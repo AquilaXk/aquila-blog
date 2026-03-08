@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.app.shared
 
+import com.back.boundedContexts.member.domain.shared.MemberProxy
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
@@ -80,7 +81,30 @@ class ActorFacadeTest {
 
         val member = actorFacade.memberOf(securityUser)
 
+        assertThat(member).isInstanceOf(MemberProxy::class.java)
         assertThat(member.id).isEqualTo(user1.id)
         assertThat(member.username).isEqualTo(user1.username)
+        assertThat(member.nickname).isEqualTo(user1.nickname)
+    }
+
+    @Test
+    fun `MemberProxy 에서 nickname 과 profileImgUrl 을 수정하면 실제 회원에도 반영된다`() {
+        val user1 = actorFacade.findByUsername("user1")!!
+        val securityUser = SecurityUser(
+            id = user1.id,
+            username = user1.username,
+            password = user1.password ?: "",
+            nickname = user1.nickname,
+            authorities = listOf(SimpleGrantedAuthority("ROLE_USER")),
+        )
+
+        val member = actorFacade.memberOf(securityUser)
+
+        member.nickname = "프록시유저1"
+        member.profileImgUrl = "https://example.com/proxy-user1.png"
+
+        assertThat(user1.nickname).isEqualTo("프록시유저1")
+        assertThat(user1.profileImgUrl).isEqualTo("https://example.com/proxy-user1.png")
+        assertThat(member.profileImgUrlOrDefault).isEqualTo("https://example.com/proxy-user1.png")
     }
 }

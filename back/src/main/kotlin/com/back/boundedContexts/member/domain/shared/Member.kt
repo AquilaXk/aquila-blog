@@ -50,8 +50,15 @@ class Member(
 
     @field:Column(columnDefinition = "TEXT")
     var profileImgUrl: String? = null,
-) : BaseTime(id) {
-    val name: String
+) : BaseTime(id), HasMember {
+    constructor(id: Int) : this(id, "", null, "", "", null)
+
+    constructor(id: Int, username: String, nickname: String) : this(id, username, null, nickname, "", null)
+
+    override val member: Member
+        get() = this
+
+    override val name: String
         get() = nickname
 
     val isAdmin: Boolean

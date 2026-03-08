@@ -1,4 +1,4 @@
-package com.back.global.pgroonga.config
+package com.back.global.pGroonga.config
 
 import org.hibernate.metamodel.model.domain.ReturnableType
 import org.hibernate.query.sqm.function.AbstractSqmSelfRenderingFunctionDescriptor

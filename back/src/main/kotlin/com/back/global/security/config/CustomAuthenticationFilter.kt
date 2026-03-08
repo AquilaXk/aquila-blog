@@ -2,7 +2,7 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.app.shared.ActorFacade
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.memberExtensions.authorities
+import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
@@ -26,12 +26,25 @@ class CustomAuthenticationFilter(
     private val actorFacade: ActorFacade,
     private val objectMapper: ObjectMapper,
 ) : OncePerRequestFilter() {
+    private val publicApiPaths = setOf(
+        "/member/api/v1/members/auth/login",
+        "/member/api/v1/members/auth/logout",
+        "/member/api/v1/members",
+        "/member/api/v1/members/randomSecureTip",
+    )
+
+    private val publicApiPatterns = listOf(
+        Regex("/member/api/v1/members/\\d+/redirectToProfileImg")
+    )
+
     private val filteredPrefixes = listOf("/member/api/")
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val uri = request.requestURI
-
-        return filteredPrefixes.none { uri.startsWith(it) }
+        if (filteredPrefixes.none { uri.startsWith(it) }) return true
+        if (uri in publicApiPaths) return true
+        if (publicApiPatterns.any { it.matches(uri) }) return true
+        return false
     }
 
     override fun doFilterInternal(
@@ -57,14 +70,14 @@ class CustomAuthenticationFilter(
         if (apiKey.isBlank() && accessToken.isBlank()) return
 
         if (apiKey == AppConfig.systemMemberApiKey && accessToken.isBlank()) {
-            authenticate(Member.SYSTEM)
+            authenticate(MemberPolicy.SYSTEM)
             return
         }
 
         val payloadMember = accessToken
             .takeIf { it.isNotBlank() }
             ?.let(actorFacade::payload)
-            ?.let { Member(it.id, it.username, it.name) }
+            ?.let { Member(it.id, it.username, null, it.name) }
 
         if (payloadMember != null) {
             authenticate(payloadMember)
@@ -109,7 +122,7 @@ class CustomAuthenticationFilter(
         val user: UserDetails = SecurityUser(
             member.id,
             member.username,
-            member.password ?: "",
+            "",
             member.name,
             member.authorities,
         )

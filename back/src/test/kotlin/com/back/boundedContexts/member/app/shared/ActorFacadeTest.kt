@@ -5,9 +5,9 @@ import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 
@@ -90,6 +90,7 @@ class ActorFacadeTest {
     @Test
     fun `MemberProxy 에서 nickname 과 profileImgUrl 을 수정하면 실제 회원에도 반영된다`() {
         val user1 = actorFacade.findByUsername("user1")!!
+
         val securityUser = SecurityUser(
             id = user1.id,
             username = user1.username,

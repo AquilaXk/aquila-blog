@@ -47,7 +47,13 @@ class ApiV1AdmMemberControllerTest {
                 resultActions.andExpect {
                     jsonPath("$.content[$index].id") { value(member.id) }
                     jsonPath("$.content[$index].createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
-                    jsonPath("$.content[$index].modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
+                    jsonPath("$.content[$index].modifiedAt") {
+                        value(
+                            startsWith(
+                                member.modifiedAt.toString().take(20)
+                            )
+                        )
+                    }
                     jsonPath("$.content[$index].isAdmin") { value(member.isAdmin) }
                     jsonPath("$.content[$index].username") { value(member.username) }
                     jsonPath("$.content[$index].name") { value(member.name) }
@@ -60,10 +66,10 @@ class ApiV1AdmMemberControllerTest {
         @Test
         @WithUserDetails("admin")
         fun `회원 목록 조회는 username 과 nickname 을 통합해서 검색한다`() {
-            memberFacade.join("android-a", "1234", "안드로이드 가이드")
-            memberFacade.join("guide-search", "1234", "안드로이드 레시피")
-            memberFacade.join("dev-guide", "1234", "개발 가이드")
-            memberFacade.join("android-guide", "1234", "일반 사용자")
+            memberFacade.join("android-a", "1234", "안드로이드 가이드", null)
+            memberFacade.join("guide-search", "1234", "안드로이드 레시피", null)
+            memberFacade.join("dev-guide", "1234", "개발 가이드", null)
+            memberFacade.join("android-guide", "1234", "일반 사용자", null)
 
             mvc.get("/member/api/v1/adm/members") {
                 param("page", "1")

@@ -21,10 +21,10 @@ class MemberFacadeTest {
     @Test
     fun `회원 생성에서 profileImgUrl 을 함께 넘기면 기본 이미지 대신 저장된 이미지가 사용된다`() {
         val member = memberFacade.join(
-            username = "profile-user",
-            password = "1234",
-            nickname = "프로필유저",
-            profileImgUrl = "https://example.com/profile-user.png",
+"profile-user",
+            "1234",
+            "프로필유저",
+            "https://example.com/profile-user.png",
         )
 
         assertThat(member.profileImgUrl).isEqualTo("https://example.com/profile-user.png")
@@ -66,7 +66,7 @@ class MemberFacadeTest {
 
         assertThat(rsData.resultCode).isEqualTo("200-1")
         assertThat(rsData.msg).isEqualTo("회원 정보가 수정되었습니다.")
-        assertThat(rsData.data).isSameAs(member)
+        assertThat(rsData.data).isEqualTo(member)
         assertThat(member.nickname).isEqualTo("수정유저1")
         assertThat(member.profileImgUrl).isEqualTo("https://example.com/modify-or-join-user1.png")
     }

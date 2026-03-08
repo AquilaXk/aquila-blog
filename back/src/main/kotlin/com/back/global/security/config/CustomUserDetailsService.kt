@@ -1,7 +1,6 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.app.shared.ActorFacade
-import com.back.boundedContexts.member.domain.shared.memberExtensions.authorities
 import com.back.global.security.domain.SecurityUser
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService

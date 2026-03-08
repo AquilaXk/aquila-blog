@@ -5,7 +5,7 @@ class MemberProxy(
     id: Int,
     username: String,
     nickname: String,
-) : Member(id, username, nickname) {
+) : Member(id, username, null, nickname) {
     override var nickname: String
         get() = super.nickname
         set(value) {

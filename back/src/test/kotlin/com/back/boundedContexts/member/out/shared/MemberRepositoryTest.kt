@@ -25,7 +25,7 @@ class MemberRepositoryTest {
     private lateinit var memberFacade: MemberFacade
 
     private fun join(username: String, nickname: String): Member =
-        memberFacade.join(username, "1234", nickname)
+        memberFacade.join(username, "1234", nickname, null)
 
     private fun search(kw: String): Page<Member> =
         memberRepository.findQPagedByKw(

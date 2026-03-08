@@ -26,8 +26,9 @@ class AuthTokenServiceTest {
         val accessToken = authTokenService.genAccessToken(member)
 
         assertThat(accessToken).isNotBlank()
+        assertThat(accessToken.split(".")).hasSize(3)
         assertThat(authTokenService.payload(accessToken))
-            .isEqualTo(AccessTokenPayload(member.id, member.username, member.nickname))
+            .isEqualTo(AccessTokenPayload(member.id, member.username, member.name))
     }
 
     @Test

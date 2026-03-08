@@ -47,3 +47,8 @@ logging:
     org.hibernate.orm.jdbc.extract: TRACE
     org.hibernate.orm.jdbc.batch: TRACE
     org.springframework.transaction.interceptor: TRACE
+custom:
+  jwt:
+    secretKey: "${CUSTOM__JWT__SECRET_KEY:12345678901234567890123456789012}"
+  accessToken:
+    expirationSeconds: 1200

@@ -32,6 +32,11 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
+    // Auth
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
+
     // QueryDSL
     implementation("io.github.openfeign.querydsl:querydsl-jpa:7.1") {
         exclude("jakarta.persistence", "jakarta.persistence-api")

@@ -54,6 +54,8 @@ class Member(
     @field:Column(unique = true, nullable = false)
     var apiKey: String,
 ) : BaseTime(id), PostMember, MemberHasSecurity, MemberHasProfileImgUrl {
+
+
     constructor(id: Int, username: String, password: String?, nickname: String) : this(
         id,
         username,
@@ -61,6 +63,8 @@ class Member(
         nickname,
         MemberPolicy.genApiKey(),
     )
+
+    internal constructor(id: Int) : this(id, "", null, "", "")
 
     companion object {
         lateinit var attrRepository_: MemberAttrRepository

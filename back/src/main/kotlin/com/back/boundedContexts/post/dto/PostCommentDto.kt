@@ -1,9 +1,10 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.PostComment
+import com.fasterxml.jackson.annotation.JsonCreator
 import java.time.Instant
 
-data class PostCommentDto(
+data class PostCommentDto @JsonCreator constructor(
     val id: Int,
     val createdAt: Instant,
     val modifiedAt: Instant,
@@ -25,4 +26,6 @@ data class PostCommentDto(
         postComment.post.id,
         postComment.content,
     )
+
+    fun forEventLog() = copy(content = "")
 }

@@ -81,7 +81,7 @@ class ApiV1PostCommentController(
         val post = postFacade.findById(postId).getOrThrow()
         val postComment = post.findCommentById(id).getOrThrow()
         postComment.checkActorCanModify(rq.actor)
-        postFacade.modifyComment(postComment, reqBody.content)
+        postFacade.modifyComment(postComment, rq.actor, reqBody.content)
         return RsData("200-1", "${id}번 댓글이 수정되었습니다.")
     }
 
@@ -94,7 +94,7 @@ class ApiV1PostCommentController(
         val post = postFacade.findById(postId).getOrThrow()
         val postComment = post.findCommentById(id).getOrThrow()
         postComment.checkActorCanDelete(rq.actor)
-        postFacade.deleteComment(post, postComment)
+        postFacade.deleteComment(post, postComment, rq.actor)
         return RsData("200-1", "${id}번 댓글이 삭제되었습니다.")
     }
 }

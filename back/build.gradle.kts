@@ -23,6 +23,7 @@ repositories {
 
 dependencies {
     // Spring
+    implementation("org.springframework:spring-test") // InternalRestClient에서 사용
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-security")
@@ -47,6 +48,13 @@ dependencies {
     }
     implementation("io.github.openfeign.querydsl:querydsl-kotlin:7.1")
     kapt("io.github.openfeign.querydsl:querydsl-apt:7.1:jpa")
+
+    // SpringDoc
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
+
+    // ShedLock
+    implementation("net.javacrumbs.shedlock:shedlock-spring:7.6.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-redis-spring:7.6.0")
 
     // Database
     runtimeOnly("org.postgresql:postgresql")

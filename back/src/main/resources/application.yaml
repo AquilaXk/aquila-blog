@@ -59,6 +59,7 @@ spring:
     redis:
       host: localhost
       port: 6379
+      password: lldj123414
   datasource:
     driver-class-name: org.postgresql.Driver
     hikari:
@@ -95,3 +96,9 @@ custom:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:12345678901234567890123456789012}"
   accessToken:
     expirationSeconds: 1200
+  task:
+    processor:
+      fixedDelayMs: "#{1000*60*60*24}"
+  cache:
+    ttl-seconds: 3600
+    ttl-overrides: { }

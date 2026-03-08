@@ -1,0 +1,29 @@
+# Next.js 빌드 디렉토리
+.next
+
+# Shadcn 관련 디렉토리
+src/components
+src/hooks
+
+# 빌드 결과물
+dist
+build
+coverage
+tsconfig.tsbuildinfo
+src/global/backend/*/schema.d.ts
+
+# 의존성 디렉토리
+node_modules
+
+# 로그 파일
+*.log
+
+# 환경 설정 파일
+.env.*
+
+# 캐시 디렉토리
+.cache
+
+# 기타 무시할 파일
+package-lock.json
+yarn.lock

@@ -111,7 +111,7 @@ class ApiV1PostController(
     ): RsData<PostDto> {
         val post = postFacade.findById(id).getOrThrow()
         post.checkActorCanModify(rq.actor)
-        postFacade.modify(post, reqBody.title, reqBody.content, reqBody.published, reqBody.listed)
+        postFacade.modify(rq.actor, post, reqBody.title, reqBody.content, reqBody.published, reqBody.listed)
         return RsData("200-1", "${post.id}번 글이 수정되었습니다.", PostDto(post))
     }
 
@@ -120,7 +120,7 @@ class ApiV1PostController(
     fun delete(@PathVariable @Positive id: Int): RsData<Void> {
         val post = postFacade.findById(id).getOrThrow()
         post.checkActorCanDelete(rq.actor)
-        postFacade.delete(post)
+        postFacade.delete(post, rq.actor)
         return RsData("200-1", "${id}번 글이 삭제되었습니다.")
     }
 

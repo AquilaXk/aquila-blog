@@ -1,15 +1,16 @@
 package com.back.boundedContexts.post.dto
 
 import com.back.boundedContexts.post.domain.Post
+import com.fasterxml.jackson.annotation.JsonCreator
 import java.time.Instant
 
-data class PostDto(
+data class PostDto @JsonCreator constructor(
     val id: Int,
     val createdAt: Instant,
     val modifiedAt: Instant,
     val authorId: Int,
     val authorName: String,
-    val authorProfileImageUrl: String,
+    val authorProfileImgUrl: String,
     val title: String,
     val published: Boolean,
     val listed: Boolean,
@@ -32,4 +33,6 @@ data class PostDto(
         post.commentsCount,
         post.hitCount,
     )
+
+    fun forEventLog() = copy(title = "")
 }

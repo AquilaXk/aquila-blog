@@ -20,7 +20,7 @@ class PostLike(
     override val id: Int = 0,
 
     @field:ManyToOne(fetch = FetchType.LAZY)
-    @field:JoinColumn(name = "liker_id", nullable = false)
+    @field:JoinColumn(nullable = false)
     val liker: Member,
 
     @field:ManyToOne(fetch = FetchType.LAZY)

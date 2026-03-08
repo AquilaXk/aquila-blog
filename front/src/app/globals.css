@@ -1,0 +1,408 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable.css";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans:
+    "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
+    system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom 1 : sonner 에 폰트 지정 및 액션 버튼 스타일 */
+[data-sonner-toaster] {
+  font-family: var(--font-sans) !important;
+}
+[data-sonner-toaster] [data-button] {
+  background-color: transparent !important;
+  color: inherit !important;
+  border: 1px solid currentColor !important;
+}
+
+/* Custom 2 : toastui-editor-contents 폰트 설정 */
+html > body .toastui-editor-contents {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+}
+
+/* Custom 3 : 코드 블록 스타일 - Dark (okaidia theme) */
+html.dark code[class*="language-"],
+html.dark pre[class*="language-"] {
+  color: #f8f8f2;
+  background: none;
+  text-shadow: 0 1px rgba(0, 0, 0, 0.3);
+  font-size: 1em;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  word-wrap: normal;
+  line-height: 1.5;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+  -ms-hyphens: none;
+  hyphens: none;
+}
+
+html.dark pre[class*="language-"] {
+  padding: 1em;
+  margin: 0.5em 0;
+  overflow: auto;
+  border-radius: 0.3em;
+}
+
+html.dark :not(pre) > code[class*="language-"],
+html.dark pre[class*="language-"] {
+  background: #272822;
+}
+
+html.dark :not(pre) > code[class*="language-"] {
+  padding: 0.1em;
+  border-radius: 0.3em;
+  white-space: normal;
+}
+
+html.dark .token.comment,
+html.dark .token.prolog,
+html.dark .token.doctype,
+html.dark .token.cdata {
+  color: #8292a2;
+}
+
+html.dark .token.punctuation {
+  color: #f8f8f2;
+}
+
+html.dark .token.namespace {
+  opacity: 0.7;
+}
+
+html.dark .token.property,
+html.dark .token.tag,
+html.dark .token.constant,
+html.dark .token.symbol,
+html.dark .token.deleted {
+  color: #f92672;
+}
+
+html.dark .token.boolean,
+html.dark .token.number {
+  color: #ae81ff;
+}
+
+html.dark .token.selector,
+html.dark .token.attr-name,
+html.dark .token.string,
+html.dark .token.char,
+html.dark .token.builtin,
+html.dark .token.inserted {
+  color: #a6e22e;
+}
+
+html.dark .token.operator,
+html.dark .token.entity,
+html.dark .token.url,
+html.dark .language-css .token.string,
+html.dark .style .token.string,
+html.dark .token.variable {
+  color: #f8f8f2;
+}
+
+html.dark .token.atrule,
+html.dark .token.attr-value,
+html.dark .token.function,
+html.dark .token.class-name {
+  color: #e6db74;
+}
+
+html.dark .token.keyword {
+  color: #66d9ef;
+}
+
+html.dark .token.regex,
+html.dark .token.important {
+  color: #fd971f;
+}
+
+html.dark .token.important,
+html.dark .token.bold {
+  font-weight: bold;
+}
+
+html.dark .token.italic {
+  font-style: italic;
+}
+
+html.dark .token.entity {
+  cursor: help;
+}
+
+/* Custom 4 : 코드 블록 스타일 - Light (prism default theme) */
+html.light code[class*="language-"],
+html.light pre[class*="language-"] {
+  color: black;
+  background: none;
+  text-shadow: 0 1px white;
+  font-size: 1em;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  word-wrap: normal;
+  line-height: 1.5;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+  -ms-hyphens: none;
+  hyphens: none;
+}
+
+html.light pre[class*="language-"] {
+  padding: 1em;
+  margin: 0.5em 0;
+  overflow: auto;
+}
+
+html.light :not(pre) > code[class*="language-"],
+html.light pre[class*="language-"] {
+  background: #f5f2f0;
+}
+
+html.light :not(pre) > code[class*="language-"] {
+  padding: 0.1em;
+  border-radius: 0.3em;
+  white-space: normal;
+}
+
+html.light .token.comment,
+html.light .token.prolog,
+html.light .token.doctype,
+html.light .token.cdata {
+  color: slategray;
+}
+
+html.light .token.punctuation {
+  color: #999;
+}
+
+html.light .token.namespace {
+  opacity: 0.7;
+}
+
+html.light .token.property,
+html.light .token.tag,
+html.light .token.boolean,
+html.light .token.number,
+html.light .token.constant,
+html.light .token.symbol,
+html.light .token.deleted {
+  color: #905;
+}
+
+html.light .token.selector,
+html.light .token.attr-name,
+html.light .token.string,
+html.light .token.char,
+html.light .token.builtin,
+html.light .token.inserted {
+  color: #690;
+}
+
+html.light .token.operator,
+html.light .token.entity,
+html.light .token.url,
+html.light .language-css .token.string,
+html.light .style .token.string {
+  color: #9a6e3a;
+}
+
+html.light .token.atrule,
+html.light .token.attr-value,
+html.light .token.keyword {
+  color: #07a;
+}
+
+html.light .token.function,
+html.light .token.class-name {
+  color: #dd4a68;
+}
+
+html.light .token.regex,
+html.light .token.important,
+html.light .token.variable {
+  color: #e90;
+}
+
+html.light .token.important,
+html.light .token.bold {
+  font-weight: bold;
+}
+
+html.light .token.italic {
+  font-style: italic;
+}
+
+html.light .token.entity {
+  cursor: help;
+}
+
+/* Custom 5 : diagram container */
+.diagram-container {
+  margin: 1rem 0;
+  padding: 1rem;
+  text-align: center;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  background: white;
+  border-radius: 0.5rem;
+}
+
+.diagram-container img {
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+}
+
+/* Custom 6 : Toast UI Chart 가운데 정렬 + 흰색 배경 (부모 div에 적용) */
+.toastui-editor-contents > div:has(> .toastui-chart-wrapper) {
+  background: white;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.toastui-editor-contents .toastui-chart-wrapper {
+  width: 800px !important;
+  margin-left: auto;
+  margin-right: auto;
+}

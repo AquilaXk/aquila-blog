@@ -11,16 +11,15 @@ private const val LIKES_COUNT_DEFAULT_VALUE = 0
 data class PostLikeToggleResult(val isLiked: Boolean, val likeId: Int)
 
 interface PostHasLikes : PostAware {
-    val likesCount: Int
+    var likesCount: Int
         get() = post.likesCountAttr?.intValue ?: LIKES_COUNT_DEFAULT_VALUE
-
-    private fun setLikesCount(value: Int) {
-        val attr = post.likesCountAttr
-            ?: Post.attrRepository.findBySubjectAndName(post, LIKES_COUNT)?.also { post.likesCountAttr = it }
-            ?: PostAttr(0, post, LIKES_COUNT, value).also { post.likesCountAttr = it }
-        attr.intValue = value
-        Post.attrRepository.save(attr)
-    }
+        set(value) {
+            val attr = post.likesCountAttr
+                ?: Post.attrRepository.findBySubjectAndName(post, LIKES_COUNT)?.also { post.likesCountAttr = it }
+                ?: PostAttr(0, post, LIKES_COUNT, value).also { post.likesCountAttr = it }
+            attr.intValue = value
+            Post.attrRepository.save(attr)
+        }
 
     fun isLikedBy(liker: Member?): Boolean {
         if (liker == null) return false
@@ -31,12 +30,12 @@ interface PostHasLikes : PostAware {
         val existingLike = Post.likeRepository.findByLikerAndPost(liker, post)
         return if (existingLike != null) {
             Post.likeRepository.delete(existingLike)
-            setLikesCount(likesCount - 1)
+            likesCount--
             PostLikeToggleResult(false, existingLike.id)
         } else {
             val newLike = PostLike(0, liker, post)
             val savedLike = Post.likeRepository.save(newLike)
-            setLikesCount(likesCount + 1)
+            likesCount++
             PostLikeToggleResult(true, savedLike.id)
         }
     }

@@ -1,22 +1,29 @@
 package com.back.boundedContexts.post.app
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.PostCommentDto
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.event.*
 import com.back.boundedContexts.post.out.PostLikeRepository
 import com.back.boundedContexts.post.out.PostRepository
+import com.back.global.event.app.EventPublisher
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.*
 import kotlin.jvm.optionals.getOrNull
 
 @Service
 class PostFacade(
     private val postRepository: PostRepository,
     private val postLikeRepository: PostLikeRepository,
+    private val eventPublisher: EventPublisher,
 ) {
     fun count(): Long = postRepository.count()
 
@@ -29,9 +36,14 @@ class PostFacade(
         listed: Boolean = false,
     ): Post {
         val post = Post(0, author, title, content, published, listed)
-        postRepository.save(post)
+        val savedPost = postRepository.save(post)
         author.incrementPostsCount()
-        return post
+
+        eventPublisher.publish(
+            PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author))
+        )
+
+        return savedPost
     }
 
     fun findById(id: Int): Post? = postRepository.findById(id).getOrNull()
@@ -40,6 +52,7 @@ class PostFacade(
 
     @Transactional
     fun modify(
+        actor: Member,
         post: Post,
         title: String,
         content: String,
@@ -48,10 +61,20 @@ class PostFacade(
     ) {
         post.modify(title, content, published, listed)
         postRepository.flush()
+
+        eventPublisher.publish(
+            PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor))
+        )
     }
 
     @Transactional
-    fun delete(post: Post) {
+    fun delete(post: Post, actor: Member) {
+        val postDto = PostDto(post)
+
+        eventPublisher.publish(
+            PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor))
+        )
+
         post.author.decrementPostsCount()
         post.softDelete()
     }
@@ -60,23 +83,55 @@ class PostFacade(
     fun writeComment(author: Member, post: Post, content: String): PostComment {
         val comment = post.addComment(author, content)
         author.incrementPostCommentsCount()
+        postRepository.flush()
+
+        eventPublisher.publish(
+            PostCommentWrittenEvent(UUID.randomUUID(), PostCommentDto(comment), PostDto(post), MemberDto(author))
+        )
+
         return comment
     }
 
     @Transactional
-    fun modifyComment(postComment: PostComment, content: String) {
+    fun modifyComment(postComment: PostComment, actor: Member, content: String) {
         postComment.modify(content)
+
+        eventPublisher.publish(
+            PostCommentModifiedEvent(
+                UUID.randomUUID(),
+                PostCommentDto(postComment),
+                PostDto(postComment.post),
+                MemberDto(actor)
+            )
+        )
     }
 
     @Transactional
-    fun deleteComment(post: Post, postComment: PostComment) {
+    fun deleteComment(post: Post, postComment: PostComment, actor: Member) {
+        val postCommentDto = PostCommentDto(postComment)
+        val postDto = PostDto(post)
+
         postComment.author.decrementPostCommentsCount()
         post.deleteComment(postComment)
+
+        eventPublisher.publish(
+            PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor))
+        )
     }
 
     @Transactional
     fun toggleLike(post: Post, actor: Member): PostLikeToggleResult {
-        return post.toggleLike(actor)
+        val likeResult = post.toggleLike(actor)
+        postRepository.flush()
+
+        eventPublisher.publish(
+            if (likeResult.isLiked)
+                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, likeResult.likeId, MemberDto(actor))
+            else
+                PostUnlikedEvent(UUID.randomUUID(), post.id, post.author.id, likeResult.likeId, MemberDto(actor))
+        )
+
+        return likeResult
     }
 
     @Transactional

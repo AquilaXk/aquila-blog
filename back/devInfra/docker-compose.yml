@@ -1,8 +1,16 @@
-name: glog_dev
+name: p14141_dev
 services:
-  glog_dev_db:
+  redis_1:
+    image: redis:latest
+    container_name: redis_1
+    ports:
+      - "6379:6379"
+    environment:
+      TZ: Asia/Seoul
+    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass lldj123414
+  p14141_dev_db:
     image: jangka512/pgj:latest
-    container_name: glog_dev_db
+    container_name: p14141_dev_db
     ports:
       - "5432:5432"
     environment:

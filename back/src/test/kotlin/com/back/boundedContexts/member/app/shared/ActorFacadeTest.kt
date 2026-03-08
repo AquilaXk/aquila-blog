@@ -72,11 +72,11 @@ class ActorFacadeTest {
     fun `SecurityUser 로부터 회원을 조회할 수 있다`() {
         val user1 = actorFacade.findByUsername("user1")!!
         val securityUser = SecurityUser(
-            id = user1.id,
-            username = user1.username,
-            password = user1.password ?: "",
-            nickname = user1.nickname,
-            authorities = listOf(SimpleGrantedAuthority("ROLE_USER")),
+            user1.id,
+            user1.username,
+            user1.password ?: "",
+            user1.nickname,
+            listOf(SimpleGrantedAuthority("ROLE_USER")),
         )
 
         val member = actorFacade.memberOf(securityUser)
@@ -92,11 +92,11 @@ class ActorFacadeTest {
         val user1 = actorFacade.findByUsername("user1")!!
 
         val securityUser = SecurityUser(
-            id = user1.id,
-            username = user1.username,
-            password = user1.password ?: "",
-            nickname = user1.nickname,
-            authorities = listOf(SimpleGrantedAuthority("ROLE_USER")),
+            user1.id,
+            user1.username,
+            user1.password ?: "",
+            user1.nickname,
+            listOf(SimpleGrantedAuthority("ROLE_USER")),
         )
 
         val member = actorFacade.memberOf(securityUser)

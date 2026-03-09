@@ -6214,3 +6214,430 @@ published=true, listed=true 이면 목록에 공개
 
 모두 여기서 다뤘다.
 
+
+---
+
+# 57강 — NotProdInitData — 개발 환경 초기 데이터
+
+프로덕션이 아닌 환경에서만 기본 데이터를 심는 패턴이다.
+
+---
+
+## 1. MemberNotProdInitData
+
+```kotlin
+@Profile("!prod")
+@Configuration
+class MemberNotProdInitData(private val memberFacade: MemberFacade) {
+    @Lazy
+    @Autowired
+    private lateinit var self: MemberNotProdInitData
+
+    @Bean
+    @Order(1)
+    fun memberNotProdInitDataApplicationRunner(): ApplicationRunner {
+        return ApplicationRunner { self.makeBaseMembers() }
+    }
+
+    @Transactional
+    fun makeBaseMembers() {
+        if (memberFacade.count() > 0) return
+
+        val memberSystem = memberFacade.join("system", "1234", "시스템", null)
+        memberSystem.modifyApiKey(memberSystem.username)  // apiKey = "system"
+
+        memberFacade.join("admin", "1234", "관리자", null).also { it.modifyApiKey(it.username) }
+        memberFacade.join("user1", "1234", "유저1", null).also { it.modifyApiKey(it.username) }
+        memberFacade.join("user2", "1234", "유저2", null).also { it.modifyApiKey(it.username) }
+        memberFacade.join("user3", "1234", "유저3", null).also { it.modifyApiKey(it.username) }
+    }
+}
+```
+
+`@Profile("!prod")` — `prod` 프로파일이 아닐 때만 등록된다. `applicationRunner` 는 앱 시작 직후 실행된다.
+
+**멱등성**: `memberFacade.count() > 0` 이면 아무것도 하지 않는다. 재시작해도 데이터가 중복 생성되지 않는다.
+
+`@Order(1)` 로 회원 초기 데이터가 먼저 생성되고, `@Order(2)` 인 `PostNotProdInitData` 가 그 회원들을 참조한다.
+
+---
+
+## 2. 자기 주입 (Self Injection) 패턴
+
+```kotlin
+@Lazy
+@Autowired
+private lateinit var self: MemberNotProdInitData
+```
+
+`makeBaseMembers` 가 `@Transactional` 인데, 같은 클래스에서 직접 호출하면 Spring 의 트랜잭션 프록시를 우회한다. `self.makeBaseMembers()` 로 프록시를 통해 호출해야 트랜잭션이 제대로 시작된다. `@Lazy` 는 순환 의존성을 방지한다.
+
+---
+
+## 3. PostNotProdInitData
+
+```kotlin
+@Transactional
+fun makeBasePosts() {
+    if (postFacade.count() > 0) return
+
+    val memberUser1 = memberFacade.findByUsername("user1").getOrThrow()
+    // ...
+    postFacade.write(memberUser1, "제목 1", "내용 1", true, true)
+    postFacade.write(memberUser1, "비공개 글", "비공개 내용", false, false)
+}
+```
+
+테스트에서 `findByUsername("user1")` 이 동작하는 이유가 여기 있다. 개발/테스트 프로파일에서는 이 초기 데이터가 항상 세팅돼 있다.
+
+---
+
+## 4. apiKey 전략
+
+```kotlin
+memberSystem.modifyApiKey(memberSystem.username)   // apiKey = "system"
+memberAdmin.modifyApiKey(memberAdmin.username)       // apiKey = "admin"
+memberUser1.modifyApiKey(memberUser1.username)       // apiKey = "user1"
+```
+
+개발 환경에서는 `apiKey` 가 `username` 과 동일하다. `Bearer user1` 으로 API 를 쉽게 테스트할 수 있다. 프로덕션에서는 `MemberPolicy.genApiKey()` 가 UUID 를 생성한다.
+
+---
+
+# 58강 — TaskHandlerRegistry — @TaskHandler 등록 메커니즘
+
+37강에서 Task 시스템의 실행 흐름을 봤다. 이번에는 핸들러가 어떻게 **등록**되는지를 본다.
+
+---
+
+## 1. @Task 어노테이션
+
+```kotlin
+@Task("member.createActionLog")
+class MemberCreateActionLogPayload(
+    override val uid: UUID,
+    override val aggregateType: String,
+    override val aggregateId: Int,
+    val event: EventPayload,
+) : TaskPayload
+```
+
+`TaskPayload` 구현체에 `@Task("타입문자열")` 을 붙인다. 이 타입 문자열이 `Task.taskType` 컬럼에 저장된다.
+
+---
+
+## 2. TaskHandlerRegistry
+
+```kotlin
+@Component
+class TaskHandlerRegistry {
+    private val byType = mutableMapOf<String, TaskHandlerEntry>()
+    private val typeByClass = mutableMapOf<Class<out TaskPayload>, String>()
+
+    internal fun register(type: String, entry: TaskHandlerEntry) {
+        check(!byType.containsKey(type)) { "Duplicate @TaskHandler for type '$type'" }
+        byType[type] = entry
+        typeByClass[entry.payloadClass] = type
+    }
+
+    fun getEntry(type: String): TaskHandlerEntry? = byType[type]
+    fun getType(payloadClass: Class<out TaskPayload>): String? = typeByClass[payloadClass]
+}
+```
+
+두 개의 Map:
+- `byType`: `"member.createActionLog"` → `TaskHandlerEntry`
+- `typeByClass`: `MemberCreateActionLogPayload::class.java` → `"member.createActionLog"`
+
+---
+
+## 3. TaskHandlerConfigurer — 자동 발견
+
+```kotlin
+@Component
+class TaskHandlerConfigurer : ApplicationListener<ContextRefreshedEvent> {
+    override fun onApplicationEvent(event: ContextRefreshedEvent) {
+        applicationContext.beanDefinitionNames.forEach { beanName ->
+            val bean = applicationContext.getBean(beanName)
+            bean::class.java.methods
+                .filter { it.isAnnotationPresent(TaskHandler::class.java) }
+                .forEach { method ->
+                    val payloadClass = method.parameterTypes[0] as Class<out TaskPayload>
+                    val type = payloadClass.getAnnotation(Task::class.java)?.type
+                        ?: error("No @Task annotation on ${payloadClass.simpleName}")
+                    taskHandlerRegistry.register(type, TaskHandlerEntry(payloadClass, TaskHandlerMethod(bean, method)))
+                }
+        }
+    }
+}
+```
+
+컨텍스트 초기화 완료 시점에 모든 Spring 빈을 순회하면서 `@TaskHandler` 메서드를 찾는다. 파라미터 타입이 `TaskPayload` 이면 등록한다. 컴파일 없이 핸들러를 추가할 수 있다 — 메서드에 `@TaskHandler` 만 붙이면 된다.
+
+---
+
+## 4. 실행 연결고리
+
+```
+addToQueue(payload: MemberCreateActionLogPayload)
+  typeByClass[MemberCreateActionLogPayload::class.java] → "member.createActionLog"
+  Task(taskType = "member.createActionLog", payload = JSON) 저장
+
+executeTask(taskId)
+  byType["member.createActionLog"] → TaskHandlerEntry
+  entry.payloadClass = MemberCreateActionLogPayload
+  Ut.JSON.fromString(task.payload, entry.payloadClass)  // 역직렬화
+  entry.handlerMethod.method.invoke(bean, payload)       // 리플렉션 호출
+```
+
+`@TaskHandler` 어노테이션이 달린 메서드가 리플렉션으로 호출된다. `EventPayload` 의 `@JsonTypeInfo` 덕분에 JSON 안에 `@class` 가 있어서 `event` 필드도 올바른 타입으로 역직렬화된다.
+
+---
+
+# 59강 — MemberActionLog — 행동 이력 서브 컨텍스트
+
+`member` 바운디드 컨텍스트 안에 `memberActionLog` 라는 서브 컨텍스트가 있다.
+
+---
+
+## 1. MemberActionLog 엔티티
+
+```kotlin
+@Entity
+@DynamicUpdate
+class MemberActionLog(
+    val type: String,           // "PostWrittenEvent", "PostLikedEvent" 등
+    val primaryType: String,    // "Post", "PostComment", "PostLike"
+    val primaryId: Int,         // 1차 대상 ID
+    val primaryOwner: Member,   // 1차 대상의 소유자
+    val secondaryType: String,  // "Member", "Post"
+    val secondaryId: Int,       // 2차 대상 ID
+    val secondaryOwner: Member, // 2차 대상의 소유자
+    val actor: Member,          // 행위자
+    val data: String,           // 이벤트 전체 JSON
+) : BaseEntity()
+```
+
+`BaseEntity` 를 상속한다 — `BaseTime` 이 아니다. `createdAt`, `modifiedAt` 이 없고 `id` 만 있다. 로그 레코드는 수정되지 않기 때문이다.
+
+`data` 에는 이벤트 객체 전체를 JSON 으로 직렬화해서 저장한다. 나중에 어떤 컨텍스트에서 무슨 일이 있었는지 완전히 재구성할 수 있다.
+
+---
+
+## 2. MemberActionLogFacade
+
+`save(event: EventPayload)` 에서 `when` 으로 이벤트 타입을 분기한다.
+
+```kotlin
+private fun save(event: PostWrittenEvent) {
+    memberActionLogRepository.save(MemberActionLog(
+        type = PostWrittenEvent::class.simpleName!!,  // "PostWrittenEvent"
+        primaryType = Post::class.simpleName!!,        // "Post"
+        primaryId = event.postDto.id,
+        primaryOwner = Member(event.postDto.authorId), // 글의 작성자
+        secondaryType = Member::class.simpleName!!,
+        secondaryId = event.actorDto.id,
+        secondaryOwner = Member(event.actorDto.id),
+        actor = Member(event.actorDto.id),             // 요청자
+        data = Ut.JSON.toString(event),
+    ))
+}
+```
+
+`Member(event.postDto.authorId)` — 실제 JPA 엔티티를 로드하지 않고, id만 가진 `Member` 객체를 만든다. `ManyToOne` 참조에 id 만 있는 엔티티를 넣어도 FK 컬럼만 저장된다. 불필요한 DB 조회가 없다.
+
+---
+
+## 3. primaryType / secondaryType 의미
+
+| 이벤트 | primaryType | secondaryType |
+|--------|-------------|---------------|
+| PostWrittenEvent | Post | Member (작성자) |
+| PostCommentWrittenEvent | PostComment | Post (댓글이 달린 글) |
+| PostLikedEvent | PostLike | Post (좋아요 받은 글) |
+
+"누가(actor) 어떤 대상(primary)에서 무슨 행동을 했고, 그 맥락(secondary)은 무엇인가" 를 구조적으로 기록한다.
+
+---
+
+# 60강 — 개발 인프라 — docker-compose.yml
+
+로컬 개발 환경 세팅을 살펴본다.
+
+```yaml
+services:
+  redis_1:
+    image: redis:latest
+    ports: ["6379:6379"]
+    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass lldj123414
+
+  db:
+    image: jangka512/pgj:latest
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DATABASES: glog_dev,glog_test
+    command: >
+      postgres
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c wal_level=minimal
+      -c max_wal_senders=0
+      -c jit=off
+```
+
+---
+
+## Redis 설정
+
+`--maxmemory-policy allkeys-lru` — 메모리 50MB 를 초과하면 가장 오래 사용하지 않은 키를 자동으로 삭제한다. 캐시 용도로만 쓰기 때문에 데이터 손실이 허용된다.
+
+---
+
+## PostgreSQL — 개발용 최적화
+
+`fsync=off`, `synchronous_commit=off`, `full_page_writes=off` — WAL(Write-Ahead Log) 을 가능한 적게 쓰고, 디스크 동기화를 건너뛴다. **프로덕션에서는 절대 쓰면 안 된다** — 서버가 다운되면 데이터가 손실된다. 개발 환경에서 쓰기 속도를 최대한 높이는 설정이다.
+
+`jit=off` — PostgreSQL 의 JIT 컴파일러를 끈다. 짧은 쿼리가 많은 개발 환경에서는 JIT 컴파일 비용이 오히려 느리게 만든다.
+
+---
+
+## CustomDevPostgreSQLDialect
+
+```kotlin
+open class CustomDevPostgreSQLDialect : CustomPostgreSQLDialect() {
+    private val unloggedTableExporter = object : StandardTableExporter(this) {
+        override fun tableCreateString(temporary: Boolean): String {
+            return if (temporary) super.tableCreateString(true) else "create unlogged table"
+        }
+    }
+    override fun getTableExporter(): Exporter<Table> = unloggedTableExporter
+}
+```
+
+개발 환경의 `application-dev.yaml` 에서 이 Dialect 를 지정한다. 테이블을 `CREATE UNLOGGED TABLE` 로 만든다. `UNLOGGED` 테이블은 WAL 에 기록되지 않아서 쓰기가 빠르다. 역시 서버 다운 시 데이터 손실 가능 — 개발용이다.
+
+---
+
+## jangka512/pgj 이미지
+
+PGroonga 가 미리 설치된 커스텀 PostgreSQL 이미지다. 일반 `postgres` 이미지에는 PGroonga 가 없어서 별도 설치가 필요하다. 이 이미지를 쓰면 `docker-compose up` 한 번으로 바로 PGroonga 를 사용할 수 있다.
+
+---
+
+# 61강 — PostSearchSortType1 — 정렬 enum 패턴
+
+`standard/dto/post/type1/PostSearchSortType1.kt` 를 보면:
+
+```kotlin
+enum class PostSearchSortType1(val sortBy: Sort) {
+    CREATED_AT(Sort.by(Sort.Direction.DESC, "createdAt")),
+    CREATED_AT_ASC(Sort.by(Sort.Direction.ASC, "createdAt")),
+    MODIFIED_AT(Sort.by(Sort.Direction.DESC, "modifiedAt")),
+    MODIFIED_AT_ASC(Sort.by(Sort.Direction.ASC, "modifiedAt")),
+}
+```
+
+enum 값이 `Sort` 객체를 바로 들고 있다. 컨트롤러에서:
+
+```kotlin
+@RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1
+```
+
+Spring 이 `"CREATED_AT"` 문자열을 `PostSearchSortType1.CREATED_AT` 으로 자동 변환한다. Facade 에서:
+
+```kotlin
+PageRequest.of(page - 1, pageSize, sort.sortBy)
+```
+
+`sort.sortBy` 를 바로 쓴다. 컨트롤러 → Facade → Repository 전 계층에서 타입이 보장된다. `"createdAt_desc"` 같은 문자열을 파싱하거나 `if/else` 로 분기할 필요가 없다.
+
+`standard/dto/` 안에 있다. 특정 바운디드 컨텍스트에 종속되지 않아서 다른 컨텍스트에서도 재사용 가능하다. 실제로 `MemberSearchSortType1` 도 같은 패키지에 있다.
+
+---
+
+# 62강 — CustomUserDetailsService — @WithUserDetails 연결
+
+테스트에서 `@WithUserDetails("user1")` 을 쓰면 Spring Security 가 `UserDetailsService.loadUserByUsername("user1")` 을 호출한다. 그 구현이 `CustomUserDetailsService` 다.
+
+```kotlin
+@Service
+class CustomUserDetailsService(private val actorFacade: ActorFacade) : UserDetailsService {
+    override fun loadUserByUsername(username: String): UserDetails {
+        val member = actorFacade.findByUsername(username)
+            ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다.")
+
+        return SecurityUser(
+            member.id,
+            member.username,
+            member.password ?: "",
+            member.nickname,
+            member.authorities,
+        )
+    }
+}
+```
+
+이 서비스가 하는 일은 하나 — `username` 으로 회원을 찾아서 `SecurityUser` 로 변환한다.
+
+---
+
+## 어디서 쓰이는가
+
+1. **`@WithUserDetails` 테스트** — 테스트에서 인증된 사용자를 시뮬레이션할 때
+2. **`ApiV1AuthController.login`** — 폼 기반 로그인 시 `AuthenticationManager` 가 호출
+
+`CustomAuthenticationFilter` 는 이 서비스를 직접 쓰지 않는다. 필터는 토큰/API 키 기반이어서 `username` → `UserDetails` 조회 경로를 타지 않는다.
+
+`SecurityConfig` 에서:
+```kotlin
+.userDetailsService(userDetailsService)
+```
+로 등록해야 `AuthenticationManager` 가 이 서비스를 사용한다.
+
+---
+
+# 63강 — 이 프로젝트의 '선택과 집중'
+
+모든 설계는 트레이드오프다. 이 프로젝트가 무엇을 선택하고 무엇을 포기했는지 정리한다.
+
+---
+
+## 선택한 것
+
+**단순한 배포 구조**
+모노레포, 단일 Spring Boot 앱. 마이크로서비스가 아니다. `InternalRestClient` 가 MockMvc 를 쓰는 이유도 여기 있다 — 서비스가 분리되지 않은 상태에서 내부 API 를 호출하는 가장 단순한 방법이다.
+
+**JPA 중심 개발**
+QueryDSL 로 동적 쿼리를 처리하고, `Persistable<Int>` + `SEQUENCE` 로 시퀀스 생성기를 직접 제어한다. `@DynamicUpdate` 로 불필요한 UPDATE 를 줄인다.
+
+**도메인 중심 설계**
+비즈니스 규칙을 엔티티와 Mixin 에 넣는다. Facade 는 얇다. 테스트에서 Facade 를 직접 호출해서 비즈니스 로직을 검증할 수 있다.
+
+**이벤트 기반 비동기**
+부가 기능(로그 저장)을 이벤트로 분리한다. 메인 트랜잭션이 실패해도 부가 기능이 영향을 주지 않는다. Task 큐 + 재시도로 신뢰성을 보장한다.
+
+---
+
+## 포기한 것
+
+**완전한 헥사고날 아키텍처**
+`in/` / `out/` 이름만 차용했다. 포트 인터페이스, 어댑터 완전 분리는 없다. 실용성을 택했다.
+
+**CQRS**
+읽기/쓰기 모델을 분리하지 않는다. 동일한 JPA 엔티티가 읽기와 쓰기 모두에 쓰인다.
+
+**완전한 DDD 애그리거트**
+`Post` 와 `PostComment` 가 별도 애그리거트이지만, `post.findCommentById()` 처럼 부모에서 자식을 직접 조회한다. 순수한 DDD 라면 댓글 리포지토리로만 접근해야 한다.
+
+**테스트 분리**
+슬라이스 테스트(`@DataJpaTest`, `@WebMvcTest`) 없이 전부 `@SpringBootTest`. 빠른 테스트 피드백보다 실환경 근접성을 택했다.
+
+---
+
+## 결론
+
+이 코드베이스는 **"실제로 동작하는 서비스"** 를 만들기 위한 실용적인 선택들의 집합이다. 교과서적으로 완벽하지 않지만, 실무에서 흔히 마주치는 문제들을 현실적인 방법으로 해결한다.
+
+코드를 처음 봤을 때 낯설었던 것들이 이제 이유가 있는 선택으로 보인다면, 이 강의 시리즈의 목표는 달성됐다.
+

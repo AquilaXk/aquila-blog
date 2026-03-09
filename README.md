@@ -5363,3 +5363,576 @@ domain/ ← 엔티티, 도메인 로직
 
 헥사고날 아키텍처의 포트-어댑터 패턴에서 영감을 받은 구조다. 이름이 기억하기 쉽다 — 들어오는 것은 `in`, 나가는 것은 `out`.
 
+
+---
+
+# 45강 — AppConfig, AppFacade — 전역 설정 접근
+
+Spring 의 `@Value` 와 `Environment` 를 정적 접근 가능하게 만드는 두 클래스다.
+
+---
+
+## 1. AppConfig
+
+```kotlin
+@Configuration
+class AppConfig(
+    @Value("\${custom.site.backUrl}") siteBackUrl: String,
+    @Value("\${custom.site.frontUrl}") siteFrontUrl: String,
+    @Value("\${custom.systemMemberApiKey}") systemMemberApiKey: String,
+) {
+    init {
+        Companion.siteBackUrl = siteBackUrl
+        Companion.siteFrontUrl = siteFrontUrl
+        Companion.systemMemberApiKey = systemMemberApiKey
+    }
+
+    companion object {
+        lateinit var siteBackUrl: String
+        lateinit var siteFrontUrl: String
+        lateinit var systemMemberApiKey: String
+    }
+}
+```
+
+생성자에서 `@Value` 로 주입받은 값을 `companion object` 정적 필드에 저장한다. 이후 어디서나 `AppConfig.systemMemberApiKey` 로 접근할 수 있다. `MemberApiClient` 에서 `AppFacade.systemMemberApiKey` 를 쓰는 것도 같은 패턴이다.
+
+---
+
+## 2. AppFacade
+
+```kotlin
+@Component
+class AppFacade(environment: Environment, objectMapper: ObjectMapper) {
+    init {
+        Companion.environment = environment
+        Ut.JSON.objectMapper = objectMapper
+    }
+
+    companion object {
+        val isDev: Boolean by lazy { environment.matchesProfiles("dev") }
+        val isTest: Boolean by lazy { environment.matchesProfiles("test") }
+        val isProd: Boolean by lazy { environment.matchesProfiles("prod") }
+        val isNotProd: Boolean by lazy { !isProd }
+        val systemMemberApiKey: String by lazy { environment.getProperty("custom.systemMemberApiKey")!! }
+        val siteFrontUrl: String by lazy { environment.getProperty("custom.site.frontUrl")!! }
+    }
+}
+```
+
+`AppConfig` 와 다른 점은 `Environment` 를 직접 들고 있어서 **프로파일 판별** 이 가능하다. `isNotProd` 를 `TaskFacade` 에서 쓴다 — 개발 환경에서 Task 를 즉시 실행하는 판별 조건이다.
+
+`Ut.JSON.objectMapper = objectMapper` 는 Jackson `ObjectMapper` 를 정적 유틸 클래스에 주입하는 것이다. `TaskFacade` 에서 `Ut.JSON.toString(payload)` 로 직렬화할 때 이 객체를 쓴다.
+
+---
+
+## 3. SpringDocConfig
+
+```kotlin
+@Configuration
+@OpenAPIDefinition(info = Info(title = "API 서버", version = "beta"))
+class SpringDocConfig {
+    @Bean fun groupApiV1(): GroupedOpenApi =
+        GroupedOpenApi.builder().group("apiV1").pathsToMatch("/*/api/v1/**").build()
+
+    @Bean fun groupMemberApiV1(): GroupedOpenApi =
+        GroupedOpenApi.builder().group("memberApiV1").pathsToMatch("/member/api/v1/**").build()
+
+    @Bean fun groupPostApiV1(): GroupedOpenApi =
+        GroupedOpenApi.builder().group("postApiV1").pathsToMatch("/post/api/v1/**").build()
+}
+```
+
+SpringDoc (Swagger UI) 설정이다. `/*/api/v1/**` 패턴으로 API 경로를 그룹화한다. `/swagger-ui.html` 에서 API 문서를 볼 수 있다.
+
+프론트엔드에서 `openapi-fetch` 라이브러리를 쓰는데, SpringDoc 이 생성한 OpenAPI 스펙을 기반으로 타입 안전한 API 클라이언트를 만들 수 있다.
+
+---
+
+# 46강 — 프론트엔드 구조 개요
+
+프론트엔드는 **Next.js 15 (App Router)** + **React 19** + **TypeScript** + **TailwindCSS** + **shadcn/ui** 스택이다.
+
+---
+
+## 1. 디렉토리 구조
+
+```
+front/src/
+  app/              ← Next.js App Router 페이지
+    layout.tsx      ← 루트 레이아웃 (ThemeProvider, AuthProvider)
+    ContextLayout.tsx
+    p/              ← 포스트 관련 페이지
+      page.tsx              ← 글 목록
+      [id]/page.tsx         ← 글 상세 (Server Component)
+      [id]/ClientPage.tsx   ← 글 상세 (Client Component)
+      write/page.tsx        ← 글 작성
+      mine/page.tsx         ← 내 글 목록
+    members/me/page.tsx
+    adm/            ← 관리자 페이지
+  components/ui/    ← shadcn/ui 컴포넌트
+  domain/           ← 도메인별 훅, 컴포넌트
+    post/
+  global/           ← 전역 설정
+    auth/           ← 인증 상태관리
+    backend/        ← API 클라이언트
+    websocket/      ← STOMP WebSocket
+  lib/              ← 공유 유틸, 비즈니스 컴포넌트
+```
+
+---
+
+## 2. 핵심 의존성
+
+```json
+{
+  "openapi-fetch": "...",       ← 타입 안전 API 클라이언트
+  "@stomp/stompjs": "...",      ← WebSocket (STOMP)
+  "sockjs-client": "...",       ← WebSocket 폴백
+  "next-themes": "...",         ← 다크모드
+  "sonner": "...",              ← Toast 알림
+  "@toast-ui/react-editor": "...", ← 마크다운 에디터/뷰어
+  "monaco-editor": "..."        ← 코드 에디터
+}
+```
+
+---
+
+## 3. 레이아웃 계층
+
+```
+RootLayout (layout.tsx)
+  └─ ThemeProvider           ← 다크/라이트 모드
+  └─ ContextLayout
+       └─ AuthProvider        ← 로그인 상태 Context
+       └─ ClientLayout         ← 헤더, 푸터
+            └─ {children}      ← 각 페이지
+```
+
+`RootLayout` 은 서버 컴포넌트. `ContextLayout` 은 `"use client"`. `AuthProvider` 가 클라이언트 컴포넌트이므로 부모도 클라이언트여야 한다.
+
+---
+
+# 47강 — 인증 상태관리 — AuthContext
+
+백엔드의 쿠키 기반 인증을 프론트엔드가 어떻게 다루는지 살펴본다.
+
+---
+
+## 1. useAuth
+
+```typescript
+export default function useAuth() {
+  const [loginMember, setLoginMember] = useState<LoginMember>(null as unknown as LoginMember);
+  const [isPending, setIsPending] = useState(true);
+
+  useEffect(() => {
+    client.GET("/member/api/v1/auth/me", {}).then((res) => {
+      if (res.error) { setIsPending(false); return; }
+      setLoginMember(res.data);
+      setIsPending(false);
+    });
+  }, []);
+
+  const logout = (onSuccess: () => void) => {
+    client.DELETE("/member/api/v1/auth/logout", {}).then((res) => {
+      if (res.error) { toast.error(res.error.msg); return; }
+      clearLoginMember();
+      onSuccess();
+    });
+  };
+
+  return { isLogin, isAdmin, isPending, loginMember, logout, setLoginMember, clearLoginMember };
+}
+```
+
+마운트 시점에 `/member/api/v1/auth/me` 를 호출해서 현재 로그인 상태를 파악한다. 쿠키(`credentials: "include"`) 가 자동으로 첨부된다. 성공하면 `loginMember` 에 저장, 실패하면 `isPending = false` 로만 변경한다.
+
+---
+
+## 2. AuthContext + AuthProvider
+
+```typescript
+export const AuthContext = createContext<ReturnType<typeof useAuth>>(null as unknown as ReturnType<typeof useAuth>);
+
+export function AuthProvider({ children }) {
+  const authState = useAuth();
+  return <AuthContext value={authState}>{children}</AuthContext>;
+}
+
+export function useAuthContext() {
+  const authState = use(AuthContext);
+  if (authState === null) throw new Error("AuthContext is not found");
+  return authState;
+}
+```
+
+React 19 의 `use(AuthContext)` 를 쓴다. `useContext` 대신 `use` 다. 컨텍스트를 안전하게 꺼내는 `useAuthContext` 훅이 있어서, 컴포넌트는 이걸 쓴다.
+
+---
+
+## 3. withLogin HOC
+
+```typescript
+export default function withLogin<P extends object>(Component: React.ComponentType<P>) {
+  return function WithLoginComponent(props: P) {
+    const { isLogin } = useAuthContext();
+    if (!isLogin) return <div>로그인 후 이용해주세요.</div>;
+    return <Component {...props} />;
+  };
+}
+```
+
+로그인이 필요한 페이지는 `withLogin(Page)` 로 감싸면 된다. HOC 패턴이다. `withAdmin` 은 `isAdmin` 도 추가로 체크한다.
+
+---
+
+# 48강 — 타입 안전 API 클라이언트 — openapi-fetch
+
+백엔드가 SpringDoc 으로 생성한 OpenAPI 스펙을 기반으로, 프론트엔드가 타입 안전한 API 클라이언트를 만든다.
+
+---
+
+## 1. client.ts
+
+```typescript
+import type { paths } from "@/global/backend/apiV1/schema";
+import createClient from "openapi-fetch";
+
+const client = createClient<paths>({
+  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+  credentials: "include",   // 쿠키 자동 전송
+});
+
+export default client;
+```
+
+`schema.d.ts` 는 SpringDoc 이 생성한 OpenAPI JSON 을 `openapi-typescript` 로 변환한 타입 파일이다. `paths` 타입에 모든 엔드포인트의 요청/응답 타입이 정의돼 있다.
+
+---
+
+## 2. 사용 예시
+
+```typescript
+// 타입 추론이 완전히 동작한다
+const res = await client.GET("/post/api/v1/posts/{id}", {
+  params: { path: { id } },
+});
+
+if (res.error) {
+  toast.error(res.error.msg);  // res.error 타입이 정확함
+  return;
+}
+
+const post = res.data;  // PostWithContentDto 타입
+```
+
+`res.data`, `res.error` 가 엔드포인트별로 정확한 타입을 갖는다. 백엔드 API 스펙이 바뀌면 `schema.d.ts` 를 재생성하면 컴파일 에러로 프론트엔드의 모든 불일치 지점을 찾을 수 있다.
+
+---
+
+## 3. 서버 컴포넌트에서 쿠키 전달
+
+```typescript
+// app/p/[id]/page.tsx (서버 컴포넌트)
+async function getPost(id: number) {
+  const res = await client.GET("/post/api/v1/posts/{id}", {
+    params: { path: { id } },
+    headers: {
+      cookie: (await cookies()).toString(),   // 서버 측 쿠키 명시적 전달
+    },
+  });
+  return res;
+}
+```
+
+서버 컴포넌트는 브라우저가 아니라 Next.js 서버에서 실행된다. `credentials: "include"` 가 동작하지 않으므로 `next/headers` 의 `cookies()` 로 요청 쿠키를 수동으로 넘긴다.
+
+이렇게 하면 서버에서 인증된 응답을 받아 초기 HTML 에 포함시킨다 — SSR + 쿠키 인증의 조합이다.
+
+---
+
+# 49강 — 글 상세 페이지 — 서버/클라이언트 분리
+
+`/p/[id]` 페이지는 서버 컴포넌트와 클라이언트 컴포넌트가 분리돼 있다.
+
+---
+
+## 1. page.tsx (서버 컴포넌트)
+
+```typescript
+export async function generateMetadata({ params }): Promise<Metadata> {
+  const { id } = await params;
+  const postResponse = await getPost(parseInt(id));
+  if (postResponse.error) return { title: postResponse.error.msg };
+
+  const post = postResponse.data;
+  return {
+    title: `${post.id} - ${post.title}`,
+    description: getSummaryFromContent(post.content),
+  };
+}
+
+export default async function Page({ params }) {
+  const { id } = await params;
+  const postResponse = await getPost(parseInt(id));
+
+  if (postResponse.error)
+    return <div>{postResponse.error.msg}</div>;
+
+  return <ClientPage initialPost={postResponse.data} />;
+}
+```
+
+서버에서 초기 데이터를 가져와서 `initialPost` 로 넘긴다. SEO 를 위한 `generateMetadata` 도 서버에서 실행된다. 서버 컴포넌트는 JavaScript 번들에 포함되지 않는다.
+
+---
+
+## 2. ClientPage.tsx (클라이언트 컴포넌트)
+
+```typescript
+"use client";
+
+export default function ClientPage({ initialPost }: { initialPost: PostWithContentDto }) {
+  const postState = usePostClient(initialPost);
+  const postCommentsState = usePostComments(initialPost.id);
+
+  return (
+    <div className="container mx-auto px-4 py-6">
+      <PostInfo postState={postState} />
+      <div className="mt-8 border-t pt-8">
+        <PostCommentWriteAndList postCommentsState={postCommentsState} />
+      </div>
+    </div>
+  );
+}
+```
+
+`usePostClient` 는 서버에서 받아온 `initialPost` 로 상태를 초기화한다. 이후 좋아요·삭제·수정 같은 인터랙션은 클라이언트에서 처리한다. `usePostComments` 는 댓글 목록을 클라이언트에서 별도로 관리한다.
+
+이 패턴이 서버 컴포넌트의 핵심이다: **초기 렌더링은 서버, 인터랙션은 클라이언트**.
+
+---
+
+# 50강 — WebSocket — STOMP + SockJS
+
+글이 새로 작성되면 실시간으로 알림이 온다. WebSocket 으로 구현됐다.
+
+---
+
+## 1. stompClient.ts
+
+```typescript
+export function getStompClient(): Client {
+  if (stompClient) return stompClient;   // 싱글톤
+
+  stompClient = new Client({
+    webSocketFactory: () => new SockJS(`${NEXT_PUBLIC_API_BASE_URL}/ws`),
+    reconnectDelay: 5000,
+    onConnect: () => {
+      // 대기 중이던 구독 처리
+      while (pendingSubscriptions.length > 0) {
+        const pending = pendingSubscriptions.shift()!;
+        const sub = stompClient!.subscribe(pending.destination, pending.callback);
+        pending.resolve(sub);
+      }
+      // 기존 구독 재구독 (reconnect 시)
+      for (const entry of activeSubscriptions.values()) {
+        stompClient!.subscribe(entry.destination, entry.callback);
+      }
+      // reconnect 리스너 호출
+      for (const listener of reconnectListeners) { listener(); }
+    },
+  });
+
+  return stompClient;
+}
+```
+
+`Client` 는 모듈 레벨 싱글톤이다. 페이지 이동이 있어도 하나의 연결을 유지한다.
+
+`pendingSubscriptions` 큐 — 아직 연결이 안 됐을 때 구독 요청이 오면 큐에 담아두고, 연결되면 한 번에 처리한다. reconnect 시에는 `activeSubscriptions` 에서 등록된 구독들을 자동 재구독한다.
+
+---
+
+## 2. subscribe 함수
+
+```typescript
+export function subscribe(destination: string, callback): Promise<ManagedSubscription> {
+  const client = getStompClient();
+  const id = `managed-sub-${++subscriptionIdCounter}`;
+
+  activeSubscriptions.set(id, { destination, callback });
+
+  if (client.connected) {
+    const sub = client.subscribe(destination, callback);
+    return Promise.resolve(wrapResult(sub));
+  }
+
+  // 연결 대기
+  const promise = new Promise<ManagedSubscription>((resolve) => {
+    pendingSubscriptions.push({ destination, callback, resolve: (sub) => resolve(wrapResult(sub)) });
+  });
+
+  if (!client.active) client.activate();
+
+  return promise;
+}
+```
+
+컴포넌트에서 `subscribe("/topic/posts/new", handler)` 를 호출하면 연결 여부에 관계없이 `Promise<ManagedSubscription>` 을 받는다. 반환된 `subscription.unsubscribe()` 로 구독 해제 시 `activeSubscriptions` 에서도 제거된다.
+
+---
+
+## 3. useNewPostNotification
+
+```typescript
+export function useNewPostNotification(onNewPost?: (post: PostNotification) => void) {
+  const { loginMember } = useAuthContext();
+
+  useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    subscribe("/topic/posts/new", (message) => {
+      const post: PostNotification = JSON.parse(message.body);
+      if (loginMemberRef.current?.id === post.authorId) return;  // 자신의 글은 무시
+      setLatestPost(post);
+      callbackRef.current?.(post);
+    }).then((sub) => { subscription = sub; });
+
+    return () => { subscription?.unsubscribe(); };  // 언마운트 시 구독 해제
+  }, []);
+}
+```
+
+`/topic/posts/new` 토픽을 구독한다. 새 글이 올라오면 작성자 자신이면 무시하고, 아니면 알림을 보여준다. 언마운트 시 구독을 해제한다.
+
+---
+
+# 51강 — 전체 흐름 정리
+
+지금까지 배운 내용을 HTTP 요청 하나의 흐름으로 정리한다.
+
+---
+
+## 글 작성 요청 전체 흐름
+
+```
+[프론트] client.POST("/post/api/v1/posts", { body: { title, content, published, listed } })
+  ↓ (Cookie: accessToken=... 자동 전송)
+
+[CustomAuthenticationFilter]
+  1. Authorization 헤더 없음 → 쿠키에서 apiKey, accessToken 추출
+  2. accessToken 유효 → payloadMember 생성 → SecurityContext 설정
+
+[PostSecurityConfigurer]
+  POST /post/api/v1/posts → authenticated() 체크
+
+[ApiV1PostController.write()]
+  @Valid reqBody 검증
+  val post = postFacade.write(rq.actor, title, content, ...)
+
+[PostFacade.write()]  @Transactional
+  Post 저장 → postRepository.save(post)
+  author.incrementPostsCount()      ← MemberAttr UPDATE
+  eventPublisher.publish(PostWrittenEvent)
+
+[MemberActionLogEventListener.handle()]  @TransactionalEventListener(BEFORE_COMMIT)
+  taskFacade.addToQueue(MemberCreateActionLogPayload)
+    └─ Task 저장 (PENDING)
+    └─ [isNotProd] 즉시 fire → MemberActionLogFacade.save(event)
+
+  ← 트랜잭션 커밋
+
+[응답] RsData("201-1", "N번 글이 작성되었습니다.", PostDto)
+
+[프론트] toast.success(res.data.msg)
+[WebSocket] /topic/posts/new 으로 브로드캐스트
+  → 다른 클라이언트의 useNewPostNotification 이 알림 수신
+```
+
+---
+
+## 인증 흐름 (토큰 갱신 포함)
+
+```
+[프론트] apiKey 쿠키 있음, accessToken 만료
+  ↓
+[CustomAuthenticationFilter]
+  Bearer {apiKey} {expiredToken} 파싱
+  payloadMember = null (토큰 만료)
+  member = findByApiKey(apiKey)    ← DB 조회
+  newAccessToken = genAccessToken(member)
+  response.addCookie("accessToken", newAccessToken)
+  response.addHeader("Authorization", newAccessToken)
+  authenticate(member)
+  ↓
+[응답] 새 accessToken 이 쿠키 + 헤더에 포함
+```
+
+---
+
+# 52강 — 이 프로젝트에서 배울 수 있는 것
+
+지금까지 훑어온 코드에서 실무에 바로 쓸 수 있는 패턴들을 정리한다.
+
+---
+
+## 1. 정적 접근 패턴 (companion object + lateinit)
+
+```kotlin
+companion object {
+    lateinit var attrRepository_: PostAttrRepository
+    val attrRepository by lazy { attrRepository_ }
+}
+```
+
+Spring 빈을 엔티티나 도메인 인터페이스에서 접근할 때 쓰는 패턴이다. 테스트에서도 `Post.attrRepository_ = mockRepo` 로 교체 가능하다.
+
+---
+
+## 2. EAV (Entity-Attribute-Value) 패턴
+
+`PostAttr`, `MemberAttr` — 컬럼을 미리 정의하지 않고 Key-Value 로 유연하게 속성을 추가한다. `hitCount`, `likesCount`, `postsCount` 등의 카운터를 별도 테이블로 분리해서 Post 엔티티를 깔끔하게 유지한다.
+
+---
+
+## 3. Mixin 인터페이스 — 관심사 분리
+
+하나의 엔티티가 여러 기능을 갖게 되면 클래스가 비대해진다. Kotlin 인터페이스의 디폴트 메서드를 활용해서 기능을 `PostHasHit`, `PostHasLikes`, `PostHasComments`, `PostHasPolicy` 로 분리한다. 각 파일이 하나의 관심사만 다룬다.
+
+---
+
+## 4. RsData — 일관된 API 응답
+
+모든 API 응답이 `{ resultCode, msg, data }` 구조다. 프론트엔드는 `res.error.msg`, `res.data.item` 으로 일관되게 접근한다. `resultCode` 의 앞 숫자가 HTTP 상태 코드다.
+
+---
+
+## 5. getCheck*Rs / check* 패턴
+
+- `getCheck*Rs` → 예외 없이 `RsData` 반환, DTO 조립 시 사용
+- `check*` → 실패 시 `AppException` 던짐, 실제 작업 전 게이트
+
+---
+
+## 6. Task 시스템 — 비동기 처리
+
+이벤트 → `BEFORE_COMMIT` 에서 Task 저장 → 스케줄러가 꺼내서 처리. 개발 환경에서는 즉시 실행. 재시도는 지수 백오프. 분산 환경에서는 ShedLock 으로 중복 실행 방지.
+
+---
+
+## 7. MockMvc in production
+
+`InternalRestClient` 가 `spring-test` 의 `MockMvc` 를 프로덕션 코드에서 사용한다. 서비스가 자기 자신의 API 를 실제 HTTP 없이 호출하는 독특한 패턴이다.
+
+---
+
+## 8. openapi-typescript + openapi-fetch
+
+백엔드 SpringDoc → OpenAPI JSON → `openapi-typescript` 변환 → 프론트엔드 타입 안전 클라이언트. API 계약이 타입으로 강제된다.
+
+---
+
+이 프로젝트는 단순한 CRUD 를 넘어, 실제 서비스 수준의 설계 패턴이 촘촘하게 담겨 있다. 코드를 다시 열어볼 때마다 새로운 의도가 보일 것이다.
+

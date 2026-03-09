@@ -12,7 +12,6 @@ env:
   DOCKER_NETWORK: common # 도커 네트워크
   back_DIR: back # Dockerfile 위치
   NPM_BASE_URL: https://127.0.0.1:81 # NPMplus 관리 API 베이스 URL
-  REGISTRY: ghcr.io
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }} # 커밋이 짧은 시간안에 몰려도 최신 커밋에 대해서만 액션이 수행되도록
@@ -50,8 +49,6 @@ jobs:
       tag_name: ${{ steps.dry_run.outputs.new_tag }} # 이후 잡에서 사용할 태그명
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: 다음 버전 태그 계산 (dry-run)
         id: dry_run
@@ -69,8 +66,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Docker Buildx 설치
         uses: docker/setup-buildx-action@v3
@@ -79,23 +74,16 @@ jobs:
       - name: 레지스트리 로그인
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # 저장소 소유자명을 소문자로 (GHCR 경로 표준화)
       - name: set lower case owner name
-        run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
-
-      # 태그 메타데이터 생성 (버전태그 + latest)
-      - name: Docker 메타데이터
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/${{ env.IMAGE_REPOSITORY }}
-          tags: |
-            type=raw,value=${{ needs.calculateTag.outputs.tag_name }}
-            type=raw,value=latest
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >> "${GITHUB_ENV}"
+        env:
+          OWNER: "${{ github.repository_owner }}"
 
       # 캐시를 최대한 활용하여 빌드 → 버전태그 및 latest 동시 푸시
       - name: 빌드 앤 푸시
@@ -103,13 +91,11 @@ jobs:
         with:
           context: ${{ env.back_DIR }}
           push: true
-          platforms: linux/amd64
-          provenance: false
-          sbom: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max,compression=zstd
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/${{ env.IMAGE_REPOSITORY }}:${{ needs.calculateTag.outputs.tag_name }}
+            ghcr.io/${{ env.OWNER_LC }}/${{ env.IMAGE_REPOSITORY }}:latest
 
   # ---------------------------------------------------------
   # 3) Blue/Green 무중단 배포 (EC2 + NPMplus 스위치)
@@ -392,11 +378,19 @@ jobs:
             --output text)
           echo "SSM Command ID: ${COMMAND_ID}"
 
-          # 완료까지 대기 (최대 15분: Delay=10s × MaxAttempts=90)
-          aws ssm wait command-executed \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${{ env.INSTANCE_ID }}" \
-            --waiter-config '{"Delay": 10, "MaxAttempts": 90}' || true
+          # 완료까지 대기 (최대 15분, 10초 간격 폴링)
+          WAIT_MAX=900
+          WAIT_INTERVAL=10
+          WAIT_ELAPSED=0
+          while (( WAIT_ELAPSED < WAIT_MAX )); do
+            CMD_STATUS=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${{ env.INSTANCE_ID }}" \
+              --query 'Status' --output text 2>/dev/null || echo "Unknown")
+            [[ "${CMD_STATUS}" == "InProgress" || "${CMD_STATUS}" == "Pending" ]] || break
+            sleep ${WAIT_INTERVAL}
+            WAIT_ELAPSED=$(( WAIT_ELAPSED + WAIT_INTERVAL ))
+          done
 
           # 결과 조회 및 출력
           INVOCATION=$(aws ssm get-command-invocation \
@@ -421,8 +415,6 @@ jobs:
     needs: deploy
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Create Tag
         id: create_tag

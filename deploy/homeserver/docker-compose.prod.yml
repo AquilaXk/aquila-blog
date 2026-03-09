@@ -3,7 +3,6 @@ name: blog_home
 services:
   caddy:
     image: caddy:2.8-alpine
-    container_name: caddy_1
     restart: unless-stopped
     ports:
       - "80:80"
@@ -14,15 +13,11 @@ services:
       - caddy_config:/config
     env_file:
       - ./.env.prod
-    depends_on:
-      - back_1
-      - back_2
 
-  back_1:
+  back_blue:
     build:
       context: ../../back
       dockerfile: Dockerfile
-    container_name: back_1
     restart: unless-stopped
     env_file:
       - ./.env.prod
@@ -30,15 +25,15 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
+      DEPLOY_COLOR: blue
     depends_on:
       - db_1
       - redis_1
 
-  back_2:
+  back_green:
     build:
       context: ../../back
       dockerfile: Dockerfile
-    container_name: back_2
     restart: unless-stopped
     env_file:
       - ./.env.prod
@@ -46,13 +41,13 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
+      DEPLOY_COLOR: green
     depends_on:
       - db_1
       - redis_1
 
   db_1:
     image: jangka512/pgj:latest
-    container_name: db_1
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -65,7 +60,6 @@ services:
 
   redis_1:
     image: redis:7-alpine
-    container_name: redis_1
     restart: unless-stopped
     command: >
       redis-server

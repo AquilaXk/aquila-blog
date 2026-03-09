@@ -85,5 +85,5 @@ jobs:
             exit 1
           fi
 
-          docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d --build --remove-orphans
+          ./deploy/homeserver/blue_green_deploy.sh
           REMOTE

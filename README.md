@@ -68,7 +68,7 @@ cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
 
 ```bash
 cd ~/app
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d --build
+./deploy/homeserver/blue_green_deploy.sh
 ```
 
 정상 확인:
@@ -101,21 +101,59 @@ Repository -> Settings -> Secrets and variables -> Actions
 1. SSH 접속
 2. `git pull`
 3. `deploy/homeserver/.env.prod` 갱신(시크릿 사용 시)
-4. `docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d --build`
+4. `./deploy/homeserver/blue_green_deploy.sh` 실행
+   - 비활성 색상 백엔드(`back_blue`/`back_green`) 빌드/기동
+   - 헬스체크 통과 확인
+   - Caddy upstream 전환 + reload
+   - 이전 색상 백엔드 정지
 
 ## 9. 무중단 배포 포인트
 
-현재 구성은 `back_1`, `back_2` 두 개 인스턴스를 Caddy가 라운드로빈으로 프록시합니다.
-배포 중 한 컨테이너가 재기동되더라도 다른 컨테이너가 응답해서 체감 다운타임이 줄어듭니다.
+현재 구성은 `back_blue` / `back_green` Blue/Green 방식입니다.
 
-## 10. 보안 체크리스트
+배포 흐름:
+1. 현재 활성 색상 반대편에 새 버전 배포
+2. 새 버전 헬스체크 성공 확인
+3. Caddy upstream을 새 색상으로 전환
+4. 이전 색상 정리
+
+주의:
+- 헬스체크 경로 기본값은 `/` 이며, 필요 시 서버 환경변수 `HEALTHCHECK_PATH`로 변경 가능
+- 헬스체크는 `1xx~4xx`를 정상 응답으로 취급합니다(애플리케이션 보호 정책상 `401/403`이어도 프로세스 기동은 정상으로 간주)
+- 완전 무중단을 위해서는 DB 스키마 변경도 backward-compatible 해야 합니다.
+
+## 10. DB 마이그레이션 규칙 (Expand/Contract)
+
+무중단 배포에서는 DB 변경을 한 번에 끝내지 말고 2단계 이상으로 나눕니다.
+
+1) Expand 단계
+- 새 컬럼/새 테이블/새 인덱스 추가
+- 기존 코드와 새 코드가 동시에 동작 가능하도록 유지
+- 절대 기존 컬럼 즉시 삭제/이름변경 금지
+
+2) 애플리케이션 전환
+- 새 버전을 Blue/Green으로 배포
+- 읽기/쓰기 경로를 점진적으로 새 스키마로 이동
+
+3) Contract 단계
+- 구버전 트래픽이 완전히 제거된 뒤
+- 더 이상 사용하지 않는 컬럼/인덱스/제약을 정리
+
+예시:
+- `nickname` -> `display_name` 변경 시
+1. `display_name` 추가 (expand)
+2. 코드에서 둘 다 읽고 새 컬럼에도 쓰기
+3. 데이터 백필
+4. 구버전 제거 후 `nickname` 삭제 (contract)
+
+## 11. 보안 체크리스트
 
 1. SSH 비밀번호 로그인 비활성화 (키 기반만)
 2. UFW 허용 포트 최소화 (`22`, `80`, `443`)
 3. DB(5432), Redis(6379)는 외부 미노출 유지
 4. 정기 백업 (DB 덤프 + 디스크 백업)
 
-## 11. 트러블슈팅
+## 12. 트러블슈팅
 
 1. 인증서 발급 실패
 - 도메인이 홈 공인 IP를 정확히 가리키는지 확인
@@ -126,11 +164,11 @@ Repository -> Settings -> Secrets and variables -> Actions
 - `HOME_KNOWN_HOSTS` 재등록
 
 3. API 502
-- `docker logs caddy_1`
-- `docker logs back_1`
-- `docker logs back_2`
+- `docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs caddy`
+- `docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs back_blue`
+- `docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs back_green`
 
-## 12. 보안 하드닝 (SSH/UFW/fail2ban)
+## 13. 보안 하드닝 (SSH/UFW/fail2ban)
 
 하드닝 문서: `deploy/homeserver/HARDENING.md`
 

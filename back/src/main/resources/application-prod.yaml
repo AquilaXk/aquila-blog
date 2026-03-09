@@ -1,0 +1,31 @@
+spring:
+  data:
+    redis:
+      password: "${PROD___SPRING__DATA__REDIS__PASSWORD}"
+  datasource:
+    password: "${PROD___SPRING__DATASOURCE__PASSWORD}"
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: false
+        highlight_sql: false
+        use_sql_comments: false
+    show-sql: false
+logging:
+  level:
+    com.back: INFO
+    org.hibernate.orm.jdbc.bind: INFO
+    org.hibernate.orm.jdbc.extract: INFO
+    org.hibernate.orm.jdbc.batch: INFO
+    org.springframework.transaction.interceptor: INFO
+custom:
+  site:
+    cookieDomain: "${custom.prod.cookieDomain}"
+    frontUrl: "${custom.prod.frontUrl}"
+    backUrl: "${custom.prod.backUrl}"
+    dbHost: "${custom.prod.dbHost}"
+    dbName: "${custom.prod.dbName}"
+    redisHost: "${custom.prod.redisHost}"
+    redisDatabase: "${custom.prod.redisDatabase}"

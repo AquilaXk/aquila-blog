@@ -7,8 +7,8 @@ import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
+import com.back.global.web.app.Rq
 import jakarta.servlet.FilterChain
-import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpHeaders
@@ -25,6 +25,7 @@ import tools.jackson.databind.ObjectMapper
 class CustomAuthenticationFilter(
     private val actorFacade: ActorFacade,
     private val objectMapper: ObjectMapper,
+    private val rq: Rq,
 ) : OncePerRequestFilter() {
     private val publicApiPaths = setOf(
         "/member/api/v1/members/auth/login",
@@ -65,7 +66,7 @@ class CustomAuthenticationFilter(
     }
 
     private fun authenticateIfPossible(request: HttpServletRequest, response: HttpServletResponse) {
-        val (apiKey, accessToken) = extractTokens(request)
+        val (apiKey, accessToken) = extractTokens()
 
         if (apiKey.isBlank() && accessToken.isBlank()) return
 
@@ -88,17 +89,14 @@ class CustomAuthenticationFilter(
             ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
         val newAccessToken = actorFacade.genAccessToken(member)
-        response.addCookie(Cookie("accessToken", newAccessToken).apply {
-            path = "/"
-            isHttpOnly = true
-        })
-        response.addHeader(HttpHeaders.AUTHORIZATION, newAccessToken)
+        rq.setCookie("accessToken", newAccessToken)
+        rq.setHeader(HttpHeaders.AUTHORIZATION, newAccessToken)
 
         authenticate(member)
     }
 
-    private fun extractTokens(request: HttpServletRequest): Pair<String, String> {
-        val headerAuthorization = request.getHeader(HttpHeaders.AUTHORIZATION).orEmpty()
+    private fun extractTokens(): Pair<String, String> {
+        val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "")
 
         return if (headerAuthorization.isNotBlank()) {
             if (!headerAuthorization.startsWith("Bearer ")) {
@@ -108,13 +106,7 @@ class CustomAuthenticationFilter(
             val bits = headerAuthorization.split(" ", limit = 3)
             bits.getOrNull(1).orEmpty() to bits.getOrNull(2).orEmpty()
         } else {
-            request.cookies
-                ?.firstOrNull { it.name == "apiKey" }
-                ?.value
-                .orEmpty() to request.cookies
-                ?.firstOrNull { it.name == "accessToken" }
-                ?.value
-                .orEmpty()
+            rq.getCookieValue("apiKey", "") to rq.getCookieValue("accessToken", "")
         }
     }
 

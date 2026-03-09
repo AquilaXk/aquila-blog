@@ -1,11 +1,18 @@
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/glog_test?reWriteBatchedInserts=true
-    username: postgres
-    password: lldj123414
+  config:
+    import: optional:file:.env.test[.properties]
   jpa:
     hibernate:
       ddl-auto: create
     properties:
       hibernate:
         dialect: com.back.global.jpa.config.CustomTestPostgreSQLDialect
+custom:
+  site:
+    cookieDomain: "${custom.test.cookieDomain}"
+    frontUrl: "${custom.test.frontUrl}"
+    backUrl: "${custom.test.backUrl}"
+    dbHost: "${custom.test.dbHost}"
+    dbName: "${custom.test.dbName}"
+    redisHost: "${custom.test.redisHost}"
+    redisDatabase: "${custom.test.redisDatabase}"

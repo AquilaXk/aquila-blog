@@ -1,0 +1,11 @@
+.idea
+.terraform
+secrets.tf
+
+# 실무에서는 아래 파일들이 같이 관리되어야 한다.
+# 강사는 해당 리포지터리를 public 으로 하려고
+# 아래 파일과 같이 민감한 정보가 담기는 파일을 .gitignore 에 추가한다.
+.terraform.lock.hcl
+.terraform.tfstate.lock.info
+terraform.tfstate
+terraform.tfstate.backup

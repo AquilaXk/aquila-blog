@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://aquilaxk.vercel.app
+
+# Sitemaps
+Sitemap: https://aquilaxk.vercel.app/sitemap.xml

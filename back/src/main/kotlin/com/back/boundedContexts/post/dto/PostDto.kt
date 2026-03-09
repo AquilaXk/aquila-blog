@@ -12,6 +12,7 @@ data class PostDto @JsonCreator constructor(
     val authorName: String,
     val authorProfileImgUrl: String,
     val title: String,
+    val summary: String,
     val published: Boolean,
     val listed: Boolean,
     val likesCount: Int,
@@ -27,12 +28,31 @@ data class PostDto @JsonCreator constructor(
         post.author.name,
         post.author.redirectToProfileImgUrlOrDefault,
         post.title,
+        makeSummary(post.content),
         post.published,
         post.listed,
         post.likesCount,
         post.commentsCount,
         post.hitCount,
     )
+
+    companion object {
+        private const val SUMMARY_MAX_LENGTH = 180
+
+        private fun makeSummary(content: String): String {
+            val normalized = content
+                .replace(Regex("```[\\s\\S]*?```"), " ")
+                .replace(Regex("`([^`]+)`"), "$1")
+                .replace(Regex("\\[(.*?)\\]\\((.*?)\\)"), "$1")
+                .replace(Regex("[#>*_~-]"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+            if (normalized.length <= SUMMARY_MAX_LENGTH) return normalized
+
+            return "${normalized.take(SUMMARY_MAX_LENGTH).trim()}..."
+        }
+    }
 
     fun forEventLog() = copy(title = "")
 }

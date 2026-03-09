@@ -1,3 +1,6 @@
 .idea/
 front/.idea/
 front/tsconfig.tsbuildinfo
+infra/terraform.tfvars
+infra/*.auto.tfvars
+deploy/homeserver/.env.prod

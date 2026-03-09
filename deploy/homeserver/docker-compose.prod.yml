@@ -1,0 +1,78 @@
+name: blog_home
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: caddy_1
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    env_file:
+      - ./.env.prod
+    depends_on:
+      - back_1
+      - back_2
+
+  back_1:
+    build:
+      context: ../../back
+      dockerfile: Dockerfile
+    container_name: back_1
+    restart: unless-stopped
+    env_file:
+      - ./.env.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+    depends_on:
+      - db_1
+      - redis_1
+
+  back_2:
+    build:
+      context: ../../back
+      dockerfile: Dockerfile
+    container_name: back_2
+    restart: unless-stopped
+    env_file:
+      - ./.env.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+    depends_on:
+      - db_1
+      - redis_1
+
+  db_1:
+    image: jangka512/pgj:latest
+    container_name: db_1
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PROD___SPRING__DATASOURCE__PASSWORD}
+      POSTGRES_DATABASE: postgres
+      POSTGRES_DATABASES: ${DB_BASE_NAME:-blog}_prod
+      TZ: Asia/Seoul
+    volumes:
+      - db_data:/var/lib/postgresql
+
+  redis_1:
+    image: redis:7-alpine
+    container_name: redis_1
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${PROD___SPRING__DATA__REDIS__PASSWORD}
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

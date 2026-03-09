@@ -53,8 +53,8 @@ WORKDIR /app
 
 COPY --from=builder /app/build/libs/*.jar app.jar
 
-# Spring Boot layered jar 추출
-RUN java -Djarmode=tools -jar app.jar extract --layers --launcher
+# Spring Boot layered jar 추출 (deprecation 경고는 무시해도 됨 — Spring Boot 4.x에서 tools extract 명령은 다른 디렉토리 구조를 생성함)
+RUN java -Djarmode=layertools -jar app.jar extract
 
 # =========================
 # 3️⃣ Runtime Stage

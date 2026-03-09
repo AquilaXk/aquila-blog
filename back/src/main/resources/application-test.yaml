@@ -7,6 +7,9 @@ spring:
     properties:
       hibernate:
         dialect: com.back.global.jpa.config.CustomTestPostgreSQLDialect
+        jdbc:
+          batch_size: 0
+          order_inserts: false
 custom:
   site:
     cookieDomain: "${custom.test.cookieDomain}"

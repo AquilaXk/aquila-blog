@@ -108,7 +108,7 @@ class ApiV1PostControllerTest {
                 content = """{"title": "제목", "content": "내용"}"""
             }.andExpect {
                 status { isUnauthorized() }
-                jsonPath("$.resultCode") { value("401-1") }
+                jsonPath("$.resultCode") { value("401-3") }
             }
         }
     }

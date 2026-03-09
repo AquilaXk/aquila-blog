@@ -8,9 +8,9 @@ services:
     environment:
       TZ: Asia/Seoul
     command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass lldj123414
-  p14141_dev_db:
+  db_1:
     image: jangka512/pgj:latest
-    container_name: p14141_dev_db
+    container_name: db_1
     ports:
       - "5432:5432"
     environment:

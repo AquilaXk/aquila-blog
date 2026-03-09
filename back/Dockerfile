@@ -3,8 +3,13 @@
 # =========================
 # 1️⃣ Build Stage
 # =========================
+# application.yaml 의 custom.dbBaseName 과 맞춰야 함
+ARG DB_BASE_NAME=blog
+
 # jangka512/pgj: PGroonga + PostGIS + pgvector 포함 커스텀 이미지
 FROM jangka512/pgj:latest AS builder
+
+ARG DB_BASE_NAME
 
 # JDK 24 + Redis 설치 (Gradle은 gradlew 사용)
 RUN apt-get update \
@@ -34,7 +39,7 @@ RUN set -e \
  && su postgres -c "initdb -D $PGDATA --auth=trust" \
  && su postgres -c "pg_ctl -D $PGDATA start -o '-c listen_addresses=localhost' -w" \
  && su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'lldj123414';\"" \
- && su postgres -c "psql -c \"CREATE DATABASE blog_test;\"" \
+ && su postgres -c "psql -c \"CREATE DATABASE ${DB_BASE_NAME}_test;\"" \
  && redis-server --daemonize yes --requirepass lldj123414 \
  && ./gradlew build --no-daemon \
  && su postgres -c "pg_ctl -D $PGDATA stop -w"

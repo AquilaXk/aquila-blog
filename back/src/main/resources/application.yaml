@@ -1,5 +1,6 @@
 server:
   port: 8080
+  shutdown: graceful
   forward-headers-strategy: native
 spring:
   application:
@@ -57,10 +58,14 @@ spring:
             user-name-attribute: response
   data:
     redis:
-      host: localhost
+      host: ${custom.site.redisHost}
       port: 6379
       password: lldj123414
+      database: ${custom.site.redisDatabase}
   datasource:
+    url: jdbc:postgresql://${custom.site.dbHost}:5432/${custom.site.dbName}?reWriteBatchedInserts=true
+    username: postgres
+    password: lldj123414
     driver-class-name: org.postgresql.Driver
     hikari:
       auto-commit: false
@@ -88,9 +93,39 @@ logging:
     org.hibernate.orm.jdbc.batch: TRACE
     org.springframework.transaction.interceptor: TRACE
 custom:
+  dbBaseName: blog
+  dev:
+    cookieDomain: localhost
+    frontUrl: "http://${custom.dev.cookieDomain}:3000"
+    backUrl: "http://${custom.dev.cookieDomain}:${server.port}"
+    dbHost: localhost
+    dbName: "${custom.dbBaseName}_dev"
+    redisHost: localhost
+    redisDatabase: 0
+  test:
+    cookieDomain: localhost
+    frontUrl: "http://${custom.test.cookieDomain}:3000"
+    backUrl: "http://${custom.test.cookieDomain}:${server.port}"
+    dbHost: localhost
+    dbName: "${custom.dbBaseName}_test"
+    redisHost: localhost
+    redisDatabase: 1
+  prod:
+    cookieDomain: blog.oa.gg
+    frontUrl: "https://www.${custom.prod.cookieDomain}"
+    backUrl: "https://api.${custom.prod.cookieDomain}"
+    dbHost: pg_1
+    dbName: "${custom.dbBaseName}_prod"
+    redisHost: redis_1
+    redisDatabase: 0
   site:
-    backUrl: 'http://localhost:${server.port}'
-    frontUrl: 'http://localhost:3000'
+    cookieDomain: "${custom.dev.cookieDomain}"
+    frontUrl: "${custom.dev.frontUrl}"
+    backUrl: "${custom.dev.backUrl}"
+    dbHost: "${custom.dev.dbHost}"
+    dbName: "${custom.dev.dbName}"
+    redisHost: "${custom.dev.redisHost}"
+    redisDatabase: "${custom.dev.redisDatabase}"
   systemMemberApiKey: "${CUSTOM__SYSTEM_MEMBER_API_KEY:system}"
   jwt:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:12345678901234567890123456789012}"

@@ -20,8 +20,8 @@ class MemberSecurityExtensionsTest {
         val admin = memberFacade.findByUsername("admin")!!
 
         assertThat(admin.isAdmin).isTrue()
-        assertThat(admin.authoritiesAsStringList).containsExactly("ROLE_ADMIN")
-        assertThat(admin.authorities.map { it.authority }).containsExactly("ROLE_ADMIN")
+        assertThat(admin.authoritiesAsStringList).containsExactly("ROLE_MEMBER", "ROLE_ADMIN")
+        assertThat(admin.authorities.map { it.authority }).containsExactly("ROLE_MEMBER", "ROLE_ADMIN")
     }
 
     @Test
@@ -29,7 +29,7 @@ class MemberSecurityExtensionsTest {
         val user1 = memberFacade.findByUsername("user1")!!
 
         assertThat(user1.isAdmin).isFalse()
-        assertThat(user1.authoritiesAsStringList).isEmpty()
-        assertThat(user1.authorities).isEmpty()
+        assertThat(user1.authoritiesAsStringList).containsExactly("ROLE_MEMBER")
+        assertThat(user1.authorities.map { it.authority }).containsExactly("ROLE_MEMBER")
     }
 }

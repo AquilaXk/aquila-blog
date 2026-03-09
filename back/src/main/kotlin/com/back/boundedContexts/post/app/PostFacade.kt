@@ -36,7 +36,7 @@ class PostFacade(
         listed: Boolean = false,
     ): Post {
         val post = Post(0, author, title, content, published, listed)
-        val savedPost = postRepository.save(post)
+        val savedPost = postRepository.saveAndFlush(post)
         author.incrementPostsCount()
 
         eventPublisher.publish(

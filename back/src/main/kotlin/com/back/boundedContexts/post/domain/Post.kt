@@ -81,13 +81,13 @@ class Post(
         deletedAt = Instant.now()
     }
 
-    @field:OneToOne(fetch = FetchType.LAZY, cascade = [CascadeType.PERSIST])
+    @field:OneToOne(fetch = FetchType.LAZY)
     var likesCountAttr: PostAttr? = null
 
-    @field:OneToOne(fetch = FetchType.LAZY, cascade = [CascadeType.PERSIST])
+    @field:OneToOne(fetch = FetchType.LAZY)
     var commentsCountAttr: PostAttr? = null
 
-    @field:OneToOne(fetch = FetchType.LAZY, cascade = [CascadeType.PERSIST])
+    @field:OneToOne(fetch = FetchType.LAZY)
     var hitCountAttr: PostAttr? = null
 
     override val post: Post get() = this

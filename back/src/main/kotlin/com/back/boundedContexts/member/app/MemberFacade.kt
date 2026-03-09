@@ -30,7 +30,7 @@ class MemberFacade(
         else
             null
 
-        val member = memberRepository.save(Member(0, username, encodedPassword, nickname))
+        val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname))
         profileImgUrl?.let { member.profileImgUrl = it }
 
         return member

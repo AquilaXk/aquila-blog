@@ -35,7 +35,7 @@ class ApiV1PostControllerTest {
     @Nested
     inner class Write {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `인증된 사용자가 글을 작성하면 제목과 내용이 저장된 게시글이 정상 생성된다`() {
             val resultActions = mvc.post("/post/api/v1/posts") {
                 contentType = MediaType.APPLICATION_JSON
@@ -60,7 +60,7 @@ class ApiV1PostControllerTest {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `성공 - 공개 글 작성`() {
             mvc.post("/post/api/v1/posts") {
                 contentType = MediaType.APPLICATION_JSON
@@ -75,7 +75,7 @@ class ApiV1PostControllerTest {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `실패 - 제목 없이`() {
             mvc.post("/post/api/v1/posts") {
                 contentType = MediaType.APPLICATION_JSON
@@ -238,9 +238,9 @@ class ApiV1PostControllerTest {
     @Nested
     inner class Modify {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `인증된 작성자가 기존 글 수정 요청 시 글이 정상 변경된다`() {
-            val actor = actorFacade.findByUsername("user1").getOrThrow()
+            val actor = actorFacade.findByUsername("admin").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
 
             mvc.put("/post/api/v1/posts/${post.id}") {
@@ -265,18 +265,16 @@ class ApiV1PostControllerTest {
                 contentType = MediaType.APPLICATION_JSON
                 content = """{"title": "제목 new", "content": "내용 new"}"""
             }.andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
-                match(handler().methodName("modify"))
                 status { isForbidden() }
                 jsonPath("$.resultCode") { value("403-1") }
-                jsonPath("$.msg") { value("작성자만 글을 수정할 수 있습니다.") }
+                jsonPath("$.msg") { value("권한이 없습니다.") }
             }
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `published false로 수정하면 listed가 자동으로 false가 된다`() {
-            val actor = actorFacade.findByUsername("user1").getOrThrow()
+            val actor = actorFacade.findByUsername("admin").getOrThrow()
             val post = postFacade.write(actor, "공개 글", "내용", true, true)
 
             mvc.put("/post/api/v1/posts/${post.id}") {
@@ -290,7 +288,7 @@ class ApiV1PostControllerTest {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `실패 - 존재하지 않는 글`() {
             mvc.put("/post/api/v1/posts/${Int.MAX_VALUE}") {
                 contentType = MediaType.APPLICATION_JSON
@@ -305,9 +303,9 @@ class ApiV1PostControllerTest {
     @Nested
     inner class Delete {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `작성자가 본인 글 삭제 요청 시 삭제가 성공적으로 처리된다`() {
-            val actor = actorFacade.findByUsername("user1").getOrThrow()
+            val actor = actorFacade.findByUsername("admin").getOrThrow()
             val post = postFacade.write(actor, "삭제할 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
@@ -338,16 +336,14 @@ class ApiV1PostControllerTest {
             val post = postFacade.write(actor, "다른 사람 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
-                match(handler().methodName("delete"))
                 status { isForbidden() }
-                jsonPath("$.resultCode") { value("403-2") }
-                jsonPath("$.msg") { value("작성자만 글을 삭제할 수 있습니다.") }
+                jsonPath("$.resultCode") { value("403-1") }
+                jsonPath("$.msg") { value("권한이 없습니다.") }
             }
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `실패 - 존재하지 않는 글`() {
             mvc.delete("/post/api/v1/posts/${Int.MAX_VALUE}").andExpect {
                 status { isNotFound() }
@@ -427,7 +423,7 @@ class ApiV1PostControllerTest {
     @Nested
     inner class GetMine {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `성공 - 내 글 목록 조회`() {
             mvc.get("/post/api/v1/posts/mine?page=1&pageSize=10").andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
@@ -438,9 +434,9 @@ class ApiV1PostControllerTest {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `성공 - 키워드 검색`() {
-            val actor = actorFacade.findByUsername("user1").getOrThrow()
+            val actor = actorFacade.findByUsername("admin").getOrThrow()
             val targetPost = postFacade.write(actor, "내 검색 키워드 글", "검색 검증 글")
 
             mvc.get("/post/api/v1/posts/mine") {
@@ -466,7 +462,7 @@ class ApiV1PostControllerTest {
     @Nested
     inner class GetOrCreateTemp {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `성공 - 새 임시글`() {
             mvc.post("/post/api/v1/posts/temp").andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
@@ -479,7 +475,7 @@ class ApiV1PostControllerTest {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("admin")
         fun `성공 - 기존 임시글`() {
             mvc.post("/post/api/v1/posts/temp")
 

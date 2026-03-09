@@ -1,0 +1,12 @@
+{
+  email {$CADDY_EMAIL}
+}
+
+{$API_DOMAIN} {
+  encode gzip zstd
+
+  reverse_proxy back_1:8080 back_2:8080 {
+    health_uri /
+    lb_policy round_robin
+  }
+}

@@ -24,7 +24,7 @@ COPY gradle gradle
 COPY build.gradle.kts settings.gradle.kts .
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 
-COPY .env.test .env
+COPY .env.test .env.test
 COPY src src
 
 # PG 초기화 → 시작 → 테스트 DB 생성 → 빌드(테스트 포함) → PG 종료
@@ -34,7 +34,7 @@ RUN set -e \
  && su postgres -c "initdb -D $PGDATA --auth=trust" \
  && su postgres -c "pg_ctl -D $PGDATA start -o '-c listen_addresses=localhost' -w" \
  && su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'lldj123414';\"" \
- && su postgres -c "psql -c \"CREATE DATABASE slog_test;\"" \
+ && su postgres -c "psql -c \"CREATE DATABASE blog_test;\"" \
  && redis-server --daemonize yes --requirepass lldj123414 \
  && ./gradlew build --no-daemon \
  && su postgres -c "pg_ctl -D $PGDATA stop -w"
@@ -49,7 +49,7 @@ WORKDIR /app
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 # Spring Boot layered jar 추출
-RUN java -Djarmode=layertools -jar app.jar extract
+RUN java -Djarmode=tools -jar app.jar extract --layers --launcher
 
 # =========================
 # 3️⃣ Runtime Stage

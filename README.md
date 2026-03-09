@@ -5936,3 +5936,281 @@ Spring 빈을 엔티티나 도메인 인터페이스에서 접근할 때 쓰는 
 
 이 프로젝트는 단순한 CRUD 를 넘어, 실제 서비스 수준의 설계 패턴이 촘촘하게 담겨 있다. 코드를 다시 열어볼 때마다 새로운 의도가 보일 것이다.
 
+
+---
+
+# 53강 — ApiV1PostCommentController
+
+댓글 컨트롤러는 글 컨트롤러와 동일한 패턴을 따른다. 짧게 살펴본다.
+
+```kotlin
+@RestController
+@RequestMapping("/post/api/v1/posts/{postId}/comments")
+class ApiV1PostCommentController(
+    private val postFacade: PostFacade,
+    private val rq: Rq,
+)
+```
+
+`/post/api/v1/posts/{postId}/comments` 하위에 댓글 CRUD 가 모인다. 모든 댓글 요청은 먼저 `postId` 로 글을 조회하고, 글 자체의 읽기 권한을 확인한 후 댓글 작업을 한다.
+
+---
+
+## 1. makePostCommentDto
+
+```kotlin
+private fun makePostCommentDto(postComment: PostComment): PostCommentDto {
+    val actor = rq.actorOrNull
+    return PostCommentDto(postComment).apply {
+        actorCanModify = postComment.getCheckActorCanModifyRs(actor).isSuccess
+        actorCanDelete = postComment.getCheckActorCanDeleteRs(actor).isSuccess
+    }
+}
+```
+
+`PostInfo` 의 `makePostWithContentDto` 와 동일한 패턴. 예외 없이 권한을 사전 확인해서 DTO 에 담는다.
+
+---
+
+## 2. 엔드포인트 패턴
+
+```kotlin
+@DeleteMapping("/{id}")
+@Transactional
+fun delete(@PathVariable postId: Int, @PathVariable id: Int): RsData<Void> {
+    val post = postFacade.findById(postId).getOrThrow()
+    val postComment = post.findCommentById(id).getOrThrow()
+    postComment.checkActorCanDelete(rq.actor)
+    postFacade.deleteComment(post, postComment, rq.actor)
+    return RsData("200-1", "${id}번 댓글이 삭제되었습니다.")
+}
+```
+
+1. `postId` 로 글 조회 (`getOrThrow`)
+2. `id` 로 댓글 조회 — `post.findCommentById(id)` 는 `Post.commentRepository` 를 통해 `(post, id)` 로 찾는다
+3. `postComment.checkActorCanDelete(rq.actor)` 권한 확인
+4. `postFacade.deleteComment(post, postComment, rq.actor)` 위임
+
+댓글 수정(`PUT`) 도 동일 구조다.
+
+---
+
+## 3. ApiV1AdmPostController
+
+```kotlin
+@GetMapping("/count")
+@Transactional(readOnly = true)
+fun count(): AdmPostCountResBody {
+    return AdmPostCountResBody(
+        postFacade.count(),
+        memberApiClient.randomSecureTip
+    )
+}
+```
+
+관리자 전용 컨트롤러. 글 전체 개수와 함께 `memberApiClient.randomSecureTip` 을 같이 반환한다. 이게 `InternalRestClient` 를 실제로 사용하는 유일한 지점이다(25강). 관리자 대시보드에 랜덤 보안 팁을 보여주는 용도다.
+
+---
+
+# 54강 — 글 목록 페이지 — Next.js 클라이언트 컴포넌트
+
+`/p/page.tsx` 는 전체 클라이언트 컴포넌트다.
+
+---
+
+## 1. URL 파라미터 기반 상태 관리
+
+```typescript
+const searchParams = useSearchParams();
+
+const currentPage = Math.max(1, Number(searchParams.get("page") || "1"));
+const currentKw = searchParams.get("kw") || "";
+const currentSort = searchParams.get("sort") || "CREATED_AT";
+```
+
+상태를 `useState` 가 아니라 **URL 쿼리 파라미터** 에서 읽는다. `router.push("?page=2&kw=react")` 로 상태를 바꾸면 URL 이 바뀌고, `useSearchParams` 가 새 값을 준다. 뒤로가기가 동작하고, 링크를 공유할 수 있다.
+
+---
+
+## 2. API 호출
+
+```typescript
+useEffect(() => {
+  let cancelled = false;
+  client.GET("/post/api/v1/posts", {
+    params: { query: { page: currentPage, pageSize: currentPageSize, kw: currentKw, sort: currentSort } },
+  }).then((res) => {
+    if (!cancelled && res.data) {
+      setPosts(res.data.content);
+      setPageable(res.data.pageable ?? null);
+      setLoading(false);
+    }
+  });
+  return () => { cancelled = true; };
+}, [currentPage, currentPageSize, currentKw, currentSort]);
+```
+
+`cancelled` 플래그로 언마운트 또는 파라미터 변경 시 이전 요청의 응답을 무시한다. React 에서 흔히 쓰는 cleanup 패턴이다.
+
+---
+
+## 3. 카드 레이아웃
+
+```tsx
+<div className="flex items-center gap-4 mt-3 pt-3 border-t text-sm text-muted-foreground">
+  <div className="flex items-center gap-1">
+    <Eye className="w-4 h-4" />
+    <span>{post.hitCount}</span>
+  </div>
+  <div className="flex items-center gap-1">
+    <Heart className={`w-4 h-4 ${post.actorHasLiked ? "fill-red-500 text-red-500" : ""}`} />
+    <span>{post.likesCount}</span>
+  </div>
+  <div className="flex items-center gap-1">
+    <MessageCircle className="w-4 h-4" />
+    <span>{post.commentsCount}</span>
+  </div>
+</div>
+```
+
+`actorHasLiked` 가 `true` 이면 하트 아이콘이 빨간색으로 채워진다. 이 값은 백엔드의 `findLikedPostIds` 로 목록 전체에 대해 한 번에 조회한 결과다 (34강).
+
+---
+
+# 55강 — 글 편집 페이지 — zod + react-hook-form + Cmd+S
+
+`/p/[id]/edit/page.tsx` 는 이 프로젝트에서 가장 복잡한 프론트엔드 파일이다.
+
+---
+
+## 1. withLogin HOC
+
+```typescript
+export default withLogin(function Page({ params }) { ... });
+```
+
+편집 페이지 전체가 `withLogin` 으로 감싸져 있다. 로그인하지 않으면 컴포넌트 자체가 렌더링되지 않고 안내 메시지만 보인다.
+
+---
+
+## 2. zod 스키마 — 조건부 유효성 검사
+
+```typescript
+const postFormSchema = z.object({
+  title: z.string().max(100),
+  content: z.string(),
+  published: z.boolean(),
+  listed: z.boolean(),
+}).refine(
+  (data) => { if (data.published) return data.title.trim().length >= 2; return true; },
+  { message: "공개 글의 제목은 2자 이상이어야 합니다.", path: ["title"] },
+).refine(
+  (data) => { if (data.published) return data.content.trim().length >= 2; return true; },
+  { message: "공개 글의 내용은 2자 이상이어야 합니다.", path: ["content"] },
+);
+```
+
+임시저장(`published=false`) 시에는 제목, 내용이 비어 있어도 된다. 공개(`published=true`) 시에만 2자 이상 필수다. `z.refine` 으로 조건부 유효성 검사를 구현한다.
+
+프론트엔드 유효성 검사가 백엔드의 `@NotBlank @Size(min=2)` 와 약간 다른 것이 보인다. 임시저장 케이스를 위해 프론트엔드에서 조건을 완화했다.
+
+---
+
+## 3. published/listed 연동
+
+```typescript
+<Checkbox
+  onCheckedChange={(checked) => {
+    field.onChange(checked);
+    if (!checked) form.setValue("listed", false);  // published 해제 시 listed도 해제
+  }}
+/>
+```
+
+`published` 체크박스를 해제하면 `listed` 도 자동으로 `false` 가 된다. 백엔드 도메인의 불변 규칙(`if (!this.published) this.listed = false`) 을 프론트엔드에서도 미리 반영한다. `listed` 체크박스는 `published` 가 `false` 이면 `disabled` 다.
+
+---
+
+## 4. Cmd+S / Ctrl+S 단축키
+
+```typescript
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.code === "KeyS")) {
+      e.preventDefault();
+      form.handleSubmit(onSubmit)();
+    }
+  };
+  window.addEventListener("keydown", handleKeyDown);
+  return () => window.removeEventListener("keydown", handleKeyDown);
+}, [form, onSubmit]);
+```
+
+에디터가 아니더라도 글 편집 페이지 전체에서 저장 단축키가 동작한다. `e.code === "KeyS"` 도 같이 확인하는 건 IME 입력 중 `e.key` 가 `"Process"` 로 나오는 경우를 방어하기 위해서다.
+
+---
+
+## 5. 글 작성 흐름 — 임시저장 우선
+
+```
+사용자: "글 쓰기" 버튼 클릭
+  ↓
+/p/write → POST /post/api/v1/posts/temp
+  ↓
+임시글 생성 (published=false, title="")
+  ↓
+/p/{id}/edit 으로 redirect
+  ↓
+사용자: 제목/내용 입력 후 Cmd+S 또는 저장 버튼
+  ↓
+PUT /post/api/v1/posts/{id}
+  ↓
+published=true, listed=true 이면 목록에 공개
+```
+
+빈 페이지를 보여주는 게 아니라, 먼저 임시글을 만들고 편집으로 진입한다. 사용자가 실수로 페이지를 닫아도 임시글은 DB 에 남는다. `getOrCreateTemp` 덕분에 동일한 글로 다시 진입한다.
+
+---
+
+# 56강 — 커리큘럼을 마치며
+
+52개 강의를 통해 이 프로젝트의 모든 주요 코드를 훑었다.
+
+---
+
+## 배운 것들
+
+**백엔드 (Spring Boot 4, Kotlin)**
+- JWT + apiKey 듀얼 토큰 인증
+- Spring Security stateless 설정과 커스텀 필터
+- OAuth2 소셜 로그인 (Kakao, Google, Naver) — stateless 변형
+- JPA `Persistable<Int>` + `@DynamicUpdate` + `@SQLRestriction` + soft delete
+- EAV 패턴으로 유연한 카운터 관리 (`PostAttr`, `MemberAttr`)
+- Kotlin 인터페이스 디폴트 메서드를 활용한 Mixin 패턴
+- `getCheck*Rs` / `check*` 도메인 권한 패턴
+- QueryDSL 동적 쿼리 + PGroonga 전문 검색
+- `@AfterDDL` + `CustomPostgreSQLDialect` 로 인덱스와 커스텀 함수 등록
+- 이벤트 → Task 큐 → 지수 백오프 재시도 → ShedLock 분산 스케줄링
+- `MockMvc` 를 프로덕션 내부 API 클라이언트로 사용
+- companion object 정적 접근 패턴
+- `@SpringBootTest` + `@Transactional` 통합 테스트
+
+**프론트엔드 (Next.js 15, React 19, TypeScript)**
+- App Router 서버/클라이언트 컴포넌트 분리
+- openapi-typescript + openapi-fetch 타입 안전 API 클라이언트
+- AuthContext + useAuth + withLogin/withAdmin HOC
+- URL 파라미터 기반 상태 관리
+- STOMP WebSocket + reconnect + 구독 큐 패턴
+- zod + react-hook-form 조건부 유효성 검사
+- 서버 컴포넌트에서 쿠키 수동 전달 (SSR + 쿠키 인증)
+
+---
+
+## 코드를 다시 볼 때
+
+이제 각 파일이 왜 그렇게 생겼는지 설명할 수 있어야 한다.
+
+`Post` 가 4개의 Mixin 인터페이스를 구현하는 이유, `@AfterDDL` 이 붙은 이유, `companion object` 에 `lateinit` 이 있는 이유, `BEFORE_COMMIT` 으로 이벤트를 처리하는 이유, `MockMvc` 를 프로덕션에서 쓰는 이유.
+
+모두 여기서 다뤘다.
+

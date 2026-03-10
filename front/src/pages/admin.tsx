@@ -256,6 +256,13 @@ const AdminPage: NextPage = () => {
     })
   }
 
+  const insertCallout = (
+    kind: "TIP" | "INFO" | "WARNING" | "OUTLINE" | "EXAMPLE" | "SUMMARY",
+    body: string
+  ) => {
+    insertSnippet(`> [!${kind}]\n> ${body}\n`)
+  }
+
   if (authLoading || !me) {
     return <Main>관리자 인증 확인 중...</Main>
   }
@@ -385,49 +392,55 @@ const AdminPage: NextPage = () => {
           </Button>
         </Row>
 
-        <Row>
-          <Input
-            placeholder="title"
-            value={postTitle}
-            onChange={(e) => setPostTitle(e.target.value)}
-          />
-          <CheckLabel>
-            <input
-              type="checkbox"
-              checked={postPublished}
-              onChange={(e) => setPostPublished(e.target.checked)}
-            />
-            published
-          </CheckLabel>
-          <CheckLabel>
-            <input
-              type="checkbox"
-              checked={postListed}
-              onChange={(e) => setPostListed(e.target.checked)}
-            />
-            listed
-          </CheckLabel>
-          <Button
-            disabled={disabled("writePost")}
-            onClick={() =>
-              run("writePost", () =>
-                apiFetch("/post/api/v1/posts", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    title: postTitle,
-                    content: postContent,
-                    published: postPublished,
-                    listed: postListed,
-                  }),
-                })
-              )
-            }
-          >
-            글 작성
-          </Button>
-        </Row>
-
         <EditorSection>
+          <WriterHeader>
+            <div className="titleGroup">
+              <label htmlFor="post-title">글 제목</label>
+              <TitleInput
+                id="post-title"
+                placeholder="제목을 입력하세요"
+                value={postTitle}
+                onChange={(e) => setPostTitle(e.target.value)}
+              />
+            </div>
+            <div className="actions">
+              <CheckLabel>
+                <input
+                  type="checkbox"
+                  checked={postPublished}
+                  onChange={(e) => setPostPublished(e.target.checked)}
+                />
+                공개
+              </CheckLabel>
+              <CheckLabel>
+                <input
+                  type="checkbox"
+                  checked={postListed}
+                  onChange={(e) => setPostListed(e.target.checked)}
+                />
+                목록 노출
+              </CheckLabel>
+              <PrimaryButton
+                disabled={disabled("writePost")}
+                onClick={() =>
+                  run("writePost", () =>
+                    apiFetch("/post/api/v1/posts", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        title: postTitle,
+                        content: postContent,
+                        published: postPublished,
+                        listed: postListed,
+                      }),
+                    })
+                  )
+                }
+              >
+                글 발행
+              </PrimaryButton>
+            </div>
+          </WriterHeader>
+
           <EditorToolbar>
             <Button type="button" onClick={() => applyHeadingStyle(1)}>
               제목1
@@ -465,6 +478,36 @@ const AdminPage: NextPage = () => {
             <Button type="button" onClick={insertLink}>
               링크
             </Button>
+            <Button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
+              TIP
+            </Button>
+            <Button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
+              INFO
+            </Button>
+            <Button
+              type="button"
+              onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
+            >
+              WARNING
+            </Button>
+            <Button
+              type="button"
+              onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}
+            >
+              OUTLINE
+            </Button>
+            <Button
+              type="button"
+              onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}
+            >
+              EXAMPLE
+            </Button>
+            <Button
+              type="button"
+              onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}
+            >
+              SUMMARY
+            </Button>
             <Button
               type="button"
               onClick={() =>
@@ -494,16 +537,6 @@ const AdminPage: NextPage = () => {
               }
             >
               테이블
-            </Button>
-            <Button
-              type="button"
-              onClick={() =>
-                insertSnippet(
-                  "> [!TIP]\n> 여기에 핵심 팁을 작성하세요.\n>\n> - 체크리스트\n> - 주의사항\n"
-                )
-              }
-            >
-              콜아웃
             </Button>
           </EditorToolbar>
           <EditorGrid>
@@ -686,8 +719,9 @@ const Main = styled.main`
 const Section = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
-  padding: 1rem;
+  padding: 1.1rem;
   margin-bottom: 1rem;
+  background: ${({ theme }) => theme.colors.gray1};
 
   h2 {
     margin: 0 0 0.75rem;
@@ -712,24 +746,42 @@ const Row = styled.div`
 const Input = styled.input`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 8px;
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem 0.65rem;
   min-width: 120px;
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
 `
 
+const TitleInput = styled(Input)`
+  width: 100%;
+  min-width: 260px;
+  font-size: 1rem;
+  border-radius: 10px;
+  padding: 0.68rem 0.78rem;
+`
+
 const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray8};
-  border-radius: 8px;
-  padding: 0.45rem 0.7rem;
-  background: ${({ theme }) => theme.colors.gray3};
+  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
+  font-size: 0.8rem;
 
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }
+`
+
+const PrimaryButton = styled(Button)`
+  border-radius: 10px;
+  padding: 0.6rem 0.88rem;
+  border-color: ${({ theme }) => theme.colors.blue9};
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #fff;
+  font-weight: 700;
 `
 
 const CheckLabel = styled.label`
@@ -741,14 +793,49 @@ const CheckLabel = styled.label`
 `
 
 const EditorSection = styled.div`
-  margin: 0.75rem 0 0.25rem;
+  margin: 0.85rem 0 0.25rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  padding: 0.85rem;
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const WriterHeader = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.7rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+
+  .titleGroup {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .titleGroup label {
+    font-size: 0.82rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
 `
 
 const EditorToolbar = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.65rem;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px dashed ${({ theme }) => theme.colors.gray7};
 `
 
 const EditorGrid = styled.div`
@@ -768,8 +855,8 @@ const EditorPane = styled.section`
 const PreviewPane = styled(EditorPane)``
 
 const PaneTitle = styled.h3`
-  margin: 0 0 0.4rem;
-  font-size: 0.96rem;
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
   color: ${({ theme }) => theme.colors.gray12};
 `
 
@@ -790,11 +877,12 @@ const ContentInput = styled.textarea`
   min-height: 420px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 10px;
-  padding: 0.75rem;
+  padding: 0.82rem;
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.6;
   resize: vertical;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 `
 
 const PreviewCard = styled.div`
@@ -802,7 +890,7 @@ const PreviewCard = styled.div`
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0 0.85rem 0.85rem;
+  padding: 0 1rem 0.9rem;
 `
 
 const ResultPanel = styled.pre`

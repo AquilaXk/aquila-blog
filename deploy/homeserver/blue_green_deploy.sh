@@ -28,10 +28,10 @@ env_value() {
 backend_host() {
   local backend="$1"
   if [[ "${backend}" == "back_blue" ]]; then
-    echo "back-blue"
+    echo "back_blue"
     return
   fi
-  echo "back-green"
+  echo "back_green"
 }
 
 detect_active_backend() {

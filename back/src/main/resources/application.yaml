@@ -108,6 +108,9 @@ custom:
     redisHost: "${custom.dev.redisHost}"
     redisDatabase: "${custom.dev.redisDatabase}"
   systemMemberApiKey: "${CUSTOM__SYSTEM_MEMBER_API_KEY:system}"
+  admin:
+    username: "${CUSTOM__ADMIN__USERNAME:}"
+    password: "${CUSTOM__ADMIN__PASSWORD:}"
   jwt:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:12345678901234567890123456789012}"
   accessToken:

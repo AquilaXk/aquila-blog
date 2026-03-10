@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfil
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasSecurity
 import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.post.domain.PostMember
+import com.back.global.app.AppConfig
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.*
@@ -86,7 +87,7 @@ class Member(
         get() = nickname
 
     val isAdmin: Boolean
-        get() = username in setOf("system", "admin")
+        get() = username in setOf("system", AppConfig.adminUsername)
 
 
     fun modify(nickname: String, profileImgUrl: String?) {

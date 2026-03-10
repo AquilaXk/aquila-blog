@@ -76,6 +76,33 @@ jobs:
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
 
+      - name: Diagnose Tailscale Route to Home SSH
+        env:
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT || '22' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${HOME_HOST}" ]; then
+            echo "HOME host secret is empty. Set HOME_TAILSCALE_HOST (or HOME_TS_HOST/HOME_SSH_HOST/HOME_HOST)." >&2
+            exit 1
+          fi
+
+          echo "diagnose target: ${HOME_HOST}:${HOME_SSH_PORT}"
+          tailscale status
+
+          echo "tailscale ping test"
+          tailscale ping -c 3 "${HOME_HOST}"
+
+          echo "tcp connectivity test"
+          if command -v nc >/dev/null 2>&1; then
+            timeout 10 nc -zv "${HOME_HOST}" "${HOME_SSH_PORT}"
+          else
+            timeout 10 bash -lc "cat < /dev/null > /dev/tcp/${HOME_HOST}/${HOME_SSH_PORT}"
+            echo "tcp open: ${HOME_HOST}:${HOME_SSH_PORT}"
+          fi
+
       - name: Configure SSH key
         shell: bash
         run: |

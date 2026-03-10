@@ -11,9 +11,15 @@ NETWORK_NAME="blog_home_default"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
+CADDY_SWITCH_VERIFY_RETRIES="${CADDY_SWITCH_VERIFY_RETRIES:-15}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+}
+
+env_value() {
+  local key="$1"
+  awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
 }
 
 backend_host() {
@@ -100,6 +106,42 @@ switch_caddy_upstream() {
   compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 }
 
+verify_caddy_upstream() {
+  local expected_backend="$1"
+  local expected_backend_host
+  expected_backend_host="$(backend_host "${expected_backend}")"
+  local api_domain
+  api_domain="$(env_value "API_DOMAIN")"
+
+  if [[ -z "${api_domain}" ]]; then
+    echo "missing API_DOMAIN in ${ENV_FILE}" >&2
+    return 1
+  fi
+
+  local attempt=1
+  while [[ "${attempt}" -le "${CADDY_SWITCH_VERIFY_RETRIES}" ]]; do
+    local code
+    code="$(
+      docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+        -s -o /dev/null -w "%{http_code}" "http://caddy:80${HEALTHCHECK_PATH}" \
+        -H "Host: ${api_domain}" || true
+    )"
+
+    if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+      echo "caddy switch verify ok: ${expected_backend} (status=${code})"
+      return 0
+    fi
+
+    echo "caddy switch verify pending: ${expected_backend} (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES}, status=${code:-none})"
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "caddy switch verify failed: expected ${expected_backend_host}" >&2
+  compose logs --no-color --tail=120 caddy >&2 || true
+  return 1
+}
+
 check_backend_health() {
   local backend="$1"
   local backend_host_name
@@ -156,6 +198,13 @@ compose up -d --build "${next_backend}"
 
 check_backend_health "${next_backend}"
 switch_caddy_upstream "${next_backend}"
+
+if ! verify_caddy_upstream "${next_backend}"; then
+  echo "rolling back caddy upstream to ${active_backend}" >&2
+  switch_caddy_upstream "${active_backend}" || true
+  exit 1
+fi
+
 echo "${next_backend}" > "${STATE_FILE}"
 
 if [[ "${active_backend}" != "${next_backend}" ]]; then

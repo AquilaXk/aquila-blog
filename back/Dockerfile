@@ -44,7 +44,7 @@ RUN set -e \
 # =========================
 # Oracle GraalVM base can require x86-64-v3 on older CPUs.
 # Use Temurin for broader CPU compatibility.
-FROM eclipse-temurin:24-jdk-jammy AS extractor
+FROM eclipse-temurin:24-jdk AS extractor
 
 WORKDIR /app
 
@@ -56,7 +56,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 # =========================
 # 3️⃣ Runtime Stage
 # =========================
-FROM eclipse-temurin:24-jdk-jammy
+FROM eclipse-temurin:24-jdk
 
 ENV LANG=ko_KR.UTF-8
 ENV LC_ALL=ko_KR.UTF-8

@@ -30,8 +30,8 @@ class MemberProdInitData(
 
     @Transactional
     fun ensureConfiguredAdminMember() {
-        val adminUsername = AppConfig.adminUsername.trim()
-        val adminPassword = AppConfig.adminPassword
+        val adminUsername = AppConfig.adminUsernameOrBlank.trim()
+        val adminPassword = AppConfig.adminPasswordOrBlank
 
         if (adminUsername.isBlank()) return
         if (adminPassword.isBlank()) return

@@ -41,5 +41,11 @@ class AppConfig(
             private set
         lateinit var adminPassword: String
             private set
+
+        val adminUsernameOrBlank: String
+            get() = if (::adminUsername.isInitialized) adminUsername else ""
+
+        val adminPasswordOrBlank: String
+            get() = if (::adminPassword.isInitialized) adminPassword else ""
     }
 }

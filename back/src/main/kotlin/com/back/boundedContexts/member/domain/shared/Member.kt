@@ -87,7 +87,7 @@ class Member(
         get() = nickname
 
     val isAdmin: Boolean
-        get() = username in setOf("system", AppConfig.adminUsername)
+        get() = username in setOf("system", AppConfig.adminUsernameOrBlank)
 
 
     fun modify(nickname: String, profileImgUrl: String?) {

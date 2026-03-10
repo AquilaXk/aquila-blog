@@ -110,6 +110,68 @@ const AdminPage: NextPage = () => {
     })
   }
 
+  const applyHeadingStyle = (level: 1 | 2 | 3 | 0) => {
+    const textarea = postContentRef.current
+    const prefix = level === 0 ? "" : `${"#".repeat(level)} `
+
+    if (!textarea) {
+      const fallback = level === 0 ? "본문 텍스트" : `${prefix}제목`
+      setPostContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${fallback}\n`)
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const blockStart = postContent.lastIndexOf("\n", Math.max(0, start - 1)) + 1
+    const nextNewline = postContent.indexOf("\n", end)
+    const blockEnd = nextNewline === -1 ? postContent.length : nextNewline
+    const selectedBlock = postContent.slice(blockStart, blockEnd)
+
+    const nextBlock = selectedBlock
+      .split("\n")
+      .map((line) => {
+        if (!line.trim()) return line
+        const stripped = line.replace(/^#{1,3}\s+/, "")
+        return prefix ? `${prefix}${stripped}` : stripped
+      })
+      .join("\n")
+
+    const nextContent = `${postContent.slice(0, blockStart)}${nextBlock}${postContent.slice(blockEnd)}`
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(blockStart, blockStart + nextBlock.length)
+    })
+  }
+
+  const insertToggle = () => {
+    const textarea = postContentRef.current
+    const defaultBody = "내용을 입력하세요."
+
+    if (!textarea) {
+      setPostContent(
+        (prev) =>
+          `${prev}${prev.endsWith("\n") ? "" : "\n"}:::toggle 토글 제목\n${defaultBody}\n:::\n`
+      )
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selected = postContent.slice(start, end).trim()
+    const body = selected || defaultBody
+    const snippet = `:::toggle 토글 제목\n${body}\n:::\n`
+    const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      const titleStart = start + ":::toggle ".length
+      textarea.setSelectionRange(titleStart, titleStart + "토글 제목".length)
+    })
+  }
+
   if (authLoading || !me) {
     return <Main>관리자 인증 확인 중...</Main>
   }
@@ -283,6 +345,21 @@ const AdminPage: NextPage = () => {
 
         <EditorSection>
           <EditorToolbar>
+            <Button type="button" onClick={() => applyHeadingStyle(1)}>
+              제목1
+            </Button>
+            <Button type="button" onClick={() => applyHeadingStyle(2)}>
+              제목2
+            </Button>
+            <Button type="button" onClick={() => applyHeadingStyle(3)}>
+              제목3
+            </Button>
+            <Button type="button" onClick={() => applyHeadingStyle(0)}>
+              텍스트
+            </Button>
+            <Button type="button" onClick={insertToggle}>
+              토글
+            </Button>
             <Button
               type="button"
               onClick={() =>

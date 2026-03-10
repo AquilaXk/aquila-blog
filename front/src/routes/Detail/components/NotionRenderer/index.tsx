@@ -11,7 +11,14 @@ type Props = {
   recordMap?: unknown
 }
 
+type MarkdownSegment =
+  | { type: "markdown"; content: string }
+  | { type: "toggle"; title: string; content: string }
+
 const MARKDOWN_GUIDE = `### 작성 가이드
+- 제목1: # 제목
+- 제목2: ## 제목
+- 제목3: ### 제목
 - 코드블록: \`\`\`ts
 const x = 1
 \`\`\`
@@ -19,6 +26,10 @@ const x = 1
 graph TD
   A[Start] --> B{Check}
 \`\`\`
+- 토글:
+  :::toggle 토글 제목
+  접기/펼치기 본문
+  :::
 - 콜아웃: > [!TIP] 제목
   > 본문
 - 테이블:
@@ -26,9 +37,61 @@ graph TD
   | --- | --- |
   | a | 1 |`
 
+const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
+  const lines = content.split("\n")
+  const segments: MarkdownSegment[] = []
+  let markdownBuffer: string[] = []
+
+  const flushMarkdown = () => {
+    const text = markdownBuffer.join("\n").trim()
+    if (text) segments.push({ type: "markdown", content: text })
+    markdownBuffer = []
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]
+    if (!line.startsWith(":::toggle")) {
+      markdownBuffer.push(line)
+      continue
+    }
+
+    const title = line.replace(/^:::toggle\s*/, "").trim() || "토글"
+    const bodyLines: string[] = []
+    let closed = false
+
+    for (let j = i + 1; j < lines.length; j += 1) {
+      if (lines[j].trim() === ":::") {
+        flushMarkdown()
+        segments.push({
+          type: "toggle",
+          title,
+          content: bodyLines.join("\n").trim() || "내용을 입력하세요.",
+        })
+        i = j
+        closed = true
+        break
+      }
+      bodyLines.push(lines[j])
+    }
+
+    if (!closed) {
+      markdownBuffer.push(line)
+      markdownBuffer.push(...bodyLines)
+      break
+    }
+  }
+
+  flushMarkdown()
+  return segments
+}
+
 const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const normalizedContent = useMemo(() => content?.trim() || "", [content])
+  const segments = useMemo(
+    () => parseMarkdownSegments(normalizedContent),
+    [normalizedContent]
+  )
   const renderKey = useMemo(
     () => `${normalizedContent.length}:${normalizedContent.slice(0, 64)}`,
     [normalizedContent]
@@ -53,39 +116,85 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
 
   return (
     <StyledWrapper ref={rootRef} className="aq-markdown">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkGithubBlockquoteAlert]}
-        components={{
-          code({ className, children, ...props }) {
-            const rawCode = String(children).replace(/\n$/, "")
-            const lang = className?.replace("language-", "").trim() || ""
+      {segments.map((segment, index) => {
+        if (segment.type === "toggle") {
+          return (
+            <details className="aq-toggle" key={`toggle-${index}`}>
+              <summary>{segment.title}</summary>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkGithubBlockquoteAlert]}
+                components={{
+                  code({ className, children, ...props }) {
+                    const rawCode = String(children).replace(/\n$/, "")
+                    const lang = className?.replace("language-", "").trim() || ""
 
-            if (!lang) {
-              return (
-                <code className="aq-inline-code" {...props}>
-                  {children}
-                </code>
-              )
-            }
+                    if (!lang) {
+                      return (
+                        <code className="aq-inline-code" {...props}>
+                          {children}
+                        </code>
+                      )
+                    }
 
-            if (lang === "mermaid") {
-              return (
-                <pre className="aq-mermaid">
-                  <code className="language-mermaid">{rawCode}</code>
-                </pre>
-              )
-            }
+                    if (lang === "mermaid") {
+                      return (
+                        <pre className="aq-mermaid">
+                          <code className="language-mermaid">{rawCode}</code>
+                        </pre>
+                      )
+                    }
 
-            return (
-              <pre className="aq-code">
-                <code className={className}>{rawCode}</code>
-              </pre>
-            )
-          },
-        }}
-      >
-        {normalizedContent}
-      </ReactMarkdown>
+                    return (
+                      <pre className="aq-code">
+                        <code className={className}>{rawCode}</code>
+                      </pre>
+                    )
+                  },
+                }}
+              >
+                {segment.content}
+              </ReactMarkdown>
+            </details>
+          )
+        }
+
+        return (
+          <ReactMarkdown
+            key={`markdown-${index}`}
+            remarkPlugins={[remarkGfm, remarkGithubBlockquoteAlert]}
+            components={{
+              code({ className, children, ...props }) {
+                const rawCode = String(children).replace(/\n$/, "")
+                const lang = className?.replace("language-", "").trim() || ""
+
+                if (!lang) {
+                  return (
+                    <code className="aq-inline-code" {...props}>
+                      {children}
+                    </code>
+                  )
+                }
+
+                if (lang === "mermaid") {
+                  return (
+                    <pre className="aq-mermaid">
+                      <code className="language-mermaid">{rawCode}</code>
+                    </pre>
+                  )
+                }
+
+                return (
+                  <pre className="aq-code">
+                    <code className={className}>{rawCode}</code>
+                  </pre>
+                )
+              },
+            }}
+          >
+            {segment.content}
+          </ReactMarkdown>
+        )
+      })}
     </StyledWrapper>
   )
 }
@@ -155,6 +264,33 @@ const StyledWrapper = styled.div`
     line-height: 1.6;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
       monospace;
+  }
+
+  .aq-toggle {
+    margin: 0.9rem 0;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 10px;
+    background: ${({ theme }) => theme.colors.gray2};
+    padding: 0.55rem 0.75rem;
+  }
+
+  .aq-toggle > summary {
+    cursor: pointer;
+    font-weight: 700;
+    list-style: none;
+  }
+
+  .aq-toggle > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .aq-toggle > summary::before {
+    content: "▸";
+    margin-right: 0.45rem;
+  }
+
+  .aq-toggle[open] > summary::before {
+    content: "▾";
   }
 
   table {

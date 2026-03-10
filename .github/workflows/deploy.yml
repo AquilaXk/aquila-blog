@@ -87,6 +87,7 @@ jobs:
 
           printf '%s\n' "${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}" > "$SSH_DIR/home_key"
           chmod 600 "$SSH_DIR/home_key"
+          SSH_STRICT_OPTS="-o StrictHostKeyChecking=yes"
           if [ -n "${{ secrets.HOME_KNOWN_HOSTS }}" ]; then
             printf '%s\n' "${{ secrets.HOME_KNOWN_HOSTS }}" > "$SSH_DIR/known_hosts"
           else
@@ -113,12 +114,14 @@ jobs:
             done
 
             if [ "${success}" -ne 1 ]; then
-              echo "Failed to build known_hosts. Set HOME_KNOWN_HOSTS secret explicitly to avoid network flakiness." >&2
-              exit 1
+              echo "Failed to build known_hosts, fallback to StrictHostKeyChecking=accept-new for this run." >&2
+              : > "$SSH_DIR/known_hosts"
+              SSH_STRICT_OPTS="-o StrictHostKeyChecking=accept-new"
             fi
           fi
           chmod 600 "$SSH_DIR/known_hosts"
           echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
+          echo "SSH_STRICT_OPTS=$SSH_STRICT_OPTS" >> "$GITHUB_ENV"
 
       - name: Deploy over SSH
         env:
@@ -130,7 +133,7 @@ jobs:
         run: |
           PORT="${HOME_SSH_PORT:-22}"
 
-          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
+          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" ${SSH_STRICT_OPTS} -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
             "HOME_APP_DIR='$HOME_APP_DIR' HOME_SERVER_ENV='$HOME_SERVER_ENV' bash -s" <<'REMOTE'
           set -euo pipefail
 

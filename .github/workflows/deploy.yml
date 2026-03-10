@@ -43,6 +43,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
       - name: Configure SSH key
         shell: bash
         run: |
@@ -57,14 +62,14 @@ jobs:
           if [ -n "${{ secrets.HOME_KNOWN_HOSTS }}" ]; then
             printf '%s\n' "${{ secrets.HOME_KNOWN_HOSTS }}" > "$SSH_DIR/known_hosts"
           else
-            ssh-keyscan -p "${{ secrets.HOME_SSH_PORT || '22' }}" -H "${{ secrets.HOME_SSH_HOST || secrets.HOME_HOST }}" > "$SSH_DIR/known_hosts"
+            ssh-keyscan -p "${{ secrets.HOME_SSH_PORT || '22' }}" -H "${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}" > "$SSH_DIR/known_hosts"
           fi
           chmod 600 "$SSH_DIR/known_hosts"
           echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
 
       - name: Deploy over SSH
         env:
-          HOME_HOST: ${{ secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
+          HOME_HOST: ${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
           HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}

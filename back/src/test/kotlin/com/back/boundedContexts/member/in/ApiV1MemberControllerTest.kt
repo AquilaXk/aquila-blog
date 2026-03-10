@@ -109,7 +109,7 @@ class ApiV1MemberControllerTest {
                         """
                         {
                             "username": "usernew",
-                            "password": "1234",
+                            "password": "Abcd1234!",
                             "nickname": "무명"
                         }
                         """.trimIndent()
@@ -143,7 +143,7 @@ class ApiV1MemberControllerTest {
                         """
                         {
                             "username": "user1",
-                            "password": "1234",
+                            "password": "Abcd1234!",
                             "nickname": "중복유저"
                         }
                         """.trimIndent()

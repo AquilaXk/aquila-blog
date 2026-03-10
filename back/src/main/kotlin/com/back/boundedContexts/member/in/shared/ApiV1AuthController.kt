@@ -54,8 +54,8 @@ class ApiV1AuthController(
         val member = memberFacade.findByUsername(reqBody.username)
             ?: throw AppException("401-1", "존재하지 않는 아이디입니다.")
 
-        if (member.username == AppConfig.adminUsername && AppConfig.adminPassword.isNotBlank()) {
-            if (reqBody.password != AppConfig.adminPassword) {
+        if (member.username == AppConfig.adminUsernameOrBlank && AppConfig.adminPasswordOrBlank.isNotBlank()) {
+            if (reqBody.password != AppConfig.adminPasswordOrBlank) {
                 throw AppException("401-2", "비밀번호가 일치하지 않습니다.")
             }
         } else {

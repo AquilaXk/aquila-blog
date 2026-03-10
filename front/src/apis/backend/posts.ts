@@ -111,22 +111,27 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => ({
 const PAGE_SIZE = 30
 
 export const getPosts = async (): Promise<TPost[]> => {
-  const firstPage = await apiFetch<PageDto<ApiPostDto>>(
-    `/post/api/v1/posts?page=1&pageSize=${PAGE_SIZE}`
-  )
+  try {
+    const firstPage = await apiFetch<PageDto<ApiPostDto>>(
+      `/post/api/v1/posts?page=1&pageSize=${PAGE_SIZE}`
+    )
 
-  const mapped = firstPage.content.map(mapPostDto)
-  if (firstPage.pageable.totalPages <= 1) return mapped
+    const mapped = firstPage.content.map(mapPostDto)
+    if (firstPage.pageable.totalPages <= 1) return mapped
 
-  const restPages = await Promise.all(
-    Array.from({ length: firstPage.pageable.totalPages - 1 }, (_, index) =>
-      apiFetch<PageDto<ApiPostDto>>(
-        `/post/api/v1/posts?page=${index + 2}&pageSize=${PAGE_SIZE}`
+    const restPages = await Promise.all(
+      Array.from({ length: firstPage.pageable.totalPages - 1 }, (_, index) =>
+        apiFetch<PageDto<ApiPostDto>>(
+          `/post/api/v1/posts?page=${index + 2}&pageSize=${PAGE_SIZE}`
+        )
       )
     )
-  )
 
-  return mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
+    return mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
+  } catch (error) {
+    console.error("[getPosts] backend request failed, returning empty list:", error)
+    return []
+  }
 }
 
 const extractPostIdFromSlug = (slug: string): number | null => {

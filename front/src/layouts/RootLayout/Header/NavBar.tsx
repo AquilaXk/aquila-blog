@@ -7,12 +7,14 @@ import { apiFetch } from "src/apis/backend/client"
 type MemberMe = {
   id: number
   username: string
+  nickname?: string
   isAdmin?: boolean
 }
 
 const NavBar: React.FC = () => {
   const router = useRouter()
   const [me, setMe] = useState<MemberMe | null>(null)
+  const [isAuthResolved, setIsAuthResolved] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -25,6 +27,8 @@ const NavBar: React.FC = () => {
       } catch {
         if (!mounted) return
         setMe(null)
+      } finally {
+        if (mounted) setIsAuthResolved(true)
       }
     }
 
@@ -47,10 +51,23 @@ const NavBar: React.FC = () => {
 
   const memberLinks = [{ id: 1, name: "About", to: "/about" }]
 
-  const links = me ? memberLinks : guestLinks
+  const links = me ? memberLinks : isAuthResolved ? guestLinks : [{ id: 1, name: "About", to: "/about" }]
+
+  const handleLogout = async () => {
+    try {
+      await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" })
+    } catch {
+      // Even if API fails, clear local auth UI state to prevent stale header.
+    } finally {
+      setMe(null)
+      if (router.pathname === "/admin") {
+        await router.replace("/login?next=%2Fadmin")
+      }
+    }
+  }
 
   return (
-    <StyledWrapper className="">
+    <StyledWrapper>
       <ul>
         {links.map((link) => (
           <li key={link.id}>
@@ -59,13 +76,18 @@ const NavBar: React.FC = () => {
         ))}
         {me?.isAdmin && (
           <li>
-            <Link href="/admin#post-write">Write</Link>
-          </li>
-        )}
-        {me?.isAdmin && (
-          <li>
             <Link href="/admin">Admin</Link>
           </li>
+        )}
+        {me && (
+          <>
+            <li className="identity">{me.nickname || me.username}</li>
+            <li>
+              <button type="button" onClick={handleLogout} className="logoutBtn">
+                Logout
+              </button>
+            </li>
+          </>
         )}
       </ul>
     </StyledWrapper>
@@ -79,10 +101,26 @@ const StyledWrapper = styled.div`
   ul {
     display: flex;
     flex-direction: row;
+    align-items: center;
     li {
       display: block;
       margin-left: 1rem;
       color: ${({ theme }) => theme.colors.gray11};
     }
+  }
+
+  .identity {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.85rem;
+  }
+
+  .logoutBtn {
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    border-radius: 999px;
+    padding: 0.22rem 0.55rem;
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.78rem;
+    cursor: pointer;
   }
 `

@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
-import { GetServerSideProps, NextPage } from "next"
-import { useMemo, useRef, useState } from "react"
+import { NextPage } from "next"
+import { useRouter } from "next/router"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import NotionRenderer, {
   markdownGuide,
@@ -15,45 +16,12 @@ type MemberMe = {
   isAdmin?: boolean
 }
 
-type Props = {
-  me: MemberMe
-}
-
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
 
-const getServerApiBaseUrl = () => {
-  const serverUrl = process.env.BACKEND_INTERNAL_URL
-  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
-  const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
-
-  if (serverUrl) return stripTrailingSlash(serverUrl)
-  if (publicUrl) return stripTrailingSlash(publicUrl)
-
-  return "http://localhost:8080"
-}
-
-export const getServerSideProps: GetServerSideProps<Props> = async (context) => {
-  const cookie = context.req.headers.cookie || ""
-  const meRes = await fetch(`${getServerApiBaseUrl()}/member/api/v1/auth/me`, {
-    headers: { cookie },
-  }).catch(() => null)
-
-  if (!meRes?.ok) {
-    return {
-      redirect: {
-        destination: `/login?next=${encodeURIComponent("/admin")}`,
-        permanent: false,
-      },
-    }
-  }
-
-  const me = (await meRes.json().catch(() => null)) as MemberMe | null
-  if (!me?.isAdmin) return { notFound: true }
-
-  return { props: { me } }
-}
-
-const AdminPage: NextPage<Props> = ({ me }) => {
+const AdminPage: NextPage = () => {
+  const router = useRouter()
+  const [me, setMe] = useState<MemberMe | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [memberId, setMemberId] = useState("1")
@@ -94,6 +62,35 @@ const AdminPage: NextPage<Props> = ({ me }) => {
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
 
+  useEffect(() => {
+    let mounted = true
+    const verifyAdmin = async () => {
+      try {
+        const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
+        if (!mounted) return
+
+        if (!member?.isAdmin) {
+          await router.replace("/")
+          return
+        }
+
+        setMe(member)
+      } catch {
+        if (!mounted) return
+        await router.replace(`/login?next=${encodeURIComponent("/admin")}`)
+        return
+      } finally {
+        if (mounted) setAuthLoading(false)
+      }
+    }
+
+    void verifyAdmin()
+
+    return () => {
+      mounted = false
+    }
+  }, [router])
+
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
     if (!textarea) {
@@ -111,6 +108,10 @@ const AdminPage: NextPage<Props> = ({ me }) => {
       const cursor = start + snippet.length
       textarea.setSelectionRange(cursor, cursor)
     })
+  }
+
+  if (authLoading || !me) {
+    return <Main>관리자 인증 확인 중...</Main>
   }
 
   return (

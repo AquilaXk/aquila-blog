@@ -15,6 +15,7 @@ const SignupPage = () => {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [nickname, setNickname] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -45,35 +46,66 @@ const SignupPage = () => {
   return (
     <Main>
       <Card>
-        <h1>회원가입</h1>
+        <Top>
+          <Title>회원가입</Title>
+          <SubTitle>계정을 만든 뒤 로그인하면 댓글 기능과 관리 기능 접근이 가능합니다.</SubTitle>
+        </Top>
+
+        <Tabs>
+          <PassiveTab href="/login">로그인</PassiveTab>
+          <ActiveTab>회원가입</ActiveTab>
+        </Tabs>
+
         <form onSubmit={onSubmit}>
-          <Input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="아이디"
-            autoComplete="username"
-          />
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호"
-            autoComplete="new-password"
-          />
-          <Input
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="닉네임"
-            autoComplete="nickname"
-          />
+          <Field>
+            <Label htmlFor="username">아이디</Label>
+            <Input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="2~30자 아이디"
+              autoComplete="username"
+            />
+          </Field>
+
+          <Field>
+            <Label htmlFor="password">비밀번호</Label>
+            <PasswordRow>
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="2자 이상 비밀번호"
+                autoComplete="new-password"
+              />
+              <GhostButton
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label="비밀번호 표시 전환"
+              >
+                {showPassword ? "숨기기" : "표시"}
+              </GhostButton>
+            </PasswordRow>
+          </Field>
+
+          <Field>
+            <Label htmlFor="nickname">닉네임</Label>
+            <Input
+              id="nickname"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              placeholder="표시할 닉네임"
+              autoComplete="nickname"
+            />
+          </Field>
+
           {error && <ErrorText>{error}</ErrorText>}
           <Button type="submit" disabled={loading}>
-            회원가입
+            {loading ? "가입 중..." : "회원가입"}
           </Button>
         </form>
-        <FooterText>
-          이미 계정이 있으면 <Link href="/login">로그인</Link>
-        </FooterText>
+        <FooterText>이미 계정이 있으면 <Link href="/login">로그인</Link></FooterText>
       </Card>
     </Main>
   )
@@ -82,54 +114,139 @@ const SignupPage = () => {
 export default SignupPage
 
 const Main = styled.main`
-  min-height: 70vh;
+  min-height: 78vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(40, 130, 255, 0.1), transparent 38%),
+    radial-gradient(circle at 84% 2%, rgba(22, 163, 74, 0.08), transparent 40%);
 `
 
 const Card = styled.section`
   width: 100%;
-  max-width: 420px;
+  max-width: 460px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  padding: 1.2rem;
-
-  h1 {
-    margin: 0 0 0.9rem;
-    font-size: 1.3rem;
-  }
+  border-radius: 16px;
+  padding: 1.3rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 
   form {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.75rem;
   }
+`
+
+const Top = styled.div`
+  margin-bottom: 0.9rem;
+`
+
+const Title = styled.h1`
+  margin: 0;
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+`
+
+const SubTitle = styled.p`
+  margin: 0.45rem 0 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.5;
+`
+
+const Tabs = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+`
+
+const ActiveTab = styled.div`
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.48rem 0.7rem;
+  text-align: center;
+  font-weight: 600;
+`
+
+const PassiveTab = styled(Link)`
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.48rem 0.7rem;
+  text-align: center;
+  text-decoration: none;
+`
+
+const Field = styled.div`
+  display: grid;
+  gap: 0.35rem;
+`
+
+const Label = styled.label`
+  font-size: 0.88rem;
+  color: ${({ theme }) => theme.colors.gray11};
+`
+
+const PasswordRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
 `
 
 const Input = styled.input`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 8px;
-  padding: 0.55rem 0.65rem;
+  padding: 0.62rem 0.7rem;
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue9};
+  }
 `
 
 const Button = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray8};
+  border: 1px solid ${({ theme }) => theme.colors.blue9};
   border-radius: 8px;
-  padding: 0.55rem 0.75rem;
-  background: ${({ theme }) => theme.colors.gray3};
+  padding: 0.62rem 0.78rem;
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #fff;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`
+
+const GhostButton = styled.button`
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 8px;
+  padding: 0.62rem 0.72rem;
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
 `
 
 const ErrorText = styled.p`
   margin: 0;
-  color: ${({ theme }) => theme.colors.red10};
+  color: ${({ theme }) => theme.colors.red11};
+  font-size: 0.92rem;
 `
 
 const FooterText = styled.p`
-  margin: 0.8rem 0 0;
+  margin: 0.95rem 0 0;
   color: ${({ theme }) => theme.colors.gray11};
+
+  a {
+    color: ${({ theme }) => theme.colors.blue10};
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 `

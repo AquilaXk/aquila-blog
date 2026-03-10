@@ -36,8 +36,13 @@ const SignupPage = () => {
         body: JSON.stringify({ username, password, nickname }),
       })
       await router.push("/login")
-    } catch {
-      setError("회원가입에 실패했습니다.")
+    } catch (error) {
+      if (error instanceof Error) {
+        const message = error.message.split(": ").slice(1).join(": ").trim()
+        setError(message || "회원가입에 실패했습니다.")
+      } else {
+        setError("회원가입에 실패했습니다.")
+      }
     } finally {
       setLoading(false)
     }

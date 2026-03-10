@@ -14,6 +14,7 @@ HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 CADDY_SWITCH_VERIFY_RETRIES="${CADDY_SWITCH_VERIFY_RETRIES:-15}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
+HEALTHCHECK_LOG_EVERY_N_TRIES="${HEALTHCHECK_LOG_EVERY_N_TRIES:-5}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -167,6 +168,14 @@ check_backend_health() {
     fi
 
     echo "healthcheck pending: ${backend} (try ${attempt}/${HEALTHCHECK_RETRIES}, status=${code:-none})"
+
+    if (( attempt % HEALTHCHECK_LOG_EVERY_N_TRIES == 0 )); then
+      echo "----- ${backend} progress logs (try ${attempt}) -----"
+      compose ps "${backend}" || true
+      compose logs --no-color --tail=60 "${backend}" || true
+      echo "----- end progress logs -----"
+    fi
+
     sleep "${HEALTHCHECK_INTERVAL_SECONDS}"
     attempt=$((attempt + 1))
   done

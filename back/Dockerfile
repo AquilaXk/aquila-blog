@@ -42,7 +42,9 @@ RUN set -e \
 # =========================
 # 2️⃣ Layer Extract Stage
 # =========================
-FROM container-registry.oracle.com/graalvm/jdk:24 AS extractor
+# Oracle GraalVM base can require x86-64-v3 on older CPUs.
+# Use Temurin for broader CPU compatibility.
+FROM eclipse-temurin:24-jdk-jammy AS extractor
 
 WORKDIR /app
 
@@ -54,7 +56,7 @@ RUN java -Djarmode=layertools -jar app.jar extract
 # =========================
 # 3️⃣ Runtime Stage
 # =========================
-FROM container-registry.oracle.com/graalvm/jdk:24
+FROM eclipse-temurin:24-jdk-jammy
 
 ENV LANG=ko_KR.UTF-8
 ENV LC_ALL=ko_KR.UTF-8
@@ -70,7 +72,6 @@ COPY --from=extractor /app/application/ ./
 
 # ── t3.micro JVM 최적화 ──
 ENTRYPOINT ["java", \
-  "-XX:+UseJVMCICompiler", \
   "-XX:+UseSerialGC", \
   "-XX:MaxRAMPercentage=55", \
   "-XX:InitialRAMPercentage=25", \

@@ -43,6 +43,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify TS_AUTHKEY secret
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
+            echo "TS_AUTHKEY present"
+          else
+            echo "TS_AUTHKEY missing"
+            exit 1
+          fi
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v3
         with:

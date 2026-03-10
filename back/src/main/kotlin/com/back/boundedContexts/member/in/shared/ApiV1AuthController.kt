@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.app.shared.ActorFacade
 import com.back.boundedContexts.member.app.shared.AuthTokenService
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
@@ -53,7 +54,13 @@ class ApiV1AuthController(
         val member = memberFacade.findByUsername(reqBody.username)
             ?: throw AppException("401-1", "존재하지 않는 아이디입니다.")
 
-        memberFacade.checkPassword(member, reqBody.password)
+        if (member.username == AppConfig.adminUsername && AppConfig.adminPassword.isNotBlank()) {
+            if (reqBody.password != AppConfig.adminPassword) {
+                throw AppException("401-2", "비밀번호가 일치하지 않습니다.")
+            }
+        } else {
+            memberFacade.checkPassword(member, reqBody.password)
+        }
 
         val accessToken = authTokenService.genAccessToken(member)
 

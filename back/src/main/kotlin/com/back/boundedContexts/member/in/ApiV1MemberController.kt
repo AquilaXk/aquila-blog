@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.dto.MemberDto
 import com.back.global.rsData.RsData
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
@@ -48,7 +49,11 @@ class ApiV1MemberController(
         @field:Size(min = 2, max = 30)
         val username: String,
         @field:NotBlank
-        @field:Size(min = 2, max = 30)
+        @field:Size(min = 8, max = 64)
+        @field:Pattern(
+            regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,64}$",
+            message = "비밀번호는 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다."
+        )
         val password: String,
         @field:NotBlank
         @field:Size(min = 2, max = 30)

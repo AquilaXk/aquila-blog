@@ -27,7 +27,7 @@ RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 COPY .env.test .env.test
 COPY src src
 
-# PG 초기화 → 시작 → 테스트 DB 생성 → 빌드(테스트 포함) → PG 종료
+# PG 초기화 → 시작 → 테스트 DB 생성 → bootJar 빌드(테스트 제외) → PG 종료
 RUN set -e \
  && PGDATA=/var/lib/postgresql/data \
  && mkdir -p "$PGDATA" && chown postgres:postgres "$PGDATA" \
@@ -36,7 +36,7 @@ RUN set -e \
  && su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'lldj123414';\"" \
  && su postgres -c "psql -c \"CREATE DATABASE blog_test;\"" \
  && redis-server --daemonize yes --requirepass lldj123414 \
- && ./gradlew build --no-daemon \
+ && ./gradlew bootJar --no-daemon -x test \
  && su postgres -c "pg_ctl -D $PGDATA stop -w"
 
 # =========================

@@ -12,6 +12,8 @@ HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 CADDY_SWITCH_VERIFY_RETRIES="${CADDY_SWITCH_VERIFY_RETRIES:-15}"
+HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
+HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -123,6 +125,8 @@ verify_caddy_upstream() {
     local code
     code="$(
       docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+        --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
+        --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
         -s -o /dev/null -w "%{http_code}" "http://caddy:80${HEALTHCHECK_PATH}" \
         -H "Host: ${api_domain}" || true
     )"
@@ -152,6 +156,8 @@ check_backend_health() {
     local code
     code="$(
       docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+        --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
+        --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
         -s -o /dev/null -w "%{http_code}" "http://${backend_host_name}:8080${HEALTHCHECK_PATH}" || true
     )"
 

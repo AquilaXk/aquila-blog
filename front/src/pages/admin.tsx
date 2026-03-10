@@ -1,7 +1,10 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import NotionRenderer, {
+  markdownGuide,
+} from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -62,6 +65,7 @@ const AdminPage: NextPage<Props> = ({ me }) => {
   const [postContent, setPostContent] = useState("")
   const [postPublished, setPostPublished] = useState(false)
   const [postListed, setPostListed] = useState(false)
+  const postContentRef = useRef<HTMLTextAreaElement>(null)
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -89,6 +93,25 @@ const AdminPage: NextPage<Props> = ({ me }) => {
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
+
+  const insertSnippet = (snippet: string) => {
+    const textarea = postContentRef.current
+    if (!textarea) {
+      setPostContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${snippet}`)
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      const cursor = start + snippet.length
+      textarea.setSelectionRange(cursor, cursor)
+    })
+  }
 
   return (
     <Main>
@@ -168,7 +191,7 @@ const AdminPage: NextPage<Props> = ({ me }) => {
         </Row>
       </Section>
 
-      <Section>
+      <Section id="post-write">
         <h2>Post</h2>
         <Row>
           <Input placeholder="page" value={listPage} onChange={(e) => setListPage(e.target.value)} />
@@ -221,11 +244,6 @@ const AdminPage: NextPage<Props> = ({ me }) => {
             value={postTitle}
             onChange={(e) => setPostTitle(e.target.value)}
           />
-          <LongInput
-            placeholder="content"
-            value={postContent}
-            onChange={(e) => setPostContent(e.target.value)}
-          />
           <CheckLabel>
             <input
               type="checkbox"
@@ -261,6 +279,69 @@ const AdminPage: NextPage<Props> = ({ me }) => {
             글 작성
           </Button>
         </Row>
+
+        <EditorSection>
+          <EditorToolbar>
+            <Button
+              type="button"
+              onClick={() =>
+                insertSnippet(
+                  "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```\n"
+                )
+              }
+            >
+              코드블럭
+            </Button>
+            <Button
+              type="button"
+              onClick={() =>
+                insertSnippet(
+                  "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```\n"
+                )
+              }
+            >
+              머메이드
+            </Button>
+            <Button
+              type="button"
+              onClick={() =>
+                insertSnippet(
+                  "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |\n"
+                )
+              }
+            >
+              테이블
+            </Button>
+            <Button
+              type="button"
+              onClick={() =>
+                insertSnippet(
+                  "> [!TIP]\n> 여기에 핵심 팁을 작성하세요.\n>\n> - 체크리스트\n> - 주의사항\n"
+                )
+              }
+            >
+              콜아웃
+            </Button>
+          </EditorToolbar>
+          <EditorGrid>
+            <EditorPane>
+              <PaneTitle>Markdown 입력</PaneTitle>
+              <EditorHint>{markdownGuide}</EditorHint>
+              <ContentInput
+                ref={postContentRef}
+                placeholder="Markdown으로 본문을 작성하세요."
+                value={postContent}
+                onChange={(e) => setPostContent(e.target.value)}
+              />
+            </EditorPane>
+            <PreviewPane>
+              <PaneTitle>실시간 미리보기</PaneTitle>
+              <PreviewCard>
+                <NotionRenderer content={postContent} />
+              </PreviewCard>
+            </PreviewPane>
+          </EditorGrid>
+        </EditorSection>
 
         <Row>
           <Input placeholder="post id" value={postId} onChange={(e) => setPostId(e.target.value)} />
@@ -454,10 +535,6 @@ const Input = styled.input`
   color: ${({ theme }) => theme.colors.gray12};
 `
 
-const LongInput = styled(Input)`
-  min-width: 320px;
-`
-
 const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray8};
   border-radius: 8px;
@@ -478,6 +555,71 @@ const CheckLabel = styled.label`
   gap: 0.3rem;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.9rem;
+`
+
+const EditorSection = styled.div`
+  margin: 0.75rem 0 0.25rem;
+`
+
+const EditorToolbar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+`
+
+const EditorGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const EditorPane = styled.section`
+  min-width: 0;
+`
+
+const PreviewPane = styled(EditorPane)``
+
+const PaneTitle = styled.h3`
+  margin: 0 0 0.4rem;
+  font-size: 0.96rem;
+  color: ${({ theme }) => theme.colors.gray12};
+`
+
+const EditorHint = styled.pre`
+  margin: 0 0 0.45rem;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+`
+
+const ContentInput = styled.textarea`
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  line-height: 1.6;
+  resize: vertical;
+`
+
+const PreviewCard = styled.div`
+  min-height: 420px;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0 0.85rem 0.85rem;
 `
 
 const ResultPanel = styled.pre`

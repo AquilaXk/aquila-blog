@@ -1,5 +1,4 @@
 import { RefObject, useEffect } from "react"
-import { ExtendedRecordMap } from "notion-types"
 
 type PrismLike = {
   highlightAllUnder: (container: Element) => void
@@ -51,10 +50,7 @@ const loadPrism = async () => {
   return prismLoader
 }
 
-const usePrismEffect = (
-  rootRef: RefObject<HTMLElement>,
-  recordMap: ExtendedRecordMap
-) => {
+const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => {
   useEffect(() => {
     let disposed = false
     const root = rootRef.current
@@ -70,7 +66,7 @@ const usePrismEffect = (
     return () => {
       disposed = true
     }
-  }, [recordMap, rootRef])
+  }, [contentKey, rootRef])
 }
 
 export default usePrismEffect

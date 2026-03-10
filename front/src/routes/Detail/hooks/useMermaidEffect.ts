@@ -1,7 +1,7 @@
 import { RefObject, useEffect } from "react"
 import useScheme from "src/hooks/useScheme"
 
-const useMermaidEffect = (rootRef?: RefObject<HTMLElement>) => {
+const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string) => {
   const [scheme] = useScheme()
 
   useEffect(() => {
@@ -13,7 +13,9 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>) => {
 
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
-        root.querySelectorAll<HTMLElement>("pre.notion-code > code.language-mermaid")
+        root.querySelectorAll<HTMLElement>(
+          "pre > code.language-mermaid, pre.aq-mermaid > code.language-mermaid"
+        )
       )
       if (!codeBlocks.length) return
 
@@ -52,7 +54,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>) => {
       for (let i = 0; i < codeBlocks.length; i += 1) {
         if (disposed) return
         const codeBlock = codeBlocks[i]
-        const block = codeBlock.closest<HTMLElement>("pre.notion-code")
+        const block = codeBlock.closest<HTMLElement>("pre")
         if (!block) continue
         const source =
           block.dataset.mermaidSource || codeBlock.textContent?.trim() || ""
@@ -100,7 +102,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>) => {
       disposed = true
       observer.disconnect()
     }
-  }, [rootRef, scheme])
+  }, [contentKey, rootRef, scheme])
 
   return
 }

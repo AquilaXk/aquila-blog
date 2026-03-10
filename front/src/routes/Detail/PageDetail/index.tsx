@@ -10,7 +10,7 @@ const PageDetail: React.FC<Props> = () => {
   if (!data) return null
   return (
     <StyledWrapper>
-      <NotionRenderer recordMap={data.recordMap} />
+      <NotionRenderer content={data.content} recordMap={data.recordMap} />
     </StyledWrapper>
   )
 }

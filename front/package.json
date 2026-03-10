@@ -15,9 +15,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@babel/runtime": "^7.18.3",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "@babel/runtime": "^7.18.3",
     "@next/env": "^13.4.9",
     "@radix-ui/colors": "^1.0.0",
     "@tanstack/react-query": "^4.29.19",
@@ -25,15 +25,14 @@
     "cookies-next": "^2.1.2",
     "mermaid": "^10.9.1",
     "next": "^13.4.9",
+    "next-sitemap": "^3.1.32",
     "notion-client": "^6.16.0",
     "notion-types": "^6.16.0",
     "notion-utils": "^6.16.0",
     "prismjs": "^1.29.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-icons": "^4.4.0",
-    "react-notion-x": "^6.16.0",
-    "next-sitemap": "^3.1.32"
+    "react-icons": "^4.4.0"
   },
   "devDependencies": {
     "@types/gtag.js": "^0.0.12",

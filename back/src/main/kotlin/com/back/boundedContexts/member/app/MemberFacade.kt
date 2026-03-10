@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.app
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.member.out.shared.MemberRepository
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
@@ -14,6 +15,7 @@ import java.util.*
 @Service
 class MemberFacade(
     private val memberRepository: MemberRepository,
+    private val memberAttrRepository: MemberAttrRepository,
     private val passwordEncoder: PasswordEncoder,
 ) {
     @Transactional(readOnly = true)
@@ -21,6 +23,8 @@ class MemberFacade(
 
     @Transactional
     fun join(username: String, password: String?, nickname: String, profileImgUrl: String?): Member {
+        syncDomainRepositories()
+
         memberRepository.findByUsername(username)?.let {
             throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
         }
@@ -51,6 +55,7 @@ class MemberFacade(
 
     @Transactional
     fun modify(member: Member, nickname: String, profileImgUrl: String?) {
+        syncDomainRepositories()
         member.modify(nickname, profileImgUrl)
     }
 
@@ -76,4 +81,8 @@ class MemberFacade(
         kw,
         PageRequest.of(page - 1, pageSize, sort.sortBy)
     )
+
+    private fun syncDomainRepositories() {
+        Member.attrRepository_ = memberAttrRepository
+    }
 }

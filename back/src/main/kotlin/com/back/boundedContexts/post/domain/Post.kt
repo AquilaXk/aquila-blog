@@ -94,13 +94,16 @@ class Post(
 
     companion object {
         lateinit var attrRepository_: PostAttrRepository
-        val attrRepository by lazy { attrRepository_ }
+        val attrRepository
+            get() = attrRepository_
 
         lateinit var commentRepository_: PostCommentRepository
-        val commentRepository by lazy { commentRepository_ }
+        val commentRepository
+            get() = commentRepository_
 
         lateinit var likeRepository_: PostLikeRepository
-        val likeRepository by lazy { likeRepository_ }
+        val likeRepository
+            get() = likeRepository_
     }
 
     fun modify(title: String, content: String, published: Boolean? = null, listed: Boolean? = null) {

@@ -208,7 +208,7 @@ fi
 echo "active backend: ${active_backend}"
 echo "next backend: ${next_backend}"
 
-compose up -d db_1 redis_1 caddy
+compose up -d db_1 redis_1 caddy cloudflared
 compose up -d --build "${next_backend}"
 
 check_backend_health "${next_backend}"

@@ -2,7 +2,7 @@ name: blog_home
 
 services:
   cloudflared:
-    image: cloudflare/cloudflared:2026.2.1
+    image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
     depends_on:

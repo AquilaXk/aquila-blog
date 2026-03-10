@@ -8,6 +8,8 @@ import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.event.*
+import com.back.boundedContexts.post.out.PostAttrRepository
+import com.back.boundedContexts.post.out.PostCommentRepository
 import com.back.boundedContexts.post.out.PostLikeRepository
 import com.back.boundedContexts.post.out.PostRepository
 import com.back.global.event.app.EventPublisher
@@ -22,6 +24,8 @@ import kotlin.jvm.optionals.getOrNull
 @Service
 class PostFacade(
     private val postRepository: PostRepository,
+    private val postAttrRepository: PostAttrRepository,
+    private val postCommentRepository: PostCommentRepository,
     private val postLikeRepository: PostLikeRepository,
     private val eventPublisher: EventPublisher,
 ) {
@@ -35,6 +39,7 @@ class PostFacade(
         published: Boolean = false,
         listed: Boolean = false,
     ): Post {
+        syncDomainRepositories()
         val post = Post(0, author, title, content, published, listed)
         val savedPost = postRepository.saveAndFlush(post)
         author.incrementPostsCount()
@@ -81,6 +86,7 @@ class PostFacade(
 
     @Transactional
     fun writeComment(author: Member, post: Post, content: String): PostComment {
+        syncDomainRepositories()
         val comment = post.addComment(author, content)
         author.incrementPostCommentsCount()
         postRepository.flush()
@@ -108,6 +114,7 @@ class PostFacade(
 
     @Transactional
     fun deleteComment(post: Post, postComment: PostComment, actor: Member) {
+        syncDomainRepositories()
         val postCommentDto = PostCommentDto(postComment)
         val postDto = PostDto(post)
 
@@ -121,6 +128,7 @@ class PostFacade(
 
     @Transactional
     fun toggleLike(post: Post, actor: Member): PostLikeToggleResult {
+        syncDomainRepositories()
         val likeResult = post.toggleLike(actor)
         postRepository.flush()
 
@@ -136,6 +144,7 @@ class PostFacade(
 
     @Transactional
     fun incrementHit(post: Post) {
+        syncDomainRepositories()
         post.incrementHitCount()
     }
 
@@ -174,10 +183,17 @@ class PostFacade(
 
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
+        syncDomainRepositories()
         val existingTemp = findTemp(author)
         if (existingTemp != null) return existingTemp to false
 
         val newPost = Post(0, author, "임시글", "임시글 입니다.")
         return postRepository.save(newPost) to true
+    }
+
+    private fun syncDomainRepositories() {
+        Post.attrRepository_ = postAttrRepository
+        Post.commentRepository_ = postCommentRepository
+        Post.likeRepository_ = postLikeRepository
     }
 }

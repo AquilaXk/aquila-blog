@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 private enum class OAuth2Provider {
-    KAKAO, GOOGLE, NAVER;
+    KAKAO;
 
     companion object {
         fun from(registrationId: String): OAuth2Provider =
@@ -37,27 +37,6 @@ class CustomOAuth2UserService(
                     oAuth2User.name,
                     props.getValue("nickname") as String,
                     props.getValue("profile_image") as String
-                )
-            }
-
-            OAuth2Provider.GOOGLE -> {
-                val attrs = oAuth2User.attributes
-
-                Triple(
-                    oAuth2User.name,
-                    attrs.getValue("name") as String,
-                    attrs.getValue("picture") as String
-                )
-            }
-
-            OAuth2Provider.NAVER -> {
-                @Suppress("UNCHECKED_CAST")
-                val resp = (oAuth2User.attributes.getValue("response") as Map<String, Any>)
-
-                Triple(
-                    resp.getValue("id") as String,
-                    resp.getValue("nickname") as String,
-                    resp.getValue("profile_image") as String
                 )
             }
         }

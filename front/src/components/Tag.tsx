@@ -9,15 +9,31 @@ type Props = {
 const Tag: React.FC<Props> = ({ children }) => {
   const router = useRouter()
 
+  const buildFeedQuery = () => {
+    const query: Record<string, string> = { tag: children }
+    if (router.query.category && typeof router.query.category === "string") {
+      query.category = router.query.category
+    }
+    if (
+      router.query.order &&
+      (router.query.order === "asc" || router.query.order === "desc")
+    ) {
+      query.order = router.query.order
+    }
+    return query
+  }
+
   const handleClick = (event?: React.SyntheticEvent) => {
     event?.preventDefault()
     event?.stopPropagation()
-    router.push({
-      query: {
-        ...router.query,
-        tag: children,
+    router.push(
+      {
+        pathname: "/",
+        query: buildFeedQuery(),
       },
-    }, undefined, { shallow: true, scroll: false })
+      undefined,
+      { shallow: true, scroll: false }
+    )
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {

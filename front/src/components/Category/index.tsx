@@ -35,16 +35,32 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
   const backgroundColor = getColorClassByName(children)
   const textColor = getReadableTextColor(backgroundColor)
 
+  const buildFeedQuery = () => {
+    const query: Record<string, string> = { category: children }
+    if (router.query.tag && typeof router.query.tag === "string") {
+      query.tag = router.query.tag
+    }
+    if (
+      router.query.order &&
+      (router.query.order === "asc" || router.query.order === "desc")
+    ) {
+      query.order = router.query.order
+    }
+    return query
+  }
+
   const handleClick = (event?: React.SyntheticEvent) => {
     if (readOnly) return
     event?.preventDefault()
     event?.stopPropagation()
-    router.push({
-      query: {
-        ...router.query,
-        category: children,
+    router.push(
+      {
+        pathname: "/",
+        query: buildFeedQuery(),
       },
-    }, undefined, { shallow: true, scroll: false })
+      undefined,
+      { shallow: true, scroll: false }
+    )
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {

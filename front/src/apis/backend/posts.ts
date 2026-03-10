@@ -20,6 +20,8 @@ type ApiPostDto = {
   authorProfileImgUrl: string
   title: string
   summary?: string
+  tags?: string[]
+  category?: string[]
   published: boolean
   listed: boolean
 }
@@ -34,6 +36,8 @@ type ApiPostWithContentDto = {
   authorProfileImgUrl?: string
   title: string
   content: string
+  tags?: string[]
+  category?: string[]
   published: boolean
   listed: boolean
 }
@@ -55,6 +59,87 @@ const stripMarkdown = (value: string) =>
     .replace(/\s+/g, " ")
     .trim()
 
+const normalizeMetaItems = (raw: string): string[] => {
+  const normalized = raw.trim().replace(/^\[|\]$/g, "")
+  if (!normalized) return []
+
+  const tokens = normalized
+    .split(",")
+    .map((token) => token.trim().replace(/^['"]|['"]$/g, ""))
+    .filter(Boolean)
+
+  return Array.from(new Set(tokens))
+}
+
+type ParsedPostMeta = {
+  content: string
+  tags: string[]
+  category: string[]
+}
+
+const parsePostMeta = (content: string): ParsedPostMeta => {
+  let trimmed = content.trimStart()
+  const tags: string[] = []
+  const categories: string[] = []
+
+  const pushTags = (items: string[]) => {
+    items.forEach((item) => {
+      if (!tags.includes(item)) tags.push(item)
+    })
+  }
+  const pushCategories = (items: string[]) => {
+    items.forEach((item) => {
+      if (!categories.includes(item)) categories.push(item)
+    })
+  }
+
+  if (trimmed.startsWith("---\n")) {
+    const closingIndex = trimmed.indexOf("\n---", 4)
+    if (closingIndex > 0) {
+      const block = trimmed.slice(4, closingIndex).split("\n")
+      block.forEach((line) => {
+        const [rawKey, ...rest] = line.split(":")
+        if (!rawKey || rest.length === 0) return
+        const key = rawKey.trim().toLowerCase()
+        const value = rest.join(":").trim()
+        if (!value) return
+
+        if (key === "tags" || key === "tag") pushTags(normalizeMetaItems(value))
+        if (key === "category" || key === "categories") {
+          pushCategories(normalizeMetaItems(value))
+        }
+      })
+      trimmed = trimmed.slice(closingIndex + 4).trimStart()
+    }
+  }
+
+  const lines = trimmed.split("\n")
+  const metadataLineRegex = /^\s*(tags?|categories?)\s*:\s*(.+)\s*$/i
+  let consumed = 0
+  for (const line of lines) {
+    if (!line.trim()) {
+      consumed += 1
+      break
+    }
+    const match = line.match(metadataLineRegex)
+    if (!match) break
+    const key = match[1].toLowerCase()
+    const value = match[2]
+    if (key === "tag" || key === "tags") pushTags(normalizeMetaItems(value))
+    if (key === "category" || key === "categories") {
+      pushCategories(normalizeMetaItems(value))
+    }
+    consumed += 1
+  }
+
+  if (consumed > 0) {
+    const rest = lines.slice(consumed).join("\n").trimStart()
+    trimmed = rest
+  }
+
+  return { content: trimmed, tags, category: categories }
+}
+
 const toSummary = (content: string, maxLength = 180) => {
   const plain = stripMarkdown(content)
   if (plain.length <= maxLength) return plain
@@ -72,6 +157,17 @@ const toSlug = (id: number, title: string) => {
   return normalized ? `${normalized}-${id}` : `${id}`
 }
 
+const normalizeStringArray = (value?: string[]) => {
+  if (!Array.isArray(value)) return []
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+    )
+  )
+}
+
 const mapPostDto = (post: ApiPostDto): TPost => ({
   id: String(post.id),
   date: { start_date: post.createdAt.slice(0, 10) },
@@ -86,29 +182,99 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
     },
   ],
   title: post.title,
+  ...(normalizeStringArray(post.tags).length > 0
+    ? { tags: normalizeStringArray(post.tags) }
+    : {}),
+  ...(normalizeStringArray(post.category).length > 0
+    ? { category: normalizeStringArray(post.category) }
+    : {}),
   status: toStatus(post.published, post.listed),
   createdTime: post.createdAt,
   fullWidth: false,
 })
 
-const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => ({
-  ...mapPostDto({
-    id: post.id,
-    createdAt: post.createdAt,
-    modifiedAt: post.modifiedAt,
-    authorId: post.authorId,
-    authorName: post.authorName,
-    authorProfileImgUrl:
-      post.authorProfileImageUrl || post.authorProfileImgUrl || "",
-    title: post.title,
-    published: post.published,
-    listed: post.listed,
-  }),
-  summary: toSummary(post.content),
-  content: post.content,
-})
+const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
+  const parsed = parsePostMeta(post.content)
+  const dtoTags = normalizeStringArray(post.tags)
+  const dtoCategories = normalizeStringArray(post.category)
+  const tags = dtoTags.length > 0 ? dtoTags : parsed.tags
+  const category = dtoCategories.length > 0 ? dtoCategories : parsed.category
+  const normalizedContent = parsed.content
+
+  return {
+    ...mapPostDto({
+      id: post.id,
+      createdAt: post.createdAt,
+      modifiedAt: post.modifiedAt,
+      authorId: post.authorId,
+      authorName: post.authorName,
+      authorProfileImgUrl:
+        post.authorProfileImageUrl || post.authorProfileImgUrl || "",
+      title: post.title,
+      summary: toSummary(normalizedContent),
+      tags,
+      category,
+      published: post.published,
+      listed: post.listed,
+    }),
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(category.length > 0 ? { category } : {}),
+    summary: toSummary(normalizedContent),
+    content: normalizedContent,
+  }
+}
 
 const PAGE_SIZE = 30
+const DETAIL_ENRICH_BATCH_SIZE = 8
+
+const enrichPostMetadata = async (posts: TPost[]): Promise<TPost[]> => {
+  const targets = posts.filter(
+    (post) =>
+      (!post.tags || post.tags.length === 0) &&
+      (!post.category || post.category.length === 0)
+  )
+  if (!targets.length) return posts
+
+  const metadataById = new Map<string, { tags: string[]; category: string[] }>()
+
+  for (let i = 0; i < targets.length; i += DETAIL_ENRICH_BATCH_SIZE) {
+    const batch = targets.slice(i, i + DETAIL_ENRICH_BATCH_SIZE)
+    const settled = await Promise.allSettled(
+      batch.map(async (post) => {
+        const detail = await apiFetch<ApiPostWithContentDto>(`/post/api/v1/posts/${post.id}`)
+        const parsed = parsePostMeta(detail.content)
+        return {
+          id: post.id,
+          tags: normalizeStringArray(detail.tags).length
+            ? normalizeStringArray(detail.tags)
+            : parsed.tags,
+          category: normalizeStringArray(detail.category).length
+            ? normalizeStringArray(detail.category)
+            : parsed.category,
+        }
+      })
+    )
+
+    settled.forEach((result) => {
+      if (result.status !== "fulfilled") return
+      metadataById.set(result.value.id, {
+        tags: result.value.tags,
+        category: result.value.category,
+      })
+    })
+  }
+
+  return posts.map((post) => {
+    const metadata = metadataById.get(post.id)
+    if (!metadata) return post
+
+    return {
+      ...post,
+      ...(metadata.tags.length > 0 ? { tags: metadata.tags } : {}),
+      ...(metadata.category.length > 0 ? { category: metadata.category } : {}),
+    }
+  })
+}
 
 export const getPosts = async (): Promise<TPost[]> => {
   try {
@@ -117,7 +283,9 @@ export const getPosts = async (): Promise<TPost[]> => {
     )
 
     const mapped = firstPage.content.map(mapPostDto)
-    if (firstPage.pageable.totalPages <= 1) return mapped
+    if (firstPage.pageable.totalPages <= 1) {
+      return enrichPostMetadata(mapped)
+    }
 
     const restPages = await Promise.all(
       Array.from({ length: firstPage.pageable.totalPages - 1 }, (_, index) =>
@@ -127,7 +295,8 @@ export const getPosts = async (): Promise<TPost[]> => {
       )
     )
 
-    return mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
+    const allPosts = mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
+    return enrichPostMetadata(allPosts)
   } catch (error) {
     console.error("[getPosts] backend request failed, returning empty list:", error)
     return []

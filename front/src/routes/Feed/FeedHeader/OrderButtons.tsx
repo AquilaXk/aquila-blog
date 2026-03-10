@@ -13,12 +13,17 @@ const OrderButtons: React.FC<Props> = () => {
     router.query.order === "asc" ? "asc" : "desc"
 
   const handleClickOrderBy = (value: TOrder) => {
-    router.push({
-      query: {
-        ...router.query,
-        order: value,
+    router.push(
+      {
+        pathname: "/",
+        query: {
+          ...router.query,
+          order: value,
+        },
       },
-    }, undefined, { shallow: true, scroll: false })
+      undefined,
+      { shallow: true, scroll: false }
+    )
   }
   return (
     <StyledWrapper>

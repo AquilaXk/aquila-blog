@@ -15,21 +15,31 @@ const TagList: React.FC<Props> = () => {
   const handleClickTag = (value: string) => {
     // delete
     if (currentTag === value) {
-      router.push({
-        query: {
-          ...router.query,
-          tag: undefined,
+      router.push(
+        {
+          pathname: "/",
+          query: {
+            ...router.query,
+            tag: undefined,
+          },
         },
-      }, undefined, { shallow: true, scroll: false })
+        undefined,
+        { shallow: true, scroll: false }
+      )
     }
     // add
     else {
-      router.push({
-        query: {
-          ...router.query,
-          tag: value,
+      router.push(
+        {
+          pathname: "/",
+          query: {
+            ...router.query,
+            tag: value,
+          },
         },
-      }, undefined, { shallow: true, scroll: false })
+        undefined,
+        { shallow: true, scroll: false }
+      )
     }
   }
 

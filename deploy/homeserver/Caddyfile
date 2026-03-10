@@ -2,7 +2,8 @@
   email {$CADDY_EMAIL}
 }
 
-{$API_DOMAIN} {
+# Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
+http://{$API_DOMAIN} {
   encode gzip zstd
 
   # Active backend is switched by deploy/homeserver/blue_green_deploy.sh.

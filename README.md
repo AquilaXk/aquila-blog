@@ -83,6 +83,8 @@ docker compose version
 - `443` -> 홈서버 `443`
 - `SSH 외부포트` -> 홈서버 `22` (외부포트 변경 권장, `Tailscale` 사용 시 생략 가능)
 
+Cloudflare Tunnel을 사용하면 `80/443` 포트포워딩 없이도 public HTTPS 운영이 가능합니다.
+
 ### 3.2 DNS
 
 - `api.example.com` -> 집 공인 IP 또는 DDNS
@@ -90,6 +92,16 @@ docker compose version
 
 주의:
 - TLS 인증서 발급은 Caddy가 80/443 접근 가능해야 정상 동작합니다.
+  - 단, Cloudflare Tunnel 모드에서는 Caddy가 직접 인증서를 발급하지 않으므로 이 제약이 사라집니다.
+
+### 3.3 Cloudflare Tunnel 모드 (권장)
+
+1. Cloudflare Zero Trust에서 Tunnel 생성
+2. Public Hostname 추가
+   - Hostname: `api.example.com`
+   - Service: `http://caddy:80`
+3. 발급된 Tunnel token을 `.env.prod`의 `CF_TUNNEL_TOKEN`에 설정
+4. 배포 시 `cloudflared` 컨테이너가 자동 기동되어 외부 트래픽을 Caddy로 전달
 
 ---
 
@@ -113,6 +125,10 @@ cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
 - `CUSTOM_PROD_COOKIEDOMAIN`
 - `CUSTOM_PROD_FRONTURL`
 - `CUSTOM_PROD_BACKURL`
+
+Cloudflare Tunnel 모드 사용 시 추가:
+
+- `CF_TUNNEL_TOKEN`
 
 권장 추가:
 

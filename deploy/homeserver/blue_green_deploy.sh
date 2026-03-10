@@ -17,21 +17,61 @@ compose() {
 }
 
 detect_active_backend() {
-  local active_from_caddy
-  active_from_caddy="$(grep -Eo 'back_(blue|green):8080' "${CADDY_FILE}" | head -n 1 | cut -d: -f1 || true)"
+  local running_services
+  running_services="$(compose ps --status running --services 2>/dev/null || true)"
 
-  if [[ "${active_from_caddy}" == "back_blue" || "${active_from_caddy}" == "back_green" ]]; then
-    echo "${active_from_caddy}"
-    return
+  local is_blue_running="false"
+  local is_green_running="false"
+
+  if echo "${running_services}" | grep -qx "back_blue"; then
+    is_blue_running="true"
+  fi
+
+  if echo "${running_services}" | grep -qx "back_green"; then
+    is_green_running="true"
   fi
 
   if [[ -f "${STATE_FILE}" ]]; then
     local active_from_state
     active_from_state="$(cat "${STATE_FILE}" || true)"
-    if [[ "${active_from_state}" == "back_blue" || "${active_from_state}" == "back_green" ]]; then
-      echo "${active_from_state}"
+
+    if [[ "${active_from_state}" == "back_blue" && "${is_blue_running}" == "true" ]]; then
+      echo "back_blue"
       return
     fi
+
+    if [[ "${active_from_state}" == "back_green" && "${is_green_running}" == "true" ]]; then
+      echo "back_green"
+      return
+    fi
+  fi
+
+  local active_from_caddy
+  active_from_caddy="$(grep -Eo 'back_(blue|green):8080' "${CADDY_FILE}" | head -n 1 | cut -d: -f1 || true)"
+
+  if [[ "${active_from_caddy}" == "back_blue" && "${is_blue_running}" == "true" ]]; then
+    echo "back_blue"
+    return
+  fi
+
+  if [[ "${active_from_caddy}" == "back_green" && "${is_green_running}" == "true" ]]; then
+    echo "back_green"
+    return
+  fi
+
+  if [[ "${is_blue_running}" == "true" && "${is_green_running}" != "true" ]]; then
+    echo "back_blue"
+    return
+  fi
+
+  if [[ "${is_green_running}" == "true" && "${is_blue_running}" != "true" ]]; then
+    echo "back_green"
+    return
+  fi
+
+  if [[ "${active_from_caddy}" == "back_blue" || "${active_from_caddy}" == "back_green" ]]; then
+    echo "${active_from_caddy}"
+    return
   fi
 
   echo "back_blue"

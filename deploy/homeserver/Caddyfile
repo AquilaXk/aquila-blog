@@ -6,7 +6,5 @@
   encode gzip zstd
 
   # Active backend is switched by deploy/homeserver/blue_green_deploy.sh.
-  reverse_proxy back_blue:8080 {
-    health_uri /
-  }
+  reverse_proxy back_blue:8080
 }

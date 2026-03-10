@@ -21,6 +21,7 @@ const LoginPage = () => {
 
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -50,29 +51,55 @@ const LoginPage = () => {
   return (
     <Main>
       <Card>
-        <h1>로그인</h1>
+        <Top>
+          <Title>로그인</Title>
+          <SubTitle>관리 기능은 관리자 계정 로그인 후에만 접근할 수 있습니다.</SubTitle>
+        </Top>
+
+        <Tabs>
+          <ActiveTab>로그인</ActiveTab>
+          <PassiveTab href="/signup">회원가입</PassiveTab>
+        </Tabs>
+
         <form onSubmit={onSubmit}>
-          <Input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="아이디"
-            autoComplete="username"
-          />
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호"
-            autoComplete="current-password"
-          />
+          <Field>
+            <Label htmlFor="username">아이디</Label>
+            <Input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="아이디를 입력하세요"
+              autoComplete="username"
+            />
+          </Field>
+
+          <Field>
+            <Label htmlFor="password">비밀번호</Label>
+            <PasswordRow>
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="비밀번호를 입력하세요"
+                autoComplete="current-password"
+              />
+              <GhostButton
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label="비밀번호 표시 전환"
+              >
+                {showPassword ? "숨기기" : "표시"}
+              </GhostButton>
+            </PasswordRow>
+          </Field>
+
           {error && <ErrorText>{error}</ErrorText>}
           <Button type="submit" disabled={loading}>
-            로그인
+            {loading ? "로그인 중..." : "로그인"}
           </Button>
         </form>
-        <FooterText>
-          계정이 없으면 <Link href="/signup">회원가입</Link>
-        </FooterText>
+        <FooterText>계정이 없으면 <Link href="/signup">회원가입</Link></FooterText>
       </Card>
     </Main>
   )
@@ -81,54 +108,139 @@ const LoginPage = () => {
 export default LoginPage
 
 const Main = styled.main`
-  min-height: 70vh;
+  min-height: 78vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(40, 130, 255, 0.1), transparent 40%),
+    radial-gradient(circle at 80% 0%, rgba(22, 163, 74, 0.08), transparent 38%);
 `
 
 const Card = styled.section`
   width: 100%;
-  max-width: 420px;
+  max-width: 460px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  padding: 1.2rem;
-
-  h1 {
-    margin: 0 0 0.9rem;
-    font-size: 1.3rem;
-  }
+  border-radius: 16px;
+  padding: 1.3rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 
   form {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.75rem;
   }
+`
+
+const Top = styled.div`
+  margin-bottom: 0.9rem;
+`
+
+const Title = styled.h1`
+  margin: 0;
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+`
+
+const SubTitle = styled.p`
+  margin: 0.45rem 0 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.5;
+`
+
+const Tabs = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+`
+
+const ActiveTab = styled.div`
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.48rem 0.7rem;
+  text-align: center;
+  font-weight: 600;
+`
+
+const PassiveTab = styled(Link)`
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.48rem 0.7rem;
+  text-align: center;
+  text-decoration: none;
+`
+
+const Field = styled.div`
+  display: grid;
+  gap: 0.35rem;
+`
+
+const Label = styled.label`
+  font-size: 0.88rem;
+  color: ${({ theme }) => theme.colors.gray11};
+`
+
+const PasswordRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
 `
 
 const Input = styled.input`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 8px;
-  padding: 0.55rem 0.65rem;
+  padding: 0.62rem 0.7rem;
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue9};
+  }
 `
 
 const Button = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray8};
+  border: 1px solid ${({ theme }) => theme.colors.blue9};
   border-radius: 8px;
-  padding: 0.55rem 0.75rem;
-  background: ${({ theme }) => theme.colors.gray3};
+  padding: 0.62rem 0.78rem;
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #fff;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`
+
+const GhostButton = styled.button`
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 8px;
+  padding: 0.62rem 0.72rem;
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
 `
 
 const ErrorText = styled.p`
   margin: 0;
-  color: ${({ theme }) => theme.colors.red10};
+  color: ${({ theme }) => theme.colors.red11};
+  font-size: 0.92rem;
 `
 
 const FooterText = styled.p`
-  margin: 0.8rem 0 0;
+  margin: 0.95rem 0 0;
   color: ${({ theme }) => theme.colors.gray11};
+
+  a {
+    color: ${({ theme }) => theme.colors.blue10};
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 `

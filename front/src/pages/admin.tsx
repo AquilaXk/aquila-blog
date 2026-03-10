@@ -172,6 +172,90 @@ const AdminPage: NextPage = () => {
     })
   }
 
+  const wrapSelection = (prefix: string, suffix = "", placeholder = "텍스트") => {
+    const textarea = postContentRef.current
+
+    if (!textarea) {
+      setPostContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${prefix}${placeholder}${suffix}`)
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selected = postContent.slice(start, end) || placeholder
+    const inserted = `${prefix}${selected}${suffix}`
+    const nextContent = `${postContent.slice(0, start)}${inserted}${postContent.slice(end)}`
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      if (start === end) {
+        const selectionStart = start + prefix.length
+        textarea.setSelectionRange(selectionStart, selectionStart + placeholder.length)
+        return
+      }
+      textarea.setSelectionRange(start, start + inserted.length)
+    })
+  }
+
+  const applyChecklist = () => {
+    const textarea = postContentRef.current
+    if (!textarea) {
+      insertSnippet("- [ ] 체크 항목\n")
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const blockStart = postContent.lastIndexOf("\n", Math.max(0, start - 1)) + 1
+    const nextNewline = postContent.indexOf("\n", end)
+    const blockEnd = nextNewline === -1 ? postContent.length : nextNewline
+    const selectedBlock = postContent.slice(blockStart, blockEnd)
+
+    const nextBlock = selectedBlock
+      .split("\n")
+      .map((line) => {
+        if (!line.trim()) return "- [ ] "
+        if (line.startsWith("- [ ] ") || line.startsWith("- [x] ")) return line
+        return `- [ ] ${line}`
+      })
+      .join("\n")
+
+    const nextContent = `${postContent.slice(0, blockStart)}${nextBlock}${postContent.slice(blockEnd)}`
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(blockStart, blockStart + nextBlock.length)
+    })
+  }
+
+  const insertDivider = () => {
+    insertSnippet("\n---\n")
+  }
+
+  const insertLink = () => {
+    const textarea = postContentRef.current
+    if (!textarea) {
+      insertSnippet("[링크 텍스트](https://example.com)")
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const selected = postContent.slice(start, end) || "링크 텍스트"
+    const url = "https://example.com"
+    const snippet = `[${selected}](${url})`
+    const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      const urlStart = start + selected.length + 3
+      textarea.setSelectionRange(urlStart, urlStart + url.length)
+    })
+  }
+
   if (authLoading || !me) {
     return <Main>관리자 인증 확인 중...</Main>
   }
@@ -359,6 +443,27 @@ const AdminPage: NextPage = () => {
             </Button>
             <Button type="button" onClick={insertToggle}>
               토글
+            </Button>
+            <Button type="button" onClick={insertDivider}>
+              구분선
+            </Button>
+            <Button type="button" onClick={applyChecklist}>
+              체크리스트
+            </Button>
+            <Button type="button" onClick={() => wrapSelection("**", "**", "굵은 텍스트")}>
+              굵게
+            </Button>
+            <Button type="button" onClick={() => wrapSelection("*", "*", "기울임 텍스트")}>
+              기울임
+            </Button>
+            <Button type="button" onClick={() => wrapSelection("~~", "~~", "취소선 텍스트")}>
+              취소선
+            </Button>
+            <Button type="button" onClick={() => wrapSelection("`", "`", "코드")}>
+              인라인코드
+            </Button>
+            <Button type="button" onClick={insertLink}>
+              링크
             </Button>
             <Button
               type="button"

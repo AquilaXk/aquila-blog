@@ -44,20 +44,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure SSH key
+        shell: bash
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.HOME_SSH_PRIVATE_KEY }}" > ~/.ssh/home_key
-          chmod 600 ~/.ssh/home_key
+          set -euo pipefail
+          SSH_DIR="${RUNNER_TEMP}/ssh"
+          rm -rf "$SSH_DIR"
+          mkdir -p "$SSH_DIR"
+          chmod 700 "$SSH_DIR"
+
+          printf '%s\n' "${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}" > "$SSH_DIR/home_key"
+          chmod 600 "$SSH_DIR/home_key"
           if [ -n "${{ secrets.HOME_KNOWN_HOSTS }}" ]; then
-            printf '%s\n' "${{ secrets.HOME_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+            printf '%s\n' "${{ secrets.HOME_KNOWN_HOSTS }}" > "$SSH_DIR/known_hosts"
           else
-            ssh-keyscan -H "${{ secrets.HOME_HOST }}" >> ~/.ssh/known_hosts
+            ssh-keyscan -p "${{ secrets.HOME_SSH_PORT || '22' }}" -H "${{ secrets.HOME_SSH_HOST || secrets.HOME_HOST }}" > "$SSH_DIR/known_hosts"
           fi
+          chmod 600 "$SSH_DIR/known_hosts"
+          echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"
 
       - name: Deploy over SSH
         env:
-          HOME_HOST: ${{ secrets.HOME_HOST }}
+          HOME_HOST: ${{ secrets.HOME_SSH_HOST || secrets.HOME_HOST }}
           HOME_SSH_USER: ${{ secrets.HOME_SSH_USER }}
           HOME_SSH_PORT: ${{ secrets.HOME_SSH_PORT }}
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
@@ -65,7 +72,7 @@ jobs:
         run: |
           PORT="${HOME_SSH_PORT:-22}"
 
-          ssh -i ~/.ssh/home_key -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
+          ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
             "HOME_APP_DIR='$HOME_APP_DIR' HOME_SERVER_ENV='$HOME_SERVER_ENV' bash -s" <<'REMOTE'
           set -euo pipefail
 

@@ -81,7 +81,7 @@ docker compose version
 
 - `80` -> 홈서버 `80`
 - `443` -> 홈서버 `443`
-- `SSH 외부포트` -> 홈서버 `22` (외부포트 변경 권장)
+- `SSH 외부포트` -> 홈서버 `22` (외부포트 변경 권장, `Tailscale` 사용 시 생략 가능)
 
 ### 3.2 DNS
 
@@ -183,7 +183,7 @@ curl -I https://api.example.com
 
 1. `test` 잡
 2. backend 테스트 성공 시 `deploy` 잡
-3. SSH로 홈서버 접속
+3. (권장) Tailscale 네트워크 연결 후 SSH로 홈서버 접속
 4. `git pull --ff-only`
 5. 필요 시 `.env.prod` 갱신
 6. `./deploy/homeserver/blue_green_deploy.sh` 실행
@@ -194,18 +194,44 @@ curl -I https://api.example.com
 
 필수:
 
-- `HOME_HOST`: 공인 IP 또는 DDNS
+- `HOME_SSH_HOST`: 홈서버 주소(공인 IP/DDNS 또는 Tailscale IP/호스트명)
 - `HOME_SSH_USER`: 서버 사용자
-- `HOME_SSH_PRIVATE_KEY`: 배포용 개인키
+- `HOME_SSH_KEY`: 배포용 개인키
 - `HOME_APP_DIR`: 예) `/home/aquila/app`
+- `TS_AUTHKEY`: Tailscale auth key (권장)
 
 선택:
 
 - `HOME_SSH_PORT`: 기본 `22`
-- `HOME_KNOWN_HOSTS`: `ssh-keyscan -H <HOME_HOST>` 결과
+- `HOME_KNOWN_HOSTS`: `ssh-keyscan -p <HOME_SSH_PORT> -H <HOME_SSH_HOST>` 결과
 - `HOME_SERVER_ENV`: `.env.prod` 전체 멀티라인 값
 
 `HOME_SERVER_ENV`를 사용하면 배포 시 `.env.prod`를 자동 동기화할 수 있습니다.
+
+호환용(구 이름):
+
+- `HOME_HOST`: `HOME_SSH_HOST`를 대체하는 구 이름
+- `HOME_SSH_PRIVATE_KEY`: `HOME_SSH_KEY`를 대체하는 구 이름
+- `HOME_TAILSCALE_HOST` 또는 `HOME_TS_HOST`: Tailscale 호스트를 별도로 분리해 쓰고 싶을 때
+
+### 7.3 Tailscale 기반 배포(포트포워딩 문제 우회)
+
+공유기/회선 환경에서 SSH 인바운드가 불안정하면 Tailscale 경로를 권장합니다.
+
+홈서버:
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --ssh
+tailscale ip -4
+```
+
+GitHub 시크릿:
+
+- `TS_AUTHKEY` 추가
+- `HOME_SSH_HOST`에 홈서버의 Tailscale IP(또는 MagicDNS 호스트명) 입력
+
+이 경우 `HOME_SSH_PORT`는 기본 `22`를 사용하면 됩니다.
 
 ---
 
@@ -348,9 +374,10 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 
 ### 12.2 배포 SSH 실패
 
-- `HOME_SSH_PRIVATE_KEY` 줄바꿈 손상 여부 확인
+- `HOME_SSH_KEY`(또는 `HOME_SSH_PRIVATE_KEY`) 줄바꿈 손상 여부 확인
 - `HOME_KNOWN_HOSTS` 재생성
 - 서버 하드닝 적용 시 포트/유저가 시크릿과 일치하는지 확인
+- 포트포워딩이 불안정하면 `TS_AUTHKEY` + Tailscale 경로로 전환
 
 ### 12.3 API 502/504
 

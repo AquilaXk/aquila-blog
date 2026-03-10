@@ -4,14 +4,19 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: homeserver-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -38,20 +43,33 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: test
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify TS_AUTHKEY secret
+      - name: Verify required secrets
         shell: bash
         run: |
-          if [ -n "${{ secrets.TS_AUTHKEY }}" ]; then
-            echo "TS_AUTHKEY present"
-          else
-            echo "TS_AUTHKEY missing"
-            exit 1
-          fi
+          required=(
+            "TS_AUTHKEY=${{ secrets.TS_AUTHKEY }}"
+            "HOME_SSH_USER=${{ secrets.HOME_SSH_USER }}"
+            "HOME_APP_DIR=${{ secrets.HOME_APP_DIR }}"
+            "HOME_HOST=${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}"
+            "HOME_SSH_KEY=${{ secrets.HOME_SSH_KEY || secrets.HOME_SSH_PRIVATE_KEY }}"
+            "HOME_SERVER_ENV=${{ secrets.HOME_SERVER_ENV }}"
+          )
+
+          for item in "${required[@]}"; do
+            key="${item%%=*}"
+            value="${item#*=}"
+            if [ -z "$value" ]; then
+              echo "$key missing"
+              exit 1
+            fi
+            echo "$key present"
+          done
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@v3
@@ -107,5 +125,50 @@ jobs:
             exit 1
           fi
 
-          ./deploy/homeserver/blue_green_deploy.sh
+          chmod +x deploy/homeserver/create_deploy_backup.sh deploy/homeserver/rollback_last_deploy.sh
+
+          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
+          echo "backup created: ${BACKUP_DIR}"
+
+          if ! ./deploy/homeserver/blue_green_deploy.sh; then
+            echo "deploy failed, rollback from backup: ${BACKUP_DIR}" >&2
+            ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
+            exit 1
+          fi
+
+          API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod)"
+          if [ -n "${API_DOMAIN}" ]; then
+            HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health" -H "Host: ${API_DOMAIN}" || true)"
+            echo "post-deploy caddy health status=${HTTP_CODE}"
+            if ! echo "${HTTP_CODE}" | grep -Eq '^[1-4][0-9][0-9]$'; then
+              echo "post-deploy healthcheck failed" >&2
+              exit 1
+            fi
+          fi
           REMOTE
+
+      - name: Create deployment release
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.sha.substring(0, 7);
+            const tag = `deploy-${context.runId}-${sha}`;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            await github.rest.git.createRef({
+              owner,
+              repo,
+              ref: `refs/tags/${tag}`,
+              sha: context.sha
+            });
+
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: `Deploy ${tag}`,
+              generate_release_notes: true
+            });

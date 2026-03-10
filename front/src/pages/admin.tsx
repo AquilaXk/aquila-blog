@@ -1,20 +1,58 @@
 import styled from "@emotion/styled"
-import { FormEvent, useMemo, useState } from "react"
+import { GetServerSideProps, NextPage } from "next"
+import { useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
+type MemberMe = {
+  id: number
+  username: string
+  nickname: string
+  isAdmin?: boolean
+}
+
+type Props = {
+  me: MemberMe
+}
+
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
 
-const AdminPage = () => {
+const getServerApiBaseUrl = () => {
+  const serverUrl = process.env.BACKEND_INTERNAL_URL
+  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+  const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
+
+  if (serverUrl) return stripTrailingSlash(serverUrl)
+  if (publicUrl) return stripTrailingSlash(publicUrl)
+
+  return "http://localhost:8080"
+}
+
+export const getServerSideProps: GetServerSideProps<Props> = async (context) => {
+  const cookie = context.req.headers.cookie || ""
+  const meRes = await fetch(`${getServerApiBaseUrl()}/member/api/v1/auth/me`, {
+    headers: { cookie },
+  }).catch(() => null)
+
+  if (!meRes?.ok) {
+    return {
+      redirect: {
+        destination: `/login?next=${encodeURIComponent("/admin")}`,
+        permanent: false,
+      },
+    }
+  }
+
+  const me = (await meRes.json().catch(() => null)) as MemberMe | null
+  if (!me?.isAdmin) return { notFound: true }
+
+  return { props: { me } }
+}
+
+const AdminPage: NextPage<Props> = ({ me }) => {
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
-
-  const [loginUsername, setLoginUsername] = useState("")
-  const [loginPassword, setLoginPassword] = useState("")
-  const [joinUsername, setJoinUsername] = useState("")
-  const [joinPassword, setJoinPassword] = useState("")
-  const [joinNickname, setJoinNickname] = useState("")
   const [memberId, setMemberId] = useState("1")
 
   const [postId, setPostId] = useState("1")
@@ -37,8 +75,6 @@ const AdminPage = () => {
     [profileImgMemberId]
   )
 
-  const request = <T,>(path: string, init?: RequestInit): Promise<T> => apiFetch<T>(path, init)
-
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
       setLoadingKey(key)
@@ -54,131 +90,41 @@ const AdminPage = () => {
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
 
-  const onJoin = async (e: FormEvent) => {
-    e.preventDefault()
-    await run("join", () =>
-      request("/member/api/v1/members", {
-        method: "POST",
-        body: JSON.stringify({
-          username: joinUsername,
-          password: joinPassword,
-          nickname: joinNickname,
-        }),
-      })
-    )
-  }
-
-  const onWritePost = async (e: FormEvent) => {
-    e.preventDefault()
-    await run("writePost", () =>
-      request("/post/api/v1/posts", {
-        method: "POST",
-        body: JSON.stringify({
-          title: postTitle,
-          content: postContent,
-          published: postPublished,
-          listed: postListed,
-        }),
-      })
-    )
-  }
-
-  const onModifyPost = async (e: FormEvent) => {
-    e.preventDefault()
-    await run("modifyPost", () =>
-      request(`/post/api/v1/posts/${postId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          title: postTitle,
-          content: postContent,
-          published: postPublished,
-          listed: postListed,
-        }),
-      })
-    )
-  }
-
   return (
     <Main>
-      <h1>Backend Admin Tools</h1>
+      <h1>Admin Tools</h1>
       <p>
-        백엔드 API 전 기능을 브라우저 UI에서 호출할 수 있는 운영 페이지입니다. 결과는
-        하단 JSON 패널에서 확인하세요.
+        {me.nickname}({me.username}) 계정으로 관리자 인증됨.
       </p>
 
       <Section>
         <h2>Auth</h2>
         <Row>
-          <Input
-            placeholder="username"
-            value={loginUsername}
-            onChange={(e) => setLoginUsername(e.target.value)}
-          />
-          <Input
-            placeholder="password"
-            type="password"
-            value={loginPassword}
-            onChange={(e) => setLoginPassword(e.target.value)}
-          />
           <Button
-            disabled={disabled("login")}
-            onClick={() =>
-              run("login", () =>
-                request("/member/api/v1/auth/login", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    username: loginUsername,
-                    password: loginPassword,
-                  }),
-                })
-              )
-            }
+            disabled={disabled("me")}
+            onClick={() => run("me", () => apiFetch("/member/api/v1/auth/me"))}
           >
-            로그인
+            내 정보
           </Button>
           <Button
             disabled={disabled("logout")}
-            onClick={() => run("logout", () => request("/member/api/v1/auth/logout", { method: "DELETE" }))}
+            onClick={() =>
+              run("logout", () => apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }))
+            }
           >
             로그아웃
-          </Button>
-          <Button disabled={disabled("me")} onClick={() => run("me", () => request("/member/api/v1/auth/me"))}>
-            내 정보
           </Button>
         </Row>
       </Section>
 
       <Section>
         <h2>Member</h2>
-        <form onSubmit={onJoin}>
-          <Row>
-            <Input
-              placeholder="join username"
-              value={joinUsername}
-              onChange={(e) => setJoinUsername(e.target.value)}
-            />
-            <Input
-              placeholder="join password"
-              type="password"
-              value={joinPassword}
-              onChange={(e) => setJoinPassword(e.target.value)}
-            />
-            <Input
-              placeholder="nickname"
-              value={joinNickname}
-              onChange={(e) => setJoinNickname(e.target.value)}
-            />
-            <Button type="submit" disabled={disabled("join")}>
-              회원가입
-            </Button>
-          </Row>
-        </form>
         <Row>
           <Button
             disabled={disabled("secureTip")}
             onClick={() =>
               run("secureTip", () =>
-                request("/member/api/v1/members/randomSecureTip").then((tip) => ({ tip }))
+                apiFetch("/member/api/v1/members/randomSecureTip").then((tip) => ({ tip }))
               )
             }
           >
@@ -191,7 +137,7 @@ const AdminPage = () => {
           />
           <Button
             disabled={disabled("admMemberOne")}
-            onClick={() => run("admMemberOne", () => request(`/member/api/v1/adm/members/${memberId}`))}
+            onClick={() => run("admMemberOne", () => apiFetch(`/member/api/v1/adm/members/${memberId}`))}
           >
             관리자 회원 단건
           </Button>
@@ -209,7 +155,7 @@ const AdminPage = () => {
             disabled={disabled("admMemberList")}
             onClick={() =>
               run("admMemberList", () =>
-                request(
+                apiFetch(
                   `/member/api/v1/adm/members?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
                     listKw
                   )}&sort=${encodeURIComponent(listSort)}`
@@ -218,21 +164,6 @@ const AdminPage = () => {
             }
           >
             관리자 회원 목록
-          </Button>
-        </Row>
-      </Section>
-
-      <Section>
-        <h2>System</h2>
-        <Row>
-          <a href={getApiBaseUrl()} target="_blank" rel="noreferrer">
-            API 서버 루트 열기
-          </a>
-          <Button
-            disabled={disabled("session")}
-            onClick={() => run("session", () => request("/session"))}
-          >
-            세션 확인
           </Button>
         </Row>
       </Section>
@@ -252,7 +183,7 @@ const AdminPage = () => {
             disabled={disabled("postList")}
             onClick={() =>
               run("postList", () =>
-                request(
+                apiFetch(
                   `/post/api/v1/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
                     listKw
                   )}&sort=${encodeURIComponent(listSort)}`
@@ -266,7 +197,7 @@ const AdminPage = () => {
             disabled={disabled("postMine")}
             onClick={() =>
               run("postMine", () =>
-                request(
+                apiFetch(
                   `/post/api/v1/posts/mine?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
                     listKw
                   )}&sort=${encodeURIComponent(listSort)}`
@@ -278,88 +209,110 @@ const AdminPage = () => {
           </Button>
           <Button
             disabled={disabled("postTemp")}
-            onClick={() => run("postTemp", () => request("/post/api/v1/posts/temp", { method: "POST" }))}
+            onClick={() => run("postTemp", () => apiFetch("/post/api/v1/posts/temp", { method: "POST" }))}
           >
             임시글 가져오기/생성
           </Button>
         </Row>
 
-        <form onSubmit={onWritePost}>
-          <Row>
-            <Input
-              placeholder="title"
-              value={postTitle}
-              onChange={(e) => setPostTitle(e.target.value)}
+        <Row>
+          <Input
+            placeholder="title"
+            value={postTitle}
+            onChange={(e) => setPostTitle(e.target.value)}
+          />
+          <LongInput
+            placeholder="content"
+            value={postContent}
+            onChange={(e) => setPostContent(e.target.value)}
+          />
+          <CheckLabel>
+            <input
+              type="checkbox"
+              checked={postPublished}
+              onChange={(e) => setPostPublished(e.target.checked)}
             />
-            <LongInput
-              placeholder="content"
-              value={postContent}
-              onChange={(e) => setPostContent(e.target.value)}
+            published
+          </CheckLabel>
+          <CheckLabel>
+            <input
+              type="checkbox"
+              checked={postListed}
+              onChange={(e) => setPostListed(e.target.checked)}
             />
-            <CheckLabel>
-              <input
-                type="checkbox"
-                checked={postPublished}
-                onChange={(e) => setPostPublished(e.target.checked)}
-              />
-              published
-            </CheckLabel>
-            <CheckLabel>
-              <input
-                type="checkbox"
-                checked={postListed}
-                onChange={(e) => setPostListed(e.target.checked)}
-              />
-              listed
-            </CheckLabel>
-            <Button type="submit" disabled={disabled("writePost")}>
-              글 작성
-            </Button>
-          </Row>
-        </form>
+            listed
+          </CheckLabel>
+          <Button
+            disabled={disabled("writePost")}
+            onClick={() =>
+              run("writePost", () =>
+                apiFetch("/post/api/v1/posts", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    title: postTitle,
+                    content: postContent,
+                    published: postPublished,
+                    listed: postListed,
+                  }),
+                })
+              )
+            }
+          >
+            글 작성
+          </Button>
+        </Row>
 
-        <form onSubmit={onModifyPost}>
-          <Row>
-            <Input placeholder="post id" value={postId} onChange={(e) => setPostId(e.target.value)} />
-            <Button
-              type="button"
-              disabled={disabled("postOne")}
-              onClick={() => run("postOne", () => request(`/post/api/v1/posts/${postId}`))}
-            >
-              글 단건
-            </Button>
-            <Button type="submit" disabled={disabled("modifyPost")}>
-              글 수정
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("deletePost")}
-              onClick={() =>
-                run("deletePost", () => request(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
-              }
-            >
-              글 삭제
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("hitPost")}
-              onClick={() =>
-                run("hitPost", () => request(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-              }
-            >
-              조회수 +1
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("likePost")}
-              onClick={() =>
-                run("likePost", () => request(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
-              }
-            >
-              좋아요 토글
-            </Button>
-          </Row>
-        </form>
+        <Row>
+          <Input placeholder="post id" value={postId} onChange={(e) => setPostId(e.target.value)} />
+          <Button
+            disabled={disabled("postOne")}
+            onClick={() => run("postOne", () => apiFetch(`/post/api/v1/posts/${postId}`))}
+          >
+            글 단건
+          </Button>
+          <Button
+            disabled={disabled("modifyPost")}
+            onClick={() =>
+              run("modifyPost", () =>
+                apiFetch(`/post/api/v1/posts/${postId}`, {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    title: postTitle,
+                    content: postContent,
+                    published: postPublished,
+                    listed: postListed,
+                  }),
+                })
+              )
+            }
+          >
+            글 수정
+          </Button>
+          <Button
+            disabled={disabled("deletePost")}
+            onClick={() =>
+              run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
+            }
+          >
+            글 삭제
+          </Button>
+          <Button
+            disabled={disabled("hitPost")}
+            onClick={() =>
+              run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+            }
+          >
+            조회수 +1
+          </Button>
+          <Button
+            disabled={disabled("likePost")}
+            onClick={() =>
+              run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
+            }
+          >
+            좋아요 토글
+          </Button>
+        </Row>
       </Section>
 
       <Section>
@@ -378,18 +331,14 @@ const AdminPage = () => {
           />
           <Button
             disabled={disabled("commentList")}
-            onClick={() =>
-              run("commentList", () => request(`/post/api/v1/posts/${postId}/comments`))
-            }
+            onClick={() => run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`))}
           >
             댓글 목록
           </Button>
           <Button
             disabled={disabled("commentOne")}
             onClick={() =>
-              run("commentOne", () =>
-                request(`/post/api/v1/posts/${postId}/comments/${commentId}`)
-              )
+              run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`))
             }
           >
             댓글 단건
@@ -398,7 +347,7 @@ const AdminPage = () => {
             disabled={disabled("commentWrite")}
             onClick={() =>
               run("commentWrite", () =>
-                request(`/post/api/v1/posts/${postId}/comments`, {
+                apiFetch(`/post/api/v1/posts/${postId}/comments`, {
                   method: "POST",
                   body: JSON.stringify({ content: commentContent }),
                 })
@@ -411,7 +360,7 @@ const AdminPage = () => {
             disabled={disabled("commentModify")}
             onClick={() =>
               run("commentModify", () =>
-                request(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+                apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
                   method: "PUT",
                   body: JSON.stringify({ content: commentContent }),
                 })
@@ -424,7 +373,7 @@ const AdminPage = () => {
             disabled={disabled("commentDelete")}
             onClick={() =>
               run("commentDelete", () =>
-                request(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+                apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
                   method: "DELETE",
                 })
               )
@@ -440,7 +389,7 @@ const AdminPage = () => {
         <Row>
           <Button
             disabled={disabled("admPostCount")}
-            onClick={() => run("admPostCount", () => request("/post/api/v1/adm/posts/count"))}
+            onClick={() => run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}
           >
             전체 글 개수 + 보안팁
           </Button>
@@ -479,10 +428,6 @@ const Section = styled.section`
   h2 {
     margin: 0 0 0.75rem;
     font-size: 1.05rem;
-  }
-
-  form + form {
-    margin-top: 0.75rem;
   }
 `
 

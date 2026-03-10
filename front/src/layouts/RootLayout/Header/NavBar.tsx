@@ -4,7 +4,9 @@ import Link from "next/link"
 const NavBar: React.FC = () => {
   const links = [
     { id: 1, name: "About", to: "/about" },
-    { id: 2, name: "Admin", to: "/admin" },
+    { id: 2, name: "Login", to: "/login" },
+    { id: 3, name: "Signup", to: "/signup" },
+    { id: 4, name: "Admin", to: "/admin" },
   ]
   return (
     <StyledWrapper className="">

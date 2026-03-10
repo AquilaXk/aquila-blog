@@ -158,7 +158,7 @@ jobs:
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created: ${BACKUP_DIR}"
 
-          if ! ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! HEALTHCHECK_PATH=/actuator/health HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
             echo "deploy failed, rollback from backup: ${BACKUP_DIR}" >&2
             ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
             exit 1

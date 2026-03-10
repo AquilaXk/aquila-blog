@@ -9,7 +9,7 @@ CADDY_FILE="${SCRIPT_DIR}/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 NETWORK_NAME="blog_home_default"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/}"
-HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-45}"
+HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 
 compose() {
@@ -70,6 +70,10 @@ check_backend_health() {
   done
 
   echo "healthcheck failed: ${backend}" >&2
+  echo "----- ${backend} recent logs -----" >&2
+  compose logs --no-color --tail=200 "${backend}" >&2 || true
+  echo "----- ${backend} container status -----" >&2
+  compose ps "${backend}" >&2 || true
   return 1
 }
 

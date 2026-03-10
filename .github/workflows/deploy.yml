@@ -90,7 +90,32 @@ jobs:
           if [ -n "${{ secrets.HOME_KNOWN_HOSTS }}" ]; then
             printf '%s\n' "${{ secrets.HOME_KNOWN_HOSTS }}" > "$SSH_DIR/known_hosts"
           else
-            ssh-keyscan -p "${{ secrets.HOME_SSH_PORT || '22' }}" -H "${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}" > "$SSH_DIR/known_hosts"
+            SSH_HOST="${{ secrets.HOME_TAILSCALE_HOST || secrets.HOME_TS_HOST || secrets.HOME_SSH_HOST || secrets.HOME_HOST }}"
+            SSH_PORT="${{ secrets.HOME_SSH_PORT || '22' }}"
+
+            if [ -z "${SSH_HOST}" ]; then
+              echo "HOME host secret is empty. Set HOME_TAILSCALE_HOST (or HOME_TS_HOST/HOME_SSH_HOST/HOME_HOST)." >&2
+              exit 1
+            fi
+
+            echo "Collecting known_hosts for ${SSH_HOST}:${SSH_PORT}"
+            success=0
+            for attempt in 1 2 3 4 5; do
+              if timeout 10 ssh-keyscan -p "${SSH_PORT}" -H "${SSH_HOST}" > "$SSH_DIR/known_hosts.tmp" 2>/dev/null; then
+                if [ -s "$SSH_DIR/known_hosts.tmp" ]; then
+                  mv "$SSH_DIR/known_hosts.tmp" "$SSH_DIR/known_hosts"
+                  success=1
+                  break
+                fi
+              fi
+              echo "ssh-keyscan failed (attempt ${attempt}/5) for ${SSH_HOST}:${SSH_PORT}" >&2
+              sleep 3
+            done
+
+            if [ "${success}" -ne 1 ]; then
+              echo "Failed to build known_hosts. Set HOME_KNOWN_HOSTS secret explicitly to avoid network flakiness." >&2
+              exit 1
+            fi
           fi
           chmod 600 "$SSH_DIR/known_hosts"
           echo "SSH_DIR=$SSH_DIR" >> "$GITHUB_ENV"

@@ -16,6 +16,15 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+backend_host() {
+  local backend="$1"
+  if [[ "${backend}" == "back_blue" ]]; then
+    echo "back-blue"
+    return
+  fi
+  echo "back-green"
+}
+
 detect_active_backend() {
   local running_services
   running_services="$(compose ps --status running --services 2>/dev/null || true)"
@@ -47,7 +56,8 @@ detect_active_backend() {
   fi
 
   local active_from_caddy
-  active_from_caddy="$(grep -Eo 'back_(blue|green):8080' "${CADDY_FILE}" | head -n 1 | cut -d: -f1 || true)"
+  active_from_caddy="$(grep -Eo 'back[-_](blue|green):8080' "${CADDY_FILE}" | head -n 1 | cut -d: -f1 || true)"
+  active_from_caddy="${active_from_caddy//-/_}"
 
   if [[ "${active_from_caddy}" == "back_blue" && "${is_blue_running}" == "true" ]]; then
     echo "back_blue"
@@ -79,10 +89,12 @@ detect_active_backend() {
 
 switch_caddy_upstream() {
   local next_backend="$1"
+  local next_backend_host
+  next_backend_host="$(backend_host "${next_backend}")"
   local tmp_file
   tmp_file="$(mktemp)"
 
-  sed -E "s/back_(blue|green):8080/${next_backend}:8080/" "${CADDY_FILE}" > "${tmp_file}"
+  sed -E "s/back[-_](blue|green):8080/${next_backend_host}:8080/" "${CADDY_FILE}" > "${tmp_file}"
   mv "${tmp_file}" "${CADDY_FILE}"
 
   compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
@@ -90,13 +102,15 @@ switch_caddy_upstream() {
 
 check_backend_health() {
   local backend="$1"
+  local backend_host_name
+  backend_host_name="$(backend_host "${backend}")"
   local attempt=1
 
   while [[ "${attempt}" -le "${HEALTHCHECK_RETRIES}" ]]; do
     local code
     code="$(
       docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-        -s -o /dev/null -w "%{http_code}" "http://${backend}:8080${HEALTHCHECK_PATH}" || true
+        -s -o /dev/null -w "%{http_code}" "http://${backend_host_name}:8080${HEALTHCHECK_PATH}" || true
     )"
 
     if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then

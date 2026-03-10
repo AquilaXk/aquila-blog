@@ -7,5 +7,5 @@ http://{$API_DOMAIN} {
   encode gzip zstd
 
   # Active backend is switched by deploy/homeserver/blue_green_deploy.sh.
-  reverse_proxy back_blue:8080
+  reverse_proxy back-blue:8080
 }

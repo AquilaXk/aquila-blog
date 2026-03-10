@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
-import { apiFetch } from "src/apis/backend/client"
+import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 
 type RsData<T> = {
   resultCode: string
@@ -24,6 +24,11 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const kakaoAuthUrl = useMemo(() => {
+    if (typeof window === "undefined") return ""
+    const redirectUrl = `${window.location.origin}${next}`
+    return `${getApiBaseUrl()}/oauth2/authorization/kakao?redirectUrl=${encodeURIComponent(redirectUrl)}`
+  }, [next])
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -41,8 +46,13 @@ const LoginPage = () => {
         body: JSON.stringify({ username, password }),
       })
       await router.push(next)
-    } catch {
-      setError("로그인에 실패했습니다.")
+    } catch (error) {
+      if (error instanceof Error) {
+        const message = error.message.split(": ").slice(1).join(": ").trim()
+        setError(message || "로그인에 실패했습니다.")
+      } else {
+        setError("로그인에 실패했습니다.")
+      }
     } finally {
       setLoading(false)
     }
@@ -98,6 +108,15 @@ const LoginPage = () => {
           <Button type="submit" disabled={loading}>
             {loading ? "로그인 중..." : "로그인"}
           </Button>
+          <KakaoButton
+            type="button"
+            onClick={() => {
+              if (!kakaoAuthUrl) return
+              window.location.href = kakaoAuthUrl
+            }}
+          >
+            카카오로 로그인
+          </KakaoButton>
         </form>
         <FooterText>계정이 없으면 <Link href="/signup">회원가입</Link></FooterText>
       </Card>
@@ -226,6 +245,16 @@ const GhostButton = styled.button`
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
+`
+
+const KakaoButton = styled.button`
+  border: 1px solid #e6c200;
+  border-radius: 8px;
+  padding: 0.62rem 0.78rem;
+  background: #fee500;
+  color: #2f1b00;
+  cursor: pointer;
+  font-weight: 600;
 `
 
 const ErrorText = styled.p`

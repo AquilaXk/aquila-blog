@@ -11,6 +11,15 @@ export const getApiBaseUrl = () => {
   if (isServer && serverUrl) return stripTrailingSlash(serverUrl)
   if (publicUrl) return stripTrailingSlash(publicUrl)
 
+  // In production, infer API domain from current host when public URL is missing.
+  if (!isServer && typeof window !== "undefined") {
+    const { protocol, hostname } = window.location
+    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+      const cookieDomain = hostname.replace(/^www\./, "")
+      return `${protocol}//api.${cookieDomain}`
+    }
+  }
+
   return DEFAULT_API_BASE_URL
 }
 

@@ -46,6 +46,8 @@ class SecurityConfig(
                 authorize(anyRequest, permitAll)
             }
 
+            cors { }
+
             csrf { disable() }
             formLogin { disable() }
             logout { disable() }

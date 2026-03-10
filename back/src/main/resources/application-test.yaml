@@ -11,6 +11,8 @@ spring:
           batch_size: 0
           order_inserts: false
 custom:
+  admin:
+    username: admin
   site:
     cookieDomain: "${custom.test.cookieDomain}"
     frontUrl: "${custom.test.frontUrl}"

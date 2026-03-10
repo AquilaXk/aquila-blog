@@ -18,12 +18,17 @@ const SignupPage = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,64}$/
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     if (!username.trim() || !password.trim() || !nickname.trim()) {
       setError("아이디, 비밀번호, 닉네임을 모두 입력해주세요.")
+      return
+    }
+    if (!passwordRule.test(password)) {
+      setError("비밀번호는 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다.")
       return
     }
 
@@ -81,7 +86,7 @@ const SignupPage = () => {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="2자 이상 비밀번호"
+                placeholder="영문 대/소문자+숫자+특수문자 포함 8~64자"
                 autoComplete="new-password"
               />
               <GhostButton
@@ -104,6 +109,7 @@ const SignupPage = () => {
               autoComplete="nickname"
             />
           </Field>
+          <HintText>비밀번호 규칙: 영문 대문자/소문자/숫자/특수문자 포함, 8~64자</HintText>
 
           {error && <ErrorText>{error}</ErrorText>}
           <Button type="submit" disabled={loading}>
@@ -243,6 +249,12 @@ const ErrorText = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.red11};
   font-size: 0.92rem;
+`
+
+const HintText = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.85rem;
 `
 
 const FooterText = styled.p`

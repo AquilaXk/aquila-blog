@@ -232,6 +232,13 @@ curl -I https://api.example.com
 - `HOME_SSH_PRIVATE_KEY`: `HOME_SSH_KEY`를 대체하는 구 이름
 - `HOME_TAILSCALE_HOST` 또는 `HOME_TS_HOST`: Tailscale 호스트를 별도로 분리해 쓰고 싶을 때
 
+주의(중요):
+
+- 워크플로의 실제 host 우선순위는 `HOME_TAILSCALE_HOST -> HOME_TS_HOST -> HOME_SSH_HOST -> HOME_HOST` 입니다.
+- 과거 시크릿 값이 남아 있으면 의도와 다른 host로 접속을 시도할 수 있으므로, 사용하지 않는 host 시크릿은 비우거나 삭제하세요.
+- `HOME_APP_DIR`는 서버에 실제로 존재하는 Git 저장소 경로여야 합니다. (예: `/home/aquila/app`)
+- `HOME_APP_DIR` 시크릿 값에는 따옴표/개행/앞뒤 공백을 넣지 마세요.
+
 ### 7.3 Tailscale 기반 배포(포트포워딩 문제 우회)
 
 공유기/회선 환경에서 SSH 인바운드가 불안정하면 Tailscale 경로를 권장합니다.
@@ -413,7 +420,95 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 - 서버 하드닝 적용 시 포트/유저가 시크릿과 일치하는지 확인
 - 포트포워딩이 불안정하면 `TS_AUTHKEY` + Tailscale 경로로 전환
 
-### 12.3 API 502/504
+추가 점검(권장):
+
+- 서버 SSH 리슨 확인: `ss -lntp | grep ':22'`
+- 서버 SSH 서비스 확인: `sudo systemctl status ssh --no-pager`
+- UFW 확인: `sudo ufw status verbose`
+- Tailscale 경로로 SSH를 사용할 때는 `sudo ufw allow in on tailscale0 to any port 22 proto tcp` 규칙을 추가하면 문제를 줄일 수 있습니다.
+
+### 12.3 Tailscale `no matching peer` 오류
+
+증상:
+
+- 워크플로 로그에 `tailscale ping ...` 실패
+- `no matching peer`
+
+원인:
+
+- GitHub Runner와 홈서버가 서로 다른 Tailnet에 연결됨
+
+해결:
+
+1. 홈서버를 Actions가 사용하는 동일 Tailnet으로 재로그인
+2. 홈서버 Tailscale IP 재확인 (`tailscale ip -4`)
+3. 시크릿 `HOME_TAILSCALE_HOST`(또는 `HOME_SSH_HOST`)를 새 IP로 갱신
+
+### 12.4 Tailscale SSH `additional check`로 배포 멈춤
+
+증상:
+
+- `Tailscale SSH requires an additional check`
+- 브라우저 승인 URL 출력 후 CI 정지
+
+원인:
+
+- Tailnet SSH policy의 `check`(추가 인증) 규칙 때문에 non-interactive CI SSH가 차단됨
+
+해결(권장):
+
+- 홈서버에서 OpenSSH(22)만 사용하도록 Tailscale SSH 비활성화
+
+```bash
+sudo tailscale up --ssh=false
+```
+
+대안:
+
+- Tailnet ACL/SSH 정책에서 CI 경로의 `check` 요구를 제거
+
+### 12.5 `cd: $HOME_APP_DIR: No such file or directory`
+
+원인:
+
+- `HOME_APP_DIR` 시크릿 경로가 서버 실제 경로와 다름
+
+해결:
+
+1. 서버에서 실제 Git 저장소 경로 확인
+2. `HOME_APP_DIR`를 그 경로로 수정 (예: `/home/aquila/app`)
+3. 경로 존재 확인
+
+```bash
+ls -ld /home/aquila/app
+ls -la /home/aquila/app/.git
+```
+
+### 12.6 `Cannot connect to the Docker daemon`
+
+증상:
+
+- `Cannot connect to the Docker daemon at unix:///var/run/docker.sock`
+
+원인:
+
+- Docker 데몬 미기동 또는 배포 사용자의 Docker 그룹 권한 누락
+
+해결:
+
+```bash
+sudo systemctl enable --now docker
+sudo usermod -aG docker <deploy_user>
+```
+
+그 다음 SSH 세션을 완전히 끊고 재접속 후 확인:
+
+```bash
+docker ps
+docker compose version
+```
+
+### 12.7 API 502/504
 
 ```bash
 docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs caddy
@@ -426,12 +521,36 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 - `deploy/homeserver/Caddyfile` upstream이 의도한 색상을 가리키는지
 - `.active_backend` 값이 실제 의도와 맞는지
 
-### 12.4 헬스체크 타임아웃
+### 12.8 헬스체크 타임아웃
 
 - 앱 기동 시간이 긴 경우 재시도 증가
 
 ```bash
 HEALTHCHECK_RETRIES=90 HEALTHCHECK_INTERVAL_SECONDS=2 ./deploy/homeserver/blue_green_deploy.sh
+```
+
+### 12.9 Caddy 업스트림 DNS 조회 실패 (`lookup back-blue ...`)
+
+증상:
+
+- `caddy switch verify pending ... status=502` 반복
+- Caddy 로그에 `lookup back-blue on 127.0.0.11:53` 오류
+
+원인:
+
+- Caddy upstream 호스트명과 Docker Compose 서비스 DNS 이름이 불일치하거나, 하이픈 별칭 해석이 불안정한 경우
+
+해결:
+
+- upstream을 Compose 서비스명(`back_blue`/`back_green`)과 동일하게 사용
+- 배포 스크립트/`Caddyfile`도 같은 표기(`back_blue`/`back_green`)로 통일
+
+점검 명령:
+
+```bash
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps
+grep -n "reverse_proxy" deploy/homeserver/Caddyfile
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -n 'reverse_proxy' /etc/caddy/Caddyfile"
 ```
 
 ---

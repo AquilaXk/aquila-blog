@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.app
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.domain.shared.MemberProxy
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.post.domain.POSTS_COUNT
@@ -50,11 +51,12 @@ class PostFacade(
         published: Boolean = false,
         listed: Boolean = false,
     ): Post {
-        val post = Post(0, author, title, content, published, listed)
+        val persistenceAuthor = toPersistenceMember(author)
+        val post = Post(0, persistenceAuthor, title, content, published, listed)
         val savedPost = postRepository.saveAndFlush(post)
-        hydrateMemberCounterAttrs(author)
-        author.incrementPostsCount()
-        saveMemberAttr(author.postsCountAttr)
+        hydrateMemberCounterAttrs(persistenceAuthor)
+        persistenceAuthor.incrementPostsCount()
+        saveMemberAttr(persistenceAuthor.postsCountAttr)
 
         eventPublisher.publish(
             PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author))
@@ -104,13 +106,14 @@ class PostFacade(
 
     @Transactional
     fun writeComment(author: Member, post: Post, content: String): PostComment {
+        val persistenceAuthor = toPersistenceMember(author)
         hydratePostAttrs(post)
-        hydrateMemberCounterAttrs(author)
-        val comment = postCommentRepository.save(post.newComment(author, content))
+        hydrateMemberCounterAttrs(persistenceAuthor)
+        val comment = postCommentRepository.save(post.newComment(persistenceAuthor, content))
         post.onCommentAdded()
         savePostAttr(post.commentsCountAttr)
-        author.incrementPostCommentsCount()
-        saveMemberAttr(author.postCommentsCountAttr)
+        persistenceAuthor.incrementPostCommentsCount()
+        saveMemberAttr(persistenceAuthor.postCommentsCountAttr)
         postRepository.flush()
 
         eventPublisher.publish(
@@ -154,14 +157,15 @@ class PostFacade(
 
     @Transactional
     fun toggleLike(post: Post, actor: Member): PostLikeToggleResult {
+        val persistenceActor = toPersistenceMember(actor)
         hydratePostAttrs(post)
-        val existingLike = postLikeRepository.findByLikerAndPost(actor, post)
+        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         val likeResult = if (existingLike != null) {
             postLikeRepository.delete(existingLike)
             post.onLikeRemoved()
             PostLikeToggleResult(false, existingLike.id)
         } else {
-            val savedLike = postLikeRepository.save(PostLike(0, actor, post))
+            val savedLike = postLikeRepository.save(PostLike(0, persistenceActor, post))
             post.onLikeAdded()
             PostLikeToggleResult(true, savedLike.id)
         }
@@ -195,13 +199,13 @@ class PostFacade(
 
     fun isLiked(post: Post, liker: Member?): Boolean {
         if (liker == null) return false
-        return postLikeRepository.findByLikerAndPost(liker, post) != null
+        return postLikeRepository.findByLikerAndPost(toPersistenceMember(liker), post) != null
     }
 
     fun findLikedPostIds(liker: Member?, posts: List<Post>): Set<Int> {
         if (liker == null || posts.isEmpty()) return emptySet()
         return postLikeRepository
-            .findByLikerAndPostIn(liker, posts)
+            .findByLikerAndPostIn(toPersistenceMember(liker), posts)
             .map { it.post.id }
             .toSet()
     }
@@ -238,21 +242,21 @@ class PostFacade(
         pageSize: Int,
     ): Page<Post> = findAndHydratePagedPosts {
         postRepository.findQPagedByAuthorAndKw(
-            author,
+            toPersistenceMember(author),
             kw,
             PageRequest.of(page - 1, pageSize, sort.sortBy)
         )
     }
 
     fun findTemp(author: Member): Post? =
-        postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
+        postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(toPersistenceMember(author), "임시글")
 
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
         val existingTemp = findTemp(author)
         if (existingTemp != null) return existingTemp to false
 
-        val newPost = Post(0, author, "임시글", "임시글 입니다.")
+        val newPost = Post(0, toPersistenceMember(author), "임시글", "임시글 입니다.")
         return postRepository.save(newPost) to true
     }
 
@@ -313,4 +317,8 @@ class PostFacade(
     private fun saveMemberAttr(attr: MemberAttr?) {
         attr?.let(memberAttrRepository::save)
     }
+
+    // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
+    private fun toPersistenceMember(member: Member): Member =
+        if (member is MemberProxy) member.persistenceMember else member
 }

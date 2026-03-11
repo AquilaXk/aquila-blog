@@ -14,6 +14,14 @@ type MemberMe = {
   isAdmin?: boolean
 }
 
+type PostForEditor = {
+  id: number
+  title: string
+  content: string
+  published: boolean
+  listed: boolean
+}
+
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
 
 const escapePipes = (value: string) => value.replace(/\|/g, "\\|")
@@ -185,8 +193,8 @@ const AdminPage: NextPage = () => {
   const [commentContent, setCommentContent] = useState("")
   const [postTitle, setPostTitle] = useState("")
   const [postContent, setPostContent] = useState("")
-  const [postPublished, setPostPublished] = useState(false)
-  const [postListed, setPostListed] = useState(false)
+  const [postPublished, setPostPublished] = useState(true)
+  const [postListed, setPostListed] = useState(true)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
 
@@ -212,6 +220,24 @@ const AdminPage: NextPage = () => {
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
+
+  const loadPostForEditor = async () => {
+    try {
+      setLoadingKey("postOne")
+      const post = await apiFetch<PostForEditor>(`/post/api/v1/posts/${postId}`)
+
+      setPostTitle(post.title ?? "")
+      setPostContent(post.content ?? "")
+      setPostPublished(!!post.published)
+      setPostListed(!!post.listed)
+      setResult(pretty(post as unknown as JsonValue))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -591,7 +617,7 @@ const AdminPage: NextPage = () => {
               onClick={() =>
                 run("postList", () =>
                   apiFetch(
-                    `/post/api/v1/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
+                    `/post/api/v1/adm/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
                       listKw
                     )}&sort=${encodeURIComponent(listSort)}`
                   )
@@ -633,6 +659,7 @@ const AdminPage: NextPage = () => {
                 value={postTitle}
                 onChange={(e) => setPostTitle(e.target.value)}
               />
+              <SmallHint>메인 페이지 노출 조건: `공개` + `목록 노출`</SmallHint>
             </div>
             <div className="actions">
               <CheckLabel>
@@ -803,9 +830,9 @@ const AdminPage: NextPage = () => {
           <Input placeholder="post id" value={postId} onChange={(e) => setPostId(e.target.value)} />
           <Button
             disabled={disabled("postOne")}
-            onClick={() => run("postOne", () => apiFetch(`/post/api/v1/posts/${postId}`))}
+            onClick={() => void loadPostForEditor()}
           >
-            글 단건
+            글 불러오기
           </Button>
           <Button
             disabled={disabled("modifyPost")}
@@ -1071,6 +1098,12 @@ const TitleInput = styled(Input)`
   font-size: 1rem;
   border-radius: 10px;
   padding: 0.68rem 0.78rem;
+`
+
+const SmallHint = styled.p`
+  margin: 0;
+  font-size: 0.76rem;
+  color: ${({ theme }) => theme.colors.gray11};
 `
 
 const Button = styled.button`

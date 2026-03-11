@@ -5,31 +5,15 @@ import { NextPageWithLayout } from "../types"
 import CustomError from "src/routes/Error"
 import { getPostDetailBySlug, getPosts } from "src/apis"
 import MetaConfig from "src/components/MetaConfig"
-import { GetStaticProps } from "next"
+import { GetServerSideProps } from "next"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
 import { dehydrate } from "@tanstack/react-query"
 import usePostQuery from "src/hooks/usePostQuery"
-import { FilterPostsOptions } from "src/libs/utils/notion/filterPosts"
 
-const filter: FilterPostsOptions = {
-  acceptStatus: ["Public", "PublicOnDetail"],
-  acceptType: ["Paper", "Post", "Page"],
-}
-
-export const getStaticPaths = async () => {
-  const posts = await getPosts()
-  const filteredPost = filterPosts(posts, filter)
-
-  return {
-    paths: filteredPost.map((row) => `/${row.slug}`),
-    fallback: "blocking",
-  }
-}
-
-export const getStaticProps: GetStaticProps = async (context) => {
+export const getServerSideProps: GetServerSideProps = async ({ params, res }) => {
   const queryClient = createQueryClient()
-  const slug = context.params?.slug as string
+  const slug = params?.slug as string
   const posts = await getPosts()
 
   const feedPosts = filterPosts(posts)
@@ -43,9 +27,11 @@ export const getStaticProps: GetStaticProps = async (context) => {
 
   await queryClient.prefetchQuery(queryKey.post(`${slug}`), () => postDetail)
 
+  // Keep detail pages fresh while still leveraging CDN edge cache.
+  res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120")
+
   return {
     props: { dehydratedState: dehydrate(queryClient) },
-    revalidate: CONFIG.revalidateTime,
   }
 }
 

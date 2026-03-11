@@ -31,7 +31,6 @@ class ArchitectureGuardTest {
         val allowedLegacyOrigins = sortedSetOf(
             "com.back.boundedContexts.member.domain.shared.Member",
             "com.back.boundedContexts.member.domain.shared.Member\$Companion",
-            "com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl",
         )
 
         assertThat(offendingOrigins).isEqualTo(allowedLegacyOrigins)

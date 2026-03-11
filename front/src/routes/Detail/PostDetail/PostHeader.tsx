@@ -13,7 +13,9 @@ type Props = {
 const PostHeader: React.FC<Props> = ({ data }) => {
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
   const bypassOptimizer =
-    authorImageSrc.includes("/redirectToProfileImg") || authorImageSrc.startsWith("data:")
+    authorImageSrc.includes("/redirectToProfileImg") ||
+    authorImageSrc.includes("placehold.co") ||
+    authorImageSrc.startsWith("data:")
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
     data.modifiedTime && data.modifiedTime !== data.createdTime

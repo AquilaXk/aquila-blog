@@ -242,7 +242,10 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     size: number
   ) => {
     const imageSrc = profileImageDirectUrl || profileImageUrl || CONFIG.profile.image
-    const bypassOptimizer = imageSrc.includes("/redirectToProfileImg") || imageSrc.startsWith("data:")
+    const bypassOptimizer =
+      imageSrc.includes("/redirectToProfileImg") ||
+      imageSrc.includes("placehold.co") ||
+      imageSrc.startsWith("data:")
 
     return (
       <Avatar size={size}>

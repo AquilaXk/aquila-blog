@@ -8,12 +8,12 @@ type AuthShellProps = {
   subtitle: string
   eyebrow: string
   heroTitle: string
-  heroDescription: string
-  statItems: {
+  heroDescription?: string
+  statItems?: {
     label: string
     value: string
   }[]
-  tips: string[]
+  tips?: string[]
   footer: ReactNode
   children: ReactNode
 }
@@ -25,8 +25,8 @@ const AuthShell = ({
   eyebrow,
   heroTitle,
   heroDescription,
-  statItems,
-  tips,
+  statItems = [],
+  tips = [],
   footer,
   children,
 }: AuthShellProps) => {
@@ -37,22 +37,26 @@ const AuthShell = ({
         <HeroPanel>
           <Eyebrow>{eyebrow}</Eyebrow>
           <HeroTitle>{heroTitle}</HeroTitle>
-          <HeroDescription>{heroDescription}</HeroDescription>
+          {heroDescription ? <HeroDescription>{heroDescription}</HeroDescription> : null}
 
-          <StatGrid>
-            {statItems.map((item) => (
-              <StatCard key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </StatCard>
-            ))}
-          </StatGrid>
+          {statItems.length > 0 ? (
+            <StatGrid>
+              {statItems.map((item) => (
+                <StatCard key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </StatCard>
+              ))}
+            </StatGrid>
+          ) : null}
 
-          <TipList>
-            {tips.map((tip) => (
-              <li key={tip}>{tip}</li>
-            ))}
-          </TipList>
+          {tips.length > 0 ? (
+            <TipList>
+              {tips.map((tip) => (
+                <li key={tip}>{tip}</li>
+              ))}
+            </TipList>
+          ) : null}
         </HeroPanel>
 
         <FormPanel>

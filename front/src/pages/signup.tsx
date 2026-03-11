@@ -15,6 +15,7 @@ const SignupPage = () => {
   const router = useRouter()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [passwordConfirm, setPasswordConfirm] = useState("")
   const [nickname, setNickname] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
@@ -32,13 +33,18 @@ const SignupPage = () => {
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    if (!username.trim() || !password.trim() || !nickname.trim()) {
-      setError("아이디, 비밀번호, 닉네임을 모두 입력해주세요.")
+    if (!username.trim() || !password.trim() || !passwordConfirm.trim() || !nickname.trim()) {
+      setError("아이디, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.")
       return
     }
 
     if (!passwordRule.test(password)) {
       setError("비밀번호는 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다.")
+      return
+    }
+
+    if (password !== passwordConfirm) {
+      setError("비밀번호와 비밀번호 확인이 일치하지 않습니다.")
       return
     }
 
@@ -67,20 +73,10 @@ const SignupPage = () => {
     <AuthShell
       activeTab="signup"
       title="회원가입"
-      subtitle="기본 계정을 만든 뒤 로그인하면 댓글과 개인 기능을 바로 사용할 수 있습니다."
+      subtitle="새 계정을 등록합니다."
       eyebrow="Account Setup"
-      heroTitle="처음 한 번만 정리하면 이후 운영이 훨씬 편해집니다"
-      heroDescription="아이디와 닉네임은 블로그 내 식별과 표시 이름에 사용됩니다. 비밀번호는 일반 서비스 수준으로 강하게 잡아두는 편이 운영상 안전합니다."
-      statItems={[
-        { label: "Username", value: "로그인 식별자" },
-        { label: "Nickname", value: "화면 표시 이름" },
-        { label: "Password", value: "강한 규칙 필수" },
-      ]}
-      tips={[
-        "관리자 권한은 회원가입만으로 부여되지 않습니다. 별도 설정된 관리자 계정만 어드민 기능을 사용할 수 있습니다.",
-        "닉네임은 댓글과 일부 화면 노출에 사용되므로, 운영용 계정이라면 식별하기 쉬운 이름으로 두는 편이 좋습니다.",
-        "가입 후 바로 로그인 화면으로 이동하므로, 동일한 비밀번호를 다시 입력할 준비만 되어 있으면 됩니다.",
-      ]}
+      heroTitle="회원가입"
+      heroDescription="아이디, 비밀번호, 닉네임을 입력해 계정을 만듭니다."
       footer={
         <FooterText>
           이미 계정이 있으면 <Link href="/login">로그인</Link>
@@ -91,7 +87,7 @@ const SignupPage = () => {
         <Field>
           <FieldTop>
             <Label htmlFor="username">아이디</Label>
-            <FieldHint>로그인에 사용하는 고정 식별자입니다.</FieldHint>
+            <FieldHint>로그인 식별자</FieldHint>
           </FieldTop>
           <Input
             id="username"
@@ -105,7 +101,7 @@ const SignupPage = () => {
         <Field>
           <FieldTop>
             <Label htmlFor="password">비밀번호</Label>
-            <FieldHint>영문 대/소문자, 숫자, 특수문자를 모두 포함해야 합니다.</FieldHint>
+            <FieldHint>규칙을 만족해야 합니다.</FieldHint>
           </FieldTop>
           <PasswordRow>
             <Input
@@ -135,8 +131,39 @@ const SignupPage = () => {
 
         <Field>
           <FieldTop>
+            <Label htmlFor="password-confirm">비밀번호 확인</Label>
+            <FieldHint>같은 값 다시 입력</FieldHint>
+          </FieldTop>
+          <PasswordRow>
+            <Input
+              id="password-confirm"
+              type={showPassword ? "text" : "password"}
+              value={passwordConfirm}
+              onChange={(e) => setPasswordConfirm(e.target.value)}
+              placeholder="비밀번호를 다시 입력하세요"
+              autoComplete="new-password"
+            />
+            <GhostButton
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label="비밀번호 표시 전환"
+            >
+              {showPassword ? "숨기기" : "표시"}
+            </GhostButton>
+          </PasswordRow>
+          <ConfirmStatus data-ok={passwordConfirm.length > 0 && password === passwordConfirm}>
+            {passwordConfirm.length === 0
+              ? "비밀번호 확인을 입력하면 일치 여부를 바로 보여줍니다."
+              : password === passwordConfirm
+                ? "비밀번호가 일치합니다."
+                : "비밀번호가 일치하지 않습니다."}
+          </ConfirmStatus>
+        </Field>
+
+        <Field>
+          <FieldTop>
             <Label htmlFor="nickname">닉네임</Label>
-            <FieldHint>댓글과 일부 화면에서 노출되는 이름입니다.</FieldHint>
+            <FieldHint>화면 표시 이름</FieldHint>
           </FieldTop>
           <Input
             id="nickname"
@@ -241,6 +268,20 @@ const RuleList = styled.ul`
     border-color: ${({ theme }) => theme.colors.green7};
     background: ${({ theme }) => theme.colors.green3};
     color: ${({ theme }) => theme.colors.green11};
+  }
+`
+
+const ConfirmStatus = styled.p`
+  margin: 0;
+  font-size: 0.8rem;
+  color: ${({ theme }) => theme.colors.gray11};
+
+  &[data-ok="true"] {
+    color: ${({ theme }) => theme.colors.green11};
+  }
+
+  &[data-ok="false"] {
+    color: ${({ theme }) => theme.colors.red11};
   }
 `
 

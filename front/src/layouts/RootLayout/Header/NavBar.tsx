@@ -36,23 +36,18 @@ const NavBar: React.FC = () => {
     void loadMe()
 
     const onFocus = () => void loadMe()
+    const onRouteDone = () => void loadMe()
     window.addEventListener("focus", onFocus)
+    router.events.on("routeChangeComplete", onRouteDone)
 
     return () => {
       mounted = false
       window.removeEventListener("focus", onFocus)
+      router.events.off("routeChangeComplete", onRouteDone)
     }
-  }, [router.asPath])
+  }, [router.events])
 
-  const guestLinks = [
-    { id: 1, name: "About", to: "/about" },
-    { id: 2, name: "Login", to: "/login" },
-    { id: 3, name: "Signup", to: "/signup" },
-  ]
-
-  const memberLinks = [{ id: 1, name: "About", to: "/about" }]
-
-  const links = me ? memberLinks : isAuthResolved ? guestLinks : [{ id: 1, name: "About", to: "/about" }]
+  const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
 
   const handleLogout = async () => {
     try {
@@ -78,28 +73,44 @@ const NavBar: React.FC = () => {
 
   return (
     <StyledWrapper>
-      <ul>
-        {links.map((link) => (
+      <ul className="primaryLinks">
+        {primaryLinks.map((link) => (
           <li key={link.id}>
             <Link href={link.to}>{link.name}</Link>
           </li>
         ))}
-        {me?.isAdmin && (
-          <li>
-            <Link href="/admin">Admin</Link>
-          </li>
-        )}
-        {me && (
+      </ul>
+      <div className="authArea">
+        {!isAuthResolved && (
           <>
-            <li className="identity">{me.nickname || me.username}</li>
-            <li>
-              <button type="button" onClick={handleLogout} className="logoutBtn">
-                Logout
-              </button>
-            </li>
+            <span className="authSkeleton short" />
+            <span className="authSkeleton medium" />
           </>
         )}
-      </ul>
+        {isAuthResolved && !me && (
+          <>
+            <Link href="/login" className="navPill">
+              Login
+            </Link>
+            <Link href="/signup" className="navPill">
+              Signup
+            </Link>
+          </>
+        )}
+        {isAuthResolved && me?.isAdmin && (
+          <Link href="/admin" className="navPill">
+            Admin
+          </Link>
+        )}
+        {isAuthResolved && me && (
+          <>
+            <span className="identity">{me.nickname || me.username}</span>
+            <button type="button" onClick={handleLogout} className="logoutBtn">
+              Logout
+            </button>
+          </>
+        )}
+      </div>
     </StyledWrapper>
   )
 }
@@ -107,30 +118,103 @@ const NavBar: React.FC = () => {
 export default NavBar
 
 const StyledWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
   flex-shrink: 0;
-  ul {
+
+  .primaryLinks {
     display: flex;
     flex-direction: row;
     align-items: center;
+
     li {
       display: block;
-      margin-left: 1rem;
       color: ${({ theme }) => theme.colors.gray11};
     }
+  }
+
+  .authArea {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    min-width: 230px;
+  }
+
+  .navPill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 74px;
+    height: 32px;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .authSkeleton {
+    display: inline-flex;
+    height: 32px;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray4};
+    opacity: 0.9;
+  }
+
+  .authSkeleton.short {
+    width: 76px;
+  }
+
+  .authSkeleton.medium {
+    width: 92px;
   }
 
   .identity {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.85rem;
+    max-width: 130px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .logoutBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     border-radius: 999px;
-    padding: 0.22rem 0.55rem;
+    min-width: 82px;
+    height: 32px;
+    padding: 0 0.62rem;
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.78rem;
+    font-weight: 600;
     cursor: pointer;
+  }
+
+  @media (max-width: 720px) {
+    gap: 0.55rem;
+
+    .authArea {
+      min-width: 0;
+      gap: 0.4rem;
+    }
+
+    .identity {
+      display: none;
+    }
+
+    .navPill,
+    .logoutBtn {
+      min-width: 68px;
+      height: 30px;
+      font-size: 0.76rem;
+    }
   }
 `

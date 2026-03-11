@@ -173,6 +173,18 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
           if (!inCallout) return <p>{children}</p>
           return <p className="notion-text">{children}</p>
         },
+        img({ src, alt }) {
+          const imageSrc = typeof src === "string" ? src : ""
+          if (!imageSrc) return null
+
+          return (
+            <figure className="aq-image-frame">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageSrc} alt={alt || ""} loading="lazy" />
+              {alt ? <figcaption>{alt}</figcaption> : null}
+            </figure>
+          )
+        },
         code({ className, children, ...props }) {
           const rawCode = String(children).replace(/\n$/, "")
           const lang = className?.replace("language-", "").trim() || ""
@@ -271,6 +283,35 @@ const StyledWrapper = styled.div`
 
   p {
     margin: 0.5rem 0;
+  }
+
+  figure {
+    margin: 1rem 0;
+  }
+
+  .aq-image-frame {
+    width: min(100%, 860px);
+  }
+
+  .aq-image-frame img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: min(78vh, 920px);
+    object-fit: contain;
+    border-radius: 18px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  }
+
+  .aq-image-frame figcaption {
+    margin-top: 0.55rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    line-height: 1.5;
+    text-align: center;
   }
 
   ul,

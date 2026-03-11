@@ -11,9 +11,15 @@ type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean
 
 type MemberMe = {
   id: number
+  createdAt?: string
+  modifiedAt?: string
   username: string
   nickname: string
   isAdmin?: boolean
+  profileImageUrl?: string
+  profileImageDirectUrl?: string
+  profileRole?: string
+  profileBio?: string
 }
 
 type PostForEditor = {
@@ -65,6 +71,19 @@ type PageDto<T> = {
     totalElements?: number
     totalPages?: number
   }
+}
+
+type NoticeTone = "idle" | "loading" | "success" | "error"
+type ToolbarAction = {
+  label: string
+  onClick: () => void
+  primary?: boolean
+  calloutTrigger?: boolean
+}
+type ToolbarGroup = {
+  label: string
+  description: string
+  actions: ToolbarAction[]
 }
 
 const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
@@ -257,8 +276,6 @@ const AdminPage: NextPage = () => {
   const [authLoading, setAuthLoading] = useState(true)
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
-  const [memberId, setMemberId] = useState("1")
-
   const [postId, setPostId] = useState("1")
   const [commentId, setCommentId] = useState("1")
   const [commentContent, setCommentContent] = useState("")
@@ -266,11 +283,18 @@ const AdminPage: NextPage = () => {
   const [postContent, setPostContent] = useState("")
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [publishNotice, setPublishNotice] = useState<{
-    tone: "idle" | "loading" | "success" | "error"
+    tone: NoticeTone
     text: string
   }>({
     tone: "idle",
     text: "작성 후 ‘글 발행’을 누르면 결과가 여기에 표시됩니다.",
+  })
+  const [profileNotice, setProfileNotice] = useState<{
+    tone: NoticeTone
+    text: string
+  }>({
+    tone: "idle",
+    text: "현재 저장된 관리자 프로필 값이 입력창에 자동으로 채워집니다.",
   })
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
@@ -281,7 +305,6 @@ const AdminPage: NextPage = () => {
   const [listKw, setListKw] = useState("")
   const [listSort, setListSort] = useState("CREATED_AT")
 
-  const [profileImgMemberId, setProfileImgMemberId] = useState("1")
   const [profileImgInputUrl, setProfileImgInputUrl] = useState("")
   const [profileRoleInput, setProfileRoleInput] = useState("")
   const [profileBioInput, setProfileBioInput] = useState("")
@@ -292,6 +315,24 @@ const AdminPage: NextPage = () => {
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
   const redirectingRef = useRef(false)
+
+  const syncProfileState = (member: MemberMe) => {
+    setMe(member)
+    setProfileRoleInput(member.profileRole || "")
+    setProfileBioInput(member.profileBio || "")
+    setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
+  }
+
+  const refreshAdminProfile = async (memberId: number, fallback?: MemberMe) => {
+    try {
+      const detailed = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${memberId}`)
+      syncProfileState(detailed)
+      return detailed
+    } catch {
+      if (fallback) syncProfileState(fallback)
+      return fallback ?? null
+    }
+  }
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -446,20 +487,20 @@ const AdminPage: NextPage = () => {
       return
     }
 
-    const targetMemberId = profileImgMemberId.trim()
-    if (!targetMemberId) {
-      setResult(pretty({ error: "프로필을 변경할 member id를 입력해주세요." }))
+    if (!me?.id) {
+      setResult(pretty({ error: "현재 관리자 정보를 확인할 수 없습니다." }))
       return
     }
 
     try {
       setLoadingKey("admMemberProfileImgUpdate")
+      setProfileNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
 
       const formData = new FormData()
       formData.append("file", file)
 
       const uploadResponse = await fetch(
-        `${getApiBaseUrl()}/member/api/v1/adm/members/${targetMemberId}/profileImageFile`,
+        `${getApiBaseUrl()}/member/api/v1/adm/members/${me.id}/profileImageFile`,
         {
           method: "POST",
           credentials: "include",
@@ -472,16 +513,17 @@ const AdminPage: NextPage = () => {
         throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${body}`.trim())
       }
 
-      const uploadData = (await uploadResponse.json()) as {
-        profileImageUrl?: string
-        profileImageDirectUrl?: string
-      }
+      const uploadData = (await uploadResponse.json()) as MemberMe
       const uploadedUrl = (uploadData?.profileImageDirectUrl || uploadData?.profileImageUrl || "").trim()
       if (!uploadedUrl) {
         throw new Error("업로드 응답에 이미지 URL이 없습니다.")
       }
 
-      setProfileImgInputUrl(uploadedUrl)
+      syncProfileState(uploadData)
+      setProfileNotice({
+        tone: "success",
+        text: "프로필 이미지가 저장되었습니다. 현재 미리보기에 반영된 상태가 저장값입니다.",
+      })
       setResult(
         pretty({
           uploadedUrl,
@@ -490,6 +532,7 @@ const AdminPage: NextPage = () => {
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      setProfileNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -497,16 +540,16 @@ const AdminPage: NextPage = () => {
   }
 
   const handleUpdateMemberProfileCard = async () => {
-    const targetMemberId = profileImgMemberId.trim()
-    if (!targetMemberId) {
-      setResult(pretty({ error: "프로필을 변경할 member id를 입력해주세요." }))
+    if (!me?.id) {
+      setResult(pretty({ error: "현재 관리자 정보를 확인할 수 없습니다." }))
       return
     }
 
     try {
       setLoadingKey("admMemberProfileCardUpdate")
-      const updated = await apiFetch<JsonValue>(
-        `/member/api/v1/adm/members/${targetMemberId}/profileCard`,
+      setProfileNotice({ tone: "loading", text: "역할과 소개 문구를 저장하고 있습니다..." })
+      const updated = await apiFetch<MemberMe>(
+        `/member/api/v1/adm/members/${me.id}/profileCard`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -515,9 +558,15 @@ const AdminPage: NextPage = () => {
           }),
         }
       )
-      setResult(pretty(updated))
+      syncProfileState(updated)
+      setProfileNotice({
+        tone: "success",
+        text: "역할과 소개 문구가 저장되었습니다. 입력창과 미리보기에 현재 저장값이 반영되었습니다.",
+      })
+      setResult(pretty(updated as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      setProfileNotice({ tone: "error", text: `프로필 저장 실패: ${message}` })
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -545,8 +594,18 @@ const AdminPage: NextPage = () => {
           return
         }
 
-        setMe(member)
-        setProfileImgMemberId(String(member.id))
+        let refreshed: MemberMe | null = null
+        try {
+          refreshed = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${member.id}`)
+        } catch {
+          refreshed = member
+        }
+        if (!mounted || !refreshed) return
+        syncProfileState(refreshed)
+        setProfileNotice({
+          tone: "idle",
+          text: "현재 저장된 관리자 프로필을 불러왔습니다. 입력창 값이 실제 저장값입니다.",
+        })
       } catch {
         if (!mounted) return
         const target = `/login?next=${encodeURIComponent("/admin")}`
@@ -589,6 +648,40 @@ const AdminPage: NextPage = () => {
       textarea.focus()
       const cursor = start + snippet.length
       textarea.setSelectionRange(cursor, cursor)
+    })
+  }
+
+  const insertBlockSnippet = (snippet: string) => {
+    const normalized = snippet.trim()
+    if (!normalized) return
+
+    const apply = (base: string, start: number, end: number) => {
+      const before = base.slice(0, start)
+      const after = base.slice(end)
+      const prefix = before.length === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n"
+      const suffix = after.length === 0 ? "\n" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n"
+      const inserted = `${prefix}${normalized}${suffix}`
+      return {
+        nextContent: `${before}${inserted}${after}`,
+        selectionStart: before.length + prefix.length,
+        selectionEnd: before.length + prefix.length + normalized.length,
+      }
+    }
+
+    const textarea = postContentRef.current
+    if (!textarea) {
+      setPostContent((prev) => apply(prev, prev.length, prev.length).nextContent)
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const { nextContent, selectionStart, selectionEnd } = apply(postContent, start, end)
+    setPostContent(nextContent)
+
+    requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(selectionStart, selectionEnd)
     })
   }
 
@@ -713,7 +806,7 @@ const AdminPage: NextPage = () => {
   }
 
   const insertDivider = () => {
-    insertSnippet("\n---\n")
+    insertBlockSnippet("---")
   }
 
   const insertLink = () => {
@@ -742,7 +835,7 @@ const AdminPage: NextPage = () => {
     kind: "TIP" | "INFO" | "WARNING" | "OUTLINE" | "EXAMPLE" | "SUMMARY",
     body: string
   ) => {
-    insertSnippet(`> [!${kind}]\n> ${body}\n`)
+    insertBlockSnippet(`> [!${kind}]\n> ${body}`)
     setIsCalloutMenuOpen(false)
   }
 
@@ -780,18 +873,102 @@ const AdminPage: NextPage = () => {
     if (!file) return
 
     void run("uploadPostImage", async () => {
-      const uploaded = await uploadPostImageFile(file)
-      const markdown = uploaded.data?.markdown
-      if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-      insertSnippet(`${markdown}\n`)
-      return uploaded
+      setPublishNotice({
+        tone: "loading",
+        text: `이미지 "${file.name}" 업로드 중입니다. 업로드가 끝나면 본문에 자동 삽입됩니다.`,
+      })
+
+      try {
+        const uploaded = await uploadPostImageFile(file)
+        const markdown = uploaded.data?.markdown
+        if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+        insertBlockSnippet(markdown)
+        setPublishNotice({
+          tone: "success",
+          text: `이미지 업로드가 완료되었습니다. 본문과 미리보기에서 반응형 크기로 확인할 수 있습니다.`,
+        })
+        return uploaded
+      } catch (error) {
+        setPublishNotice({
+          tone: "error",
+          text: `이미지 업로드 실패: ${error instanceof Error ? error.message : String(error)}`,
+        })
+        throw error
+      }
     })
   }
 
   const currentFlags = toFlags(postVisibility)
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
   const currentPostLabel = postTitle.trim() || (postId.trim() ? `#${postId} 불러온 글` : "새 글 초안")
+  const selectedPostLabel = postId.trim() ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
+  const contentLength = postContent.trim().length
+  const lineCount = postContent ? postContent.split("\n").length : 0
+  const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
+  const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const profilePreviewSrc = profileImgInputUrl.trim()
+  const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
+  const profileRoleStatus = profileRoleInput.trim() || "미설정"
+  const profileBioStatus = profileBioInput.trim() || "미설정"
+  const profileUpdatedText = me?.modifiedAt ? me.modifiedAt.slice(0, 16).replace("T", " ") : "확인 전"
+  const profileImageHint = profileImageFileName
+    ? `선택 파일: ${profileImageFileName}`
+    : "아직 선택된 파일이 없습니다."
+  const toolbarGroups: ToolbarGroup[] = [
+    {
+      label: "구조",
+      description: "문서 구조와 기본 블록",
+      actions: [
+        { label: "제목1", onClick: () => applyHeadingStyle(1) },
+        { label: "제목2", onClick: () => applyHeadingStyle(2) },
+        { label: "제목3", onClick: () => applyHeadingStyle(3) },
+        { label: "텍스트", onClick: () => applyHeadingStyle(0) },
+        { label: "토글", onClick: insertToggle },
+        { label: "구분선", onClick: insertDivider },
+        { label: "체크리스트", onClick: applyChecklist },
+      ],
+    },
+    {
+      label: "강조",
+      description: "문장 강조와 링크",
+      actions: [
+        { label: "굵게", onClick: () => wrapSelection("**", "**", "굵은 텍스트") },
+        { label: "기울임", onClick: () => wrapSelection("*", "*", "기울임 텍스트") },
+        { label: "취소선", onClick: () => wrapSelection("~~", "~~", "취소선 텍스트") },
+        { label: "인라인코드", onClick: () => wrapSelection("`", "`", "코드") },
+        { label: "링크", onClick: insertLink },
+      ],
+    },
+    {
+      label: "삽입",
+      description: "이미지, 콜아웃, 코드, 다이어그램",
+      actions: [
+        { label: "이미지 업로드", onClick: () => postImageFileInputRef.current?.click(), primary: true },
+        { label: "콜아웃", onClick: () => setIsCalloutMenuOpen((prev) => !prev), calloutTrigger: true },
+        {
+          label: "코드블럭",
+          onClick: () =>
+            insertBlockSnippet(
+              "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```"
+            ),
+        },
+        {
+          label: "머메이드",
+          onClick: () =>
+            insertBlockSnippet(
+              "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```"
+            ),
+        },
+        {
+          label: "테이블",
+          onClick: () =>
+            insertBlockSnippet(
+              "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |"
+            ),
+        },
+      ],
+    },
+  ]
   const adminTools = [
     { href: "#profile-studio", label: "프로필" },
     { href: "#content-studio", label: "글 관리" },
@@ -851,16 +1028,21 @@ const AdminPage: NextPage = () => {
             <Button
               type="button"
               disabled={disabled("me")}
-              onClick={() => run("me", () => apiFetch("/member/api/v1/auth/me"))}
+              onClick={() =>
+                run("me", async () => {
+                  const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
+                  const refreshed = await refreshAdminProfile(member.id, member)
+                  if (refreshed) {
+                    setProfileNotice({
+                      tone: "success",
+                      text: "현재 로그인 정보와 프로필 저장값을 다시 동기화했습니다.",
+                    })
+                  }
+                  return (refreshed || member) as unknown as JsonValue
+                })
+              }
             >
               내 정보
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("systemHealth")}
-              onClick={() => run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}
-            >
-              서버 상태
             </Button>
             <Button
               type="button"
@@ -883,7 +1065,8 @@ const AdminPage: NextPage = () => {
                 <SectionEyebrow>Profile Studio</SectionEyebrow>
                 <h2>관리자 프로필 관리</h2>
                 <SectionDescription>
-                  프로필 사진은 파일 선택 즉시 업로드되고, 역할과 소개 문구는 별도 저장으로 반영됩니다.
+                  현재 로그인한 관리자 1명의 프로필만 여기서 수정합니다. 프로필 사진은 파일 선택 즉시
+                  업로드되고, 역할과 소개 문구는 별도 저장으로 반영됩니다.
                 </SectionDescription>
               </div>
             </SectionTop>
@@ -928,29 +1111,35 @@ const AdminPage: NextPage = () => {
                 >
                   {loadingKey === "admMemberProfileImgUpdate" ? "업로드 중..." : "프로필 이미지 선택"}
                 </PrimaryButton>
-                <InlineHint>{profileImageFileName || "아직 선택된 파일이 없습니다."}</InlineHint>
+                <InlineHint title={profileImageHint}>{profileImageHint}</InlineHint>
               </ProfileCardPanel>
 
               <FormPanelCard>
+                <ProfileMetaCard>
+                  <span>편집 대상 관리자</span>
+                  <strong>@{me.username}</strong>
+                  <small>member #{me.id}</small>
+                </ProfileMetaCard>
+                <ProfileCurrentGrid>
+                  <ProfileCurrentItem>
+                    <label>현재 프로필 이미지</label>
+                    <strong>{profileImageStatus}</strong>
+                  </ProfileCurrentItem>
+                  <ProfileCurrentItem>
+                    <label>현재 역할</label>
+                    <strong>{profileRoleStatus}</strong>
+                  </ProfileCurrentItem>
+                  <ProfileCurrentItem className="wide">
+                    <label>현재 소개</label>
+                    <strong>{profileBioStatus}</strong>
+                  </ProfileCurrentItem>
+                  <ProfileCurrentItem>
+                    <label>마지막 반영 시각</label>
+                    <strong>{profileUpdatedText}</strong>
+                  </ProfileCurrentItem>
+                </ProfileCurrentGrid>
+                <InlineStatus data-tone={profileNotice.tone}>{profileNotice.text}</InlineStatus>
                 <FieldGrid>
-                  <FieldBox>
-                    <FieldLabel htmlFor="profile-member-id">대상 member id</FieldLabel>
-                    <Input
-                      id="profile-member-id"
-                      placeholder="예: 1"
-                      value={profileImgMemberId}
-                      onChange={(e) => setProfileImgMemberId(e.target.value)}
-                    />
-                  </FieldBox>
-                  <FieldBox>
-                    <FieldLabel htmlFor="member-id">회원 조회 id</FieldLabel>
-                    <Input
-                      id="member-id"
-                      placeholder="예: 1"
-                      value={memberId}
-                      onChange={(e) => setMemberId(e.target.value)}
-                    />
-                  </FieldBox>
                   <FieldBox>
                     <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
                     <Input
@@ -971,6 +1160,25 @@ const AdminPage: NextPage = () => {
                   </FieldBox>
                 </FieldGrid>
                 <ActionRow>
+                  <Button
+                    type="button"
+                    disabled={disabled("admMemberProfileRefresh")}
+                    onClick={() =>
+                      run("admMemberProfileRefresh", async () => {
+                        if (!me?.id) throw new Error("현재 관리자 정보를 확인할 수 없습니다.")
+                        setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
+                        const refreshed = await refreshAdminProfile(me.id, me)
+                        if (!refreshed) throw new Error("현재 저장값을 불러오지 못했습니다.")
+                        setProfileNotice({
+                          tone: "success",
+                          text: "현재 저장값을 다시 불러왔습니다. 입력창과 미리보기가 최신 상태입니다.",
+                        })
+                        return refreshed as unknown as JsonValue
+                      })
+                    }
+                  >
+                    현재 저장값 다시 불러오기
+                  </Button>
                   <PrimaryButton
                     type="button"
                     disabled={disabled("admMemberProfileCardUpdate")}
@@ -978,41 +1186,6 @@ const AdminPage: NextPage = () => {
                   >
                     역할/소개 저장
                   </PrimaryButton>
-                  <Button
-                    type="button"
-                    disabled={disabled("admMemberOne")}
-                    onClick={() =>
-                      run("admMemberOne", () => apiFetch(`/member/api/v1/adm/members/${memberId}`))
-                    }
-                  >
-                    회원 단건 조회
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={disabled("admMemberList")}
-                    onClick={() =>
-                      run("admMemberList", () =>
-                        apiFetch(
-                          `/member/api/v1/adm/members?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-                            listKw
-                          )}&sort=${encodeURIComponent(listSort)}`
-                        )
-                      )
-                    }
-                  >
-                    관리자 회원 목록
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={disabled("secureTip")}
-                    onClick={() =>
-                      run("secureTip", () =>
-                        apiFetch("/member/api/v1/members/randomSecureTip").then((tip) => ({ tip }))
-                      )
-                    }
-                  >
-                    랜덤 보안 팁
-                  </Button>
                 </ActionRow>
               </FormPanelCard>
             </ProfileStudioGrid>
@@ -1169,6 +1342,84 @@ const AdminPage: NextPage = () => {
             </ListTable>
           )}
         </ListPanel>
+
+        <SelectedPostPanel>
+          <SelectedPostHeader>
+            <div>
+              <h3>선택한 글 작업</h3>
+              <p>목록에서 불러온 글이나 직접 입력한 `post id` 기준으로 수정, 삭제, 동작 점검을 수행합니다.</p>
+            </div>
+            <SelectedPostBadge>{selectedPostLabel}</SelectedPostBadge>
+          </SelectedPostHeader>
+          <SelectedPostGrid>
+            <FieldBox>
+              <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
+              <Input
+                id="selected-post-id"
+                placeholder="예: 1"
+                value={postId}
+                onChange={(e) => setPostId(e.target.value)}
+              />
+            </FieldBox>
+          </SelectedPostGrid>
+          <ActionRow>
+            <Button
+              type="button"
+              disabled={disabled("postOne")}
+              onClick={() => void loadPostForEditor()}
+            >
+              글 불러오기
+            </Button>
+            <Button
+              type="button"
+              disabled={disabled("modifyPost")}
+              onClick={() =>
+                run("modifyPost", () =>
+                  apiFetch(`/post/api/v1/posts/${postId}`, {
+                    method: "PUT",
+                    body: JSON.stringify({
+                      title: postTitle,
+                      content: postContent,
+                      ...toFlags(postVisibility),
+                    }),
+                  })
+                )
+              }
+            >
+              글 수정
+            </Button>
+            <Button
+              type="button"
+              disabled={disabled("deletePost")}
+              onClick={() =>
+                run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
+              }
+            >
+              글 삭제
+            </Button>
+          </ActionRow>
+          <SubActionRow>
+            <Button
+              type="button"
+              disabled={disabled("hitPost")}
+              onClick={() =>
+                run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+              }
+            >
+              조회수 테스트
+            </Button>
+            <Button
+              type="button"
+              disabled={disabled("likePost")}
+              onClick={() =>
+                run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
+              }
+            >
+              좋아요 테스트
+            </Button>
+          </SubActionRow>
+        </SelectedPostPanel>
+
         {deleteConfirmTarget && (
           <ModalBackdrop
             onClick={() => {
@@ -1208,162 +1459,142 @@ const AdminPage: NextPage = () => {
 
         <EditorSection>
           <WriterHeader>
-            <div className="titleGroup">
-              <label htmlFor="post-title">글 제목</label>
+            <div className="titleField">
+              <FieldLabel htmlFor="post-title">글 제목</FieldLabel>
               <TitleInput
                 id="post-title"
                 placeholder="제목을 입력하세요"
                 value={postTitle}
                 onChange={(e) => setPostTitle(e.target.value)}
               />
-              <SmallHint>메인 페이지 노출 조건: `공개` + `목록 노출`</SmallHint>
             </div>
-            <div className="actions">
-              <VisibilityWrap>
-                <label htmlFor="post-visibility">공개 범위</label>
-                <VisibilitySelect
-                  id="post-visibility"
-                  value={postVisibility}
-                  onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
-                >
-                  <option value="PRIVATE">비공개</option>
-                  <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
-                  <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
-                </VisibilitySelect>
-              </VisibilityWrap>
-              <PublishActionWrap>
-                <PrimaryButton disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
-                  {loadingKey === "writePost" ? "발행 중..." : "글 발행"}
-                </PrimaryButton>
-              </PublishActionWrap>
-            </div>
+            <VisibilityWrap>
+              <FieldLabel htmlFor="post-visibility">공개 범위</FieldLabel>
+              <VisibilitySelect
+                id="post-visibility"
+                value={postVisibility}
+                onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
+              >
+                <option value="PRIVATE">비공개</option>
+                <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
+                <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
+              </VisibilitySelect>
+            </VisibilityWrap>
+            <PublishActionWrap>
+              <PrimaryButton disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
+                {loadingKey === "writePost" ? "발행 중..." : "글 발행"}
+              </PrimaryButton>
+            </PublishActionWrap>
           </WriterHeader>
+          <EditorMetaRow>
+            <SmallHint>메인 페이지 노출 조건: `공개` + `목록 노출`</SmallHint>
+            <EditorContextChip>{currentPostLabel}</EditorContextChip>
+          </EditorMetaRow>
           <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
+          <EditorInsightGrid>
+            <EditorInsightCard>
+              <span>현재 문서</span>
+              <strong>{currentPostLabel}</strong>
+            </EditorInsightCard>
+            <EditorInsightCard>
+              <span>공개 상태</span>
+              <strong>{currentVisibilityText}</strong>
+            </EditorInsightCard>
+            <EditorInsightCard>
+              <span>본문 분량</span>
+              <strong>{contentLength}자 · {lineCount}줄</strong>
+            </EditorInsightCard>
+            <EditorInsightCard>
+              <span>삽입 블록</span>
+              <strong>이미지 {imageCount}개 · 코드 {codeBlockCount}개</strong>
+            </EditorInsightCard>
+          </EditorInsightGrid>
 
+          <input
+            ref={postImageFileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePostImageFileChange}
+            style={{ display: "none" }}
+          />
           <EditorToolbar>
-            <Button type="button" onClick={() => applyHeadingStyle(1)}>
-              제목1
-            </Button>
-            <Button type="button" onClick={() => applyHeadingStyle(2)}>
-              제목2
-            </Button>
-            <Button type="button" onClick={() => applyHeadingStyle(3)}>
-              제목3
-            </Button>
-            <Button type="button" onClick={() => applyHeadingStyle(0)}>
-              텍스트
-            </Button>
-            <Button type="button" onClick={insertToggle}>
-              토글
-            </Button>
-            <Button type="button" onClick={insertDivider}>
-              구분선
-            </Button>
-            <Button type="button" onClick={applyChecklist}>
-              체크리스트
-            </Button>
-            <Button type="button" onClick={() => wrapSelection("**", "**", "굵은 텍스트")}>
-              굵게
-            </Button>
-            <Button type="button" onClick={() => wrapSelection("*", "*", "기울임 텍스트")}>
-              기울임
-            </Button>
-            <Button type="button" onClick={() => wrapSelection("~~", "~~", "취소선 텍스트")}>
-              취소선
-            </Button>
-            <Button type="button" onClick={() => wrapSelection("`", "`", "코드")}>
-              인라인코드
-            </Button>
-            <Button type="button" onClick={insertLink}>
-              링크
-            </Button>
-            <input
-              ref={postImageFileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handlePostImageFileChange}
-              style={{ display: "none" }}
-            />
-            <Button
-              type="button"
-              disabled={disabled("uploadPostImage")}
-              onClick={() => postImageFileInputRef.current?.click()}
-            >
-              이미지 업로드
-            </Button>
-            <CalloutDropdown>
-              <Button type="button" onClick={() => setIsCalloutMenuOpen((prev) => !prev)}>
-                콜아웃 ▾
-              </Button>
-              {isCalloutMenuOpen && (
-                <CalloutMenu>
-                  <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
-                    TIP
-                  </button>
-                  <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
-                    INFO
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
-                  >
-                    WARNING
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}
-                  >
-                    OUTLINE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}
-                  >
-                    EXAMPLE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}
-                  >
-                    SUMMARY
-                  </button>
-                </CalloutMenu>
-              )}
-            </CalloutDropdown>
-            <Button
-              type="button"
-              onClick={() =>
-                insertSnippet(
-                  "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```\n"
-                )
-              }
-            >
-              코드블럭
-            </Button>
-            <Button
-              type="button"
-              onClick={() =>
-                insertSnippet(
-                  "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```\n"
-                )
-              }
-            >
-              머메이드
-            </Button>
-            <Button
-              type="button"
-              onClick={() =>
-                insertSnippet(
-                  "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |\n"
-                )
-              }
-            >
-              테이블
-            </Button>
+            {toolbarGroups.map((group) => (
+              <ToolbarGroup key={group.label}>
+                <ToolbarGroupHeader>
+                  <strong>{group.label}</strong>
+                  <span>{group.description}</span>
+                </ToolbarGroupHeader>
+                <ToolbarActionGrid>
+                  {group.actions.map((action) =>
+                    action.calloutTrigger ? (
+                      <CalloutDropdown key={action.label}>
+                        <ToolbarActionButton type="button" onClick={action.onClick}>
+                          {action.label} ▾
+                        </ToolbarActionButton>
+                        {isCalloutMenuOpen && (
+                          <CalloutMenu>
+                            <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
+                              TIP
+                            </button>
+                            <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
+                              INFO
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
+                            >
+                              WARNING
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}
+                            >
+                              OUTLINE
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}
+                            >
+                              EXAMPLE
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}
+                            >
+                              SUMMARY
+                            </button>
+                          </CalloutMenu>
+                        )}
+                      </CalloutDropdown>
+                    ) : (
+                      <ToolbarActionButton
+                        key={action.label}
+                        type="button"
+                        disabled={action.primary ? disabled("uploadPostImage") : false}
+                        data-variant={action.primary ? "primary" : "default"}
+                        onClick={action.onClick}
+                      >
+                        {action.label}
+                      </ToolbarActionButton>
+                    )
+                  )}
+                </ToolbarActionGrid>
+              </ToolbarGroup>
+            ))}
           </EditorToolbar>
+          <EditorSupportNote>
+            이미지는 업로드 후 본문에 블록 형태로 삽입되고, 미리보기와 실제 글에서 자동으로 폭이 제한됩니다.
+            콜아웃은 유형을 고르면 바로 템플릿이 들어갑니다.
+          </EditorSupportNote>
           <EditorGrid>
             <EditorPane>
-              <PaneTitle>Markdown 입력</PaneTitle>
+              <PaneHeader>
+                <div>
+                  <PaneTitle>Markdown 입력</PaneTitle>
+                  <PaneDescription>본문을 직접 작성하거나 위 도구로 블록 템플릿을 삽입합니다.</PaneDescription>
+                </div>
+                <PaneChip>{lineCount} lines</PaneChip>
+              </PaneHeader>
               <ContentInput
                 ref={postContentRef}
                 placeholder="Markdown으로 본문을 작성하세요."
@@ -1373,7 +1604,13 @@ const AdminPage: NextPage = () => {
               />
             </EditorPane>
             <PreviewPane>
-              <PaneTitle>실시간 미리보기</PaneTitle>
+              <PaneHeader>
+                <div>
+                  <PaneTitle>실시간 미리보기</PaneTitle>
+                  <PaneDescription>실제 글 상세 화면과 같은 렌더러로 바로 확인합니다.</PaneDescription>
+                </div>
+                <PaneChip>{imageCount} images</PaneChip>
+              </PaneHeader>
               <PreviewCard>
                 <NotionRenderer content={postContent} />
               </PreviewCard>
@@ -1381,56 +1618,6 @@ const AdminPage: NextPage = () => {
           </EditorGrid>
         </EditorSection>
 
-        <Row>
-          <Input placeholder="post id" value={postId} onChange={(e) => setPostId(e.target.value)} />
-          <Button
-            disabled={disabled("postOne")}
-            onClick={() => void loadPostForEditor()}
-          >
-            글 불러오기
-          </Button>
-          <Button
-            disabled={disabled("modifyPost")}
-            onClick={() =>
-              run("modifyPost", () =>
-                apiFetch(`/post/api/v1/posts/${postId}`, {
-                  method: "PUT",
-                  body: JSON.stringify({
-                    title: postTitle,
-                    content: postContent,
-                    ...toFlags(postVisibility),
-                  }),
-                })
-              )
-            }
-          >
-            글 수정
-          </Button>
-          <Button
-            disabled={disabled("deletePost")}
-            onClick={() =>
-              run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
-            }
-          >
-            글 삭제
-          </Button>
-          <Button
-            disabled={disabled("hitPost")}
-            onClick={() =>
-              run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-            }
-          >
-            조회수 +1
-          </Button>
-          <Button
-            disabled={disabled("likePost")}
-            onClick={() =>
-              run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
-            }
-          >
-            좋아요 토글
-          </Button>
-        </Row>
           </Section>
 
           <UtilityGrid>
@@ -1546,7 +1733,7 @@ const AdminPage: NextPage = () => {
                   disabled={disabled("admPostCount")}
                   onClick={() => run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}
                 >
-                  전체 글 개수 + 보안팁
+                  전체 글 개수 확인
                 </Button>
                 <Button
                   type="button"
@@ -1782,20 +1969,6 @@ const SectionDescription = styled.p`
   line-height: 1.65;
 `
 
-const Row = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.5rem;
-
-  a {
-    color: ${({ theme }) => theme.colors.blue10};
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-`
-
 const QueryPanel = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
@@ -1876,15 +2049,22 @@ const ProfileCardPanel = styled.div`
   padding: 1rem;
   display: grid;
   gap: 0.7rem;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
   justify-items: center;
   text-align: center;
 `
 
 const ProfilePreview = styled.div`
   padding: 0.15rem;
+  width: 124px;
+  height: 124px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+  flex-shrink: 0;
 
   .previewImage {
     width: 120px;
@@ -1911,16 +2091,20 @@ const ProfileFallback = styled.div`
 const ProfileSummary = styled.div`
   display: grid;
   gap: 0.18rem;
+  width: 100%;
+  min-width: 0;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 1rem;
+    overflow-wrap: anywhere;
   }
 
   span {
     color: ${({ theme }) => theme.colors.blue11};
     font-size: 0.84rem;
     font-weight: 600;
+    overflow-wrap: anywhere;
   }
 
   p {
@@ -1928,14 +2112,19 @@ const ProfileSummary = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.6;
     font-size: 0.85rem;
+    overflow-wrap: anywhere;
   }
 `
 
 const InlineHint = styled.p`
   margin: 0;
+  width: 100%;
+  min-width: 0;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.8rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 `
 
 const FormPanelCard = styled.div`
@@ -1943,6 +2132,108 @@ const FormPanelCard = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
+`
+
+const ProfileMetaCard = styled.div`
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.8rem 0.9rem;
+  margin-bottom: 0.85rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1rem;
+  }
+
+  small {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+  }
+`
+
+const ProfileCurrentGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ProfileCurrentItem = styled.div`
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  min-width: 0;
+
+  &.wide {
+    grid-column: span 2;
+
+    @media (max-width: 720px) {
+      grid-column: span 1;
+    }
+  }
+
+  label {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+`
+
+const InlineStatus = styled.div`
+  margin-bottom: 0.85rem;
+  padding: 0.62rem 0.72rem;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+
+  &[data-tone="idle"] {
+    color: ${({ theme }) => theme.colors.gray11};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+  }
+
+  &[data-tone="loading"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
+
+  &[data-tone="success"] {
+    color: ${({ theme }) => theme.colors.green11};
+    border: 1px solid ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+  }
+
+  &[data-tone="error"] {
+    color: ${({ theme }) => theme.colors.red11};
+    border: 1px solid ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+  }
 `
 
 const FieldGrid = styled.div`
@@ -2030,11 +2321,6 @@ const VisibilityWrap = styled.div`
   display: grid;
   gap: 0.22rem;
   min-width: 220px;
-
-  label {
-    font-size: 0.75rem;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
 `
 
 const VisibilitySelect = styled.select`
@@ -2056,41 +2342,62 @@ const EditorSection = styled.div`
 
 const WriterHeader = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px) auto;
   gap: 0.75rem;
   align-items: flex-end;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.45rem;
 
   @media (max-width: 980px) {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
+  }
+
+  @media (max-width: 720px) {
     grid-template-columns: 1fr;
   }
 
-  .titleGroup {
+  .titleField {
     display: grid;
     gap: 0.35rem;
-  }
-
-  .titleGroup label {
-    font-size: 0.82rem;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-
-  .actions {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.5rem;
-    flex-wrap: nowrap;
-
-    @media (max-width: 640px) {
-      width: 100%;
-      flex-wrap: wrap;
-    }
+    min-width: 0;
   }
 `
 
 const PublishActionWrap = styled.div`
   display: grid;
   align-items: end;
+
+  ${PrimaryButton} {
+    min-height: 46px;
+    padding-inline: 1.1rem;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 720px) {
+    ${PrimaryButton} {
+      width: 100%;
+    }
+  }
+`
+
+const EditorMetaRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+`
+
+const EditorContextChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.3rem 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.76rem;
+  font-weight: 600;
 `
 
 const PublishNotice = styled.div`
@@ -2126,12 +2433,59 @@ const PublishNotice = styled.div`
 `
 
 const EditorToolbar = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px dashed ${({ theme }) => theme.colors.gray7};
+
+  @media (max-width: 1080px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ToolbarGroup = styled.div`
+  display: grid;
+  gap: 0.5rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.72rem;
+`
+
+const ToolbarGroupHeader = styled.div`
+  display: grid;
+  gap: 0.18rem;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+`
+
+const ToolbarActionGrid = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.65rem;
-  border-bottom: 1px dashed ${({ theme }) => theme.colors.gray7};
+  gap: 0.4rem;
+`
+
+const ToolbarActionButton = styled(Button)`
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray2};
+  min-height: 38px;
+
+  &[data-variant="primary"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
 `
 
 const CalloutDropdown = styled.div`
@@ -2171,8 +2525,8 @@ const CalloutMenu = styled.div`
 
 const EditorGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  gap: 0.9rem;
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -2210,6 +2564,73 @@ const ListEmpty = styled.p`
   margin: 0.2rem 0 0.1rem;
   font-size: 0.82rem;
   color: ${({ theme }) => theme.colors.gray11};
+`
+
+const SelectedPostPanel = styled.div`
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.8rem;
+  margin: 0.7rem 0 0.2rem;
+`
+
+const SelectedPostHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0.22rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+
+  @media (max-width: 720px) {
+    flex-direction: column;
+  }
+`
+
+const SelectedPostBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.34rem 0.68rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+`
+
+const SelectedPostGrid = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 320px);
+  gap: 0.7rem;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const SubActionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+
+  ${Button} {
+    border-style: dashed;
+  }
 `
 
 const ListTable = styled.table`
@@ -2329,31 +2750,118 @@ const EditorPane = styled.section`
 
 const PreviewPane = styled(EditorPane)``
 
+const PaneHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+`
+
 const PaneTitle = styled.h3`
-  margin: 0 0 0.45rem;
+  margin: 0;
   font-size: 0.92rem;
   color: ${({ theme }) => theme.colors.gray12};
 `
 
+const PaneDescription = styled.p`
+  margin: 0.18rem 0 0;
+  font-size: 0.78rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.5;
+`
+
+const PaneChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.74rem;
+  font-weight: 700;
+  min-height: 30px;
+  padding: 0 0.62rem;
+`
+
 const ContentInput = styled.textarea`
   width: 100%;
-  min-height: 420px;
+  min-height: 560px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 10px;
-  padding: 0.82rem;
+  border-radius: 16px;
+  padding: 1rem 1.05rem;
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
-  line-height: 1.6;
+  line-height: 1.7;
+  font-size: 0.94rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
   resize: vertical;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 `
 
 const PreviewCard = styled.div`
-  min-height: 420px;
-  border-radius: 10px;
+  min-height: 560px;
+  max-height: 820px;
+  overflow: auto;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0 1rem 0.9rem;
+  padding: 0.15rem 1.05rem 1rem;
+
+  > .aq-markdown {
+    margin-top: 0.35rem;
+  }
+`
+
+const EditorInsightGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const EditorInsightCard = styled.div`
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+`
+
+const EditorSupportNote = styled.p`
+  margin: 0 0 0.85rem;
+  padding: 0.72rem 0.82rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  line-height: 1.6;
 `
 
 const ResultPanel = styled.pre`

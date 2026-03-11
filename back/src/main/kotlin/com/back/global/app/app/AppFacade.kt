@@ -21,7 +21,6 @@ class AppFacade(
         val isTest: Boolean by lazy { environment.matchesProfiles("test") }
         val isProd: Boolean by lazy { environment.matchesProfiles("prod") }
         val isNotProd: Boolean by lazy { !isProd }
-        val systemMemberApiKey: String by lazy { environment.getProperty("custom.systemMemberApiKey")!! }
         val siteCookieDomain: String by lazy { environment.getProperty("custom.site.cookieDomain")!! }
         val siteFrontUrl: String by lazy { environment.getProperty("custom.site.frontUrl")!! }
         val siteBackUrl: String by lazy { environment.getProperty("custom.site.backUrl")!! }

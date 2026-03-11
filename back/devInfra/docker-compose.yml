@@ -7,7 +7,7 @@ services:
       - "6379:6379"
     environment:
       TZ: Asia/Seoul
-    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass lldj123414
+    command: redis-server --maxmemory 50mb --maxmemory-policy allkeys-lru --requirepass ${DEV_REDIS_PASSWORD:-dev_redis_password_change_me}
   db_1:
     image: jangka512/pgj:latest
     container_name: db_1
@@ -15,7 +15,7 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: lldj123414
+      POSTGRES_PASSWORD: ${DEV_DB_PASSWORD:-dev_db_password_change_me}
       POSTGRES_DATABASE: postgres
       POSTGRES_DATABASES: ${DB_BASE_NAME:-blog}_dev,${DB_BASE_NAME:-blog}_test
       TZ: Asia/Seoul
@@ -46,7 +46,7 @@ services:
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio1234
+      MINIO_ROOT_PASSWORD: ${DEV_MINIO_ROOT_PASSWORD:-dev_minio_password_change_me}
       TZ: Asia/Seoul
     command: server /data --console-address ":9001"
     volumes:

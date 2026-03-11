@@ -44,8 +44,7 @@ class MemberNotProdInitData(
             )
 
         seedMembers.forEach { (username, nickname) ->
-            val member = memberUseCase.join(username, "1234", nickname, null)
-            member.modifyApiKey(member.username)
+            memberUseCase.join(username, "1234", nickname, null)
         }
     }
 }

@@ -3,6 +3,8 @@ package com.back.boundedContexts.member.adapter.`in`.web
 import com.back.boundedContexts.member.application.port.`in`.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
 import com.back.boundedContexts.member.application.service.AuthTokenService
+import com.back.boundedContexts.member.application.service.LoginAttemptService
+import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AppConfig
@@ -10,6 +12,7 @@ import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.app.AuthCookieService
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -29,6 +32,7 @@ class ApiV1AuthController(
     private val memberUseCase: MemberUseCase,
     private val authTokenService: AuthTokenService,
     private val authCookieService: AuthCookieService,
+    private val loginAttemptService: LoginAttemptService,
 ) {
     data class MemberLoginRequest(
         @field:NotBlank
@@ -41,26 +45,31 @@ class ApiV1AuthController(
 
     data class MemberLoginResBody(
         val item: MemberDto,
-        val apiKey: String,
-        val accessToken: String,
     )
 
     @PostMapping("/login")
     @Transactional(readOnly = true)
     fun login(
+        request: HttpServletRequest,
         @RequestBody @Valid reqBody: MemberLoginRequest,
     ): RsData<MemberLoginResBody> {
-        val member =
-            memberUseCase.findByUsername(reqBody.username)
-                ?: throw AppException("401-1", "존재하지 않는 아이디입니다.")
+        val username = reqBody.username.trim()
+        val clientIp = extractClientIp(request)
 
-        if (member.username == AppConfig.adminUsernameOrBlank && AppConfig.adminPasswordOrBlank.isNotBlank()) {
-            if (reqBody.password != AppConfig.adminPasswordOrBlank) {
-                throw AppException("401-2", "비밀번호가 일치하지 않습니다.")
-            }
-        } else {
-            memberUseCase.checkPassword(member, reqBody.password)
+        if (loginAttemptService.isBlocked(username, clientIp)) {
+            throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
+
+        val member =
+            memberUseCase.findByUsername(username)
+                ?.takeIf { isPasswordValid(it, reqBody.password) }
+                ?: run {
+                    val blocked = loginAttemptService.recordFailure(username, clientIp)
+                    if (blocked) throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
+                    throw AppException("401-1", "아이디 또는 비밀번호가 올바르지 않습니다.")
+                }
+
+        loginAttemptService.clear(username, clientIp)
 
         val accessToken = authTokenService.genAccessToken(member)
 
@@ -71,8 +80,6 @@ class ApiV1AuthController(
             "${member.nickname}님 환영합니다.",
             MemberLoginResBody(
                 item = MemberDto(member),
-                apiKey = member.apiKey,
-                accessToken = accessToken,
             ),
         )
     }
@@ -88,4 +95,28 @@ class ApiV1AuthController(
     fun me(
         @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(securityUser.id)
+
+    private fun isPasswordValid(
+        member: Member,
+        rawPassword: String,
+    ): Boolean =
+        if (member.username == AppConfig.adminUsernameOrBlank && AppConfig.adminPasswordOrBlank.isNotBlank()) {
+            rawPassword == AppConfig.adminPasswordOrBlank
+        } else {
+            runCatching {
+                memberUseCase.checkPassword(member, rawPassword)
+            }.isSuccess
+        }
+
+    private fun extractClientIp(request: HttpServletRequest): String {
+        val xForwardedFor = request.getHeader("X-Forwarded-For").orEmpty()
+        if (xForwardedFor.isNotBlank()) {
+            return xForwardedFor.split(",").firstOrNull().orEmpty().trim().ifBlank { request.remoteAddr.orEmpty() }
+        }
+
+        val xRealIp = request.getHeader("X-Real-IP").orEmpty().trim()
+        if (xRealIp.isNotBlank()) return xRealIp
+
+        return request.remoteAddr.orEmpty()
+    }
 }

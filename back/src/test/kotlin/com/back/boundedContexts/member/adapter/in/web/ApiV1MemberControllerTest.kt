@@ -111,12 +111,9 @@ class ApiV1MemberControllerTest {
             }
 
             @Test
-            fun `랜덤 보안 팁 조회는 인증 쿠키가 있으면 성공한다`() {
-                val member = memberFacade.findByUsername("user1")!!
-
+            fun `랜덤 보안 팁 조회는 미인증 사용자도 성공한다`() {
                 mvc
                     .get("/member/api/v1/members/randomSecureTip") {
-                        cookie(Cookie("apiKey", member.apiKey))
                     }.andExpect {
                         status { isOk() }
                         match(handler().handlerType(ApiV1MemberController::class.java))
@@ -125,20 +122,6 @@ class ApiV1MemberControllerTest {
                         content {
                             string("비밀번호는 영문, 숫자, 특수문자를 조합하여 8자 이상으로 설정하세요.")
                         }
-                    }
-            }
-        }
-
-        @Nested
-        inner class Failure {
-            @Test
-            fun `랜덤 보안 팁 조회에서 미인증 사용자는 401을 반환한다`() {
-                mvc
-                    .get("/member/api/v1/members/randomSecureTip")
-                    .andExpect {
-                        status { isUnauthorized() }
-                        jsonPath("$.resultCode") { value("401-1") }
-                        jsonPath("$.msg") { value("로그인 후 이용해주세요.") }
                     }
             }
         }

@@ -30,12 +30,14 @@ COPY src src
 # PG 초기화 → 시작 → 테스트 DB 생성 → bootJar 빌드(테스트 제외) → PG 종료
 RUN set -e \
  && PGDATA=/var/lib/postgresql/data \
+ && BUILD_DB_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)" \
+ && BUILD_REDIS_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)" \
  && mkdir -p "$PGDATA" && chown postgres:postgres "$PGDATA" \
  && su postgres -c "initdb -D $PGDATA --auth=trust" \
  && su postgres -c "pg_ctl -D $PGDATA start -o '-c listen_addresses=localhost' -w" \
- && su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'lldj123414';\"" \
+ && su postgres -c "psql -c \"ALTER USER postgres PASSWORD '${BUILD_DB_PASSWORD}';\"" \
  && su postgres -c "psql -c \"CREATE DATABASE blog_test;\"" \
- && redis-server --daemonize yes --requirepass lldj123414 \
+ && redis-server --daemonize yes --requirepass "${BUILD_REDIS_PASSWORD}" \
  && ./gradlew bootJar --no-daemon -x test \
  && su postgres -c "pg_ctl -D $PGDATA stop -w"
 

@@ -94,8 +94,13 @@ class PostImageStorageAdapter(
         }
 
         val contentType = file.contentType?.lowercase() ?: ""
-        if (!contentType.startsWith("image/")) {
+        if (contentType !in allowedContentTypes) {
             throw AppException("400-1", "이미지 파일만 업로드할 수 있습니다.")
+        }
+        val signature = file.inputStream.use { input -> input.readNBytes(16) }
+        val detectedType = detectImageContentType(signature)
+        if (detectedType == null || detectedType != contentType) {
+            throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
         }
 
         val key = buildObjectKey(file.originalFilename)
@@ -261,6 +266,50 @@ class PostImageStorageAdapter(
     }
 
     companion object {
+        private val allowedContentTypes =
+            setOf(
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+            )
+
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
+    }
+
+    private fun detectImageContentType(signature: ByteArray): String? {
+        if (signature.size >= 3 &&
+            signature[0] == 0xFF.toByte() &&
+            signature[1] == 0xD8.toByte() &&
+            signature[2] == 0xFF.toByte()
+        ) {
+            return "image/jpeg"
+        }
+
+        if (signature.size >= 8 &&
+            signature[0] == 0x89.toByte() &&
+            signature[1] == 0x50.toByte() &&
+            signature[2] == 0x4E.toByte() &&
+            signature[3] == 0x47.toByte() &&
+            signature[4] == 0x0D.toByte() &&
+            signature[5] == 0x0A.toByte() &&
+            signature[6] == 0x1A.toByte() &&
+            signature[7] == 0x0A.toByte()
+        ) {
+            return "image/png"
+        }
+
+        if (signature.size >= 6) {
+            val header = signature.copyOfRange(0, 6).toString(Charsets.US_ASCII)
+            if (header == "GIF87a" || header == "GIF89a") return "image/gif"
+        }
+
+        if (signature.size >= 12) {
+            val riff = signature.copyOfRange(0, 4).toString(Charsets.US_ASCII)
+            val webp = signature.copyOfRange(8, 12).toString(Charsets.US_ASCII)
+            if (riff == "RIFF" && webp == "WEBP") return "image/webp"
+        }
+
+        return null
     }
 }

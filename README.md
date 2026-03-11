@@ -136,7 +136,10 @@ Cloudflare Tunnel 모드 사용 시 추가:
 권장 추가:
 
 - `CUSTOM__JWT__SECRET_KEY`를 충분히 긴 랜덤 문자열로 설정
-- `CUSTOM__SYSTEM_MEMBER_API_KEY` 변경
+- 로그인 브루트포스 완화를 위해 필요 시 아래 값을 조정:
+  - `CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS`
+  - `CUSTOM__AUTH__LOGIN__WINDOW_SECONDS`
+  - `CUSTOM__AUTH__LOGIN__LOCK_SECONDS`
 
 이미지 업로드(글 이미지 + 관리자 프로필 이미지)를 쓸 경우 사실상 필수:
 

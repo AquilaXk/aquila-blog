@@ -15,6 +15,11 @@ class AuthTokenService(
     @param:Value("\${custom.accessToken.expirationSeconds}")
     private val accessTokenExpirationSeconds: Int,
 ) {
+    init {
+        require(jwtSecretKey.isNotBlank()) { "CUSTOM__JWT__SECRET_KEY must be configured." }
+        require(jwtSecretKey.toByteArray().size >= 32) { "CUSTOM__JWT__SECRET_KEY must be at least 32 bytes." }
+    }
+
     fun genAccessToken(member: Member): String =
         Jwts
             .builder()

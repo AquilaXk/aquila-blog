@@ -1,7 +1,15 @@
 spring:
+  data:
+    redis:
+      password: ${SPRING__DATA__REDIS__PASSWORD:lldj123414}
+  datasource:
+    password: ${SPRING__DATASOURCE__PASSWORD:lldj123414}
   jpa:
     hibernate:
       ddl-auto: create
     properties:
       hibernate:
         dialect: com.back.global.jpa.config.CustomDevPostgreSQLDialect
+custom:
+  jwt:
+    secretKey: "${CUSTOM__JWT__SECRET_KEY:dev-only-jwt-secret-key-please-change-1234567890}"

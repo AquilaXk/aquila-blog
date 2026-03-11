@@ -74,6 +74,17 @@ const StyledWrapper = styled.div`
     font-size: 0.95rem;
     line-height: 1.5;
     color: ${({ theme }) => theme.colors.gray12};
+    border: 0;
+    outline: none;
+    box-shadow: none;
+    background: transparent;
+
+    &::-webkit-search-decoration,
+    &::-webkit-search-cancel-button,
+    &::-webkit-search-results-button,
+    &::-webkit-search-results-decoration {
+      -webkit-appearance: none;
+    }
   }
 
   > .field:focus-within {

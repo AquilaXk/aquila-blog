@@ -33,7 +33,7 @@ const OrderButtons: React.FC<Props> = () => {
         aria-pressed={currentOrder === "desc"}
         onClick={() => handleClickOrderBy("desc")}
       >
-        Desc
+        최신순
       </button>
       <button
         type="button"
@@ -41,7 +41,7 @@ const OrderButtons: React.FC<Props> = () => {
         aria-pressed={currentOrder === "asc"}
         onClick={() => handleClickOrderBy("asc")}
       >
-        Asc
+        오래된순
       </button>
     </StyledWrapper>
   )
@@ -58,7 +58,7 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 70px;
+    min-width: 92px;
     min-height: 38px;
     padding: 0 0.72rem;
     border-radius: 999px;

@@ -11,12 +11,15 @@ import ServiceCard from "./ServiceCard"
 import ContactCard from "./ContactCard"
 import PostList from "./PostList"
 import PinnedPosts from "./PostList/PinnedPosts"
+import { AdminProfile } from "src/hooks/useAdminProfile"
 
 const HEADER_HEIGHT = 73
 
-type Props = {}
+type Props = {
+  initialAdminProfile?: AdminProfile | null
+}
 
-const Feed: React.FC<Props> = () => {
+const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const [q, setQ] = useState("")
 
   return (
@@ -30,7 +33,7 @@ const Feed: React.FC<Props> = () => {
         <TagList />
       </div>
       <div className="mid">
-        <MobileProfileCard />
+        <MobileProfileCard initialAdminProfile={initialAdminProfile} />
         <PinnedPosts q={q} />
         <SearchInput value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="tags">
@@ -48,7 +51,7 @@ const Feed: React.FC<Props> = () => {
           height: `calc(100vh - ${HEADER_HEIGHT}px)`,
         }}
       >
-        <ProfileCard />
+        <ProfileCard initialAdminProfile={initialAdminProfile} />
         <ServiceCard />
         <ContactCard />
         <div className="footer">

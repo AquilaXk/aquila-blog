@@ -15,6 +15,7 @@ class MemberActionLogEventListener(
     private val memberActionLogFacade: MemberActionLogFacade,
     private val taskFacade: TaskFacade,
 ) {
+    // 도메인 변경과 액션로그 큐 적재를 같은 트랜잭션 경계에서 묶기 위해 BEFORE_COMMIT 단계에서 수집한다.
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     fun handle(event: PostWrittenEvent) = addTask(event)
 
@@ -43,6 +44,7 @@ class MemberActionLogEventListener(
         taskFacade.addToQueue(MemberCreateActionLogPayload(event.uid, event.aggregateType, event.aggregateId, event))
     }
 
+    // 실제 로그 저장은 TaskHandler에서 처리해 write API latency에 직접 영향이 없도록 분리한다.
     @TaskHandler
     fun handle(payload: MemberCreateActionLogPayload) {
         memberActionLogFacade.save(payload.event)

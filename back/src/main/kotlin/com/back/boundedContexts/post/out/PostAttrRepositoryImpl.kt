@@ -16,4 +16,21 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
             .using(PostAttr::subject.name, subject)
             .using(PostAttr::name.name, name)
             .load()
+
+    override fun findBySubjectInAndNameIn(subjects: List<Post>, names: List<String>): List<PostAttr> {
+        if (subjects.isEmpty() || names.isEmpty()) return emptyList()
+
+        return entityManager.createQuery(
+            """
+            select a
+            from PostAttr a
+            where a.subject in :subjects
+              and a.name in :names
+            """.trimIndent(),
+            PostAttr::class.java,
+        )
+            .setParameter("subjects", subjects)
+            .setParameter("names", names)
+            .resultList
+    }
 }

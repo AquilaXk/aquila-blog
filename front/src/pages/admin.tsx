@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import { NextPage } from "next"
 import { useRouter } from "next/router"
-import { ChangeEvent, ClipboardEvent, useEffect, useRef, useState } from "react"
+import { ChangeEvent, ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
@@ -29,6 +29,39 @@ type UploadPostImageResponse = {
     key: string
     url: string
     markdown: string
+  }
+}
+
+type RsData<T> = {
+  resultCode: string
+  msg: string
+  data: T
+}
+
+type PostWriteResult = {
+  id: number
+  title: string
+  published: boolean
+  listed: boolean
+}
+
+type AdminPostListItem = {
+  id: number
+  title: string
+  authorName: string
+  published: boolean
+  listed: boolean
+  createdAt: string
+  modifiedAt: string
+}
+
+type PageDto<T> = {
+  content: T[]
+  pageable?: {
+    pageNumber?: number
+    pageSize?: number
+    totalElements?: number
+    totalPages?: number
   }
 }
 
@@ -216,6 +249,13 @@ const AdminPage: NextPage = () => {
   const [postTitle, setPostTitle] = useState("")
   const [postContent, setPostContent] = useState("")
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
+  const [publishNotice, setPublishNotice] = useState<{
+    tone: "idle" | "loading" | "success" | "error"
+    text: string
+  }>({
+    tone: "idle",
+    text: "작성 후 ‘글 발행’을 누르면 결과가 여기에 표시됩니다.",
+  })
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
@@ -227,6 +267,10 @@ const AdminPage: NextPage = () => {
 
   const [profileImgMemberId, setProfileImgMemberId] = useState("1")
   const [profileImgInputUrl, setProfileImgInputUrl] = useState("")
+  const [adminPostRows, setAdminPostRows] = useState<AdminPostListItem[]>([])
+  const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
+  const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -243,18 +287,132 @@ const AdminPage: NextPage = () => {
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
 
-  const loadPostForEditor = async () => {
+  const loadPostForEditor = async (targetPostId: string = postId) => {
     try {
       setLoadingKey("postOne")
-      const post = await apiFetch<PostForEditor>(`/post/api/v1/posts/${postId}`)
+      const post = await apiFetch<PostForEditor>(`/post/api/v1/posts/${targetPostId}`)
 
       setPostTitle(post.title ?? "")
       setPostContent(post.content ?? "")
       setPostVisibility(toVisibility(!!post.published, !!post.listed))
+      setPostId(String(post.id))
       setResult(pretty(post as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const handleWritePost = async () => {
+    if (!postTitle.trim()) {
+      const msg = "제목을 입력해주세요."
+      setPublishNotice({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return
+    }
+
+    if (!postContent.trim()) {
+      const msg = "본문을 입력해주세요."
+      setPublishNotice({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return
+    }
+
+    try {
+      setLoadingKey("writePost")
+      setPublishNotice({ tone: "loading", text: "글 발행 중입니다..." })
+
+      const response = await apiFetch<RsData<PostWriteResult>>("/post/api/v1/posts", {
+        method: "POST",
+        body: JSON.stringify({
+          title: postTitle,
+          content: postContent,
+          ...toFlags(postVisibility),
+        }),
+      })
+
+      setResult(pretty(response as unknown as JsonValue))
+      if (response?.data?.id) setPostId(String(response.data.id))
+
+      const visibilityText =
+        postVisibility === "PUBLIC_LISTED"
+          ? "전체 공개(목록 노출)"
+          : postVisibility === "PUBLIC_UNLISTED"
+            ? "링크 공개(목록 미노출)"
+            : "비공개"
+
+      setPublishNotice({
+        tone: "success",
+        text: `발행 완료: ${response.msg} (공개 범위: ${visibilityText})`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ error: message }))
+      setPublishNotice({ tone: "error", text: `발행 실패: ${message}` })
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const visibilityLabel = (published: boolean, listed: boolean) => {
+    if (!published) return "비공개"
+    if (!listed) return "링크 공개"
+    return "전체 공개"
+  }
+
+  const adminPostViewRows = useMemo(() => {
+    const copy = [...adminPostRows]
+    copy.sort((a, b) => {
+      const aMs = new Date(a.modifiedAt).getTime()
+      const bMs = new Date(b.modifiedAt).getTime()
+      if (Number.isNaN(aMs) || Number.isNaN(bMs)) return 0
+      return modifiedSortOrder === "desc" ? bMs - aMs : aMs - bMs
+    })
+    return copy
+  }, [adminPostRows, modifiedSortOrder])
+
+  const loadAdminPosts = async () => {
+    try {
+      setLoadingKey("postList")
+      const data = await apiFetch<PageDto<AdminPostListItem>>(
+        `/post/api/v1/adm/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
+          listKw
+        )}&sort=${encodeURIComponent(listSort)}`
+      )
+      setAdminPostRows(data.content || [])
+      setAdminPostTotal(data.pageable?.totalElements ?? data.content?.length ?? 0)
+      setResult(pretty(data as unknown as JsonValue))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ error: message }))
+      setAdminPostRows([])
+      setAdminPostTotal(0)
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const deletePostFromList = async (targetId: number) => {
+    try {
+      setLoadingKey(`deletePost-${targetId}`)
+      const data = await apiFetch<JsonValue>(`/post/api/v1/posts/${targetId}`, {
+        method: "DELETE",
+      })
+      setResult(pretty(data))
+      setAdminPostRows((prev) => prev.filter((row) => row.id !== targetId))
+      setAdminPostTotal((prev) => Math.max(0, prev - 1))
+      if (postId === String(targetId)) {
+        setPostId("")
+        setPostTitle("")
+        setPostContent("")
+      }
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ error: message }))
+      return false
     } finally {
       setLoadingKey("")
     }
@@ -667,15 +825,7 @@ const AdminPage: NextPage = () => {
           <QueryActions>
             <Button
               disabled={disabled("postList")}
-              onClick={() =>
-                run("postList", () =>
-                  apiFetch(
-                    `/post/api/v1/adm/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-                      listKw
-                    )}&sort=${encodeURIComponent(listSort)}`
-                  )
-                )
-              }
+              onClick={() => void loadAdminPosts()}
             >
               전체 글 목록 조회
             </Button>
@@ -701,6 +851,109 @@ const AdminPage: NextPage = () => {
             </Button>
           </QueryActions>
         </QueryPanel>
+        <ListPanel>
+          <ListHeader>
+            <h3>관리자 글 리스트</h3>
+            <span>총 {adminPostTotal}건</span>
+          </ListHeader>
+          {adminPostRows.length === 0 ? (
+            <ListEmpty>목록이 없습니다. 상단의 `전체 글 목록 조회`를 눌러 불러오세요.</ListEmpty>
+          ) : (
+            <ListTable>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>제목</th>
+                  <th>공개상태</th>
+                  <th>작성자</th>
+                  <th>
+                    <SortHeaderButton
+                      type="button"
+                      onClick={() =>
+                        setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
+                      }
+                    >
+                      수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
+                    </SortHeaderButton>
+                  </th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminPostViewRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.id}</td>
+                    <td className="title">{row.title}</td>
+                    <td>
+                      <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                        {visibilityLabel(row.published, row.listed)}
+                      </VisibilityBadge>
+                    </td>
+                    <td>{row.authorName}</td>
+                    <td>{row.modifiedAt.slice(0, 10)}</td>
+                    <td>
+                      <InlineActions>
+                        <Button
+                          type="button"
+                          disabled={loadingKey.length > 0}
+                          onClick={() => {
+                            setPostId(String(row.id))
+                            void loadPostForEditor(String(row.id))
+                          }}
+                        >
+                          불러오기
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={loadingKey.length > 0 && loadingKey !== `deletePost-${row.id}`}
+                          onClick={() => setDeleteConfirmTarget(row)}
+                        >
+                          삭제
+                        </Button>
+                      </InlineActions>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </ListTable>
+          )}
+        </ListPanel>
+        {deleteConfirmTarget && (
+          <ModalBackdrop
+            onClick={() => {
+              if (loadingKey.startsWith("deletePost-")) return
+              setDeleteConfirmTarget(null)
+            }}
+          >
+            <ConfirmModal onClick={(e) => e.stopPropagation()}>
+              <h4>글 삭제 확인</h4>
+              <p>
+                정말 삭제할까요?
+                <br />
+                <strong>#{deleteConfirmTarget.id} {deleteConfirmTarget.title}</strong>
+              </p>
+              <div className="actions">
+                <Button
+                  type="button"
+                  disabled={loadingKey.startsWith("deletePost-")}
+                  onClick={() => setDeleteConfirmTarget(null)}
+                >
+                  취소
+                </Button>
+                <PrimaryButton
+                  type="button"
+                  disabled={loadingKey.startsWith("deletePost-")}
+                  onClick={async () => {
+                    const ok = await deletePostFromList(deleteConfirmTarget.id)
+                    if (ok) setDeleteConfirmTarget(null)
+                  }}
+                >
+                  {loadingKey.startsWith("deletePost-") ? "삭제 중..." : "삭제 확정"}
+                </PrimaryButton>
+              </div>
+            </ConfirmModal>
+          </ModalBackdrop>
+        )}
 
         <EditorSection>
           <WriterHeader>
@@ -727,25 +980,14 @@ const AdminPage: NextPage = () => {
                   <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
                 </VisibilitySelect>
               </VisibilityWrap>
-              <PrimaryButton
-                disabled={disabled("writePost")}
-                onClick={() =>
-                  run("writePost", () =>
-                    apiFetch("/post/api/v1/posts", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        title: postTitle,
-                        content: postContent,
-                        ...toFlags(postVisibility),
-                      }),
-                    })
-                  )
-                }
-              >
-                글 발행
-              </PrimaryButton>
+              <PublishActionWrap>
+                <PrimaryButton disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
+                  {loadingKey === "writePost" ? "발행 중..." : "글 발행"}
+                </PrimaryButton>
+              </PublishActionWrap>
             </div>
           </WriterHeader>
+          <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
 
           <EditorToolbar>
             <Button type="button" onClick={() => applyHeadingStyle(1)}>
@@ -1235,7 +1477,7 @@ const WriterHeader = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
-  align-items: end;
+  align-items: flex-end;
   margin-bottom: 0.7rem;
 
   @media (max-width: 980px) {
@@ -1254,9 +1496,51 @@ const WriterHeader = styled.div`
 
   .actions {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.5rem;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+
+    @media (max-width: 640px) {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+  }
+`
+
+const PublishActionWrap = styled.div`
+  display: grid;
+  align-items: end;
+`
+
+const PublishNotice = styled.div`
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  font-size: 0.83rem;
+  line-height: 1.4;
+
+  &[data-tone="idle"] {
+    color: ${({ theme }) => theme.colors.gray11};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
+  &[data-tone="loading"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
+
+  &[data-tone="success"] {
+    color: ${({ theme }) => theme.colors.green11};
+    border: 1px solid ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+  }
+
+  &[data-tone="error"] {
+    color: ${({ theme }) => theme.colors.red11};
+    border: 1px solid ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
   }
 `
 
@@ -1311,6 +1595,150 @@ const EditorGrid = styled.div`
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
+  }
+`
+
+const ListPanel = styled.div`
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.7rem;
+  margin: 0.7rem 0 0.2rem;
+`
+
+const ListHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  span {
+    font-size: 0.78rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+`
+
+const ListEmpty = styled.p`
+  margin: 0.2rem 0 0.1rem;
+  font-size: 0.82rem;
+  color: ${({ theme }) => theme.colors.gray11};
+`
+
+const ListTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    padding: 0.45rem 0.4rem;
+    text-align: left;
+    font-size: 0.79rem;
+    color: ${({ theme }) => theme.colors.gray12};
+    vertical-align: middle;
+  }
+
+  th {
+    font-size: 0.74rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 700;
+  }
+
+  tbody tr:last-of-type td {
+    border-bottom: 0;
+  }
+
+  td.title {
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+`
+
+const SortHeaderButton = styled.button`
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+`
+
+const VisibilityBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.16rem 0.46rem;
+  font-size: 0.72rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+
+  &[data-tone="PRIVATE"] {
+    color: ${({ theme }) => theme.colors.gray11};
+    background: ${({ theme }) => theme.colors.gray3};
+  }
+
+  &[data-tone="PUBLIC_UNLISTED"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    background: ${({ theme }) => theme.colors.blue3};
+    border-color: ${({ theme }) => theme.colors.blue7};
+  }
+
+  &[data-tone="PUBLIC_LISTED"] {
+    color: ${({ theme }) => theme.colors.green11};
+    background: ${({ theme }) => theme.colors.green3};
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+`
+
+const InlineActions = styled.div`
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+`
+
+const ModalBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 120;
+  padding: 1rem;
+`
+
+const ConfirmModal = styled.div`
+  width: min(440px, 100%);
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.9rem;
+
+  h4 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0 0 0.85rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.45;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
   }
 `
 

@@ -61,19 +61,38 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         if (!source) continue
 
         const alreadyRendered =
-          block.dataset.mermaidRendered === "true" &&
+          (block.dataset.mermaidRendered === "true" ||
+            block.dataset.mermaidRendered === "error") &&
           block.dataset.mermaidSource === source &&
           block.dataset.mermaidTheme === theme
         if (alreadyRendered) continue
 
-        const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
-        const { svg } = await mermaid.render(id, source)
-        if (disposed) return
+        try {
+          const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
+          const { svg } = await mermaid.render(id, source)
+          if (disposed) return
 
-        block.dataset.mermaidSource = source
-        block.dataset.mermaidTheme = theme
-        block.dataset.mermaidRendered = "true"
-        block.innerHTML = svg
+          block.dataset.mermaidSource = source
+          block.dataset.mermaidTheme = theme
+          block.dataset.mermaidRendered = "true"
+          block.innerHTML = svg
+        } catch (error) {
+          const escapedSource = source
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+
+          block.dataset.mermaidSource = source
+          block.dataset.mermaidTheme = theme
+          block.dataset.mermaidRendered = "error"
+          block.innerHTML = `
+            <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
+              Mermaid 문법 오류: 다이어그램 코드를 확인하세요.
+            </div>
+            <code style="white-space:pre-wrap;display:block;">${escapedSource}</code>
+          `
+          console.warn("[mermaid] render failed", error)
+        }
       }
     }
 

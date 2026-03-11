@@ -319,16 +319,17 @@ const StyledWrapper = styled.div`
 
   .aq-toggle {
     margin: 0.9rem 0;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 10px;
-    background: ${({ theme }) => theme.colors.gray2};
-    padding: 0.55rem 0.75rem;
   }
 
   .aq-toggle > summary {
     cursor: pointer;
     font-weight: 700;
     list-style: none;
+    padding: 0;
+  }
+
+  .aq-toggle[open] > *:not(summary) {
+    margin-top: 0.5rem;
   }
 
   .aq-toggle > summary::-webkit-details-marker {

@@ -34,9 +34,11 @@ trim_quotes() {
 }
 
 validate_storage_env() {
-  local enabled_raw endpoint
+  local enabled_raw endpoint access_key secret_key
   enabled_raw="$(trim_quotes "$(env_value "CUSTOM_STORAGE_ENABLED")")"
   endpoint="$(trim_quotes "$(env_value "CUSTOM_STORAGE_ENDPOINT")")"
+  access_key="$(trim_quotes "$(env_value "CUSTOM_STORAGE_ACCESSKEY")")"
+  secret_key="$(trim_quotes "$(env_value "CUSTOM_STORAGE_SECRETKEY")")"
 
   local enabled
   enabled="$(echo "${enabled_raw}" | tr '[:upper:]' '[:lower:]')"
@@ -48,6 +50,24 @@ validate_storage_env() {
   if ! [[ "${endpoint}" =~ ^https?://.+$ ]]; then
     echo "invalid CUSTOM_STORAGE_ENDPOINT: '${endpoint:-<empty>}'" >&2
     echo "expected format example: http://minio_1:9000" >&2
+    return 1
+  fi
+
+  if [[ "${endpoint}" == *'${'* ]]; then
+    echo "invalid CUSTOM_STORAGE_ENDPOINT: unresolved placeholder detected -> '${endpoint}'" >&2
+    echo "set a concrete value like: CUSTOM_STORAGE_ENDPOINT=http://minio_1:9000" >&2
+    return 1
+  fi
+
+  if [[ "${endpoint}" == "http:" || "${endpoint}" == "https:" ]]; then
+    echo "invalid CUSTOM_STORAGE_ENDPOINT: '${endpoint}'" >&2
+    echo "endpoint lost host/port. expected format example: http://minio_1:9000" >&2
+    return 1
+  fi
+
+  if [[ "${access_key}" == *'${'* || "${secret_key}" == *'${'* ]]; then
+    echo "invalid storage credentials: unresolved placeholder detected in CUSTOM_STORAGE_ACCESSKEY/CUSTOM_STORAGE_SECRETKEY" >&2
+    echo "do not use literal '\${...}' in .env.prod for back service credentials" >&2
     return 1
   fi
 

@@ -57,7 +57,7 @@ class PostImageStorageService(
                     .bucket(properties.bucket)
                     .build()
             )
-        } catch (e: S3Exception) {
+        } catch (headError: Exception) {
             try {
                 client.createBucket(
                     CreateBucketRequest.builder()
@@ -65,7 +65,7 @@ class PostImageStorageService(
                         .build()
                 )
             } catch (createError: Exception) {
-                initErrorMessage = "스토리지 버킷 초기화 실패: ${createError.message ?: "알 수 없는 오류"}"
+                initErrorMessage = "스토리지 버킷 초기화 실패: ${createError.message ?: headError.message ?: "알 수 없는 오류"}"
                 logger.error("Post image storage bucket initialization failed", createError)
                 return
             }
@@ -146,8 +146,14 @@ class PostImageStorageService(
         if (properties.accessKey.isBlank() || properties.secretKey.isBlank()) {
             throw IllegalArgumentException("스토리지 계정 정보가 비어 있습니다.")
         }
+        if (properties.accessKey.contains("\${") || properties.secretKey.contains("\${")) {
+            throw IllegalArgumentException("CUSTOM_STORAGE_ACCESSKEY 또는 CUSTOM_STORAGE_SECRETKEY에 미해결 placeholder가 포함되어 있습니다.")
+        }
 
         val endpoint = properties.endpoint.trim()
+        if (endpoint.contains("\${")) {
+            throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT에 미해결 placeholder가 포함되어 있습니다. (현재: $endpoint)")
+        }
         if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
             throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT 형식이 올바르지 않습니다. (현재: $endpoint)")
         }

@@ -13,8 +13,11 @@ class ActorApplicationService(
     private val authTokenService: AuthTokenService,
     private val memberRepository: MemberRepositoryPort,
 ) {
-    fun memberOf(securityUser: SecurityUser): Member =
-        MemberProxy(getReferenceById(securityUser.id), securityUser.id, securityUser.username, securityUser.nickname)
+    @Transactional(readOnly = true)
+    fun memberOf(securityUser: SecurityUser): Member {
+        val realMember = getReferenceById(securityUser.id)
+        return MemberProxy(realMember, securityUser.id, securityUser.username, securityUser.nickname)
+    }
 
     @Transactional(readOnly = true)
     fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)

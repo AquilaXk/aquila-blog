@@ -3,10 +3,6 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.out.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberAttr
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_BIO
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
-import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_ROLE
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
@@ -20,6 +16,7 @@ import java.util.*
 class MemberApplicationService(
     private val memberRepository: MemberRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
+    private val memberProfileHydrator: MemberProfileHydrator,
     private val passwordEncoder: PasswordEncoder,
 ) {
     @Transactional(readOnly = true)
@@ -45,7 +42,7 @@ class MemberApplicationService(
 
         val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname))
         profileImgUrl?.let {
-            hydrateProfileAttrs(member)
+            memberProfileHydrator.hydrate(member)
             member.profileImgUrl = it
             saveProfileImgUrlAttr(member)
         }
@@ -57,15 +54,14 @@ class MemberApplicationService(
     fun findByUsername(username: String): Member? =
         memberRepository
             .findByUsername(username)
-            ?.also(::hydrateProfileAttrs)
+            ?.let(memberProfileHydrator::hydrate)
 
     @Transactional(readOnly = true)
     fun findById(id: Int): Optional<Member> =
         memberRepository
             .findById(id)
             .map { member ->
-                hydrateProfileAttrs(member)
-                member
+                memberProfileHydrator.hydrate(member)
             }
 
     @Transactional(readOnly = true)
@@ -85,7 +81,7 @@ class MemberApplicationService(
         nickname: String,
         profileImgUrl: String?,
     ) {
-        hydrateProfileAttrs(member)
+        memberProfileHydrator.hydrate(member)
         member.modify(nickname, profileImgUrl)
         if (profileImgUrl != null) saveProfileImgUrlAttr(member)
     }
@@ -96,7 +92,7 @@ class MemberApplicationService(
         role: String,
         bio: String,
     ) {
-        hydrateProfileAttrs(member)
+        memberProfileHydrator.hydrate(member)
         member.profileRole = role
         member.profileBio = bio
         saveProfileRoleAttr(member)
@@ -131,24 +127,8 @@ class MemberApplicationService(
             kw,
             PageRequest.of(page - 1, pageSize, sort.sortBy),
         ).map { member ->
-            hydrateProfileAttrs(member)
-            member
+            memberProfileHydrator.hydrate(member)
         }
-
-    private fun hydrateProfileAttrs(member: Member) {
-        member.getOrInitProfileImgUrlAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_IMG_URL)
-                ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
-        }
-        member.getOrInitProfileRoleAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_ROLE)
-                ?: MemberAttr(0, member, PROFILE_ROLE, "")
-        }
-        member.getOrInitProfileBioAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_BIO)
-                ?: MemberAttr(0, member, PROFILE_BIO, "")
-        }
-    }
 
     private fun saveProfileImgUrlAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitProfileImgUrlAttr())

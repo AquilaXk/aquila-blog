@@ -1,16 +1,15 @@
 package com.back.boundedContexts.member.adapter.`in`.web
 
+import com.back.boundedContexts.member.application.port.`in`.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
-import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
+import com.back.global.security.app.AuthCookieService
 import com.back.global.security.domain.SecurityUser
-import jakarta.servlet.http.Cookie
-import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -26,9 +25,10 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/member/api/v1/auth")
 class ApiV1AuthController(
+    private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val memberUseCase: MemberUseCase,
-    private val actorApplicationService: ActorApplicationService,
     private val authTokenService: AuthTokenService,
+    private val authCookieService: AuthCookieService,
 ) {
     data class MemberLoginRequest(
         @field:NotBlank
@@ -49,7 +49,6 @@ class ApiV1AuthController(
     @Transactional(readOnly = true)
     fun login(
         @RequestBody @Valid reqBody: MemberLoginRequest,
-        response: HttpServletResponse,
     ): RsData<MemberLoginResBody> {
         val member =
             memberUseCase.findByUsername(reqBody.username)
@@ -65,8 +64,7 @@ class ApiV1AuthController(
 
         val accessToken = authTokenService.genAccessToken(member)
 
-        response.addAuthCookie("apiKey", member.apiKey)
-        response.addAuthCookie("accessToken", accessToken)
+        authCookieService.issueAuthCookies(member.apiKey, accessToken)
 
         return RsData(
             "200-1",
@@ -80,10 +78,8 @@ class ApiV1AuthController(
     }
 
     @DeleteMapping("/logout")
-    fun logout(response: HttpServletResponse): RsData<Void> {
-        response.expireAuthCookie("apiKey")
-        response.expireAuthCookie("accessToken")
-
+    fun logout(): RsData<Void> {
+        authCookieService.expireAuthCookies()
         return RsData("200-1", "로그아웃 되었습니다.")
     }
 
@@ -91,27 +87,5 @@ class ApiV1AuthController(
     @Transactional(readOnly = true)
     fun me(
         @AuthenticationPrincipal securityUser: SecurityUser,
-    ): MemberWithUsernameDto = MemberWithUsernameDto(actorApplicationService.memberOf(securityUser))
-
-    private fun HttpServletResponse.addAuthCookie(
-        name: String,
-        value: String,
-    ) {
-        addCookie(
-            Cookie(name, value).apply {
-                path = "/"
-                isHttpOnly = true
-            },
-        )
-    }
-
-    private fun HttpServletResponse.expireAuthCookie(name: String) {
-        addCookie(
-            Cookie(name, "").apply {
-                path = "/"
-                isHttpOnly = true
-                maxAge = 0
-            },
-        )
-    }
+    ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(securityUser.id)
 }

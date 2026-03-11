@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
 import Image from "next/image"
 import { CONFIG } from "site.config"
+import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
 
 type Props = {
@@ -49,7 +50,7 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
 
-  const [me, setMe] = useState<MemberMe | null>(null)
+  const { me } = useAuthSession()
   const [comments, setComments] = useState<PostComment[]>([])
   const [commentInput, setCommentInput] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
@@ -62,15 +63,6 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     const next = router.asPath || `/${data.slug}`
     return `/login?next=${encodeURIComponent(next)}`
   }, [data.slug, router.asPath])
-
-  const loadMe = useCallback(async () => {
-    try {
-      const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
-      setMe(member)
-    } catch {
-      setMe(null)
-    }
-  }, [])
 
   const loadComments = useCallback(async () => {
     if (!Number.isInteger(postId) || postId <= 0) {
@@ -87,9 +79,8 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   }, [postId])
 
   useEffect(() => {
-    void loadMe()
     void loadComments()
-  }, [loadMe, loadComments])
+  }, [loadComments])
 
   const commentTree = useMemo(() => {
     const map = new Map<number, CommentNode>()

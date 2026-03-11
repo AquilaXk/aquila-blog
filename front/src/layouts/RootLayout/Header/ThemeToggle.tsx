@@ -31,8 +31,8 @@ const StyledWrapper = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 999px;
   padding: 0;
@@ -44,16 +44,16 @@ const StyledWrapper = styled.button`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.45rem;
+    font-size: 1.08rem;
     line-height: 1;
   }
 
   @media (max-width: 720px) {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
 
     svg {
-      font-size: 1.3rem;
+      font-size: 1rem;
     }
   }
 `

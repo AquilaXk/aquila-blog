@@ -4,6 +4,7 @@ import { NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import useAuthSession from "src/hooks/useAuthSession"
 import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
@@ -405,8 +406,7 @@ const convertHtmlToMarkdown = (html: string): string => {
 
 const AdminPage: NextPage = () => {
   const router = useRouter()
-  const [me, setMe] = useState<MemberMe | null>(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  const { me, isAuthResolved, setMe, refresh, logout } = useAuthSession()
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("1")
@@ -469,15 +469,17 @@ const AdminPage: NextPage = () => {
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
   const redirectingRef = useRef(false)
+  const hydratedAdminIdRef = useRef<number | null>(null)
+  const authLoading = !isAuthResolved
 
-  const syncProfileState = (member: MemberMe) => {
+  const syncProfileState = useCallback((member: MemberMe) => {
     setMe(member)
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
     setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
-  }
+  }, [setMe])
 
-  const refreshAdminProfile = async (memberId: number, fallback?: MemberMe) => {
+  const refreshAdminProfile = useCallback(async (memberId: number, fallback?: MemberMe) => {
     try {
       const detailed = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${memberId}`)
       syncProfileState(detailed)
@@ -486,7 +488,7 @@ const AdminPage: NextPage = () => {
       if (fallback) syncProfileState(fallback)
       return fallback ?? null
     }
-  }
+  }, [syncProfileState])
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -502,6 +504,32 @@ const AdminPage: NextPage = () => {
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
+
+  const handleAdminLogout = async () => {
+    try {
+      setLoadingKey("logout")
+      await logout()
+      setResult(pretty({ ok: true, msg: "로그아웃 되었습니다." }))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ warn: `로그아웃 API 호출 실패: ${message}` }))
+    } finally {
+      const target = `/login?next=${encodeURIComponent("/admin")}`
+
+      if (!redirectingRef.current && router.asPath !== target) {
+        redirectingRef.current = true
+        try {
+          await router.replace(target)
+        } catch (error) {
+          if (!isNavigationCancelledError(error)) {
+            setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
+          }
+        }
+      }
+
+      setLoadingKey("")
+    }
+  }
 
   const syncEditorMeta = (content: string) => {
     const parsed = parseEditorMeta(content)
@@ -956,44 +984,13 @@ const AdminPage: NextPage = () => {
   }, [categoryUsageMap, customCategoryCatalog, postCategory])
 
   useEffect(() => {
-    let mounted = true
-    const verifyAdmin = async () => {
-      try {
-        const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
-        if (!mounted) return
+    if (!isAuthResolved) return
 
-        if (!member?.isAdmin) {
-          if (!redirectingRef.current && router.asPath !== "/") {
-            redirectingRef.current = true
-            try {
-              await router.replace("/")
-            } catch (error) {
-              if (!isNavigationCancelledError(error)) {
-                setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
-              }
-            }
-          }
-          return
-        }
-
-        let refreshed: MemberMe | null = null
-        try {
-          refreshed = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${member.id}`)
-        } catch {
-          refreshed = member
-        }
-        if (!mounted || !refreshed) return
-        syncProfileState(refreshed)
-        setProfileNotice({
-          tone: "idle",
-          text: "현재 저장된 관리자 프로필을 불러왔습니다. 입력창 값이 실제 저장값입니다.",
-        })
-        void refreshEditorMetaCatalog()
-      } catch {
-        if (!mounted) return
-        const target = `/login?next=${encodeURIComponent("/admin")}`
-        if (!redirectingRef.current && router.asPath !== target) {
-          redirectingRef.current = true
+    if (!me) {
+      const target = `/login?next=${encodeURIComponent("/admin")}`
+      if (!redirectingRef.current && router.asPath !== target) {
+        redirectingRef.current = true
+        void (async () => {
           try {
             await router.replace(target)
           } catch (error) {
@@ -1001,19 +998,46 @@ const AdminPage: NextPage = () => {
               setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
             }
           }
-        }
-        return
-      } finally {
-        if (mounted) setAuthLoading(false)
+        })()
       }
+      return
     }
 
-    void verifyAdmin()
+    if (!me.isAdmin) {
+      if (!redirectingRef.current && router.asPath !== "/") {
+        redirectingRef.current = true
+        void (async () => {
+          try {
+            await router.replace("/")
+          } catch (error) {
+            if (!isNavigationCancelledError(error)) {
+              setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
+            }
+          }
+        })()
+      }
+      return
+    }
+
+    if (hydratedAdminIdRef.current === me.id) return
+
+    hydratedAdminIdRef.current = me.id
+    let mounted = true
+
+    void (async () => {
+      const refreshed = await refreshAdminProfile(me.id, me)
+      if (!mounted || !refreshed) return
+      setProfileNotice({
+        tone: "idle",
+        text: "현재 저장된 관리자 프로필을 불러왔습니다. 입력창 값이 실제 저장값입니다.",
+      })
+      void refreshEditorMetaCatalog()
+    })()
 
     return () => {
       mounted = false
     }
-  }, [refreshEditorMetaCatalog, router])
+  }, [isAuthResolved, me, refreshAdminProfile, refreshEditorMetaCatalog, router])
 
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
@@ -1429,7 +1453,10 @@ const AdminPage: NextPage = () => {
               disabled={disabled("me")}
               onClick={() =>
                 run("me", async () => {
-                  const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
+                  const member = (await refresh()).data
+                  if (!member) {
+                    throw new Error("현재 로그인 정보를 불러올 수 없습니다.")
+                  }
                   const refreshed = await refreshAdminProfile(member.id, member)
                   if (refreshed) {
                     setProfileNotice({
@@ -1446,9 +1473,7 @@ const AdminPage: NextPage = () => {
             <Button
               type="button"
               disabled={disabled("logout")}
-              onClick={() =>
-                run("logout", () => apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }))
-              }
+              onClick={() => void handleAdminLogout()}
             >
               로그아웃
             </Button>

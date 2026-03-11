@@ -1,40 +1,29 @@
 package com.back.boundedContexts.post.domain
 
-import com.back.boundedContexts.member.domain.shared.Member.Companion.attrRepository
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberAware
 
-private const val POSTS_COUNT = "postsCount"
-private const val POSTS_COUNT_DEFAULT_VALUE = 0
+const val POSTS_COUNT = "postsCount"
+const val POSTS_COUNT_DEFAULT_VALUE = 0
 
-private const val POST_COMMENTS_COUNT = "postCommentsCount"
-private const val POST_COMMENTS_COUNT_DEFAULT_VALUE = 0
+const val POST_COMMENTS_COUNT = "postCommentsCount"
+const val POST_COMMENTS_COUNT_DEFAULT_VALUE = 0
 
 interface PostMember : MemberAware {
-    private val postsCountAttr: MemberAttr
-        get() = member.getOrPutAttr(POSTS_COUNT) {
-            attrRepository.findBySubjectAndName(member, POSTS_COUNT)
-                ?: MemberAttr(0, member, POSTS_COUNT, POSTS_COUNT_DEFAULT_VALUE)
-        }
+    var postsCountAttr: MemberAttr?
 
-    private val postCommentsCountAttr: MemberAttr
-        get() = member.getOrPutAttr(POST_COMMENTS_COUNT) {
-            attrRepository.findBySubjectAndName(member, POST_COMMENTS_COUNT)
-                ?: MemberAttr(0, member, POST_COMMENTS_COUNT, POST_COMMENTS_COUNT_DEFAULT_VALUE)
-        }
+    var postCommentsCountAttr: MemberAttr?
 
     var postsCount: Int
-        get() = postsCountAttr.intValue ?: POSTS_COUNT_DEFAULT_VALUE
+        get() = getOrInitPostsCountAttr().intValue ?: POSTS_COUNT_DEFAULT_VALUE
         set(value) {
-            postsCountAttr.value = value
-            attrRepository.save(postsCountAttr)
+            getOrInitPostsCountAttr().value = value
         }
 
     var postCommentsCount: Int
-        get() = postCommentsCountAttr.intValue ?: POST_COMMENTS_COUNT_DEFAULT_VALUE
+        get() = getOrInitPostCommentsCountAttr().intValue ?: POST_COMMENTS_COUNT_DEFAULT_VALUE
         set(value) {
-            postCommentsCountAttr.value = value
-            attrRepository.save(postCommentsCountAttr)
+            getOrInitPostCommentsCountAttr().value = value
         }
 
     fun incrementPostsCount() {
@@ -51,5 +40,19 @@ interface PostMember : MemberAware {
 
     fun decrementPostCommentsCount() {
         postCommentsCount--
+    }
+
+    fun getOrInitPostsCountAttr(): MemberAttr {
+        if (postsCountAttr == null) {
+            postsCountAttr = MemberAttr(0, member, POSTS_COUNT, POSTS_COUNT_DEFAULT_VALUE)
+        }
+        return postsCountAttr!!
+    }
+
+    fun getOrInitPostCommentsCountAttr(): MemberAttr {
+        if (postCommentsCountAttr == null) {
+            postCommentsCountAttr = MemberAttr(0, member, POST_COMMENTS_COUNT, POST_COMMENTS_COUNT_DEFAULT_VALUE)
+        }
+        return postCommentsCountAttr!!
     }
 }

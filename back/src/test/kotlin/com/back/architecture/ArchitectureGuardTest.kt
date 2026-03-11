@@ -27,11 +27,8 @@ class ArchitectureGuardTest {
             }
             .toSortedSet()
 
-        // 현재 기술부채 스냅샷. 새 의존이 생기면 테스트를 실패시켜 아키텍처 악화를 차단한다.
-        val allowedLegacyOrigins = sortedSetOf(
-            "com.back.boundedContexts.member.domain.shared.Member",
-            "com.back.boundedContexts.member.domain.shared.Member\$Companion",
-        )
+        // domain 계층에서 outbound repository 의존을 완전히 제거한다.
+        val allowedLegacyOrigins = sortedSetOf<String>()
 
         assertThat(offendingOrigins).isEqualTo(allowedLegacyOrigins)
     }

@@ -2,7 +2,6 @@ package com.back.boundedContexts.member.domain.shared
 
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasSecurity
-import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.post.domain.PostMember
 import com.back.global.app.AppConfig
 import com.back.global.jpa.domain.AfterDDL
@@ -67,14 +66,14 @@ class Member(
 
     internal constructor(id: Int) : this(id, "", null, "", "")
 
-    companion object {
-        lateinit var attrRepository_: MemberAttrRepository
-        val attrRepository
-            get() = attrRepository_
-    }
-
     @field:Column
     var deletedAt: Instant? = null
+
+    @Transient
+    override var postsCountAttr: MemberAttr? = null
+
+    @Transient
+    override var postCommentsCountAttr: MemberAttr? = null
 
     fun softDelete() {
         deletedAt = Instant.now()

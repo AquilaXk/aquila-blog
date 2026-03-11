@@ -1,6 +1,10 @@
 package com.back.boundedContexts.post.app
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.out.shared.MemberAttrRepository
+import com.back.boundedContexts.post.domain.POSTS_COUNT
+import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostLike
 import com.back.boundedContexts.member.dto.MemberDto
@@ -30,6 +34,7 @@ import kotlin.jvm.optionals.getOrNull
 class PostFacade(
     private val postRepository: PostRepository,
     private val postAttrRepository: PostAttrRepository,
+    private val memberAttrRepository: MemberAttrRepository,
     private val postCommentRepository: PostCommentRepository,
     private val postLikeRepository: PostLikeRepository,
     private val eventPublisher: EventPublisher,
@@ -46,7 +51,9 @@ class PostFacade(
     ): Post {
         val post = Post(0, author, title, content, published, listed)
         val savedPost = postRepository.saveAndFlush(post)
+        hydrateMemberCounterAttrs(author)
         author.incrementPostsCount()
+        saveMemberAttr(author.postsCountAttr)
 
         eventPublisher.publish(
             PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author))
@@ -82,6 +89,7 @@ class PostFacade(
     @Transactional
     fun delete(post: Post, actor: Member) {
         hydratePostAttrs(post)
+        hydrateMemberCounterAttrs(post.author)
         val postDto = PostDto(post)
 
         eventPublisher.publish(
@@ -89,16 +97,19 @@ class PostFacade(
         )
 
         post.author.decrementPostsCount()
+        saveMemberAttr(post.author.postsCountAttr)
         post.softDelete()
     }
 
     @Transactional
     fun writeComment(author: Member, post: Post, content: String): PostComment {
         hydratePostAttrs(post)
+        hydrateMemberCounterAttrs(author)
         val comment = postCommentRepository.save(post.newComment(author, content))
         post.onCommentAdded()
         savePostAttr(post.commentsCountAttr)
         author.incrementPostCommentsCount()
+        saveMemberAttr(author.postCommentsCountAttr)
         postRepository.flush()
 
         eventPublisher.publish(
@@ -125,10 +136,12 @@ class PostFacade(
     @Transactional
     fun deleteComment(post: Post, postComment: PostComment, actor: Member) {
         hydratePostAttrs(post)
+        hydrateMemberCounterAttrs(postComment.author)
         val postCommentDto = PostCommentDto(postComment)
         val postDto = PostDto(post)
 
         postComment.author.decrementPostCommentsCount()
+        saveMemberAttr(postComment.author.postCommentsCountAttr)
         post.onCommentDeleted()
         postCommentRepository.delete(postComment)
         savePostAttr(post.commentsCountAttr)
@@ -249,7 +262,17 @@ class PostFacade(
         post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
     }
 
+    private fun hydrateMemberCounterAttrs(member: Member) {
+        member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)?.let { member.postsCountAttr = it }
+        member.postCommentsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POST_COMMENTS_COUNT)
+            ?.let { member.postCommentsCountAttr = it }
+    }
+
     private fun savePostAttr(attr: PostAttr?) {
         attr?.let(postAttrRepository::save)
+    }
+
+    private fun saveMemberAttr(attr: MemberAttr?) {
+        attr?.let(memberAttrRepository::save)
     }
 }

@@ -16,7 +16,10 @@ const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const displayName = adminProfile?.username || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
-  const bypassOptimizer = imageSrc.includes("/redirectToProfileImg") || imageSrc.startsWith("data:")
+  const bypassOptimizer =
+    imageSrc.includes("/redirectToProfileImg") ||
+    imageSrc.startsWith("data:") ||
+    imageSrc.includes("placehold.co")
 
   return (
     <StyledWrapper>

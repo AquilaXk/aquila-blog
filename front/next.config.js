@@ -6,6 +6,7 @@ module.exports = {
       "s3-us-west-2.amazonaws.com",
       "avatars.githubusercontent.com",
       "api.aquilaxk.site",
+      "placehold.co",
     ],
     remotePatterns: [
       {

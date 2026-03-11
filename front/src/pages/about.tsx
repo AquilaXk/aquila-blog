@@ -1,13 +1,69 @@
-import { CONFIG } from "site.config"
-import { NextPageWithLayout } from "../types"
-import MetaConfig from "src/components/MetaConfig"
 import styled from "@emotion/styled"
 import Image from "next/image"
+import { GetServerSideProps } from "next"
+import { IncomingMessage } from "http"
+import { CONFIG } from "site.config"
+import MetaConfig from "src/components/MetaConfig"
+import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
+import { NextPageWithLayout } from "../types"
 
-const AboutPage: NextPageWithLayout = () => {
+const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
+  const internal = process.env.BACKEND_INTERNAL_URL
+  if (internal) return internal.replace(/\/+$/, "")
+
+  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+  if (publicUrl) return publicUrl.replace(/\/+$/, "")
+
+  const forwardedProto = req.headers["x-forwarded-proto"]
+  const protocol = typeof forwardedProto === "string" ? forwardedProto : "https"
+  const host = req.headers.host || ""
+  const apiHost = host.replace(/^www\./, "api.")
+  return `${protocol}://${apiHost}`
+}
+
+const fetchAdminProfile = async (req: IncomingMessage): Promise<AdminProfile | null> => {
+  try {
+    const baseUrl = resolveServerApiBaseUrl(req)
+    const response = await fetch(`${baseUrl}/member/api/v1/members/adminProfile`)
+    if (!response.ok) return null
+    return (await response.json()) as AdminProfile
+  } catch {
+    return null
+  }
+}
+
+export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
+  const initialAdminProfile = await fetchAdminProfile(req)
+
+  res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120")
+
+  return {
+    props: {
+      initialAdminProfile,
+    },
+  }
+}
+
+type AboutPageProps = {
+  initialAdminProfile: AdminProfile | null
+}
+
+const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
+  const adminProfile = useAdminProfile(initialAdminProfile)
+
+  const imageSrc =
+    adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
+  const displayName = adminProfile?.username || CONFIG.profile.name
+  const displayRole = adminProfile?.profileRole || CONFIG.profile.role
+  const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
+  const bypassOptimizer =
+    imageSrc.includes("/redirectToProfileImg") ||
+    imageSrc.startsWith("data:") ||
+    imageSrc.includes("placehold.co")
+
   const meta = {
     title: `About - ${CONFIG.blog.title}`,
-    description: CONFIG.profile.bio,
+    description: displayBio,
     type: "website",
     url: `${CONFIG.link}/about`,
   }
@@ -22,16 +78,17 @@ const AboutPage: NextPageWithLayout = () => {
           <div className="profile-section">
             <div className="profile-image-wrapper">
               <Image
-                src={CONFIG.profile.image}
-                alt={CONFIG.profile.name}
+                src={imageSrc}
+                alt={displayName}
                 fill
                 sizes="150px"
                 className="profile-image"
+                unoptimized={bypassOptimizer}
               />
             </div>
-            <h2 className="profile-name">{CONFIG.profile.name}</h2>
-            <p className="profile-role">{CONFIG.profile.role}</p>
-            <p className="profile-bio">{CONFIG.profile.bio}</p>
+            <h2 className="profile-name">{displayName}</h2>
+            <p className="profile-role">{displayRole}</p>
+            <p className="profile-bio">{displayBio}</p>
           </div>
 
           <div className="section">
@@ -46,11 +103,7 @@ const AboutPage: NextPageWithLayout = () => {
               {CONFIG.profile.github && (
                 <li>
                   <span className="icon">💻</span>
-                  <a
-                    href={`https://github.com/${CONFIG.profile.github}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={`https://github.com/${CONFIG.profile.github}`} target="_blank" rel="noopener noreferrer">
                     github.com/{CONFIG.profile.github}
                   </a>
                 </li>
@@ -58,11 +111,7 @@ const AboutPage: NextPageWithLayout = () => {
               {CONFIG.profile.linkedin && (
                 <li>
                   <span className="icon">💼</span>
-                  <a
-                    href={CONFIG.profile.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={CONFIG.profile.linkedin} target="_blank" rel="noopener noreferrer">
                     LinkedIn
                   </a>
                 </li>
@@ -88,11 +137,7 @@ const AboutPage: NextPageWithLayout = () => {
               <ul className="projects-list">
                 {CONFIG.projects.map((project, index) => (
                   <li key={index}>
-                    <a
-                      href={project.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
+                    <a href={project.href} target="_blank" rel="noopener noreferrer">
                       🚀 {project.name}
                     </a>
                   </li>
@@ -119,7 +164,7 @@ const StyledWrapper = styled.div`
       font-weight: 700;
       margin-bottom: 3rem;
       color: ${({ theme }) => theme.colors.gray12};
-      
+
       @media (max-width: 768px) {
         font-size: 2rem;
         margin-bottom: 2rem;
@@ -138,10 +183,11 @@ const StyledWrapper = styled.div`
         width: 150px;
         height: 150px;
         margin: 0 auto 1.5rem;
-        
+
         .profile-image {
           border-radius: 50%;
           object-fit: cover;
+          object-position: center 38%;
           border: 4px solid ${({ theme }) => theme.colors.gray6};
         }
       }
@@ -211,7 +257,7 @@ const StyledWrapper = styled.div`
             color: ${({ theme }) => theme.colors.gray12};
             text-decoration: none;
             flex: 1;
-            
+
             &:hover {
               color: ${({ theme }) => theme.colors.gray11};
               text-decoration: underline;

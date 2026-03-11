@@ -4,9 +4,12 @@ import com.back.boundedContexts.member.app.MemberFacade
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PageDto
+import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
@@ -17,6 +20,12 @@ import org.springframework.web.bind.annotation.*
 class ApiV1AdmMemberController(
     private val memberFacade: MemberFacade,
 ) {
+    data class UpdateProfileImgRequest(
+        @field:NotBlank
+        @field:Size(max = 2000)
+        val profileImgUrl: String,
+    )
+
     @GetMapping
     @Transactional(readOnly = true)
     fun getItems(
@@ -50,6 +59,20 @@ class ApiV1AdmMemberController(
         id: Int,
     ): MemberWithUsernameDto {
         val member = memberFacade.findById(id).orElseThrow()
+
+        return MemberWithUsernameDto(member)
+    }
+
+    @PatchMapping("/{id}/profileImgUrl")
+    @Transactional
+    fun updateProfileImg(
+        @PathVariable
+        @Positive
+        id: Int,
+        @RequestBody @Valid reqBody: UpdateProfileImgRequest,
+    ): MemberWithUsernameDto {
+        val member = memberFacade.findById(id).orElseThrow()
+        memberFacade.modify(member, member.nickname, reqBody.profileImgUrl.trim())
 
         return MemberWithUsernameDto(member)
     }

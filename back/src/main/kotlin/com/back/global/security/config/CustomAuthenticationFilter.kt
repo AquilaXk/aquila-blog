@@ -6,8 +6,8 @@ import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
-import com.back.global.security.app.AuthCookieService
 import com.back.global.security.domain.SecurityUser
+import com.back.global.web.app.AuthCookieService
 import com.back.global.web.app.Rq
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -27,29 +27,15 @@ class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
     private val authCookieService: AuthCookieService,
     private val objectMapper: ObjectMapper,
+    private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
-    private val publicApiPaths =
-        setOf(
-            "/member/api/v1/auth/login",
-            "/member/api/v1/auth/logout",
-            "/member/api/v1/members",
-            "/member/api/v1/members/randomSecureTip",
-        )
-
-    private val publicApiPatterns =
-        listOf(
-            Regex("/member/api/v1/members/\\d+/redirectToProfileImg"),
-        )
-
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/")
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val uri = request.requestURI
         if (filteredPrefixes.none { uri.startsWith(it) }) return true
-        if (uri in publicApiPaths) return true
-        if (publicApiPatterns.any { it.matches(uri) }) return true
-        return false
+        return publicApiRequestMatcher.matches(request)
     }
 
     override fun doFilterInternal(

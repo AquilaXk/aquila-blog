@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
+import jakarta.servlet.http.Cookie
 import org.hamcrest.Matchers
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -237,6 +238,20 @@ class ApiV1PostControllerTest {
                 status { isOk() }
                 jsonPath("$.content[*].id") { value(Matchers.not(Matchers.hasItem(unlistedPost.id))) }
             }
+        }
+
+        @Test
+        fun `공개 글 목록 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
+            mvc
+                .get("/post/api/v1/posts") {
+                    cookie(Cookie("apiKey", "invalid-api-key"))
+                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("getItems"))
+                }
         }
     }
 

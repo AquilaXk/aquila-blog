@@ -10,45 +10,50 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check API health
-        id: health
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare workflow scripts
+        run: chmod +x .github/scripts/*.sh
+
+      - name: Run public API smoke
+        id: smoke
         shell: bash
         env:
-          HEALTH_URL: ${{ secrets.HOME_HEALTHCHECK_URL || 'https://api.aquilaxk.site/actuator/health' }}
+          BASE_URL: ${{ secrets.HOME_API_BASE_URL || 'https://api.aquilaxk.site' }}
+          OAUTH_PROVIDER: ${{ secrets.E2E_OAUTH_PROVIDER }}
+          OAUTH_REDIRECT_URL: ${{ secrets.E2E_OAUTH_REDIRECT_URL || secrets.HOME_FRONT_BASE_URL || 'https://www.aquilaxk.site/' }}
         run: |
           set -euo pipefail
-          CODE="$(curl -sS -o /tmp/health.body -w "%{http_code}" "${HEALTH_URL}" || true)"
-          BODY="$(cat /tmp/health.body || true)"
-
-          echo "health_url=${HEALTH_URL}" >> "$GITHUB_OUTPUT"
-          echo "http_code=${CODE}" >> "$GITHUB_OUTPUT"
-          {
-            echo "body<<EOF"
-            echo "${BODY}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          if ! echo "${CODE}" | grep -Eq '^[1-4][0-9][0-9]$'; then
-            echo "healthcheck failed with status=${CODE}" >&2
+          if ./.github/scripts/public_smoke.sh > /tmp/public-smoke.log 2>&1; then
+            cat /tmp/public-smoke.log
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/public-smoke.log >&2 || true
+            echo "ok=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
+
+          {
+            echo "log<<EOF"
+            cat /tmp/public-smoke.log || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Send alert webhook
         if: failure() && (secrets.HOME_ALERT_WEBHOOK_URL != '')
         shell: bash
         env:
           ALERT_WEBHOOK_URL: ${{ secrets.HOME_ALERT_WEBHOOK_URL }}
-          HEALTH_URL: ${{ steps.health.outputs.health_url }}
-          HTTP_CODE: ${{ steps.health.outputs.http_code }}
-          BODY: ${{ steps.health.outputs.body }}
+          BASE_URL: ${{ secrets.HOME_API_BASE_URL || 'https://api.aquilaxk.site' }}
+          LOG: ${{ steps.smoke.outputs.log }}
         run: |
           set -euo pipefail
-          ESCAPED_BODY="$(printf '%s' "${BODY}" | sed 's/"/\\"/g' | tr '\n' ' ' | cut -c1-700)"
-          ESCAPED_URL="$(printf '%s' "${HEALTH_URL}" | sed 's/"/\\"/g')"
-          ESCAPED_CODE="$(printf '%s' "${HTTP_CODE}" | sed 's/"/\\"/g')"
+          ESCAPED_LOG="$(printf '%s' "${LOG}" | sed 's/"/\\"/g' | tr '\n' ' ' | cut -c1-700)"
+          ESCAPED_URL="$(printf '%s' "${BASE_URL}" | sed 's/"/\\"/g')"
 
           PAYLOAD="$(cat <<EOF
-{"text":"[homeserver-monitor] API healthcheck failed\nurl=${ESCAPED_URL}\nstatus=${ESCAPED_CODE}\nbody=${ESCAPED_BODY}"}
+{"text":"[homeserver-monitor] Public API smoke failed\nbase_url=${ESCAPED_URL}\nlog=${ESCAPED_LOG}"}
 EOF
 )"
 

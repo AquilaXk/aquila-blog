@@ -406,7 +406,7 @@ const convertHtmlToMarkdown = (html: string): string => {
 
 const AdminPage: NextPage = () => {
   const router = useRouter()
-  const { me, isAuthResolved, setMe, refresh, logout } = useAuthSession()
+  const { me, authStatus, authUnavailable, setMe, refresh, logout } = useAuthSession()
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("1")
@@ -470,7 +470,7 @@ const AdminPage: NextPage = () => {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
   const redirectingRef = useRef(false)
   const hydratedAdminIdRef = useRef<number | null>(null)
-  const authLoading = !isAuthResolved
+  const authLoading = authStatus === "loading"
 
   const syncProfileState = useCallback((member: MemberMe) => {
     setMe(member)
@@ -984,7 +984,7 @@ const AdminPage: NextPage = () => {
   }, [categoryUsageMap, customCategoryCatalog, postCategory])
 
   useEffect(() => {
-    if (!isAuthResolved) return
+    if (authStatus === "loading" || authStatus === "unavailable") return
 
     if (!me) {
       const target = `/login?next=${encodeURIComponent("/admin")}`
@@ -1037,7 +1037,7 @@ const AdminPage: NextPage = () => {
     return () => {
       mounted = false
     }
-  }, [isAuthResolved, me, refreshAdminProfile, refreshEditorMetaCatalog, router])
+  }, [authStatus, me, refreshAdminProfile, refreshEditorMetaCatalog, router])
 
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
@@ -1388,7 +1388,7 @@ const AdminPage: NextPage = () => {
     { href: "#system-tools", label: "시스템" },
   ]
 
-  if (authLoading || !me) {
+  if (authLoading) {
     return (
       <Main>
         <AdminGateCard>
@@ -1398,6 +1398,38 @@ const AdminPage: NextPage = () => {
             로그인 상태와 관리자 권한을 점검한 뒤 관리자 스튜디오를 열고 있습니다. 인증이 없으면 자동으로
             로그인 화면으로 이동합니다.
           </p>
+        </AdminGateCard>
+      </Main>
+    )
+  }
+
+  if (authUnavailable && !me) {
+    return (
+      <Main>
+        <AdminGateCard>
+          <span className="eyebrow">Admin Access</span>
+          <h1>인증 상태를 확인할 수 없습니다</h1>
+          <p>
+            로그인 정보 조회가 일시적으로 실패했습니다. 네트워크나 백엔드 상태를 확인한 뒤 다시
+            시도해주세요. 확인 실패를 로그아웃으로 간주하지는 않습니다.
+          </p>
+          <ActionRow>
+            <Button type="button" onClick={() => void refresh()}>
+              다시 시도
+            </Button>
+          </ActionRow>
+        </AdminGateCard>
+      </Main>
+    )
+  }
+
+  if (!me) {
+    return (
+      <Main>
+        <AdminGateCard>
+          <span className="eyebrow">Admin Access</span>
+          <h1>로그인 화면으로 이동하는 중입니다</h1>
+          <p>관리자 페이지는 로그인된 관리자 계정으로만 접근할 수 있습니다.</p>
         </AdminGateCard>
       </Main>
     )

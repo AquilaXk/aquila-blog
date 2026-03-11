@@ -8,8 +8,8 @@ import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
-import com.back.global.security.app.AuthCookieService
 import com.back.global.security.domain.SecurityUser
+import com.back.global.web.app.AuthCookieService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size

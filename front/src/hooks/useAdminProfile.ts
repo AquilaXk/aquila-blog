@@ -24,7 +24,8 @@ export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
         setProfile(data)
       } catch {
         if (!mounted) return
-        setProfile(null)
+        // 공개 프로필 재조회가 일시 실패하더라도 마지막 정상값은 유지한다.
+        setProfile((current) => current ?? initialProfile)
       }
     }
 

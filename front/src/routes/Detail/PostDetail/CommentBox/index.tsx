@@ -50,7 +50,7 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
 
-  const { me } = useAuthSession()
+  const { me, authStatus, authUnavailable } = useAuthSession()
   const [comments, setComments] = useState<PostComment[]>([])
   const [commentInput, setCommentInput] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
@@ -106,6 +106,11 @@ const CommentBox: React.FC<Props> = ({ data }) => {
 
   const submitComment = async (content: string, parentCommentId?: number | null) => {
     const trimmed = content.trim()
+
+    if (authUnavailable && !me) {
+      setError("인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
+      return false
+    }
 
     if (!me) {
       setError("댓글 작성은 로그인 후 가능합니다.")
@@ -372,6 +377,13 @@ const CommentBox: React.FC<Props> = ({ data }) => {
               <span>로그인된 계정으로 바로 댓글과 답글을 작성할 수 있습니다.</span>
             </div>
           </>
+        ) : authStatus === "unavailable" ? (
+          <div className="loginBox">
+            <div>
+              <strong>인증 상태를 확인할 수 없습니다</strong>
+              <span>네트워크가 안정되면 댓글 작성 영역이 다시 활성화됩니다.</span>
+            </div>
+          </div>
         ) : (
           <div className="loginBox">
             <div>
@@ -391,12 +403,18 @@ const CommentBox: React.FC<Props> = ({ data }) => {
           <textarea
             value={commentInput}
             onChange={(event) => setCommentInput(event.target.value)}
-            placeholder={me ? "의견이나 질문을 남겨주세요." : "로그인 후 댓글을 작성할 수 있습니다."}
-            disabled={!me || isLoading}
+            placeholder={
+              me
+                ? "의견이나 질문을 남겨주세요."
+                : authStatus === "unavailable"
+                  ? "인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
+                  : "로그인 후 댓글을 작성할 수 있습니다."
+            }
+            disabled={!me || isLoading || authUnavailable}
           />
           <div className="composerFooter">
             <span>대댓글은 각 댓글의 `답글` 버튼으로 이어서 작성할 수 있습니다.</span>
-            <button type="submit" disabled={!me || isLoading}>
+            <button type="submit" disabled={!me || isLoading || authUnavailable}>
               댓글 작성
             </button>
           </div>

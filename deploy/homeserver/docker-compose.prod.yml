@@ -34,11 +34,11 @@ services:
     depends_on:
       - db_1
       - redis_1
+      - minio_1
     networks:
       default:
         aliases:
           - back-blue
-          - back_active
 
   back_green:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
@@ -53,11 +53,11 @@ services:
     depends_on:
       - db_1
       - redis_1
+      - minio_1
     networks:
       default:
         aliases:
           - back-green
-          - back_active
 
   db_1:
     image: jangka512/pgj:latest
@@ -79,7 +79,19 @@ services:
       --appendonly yes
       --requirepass ${PROD___SPRING__DATA__REDIS__PASSWORD}
 
+  minio_1:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TZ: Asia/Seoul
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
 volumes:
   db_data:
   caddy_data:
   caddy_config:
+  minio_data:

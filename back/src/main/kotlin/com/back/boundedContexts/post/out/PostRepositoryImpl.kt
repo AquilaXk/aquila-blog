@@ -61,6 +61,7 @@ class PostRepositoryImpl(
     private fun createPostsQuery(builder: BooleanBuilder, pageable: Pageable): JPAQuery<Post> {
         val query = queryFactory
             .selectFrom(post)
+            .leftJoin(post.author).fetchJoin()
             .where(builder)
 
         QueryDslUtil.applySorting(query, pageable) { property ->

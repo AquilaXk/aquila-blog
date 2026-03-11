@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.app
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
@@ -185,7 +186,9 @@ class PostFacade(
     }
 
     fun getComments(post: Post): List<PostComment> =
-        postCommentRepository.findByPostOrderByIdDesc(post)
+        postCommentRepository.findByPostOrderByIdDesc(post).also { comments ->
+            hydrateMembersProfileImgAttrs(comments.map { it.author })
+        }
 
     fun findCommentById(post: Post, id: Int): PostComment? =
         postCommentRepository.findByPostAndId(post, id)
@@ -208,12 +211,11 @@ class PostFacade(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postRepository.findQPagedByKw(
-        kw,
-        PageRequest.of(page - 1, pageSize, sort.sortBy)
-    ).map { post ->
-        hydratePostAttrs(post)
-        post
+    ): Page<Post> = findAndHydratePagedPosts {
+        postRepository.findQPagedByKw(
+            kw,
+            PageRequest.of(page - 1, pageSize, sort.sortBy)
+        )
     }
 
     fun findPagedByKwForAdmin(
@@ -221,12 +223,11 @@ class PostFacade(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postRepository.findQPagedByKwForAdmin(
-        kw,
-        PageRequest.of(page - 1, pageSize, sort.sortBy)
-    ).map { post ->
-        hydratePostAttrs(post)
-        post
+    ): Page<Post> = findAndHydratePagedPosts {
+        postRepository.findQPagedByKwForAdmin(
+            kw,
+            PageRequest.of(page - 1, pageSize, sort.sortBy)
+        )
     }
 
     fun findPagedByAuthor(
@@ -235,13 +236,12 @@ class PostFacade(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postRepository.findQPagedByAuthorAndKw(
-        author,
-        kw,
-        PageRequest.of(page - 1, pageSize, sort.sortBy)
-    ).map { post ->
-        hydratePostAttrs(post)
-        post
+    ): Page<Post> = findAndHydratePagedPosts {
+        postRepository.findQPagedByAuthorAndKw(
+            author,
+            kw,
+            PageRequest.of(page - 1, pageSize, sort.sortBy)
+        )
     }
 
     fun findTemp(author: Member): Post? =
@@ -256,16 +256,54 @@ class PostFacade(
         return postRepository.save(newPost) to true
     }
 
+    private fun findAndHydratePagedPosts(loader: () -> Page<Post>): Page<Post> {
+        val page = loader()
+        hydratePostAttrs(page.content)
+        hydrateMembersProfileImgAttrs(page.content.map { it.author })
+        return page
+    }
+
     private fun hydratePostAttrs(post: Post) {
         post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)?.let { post.likesCountAttr = it }
         post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)?.let { post.commentsCountAttr = it }
         post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
     }
 
+    private fun hydratePostAttrs(posts: List<Post>) {
+        if (posts.isEmpty()) return
+
+        // 목록 조회 시 post마다 natural-id lookup을 반복하면 쿼리가 급증하므로 일괄 hydrate 한다.
+        val attrsByKey = postAttrRepository
+            .findBySubjectInAndNameIn(posts, listOf(LIKES_COUNT, COMMENTS_COUNT, HIT_COUNT))
+            .associateBy { "${it.subject.id}:${it.name}" }
+
+        posts.forEach { post ->
+            post.likesCountAttr = post.likesCountAttr ?: attrsByKey["${post.id}:$LIKES_COUNT"]
+            post.commentsCountAttr = post.commentsCountAttr ?: attrsByKey["${post.id}:$COMMENTS_COUNT"]
+            post.hitCountAttr = post.hitCountAttr ?: attrsByKey["${post.id}:$HIT_COUNT"]
+        }
+    }
+
     private fun hydrateMemberCounterAttrs(member: Member) {
         member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)?.let { member.postsCountAttr = it }
         member.postCommentsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POST_COMMENTS_COUNT)
             ?.let { member.postCommentsCountAttr = it }
+    }
+
+    private fun hydrateMembersProfileImgAttrs(members: List<Member>) {
+        if (members.isEmpty()) return
+
+        val uniqueMembers = members.distinctBy { it.id }
+        val profileAttrsByMemberId = memberAttrRepository
+            .findBySubjectInAndNameIn(uniqueMembers, listOf(PROFILE_IMG_URL))
+            .associateBy { it.subject.id }
+
+        // DTO 매핑에서 redirectToProfileImgUrlOrDefault 접근 시 profile attr lazy-load를 미리 해소한다.
+        uniqueMembers.forEach { member ->
+            member.getOrInitProfileImgUrlAttr {
+                profileAttrsByMemberId[member.id] ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
+            }
+        }
     }
 
     private fun savePostAttr(attr: PostAttr?) {

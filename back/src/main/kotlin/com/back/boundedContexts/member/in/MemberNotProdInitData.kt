@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.`in`
 
 import com.back.boundedContexts.member.app.MemberFacade
+import com.back.global.app.AppConfig
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Bean
@@ -31,22 +32,20 @@ class MemberNotProdInitData(
     fun makeBaseMembers() {
         if (memberFacade.count() > 0) return
 
-        val memberSystem = memberFacade.join("system", "1234", "시스템", null)
-        memberSystem.modifyApiKey(memberSystem.username)
+        val adminUsername = AppConfig.adminUsernameOrBlank.trim().ifBlank { "admin" }
+        val seedMembers = linkedMapOf(
+            "system" to "시스템",
+            "holding" to "홀딩",
+            // 관리자 계정은 환경설정 username 기준으로 단일 생성한다.
+            adminUsername to "관리자",
+            "user1" to "유저1",
+            "user2" to "유저2",
+            "user3" to "유저3",
+        )
 
-        val memberHolding = memberFacade.join("holding", "1234", "홀딩", null)
-        memberHolding.modifyApiKey(memberHolding.username)
-
-        val memberAdmin = memberFacade.join("admin", "1234", "관리자", null)
-        memberAdmin.modifyApiKey(memberAdmin.username)
-
-        val memberUser1 = memberFacade.join("user1", "1234", "유저1", null)
-        memberUser1.modifyApiKey(memberUser1.username)
-
-        val memberUser2 = memberFacade.join("user2", "1234", "유저2", null)
-        memberUser2.modifyApiKey(memberUser2.username)
-
-        val memberUser3 = memberFacade.join("user3", "1234", "유저3", null)
-        memberUser3.modifyApiKey(memberUser3.username)
+        seedMembers.forEach { (username, nickname) ->
+            val member = memberFacade.join(username, "1234", nickname, null)
+            member.modifyApiKey(member.username)
+        }
     }
 }

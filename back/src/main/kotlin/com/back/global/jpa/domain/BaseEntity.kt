@@ -52,6 +52,7 @@ abstract class BaseEntity : Persistable<Int> {
     private fun identityClass(entity: Any): Class<*> {
         var clazz = effectiveClass(entity)
 
+        // MemberProxy 같은 도메인 프록시는 실제 엔티티 클래스 기준으로 동일성 비교해야 한다.
         while (
             clazz.superclass != null &&
             BaseEntity::class.java.isAssignableFrom(clazz.superclass) &&

@@ -16,4 +16,21 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
             .using(MemberAttr::subject.name, subject)
             .using(MemberAttr::name.name, name)
             .load()
+
+    override fun findBySubjectInAndNameIn(subjects: List<Member>, names: List<String>): List<MemberAttr> {
+        if (subjects.isEmpty() || names.isEmpty()) return emptyList()
+
+        return entityManager.createQuery(
+            """
+            select a
+            from MemberAttr a
+            where a.subject in :subjects
+              and a.name in :names
+            """.trimIndent(),
+            MemberAttr::class.java,
+        )
+            .setParameter("subjects", subjects)
+            .setParameter("names", names)
+            .resultList
+    }
 }

@@ -3,12 +3,14 @@ import Image from "next/image"
 import React from "react"
 import { CONFIG } from "site.config"
 import { Emoji } from "src/components/Emoji"
-import { useAdminProfile } from "src/hooks/useAdminProfile"
+import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 
-type Props = {}
+type Props = {
+  initialAdminProfile?: AdminProfile | null
+}
 
-const ProfileCard: React.FC<Props> = () => {
-  const adminProfile = useAdminProfile()
+const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
+  const adminProfile = useAdminProfile(initialAdminProfile)
   const imageSrc = adminProfile?.profileImageUrl || CONFIG.profile.image
   const displayName = adminProfile?.username || CONFIG.profile.name
   const bypassOptimizer = imageSrc.includes("/redirectToProfileImg")

@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
+import org.springframework.cache.annotation.CacheEvict
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.*
@@ -65,6 +66,7 @@ class ApiV1AdmMemberController(
 
     @PatchMapping("/{id}/profileImgUrl")
     @Transactional
+    @CacheEvict(cacheNames = ["member-admin-profile"], allEntries = true)
     fun updateProfileImg(
         @PathVariable
         @Positive

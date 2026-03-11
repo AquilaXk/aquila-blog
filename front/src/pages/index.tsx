@@ -8,10 +8,25 @@ import { queryKey } from "src/constants/queryKey"
 import { GetServerSideProps } from "next"
 import { dehydrate } from "@tanstack/react-query"
 import { filterPosts } from "src/libs/utils/notion"
+import { AdminProfile } from "src/hooks/useAdminProfile"
+import { getApiBaseUrl } from "src/apis/backend/client"
+
+const fetchAdminProfile = async (): Promise<AdminProfile | null> => {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/member/api/v1/members/adminProfile`)
+    if (!response.ok) return null
+    return (await response.json()) as AdminProfile
+  } catch {
+    return null
+  }
+}
 
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
   const queryClient = createQueryClient()
-  const posts = filterPosts(await getPosts())
+  const [posts, initialAdminProfile] = await Promise.all([
+    getPosts().then(filterPosts),
+    fetchAdminProfile(),
+  ])
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
   // Velog-like strategy: SSR + short CDN cache.
@@ -20,11 +35,16 @@ export const getServerSideProps: GetServerSideProps = async ({ res }) => {
   return {
     props: {
       dehydratedState: dehydrate(queryClient),
+      initialAdminProfile,
     },
   }
 }
 
-const FeedPage: NextPageWithLayout = () => {
+type FeedPageProps = {
+  initialAdminProfile: AdminProfile | null
+}
+
+const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
   const meta = {
     title: CONFIG.blog.title,
     description: CONFIG.blog.description,
@@ -35,7 +55,7 @@ const FeedPage: NextPageWithLayout = () => {
   return (
     <>
       <MetaConfig {...meta} />
-      <Feed />
+      <Feed initialAdminProfile={initialAdminProfile} />
     </>
   )
 }

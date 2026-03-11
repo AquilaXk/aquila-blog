@@ -8,8 +8,8 @@ export type AdminProfile = {
   profileImageUrl: string
 }
 
-export const useAdminProfile = () => {
-  const [profile, setProfile] = useState<AdminProfile | null>(null)
+export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
+  const [profile, setProfile] = useState<AdminProfile | null>(initialProfile)
 
   useEffect(() => {
     let mounted = true

@@ -10,7 +10,7 @@ class MemberTest {
         assertThat(MemberPolicy.SYSTEM.username).isEqualTo("system")
         assertThat(MemberPolicy.SYSTEM.nickname).isEqualTo("시스템")
         assertThat(MemberPolicy.SYSTEM.name).isEqualTo("시스템")
-        assertThat(MemberPolicy.SYSTEM.isAdmin).isTrue()
+        assertThat(MemberPolicy.SYSTEM.isAdmin).isFalse()
     }
 
     @Test

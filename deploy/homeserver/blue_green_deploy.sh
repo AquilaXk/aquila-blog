@@ -49,19 +49,19 @@ validate_storage_env() {
 
   if ! [[ "${endpoint}" =~ ^https?://.+$ ]]; then
     echo "invalid CUSTOM_STORAGE_ENDPOINT: '${endpoint:-<empty>}'" >&2
-    echo "expected format example: http://minio_1:9000" >&2
+    echo "expected format example: http://minio:9000" >&2
     return 1
   fi
 
   if [[ "${endpoint}" == *'${'* ]]; then
     echo "invalid CUSTOM_STORAGE_ENDPOINT: unresolved placeholder detected -> '${endpoint}'" >&2
-    echo "set a concrete value like: CUSTOM_STORAGE_ENDPOINT=http://minio_1:9000" >&2
+    echo "set a concrete value like: CUSTOM_STORAGE_ENDPOINT=http://minio:9000" >&2
     return 1
   fi
 
   if [[ "${endpoint}" == "http:" || "${endpoint}" == "https:" ]]; then
     echo "invalid CUSTOM_STORAGE_ENDPOINT: '${endpoint}'" >&2
-    echo "endpoint lost host/port. expected format example: http://minio_1:9000" >&2
+    echo "endpoint lost host/port. expected format example: http://minio:9000" >&2
     return 1
   fi
 

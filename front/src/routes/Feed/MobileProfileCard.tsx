@@ -13,6 +13,8 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
   const imageSrc = adminProfile?.profileImageUrl || CONFIG.profile.image
   const displayName = adminProfile?.username || CONFIG.profile.name
+  const displayRole = adminProfile?.profileRole || CONFIG.profile.role
+  const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
   const bypassOptimizer = imageSrc.includes("/redirectToProfileImg")
 
   return (
@@ -34,8 +36,8 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
           />
           <div className="wrapper">
             <div className="top">{displayName}</div>
-            <div className="mid">{CONFIG.profile.role}</div>
-            <div className="btm">{CONFIG.profile.bio}</div>
+            <div className="mid">{displayRole}</div>
+            <div className="btm">{displayBio}</div>
           </div>
         </div>
       </div>

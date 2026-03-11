@@ -2,7 +2,9 @@ package com.back.boundedContexts.member.app
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_BIO
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_ROLE
 import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.member.out.shared.MemberRepository
 import com.back.global.exception.app.AppException
@@ -36,7 +38,7 @@ class MemberFacade(
 
         val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname))
         profileImgUrl?.let {
-            hydrateProfileImgUrlAttr(member)
+            hydrateProfileAttrs(member)
             member.profileImgUrl = it
             saveProfileImgUrlAttr(member)
         }
@@ -47,13 +49,13 @@ class MemberFacade(
     @Transactional(readOnly = true)
     fun findByUsername(username: String): Member? =
         memberRepository.findByUsername(username)
-            ?.also(::hydrateProfileImgUrlAttr)
+            ?.also(::hydrateProfileAttrs)
 
     @Transactional(readOnly = true)
     fun findById(id: Int): Optional<Member> =
         memberRepository.findById(id)
             .map { member ->
-                hydrateProfileImgUrlAttr(member)
+                hydrateProfileAttrs(member)
                 member
             }
 
@@ -66,9 +68,18 @@ class MemberFacade(
 
     @Transactional
     fun modify(member: Member, nickname: String, profileImgUrl: String?) {
-        hydrateProfileImgUrlAttr(member)
+        hydrateProfileAttrs(member)
         member.modify(nickname, profileImgUrl)
         if (profileImgUrl != null) saveProfileImgUrlAttr(member)
+    }
+
+    @Transactional
+    fun modifyProfileCard(member: Member, role: String, bio: String) {
+        hydrateProfileAttrs(member)
+        member.profileRole = role
+        member.profileBio = bio
+        saveProfileRoleAttr(member)
+        saveProfileBioAttr(member)
     }
 
     @Transactional
@@ -93,18 +104,34 @@ class MemberFacade(
         kw,
         PageRequest.of(page - 1, pageSize, sort.sortBy)
     ).map { member ->
-        hydrateProfileImgUrlAttr(member)
+        hydrateProfileAttrs(member)
         member
     }
 
-    private fun hydrateProfileImgUrlAttr(member: Member) {
+    private fun hydrateProfileAttrs(member: Member) {
         member.getOrInitProfileImgUrlAttr {
             memberAttrRepository.findBySubjectAndName(member, PROFILE_IMG_URL)
                 ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
+        }
+        member.getOrInitProfileRoleAttr {
+            memberAttrRepository.findBySubjectAndName(member, PROFILE_ROLE)
+                ?: MemberAttr(0, member, PROFILE_ROLE, "")
+        }
+        member.getOrInitProfileBioAttr {
+            memberAttrRepository.findBySubjectAndName(member, PROFILE_BIO)
+                ?: MemberAttr(0, member, PROFILE_BIO, "")
         }
     }
 
     private fun saveProfileImgUrlAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitProfileImgUrlAttr())
+    }
+
+    private fun saveProfileRoleAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitProfileRoleAttr())
+    }
+
+    private fun saveProfileBioAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitProfileBioAttr())
     }
 }

@@ -6,6 +6,8 @@ export type AdminProfile = {
   name: string
   nickname: string
   profileImageUrl: string
+  profileRole?: string
+  profileBio?: string
 }
 
 export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {

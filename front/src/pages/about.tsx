@@ -3,6 +3,7 @@ import Image from "next/image"
 import { GetServerSideProps } from "next"
 import { IncomingMessage } from "http"
 import { CONFIG } from "site.config"
+import { Emoji } from "src/components/Emoji"
 import MetaConfig from "src/components/MetaConfig"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { NextPageWithLayout } from "../types"
@@ -87,6 +88,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                 alt={displayName}
                 fill
                 sizes="150px"
+                priority
                 className="profile-image"
                 unoptimized={bypassOptimizer}
               />
@@ -101,13 +103,17 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
             <ul className="contact-list">
               {CONFIG.profile.email && (
                 <li>
-                  <span className="icon">📧</span>
+                  <span className="icon">
+                    <Emoji>📧</Emoji>
+                  </span>
                   <a href={`mailto:${CONFIG.profile.email}`}>{CONFIG.profile.email}</a>
                 </li>
               )}
               {CONFIG.profile.github && (
                 <li>
-                  <span className="icon">💻</span>
+                  <span className="icon">
+                    <Emoji>💻</Emoji>
+                  </span>
                   <a href={`https://github.com/${CONFIG.profile.github}`} target="_blank" rel="noopener noreferrer">
                     github.com/{CONFIG.profile.github}
                   </a>
@@ -115,7 +121,9 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               )}
               {CONFIG.profile.linkedin && (
                 <li>
-                  <span className="icon">💼</span>
+                  <span className="icon">
+                    <Emoji>💼</Emoji>
+                  </span>
                   <a href={CONFIG.profile.linkedin} target="_blank" rel="noopener noreferrer">
                     LinkedIn
                   </a>
@@ -123,7 +131,9 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               )}
               {CONFIG.profile.instagram && (
                 <li>
-                  <span className="icon">📸</span>
+                  <span className="icon">
+                    <Emoji>📸</Emoji>
+                  </span>
                   <a
                     href={`https://instagram.com/${CONFIG.profile.instagram}`}
                     target="_blank"
@@ -143,7 +153,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                 {CONFIG.projects.map((project, index) => (
                   <li key={index}>
                     <a href={project.href} target="_blank" rel="noopener noreferrer">
-                      🚀 {project.name}
+                      <Emoji>🚀</Emoji> {project.name}
                     </a>
                   </li>
                 ))}

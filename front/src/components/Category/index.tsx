@@ -1,5 +1,6 @@
 import { useRouter } from "next/router"
 import React from "react"
+import { Emoji } from "src/components/Emoji"
 import { splitCategoryDisplay } from "src/libs/utils"
 import { COLOR_SET } from "./constants"
 import styled from "@emotion/styled"
@@ -84,7 +85,11 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
         cursor: readOnly ? "default" : "pointer",
       }}
     >
-      {emoji && <span className="emoji">{emoji}</span>}
+      {emoji && (
+        <span className="emoji">
+          <Emoji>{emoji}</Emoji>
+        </span>
+      )}
       <span className="label">{label || children}</span>
     </StyledWrapper>
   )

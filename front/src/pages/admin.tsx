@@ -120,6 +120,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   return {
     props: {
       dehydratedState: dehydrate(queryClient),
+      initialMember: guardResult.member,
     },
   }
 }
@@ -430,9 +431,14 @@ const convertHtmlToMarkdown = (html: string): string => {
   return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
 }
 
-const AdminPage: NextPage = () => {
+type AdminPageProps = {
+  initialMember: MemberMe
+}
+
+const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const { me, authStatus, setMe, refresh, logout } = useAuthSession()
+  const sessionMember = me ?? initialMember
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("1")
@@ -485,9 +491,11 @@ const AdminPage: NextPage = () => {
   const [listKw, setListKw] = useState("")
   const [listSort, setListSort] = useState("CREATED_AT")
 
-  const [profileImgInputUrl, setProfileImgInputUrl] = useState("")
-  const [profileRoleInput, setProfileRoleInput] = useState("")
-  const [profileBioInput, setProfileBioInput] = useState("")
+  const [profileImgInputUrl, setProfileImgInputUrl] = useState(() =>
+    (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
+  )
+  const [profileRoleInput, setProfileRoleInput] = useState(initialMember.profileRole || "")
+  const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
   const [adminPostRows, setAdminPostRows] = useState<AdminPostListItem[]>([])
@@ -893,7 +901,7 @@ const AdminPage: NextPage = () => {
       return
     }
 
-    if (!me?.id) {
+    if (!sessionMember?.id) {
       setResult(pretty({ error: "현재 관리자 정보를 확인할 수 없습니다." }))
       return
     }
@@ -906,7 +914,7 @@ const AdminPage: NextPage = () => {
       formData.append("file", file)
 
       const uploadResponse = await fetch(
-        `${getApiBaseUrl()}/member/api/v1/adm/members/${me.id}/profileImageFile`,
+        `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
         {
           method: "POST",
           credentials: "include",
@@ -946,7 +954,7 @@ const AdminPage: NextPage = () => {
   }
 
   const handleUpdateMemberProfileCard = async () => {
-    if (!me?.id) {
+    if (!sessionMember?.id) {
       setResult(pretty({ error: "현재 관리자 정보를 확인할 수 없습니다." }))
       return
     }
@@ -955,7 +963,7 @@ const AdminPage: NextPage = () => {
       setLoadingKey("admMemberProfileCardUpdate")
       setProfileNotice({ tone: "loading", text: "역할과 소개 문구를 저장하고 있습니다..." })
       const updated = await apiFetch<MemberMe>(
-        `/member/api/v1/adm/members/${me.id}/profileCard`,
+        `/member/api/v1/adm/members/${sessionMember.id}/profileCard`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -1046,19 +1054,22 @@ const AdminPage: NextPage = () => {
       }
       return
     }
+  }, [authStatus, me, router])
 
-    if (hydratedAdminIdRef.current === me.id) return
+  useEffect(() => {
+    if (!sessionMember) return
+    if (hydratedAdminIdRef.current === sessionMember.id) return
 
-    hydratedAdminIdRef.current = me.id
+    hydratedAdminIdRef.current = sessionMember.id
     // auth/me 응답에는 관리자 프로필 카드 필드가 포함되어 있으므로,
     // 관리자 상세 재조회가 끝날 때까지 패널을 비워두지 않고 즉시 화면을 채운다.
-    applyProfileState(me)
+    applyProfileState(sessionMember)
     setProfileNotice({
       tone: "idle",
       text: "현재 로그인 세션의 관리자 프로필 값을 불러왔습니다. 필요하면 아래 버튼으로 저장값을 다시 조회할 수 있습니다.",
     })
     void refreshEditorMetaCatalog()
-  }, [applyProfileState, authStatus, me, refreshEditorMetaCatalog, router])
+  }, [applyProfileState, refreshEditorMetaCatalog, sessionMember])
 
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
@@ -1346,7 +1357,9 @@ const AdminPage: NextPage = () => {
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
   const profileBioStatus = profileBioInput.trim() || "미설정"
-  const profileUpdatedText = me?.modifiedAt ? me.modifiedAt.slice(0, 16).replace("T", " ") : "확인 전"
+  const profileUpdatedText = sessionMember?.modifiedAt
+    ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
+    : "확인 전"
   const profileImageHint = profileImageFileName
     ? `선택 파일: ${profileImageFileName}`
     : "아직 선택된 파일이 없습니다."
@@ -1413,7 +1426,7 @@ const AdminPage: NextPage = () => {
     { href: "#system-tools", label: "시스템" },
   ]
 
-  if (!me) {
+  if (!sessionMember) {
     return null
   }
 
@@ -1439,7 +1452,7 @@ const AdminPage: NextPage = () => {
           <MetricGrid>
             <MetricCard>
               <span>현재 계정</span>
-              <strong>{me.username}</strong>
+              <strong>{sessionMember.username}</strong>
             </MetricCard>
             <MetricCard>
               <span>작업 중 글</span>
@@ -1518,15 +1531,16 @@ const AdminPage: NextPage = () => {
                       alt="profile preview"
                       width={120}
                       height={120}
+                      sizes="120px"
                       priority
                       unoptimized={bypassProfilePreviewOptimizer}
                     />
                   ) : (
-                    <ProfileFallback>{me.username.slice(0, 2).toUpperCase()}</ProfileFallback>
+                    <ProfileFallback>{sessionMember.username.slice(0, 2).toUpperCase()}</ProfileFallback>
                   )}
                 </ProfilePreview>
                 <ProfileSummary>
-                  <strong>{me.username}</strong>
+                  <strong>{sessionMember.username}</strong>
                   <span>{profileRoleInput.trim() || "역할을 아직 입력하지 않았습니다."}</span>
                   <p>{profileBioInput.trim() || "소개 문구를 입력하면 메인 프로필 카드에 반영됩니다."}</p>
                 </ProfileSummary>
@@ -1599,9 +1613,9 @@ const AdminPage: NextPage = () => {
                     disabled={disabled("admMemberProfileRefresh")}
                     onClick={() =>
                       run("admMemberProfileRefresh", async () => {
-                        if (!me?.id) throw new Error("현재 관리자 정보를 확인할 수 없습니다.")
+                        if (!sessionMember?.id) throw new Error("현재 관리자 정보를 확인할 수 없습니다.")
                         setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
-                        const refreshed = await refreshAdminProfile(me.id, me)
+                        const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
                         if (!refreshed) throw new Error("현재 저장값을 불러오지 못했습니다.")
                         setProfileNotice({
                           tone: "success",
@@ -2871,9 +2885,9 @@ const TitleInput = styled(Input)`
   padding: 0;
   background: transparent;
   box-shadow: none;
-  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-size: clamp(1.9rem, 3.8vw, 3rem);
   font-weight: 800;
-  line-height: 1.08;
+  line-height: 1.12;
   letter-spacing: -0.04em;
 
   &::placeholder {
@@ -3855,6 +3869,7 @@ const PreviewCard = styled.div`
   min-height: 32rem;
   max-height: 48rem;
   overflow: auto;
+  scrollbar-gutter: stable both-edges;
   padding: 0 0 0.25rem;
 
   > .aq-markdown {

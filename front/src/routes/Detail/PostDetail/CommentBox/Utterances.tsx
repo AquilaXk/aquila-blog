@@ -1,6 +1,7 @@
 import { CONFIG } from "site.config"
 import { useEffect, useRef, useState } from "react" // useState 추가
 import styled from "@emotion/styled"
+import { Emoji } from "src/components/Emoji"
 import useScheme from "src/hooks/useScheme"
 
 type Props = {
@@ -52,7 +53,9 @@ const Utterances: React.FC<Props> = ({ issueTerm }) => {
     <StyledWrapper>
       {/* 3. isLoaded가 false일 때만(로딩 중일 때만) 텍스트 표시 */}
       {!isLoaded && (
-        <div className="loading-text">💬 댓글을 불러오고 있습니다...</div>
+        <div className="loading-text">
+          <Emoji>💬</Emoji> 댓글을 불러오고 있습니다...
+        </div>
       )}
 
       <div className="utterances-frame" ref={containerRef} />

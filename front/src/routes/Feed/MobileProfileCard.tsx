@@ -2,6 +2,7 @@ import { CONFIG } from "site.config"
 import Image from "next/image"
 import React from "react"
 import styled from "@emotion/styled"
+import { Emoji } from "src/components/Emoji"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 
 type Props = {
@@ -23,13 +24,17 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
 
   return (
     <StyledWrapper>
-      <div className="top">💻 Profile</div>
+      <div className="top">
+        <Emoji>💻</Emoji> Profile
+      </div>
       <div className="mid">
         <div className="wrapper">
           <Image
             src={imageSrc}
             width={90}
             height={90}
+            sizes="90px"
+            priority
             css={{
               position: "relative",
               borderRadius: "50%",
@@ -60,6 +65,9 @@ const StyledWrapper = styled.div`
   }
 
   > .top {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     padding: 0.15rem 0.1rem;
     margin-bottom: 0.7rem;
     color: ${({ theme }) => theme.colors.gray11};

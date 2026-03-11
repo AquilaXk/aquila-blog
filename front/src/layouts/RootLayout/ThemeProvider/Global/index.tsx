@@ -9,9 +9,16 @@ export const Global = () => {
   return (
     <_Global
       styles={css`
+        html {
+          min-height: 100%;
+          scrollbar-gutter: stable both-edges;
+        }
+
         body {
+          min-height: 100%;
           margin: 0;
           padding: 0;
+          overflow-y: scroll;
           color: ${theme.colors.gray12};
           background-color: ${theme.colors.gray2};
           font-family: ${pretendard.style.fontFamily};

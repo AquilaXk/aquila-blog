@@ -4,6 +4,7 @@ import React from "react"
 import { MdExpandMore } from "react-icons/md"
 import { DEFAULT_CATEGORY } from "src/constants"
 import styled from "@emotion/styled"
+import { Emoji } from "src/components/Emoji"
 import { useCategoriesQuery } from "src/hooks/useCategoriesQuery"
 import { splitCategoryDisplay } from "src/libs/utils"
 
@@ -45,7 +46,11 @@ const CategorySelect: React.FC<Props> = () => {
           aria-label="Filter posts by category"
         >
           <span className="currentLabel">
-            {currentCategoryDisplay.emoji && <span className="emoji">{currentCategoryDisplay.emoji}</span>}
+            {currentCategoryDisplay.emoji && (
+              <span className="emoji">
+                <Emoji>{currentCategoryDisplay.emoji}</Emoji>
+              </span>
+            )}
             <span>{currentCategoryDisplay.label || currentCategory}</span>
           </span>
           <MdExpandMore />
@@ -65,7 +70,15 @@ const CategorySelect: React.FC<Props> = () => {
                 aria-selected={key === currentCategory}
                 onClick={() => handleOptionClick(key)}
               >
-                {`${parsed.value || key} (${data[key]})`}
+                <span className="itemLabel">
+                  {parsed.emoji && (
+                    <span className="emoji">
+                      <Emoji>{parsed.emoji}</Emoji>
+                    </span>
+                  )}
+                  <span>{parsed.label || key}</span>
+                </span>
+                <span className="count">({data[key]})</span>
               </button>
             )
           })}
@@ -116,6 +129,7 @@ const StyledWrapper = styled.div`
     min-width: 14rem;
     max-height: min(18rem, calc(100vh - 9rem));
     overflow-y: auto;
+    scrollbar-gutter: stable both-edges;
     padding: 0.25rem;
     border-radius: 0.75rem;
     background-color: ${({ theme }) => theme.colors.gray2};
@@ -123,7 +137,10 @@ const StyledWrapper = styled.div`
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
       0 2px 4px -1px rgba(0, 0, 0, 0.06);
     > .item {
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
       width: 100%;
       text-align: left;
       padding: 0.25rem;
@@ -137,6 +154,25 @@ const StyledWrapper = styled.div`
 
       :hover {
         background-color: ${({ theme }) => theme.colors.gray4};
+      }
+
+      .itemLabel {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-width: 0;
+      }
+
+      .emoji {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .count {
+        flex: 0 0 auto;
+        color: ${({ theme }) => theme.colors.gray10};
       }
     }
   }

@@ -28,7 +28,7 @@ const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
       </div>
       <div className="content">
         <div className="top">
-          <Image src={imageSrc} fill alt="" unoptimized={bypassOptimizer} />
+          <Image src={imageSrc} fill sizes="132px" alt="" priority unoptimized={bypassOptimizer} />
         </div>
         <div className="mid">
           <div className="name">{displayName}</div>

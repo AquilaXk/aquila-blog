@@ -53,7 +53,7 @@ const RootLayout = ({ children }: Props) => {
       {/* {metaConfig.type !== "Paper" && <Header />} */}
       <Header fullWidth={false} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
-      <StyledMain data-busy={isNavigating}>{children}</StyledMain>
+      <StyledMain>{children}</StyledMain>
     </ThemeProvider>
   )
 }
@@ -65,14 +65,6 @@ const StyledMain = styled.main`
   width: 100%;
   max-width: 1120px;
   padding: 0 1rem;
-  transition: opacity 0.24s ease, filter 0.24s ease;
-  opacity: 1;
-  filter: none;
-
-  &[data-busy="true"] {
-    opacity: 0.72;
-    filter: saturate(0.96);
-  }
 `
 
 const RouteProgress = styled.div`

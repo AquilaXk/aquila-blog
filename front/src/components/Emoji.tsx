@@ -14,7 +14,10 @@ type Props = {
 
 export const Emoji = ({ className, children }: Props) => {
   return (
-    <span className={className} css={[notoColorEmoji.style]}>
+    <span
+      className={[notoColorEmoji.className, className].filter(Boolean).join(" ")}
+      style={{ display: "inline-flex", alignItems: "center", lineHeight: 1, flexShrink: 0 }}
+    >
       {children}
     </span>
   )

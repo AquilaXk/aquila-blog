@@ -20,7 +20,7 @@ const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   return (
     <StyledWrapper>
       <div className="title">
-        <Emoji>💻</Emoji> Profile
+        <Emoji>💻</Emoji> {displayName}
       </div>
       <div className="content">
         <div className="top">

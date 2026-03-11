@@ -14,6 +14,8 @@ export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
   const [profile, setProfile] = useState<AdminProfile | null>(initialProfile)
 
   useEffect(() => {
+    if (initialProfile) return
+
     let mounted = true
 
     const load = async () => {
@@ -32,7 +34,7 @@ export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [initialProfile])
 
   return profile
 }

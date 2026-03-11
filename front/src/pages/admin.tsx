@@ -424,8 +424,8 @@ const AdminPage: NextPage = () => {
     }
   }
 
-  const handleUploadMemberProfileImage = async () => {
-    const file = profileImageFileInputRef.current?.files?.[0]
+  const handleUploadMemberProfileImage = async (selectedFile?: File) => {
+    const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
     if (!file) {
       setResult(pretty({ error: "업로드할 이미지 파일을 선택해주세요." }))
       return
@@ -785,7 +785,7 @@ const AdminPage: NextPage = () => {
     <Main>
       <h1>Admin Tools</h1>
       <p>
-        {me.nickname}({me.username}) 계정으로 관리자 인증됨.
+        {me.username} 계정으로 인증됨.
       </p>
 
       <Section>
@@ -845,25 +845,22 @@ const AdminPage: NextPage = () => {
             onChange={(e) => {
               const file = e.target.files?.[0]
               setProfileImageFileName(file?.name || "")
+              if (file) {
+                void handleUploadMemberProfileImage(file)
+              }
             }}
           />
           <Button
             disabled={disabled("admMemberProfileImgUpdate")}
             onClick={() => profileImageFileInputRef.current?.click()}
           >
-            프로필 이미지 선택
+            프로필 이미지 선택(즉시 적용)
           </Button>
           <Input
             placeholder="선택된 파일"
             value={profileImageFileName}
             readOnly
           />
-          <Button
-            disabled={disabled("admMemberProfileImgUpdate")}
-            onClick={() => void handleUploadMemberProfileImage()}
-          >
-            프로필 이미지 업로드/적용
-          </Button>
           <Input
             placeholder="프로필 역할 (예: backend developer)"
             value={profileRoleInput}

@@ -19,7 +19,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
 
   return (
     <StyledWrapper>
-      <div className="top">💻 Profile</div>
+      <div className="top">💻 {displayName}</div>
       <div className="mid">
         <div className="wrapper">
           <Image

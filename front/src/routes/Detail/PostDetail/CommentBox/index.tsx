@@ -1,4 +1,5 @@
 import { apiFetch } from "src/apis/backend/client"
+import { useRouter } from "next/router"
 import { TPost } from "src/types"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
@@ -18,6 +19,7 @@ type PostComment = {
   id: number
   authorId: number
   authorName: string
+  authorUsername?: string
   authorProfileImageUrl: string
   postId: number
   content: string
@@ -32,17 +34,20 @@ type RsData<T> = {
 }
 
 const CommentBox: React.FC<Props> = ({ data }) => {
+  const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
 
   const [me, setMe] = useState<MemberMe | null>(null)
   const [comments, setComments] = useState<PostComment[]>([])
   const [commentInput, setCommentInput] = useState("")
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingCommentInput, setEditingCommentInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const loginHref = useMemo(() => {
+    const next = router.asPath || `/${data.slug}`
+    return `/login?next=${encodeURIComponent(next)}`
+  }, [data.slug, router.asPath])
 
   const loadMe = useCallback(async () => {
     try {
@@ -71,50 +76,6 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     void loadMe()
     void loadComments()
   }, [loadMe, loadComments])
-
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!username.trim() || !password.trim()) {
-      setError("아이디와 비밀번호를 입력해주세요.")
-      return
-    }
-
-    setIsLoading(true)
-    setError("")
-
-    try {
-      await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password }),
-      })
-      setPassword("")
-      await loadMe()
-      await loadComments()
-    } catch {
-      setError("로그인에 실패했습니다. 계정을 확인해주세요.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    setIsLoading(true)
-    setError("")
-
-    try {
-      await apiFetch<RsData<unknown>>("/member/api/v1/auth/logout", {
-        method: "DELETE",
-      })
-      setMe(null)
-      setPassword("")
-      setEditingCommentId(null)
-      setEditingCommentInput("")
-    } catch {
-      setError("로그아웃에 실패했습니다.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const handleWriteComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -208,39 +169,15 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   return (
     <StyledWrapper>
       <h3>Comments</h3>
-
-      {!me && (
-        <form onSubmit={handleLogin} className="loginForm">
-          <div className="row">
-            <input
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="아이디"
-              autoComplete="username"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="비밀번호"
-              autoComplete="current-password"
-            />
-            <button type="submit" disabled={isLoading}>
-              로그인
-            </button>
-          </div>
-          <p className="caption">댓글 작성은 로그인 후 가능합니다.</p>
-        </form>
-      )}
-
-      {me && (
-        <div className="accountRow">
-          <span>{me.nickname}님으로 로그인됨</span>
-          <button type="button" onClick={handleLogout} disabled={isLoading}>
-            로그아웃
-          </button>
-        </div>
-      )}
+      <div className="accountRow">
+        {me ? (
+          <span>{me.username} 계정으로 댓글 작성 가능</span>
+        ) : (
+          <span>
+            댓글 작성은 <a href={loginHref}>로그인</a> 후 가능합니다.
+          </span>
+        )}
+      </div>
 
       <form onSubmit={handleWriteComment} className="writeForm">
         <textarea
@@ -260,7 +197,7 @@ const CommentBox: React.FC<Props> = ({ data }) => {
         {comments.map((comment) => (
           <li key={comment.id}>
             <div className="head">
-              <strong>{comment.authorName}</strong>
+              <strong>{comment.authorUsername || comment.authorName}</strong>
               <div className="actions">
                 {comment.actorCanModify && (
                   <button
@@ -331,28 +268,20 @@ const StyledWrapper = styled.section`
     font-weight: 700;
   }
 
-  .loginForm,
   .writeForm {
     margin-bottom: 1rem;
   }
 
-  .row {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 0.5rem;
-
-    @media (max-width: 768px) {
-      grid-template-columns: 1fr;
-    }
-  }
-
   .accountRow {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: block;
     margin-bottom: 1rem;
     font-size: 0.875rem;
     color: ${({ theme }) => theme.colors.gray11};
+
+    a {
+      color: ${({ theme }) => theme.colors.gray12};
+      text-decoration: underline;
+    }
   }
 
   input,
@@ -392,12 +321,6 @@ const StyledWrapper = styled.section`
   button.danger {
     background-color: #d14343;
     color: #fff;
-  }
-
-  .caption {
-    margin-top: 0.5rem;
-    font-size: 0.8125rem;
-    color: ${({ theme }) => theme.colors.gray10};
   }
 
   .error {

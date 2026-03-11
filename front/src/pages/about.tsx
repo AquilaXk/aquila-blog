@@ -1,11 +1,14 @@
 import styled from "@emotion/styled"
-import Image from "next/image"
 import { GetServerSideProps } from "next"
 import { IncomingMessage } from "http"
+import { dehydrate } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import { Emoji } from "src/components/Emoji"
 import MetaConfig from "src/components/MetaConfig"
+import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
+import { createQueryClient } from "src/libs/react-query"
+import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import { NextPageWithLayout } from "../types"
 
 const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
@@ -34,7 +37,9 @@ const fetchAdminProfile = async (req: IncomingMessage): Promise<AdminProfile | n
 }
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
+  const queryClient = createQueryClient()
   const initialAdminProfile = await fetchAdminProfile(req)
+  await hydrateServerAuthSession(queryClient, req)
 
   res.setHeader(
     "Cache-Control",
@@ -45,6 +50,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
 
   return {
     props: {
+      dehydratedState: dehydrate(queryClient),
       initialAdminProfile,
     },
   }
@@ -62,10 +68,6 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const displayName = adminProfile?.username || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
-  const bypassOptimizer =
-    imageSrc.includes("/redirectToProfileImg") ||
-    imageSrc.startsWith("data:") ||
-    imageSrc.includes("placehold.co")
 
   const meta = {
     title: `About - ${CONFIG.blog.title}`,
@@ -83,14 +85,14 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
 
           <div className="profile-section">
             <div className="profile-image-wrapper">
-              <Image
+              <ProfileImage
                 src={imageSrc}
                 alt={displayName}
-                fill
-                sizes="150px"
+                width={150}
+                height={150}
                 priority
+                fillContainer
                 className="profile-image"
-                unoptimized={bypassOptimizer}
               />
             </div>
             <h2 className="profile-name">{displayName}</h2>

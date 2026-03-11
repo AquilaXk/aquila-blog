@@ -1,6 +1,5 @@
 import styled from "@emotion/styled"
 import { dehydrate } from "@tanstack/react-query"
-import Image from "next/image"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -11,6 +10,7 @@ import { createQueryClient } from "src/libs/react-query"
 import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
 import { guardAdminRequest } from "src/libs/server/adminGuard"
+import ProfileImage from "src/components/ProfileImage"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -1350,10 +1350,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const selectedCategoryParts = splitCategoryDisplay(postCategory)
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const profilePreviewSrc = profileImgInputUrl.trim()
-  const bypassProfilePreviewOptimizer =
-    profilePreviewSrc.startsWith("data:") ||
-    profilePreviewSrc.includes("/redirectToProfileImg") ||
-    /^https?:\/\//.test(profilePreviewSrc)
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
   const profileBioStatus = profileBioInput.trim() || "미설정"
@@ -1525,15 +1521,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <ProfileCardPanel>
                 <ProfilePreview>
                   {profilePreviewSrc ? (
-                    <Image
+                    <ProfileImage
                       className="previewImage"
                       src={profilePreviewSrc}
                       alt="profile preview"
                       width={120}
                       height={120}
-                      sizes="120px"
                       priority
-                      unoptimized={bypassProfilePreviewOptimizer}
                     />
                   ) : (
                     <ProfileFallback>{sessionMember.username.slice(0, 2).toUpperCase()}</ProfileFallback>

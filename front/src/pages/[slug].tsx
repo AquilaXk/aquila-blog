@@ -10,11 +10,26 @@ import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
 import { dehydrate } from "@tanstack/react-query"
 import usePostQuery from "src/hooks/usePostQuery"
+import { IncomingMessage } from "http"
+import { hydrateServerAuthSession } from "src/libs/server/authSession"
+import { serverApiFetch } from "src/libs/server/backend"
+import { TPostComment } from "src/types"
 
-export const getServerSideProps: GetServerSideProps = async ({ params, res }) => {
+const fetchInitialComments = async (req: IncomingMessage, postId: string) => {
+  try {
+    const response = await serverApiFetch(req, `/post/api/v1/posts/${postId}/comments`)
+    if (!response.ok) return []
+    return (await response.json()) as TPostComment[]
+  } catch {
+    return []
+  }
+}
+
+export const getServerSideProps: GetServerSideProps = async ({ params, req, res }) => {
   const queryClient = createQueryClient()
   const slug = params?.slug as string
   const posts = await getPosts()
+  await hydrateServerAuthSession(queryClient, req)
 
   const feedPosts = filterPosts(posts)
   await queryClient.prefetchQuery(queryKey.posts(), () => feedPosts)
@@ -26,16 +41,21 @@ export const getServerSideProps: GetServerSideProps = async ({ params, res }) =>
   }
 
   await queryClient.prefetchQuery(queryKey.post(`${slug}`), () => postDetail)
+  const initialComments = postDetail.type[0] === "Post" ? await fetchInitialComments(req, postDetail.id) : []
 
   // Keep detail pages fresh while still leveraging CDN edge cache.
   res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120")
 
   return {
-    props: { dehydratedState: dehydrate(queryClient) },
+    props: { dehydratedState: dehydrate(queryClient), initialComments },
   }
 }
 
-const DetailPage: NextPageWithLayout = () => {
+type DetailPageProps = {
+  initialComments: TPostComment[]
+}
+
+const DetailPage: NextPageWithLayout<DetailPageProps> = ({ initialComments }) => {
   const post = usePostQuery()
   if (!post) return <CustomError />
 
@@ -58,7 +78,7 @@ const DetailPage: NextPageWithLayout = () => {
   return (
     <>
       <MetaConfig {...meta} />
-      <Detail />
+      <Detail initialComments={initialComments} />
     </>
   )
 }

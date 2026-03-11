@@ -44,6 +44,22 @@ export type PostDetail = TPost & {
   recordMap?: ExtendedRecordMap
 }
 
+export type TPostComment = {
+  id: number
+  createdAt: string
+  modifiedAt: string
+  authorId: number
+  authorName: string
+  authorUsername?: string
+  authorProfileImageUrl: string
+  authorProfileImageDirectUrl?: string
+  postId: number
+  parentCommentId?: number | null
+  content: string
+  actorCanModify: boolean
+  actorCanDelete: boolean
+}
+
 export type TPosts = TPost[]
 
 export type TTags = {

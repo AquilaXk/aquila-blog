@@ -1,15 +1,16 @@
 import { apiFetch } from "src/apis/backend/client"
 import { useRouter } from "next/router"
-import { TPost } from "src/types"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
-import Image from "next/image"
 import { CONFIG } from "site.config"
 import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
+import ProfileImage from "src/components/ProfileImage"
+import { TPost, TPostComment } from "src/types"
 
 type Props = {
   data: TPost
+  initialComments?: TPostComment[] | null
 }
 
 type MemberMe = {
@@ -20,23 +21,7 @@ type MemberMe = {
   profileImageDirectUrl?: string
 }
 
-type PostComment = {
-  id: number
-  createdAt: string
-  modifiedAt: string
-  authorId: number
-  authorName: string
-  authorUsername?: string
-  authorProfileImageUrl: string
-  authorProfileImageDirectUrl?: string
-  postId: number
-  parentCommentId?: number | null
-  content: string
-  actorCanModify: boolean
-  actorCanDelete: boolean
-}
-
-type CommentNode = PostComment & {
+type CommentNode = TPostComment & {
   replies: CommentNode[]
 }
 
@@ -46,12 +31,13 @@ type RsData<T> = {
   data: T
 }
 
-const CommentBox: React.FC<Props> = ({ data }) => {
+const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
+  const hasInitialComments = initialComments !== null
 
   const { me, authStatus, authUnavailable } = useAuthSession()
-  const [comments, setComments] = useState<PostComment[]>([])
+  const [comments, setComments] = useState<TPostComment[]>(initialComments ?? [])
   const [commentInput, setCommentInput] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingCommentInput, setEditingCommentInput] = useState("")
@@ -71,7 +57,7 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     }
 
     try {
-      const rows = await apiFetch<PostComment[]>(`/post/api/v1/posts/${postId}/comments`)
+      const rows = await apiFetch<TPostComment[]>(`/post/api/v1/posts/${postId}/comments`)
       setComments(rows)
     } catch {
       setComments([])
@@ -79,8 +65,14 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   }, [postId])
 
   useEffect(() => {
+    if (!initialComments) return
+    setComments(initialComments)
+  }, [initialComments])
+
+  useEffect(() => {
+    if (hasInitialComments) return
     void loadComments()
-  }, [loadComments])
+  }, [hasInitialComments, loadComments])
 
   const commentTree = useMemo(() => {
     const map = new Map<number, CommentNode>()
@@ -126,7 +118,7 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     setError("")
 
     try {
-      await apiFetch<RsData<PostComment>>(`/post/api/v1/posts/${postId}/comments`, {
+      await apiFetch<RsData<TPostComment>>(`/post/api/v1/posts/${postId}/comments`, {
         method: "POST",
         body: JSON.stringify({
           content: trimmed,
@@ -181,7 +173,7 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     }
   }
 
-  const startEdit = (comment: PostComment) => {
+  const startEdit = (comment: TPostComment) => {
     setEditingCommentId(comment.id)
     setEditingCommentInput(comment.content)
     setReplyingToCommentId(null)
@@ -238,14 +230,16 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     size: number
   ) => {
     const imageSrc = profileImageDirectUrl || profileImageUrl || CONFIG.profile.image
-    const bypassOptimizer =
-      imageSrc.includes("/redirectToProfileImg") ||
-      imageSrc.includes("placehold.co") ||
-      imageSrc.startsWith("data:")
-
     return (
       <Avatar size={size}>
-        <Image src={imageSrc} alt={`${name} avatar`} fill unoptimized={bypassOptimizer} />
+        <ProfileImage
+          src={imageSrc}
+          alt={`${name} avatar`}
+          priority={size >= 44}
+          fillContainer
+          width={size}
+          height={size}
+        />
       </Avatar>
     )
   }

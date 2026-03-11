@@ -1,8 +1,8 @@
 import { CONFIG } from "site.config"
-import Image from "next/image"
 import React from "react"
 import styled from "@emotion/styled"
 import { Emoji } from "src/components/Emoji"
+import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 
 type Props = {
@@ -17,10 +17,6 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const displayName = adminProfile?.username || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
-  const bypassOptimizer =
-    imageSrc.includes("/redirectToProfileImg") ||
-    imageSrc.startsWith("data:") ||
-    imageSrc.includes("placehold.co")
 
   return (
     <StyledWrapper>
@@ -29,11 +25,10 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
       </div>
       <div className="mid">
         <div className="wrapper">
-          <Image
+          <ProfileImage
             src={imageSrc}
             width={90}
             height={90}
-            sizes="90px"
             priority
             css={{
               position: "relative",
@@ -42,7 +37,6 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
               objectPosition: "center 38%",
             }}
             alt="profile_image"
-            unoptimized={bypassOptimizer}
           />
           <div className="wrapper">
             <div className="top">{displayName}</div>

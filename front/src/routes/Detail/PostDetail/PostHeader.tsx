@@ -3,6 +3,7 @@ import Image from "next/image"
 import React from "react"
 import { CONFIG } from "site.config"
 import Category from "src/components/Category"
+import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
 import { formatDateTime } from "src/libs/utils"
 import { TPost } from "src/types"
@@ -14,10 +15,6 @@ type Props = {
 
 const PostHeader: React.FC<Props> = ({ data, category }) => {
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
-  const bypassOptimizer =
-    authorImageSrc.includes("/redirectToProfileImg") ||
-    authorImageSrc.includes("placehold.co") ||
-    authorImageSrc.startsWith("data:")
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
     data.modifiedTime && data.modifiedTime !== data.createdTime
@@ -39,13 +36,13 @@ const PostHeader: React.FC<Props> = ({ data, category }) => {
         {data.author?.[0]?.name && (
           <div className="author">
             <div className="avatar">
-              <Image
+              <ProfileImage
                 src={authorImageSrc}
                 alt="profile_photo"
-                fill
                 priority
-                sizes="48px"
-                unoptimized={bypassOptimizer}
+                fillContainer
+                width={48}
+                height={48}
               />
             </div>
             <div className="authorText">

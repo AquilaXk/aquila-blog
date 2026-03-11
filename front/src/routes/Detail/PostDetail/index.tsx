@@ -5,10 +5,13 @@ import CommentBox from "./CommentBox"
 import styled from "@emotion/styled"
 import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
+import { TPostComment } from "src/types"
 
-type Props = {}
+type Props = {
+  initialComments?: TPostComment[] | null
+}
 
-const PostDetail: React.FC<Props> = () => {
+const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const data = usePostQuery()
 
   if (!data) return null
@@ -25,7 +28,7 @@ const PostDetail: React.FC<Props> = () => {
         {data.type[0] === "Post" && (
           <>
             <Footer />
-            <CommentBox data={data} />
+            <CommentBox data={data} initialComments={initialComments} />
           </>
         )}
       </article>

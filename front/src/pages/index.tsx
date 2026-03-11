@@ -10,6 +10,7 @@ import { dehydrate } from "@tanstack/react-query"
 import { filterPosts } from "src/libs/utils/notion"
 import { AdminProfile } from "src/hooks/useAdminProfile"
 import { IncomingMessage } from "http"
+import { hydrateServerAuthSession } from "src/libs/server/authSession"
 
 const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
   const internal = process.env.BACKEND_INTERNAL_URL
@@ -42,6 +43,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
     getPosts().then(filterPosts),
     fetchAdminProfile(req),
   ])
+  await hydrateServerAuthSession(queryClient, req)
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
   // 프로필 조회 실패 시 fallback HTML을 CDN에 캐시하지 않도록 한다.

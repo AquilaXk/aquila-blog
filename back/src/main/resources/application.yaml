@@ -121,6 +121,9 @@ custom:
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }
+  revalidate:
+    url: "${CUSTOM__REVALIDATE__URL:}"
+    token: "${CUSTOM__REVALIDATE__TOKEN:}"
   storage:
     enabled: ${CUSTOM_STORAGE_ENABLED:false}
     endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}

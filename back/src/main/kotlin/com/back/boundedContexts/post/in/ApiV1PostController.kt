@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.app.PostFacade
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.global.revalidate.RevalidateService
 import com.back.global.rsData.RsData
 import com.back.global.web.app.Rq
 import com.back.standard.dto.page.PageDto
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*
 class ApiV1PostController(
     private val postFacade: PostFacade,
     private val rq: Rq,
+    private val revalidateService: RevalidateService,
 ) {
     private fun makePostDtoPage(postPage: org.springframework.data.domain.Page<Post>): PageDto<PostDto> {
         val actor = rq.actorOrNull
@@ -89,6 +91,7 @@ class ApiV1PostController(
             reqBody.published ?: false,
             reqBody.listed ?: false,
         )
+        revalidateService.revalidateHome()
         return RsData("201-1", "${post.id}번 글이 작성되었습니다.", PostDto(post))
     }
 
@@ -112,6 +115,7 @@ class ApiV1PostController(
         val post = postFacade.findById(id).getOrThrow()
         post.checkActorCanModify(rq.actor)
         postFacade.modify(rq.actor, post, reqBody.title, reqBody.content, reqBody.published, reqBody.listed)
+        revalidateService.revalidateHome()
         return RsData("200-1", "${post.id}번 글이 수정되었습니다.", PostDto(post))
     }
 
@@ -121,6 +125,7 @@ class ApiV1PostController(
         val post = postFacade.findById(id).getOrThrow()
         post.checkActorCanDelete(rq.actor)
         postFacade.delete(post, rq.actor)
+        revalidateService.revalidateHome()
         return RsData("200-1", "${id}번 글이 삭제되었습니다.")
     }
 

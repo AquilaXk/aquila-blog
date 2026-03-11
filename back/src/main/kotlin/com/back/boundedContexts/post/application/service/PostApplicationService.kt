@@ -80,7 +80,10 @@ class PostApplicationService(
         postRepository
             .findById(id)
             .getOrNull()
-            ?.also(::hydratePostAttrs)
+            ?.also { post ->
+                hydratePostAttrs(post)
+                hydrateMembersProfileImgAttrs(listOf(post.author))
+            }
 
     fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 

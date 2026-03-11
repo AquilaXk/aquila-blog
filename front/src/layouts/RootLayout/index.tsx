@@ -20,12 +20,14 @@ const RootLayout = ({ children }: Props) => {
   useEffect(() => {
     let mounted = true
 
-    const handleStart = () => {
+    const handleStart = (_url: string, options?: { shallow: boolean }) => {
+      if (options?.shallow) return
       if (!mounted) return
       setIsNavigating(true)
     }
 
-    const handleDone = () => {
+    const handleDone = (_url?: string, options?: { shallow: boolean }) => {
+      if (options?.shallow) return
       if (!mounted) return
       window.requestAnimationFrame(() => {
         if (mounted) setIsNavigating(false)

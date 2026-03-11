@@ -108,11 +108,17 @@ const StyledWrapper = styled.span`
   color: inherit;
 
   > .emoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
     font-size: 0.92em;
+    margin-right: 0.06rem;
   }
 
   > .label {
+    display: inline-flex;
+    align-items: center;
     min-width: 0;
   }
 `

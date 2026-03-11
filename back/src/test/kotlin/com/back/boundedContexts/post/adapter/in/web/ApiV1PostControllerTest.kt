@@ -132,6 +132,7 @@ class ApiV1PostControllerTest {
                 jsonPath("$.id") { value(post.id) }
                 jsonPath("$.authorId") { value(post.author.id) }
                 jsonPath("$.title") { value(post.title) }
+                jsonPath("$.authorProfileImageDirectUrl") { value(post.author.profileImgUrlOrDefault) }
                 jsonPath("$.published") { value(post.published) }
             }
         }

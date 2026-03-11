@@ -35,6 +35,7 @@ type ApiPostWithContentDto = {
   authorName: string
   authorUsername?: string
   authorProfileImageUrl?: string
+  authorProfileImageDirectUrl?: string
   authorProfileImgUrl?: string
   title: string
   content: string
@@ -216,7 +217,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
       authorName: post.authorName,
       authorUsername: post.authorUsername,
       authorProfileImgUrl:
-        post.authorProfileImageUrl || post.authorProfileImgUrl || "",
+        post.authorProfileImageDirectUrl || post.authorProfileImageUrl || post.authorProfileImgUrl || "",
       title: post.title,
       summary: toSummary(normalizedContent),
       tags,

@@ -3284,16 +3284,21 @@ const SelectionRow = styled.div`
 const CatalogChipGroup = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
+  gap: 0;
   min-width: 0;
-`
-
-const SelectionChip = styled.button`
+  max-width: 100%;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+`
+
+const SelectionChip = styled.button`
+  border-radius: 0;
+  border: 0;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.44rem 0.76rem;
+  padding: 0.44rem 0.82rem;
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -3304,27 +3309,36 @@ const SelectionChip = styled.button`
     transform 0.18s ease;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.blue11};
-    transform: translateY(-1px);
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
   }
 `
 
 const CatalogDeleteButton = styled.button`
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 2rem;
+  padding: 0 0.55rem;
+  border: 0;
+  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
   flex: 0 0 auto;
+  font-size: 0.95rem;
+  line-height: 1;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
+  }
 
   &:disabled {
     opacity: 0.45;
@@ -3389,26 +3403,42 @@ const TagChipRow = styled.div`
 const TagChip = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 0.34rem;
+  gap: 0;
   min-width: 0;
   max-width: 100%;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.34rem 0.42rem 0.34rem 0.68rem;
+  padding-left: 0.68rem;
   font-size: 0.78rem;
   font-weight: 600;
+  overflow: hidden;
+
+  > button {
+    margin-left: 0.45rem;
+  }
 
   button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    min-width: 1.9rem;
+    padding: 0 0.5rem;
     border: 0;
-    background: ${({ theme }) => theme.colors.gray3};
+    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    width: 1.2rem;
-    height: 1.2rem;
-    border-radius: 999px;
     cursor: pointer;
     flex: 0 0 auto;
+    font-size: 0.92rem;
+    line-height: 1;
+
+    &:hover {
+      background: ${({ theme }) => theme.colors.red3};
+      color: ${({ theme }) => theme.colors.red11};
+    }
   }
 `
 

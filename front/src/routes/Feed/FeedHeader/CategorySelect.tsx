@@ -98,12 +98,16 @@ const StyledWrapper = styled.div`
     .currentLabel {
       display: inline-flex;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.48rem;
       min-width: 0;
     }
 
     .emoji {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       flex: 0 0 auto;
+      margin-right: 0.04rem;
     }
   }
   > .content {

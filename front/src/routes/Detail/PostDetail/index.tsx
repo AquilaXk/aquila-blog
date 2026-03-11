@@ -2,7 +2,6 @@ import React from "react"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import CommentBox from "./CommentBox"
-import Category from "src/components/Category"
 import styled from "@emotion/styled"
 import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
@@ -19,17 +18,10 @@ const PostDetail: React.FC<Props> = () => {
   return (
     <StyledWrapper>
       <article>
-        <TopMetaRow>
-          {category && (
-            <Category readOnly={data.status?.[0] === "PublicOnDetail"}>
-              {category}
-            </Category>
-          )}
-        </TopMetaRow>
-        {data.type[0] === "Post" && <PostHeader data={data} />}
-        <BodyCard>
+        {data.type[0] === "Post" && <PostHeader data={data} category={category} />}
+        <BodySection>
           <NotionRenderer content={data.content} />
-        </BodyCard>
+        </BodySection>
         {data.type[0] === "Post" && (
           <>
             <Footer />
@@ -49,25 +41,14 @@ const StyledWrapper = styled.div`
 
   > article {
     margin: 0 auto;
-    max-width: 58rem;
+    max-width: 52rem;
   }
 `
 
-const TopMetaRow = styled.div`
-  margin-bottom: 0.9rem;
-`
-
-const BodyCard = styled.div`
-  margin-top: 1.2rem;
-  padding: 1.1rem 1.35rem 1.5rem;
-  border-radius: 28px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
-  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.08);
+const BodySection = styled.div`
+  margin-top: 2rem;
 
   @media (max-width: 768px) {
-    padding: 0.95rem 1rem 1.25rem;
-    border-radius: 22px;
+    margin-top: 1.6rem;
   }
 `

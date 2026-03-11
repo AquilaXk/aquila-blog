@@ -1,16 +1,18 @@
-import { CONFIG } from "site.config"
-import Tag from "src/components/Tag"
-import { TPost } from "src/types"
-import { formatDateTime } from "src/libs/utils"
+import styled from "@emotion/styled"
 import Image from "next/image"
 import React from "react"
-import styled from "@emotion/styled"
+import { CONFIG } from "site.config"
+import Category from "src/components/Category"
+import Tag from "src/components/Tag"
+import { formatDateTime } from "src/libs/utils"
+import { TPost } from "src/types"
 
 type Props = {
   data: TPost
+  category?: string
 }
 
-const PostHeader: React.FC<Props> = ({ data }) => {
+const PostHeader: React.FC<Props> = ({ data, category }) => {
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
   const bypassOptimizer =
     authorImageSrc.includes("/redirectToProfileImg") ||
@@ -24,60 +26,59 @@ const PostHeader: React.FC<Props> = ({ data }) => {
 
   return (
     <StyledWrapper>
-      <div className="eyebrow">Post Detail</div>
+      <div className="taxonomyRow">
+        {category && <Category readOnly={data.status?.[0] === "PublicOnDetail"}>{category}</Category>}
+        {data.tags?.map((tag) => (
+          <Tag key={tag}>{tag}</Tag>
+        ))}
+      </div>
+
       <h1 className="title">{data.title}</h1>
-      {data.type[0] !== "Paper" && (
-        <div className="metaCard">
-          <div className="authorRow">
-            {data.author?.[0]?.name && (
-              <div className="author">
-                <div className="avatar">
-                  <Image
-                    src={authorImageSrc}
-                    alt="profile_photo"
-                    fill
-                    unoptimized={bypassOptimizer}
-                  />
-                </div>
-                <div className="authorText">
-                  <strong>{data.author[0].name}</strong>
-                  <span>{publishedAt}</span>
-                </div>
+
+      <div className="metaRow">
+        {data.author?.[0]?.name && (
+          <div className="author">
+            <div className="avatar">
+              <Image
+                src={authorImageSrc}
+                alt="profile_photo"
+                fill
+                priority
+                sizes="48px"
+                unoptimized={bypassOptimizer}
+              />
+            </div>
+            <div className="authorText">
+              <strong>{data.author[0].name}</strong>
+              <div className="metaText">
+                <span>{publishedAt}</span>
+                {modifiedAt && (
+                  <>
+                    <span className="dot" />
+                    <span>수정 {modifiedAt}</span>
+                  </>
+                )}
               </div>
-            )}
-            <div className="stats">
-              <span>댓글 {data.commentsCount ?? 0}</span>
-              <span>좋아요 {data.likesCount ?? 0}</span>
-              <span>조회 {data.hitCount ?? 0}</span>
             </div>
           </div>
+        )}
 
-          <div className="infoGrid">
-            <div className="infoItem">
-              <label>게시 시각</label>
-              <strong>{publishedAt}</strong>
-            </div>
-            <div className="infoItem">
-              <label>최종 수정</label>
-              <strong>{modifiedAt || "게시 시각과 동일"}</strong>
-            </div>
-          </div>
+        <div className="stats" aria-label="post stats">
+          <span>댓글 {data.commentsCount ?? 0}</span>
+          <span className="dot" />
+          <span>좋아요 {data.likesCount ?? 0}</span>
+          <span className="dot" />
+          <span>조회 {data.hitCount ?? 0}</span>
+        </div>
+      </div>
 
-          {data.tags && (
-            <div className="tags">
-              {data.tags.map((tag: string) => (
-                <Tag key={tag}>{tag}</Tag>
-              ))}
-            </div>
-          )}
-
-          {data.thumbnail && (
-            <div className="thumbnail">
-              <Image src={data.thumbnail} css={{ objectFit: "cover" }} fill alt={data.title} />
-            </div>
-          )}
+      {data.thumbnail && (
+        <div className="thumbnail">
+          <Image src={data.thumbnail} css={{ objectFit: "cover" }} fill alt={data.title} />
         </div>
       )}
+
+      <div className="divider" />
     </StyledWrapper>
   )
 }
@@ -85,63 +86,55 @@ const PostHeader: React.FC<Props> = ({ data }) => {
 export default PostHeader
 
 const StyledWrapper = styled.header`
-  .eyebrow {
-    display: inline-flex;
-    margin-bottom: 0.7rem;
-    border-radius: 999px;
-    padding: 0.36rem 0.68rem;
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  .taxonomyRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+
+    > span {
+      min-height: 32px;
+      padding: 0.38rem 0.78rem;
+      border-radius: 999px;
+      font-size: 0.86rem;
+      line-height: 1;
+      font-weight: 600;
+    }
   }
 
   .title {
     margin: 0;
-    font-size: clamp(2rem, 4vw, 3rem);
-    line-height: 1.08;
+    font-size: clamp(2.5rem, 5vw, 4.4rem);
+    line-height: 1.12;
     letter-spacing: -0.05em;
     font-weight: 800;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
-  .metaCard {
-    margin-top: 1.35rem;
-    padding: 1rem;
-    border-radius: 24px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background:
-      radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 34%),
-      ${({ theme }) => theme.colors.gray1};
-  }
-
-  .authorRow {
+  .metaRow {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.9rem;
+    gap: 1rem;
     flex-wrap: wrap;
-    margin-bottom: 1rem;
+    margin-top: 1.4rem;
   }
 
   .author {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
+    gap: 0.85rem;
     min-width: 0;
   }
 
   .avatar {
     position: relative;
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     overflow: hidden;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray3};
 
     img {
       object-fit: cover;
@@ -151,92 +144,76 @@ const StyledWrapper = styled.header`
 
   .authorText {
     display: grid;
-    gap: 0.15rem;
+    gap: 0.18rem;
     min-width: 0;
 
     strong {
       color: ${({ theme }) => theme.colors.gray12};
       font-size: 1rem;
-    }
-
-    span {
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.82rem;
+      font-weight: 700;
     }
   }
 
+  .metaText,
   .stats {
-    display: flex;
+    display: inline-flex;
+    align-items: center;
     flex-wrap: wrap;
-    gap: 0.45rem;
-
-    span {
-      display: inline-flex;
-      align-items: center;
-      min-height: 34px;
-      padding: 0 0.76rem;
-      border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray7};
-      background: ${({ theme }) => theme.colors.gray2};
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.8rem;
-      font-weight: 700;
-    }
-  }
-
-  .infoGrid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
-    margin-bottom: 0.95rem;
-
-    @media (max-width: 680px) {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .infoItem {
-    display: grid;
-    gap: 0.2rem;
-    padding: 0.82rem 0.9rem;
-    border-radius: 18px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-
-    label {
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.74rem;
-      font-weight: 700;
-    }
-
-    strong {
-      color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.92rem;
-      line-height: 1.5;
-    }
-  }
-
-  .tags {
-    display: flex;
-    overflow-x: auto;
-    flex-wrap: nowrap;
     gap: 0.5rem;
-    max-width: 100%;
-    margin-bottom: 1rem;
-    padding-bottom: 0.15rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.92rem;
+    font-weight: 500;
+  }
+
+  .dot {
+    width: 0.22rem;
+    height: 0.22rem;
+    border-radius: 50%;
+    background: ${({ theme }) => theme.colors.gray8};
   }
 
   .thumbnail {
     overflow: hidden;
     position: relative;
-    margin-bottom: 0.25rem;
-    border-radius: 1.5rem;
+    margin-top: 2rem;
+    border-radius: 1.3rem;
     width: 100%;
-    background-color: ${({ theme }) => theme.colors.gray4};
-    padding-bottom: 58%;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background-color: ${({ theme }) => theme.colors.gray3};
+    padding-bottom: 52%;
+  }
 
-    @media (min-width: 1024px) {
-      padding-bottom: 46%;
+  .divider {
+    margin-top: 2rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  }
+
+  @media (max-width: 768px) {
+    .taxonomyRow {
+      margin-bottom: 0.8rem;
+    }
+
+    .taxonomyRow > span {
+      min-height: 30px;
+      font-size: 0.8rem;
+    }
+
+    .title {
+      font-size: clamp(2rem, 10vw, 3rem);
+    }
+
+    .metaRow {
+      margin-top: 1.15rem;
+      align-items: flex-start;
+    }
+
+    .metaText,
+    .stats {
+      font-size: 0.86rem;
+    }
+
+    .divider {
+      margin-top: 1.5rem;
     }
   }
 `

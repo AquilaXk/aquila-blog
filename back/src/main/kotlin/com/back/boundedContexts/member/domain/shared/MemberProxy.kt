@@ -8,6 +8,9 @@ class MemberProxy(
     username: String,
     nickname: String,
 ) : Member(id, username, null, nickname) {
+    val persistenceMember: Member
+        get() = real
+
     override var nickname: String
         get() = super.nickname
         set(value) {

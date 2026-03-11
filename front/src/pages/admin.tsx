@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import { NextPage } from "next"
 import { useRouter } from "next/router"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
@@ -15,6 +15,162 @@ type MemberMe = {
 }
 
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
+
+const escapePipes = (value: string) => value.replace(/\|/g, "\\|")
+
+const nodeText = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
+  if (node.nodeType !== Node.ELEMENT_NODE) return ""
+  const el = node as HTMLElement
+  return Array.from(el.childNodes).map(nodeText).join("")
+}
+
+const inlineToMarkdown = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
+  if (node.nodeType !== Node.ELEMENT_NODE) return ""
+
+  const el = node as HTMLElement
+  const tag = el.tagName.toLowerCase()
+  const inner = Array.from(el.childNodes).map(inlineToMarkdown).join("")
+
+  if (tag === "strong" || tag === "b") return `**${inner}**`
+  if (tag === "em" || tag === "i") return `*${inner}*`
+  if (tag === "s" || tag === "del" || tag === "strike") return `~~${inner}~~`
+  if (tag === "code" && el.parentElement?.tagName.toLowerCase() !== "pre") return `\`${inner}\``
+  if (tag === "a") {
+    const href = el.getAttribute("href") || ""
+    if (!href) return inner
+    return `[${inner || href}](${href})`
+  }
+  if (tag === "br") return "\n"
+
+  return inner
+}
+
+const blockquoteToMarkdown = (el: HTMLElement): string => {
+  const content = Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()
+  if (!content) return ""
+  return content
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n")
+}
+
+const listToMarkdown = (el: HTMLElement, ordered: boolean): string => {
+  const items = Array.from(el.children).filter(
+    (child): child is HTMLLIElement => child.tagName.toLowerCase() === "li"
+  )
+
+  return items
+    .map((li, idx) => {
+      const checkbox = li.querySelector<HTMLInputElement>("input[type='checkbox']")
+      const hasCheckbox = !!checkbox
+      const checked = checkbox?.checked
+      const marker = ordered ? `${idx + 1}.` : hasCheckbox ? (checked ? "- [x]" : "- [ ]") : "-"
+      if (checkbox) checkbox.remove()
+
+      const content = Array.from(li.childNodes).map(inlineToMarkdown).join("").trim() || "내용"
+      return `${marker} ${content}`
+    })
+    .join("\n")
+}
+
+const tableToMarkdown = (el: HTMLTableElement): string => {
+  const rows = Array.from(el.querySelectorAll("tr"))
+  if (!rows.length) return ""
+
+  const matrix = rows.map((row) =>
+    Array.from(row.querySelectorAll("th,td")).map((cell) =>
+      escapePipes(Array.from(cell.childNodes).map(inlineToMarkdown).join("").replace(/\n+/g, " ").trim())
+    )
+  )
+
+  const maxCols = Math.max(...matrix.map((row) => row.length))
+  const normalized = matrix.map((row) => {
+    const copy = [...row]
+    while (copy.length < maxCols) copy.push("")
+    return copy
+  })
+
+  const head = normalized[0]
+  const separator = Array.from({ length: maxCols }, () => "---")
+  const body = normalized.slice(1)
+
+  return [
+    `| ${head.join(" | ")} |`,
+    `| ${separator.join(" | ")} |`,
+    ...body.map((row) => `| ${row.join(" | ")} |`),
+  ].join("\n")
+}
+
+const preToMarkdown = (el: HTMLElement): string => {
+  const codeEl = el.querySelector("code")
+  const codeText = (codeEl?.textContent || el.textContent || "").trimEnd()
+  const className = codeEl?.className || ""
+  const lang = (className.match(/language-([a-zA-Z0-9_-]+)/)?.[1] || "").trim()
+  return `\`\`\`${lang}\n${codeText}\n\`\`\``
+}
+
+const detailsToMarkdown = (el: HTMLElement): string => {
+  const summary = el.querySelector("summary")
+  const title = summary?.textContent?.trim() || "토글 제목"
+
+  const contentNodes = Array.from(el.childNodes).filter((node) => node !== summary)
+  const body = contentNodes
+    .map((node) => (node.nodeType === Node.ELEMENT_NODE ? blockToMarkdown(node as HTMLElement) : inlineToMarkdown(node)))
+    .join("\n")
+    .trim() || "내용을 입력하세요."
+
+  return `:::toggle ${title}\n${body}\n:::`
+}
+
+const blockToMarkdown = (el: HTMLElement): string => {
+  const tag = el.tagName.toLowerCase()
+
+  if (tag === "h1") return `# ${Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()}`
+  if (tag === "h2") return `## ${Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()}`
+  if (tag === "h3") return `### ${Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()}`
+  if (tag === "p") return Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()
+  if (tag === "hr") return "---"
+  if (tag === "blockquote") return blockquoteToMarkdown(el)
+  if (tag === "ul") return listToMarkdown(el, false)
+  if (tag === "ol") return listToMarkdown(el, true)
+  if (tag === "pre") return preToMarkdown(el)
+  if (tag === "table") return tableToMarkdown(el as HTMLTableElement)
+  if (tag === "details") return detailsToMarkdown(el)
+
+  const classNames = el.className || ""
+  if (classNames.includes("notion-toggle")) {
+    const title = el.querySelector(".notion-toggle-summary")?.textContent?.trim() || "토글 제목"
+    const body = el.querySelector(".notion-toggle-content")?.textContent?.trim() || "내용을 입력하세요."
+    return `:::toggle ${title}\n${body}\n:::`
+  }
+
+  return Array.from(el.childNodes)
+    .map((node) =>
+      node.nodeType === Node.ELEMENT_NODE
+        ? blockToMarkdown(node as HTMLElement)
+        : inlineToMarkdown(node)
+    )
+    .join("\n")
+    .trim()
+}
+
+const convertHtmlToMarkdown = (html: string): string => {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, "text/html")
+  const lines = Array.from(doc.body.childNodes)
+    .map((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        return blockToMarkdown(node as HTMLElement)
+      }
+      return inlineToMarkdown(node).trim()
+    })
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+
+  return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
+}
 
 const AdminPage: NextPage = () => {
   const router = useRouter()
@@ -261,6 +417,16 @@ const AdminPage: NextPage = () => {
   ) => {
     insertSnippet(`> [!${kind}]\n> ${body}\n`)
     setIsCalloutMenuOpen(false)
+  }
+
+  const handlePasteFromNotion = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const html = e.clipboardData.getData("text/html")
+    if (!html) return
+
+    e.preventDefault()
+    const markdown = convertHtmlToMarkdown(html)
+    if (!markdown.trim()) return
+    insertSnippet(markdown)
   }
 
   if (authLoading || !me) {
@@ -556,6 +722,7 @@ const AdminPage: NextPage = () => {
                 placeholder="Markdown으로 본문을 작성하세요."
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
+                onPaste={handlePasteFromNotion}
               />
             </EditorPane>
             <PreviewPane>

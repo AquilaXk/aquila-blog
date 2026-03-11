@@ -35,6 +35,7 @@ const StyledWrapper = styled.div`
     display: flex;
     padding-left: 1rem;
     padding-right: 1rem;
+    gap: 0.75rem;
     justify-content: space-between;
     align-items: center;
     width: 100%;
@@ -51,6 +52,27 @@ const StyledWrapper = styled.div`
       display: flex;
       gap: 0.75rem;
       align-items: center;
+      flex-shrink: 0;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .container {
+      padding-left: 0.8rem;
+      padding-right: 0.8rem;
+      gap: 0.55rem;
+
+      > a {
+        min-width: 0;
+        max-width: 42vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .nav {
+        gap: 0.4rem;
+      }
     }
   }
 `

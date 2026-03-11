@@ -1,19 +1,14 @@
 package com.back.boundedContexts.member.config.shared
 
-import com.back.global.security.config.PublicApiRouteContributor
-import com.back.global.security.config.PublicApiRouteSpec
 import org.springframework.security.config.annotation.web.AuthorizeHttpRequestsDsl
 import org.springframework.stereotype.Component
 
 @Component
-class AuthSecurityConfigurer : PublicApiRouteContributor {
-    override fun publicApiRoutes() =
-        listOf(
-            PublicApiRouteSpec("/member/api/*/auth/login"),
-            PublicApiRouteSpec("/member/api/*/auth/logout"),
-        )
-
+class AuthSecurityConfigurer {
     fun configure(authorize: AuthorizeHttpRequestsDsl) {
-        publicApiRoutes().forEach { it.authorizePermitAll(authorize) }
+        authorize.apply {
+            authorize("/member/api/*/auth/login", permitAll)
+            authorize("/member/api/*/auth/logout", permitAll)
+        }
     }
 }

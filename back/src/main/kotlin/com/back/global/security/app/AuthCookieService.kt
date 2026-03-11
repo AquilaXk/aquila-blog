@@ -1,5 +1,6 @@
-package com.back.global.web.app
+package com.back.global.security.app
 
+import com.back.global.web.app.Rq
 import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.stereotype.Component

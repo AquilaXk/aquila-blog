@@ -122,7 +122,7 @@
 - [x] No global mutable repository state in domain entities.
 - [x] Full backend tests pass (`./gradlew clean test --no-daemon`).
 - [x] Key API integration tests pass for member/post/comment/like.
-- [ ] Query/performance sanity check completed.
+- [x] Query/performance sanity check completed.
 - [x] Refactoring decisions documented (short ADRs recommended).
 
 ## 9. Recommended PR Strategy

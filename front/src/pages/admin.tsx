@@ -513,50 +513,87 @@ const AdminPage: NextPage = () => {
 
       <Section id="post-write">
         <h2>Post</h2>
-        <Row>
-          <Input placeholder="page" value={listPage} onChange={(e) => setListPage(e.target.value)} />
-          <Input
-            placeholder="pageSize (1~30)"
-            value={listPageSize}
-            onChange={(e) => setListPageSize(e.target.value)}
-          />
-          <Input placeholder="kw" value={listKw} onChange={(e) => setListKw(e.target.value)} />
-          <Input placeholder="sort" value={listSort} onChange={(e) => setListSort(e.target.value)} />
-          <Button
-            disabled={disabled("postList")}
-            onClick={() =>
-              run("postList", () =>
-                apiFetch(
-                  `/post/api/v1/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-                    listKw
-                  )}&sort=${encodeURIComponent(listSort)}`
+        <QueryPanel>
+          <QueryHeader>
+            <h3>글 목록 조회 조건</h3>
+            <p>아래 조건으로 전체 글/내 글 목록을 조회할 수 있습니다.</p>
+          </QueryHeader>
+          <QueryGrid>
+            <FieldBox>
+              <FieldLabel htmlFor="list-page">페이지</FieldLabel>
+              <Input
+                id="list-page"
+                placeholder="예: 1"
+                value={listPage}
+                onChange={(e) => setListPage(e.target.value)}
+              />
+            </FieldBox>
+            <FieldBox>
+              <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
+              <Input
+                id="list-page-size"
+                placeholder="1~30"
+                value={listPageSize}
+                onChange={(e) => setListPageSize(e.target.value)}
+              />
+            </FieldBox>
+            <FieldBox>
+              <FieldLabel htmlFor="list-kw">검색어</FieldLabel>
+              <Input
+                id="list-kw"
+                placeholder="제목/본문 키워드"
+                value={listKw}
+                onChange={(e) => setListKw(e.target.value)}
+              />
+            </FieldBox>
+            <FieldBox>
+              <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
+              <Input
+                id="list-sort"
+                placeholder="예: CREATED_AT"
+                value={listSort}
+                onChange={(e) => setListSort(e.target.value)}
+              />
+            </FieldBox>
+          </QueryGrid>
+
+          <QueryActions>
+            <Button
+              disabled={disabled("postList")}
+              onClick={() =>
+                run("postList", () =>
+                  apiFetch(
+                    `/post/api/v1/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
+                      listKw
+                    )}&sort=${encodeURIComponent(listSort)}`
+                  )
                 )
-              )
-            }
-          >
-            글 목록
-          </Button>
-          <Button
-            disabled={disabled("postMine")}
-            onClick={() =>
-              run("postMine", () =>
-                apiFetch(
-                  `/post/api/v1/posts/mine?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-                    listKw
-                  )}&sort=${encodeURIComponent(listSort)}`
+              }
+            >
+              전체 글 목록 조회
+            </Button>
+            <Button
+              disabled={disabled("postMine")}
+              onClick={() =>
+                run("postMine", () =>
+                  apiFetch(
+                    `/post/api/v1/posts/mine?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
+                      listKw
+                    )}&sort=${encodeURIComponent(listSort)}`
+                  )
                 )
-              )
-            }
-          >
-            내 글 목록
-          </Button>
-          <Button
-            disabled={disabled("postTemp")}
-            onClick={() => run("postTemp", () => apiFetch("/post/api/v1/posts/temp", { method: "POST" }))}
-          >
-            임시글 가져오기/생성
-          </Button>
-        </Row>
+              }
+            >
+              내 글 목록 조회
+            </Button>
+            <Button
+              disabled={disabled("postTemp")}
+              onClick={() => run("postTemp", () => apiFetch("/post/api/v1/posts/temp", { method: "POST" }))}
+            >
+              임시글 불러오기/없으면 생성
+            </Button>
+          </QueryActions>
+        </QueryPanel>
 
         <EditorSection>
           <WriterHeader>
@@ -916,6 +953,61 @@ const Row = styled.div`
     text-decoration: underline;
     text-underline-offset: 2px;
   }
+`
+
+const QueryPanel = styled.div`
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.8rem;
+  margin-bottom: 0.7rem;
+`
+
+const QueryHeader = styled.div`
+  margin-bottom: 0.55rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0.2rem 0 0;
+    font-size: 0.82rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+`
+
+const QueryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const FieldBox = styled.div`
+  display: grid;
+  gap: 0.26rem;
+`
+
+const FieldLabel = styled.label`
+  font-size: 0.78rem;
+  color: ${({ theme }) => theme.colors.gray11};
+`
+
+const QueryActions = styled.div`
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 `
 
 const Input = styled.input`

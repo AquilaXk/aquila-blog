@@ -1,8 +1,8 @@
 import styled from "@emotion/styled"
 import { NextPage } from "next"
 import { useRouter } from "next/router"
-import { ClipboardEvent, useEffect, useRef, useState } from "react"
-import { apiFetch } from "src/apis/backend/client"
+import { ChangeEvent, ClipboardEvent, useEffect, useRef, useState } from "react"
+import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -23,6 +23,14 @@ type PostForEditor = {
 }
 
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
+
+type UploadPostImageResponse = {
+  data: {
+    key: string
+    url: string
+    markdown: string
+  }
+}
 
 const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
   if (!published) return "PRIVATE"
@@ -210,6 +218,7 @@ const AdminPage: NextPage = () => {
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
+  const postImageFileInputRef = useRef<HTMLInputElement>(null)
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -461,6 +470,38 @@ const AdminPage: NextPage = () => {
     const markdown = convertHtmlToMarkdown(html)
     if (!markdown.trim()) return
     insertSnippet(markdown)
+  }
+
+  const uploadPostImageFile = async (file: File): Promise<UploadPostImageResponse> => {
+    const formData = new FormData()
+    formData.append("file", file)
+
+    const response = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
+    }
+
+    return (await response.json()) as UploadPostImageResponse
+  }
+
+  const handlePostImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    void run("uploadPostImage", async () => {
+      const uploaded = await uploadPostImageFile(file)
+      const markdown = uploaded.data?.markdown
+      if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+      insertSnippet(`${markdown}\n`)
+      return uploaded
+    })
   }
 
   if (authLoading || !me) {
@@ -742,6 +783,20 @@ const AdminPage: NextPage = () => {
             </Button>
             <Button type="button" onClick={insertLink}>
               링크
+            </Button>
+            <input
+              ref={postImageFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePostImageFileChange}
+              style={{ display: "none" }}
+            />
+            <Button
+              type="button"
+              disabled={disabled("uploadPostImage")}
+              onClick={() => postImageFileInputRef.current?.click()}
+            >
+              이미지 업로드
             </Button>
             <CalloutDropdown>
               <Button type="button" onClick={() => setIsCalloutMenuOpen((prev) => !prev)}>

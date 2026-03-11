@@ -11,7 +11,6 @@ NETWORK_NAME="blog_home_default"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
-CADDY_SWITCH_VERIFY_RETRIES="${CADDY_SWITCH_VERIFY_RETRIES:-15}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 HEALTHCHECK_LOG_EVERY_N_TRIES="${HEALTHCHECK_LOG_EVERY_N_TRIES:-5}"
@@ -34,47 +33,56 @@ backend_host() {
   echo "back_green"
 }
 
-detect_active_backend() {
-  local running_services
-  running_services="$(compose ps --status running --services 2>/dev/null || true)"
-
-  local is_blue_running="false"
-  local is_green_running="false"
-
-  if echo "${running_services}" | grep -qx "back_blue"; then
-    is_blue_running="true"
-  fi
-
-  if echo "${running_services}" | grep -qx "back_green"; then
-    is_green_running="true"
-  fi
-
-  if [[ -f "${STATE_FILE}" ]]; then
-    local active_from_state
-    active_from_state="$(cat "${STATE_FILE}" || true)"
-
-    if [[ "${active_from_state}" == "back_blue" && "${is_blue_running}" == "true" ]]; then
-      echo "back_blue"
-      return
-    fi
-
-    if [[ "${active_from_state}" == "back_green" && "${is_green_running}" == "true" ]]; then
-      echo "back_green"
-      return
-    fi
-  fi
-
-  if [[ "${is_blue_running}" == "true" && "${is_green_running}" != "true" ]]; then
-    echo "back_blue"
-    return
-  fi
-
-  if [[ "${is_green_running}" == "true" && "${is_blue_running}" != "true" ]]; then
+other_backend() {
+  local backend="$1"
+  if [[ "${backend}" == "back_blue" ]]; then
     echo "back_green"
     return
   fi
-
   echo "back_blue"
+}
+
+backend_container_id() {
+  local backend="$1"
+  compose ps -q "${backend}" | head -n 1
+}
+
+resolve_in_caddy() {
+  local host="$1"
+  compose exec -T caddy getent hosts "${host}" >/dev/null 2>&1
+}
+
+get_caddy_ip() {
+  local host="$1"
+  compose exec -T caddy sh -lc "getent hosts ${host} | awk 'NR==1{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
+ensure_caddyfile_back_active() {
+  local tmp_file
+  tmp_file="$(mktemp)"
+  sed -E "s/back[-_](blue|green|active):8080/back_active:8080/" "${CADDY_FILE}" > "${tmp_file}"
+  mv "${tmp_file}" "${CADDY_FILE}"
+  compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+}
+
+check_backend_dns_from_caddy() {
+  local backend="$1"
+  local host
+  host="$(backend_host "${backend}")"
+
+  if ! resolve_in_caddy "${host}"; then
+    echo "caddy dns resolve failed: ${host}" >&2
+    return 1
+  fi
+
+  local ip
+  ip="$(get_caddy_ip "${host}")"
+  echo "caddy dns ok: ${host} -> ${ip:-unknown}"
+}
+
+check_all_backend_dns_from_caddy() {
+  check_backend_dns_from_caddy "back_blue"
+  check_backend_dns_from_caddy "back_green"
 }
 
 probe_caddy_http_code() {
@@ -86,72 +94,20 @@ probe_caddy_http_code() {
     -H "Host: ${api_domain}" || true
 }
 
-resolve_in_caddy() {
-  local host="$1"
-  compose exec -T caddy getent hosts "${host}" >/dev/null 2>&1
-}
-
-verify_caddy_route_ready() {
-  local next_backend="$1"
-  local next_backend_host
-  next_backend_host="$(backend_host "${next_backend}")"
-  local api_domain
-  api_domain="$(env_value "API_DOMAIN")"
-
-  if [[ -z "${api_domain}" ]]; then
-    echo "missing API_DOMAIN in ${ENV_FILE}" >&2
-    return 1
-  fi
-
-  local attempt=1
-  while [[ "${attempt}" -le "${CADDY_SWITCH_VERIFY_RETRIES}" ]]; do
-    # Ensure both blue/green names and fixed active alias are resolvable inside caddy.
-    if ! resolve_in_caddy "back_blue" || ! resolve_in_caddy "back_green" || ! resolve_in_caddy "back_active"; then
-      echo "caddy DNS resolve pending for back_blue/back_green/back_active (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES})"
-      sleep 1
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    if ! resolve_in_caddy "${next_backend_host}"; then
-      echo "caddy DNS resolve pending for ${next_backend_host} (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES})"
-      sleep 1
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    local code
-    code="$(probe_caddy_http_code "${api_domain}")"
-
-    if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
-      echo "caddy route verify ok (next=${next_backend}, status=${code})"
-      return 0
-    fi
-
-    echo "caddy route verify pending (next=${next_backend}, try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES}, status=${code:-none})"
-    sleep 1
-    attempt=$((attempt + 1))
-  done
-
-  echo "caddy route verify failed: next=${next_backend_host}" >&2
-  compose logs --no-color --tail=120 caddy >&2 || true
-  return 1
-}
-
 check_backend_health() {
   local backend="$1"
-  local backend_host_name
-  backend_host_name="$(backend_host "${backend}")"
+  local host
+  host="$(backend_host "${backend}")"
   local attempt=1
 
   while [[ "${attempt}" -le "${HEALTHCHECK_RETRIES}" ]]; do
     local code
-    code="$(
+    code="$({
       docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
         --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
         --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
-        -s -o /dev/null -w "%{http_code}" "http://${backend_host_name}:8080${HEALTHCHECK_PATH}" || true
-    )"
+        -s -o /dev/null -w "%{http_code}" "http://${host}:8080${HEALTHCHECK_PATH}"
+    } || true)"
 
     if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
       echo "healthcheck ok: ${backend} (status=${code})"
@@ -172,11 +128,152 @@ check_backend_health() {
   done
 
   echo "healthcheck failed: ${backend}" >&2
-  echo "----- ${backend} recent logs -----" >&2
   compose logs --no-color --tail=200 "${backend}" >&2 || true
-  echo "----- ${backend} container status -----" >&2
   compose ps "${backend}" >&2 || true
   return 1
+}
+
+connect_backend_network() {
+  local backend="$1"
+  local with_active_alias="$2"
+  local cid
+  cid="$(backend_container_id "${backend}")"
+  if [[ -z "${cid}" ]]; then
+    echo "container id not found: ${backend}" >&2
+    return 1
+  fi
+
+  docker network disconnect "${NETWORK_NAME}" "${cid}" >/dev/null 2>&1 || true
+
+  local args=(network connect --alias "${backend}" --alias "${backend//_/-}")
+  if [[ "${with_active_alias}" == "true" ]]; then
+    args+=(--alias "back_active")
+  fi
+  args+=("${NETWORK_NAME}" "${cid}")
+
+  docker "${args[@]}"
+}
+
+switch_active_alias() {
+  local target="$1"
+  local other
+  other="$(other_backend "${target}")"
+
+  connect_backend_network "${target}" "true"
+  connect_backend_network "${other}" "false"
+
+  if ! resolve_in_caddy "back_active"; then
+    echo "caddy dns resolve failed: back_active" >&2
+    return 1
+  fi
+
+  local active_ip target_ip
+  active_ip="$(get_caddy_ip "back_active")"
+  target_ip="$(get_caddy_ip "$(backend_host "${target}")")"
+  if [[ -z "${active_ip}" || -z "${target_ip}" || "${active_ip}" != "${target_ip}" ]]; then
+    echo "back_active alias mismatch: active=${active_ip:-none}, target=${target_ip:-none}" >&2
+    return 1
+  fi
+
+  echo "back_active alias switched to ${target} (${active_ip})"
+}
+
+verify_caddy_route() {
+  local expected_backend="$1"
+  local api_domain="$2"
+  local expected_ip
+  expected_ip="$(get_caddy_ip "$(backend_host "${expected_backend}")")"
+
+  if [[ -z "${expected_ip}" ]]; then
+    echo "expected backend ip not found for ${expected_backend}" >&2
+    return 1
+  fi
+
+  local attempt=1
+  while [[ "${attempt}" -le 20 ]]; do
+    local active_ip
+    active_ip="$(get_caddy_ip "back_active")"
+    if [[ -n "${active_ip}" && "${active_ip}" == "${expected_ip}" ]]; then
+      local code
+      code="$(probe_caddy_http_code "${api_domain}")"
+      if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+        echo "caddy route verify ok: ${expected_backend} (status=${code})"
+        return 0
+      fi
+      echo "caddy route pending: status=${code:-none} (try ${attempt}/20)"
+    else
+      echo "caddy alias pending: active=${active_ip:-none}, expected=${expected_ip} (try ${attempt}/20)"
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  compose logs --no-color --tail=120 caddy >&2 || true
+  return 1
+}
+
+detect_active_backend() {
+  local running_services
+  running_services="$(compose ps --status running --services 2>/dev/null || true)"
+
+  local blue_running="false"
+  local green_running="false"
+  if echo "${running_services}" | grep -qx "back_blue"; then blue_running="true"; fi
+  if echo "${running_services}" | grep -qx "back_green"; then green_running="true"; fi
+
+  if [[ -f "${STATE_FILE}" ]]; then
+    local from_state
+    from_state="$(cat "${STATE_FILE}" || true)"
+    if [[ "${from_state}" == "back_blue" && "${blue_running}" == "true" ]]; then
+      echo "back_blue"
+      return
+    fi
+    if [[ "${from_state}" == "back_green" && "${green_running}" == "true" ]]; then
+      echo "back_green"
+      return
+    fi
+  fi
+
+  if [[ "${blue_running}" == "true" && "${green_running}" != "true" ]]; then
+    echo "back_blue"
+    return
+  fi
+  if [[ "${green_running}" == "true" && "${blue_running}" != "true" ]]; then
+    echo "back_green"
+    return
+  fi
+
+  echo "back_blue"
+}
+
+rollback_to_backend() {
+  local rollback_backend="$1"
+  local api_domain="$2"
+
+  echo "attempting rollback to ${rollback_backend}" >&2
+
+  compose up -d "${rollback_backend}" || true
+
+  if ! check_backend_dns_from_caddy "${rollback_backend}"; then
+    echo "rollback blocked: DNS not resolvable for ${rollback_backend}" >&2
+    return 1
+  fi
+
+  if ! check_backend_health "${rollback_backend}"; then
+    echo "rollback blocked: healthcheck failed for ${rollback_backend}" >&2
+    return 1
+  fi
+
+  switch_active_alias "${rollback_backend}"
+
+  if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
+    echo "rollback failed: caddy route verify failed" >&2
+    return 1
+  fi
+
+  echo "${rollback_backend}" > "${STATE_FILE}"
+  return 0
 }
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -189,6 +286,12 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   exit 1
 fi
 
+api_domain="$(env_value "API_DOMAIN")"
+if [[ -z "${api_domain}" ]]; then
+  echo "missing API_DOMAIN in ${ENV_FILE}" >&2
+  exit 1
+fi
+
 active_backend="$(detect_active_backend)"
 if [[ "${active_backend}" == "back_blue" ]]; then
   next_backend="back_green"
@@ -198,15 +301,24 @@ fi
 
 echo "active backend: ${active_backend}"
 echo "next backend: ${next_backend}"
-echo "BACK_IMAGE: ${BACK_IMAGE:-unset}"
 
+action_backend_host="$(backend_host "${next_backend}")"
+
+echo "starting infra + ${next_backend} (${action_backend_host})"
 compose up -d db_1 redis_1 caddy cloudflared
 compose pull "${next_backend}"
 compose up -d "${next_backend}"
 
+ensure_caddyfile_back_active
+
+# Required by request: verify DNS for both color backends before cutover.
+check_all_backend_dns_from_caddy
 check_backend_health "${next_backend}"
-if ! verify_caddy_route_ready "${next_backend}"; then
-  echo "route verify failed before cutover; keeping ${active_backend} running and stopping ${next_backend}" >&2
+
+switch_active_alias "${next_backend}"
+
+if ! verify_caddy_route "${next_backend}" "${api_domain}"; then
+  rollback_to_backend "${active_backend}" "${api_domain}" || true
   compose stop "${next_backend}" || true
   exit 1
 fi
@@ -215,41 +327,14 @@ if [[ "${active_backend}" != "${next_backend}" ]]; then
   compose stop "${active_backend}" || true
 fi
 
-api_domain="$(env_value "API_DOMAIN")"
-if [[ -n "${api_domain}" ]]; then
-  post_stop_code="$(probe_caddy_http_code "${api_domain}")"
-  if ! [[ "${post_stop_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
-    echo "post-stop verify failed (status=${post_stop_code:-none}), attempting rollback to ${active_backend}" >&2
-    compose up -d "${active_backend}" || true
-
-    rollback_host="$(backend_host "${active_backend}")"
-    if ! resolve_in_caddy "${rollback_host}"; then
-      echo "rollback skipped: ${rollback_host} is not resolvable from caddy" >&2
-      compose logs --no-color --tail=120 caddy >&2 || true
-      exit 1
-    fi
-
-    if ! check_backend_health "${active_backend}"; then
-      echo "rollback skipped: ${active_backend} healthcheck failed" >&2
-      compose logs --no-color --tail=120 "${active_backend}" >&2 || true
-      exit 1
-    fi
-
-    rollback_code="$(probe_caddy_http_code "${api_domain}")"
-    if ! [[ "${rollback_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
-      echo "rollback failed: caddy status=${rollback_code:-none}" >&2
-      compose logs --no-color --tail=120 caddy >&2 || true
-      exit 1
-    fi
-
-    echo "${active_backend}" > "${STATE_FILE}"
-    echo "rollback recovered with ${active_backend} (status=${rollback_code})"
-    compose logs --no-color --tail=120 caddy >&2 || true
-    exit 1
-  fi
-  echo "post-stop verify ok (status=${post_stop_code})"
+post_code="$(probe_caddy_http_code "${api_domain}")"
+if ! [[ "${post_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+  echo "post-stop verify failed (status=${post_code:-none})" >&2
+  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  exit 1
 fi
 
 echo "${next_backend}" > "${STATE_FILE}"
 
+echo "post-stop verify ok (status=${post_code})"
 compose ps

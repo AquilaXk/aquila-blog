@@ -38,5 +38,19 @@ services:
       -c idle_in_transaction_session_timeout=60000
     volumes:
       - db_data:/var/lib/postgresql
+  minio_1:
+    image: minio/minio:latest
+    container_name: minio_1
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio1234
+      TZ: Asia/Seoul
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
 volumes:
   db_data:
+  minio_data:

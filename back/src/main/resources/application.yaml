@@ -121,3 +121,13 @@ custom:
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }
+  storage:
+    enabled: ${CUSTOM_STORAGE_ENABLED:false}
+    endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${CUSTOM_STORAGE_REGION:us-east-1}
+    bucket: ${CUSTOM_STORAGE_BUCKET:blog-images}
+    accessKey: ${CUSTOM_STORAGE_ACCESSKEY:}
+    secretKey: ${CUSTOM_STORAGE_SECRETKEY:}
+    pathStyleAccess: ${CUSTOM_STORAGE_PATHSTYLEACCESS:true}
+    keyPrefix: ${CUSTOM_STORAGE_KEYPREFIX:posts}
+    maxFileSizeBytes: ${CUSTOM_STORAGE_MAXFILESIZEBYTES:10485760}

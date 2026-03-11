@@ -93,7 +93,9 @@ jobs:
           tailscale status
 
           echo "tailscale ping test"
-          tailscale ping -c 3 "${HOME_HOST}"
+          if ! tailscale ping -c 3 "${HOME_HOST}"; then
+            echo "tailscale ping did not establish direct path (DERP-only or transient). Continue and rely on TCP SSH connectivity test."
+          fi
 
           echo "tcp connectivity test"
           if command -v nc >/dev/null 2>&1; then

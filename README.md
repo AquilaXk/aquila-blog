@@ -467,7 +467,26 @@ sudo tailscale up --ssh=false
 
 - Tailnet ACL/SSH 정책에서 CI 경로의 `check` 요구를 제거
 
-### 12.5 `cd: $HOME_APP_DIR: No such file or directory`
+### 12.5 Tailscale ping은 되는데 `direct connection not established`로 실패
+
+증상:
+
+- `tailscale ping -c 3 <HOME_HOST>` 결과에 `pong ... via DERP(...)` 출력
+- 마지막에 `direct connection not established`
+- 진단 스텝이 `exit code 1`로 실패
+
+원인:
+
+- GitHub Hosted Runner 네트워크 특성상 direct UDP 경로가 자주 성립하지 않음
+- DERP 릴레이 경유 자체는 정상 통신인데, `tailscale ping`은 direct 미성립 시 실패 코드를 반환할 수 있음
+
+해결:
+
+- 워크플로에서 `tailscale ping`은 soft-fail 처리
+- 최종 성공/실패 기준은 TCP SSH 연결 테스트(`nc -zv` 또는 `/dev/tcp`)로 판정
+- 현재 저장소의 `.github/workflows/deploy.yml`에 이미 반영됨
+
+### 12.6 `cd: $HOME_APP_DIR: No such file or directory`
 
 원인:
 
@@ -484,7 +503,7 @@ ls -ld /home/aquila/app
 ls -la /home/aquila/app/.git
 ```
 
-### 12.6 `Cannot connect to the Docker daemon`
+### 12.7 `Cannot connect to the Docker daemon`
 
 증상:
 
@@ -508,7 +527,7 @@ docker ps
 docker compose version
 ```
 
-### 12.7 API 502/504
+### 12.8 API 502/504
 
 ```bash
 docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs caddy
@@ -521,7 +540,7 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 - `deploy/homeserver/Caddyfile` upstream이 의도한 색상을 가리키는지
 - `.active_backend` 값이 실제 의도와 맞는지
 
-### 12.8 헬스체크 타임아웃
+### 12.9 헬스체크 타임아웃
 
 - 앱 기동 시간이 긴 경우 재시도 증가
 
@@ -529,7 +548,7 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 HEALTHCHECK_RETRIES=90 HEALTHCHECK_INTERVAL_SECONDS=2 ./deploy/homeserver/blue_green_deploy.sh
 ```
 
-### 12.9 Caddy 업스트림 DNS 조회 실패 (`lookup back-blue ...`)
+### 12.10 Caddy 업스트림 DNS 조회 실패 (`lookup back-blue ...`)
 
 증상:
 

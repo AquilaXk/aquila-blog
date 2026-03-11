@@ -1,5 +1,7 @@
 package com.back.global.system.`in`
 
+import com.back.boundedContexts.member.app.MemberFacade
+import jakarta.servlet.http.Cookie
 import org.hamcrest.Matchers.anyOf
 import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
@@ -19,6 +21,21 @@ import org.springframework.transaction.annotation.Transactional
 class ApiV1AdmSystemControllerTest {
     @Autowired
     private lateinit var mvc: MockMvc
+
+    @Autowired
+    private lateinit var memberFacade: MemberFacade
+
+    @Test
+    fun `관리자 apiKey 쿠키로 시스템 헬스 상태를 조회할 수 있다`() {
+        val admin = memberFacade.findByUsername("admin")!!
+
+        mvc.get("/system/api/v1/adm/health") {
+            cookie(Cookie("apiKey", admin.apiKey))
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value("UP") }
+        }
+    }
 
     @Test
     @WithUserDetails("admin")

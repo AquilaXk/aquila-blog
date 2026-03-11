@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.domain.shared
 
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileCard
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasSecurity
 import com.back.boundedContexts.post.domain.PostMember
 import com.back.global.app.AppConfig
@@ -21,42 +21,40 @@ import java.time.Instant
     """
     CREATE INDEX IF NOT EXISTS member_idx_created_at_desc
     ON member (created_at DESC)
-"""
+""",
 )
 @AfterDDL(
     """
         CREATE INDEX IF NOT EXISTS member_idx_modified_at_desc
         ON member (modified_at DESC)
-"""
+""",
 )
 @AfterDDL(
     """
     CREATE INDEX IF NOT EXISTS member_idx_pgroonga_username_nickname
     ON member USING pgroonga ((ARRAY["username"::text, "nickname"::text])
     pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')
-    """
+    """,
 )
 class Member(
     @field:Id
     @field:SequenceGenerator(name = "member_seq_gen", sequenceName = "member_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
     override val id: Int = 0,
-
     @field:NaturalId
     @field:Column(unique = true, nullable = false)
     val username: String,
-
     @field:Column(nullable = true)
     var password: String? = null,
-
     @field:Column(nullable = false)
     var nickname: String,
-
     @field:Column(unique = true, nullable = false)
     var apiKey: String,
-) : BaseTime(id), PostMember, MemberHasSecurity, MemberHasProfileImgUrl, MemberHasProfileCard {
-
-
+) : BaseTime(id),
+    PostMember,
+    MemberHasSecurity,
+    MemberHasProfileImgUrl,
+    MemberHasProfileCard {
     constructor(id: Int, username: String, password: String?, nickname: String) : this(
         id,
         username,
@@ -89,8 +87,10 @@ class Member(
     val isAdmin: Boolean
         get() = username == AppConfig.adminUsernameOrBlank
 
-
-    fun modify(nickname: String, profileImgUrl: String?) {
+    fun modify(
+        nickname: String,
+        profileImgUrl: String?,
+    ) {
         this.nickname = nickname
         profileImgUrl?.let { this.profileImgUrl = it }
     }

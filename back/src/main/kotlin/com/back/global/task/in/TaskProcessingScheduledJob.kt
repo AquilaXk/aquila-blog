@@ -23,37 +23,39 @@ class TaskProcessingScheduledJob(
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M")
     fun processTasks() {
-        val taskIds = transactionTemplate.execute {
-            val pendingTasks = taskRepository.findPendingTasksWithLock(10)
-            pendingTasks.forEach { it.markAsProcessing() }
-            pendingTasks.map { it.id }
-        }
+        val taskIds =
+            transactionTemplate.execute {
+                val pendingTasks = taskRepository.findPendingTasksWithLock(10)
+                pendingTasks.forEach { it.markAsProcessing() }
+                pendingTasks.map { it.id }
+            }
 
         taskIds?.forEach { taskId ->
             executor.submit { executeTask(taskId) }
         }
     }
 
-    private fun executeTask(taskId: Int) = transactionTemplate.execute {
-        val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
+    private fun executeTask(taskId: Int) =
+        transactionTemplate.execute {
+            val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
 
-        try {
-            val entry = taskHandlerRegistry.getEntry(task.taskType)
+            try {
+                val entry = taskHandlerRegistry.getEntry(task.taskType)
 
-            if (entry != null) {
-                val payload = Ut.JSON.fromString(task.payload, entry.payloadClass) as TaskPayload
-                entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
-                task.markAsCompleted()
-            } else {
-                logger.warn("No handler found for task type: ${task.taskType}")
-                task.errorMessage = "No handler found"
+                if (entry != null) {
+                    val payload = Ut.JSON.fromString(task.payload, entry.payloadClass) as TaskPayload
+                    entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
+                    task.markAsCompleted()
+                } else {
+                    logger.warn("No handler found for task type: ${task.taskType}")
+                    task.errorMessage = "No handler found"
+                    task.scheduleRetry()
+                }
+            } catch (e: Exception) {
+                val rootCause = e.cause ?: e
+                logger.error("Task failed: $taskId (retry: ${task.retryCount}/${task.maxRetries})", rootCause)
+                task.errorMessage = rootCause.message ?: rootCause::class.simpleName
                 task.scheduleRetry()
             }
-        } catch (e: Exception) {
-            val rootCause = e.cause ?: e
-            logger.error("Task failed: $taskId (retry: ${task.retryCount}/${task.maxRetries})", rootCause)
-            task.errorMessage = rootCause.message ?: rootCause::class.simpleName
-            task.scheduleRetry()
         }
-    }
 }

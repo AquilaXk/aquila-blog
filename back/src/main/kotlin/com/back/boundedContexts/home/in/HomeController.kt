@@ -63,14 +63,13 @@ class HomeController {
             |  <p>Host Address: ${localHost.hostAddress}</p>
             |</body>
             |</html>
-        """.trimMargin()
+            """.trimMargin()
     }
 
     @GetMapping("/session")
     @Operation(summary = "세션 확인")
-    fun session(session: HttpSession): Map<String, Any> {
-        return session.attributeNames
+    fun session(session: HttpSession): Map<String, Any> =
+        session.attributeNames
             .asSequence()
             .associateWith { name -> session.getAttribute(name) }
-    }
 }

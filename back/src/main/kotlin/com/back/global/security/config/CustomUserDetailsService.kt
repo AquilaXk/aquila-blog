@@ -1,6 +1,6 @@
 package com.back.global.security.config
 
-import com.back.boundedContexts.member.app.shared.ActorFacade
+import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.global.security.domain.SecurityUser
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
@@ -9,11 +9,12 @@ import org.springframework.stereotype.Service
 
 @Service
 class CustomUserDetailsService(
-    private val actorFacade: ActorFacade,
+    private val actorApplicationService: ActorApplicationService,
 ) : UserDetailsService {
     override fun loadUserByUsername(username: String): UserDetails {
-        val member = actorFacade.findByUsername(username)
-            ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다.")
+        val member =
+            actorApplicationService.findByUsername(username)
+                ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다.")
 
         return SecurityUser(
             member.id,

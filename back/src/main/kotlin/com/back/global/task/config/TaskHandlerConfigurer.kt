@@ -17,7 +17,6 @@ class TaskHandlerConfigurer(
     private val applicationContext: ApplicationContext,
     private val taskHandlerRegistry: TaskHandlerRegistry,
 ) : ApplicationListener<ContextRefreshedEvent> {
-
     override fun onApplicationEvent(event: ContextRefreshedEvent) {
         val beanFactory = applicationContext.autowireCapableBeanFactory as? ConfigurableListableBeanFactory
         applicationContext.beanDefinitionNames.forEach { beanName ->
@@ -32,12 +31,13 @@ class TaskHandlerConfigurer(
                     if (parameterTypes.size == 1 && TaskPayload::class.java.isAssignableFrom(parameterTypes[0])) {
                         @Suppress("UNCHECKED_CAST")
                         val payloadClass = parameterTypes[0] as Class<out TaskPayload>
-                        val type = payloadClass.getAnnotation(Task::class.java)?.type
-                            ?: error("No @Task annotation on ${payloadClass.simpleName}")
+                        val type =
+                            payloadClass.getAnnotation(Task::class.java)?.type
+                                ?: error("No @Task annotation on ${payloadClass.simpleName}")
 
                         taskHandlerRegistry.register(
                             type,
-                            TaskHandlerEntry(payloadClass, TaskHandlerMethod(bean, method))
+                            TaskHandlerEntry(payloadClass, TaskHandlerMethod(bean, method)),
                         )
                     }
                 }

@@ -1,12 +1,14 @@
 package com.back.boundedContexts.post.domain.postMixin
 
-import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 
 const val LIKES_COUNT = "likesCount"
 private const val LIKES_COUNT_DEFAULT_VALUE = 0
 
-data class PostLikeToggleResult(val isLiked: Boolean, val likeId: Int)
+data class PostLikeToggleResult(
+    val isLiked: Boolean,
+    val likeId: Int,
+)
 
 interface PostHasLikes : PostAware {
     var likesCount: Int

@@ -23,24 +23,32 @@ class RedisCacheConfig(
 ) {
     @Bean
     fun cacheManager(redisConnectionFactory: RedisConnectionFactory): CacheManager {
-        val ptv = BasicPolymorphicTypeValidator.builder()
-            .allowIfSubType(Any::class.java)
-            .build()
-        val serializer = GenericJacksonJsonRedisSerializer.builder()
-            .enableDefaultTyping(ptv)
-            .build()
+        val ptv =
+            BasicPolymorphicTypeValidator
+                .builder()
+                .allowIfSubType(Any::class.java)
+                .build()
+        val serializer =
+            GenericJacksonJsonRedisSerializer
+                .builder()
+                .enableDefaultTyping(ptv)
+                .build()
 
-        val defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
-            .entryTtl(Duration.ofSeconds(properties.ttlSeconds))
-            .serializeValuesWith(
-                RedisSerializationContext.SerializationPair.fromSerializer(serializer)
-            )
+        val defaultConfig =
+            RedisCacheConfiguration
+                .defaultCacheConfig()
+                .entryTtl(Duration.ofSeconds(properties.ttlSeconds))
+                .serializeValuesWith(
+                    RedisSerializationContext.SerializationPair.fromSerializer(serializer),
+                )
 
-        val perCacheConfigs = properties.ttlOverrides.mapValues { (_, seconds) ->
-            defaultConfig.entryTtl(Duration.ofSeconds(seconds))
-        }
+        val perCacheConfigs =
+            properties.ttlOverrides.mapValues { (_, seconds) ->
+                defaultConfig.entryTtl(Duration.ofSeconds(seconds))
+            }
 
-        return RedisCacheManager.builder(redisConnectionFactory)
+        return RedisCacheManager
+            .builder(redisConnectionFactory)
             .cacheDefaults(defaultConfig)
             .withInitialCacheConfigurations(perCacheConfigs)
             .build()

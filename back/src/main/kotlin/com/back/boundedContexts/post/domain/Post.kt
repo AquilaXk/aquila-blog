@@ -20,57 +20,55 @@ import java.time.Instant
     """
     CREATE INDEX IF NOT EXISTS post_idx_listed_created_at_desc
     ON post (listed, created_at DESC)
-    """
+    """,
 )
 @AfterDDL(
     """
     CREATE INDEX IF NOT EXISTS post_idx_listed_modified_at_desc
     ON post (listed, modified_at DESC)
-    """
+    """,
 )
 @AfterDDL(
     """
     CREATE INDEX IF NOT EXISTS post_idx_author_created_at_desc
     ON post (author_id, created_at DESC)
-    """
+    """,
 )
 @AfterDDL(
     """
     CREATE INDEX IF NOT EXISTS post_idx_author_modified_at_desc
     ON post (author_id, modified_at DESC)
-    """
+    """,
 )
 @AfterDDL(
     """
     CREATE INDEX IF NOT EXISTS idx_post_title_content_pgroonga
     ON post USING pgroonga ((ARRAY["title"::text, "content"::text])
     pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')
-    """
+    """,
 )
 class Post(
     @field:Id
     @field:SequenceGenerator(name = "post_seq_gen", sequenceName = "post_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "post_seq_gen")
     override val id: Int = 0,
-
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val author: Member,
-
     @field:Column(columnDefinition = "TEXT", nullable = false)
     var title: String,
-
     @field:Basic(fetch = FetchType.LAZY)
     @field:Column(columnDefinition = "TEXT", nullable = false)
     var content: String,
-
     @field:Column(nullable = false)
     var published: Boolean = false,
-
     @field:Column(nullable = false)
     var listed: Boolean = false,
-) : BaseTime(id), PostHasHit, PostHasLikes, PostHasComments, PostHasPolicy {
-
+) : BaseTime(id),
+    PostHasHit,
+    PostHasLikes,
+    PostHasComments,
+    PostHasPolicy {
     @field:Column
     var deletedAt: Instant? = null
 
@@ -89,7 +87,12 @@ class Post(
 
     override val post: Post get() = this
 
-    fun modify(title: String, content: String, published: Boolean? = null, listed: Boolean? = null) {
+    fun modify(
+        title: String,
+        content: String,
+        published: Boolean? = null,
+        listed: Boolean? = null,
+    ) {
         this.title = title
         this.content = content
         published?.let { this.published = it }

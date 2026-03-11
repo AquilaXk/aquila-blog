@@ -10,34 +10,34 @@ import org.springframework.context.annotation.Configuration
 @OpenAPIDefinition(info = Info(title = "API 서버", version = "beta", description = "API 서버 문서입니다."))
 class SpringDocConfig {
     @Bean
-    fun groupApiV1(): GroupedOpenApi {
-        return GroupedOpenApi.builder()
+    fun groupApiV1(): GroupedOpenApi =
+        GroupedOpenApi
+            .builder()
             .group("apiV1")
             .pathsToMatch("/*/api/v1/**")
             .build()
-    }
 
     @Bean
-    fun groupMemberApiV1(): GroupedOpenApi {
-        return GroupedOpenApi.builder()
+    fun groupMemberApiV1(): GroupedOpenApi =
+        GroupedOpenApi
+            .builder()
             .group("memberApiV1")
             .pathsToMatch("/member/api/v1/**")
             .build()
-    }
 
     @Bean
-    fun groupPostApiV1(): GroupedOpenApi {
-        return GroupedOpenApi.builder()
+    fun groupPostApiV1(): GroupedOpenApi =
+        GroupedOpenApi
+            .builder()
             .group("postApiV1")
             .pathsToMatch("/post/api/v1/**")
             .build()
-    }
 
     @Bean
-    fun groupController(): GroupedOpenApi {
-        return GroupedOpenApi.builder()
+    fun groupController(): GroupedOpenApi =
+        GroupedOpenApi
+            .builder()
             .group("controller")
             .pathsToExclude("/*/api/v1/**")
             .build()
-    }
 }

@@ -16,11 +16,16 @@ import javax.imageio.ImageIO
 
 object Ut {
     object JWT {
-        fun toString(secret: String, expireSeconds: Int, body: Map<String, Any>): String {
+        fun toString(
+            secret: String,
+            expireSeconds: Int,
+            body: Map<String, Any>,
+        ): String {
             val issuedAt = Date()
             val expiration = Date(issuedAt.time + 1000L * expireSeconds)
             val secretKey = Keys.hmacShaKeyFor(secret.toByteArray())
-            return Jwts.builder()
+            return Jwts
+                .builder()
                 .claims(body)
                 .issuedAt(issuedAt)
                 .expiration(expiration)
@@ -28,57 +33,70 @@ object Ut {
                 .compact()
         }
 
-        fun isValid(secret: String, jwtStr: String): Boolean {
-            return try {
+        fun isValid(
+            secret: String,
+            jwtStr: String,
+        ): Boolean =
+            try {
                 val secretKey = Keys.hmacShaKeyFor(secret.toByteArray())
-                Jwts.parser().verifyWith(secretKey).build().parse(jwtStr)
+                Jwts
+                    .parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parse(jwtStr)
                 true
             } catch (_: Exception) {
                 false
             }
-        }
 
-        fun payload(secret: String, jwtStr: String): Map<String, Any>? {
-            return try {
+        fun payload(
+            secret: String,
+            jwtStr: String,
+        ): Map<String, Any>? =
+            try {
                 val secretKey = Keys.hmacShaKeyFor(secret.toByteArray())
                 @Suppress("UNCHECKED_CAST")
-                Jwts.parser().verifyWith(secretKey).build().parse(jwtStr).payload as Map<String, Any>
+                Jwts
+                    .parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parse(jwtStr)
+                    .payload as Map<String, Any>
             } catch (_: Exception) {
                 null
             }
-        }
     }
 
     object JSON {
         lateinit var objectMapper: ObjectMapper
 
-        fun toString(obj: Any, defaultValue: String = ""): String {
-            return try {
+        fun toString(
+            obj: Any,
+            defaultValue: String = "",
+        ): String =
+            try {
                 objectMapper.writeValueAsString(obj)
             } catch (_: Exception) {
                 defaultValue
             }
-        }
 
-        inline fun <reified T> fromMap(map: Any?): T {
-            return objectMapper.convertValue(map, T::class.java)
-        }
+        inline fun <reified T> fromMap(map: Any?): T = objectMapper.convertValue(map, T::class.java)
 
-        fun <T> fromString(json: String, cls: Class<T>): T {
-            return objectMapper.readValue(json, cls)
-        }
+        fun <T> fromString(
+            json: String,
+            cls: Class<T>,
+        ): T = objectMapper.readValue(json, cls)
 
-        inline fun <reified T> fromString(json: String): T {
-            return objectMapper.readValue(json, T::class.java)
-        }
+        inline fun <reified T> fromString(json: String): T = objectMapper.readValue(json, T::class.java)
     }
 
     object CMD {
         fun run(vararg args: String) {
             val isWindows = System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")
-            val builder = ProcessBuilder(
-                args.map { it.replace("{{DOT_CMD}}", if (isWindows) ".cmd" else "") }.toList()
-            )
+            val builder =
+                ProcessBuilder(
+                    args.map { it.replace("{{DOT_CMD}}", if (isWindows) ".cmd" else "") }.toList(),
+                )
             builder.redirectErrorStream(true)
             val process = builder.start()
             process.inputStream.bufferedReader().useLines { lines -> lines.forEach { println(it) } }
@@ -92,49 +110,52 @@ object Ut {
     }
 
     object FILE {
-        private val MIME_TYPE_MAP: LinkedHashMap<String, String> = linkedMapOf(
-            "application/json" to "json",
-            "text/plain" to "txt",
-            "text/html" to "html",
-            "text/css" to "css",
-            "application/javascript" to "js",
-            "image/jpeg" to "jpg",
-            "image/png" to "png",
-            "image/gif" to "gif",
-            "image/webp" to "webp",
-            "image/svg+xml" to "svg",
-            "application/pdf" to "pdf",
-            "application/xml" to "xml",
-            "application/zip" to "zip",
-            "application/gzip" to "gz",
-            "application/x-tar" to "tar",
-            "application/x-7z-compressed" to "7z",
-            "application/vnd.rar" to "rar",
-            "audio/mpeg" to "mp3",
-            "audio/mp4" to "m4a",
-            "audio/x-m4a" to "m4a",
-            "audio/wav" to "wav",
-            "video/quicktime" to "mov",
-            "video/mp4" to "mp4",
-            "video/webm" to "webm",
-            "video/x-msvideo" to "avi"
-        )
+        private val MIME_TYPE_MAP: LinkedHashMap<String, String> =
+            linkedMapOf(
+                "application/json" to "json",
+                "text/plain" to "txt",
+                "text/html" to "html",
+                "text/css" to "css",
+                "application/javascript" to "js",
+                "image/jpeg" to "jpg",
+                "image/png" to "png",
+                "image/gif" to "gif",
+                "image/webp" to "webp",
+                "image/svg+xml" to "svg",
+                "application/pdf" to "pdf",
+                "application/xml" to "xml",
+                "application/zip" to "zip",
+                "application/gzip" to "gz",
+                "application/x-tar" to "tar",
+                "application/x-7z-compressed" to "7z",
+                "application/vnd.rar" to "rar",
+                "audio/mpeg" to "mp3",
+                "audio/mp4" to "m4a",
+                "audio/x-m4a" to "m4a",
+                "audio/wav" to "wav",
+                "video/quicktime" to "mov",
+                "video/mp4" to "mp4",
+                "video/webm" to "webm",
+                "video/x-msvideo" to "avi",
+            )
 
         fun getFileExt(filePath: String): String {
             val filename = Path.of(filePath).fileName.toString()
             return if (filename.contains(".")) filename.substring(filename.lastIndexOf('.') + 1) else ""
         }
 
-        fun getFileExtTypeCodeFromFileExt(ext: String): String {
-            return when (ext) {
+        fun getFileExtTypeCodeFromFileExt(ext: String): String =
+            when (ext) {
                 "jpeg", "jpg", "gif", "png", "svg", "webp" -> "img"
                 "mp4", "avi", "mov" -> "video"
                 "mp3", "m4a" -> "audio"
                 else -> "etc"
             }
-        }
 
-        fun copy(filePath: String, newFilePath: String) {
+        fun copy(
+            filePath: String,
+            newFilePath: String,
+        ) {
             mkdir(Paths.get(newFilePath).parent.toString())
             Files.copy(Path.of(filePath), Path.of(newFilePath), StandardCopyOption.REPLACE_EXISTING)
         }
@@ -145,9 +166,7 @@ object Ut {
             Files.createDirectories(path)
         }
 
-        fun getContentType(fileExt: String): String {
-            return MIME_TYPE_MAP.entries.find { it.value == fileExt }?.key ?: "application/octet-stream"
-        }
+        fun getContentType(fileExt: String): String = MIME_TYPE_MAP.entries.find { it.value == fileExt }?.key ?: "application/octet-stream"
 
         fun getMetadata(filePath: String): Map<String, Any> {
             val ext = getFileExt(filePath)
@@ -173,7 +192,12 @@ object Ut {
             return metadata
         }
 
-        fun makeThumbnail(srcFilePath: String, destFilePath: String, maxWidth: Int, maxHeight: Int = maxWidth): Boolean {
+        fun makeThumbnail(
+            srcFilePath: String,
+            destFilePath: String,
+            maxWidth: Int,
+            maxHeight: Int = maxWidth,
+        ): Boolean {
             return try {
                 val originalImage = ImageIO.read(File(srcFilePath)) ?: return false
                 val originalWidth = originalImage.width

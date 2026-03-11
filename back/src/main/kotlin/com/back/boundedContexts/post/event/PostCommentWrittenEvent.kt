@@ -10,26 +10,32 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonProperty
 import java.util.*
 
-data class PostCommentWrittenEvent @JsonCreator constructor(
-    override val uid: UUID,
-    override val aggregateType: String,
-    override val aggregateId: Int,
-    @field:JsonIgnore
-    @JsonProperty("postCommentDto")
-    val postCommentDto: PostCommentDto,
-    @field:JsonIgnore
-    @JsonProperty("postDto")
-    val postDto: PostDto,
-    val actorDto: MemberDto,
-) : EventPayload {
+data class PostCommentWrittenEvent
+    @JsonCreator
+    constructor(
+        override val uid: UUID,
+        override val aggregateType: String,
+        override val aggregateId: Int,
+        @field:JsonIgnore
+        @JsonProperty("postCommentDto")
+        val postCommentDto: PostCommentDto,
+        @field:JsonIgnore
+        @JsonProperty("postDto")
+        val postDto: PostDto,
+        val actorDto: MemberDto,
+    ) : EventPayload {
+        @JsonGetter("postCommentDto")
+        fun getPostCommentDtoForJson() = postCommentDto.forEventLog()
 
-    @JsonGetter("postCommentDto")
-    fun getPostCommentDtoForJson() = postCommentDto.forEventLog()
+        @JsonGetter("postDto")
+        fun getPostDtoForJson() = postDto.forEventLog()
 
-    @JsonGetter("postDto")
-    fun getPostDtoForJson() = postDto.forEventLog()
-
-    constructor(uid: UUID, postCommentDto: PostCommentDto, postDto: PostDto, actorDto: MemberDto) : this(
-        uid, postCommentDto::class.simpleName!!, postCommentDto.id, postCommentDto, postDto, actorDto
-    )
-}
+        constructor(uid: UUID, postCommentDto: PostCommentDto, postDto: PostDto, actorDto: MemberDto) : this(
+            uid,
+            postCommentDto::class.simpleName!!,
+            postCommentDto.id,
+            postCommentDto,
+            postDto,
+            actorDto,
+        )
+    }

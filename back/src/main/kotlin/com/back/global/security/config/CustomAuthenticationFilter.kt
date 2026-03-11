@@ -1,6 +1,6 @@
 package com.back.global.security.config
 
-import com.back.boundedContexts.member.app.shared.ActorFacade
+import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
@@ -23,7 +23,7 @@ import tools.jackson.databind.ObjectMapper
 
 @Component
 class CustomAuthenticationFilter(
-    private val actorFacade: ActorFacade,
+    private val actorApplicationService: ActorApplicationService,
     private val objectMapper: ObjectMapper,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
@@ -84,7 +84,7 @@ class CustomAuthenticationFilter(
         val payloadMember =
             accessToken
                 .takeIf { it.isNotBlank() }
-                ?.let(actorFacade::payload)
+                ?.let(actorApplicationService::payload)
                 ?.let { Member(it.id, it.username, null, it.name) }
 
         if (payloadMember != null) {
@@ -93,10 +93,10 @@ class CustomAuthenticationFilter(
         }
 
         val member =
-            actorFacade.findByApiKey(apiKey)
+            actorApplicationService.findByApiKey(apiKey)
                 ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
-        val newAccessToken = actorFacade.genAccessToken(member)
+        val newAccessToken = actorApplicationService.genAccessToken(member)
         rq.setCookie("accessToken", newAccessToken)
         rq.setHeader(HttpHeaders.AUTHORIZATION, newAccessToken)
 

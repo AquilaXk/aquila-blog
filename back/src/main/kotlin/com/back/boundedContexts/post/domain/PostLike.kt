@@ -10,19 +10,17 @@ import org.hibernate.annotations.DynamicUpdate
 @DynamicUpdate
 @Table(
     uniqueConstraints = [
-        UniqueConstraint(columnNames = ["liker_id", "post_id"])
-    ]
+        UniqueConstraint(columnNames = ["liker_id", "post_id"]),
+    ],
 )
 class PostLike(
     @field:Id
     @field:SequenceGenerator(name = "post_like_seq_gen", sequenceName = "post_like_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "post_like_seq_gen")
     override val id: Int = 0,
-
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val liker: Member,
-
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val post: Post,

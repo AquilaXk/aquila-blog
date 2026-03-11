@@ -11,6 +11,5 @@ import org.springframework.data.redis.connection.RedisConnectionFactory
 @EnableSchedulerLock(defaultLockAtMostFor = "PT2H")
 class ShedLockConfig {
     @Bean
-    fun lockProvider(redisConnectionFactory: RedisConnectionFactory): LockProvider =
-        RedisLockProvider(redisConnectionFactory)
+    fun lockProvider(redisConnectionFactory: RedisConnectionFactory): LockProvider = RedisLockProvider(redisConnectionFactory)
 }

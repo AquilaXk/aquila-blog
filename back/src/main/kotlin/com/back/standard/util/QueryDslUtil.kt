@@ -12,7 +12,7 @@ object QueryDslUtil {
     fun <T> applySorting(
         query: JPAQuery<T>,
         pageable: Pageable,
-        pathProvider: (String) -> Path<out Comparable<*>>?
+        pathProvider: (String) -> Path<out Comparable<*>>?,
     ) {
         pageable.sort.forEach { order ->
             val path = pathProvider(order.property) ?: return@forEach
@@ -20,8 +20,8 @@ object QueryDslUtil {
             query.orderBy(
                 OrderSpecifier(
                     if (order.isAscending) Order.ASC else Order.DESC,
-                    path as Expression<Comparable<*>>
-                )
+                    path as Expression<Comparable<*>>,
+                ),
             )
         }
     }

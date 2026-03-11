@@ -1,6 +1,6 @@
 package com.back.global.security.config.oauth2
 
-import com.back.boundedContexts.member.app.shared.ActorFacade
+import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.global.exception.app.AppException
 import com.back.global.security.config.oauth2.app.OAuth2State
 import com.back.global.security.domain.SecurityUser
@@ -14,9 +14,8 @@ import org.springframework.transaction.annotation.Transactional
 
 @Component
 class CustomOAuth2LoginSuccessHandler(
-    private val actorFacade: ActorFacade,
+    private val actorApplicationService: ActorApplicationService,
 ) : AuthenticationSuccessHandler {
-
     @Transactional(readOnly = true)
     override fun onAuthenticationSuccess(
         request: HttpServletRequest,
@@ -24,23 +23,29 @@ class CustomOAuth2LoginSuccessHandler(
         authentication: Authentication,
     ) {
         val securityUser = authentication.principal as SecurityUser
-        val actor = actorFacade.memberOf(securityUser)
+        val actor = actorApplicationService.memberOf(securityUser)
 
-        val accessToken = actorFacade.genAccessToken(actor)
+        val accessToken = actorApplicationService.genAccessToken(actor)
 
         response.addAuthCookie("apiKey", actor.apiKey)
         response.addAuthCookie("accessToken", accessToken)
 
-        val stateParam = request.getParameter("state")
-            ?: throw AppException("400-1", "state 파라미터가 없습니다.")
+        val stateParam =
+            request.getParameter("state")
+                ?: throw AppException("400-1", "state 파라미터가 없습니다.")
         val state = OAuth2State.decode(stateParam)
         response.sendRedirect(state.redirectUrl)
     }
 
-    private fun HttpServletResponse.addAuthCookie(name: String, value: String) {
-        addCookie(Cookie(name, value).apply {
-            path = "/"
-            isHttpOnly = true
-        })
+    private fun HttpServletResponse.addAuthCookie(
+        name: String,
+        value: String,
+    ) {
+        addCookie(
+            Cookie(name, value).apply {
+                path = "/"
+                isHttpOnly = true
+            },
+        )
     }
 }

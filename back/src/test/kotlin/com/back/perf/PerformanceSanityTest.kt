@@ -1,7 +1,7 @@
 package com.back.perf
 
-import com.back.boundedContexts.member.app.shared.ActorFacade
-import com.back.boundedContexts.post.app.PostFacade
+import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.post.application.service.PostApplicationService
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
@@ -33,10 +33,10 @@ class PerformanceSanityTest {
     private lateinit var mvc: MockMvc
 
     @Autowired
-    private lateinit var actorFacade: ActorFacade
+    private lateinit var actorApplicationService: ActorApplicationService
 
     @Autowired
-    private lateinit var postFacade: PostFacade
+    private lateinit var postFacade: PostApplicationService
 
     @Autowired
     private lateinit var entityManagerFactory: EntityManagerFactory
@@ -51,11 +51,12 @@ class PerformanceSanityTest {
 
     @Test
     fun `post list query count sanity`() {
-        val admin = actorFacade.findByUsername("admin")!!
+        val admin = actorApplicationService.findByUsername("admin")!!
         postFacade.write(admin, "sanity list title", "sanity list content", true, true)
         statistics.clear()
 
-        mvc.get("/post/api/v1/posts?page=1&pageSize=10")
+        mvc
+            .get("/post/api/v1/posts?page=1&pageSize=10")
             .andExpect {
                 status { isOk() }
             }
@@ -65,11 +66,12 @@ class PerformanceSanityTest {
 
     @Test
     fun `post detail query count sanity`() {
-        val admin = actorFacade.findByUsername("admin")!!
+        val admin = actorApplicationService.findByUsername("admin")!!
         val post = postFacade.write(admin, "sanity detail title", "sanity detail content", true, true)
         statistics.clear()
 
-        mvc.get("/post/api/v1/posts/${post.id}")
+        mvc
+            .get("/post/api/v1/posts/${post.id}")
             .andExpect {
                 status { isOk() }
             }
@@ -80,16 +82,17 @@ class PerformanceSanityTest {
     @Test
     @WithUserDetails("user1")
     fun `write comment query count sanity`() {
-        val admin = actorFacade.findByUsername("admin")!!
+        val admin = actorApplicationService.findByUsername("admin")!!
         val post = postFacade.write(admin, "sanity comment title", "sanity comment content", true, true)
         statistics.clear()
 
-        mvc.post("/post/api/v1/posts/${post.id}/comments") {
-            contentType = MediaType.APPLICATION_JSON
-            content = """{"content":"댓글 내용"}"""
-        }.andExpect {
-            status { isCreated() }
-        }
+        mvc
+            .post("/post/api/v1/posts/${post.id}/comments") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"content":"댓글 내용"}"""
+            }.andExpect {
+                status { isCreated() }
+            }
 
         assertQueryCountWithin("comment-write", 20)
     }
@@ -97,11 +100,12 @@ class PerformanceSanityTest {
     @Test
     @WithUserDetails("user1")
     fun `toggle like query count sanity`() {
-        val admin = actorFacade.findByUsername("admin")!!
+        val admin = actorApplicationService.findByUsername("admin")!!
         val post = postFacade.write(admin, "sanity like title", "sanity like content", true, true)
         statistics.clear()
 
-        mvc.post("/post/api/v1/posts/${post.id}/like")
+        mvc
+            .post("/post/api/v1/posts/${post.id}/like")
             .andExpect {
                 status { isOk() }
             }
@@ -113,23 +117,27 @@ class PerformanceSanityTest {
     fun `auth login query count sanity`() {
         statistics.clear()
 
-        mvc.post("/member/api/v1/auth/login") {
-            contentType = MediaType.APPLICATION_JSON
-            content =
-                """
-                {
-                    "username": "user1",
-                    "password": "1234"
-                }
-                """.trimIndent()
-        }.andExpect {
-            status { isOk() }
-        }
+        mvc
+            .post("/member/api/v1/auth/login") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "username": "user1",
+                        "password": "1234"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+            }
 
         assertQueryCountWithin("auth-login", 10)
     }
 
-    private fun assertQueryCountWithin(scenario: String, maxInclusive: Long) {
+    private fun assertQueryCountWithin(
+        scenario: String,
+        maxInclusive: Long,
+    ) {
         val queryCount = statistics.prepareStatementCount
         println("PERF_SANITY scenario=$scenario queryCount=$queryCount max=$maxInclusive")
         assertThat(queryCount).isBetween(1, maxInclusive)

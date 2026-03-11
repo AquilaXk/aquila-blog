@@ -1,12 +1,12 @@
 package com.back.global.system.`in`
 
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.data.redis.core.StringRedisTemplate
 import java.lang.management.ManagementFactory
 import java.time.Instant
 
@@ -41,10 +41,11 @@ class ApiV1AdmSystemController(
             serverTime = Instant.now().toString(),
             uptimeMs = ManagementFactory.getRuntimeMXBean().uptime,
             version = this::class.java.`package`?.implementationVersion ?: "dev",
-            checks = HealthChecks(
-                db = db,
-                redis = redis,
-            ),
+            checks =
+                HealthChecks(
+                    db = db,
+                    redis = redis,
+                ),
         )
     }
 

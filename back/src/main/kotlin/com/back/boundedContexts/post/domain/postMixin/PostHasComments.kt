@@ -1,7 +1,6 @@
 package com.back.boundedContexts.post.domain.postMixin
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostComment
 
@@ -18,7 +17,11 @@ interface PostHasComments : PostAware {
             attr.intValue = value
         }
 
-    fun newComment(author: Member, content: String, parentComment: PostComment? = null): PostComment =
+    fun newComment(
+        author: Member,
+        content: String,
+        parentComment: PostComment? = null,
+    ): PostComment =
         PostComment(
             id = 0,
             author = author,

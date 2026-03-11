@@ -1,6 +1,6 @@
 package com.back.global.security.config.oauth2
 
-import com.back.boundedContexts.member.app.MemberFacade
+import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
 import com.back.global.security.domain.SecurityUser
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
@@ -9,7 +9,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 private enum class OAuth2Provider {
-    KAKAO;
+    KAKAO,
+    ;
 
     companion object {
         fun from(registrationId: String): OAuth2Provider =
@@ -20,38 +21,38 @@ private enum class OAuth2Provider {
 
 @Service
 class CustomOAuth2UserService(
-    private val memberFacade: MemberFacade
+    private val memberUseCase: MemberUseCase,
 ) : DefaultOAuth2UserService() {
-
     @Transactional
     override fun loadUser(userRequest: OAuth2UserRequest): OAuth2User {
         val oAuth2User = super.loadUser(userRequest)
         val provider = OAuth2Provider.from(userRequest.clientRegistration.registrationId)
 
-        val (oauthUserId, nickname, profileImgUrl) = when (provider) {
-            OAuth2Provider.KAKAO -> {
-                @Suppress("UNCHECKED_CAST")
-                val props = (oAuth2User.attributes.getValue("properties") as Map<String, Any>)
+        val (oauthUserId, nickname, profileImgUrl) =
+            when (provider) {
+                OAuth2Provider.KAKAO -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val props = (oAuth2User.attributes.getValue("properties") as Map<String, Any>)
 
-                Triple(
-                    oAuth2User.name,
-                    props.getValue("nickname") as String,
-                    props.getValue("profile_image") as String
-                )
+                    Triple(
+                        oAuth2User.name,
+                        props.getValue("nickname") as String,
+                        props.getValue("profile_image") as String,
+                    )
+                }
             }
-        }
 
         val username = "${provider.name}__$oauthUserId"
         val password = ""
 
-        val member = memberFacade.modifyOrJoin(username, password, nickname, profileImgUrl).data
+        val member = memberUseCase.modifyOrJoin(username, password, nickname, profileImgUrl).data
 
         return SecurityUser(
             member.id,
             member.username,
             member.password ?: "",
             member.name,
-            member.authorities
+            member.authorities,
         )
     }
 }

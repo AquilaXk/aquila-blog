@@ -1,6 +1,5 @@
 import styled from "@emotion/styled"
 import { NextPage } from "next"
-import Image from "next/image"
 import { useRouter } from "next/router"
 import { ClipboardEvent, useEffect, useRef, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
@@ -515,12 +514,10 @@ const AdminPage: NextPage = () => {
         </Row>
         {profileImgInputUrl.trim().length > 0 && (
           <ProfilePreview>
-            <Image
+            <img
               className="previewImage"
               src={profileImgInputUrl.trim()}
               alt="profile preview"
-              width={92}
-              height={92}
             />
           </ProfilePreview>
         )}

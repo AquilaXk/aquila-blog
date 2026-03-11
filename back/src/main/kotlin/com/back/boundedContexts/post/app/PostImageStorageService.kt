@@ -33,50 +33,61 @@ class PostImageStorageService(
 
     private val datePathFormatter = DateTimeFormatter.ofPattern("yyyy/MM")
     private val logger = LoggerFactory.getLogger(javaClass)
+    private val initLock = Any()
 
+    @Volatile
     private var s3Client: S3Client? = null
+
+    @Volatile
     private var initErrorMessage: String? = null
 
     @PostConstruct
     fun initializeBucket() {
+        initializeStorage(forceRetry = true)
+    }
+
+    // Storage may be unavailable during app boot (container startup race).
+    // Keep this method retryable so requests can recover without a backend restart.
+    private fun initializeStorage(forceRetry: Boolean) {
         if (!properties.enabled) return
 
-        val client = try {
-            buildClient()
-        } catch (e: Exception) {
-            initErrorMessage = "이미지 스토리지 설정 오류: ${e.message ?: "알 수 없는 오류"}"
-            logger.error("Post image storage client initialization failed: {}", initErrorMessage)
-            return
-        }
+        synchronized(initLock) {
+            if (!forceRetry && s3Client != null && initErrorMessage == null) return
 
-        s3Client = client
+            val client = try {
+                s3Client ?: buildClient()
+            } catch (e: Exception) {
+                initErrorMessage = "이미지 스토리지 설정 오류: ${e.message ?: "알 수 없는 오류"}"
+                logger.error("Post image storage client initialization failed", e)
+                return
+            }
+            s3Client = client
 
-        try {
-            client.headBucket(
-                HeadBucketRequest.builder()
-                    .bucket(properties.bucket)
-                    .build()
-            )
-        } catch (headError: Exception) {
             try {
-                client.createBucket(
-                    CreateBucketRequest.builder()
+                client.headBucket(
+                    HeadBucketRequest.builder()
                         .bucket(properties.bucket)
                         .build()
                 )
-            } catch (createError: Exception) {
-                initErrorMessage = "스토리지 버킷 초기화 실패: ${createError.message ?: headError.message ?: "알 수 없는 오류"}"
-                logger.error("Post image storage bucket initialization failed", createError)
-                return
+                initErrorMessage = null
+            } catch (headError: Exception) {
+                try {
+                    client.createBucket(
+                        CreateBucketRequest.builder()
+                            .bucket(properties.bucket)
+                            .build()
+                    )
+                    initErrorMessage = null
+                } catch (createError: Exception) {
+                    initErrorMessage = "스토리지 버킷 초기화 실패: ${createError.message ?: headError.message ?: "알 수 없는 오류"}"
+                    logger.error("Post image storage bucket initialization failed", createError)
+                }
             }
         }
-
-        initErrorMessage = null
     }
 
     fun uploadPostImage(file: MultipartFile): String {
         val client = requireClient()
-
         if (file.isEmpty) throw AppException("400-1", "이미지 파일이 비어 있습니다.")
         if (file.size > properties.maxFileSizeBytes) {
             throw AppException("400-1", "이미지 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.")
@@ -135,6 +146,10 @@ class PostImageStorageService(
     private fun requireClient(): S3Client {
         ensureStorageEnabled()
 
+        if (s3Client == null || initErrorMessage != null) {
+            initializeStorage(forceRetry = true)
+        }
+
         initErrorMessage?.let {
             throw AppException("503-1", it)
         }
@@ -143,17 +158,25 @@ class PostImageStorageService(
     }
 
     private fun buildClient(): S3Client {
-        if (properties.accessKey.isBlank() || properties.secretKey.isBlank()) {
+        val accessKey = resolveProperty(
+            rawValue = properties.accessKey,
+            envKeyName = "CUSTOM_STORAGE_ACCESSKEY",
+            fallbackEnvKeyName = "MINIO_ROOT_USER"
+        )
+        val secretKey = resolveProperty(
+            rawValue = properties.secretKey,
+            envKeyName = "CUSTOM_STORAGE_SECRETKEY",
+            fallbackEnvKeyName = "MINIO_ROOT_PASSWORD"
+        )
+
+        if (accessKey.isBlank() || secretKey.isBlank()) {
             throw IllegalArgumentException("스토리지 계정 정보가 비어 있습니다.")
         }
-        if (properties.accessKey.contains("\${") || properties.secretKey.contains("\${")) {
-            throw IllegalArgumentException("CUSTOM_STORAGE_ACCESSKEY 또는 CUSTOM_STORAGE_SECRETKEY에 미해결 placeholder가 포함되어 있습니다.")
-        }
-
-        val endpoint = properties.endpoint.trim()
-        if (endpoint.contains("\${")) {
-            throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT에 미해결 placeholder가 포함되어 있습니다. (현재: $endpoint)")
-        }
+        val endpoint = resolveProperty(
+            rawValue = properties.endpoint,
+            envKeyName = "CUSTOM_STORAGE_ENDPOINT",
+            fallbackEnvKeyName = null
+        )
         if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
             throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT 형식이 올바르지 않습니다. (현재: $endpoint)")
         }
@@ -169,11 +192,36 @@ class PostImageStorageService(
             .region(Region.of(properties.region))
             .credentialsProvider(
                 StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(properties.accessKey, properties.secretKey)
+                    AwsBasicCredentials.create(accessKey, secretKey)
                 )
             )
             .forcePathStyle(properties.pathStyleAccess)
             .build()
+    }
+
+    private fun resolveProperty(
+        rawValue: String,
+        envKeyName: String,
+        fallbackEnvKeyName: String?,
+    ): String {
+        val trimmed = rawValue.trim()
+        val resolved = resolveEnvReference(trimmed)
+            ?: trimmed
+            .ifBlank { fallbackEnvKeyName?.let { System.getenv(it)?.trim().orEmpty() } ?: "" }
+
+        if (resolved.contains("\${")) {
+            throw IllegalArgumentException("${envKeyName}에 미해결 placeholder가 포함되어 있습니다. (현재: $resolved)")
+        }
+
+        return resolved
+    }
+
+    private fun resolveEnvReference(value: String): String? {
+        val match = ENV_REFERENCE_REGEX.matchEntire(value) ?: return null
+        val envName = match.groupValues[1]
+        val defaultValue = match.groupValues.getOrNull(2).orEmpty()
+        val envValue = System.getenv(envName)?.trim().orEmpty()
+        return if (envValue.isNotBlank()) envValue else defaultValue
     }
 
     private fun buildObjectKey(originalFilename: String?): String {
@@ -198,5 +246,9 @@ class PostImageStorageService(
         if (objectKey.isBlank() || objectKey.contains("..") || objectKey.startsWith("/")) {
             throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
         }
+    }
+
+    companion object {
+        private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
     }
 }

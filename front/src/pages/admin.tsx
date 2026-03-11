@@ -80,6 +80,20 @@ const toFlags = (visibility: PostVisibility): { published: boolean; listed: bool
 
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
 
+const parseResponseErrorBody = async (response: Response): Promise<string> => {
+  const text = await response.text().catch(() => "")
+  if (!text) return ""
+
+  try {
+    const parsed = JSON.parse(text) as { resultCode?: string; msg?: string }
+    const msg = parsed.msg?.trim()
+    if (!msg) return text
+    return parsed.resultCode ? `${msg} (${parsed.resultCode})` : msg
+  } catch {
+    return text
+  }
+}
+
 const escapePipes = (value: string) => value.replace(/\|/g, "\\|")
 
 const nodeText = (node: Node): string => {
@@ -453,8 +467,8 @@ const AdminPage: NextPage = () => {
       )
 
       if (!uploadResponse.ok) {
-        const text = await uploadResponse.text().catch(() => "")
-        throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${text}`.trim())
+        const body = await parseResponseErrorBody(uploadResponse)
+        throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${body}`.trim())
       }
 
       const uploadData = (await uploadResponse.json()) as {
@@ -752,7 +766,7 @@ const AdminPage: NextPage = () => {
     })
 
     if (!response.ok) {
-      const body = await response.text().catch(() => "")
+      const body = await parseResponseErrorBody(response)
       throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
     }
 

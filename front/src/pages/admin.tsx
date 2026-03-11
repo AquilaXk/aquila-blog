@@ -3,9 +3,7 @@ import { NextPage } from "next"
 import { useRouter } from "next/router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
-import NotionRenderer, {
-  markdownGuide,
-} from "src/routes/Detail/components/NotionRenderer"
+import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -33,6 +31,7 @@ const AdminPage: NextPage = () => {
   const [postContent, setPostContent] = useState("")
   const [postPublished, setPostPublished] = useState(false)
   const [postListed, setPostListed] = useState(false)
+  const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
 
   const [listPage, setListPage] = useState("1")
@@ -261,6 +260,7 @@ const AdminPage: NextPage = () => {
     body: string
   ) => {
     insertSnippet(`> [!${kind}]\n> ${body}\n`)
+    setIsCalloutMenuOpen(false)
   }
 
   if (authLoading || !me) {
@@ -478,36 +478,45 @@ const AdminPage: NextPage = () => {
             <Button type="button" onClick={insertLink}>
               링크
             </Button>
-            <Button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
-              TIP
-            </Button>
-            <Button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
-              INFO
-            </Button>
-            <Button
-              type="button"
-              onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
-            >
-              WARNING
-            </Button>
-            <Button
-              type="button"
-              onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}
-            >
-              OUTLINE
-            </Button>
-            <Button
-              type="button"
-              onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}
-            >
-              EXAMPLE
-            </Button>
-            <Button
-              type="button"
-              onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}
-            >
-              SUMMARY
-            </Button>
+            <CalloutDropdown>
+              <Button type="button" onClick={() => setIsCalloutMenuOpen((prev) => !prev)}>
+                콜아웃 ▾
+              </Button>
+              {isCalloutMenuOpen && (
+                <CalloutMenu>
+                  <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
+                    TIP
+                  </button>
+                  <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
+                    INFO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
+                  >
+                    WARNING
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}
+                  >
+                    OUTLINE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}
+                  >
+                    EXAMPLE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}
+                  >
+                    SUMMARY
+                  </button>
+                </CalloutMenu>
+              )}
+            </CalloutDropdown>
             <Button
               type="button"
               onClick={() =>
@@ -542,7 +551,6 @@ const AdminPage: NextPage = () => {
           <EditorGrid>
             <EditorPane>
               <PaneTitle>Markdown 입력</PaneTitle>
-              <EditorHint>{markdownGuide}</EditorHint>
               <ContentInput
                 ref={postContentRef}
                 placeholder="Markdown으로 본문을 작성하세요."
@@ -838,6 +846,41 @@ const EditorToolbar = styled.div`
   border-bottom: 1px dashed ${({ theme }) => theme.colors.gray7};
 `
 
+const CalloutDropdown = styled.div`
+  position: relative;
+`
+
+const CalloutMenu = styled.div`
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  min-width: 10rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  padding: 0.3rem;
+  display: grid;
+  gap: 0.25rem;
+
+  button {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0.4rem 0.55rem;
+    text-align: left;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    cursor: pointer;
+    font-size: 0.82rem;
+
+    &:hover {
+      background: ${({ theme }) => theme.colors.gray3};
+      border-color: ${({ theme }) => theme.colors.gray6};
+    }
+  }
+`
+
 const EditorGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -858,18 +901,6 @@ const PaneTitle = styled.h3`
   margin: 0 0 0.45rem;
   font-size: 0.92rem;
   color: ${({ theme }) => theme.colors.gray12};
-`
-
-const EditorHint = styled.pre`
-  margin: 0 0 0.45rem;
-  padding: 0.6rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
 `
 
 const ContentInput = styled.textarea`

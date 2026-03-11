@@ -39,6 +39,18 @@ class MemberProxy(
     override val profileImgUrlOrDefault: String
         get() = real.profileImgUrlOrDefault
 
+    override var profileRole
+        get() = real.profileRole
+        set(value) {
+            real.profileRole = value
+        }
+
+    override var profileBio
+        get() = real.profileBio
+        set(value) {
+            real.profileBio = value
+        }
+
     override var apiKey
         get() = real.apiKey
         set(value) {

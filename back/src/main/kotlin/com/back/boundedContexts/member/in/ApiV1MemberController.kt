@@ -10,7 +10,6 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
-import org.springframework.cache.annotation.Cacheable
 import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -30,8 +29,6 @@ class ApiV1MemberController(
 
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)
-    // 메인 프로필 카드에서 자주 조회되는 고정 데이터라 캐시로 DB hit를 줄인다.
-    @Cacheable(cacheNames = ["member-admin-profile"], key = "'singleton'")
     fun getAdminProfile(): MemberWithUsernameDto {
         val adminUsername = AppConfig.adminUsernameOrBlank.trim()
         if (adminUsername.isBlank()) {

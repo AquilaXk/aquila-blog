@@ -27,6 +27,13 @@ class ApiV1AdmMemberController(
         val profileImgUrl: String,
     )
 
+    data class UpdateProfileCardRequest(
+        @field:Size(max = 100)
+        val role: String,
+        @field:Size(max = 1000)
+        val bio: String,
+    )
+
     @GetMapping
     @Transactional(readOnly = true)
     fun getItems(
@@ -76,6 +83,19 @@ class ApiV1AdmMemberController(
         val member = memberFacade.findById(id).orElseThrow()
         memberFacade.modify(member, member.nickname, reqBody.profileImgUrl.trim())
 
+        return MemberWithUsernameDto(member)
+    }
+
+    @PatchMapping("/{id}/profileCard")
+    @Transactional
+    fun updateProfileCard(
+        @PathVariable
+        @Positive
+        id: Int,
+        @RequestBody @Valid reqBody: UpdateProfileCardRequest,
+    ): MemberWithUsernameDto {
+        val member = memberFacade.findById(id).orElseThrow()
+        memberFacade.modifyProfileCard(member, reqBody.role.trim(), reqBody.bio.trim())
         return MemberWithUsernameDto(member)
     }
 }

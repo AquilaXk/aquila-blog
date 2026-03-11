@@ -268,6 +268,8 @@ const AdminPage: NextPage = () => {
 
   const [profileImgMemberId, setProfileImgMemberId] = useState("1")
   const [profileImgInputUrl, setProfileImgInputUrl] = useState("")
+  const [profileRoleInput, setProfileRoleInput] = useState("")
+  const [profileBioInput, setProfileBioInput] = useState("")
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
   const [adminPostRows, setAdminPostRows] = useState<AdminPostListItem[]>([])
@@ -483,6 +485,34 @@ const AdminPage: NextPage = () => {
     }
   }
 
+  const handleUpdateMemberProfileCard = async () => {
+    const targetMemberId = profileImgMemberId.trim()
+    if (!targetMemberId) {
+      setResult(pretty({ error: "프로필을 변경할 member id를 입력해주세요." }))
+      return
+    }
+
+    try {
+      setLoadingKey("admMemberProfileCardUpdate")
+      const updated = await apiFetch<JsonValue>(
+        `/member/api/v1/adm/members/${targetMemberId}/profileCard`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            role: profileRoleInput.trim(),
+            bio: profileBioInput.trim(),
+          }),
+        }
+      )
+      setResult(pretty(updated))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
   useEffect(() => {
     let mounted = true
     const verifyAdmin = async () => {
@@ -505,6 +535,7 @@ const AdminPage: NextPage = () => {
         }
 
         setMe(member)
+        setProfileImgMemberId(String(member.id))
       } catch {
         if (!mounted) return
         const target = `/login?next=${encodeURIComponent("/admin")}`
@@ -832,6 +863,22 @@ const AdminPage: NextPage = () => {
             onClick={() => void handleUploadMemberProfileImage()}
           >
             프로필 이미지 업로드/적용
+          </Button>
+          <Input
+            placeholder="프로필 역할 (예: backend developer)"
+            value={profileRoleInput}
+            onChange={(e) => setProfileRoleInput(e.target.value)}
+          />
+          <Input
+            placeholder="프로필 소개문구"
+            value={profileBioInput}
+            onChange={(e) => setProfileBioInput(e.target.value)}
+          />
+          <Button
+            disabled={disabled("admMemberProfileCardUpdate")}
+            onClick={() => void handleUpdateMemberProfileCard()}
+          >
+            역할/소개 저장
           </Button>
         </Row>
         {profileImgInputUrl.trim().length > 0 && (

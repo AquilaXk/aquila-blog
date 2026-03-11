@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.app
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.exception.app.AppException
 import jakarta.annotation.PostConstruct
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
@@ -31,48 +32,50 @@ class PostImageStorageService(
     )
 
     private val datePathFormatter = DateTimeFormatter.ofPattern("yyyy/MM")
+    private val logger = LoggerFactory.getLogger(javaClass)
 
-    private val s3Client: S3Client? by lazy {
-        if (!properties.enabled) return@lazy null
-        if (properties.accessKey.isBlank() || properties.secretKey.isBlank()) {
-            throw AppException("500-1", "스토리지 계정 정보가 비어 있습니다.")
-        }
-
-        S3Client.builder()
-            .endpointOverride(URI.create(properties.endpoint))
-            .region(Region.of(properties.region))
-            .credentialsProvider(
-                StaticCredentialsProvider.create(
-                    AwsBasicCredentials.create(properties.accessKey, properties.secretKey)
-                )
-            )
-            .forcePathStyle(properties.pathStyleAccess)
-            .build()
-    }
+    private var s3Client: S3Client? = null
+    private var initErrorMessage: String? = null
 
     @PostConstruct
     fun initializeBucket() {
         if (!properties.enabled) return
 
-        val client = s3Client ?: return
+        val client = try {
+            buildClient()
+        } catch (e: Exception) {
+            initErrorMessage = "이미지 스토리지 설정 오류: ${e.message ?: "알 수 없는 오류"}"
+            logger.error("Post image storage client initialization failed: {}", initErrorMessage)
+            return
+        }
+
+        s3Client = client
+
         try {
             client.headBucket(
                 HeadBucketRequest.builder()
                     .bucket(properties.bucket)
                     .build()
             )
-        } catch (_: S3Exception) {
-            client.createBucket(
-                CreateBucketRequest.builder()
-                    .bucket(properties.bucket)
-                    .build()
-            )
+        } catch (e: S3Exception) {
+            try {
+                client.createBucket(
+                    CreateBucketRequest.builder()
+                        .bucket(properties.bucket)
+                        .build()
+                )
+            } catch (createError: Exception) {
+                initErrorMessage = "스토리지 버킷 초기화 실패: ${createError.message ?: "알 수 없는 오류"}"
+                logger.error("Post image storage bucket initialization failed", createError)
+                return
+            }
         }
+
+        initErrorMessage = null
     }
 
     fun uploadPostImage(file: MultipartFile): String {
-        ensureStorageEnabled()
-        val client = s3Client ?: throw AppException("500-1", "스토리지 클라이언트를 초기화하지 못했습니다.")
+        val client = requireClient()
 
         if (file.isEmpty) throw AppException("400-1", "이미지 파일이 비어 있습니다.")
         if (file.size > properties.maxFileSizeBytes) {
@@ -103,8 +106,7 @@ class PostImageStorageService(
     }
 
     fun getPostImage(objectKey: String): StoredImage? {
-        ensureStorageEnabled()
-        val client = s3Client ?: throw AppException("500-1", "스토리지 클라이언트를 초기화하지 못했습니다.")
+        val client = requireClient()
         validateObjectKey(objectKey)
 
         return try {
@@ -128,6 +130,44 @@ class PostImageStorageService(
 
     private fun ensureStorageEnabled() {
         if (!properties.enabled) throw AppException("503-1", "이미지 스토리지가 비활성화되어 있습니다.")
+    }
+
+    private fun requireClient(): S3Client {
+        ensureStorageEnabled()
+
+        initErrorMessage?.let {
+            throw AppException("503-1", it)
+        }
+
+        return s3Client ?: throw AppException("503-1", "이미지 스토리지가 아직 준비되지 않았습니다.")
+    }
+
+    private fun buildClient(): S3Client {
+        if (properties.accessKey.isBlank() || properties.secretKey.isBlank()) {
+            throw IllegalArgumentException("스토리지 계정 정보가 비어 있습니다.")
+        }
+
+        val endpoint = properties.endpoint.trim()
+        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+            throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT 형식이 올바르지 않습니다. (현재: $endpoint)")
+        }
+
+        val endpointUri = try {
+            URI.create(endpoint)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("CUSTOM_STORAGE_ENDPOINT가 유효한 URI가 아닙니다. (현재: $endpoint)")
+        }
+
+        return S3Client.builder()
+            .endpointOverride(endpointUri)
+            .region(Region.of(properties.region))
+            .credentialsProvider(
+                StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(properties.accessKey, properties.secretKey)
+                )
+            )
+            .forcePathStyle(properties.pathStyleAccess)
+            .build()
     }
 
     private fun buildObjectKey(originalFilename: String?): String {

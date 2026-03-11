@@ -24,6 +24,36 @@ env_value() {
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
 }
 
+trim_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  echo "${value}"
+}
+
+validate_storage_env() {
+  local enabled_raw endpoint
+  enabled_raw="$(trim_quotes "$(env_value "CUSTOM_STORAGE_ENABLED")")"
+  endpoint="$(trim_quotes "$(env_value "CUSTOM_STORAGE_ENDPOINT")")"
+
+  local enabled
+  enabled="$(echo "${enabled_raw}" | tr '[:upper:]' '[:lower:]')"
+
+  if [[ "${enabled}" != "true" ]]; then
+    return 0
+  fi
+
+  if ! [[ "${endpoint}" =~ ^https?://.+$ ]]; then
+    echo "invalid CUSTOM_STORAGE_ENDPOINT: '${endpoint:-<empty>}'" >&2
+    echo "expected format example: http://minio_1:9000" >&2
+    return 1
+  fi
+
+  echo "storage endpoint validation ok: ${endpoint}"
+}
+
 backend_host() {
   local backend="$1"
   if [[ "${backend}" == "back_blue" ]]; then
@@ -285,6 +315,8 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   echo "missing caddy file: ${CADDY_FILE}" >&2
   exit 1
 fi
+
+validate_storage_env
 
 api_domain="$(env_value "API_DOMAIN")"
 if [[ -z "${api_domain}" ]]; then

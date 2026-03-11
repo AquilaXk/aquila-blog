@@ -273,13 +273,36 @@ jobs:
           fi
 
           API_DOMAIN="$(awk -F= '$1=="API_DOMAIN"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod)"
-          if [ -n "${API_DOMAIN}" ]; then
-            HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health" -H "Host: ${API_DOMAIN}" || true)"
-            echo "post-deploy caddy health status=${HTTP_CODE}"
-            if ! echo "${HTTP_CODE}" | grep -Eq '^[1-4][0-9][0-9]$'; then
-              echo "post-deploy healthcheck failed" >&2
-              exit 1
-            fi
+          if [ -z "${API_DOMAIN}" ]; then
+            echo "API_DOMAIN missing in deploy/homeserver/.env.prod" >&2
+            exit 1
+          fi
+
+          ACTIVE_BACKEND="$(cat deploy/homeserver/.active_backend 2>/dev/null || true)"
+          if [ "${ACTIVE_BACKEND}" != "back_blue" ] && [ "${ACTIVE_BACKEND}" != "back_green" ]; then
+            echo "invalid or missing .active_backend value: '${ACTIVE_BACKEND}'" >&2
+            exit 1
+          fi
+
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${ACTIVE_BACKEND}"; then
+            echo "active backend is not running: ${ACTIVE_BACKEND}" >&2
+            exit 1
+          fi
+
+          TARGET_IP="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "getent hosts ${ACTIVE_BACKEND} | awk 'NR==1{print \$1}'" | tr -d '\r' | head -n 1)"
+          ACTIVE_IP="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "getent hosts back_active | awk 'NR==1{print \$1}'" | tr -d '\r' | head -n 1)"
+
+          echo "post-deploy alias verify: active_backend=${ACTIVE_BACKEND}, target_ip=${TARGET_IP:-none}, back_active_ip=${ACTIVE_IP:-none}"
+          if [ -z "${TARGET_IP}" ] || [ -z "${ACTIVE_IP}" ] || [ "${TARGET_IP}" != "${ACTIVE_IP}" ]; then
+            echo "back_active alias mismatch after deploy" >&2
+            exit 1
+          fi
+
+          HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health" -H "Host: ${API_DOMAIN}" || true)"
+          echo "post-deploy caddy health status=${HTTP_CODE}"
+          if ! echo "${HTTP_CODE}" | grep -Eq '^[1-4][0-9][0-9]$'; then
+            echo "post-deploy healthcheck failed via caddy route" >&2
+            exit 1
           fi
           REMOTE
 

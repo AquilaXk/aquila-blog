@@ -1,0 +1,55 @@
+package com.back.global.system.`in`
+
+import org.hamcrest.Matchers.anyOf
+import org.hamcrest.Matchers.equalTo
+import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.security.test.context.support.WithUserDetails
+import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.get
+import org.springframework.transaction.annotation.Transactional
+
+@ActiveProfiles("test")
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+class ApiV1AdmSystemControllerTest {
+    @Autowired
+    private lateinit var mvc: MockMvc
+
+    @Test
+    @WithUserDetails("admin")
+    fun `관리자는 시스템 헬스 상태를 조회할 수 있다`() {
+        mvc.get("/system/api/v1/adm/health").andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value("UP") }
+            jsonPath("$.serverTime") { isString() }
+            jsonPath("$.uptimeMs") { isNumber() }
+            jsonPath("$.version") { isString() }
+            jsonPath("$.checks.db") { value("UP") }
+            jsonPath("$.checks.redis") { value(anyOf(equalTo("UP"), equalTo("SKIPPED"))) }
+        }
+    }
+
+    @Test
+    @WithUserDetails("user1")
+    fun `일반 사용자는 시스템 헬스 상태를 조회할 수 없다`() {
+        mvc.get("/system/api/v1/adm/health").andExpect {
+            status { isForbidden() }
+            jsonPath("$.resultCode") { value("403-1") }
+            jsonPath("$.msg") { value("권한이 없습니다.") }
+        }
+    }
+
+    @Test
+    fun `비로그인 사용자는 시스템 헬스 상태를 조회할 수 없다`() {
+        mvc.get("/system/api/v1/adm/health").andExpect {
+            status { isUnauthorized() }
+            jsonPath("$.resultCode") { value("401-1") }
+            jsonPath("$.msg") { value("로그인 후 이용해주세요.") }
+        }
+    }
+}

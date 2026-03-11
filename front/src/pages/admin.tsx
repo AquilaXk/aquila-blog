@@ -960,6 +960,18 @@ const AdminPage: NextPage = () => {
         </Row>
       </Section>
 
+      <Section>
+        <h2>System</h2>
+        <Row>
+          <Button
+            disabled={disabled("systemHealth")}
+            onClick={() => run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}
+          >
+            서버 상태 조회
+          </Button>
+        </Row>
+      </Section>
+
       <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
     </Main>
   )

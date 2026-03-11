@@ -38,7 +38,7 @@ import java.time.Instant
 class Member(
     @field:Id
     @field:SequenceGenerator(name = "member_seq_gen", sequenceName = "member_seq", allocationSize = 50)
-    @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq")
+    @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
     override val id: Int = 0,
 
     @field:NaturalId

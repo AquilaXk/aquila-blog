@@ -18,7 +18,7 @@ import org.hibernate.annotations.NaturalId
 class MemberAttr private constructor(
     @field:Id
     @field:SequenceGenerator(name = "member_attr_seq_gen", sequenceName = "member_attr_seq", allocationSize = 50)
-    @field:GeneratedValue(strategy = SEQUENCE, generator = "member_attr_seq")
+    @field:GeneratedValue(strategy = SEQUENCE, generator = "member_attr_seq_gen")
     override val id: Int = 0,
 
     @field:NaturalId

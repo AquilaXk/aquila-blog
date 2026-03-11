@@ -118,12 +118,12 @@
   - Mitigation: vertical slicing (member first, then post), merge in small PRs.
 
 ## 8. Validation Checklist (Definition of Done)
-- [ ] Domain packages have no direct repository dependency.
-- [ ] No global mutable repository state in domain entities.
-- [ ] Full backend tests pass (`./gradlew clean test --no-daemon`).
-- [ ] Key API integration tests pass for member/post/comment/like.
+- [x] Domain packages have no direct repository dependency.
+- [x] No global mutable repository state in domain entities.
+- [x] Full backend tests pass (`./gradlew clean test --no-daemon`).
+- [x] Key API integration tests pass for member/post/comment/like.
 - [ ] Query/performance sanity check completed.
-- [ ] Refactoring decisions documented (short ADRs recommended).
+- [x] Refactoring decisions documented (short ADRs recommended).
 
 ## 9. Recommended PR Strategy
 1. PR-1: Architecture constraints + safety tests only.
@@ -131,5 +131,9 @@
 3. PR-3: Post domain decoupling.
 4. PR-4: Equality/id generator hardening.
 5. PR-5: Kotlin-style cleanup + docs/perf checks.
+
+### Progress Snapshot (2026-03-11)
+- Done: PR-1 ~ PR-4 (architecture guard, domain persistence decoupling, equality/id hardening).
+- In progress: PR-5 (Kotlin-style cleanup + performance sanity verification).
 
 This sequence minimizes blast radius and keeps each review focused.

@@ -1,12 +1,16 @@
 import styled from "@emotion/styled"
+import { dehydrate } from "@tanstack/react-query"
 import Image from "next/image"
-import { NextPage } from "next"
+import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { queryKey } from "src/constants/queryKey"
 import useAuthSession from "src/hooks/useAuthSession"
+import { createQueryClient } from "src/libs/react-query"
 import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
+import { guardAdminRequest } from "src/libs/server/adminGuard"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -97,6 +101,28 @@ type MetaUsageMap = Record<string, number>
 
 const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
+
+export const getServerSideProps: GetServerSideProps = async ({ req }) => {
+  const queryClient = createQueryClient()
+  const guardResult = await guardAdminRequest(req)
+
+  if (!guardResult.ok) {
+    return {
+      redirect: {
+        destination: guardResult.destination,
+        permanent: false,
+      },
+    }
+  }
+
+  await queryClient.prefetchQuery(queryKey.authMe(), () => guardResult.member)
+
+  return {
+    props: {
+      dehydratedState: dehydrate(queryClient),
+    },
+  }
+}
 
 const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
   if (!published) return "PRIVATE"
@@ -406,7 +432,7 @@ const convertHtmlToMarkdown = (html: string): string => {
 
 const AdminPage: NextPage = () => {
   const router = useRouter()
-  const { me, authStatus, authUnavailable, setMe, refresh, logout } = useAuthSession()
+  const { me, authStatus, setMe, refresh, logout } = useAuthSession()
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("1")
@@ -470,14 +496,16 @@ const AdminPage: NextPage = () => {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
   const redirectingRef = useRef(false)
   const hydratedAdminIdRef = useRef<number | null>(null)
-  const authLoading = authStatus === "loading"
-
-  const syncProfileState = useCallback((member: MemberMe) => {
-    setMe(member)
+  const applyProfileState = useCallback((member: MemberMe) => {
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
     setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
-  }, [setMe])
+  }, [])
+
+  const syncProfileState = useCallback((member: MemberMe) => {
+    setMe(member)
+    applyProfileState(member)
+  }, [applyProfileState, setMe])
 
   const refreshAdminProfile = useCallback(async (memberId: number, fallback?: MemberMe) => {
     try {
@@ -1022,22 +1050,15 @@ const AdminPage: NextPage = () => {
     if (hydratedAdminIdRef.current === me.id) return
 
     hydratedAdminIdRef.current = me.id
-    let mounted = true
-
-    void (async () => {
-      const refreshed = await refreshAdminProfile(me.id, me)
-      if (!mounted || !refreshed) return
-      setProfileNotice({
-        tone: "idle",
-        text: "현재 저장된 관리자 프로필을 불러왔습니다. 입력창 값이 실제 저장값입니다.",
-      })
-      void refreshEditorMetaCatalog()
-    })()
-
-    return () => {
-      mounted = false
-    }
-  }, [authStatus, me, refreshAdminProfile, refreshEditorMetaCatalog, router])
+    // auth/me 응답에는 관리자 프로필 카드 필드가 포함되어 있으므로,
+    // 관리자 상세 재조회가 끝날 때까지 패널을 비워두지 않고 즉시 화면을 채운다.
+    applyProfileState(me)
+    setProfileNotice({
+      tone: "idle",
+      text: "현재 로그인 세션의 관리자 프로필 값을 불러왔습니다. 필요하면 아래 버튼으로 저장값을 다시 조회할 수 있습니다.",
+    })
+    void refreshEditorMetaCatalog()
+  }, [applyProfileState, authStatus, me, refreshEditorMetaCatalog, router])
 
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
@@ -1318,6 +1339,10 @@ const AdminPage: NextPage = () => {
   const selectedCategoryParts = splitCategoryDisplay(postCategory)
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const profilePreviewSrc = profileImgInputUrl.trim()
+  const bypassProfilePreviewOptimizer =
+    profilePreviewSrc.startsWith("data:") ||
+    profilePreviewSrc.includes("/redirectToProfileImg") ||
+    /^https?:\/\//.test(profilePreviewSrc)
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
   const profileBioStatus = profileBioInput.trim() || "미설정"
@@ -1388,51 +1413,8 @@ const AdminPage: NextPage = () => {
     { href: "#system-tools", label: "시스템" },
   ]
 
-  if (authLoading) {
-    return (
-      <Main>
-        <AdminGateCard>
-          <span className="eyebrow">Admin Access</span>
-          <h1>관리자 권한을 확인하는 중입니다</h1>
-          <p>
-            로그인 상태와 관리자 권한을 점검한 뒤 관리자 스튜디오를 열고 있습니다. 인증이 없으면 자동으로
-            로그인 화면으로 이동합니다.
-          </p>
-        </AdminGateCard>
-      </Main>
-    )
-  }
-
-  if (authUnavailable && !me) {
-    return (
-      <Main>
-        <AdminGateCard>
-          <span className="eyebrow">Admin Access</span>
-          <h1>인증 상태를 확인할 수 없습니다</h1>
-          <p>
-            로그인 정보 조회가 일시적으로 실패했습니다. 네트워크나 백엔드 상태를 확인한 뒤 다시
-            시도해주세요. 확인 실패를 로그아웃으로 간주하지는 않습니다.
-          </p>
-          <ActionRow>
-            <Button type="button" onClick={() => void refresh()}>
-              다시 시도
-            </Button>
-          </ActionRow>
-        </AdminGateCard>
-      </Main>
-    )
-  }
-
   if (!me) {
-    return (
-      <Main>
-        <AdminGateCard>
-          <span className="eyebrow">Admin Access</span>
-          <h1>로그인 화면으로 이동하는 중입니다</h1>
-          <p>관리자 페이지는 로그인된 관리자 계정으로만 접근할 수 있습니다.</p>
-        </AdminGateCard>
-      </Main>
-    )
+    return null
   }
 
   return (
@@ -1536,7 +1518,8 @@ const AdminPage: NextPage = () => {
                       alt="profile preview"
                       width={120}
                       height={120}
-                      unoptimized={profilePreviewSrc.includes("/redirectToProfileImg")}
+                      priority
+                      unoptimized={bypassProfilePreviewOptimizer}
                     />
                   ) : (
                     <ProfileFallback>{me.username.slice(0, 2).toUpperCase()}</ProfileFallback>
@@ -3994,44 +3977,4 @@ const ResultPanel = styled.pre`
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 160px;
-`
-
-const AdminGateCard = styled.section`
-  width: min(720px, 100%);
-  margin: 3rem auto 0;
-  padding: 1.3rem;
-  border-radius: 24px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 36%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
-
-  .eyebrow {
-    display: inline-flex;
-    margin-bottom: 0.7rem;
-    border-radius: 999px;
-    padding: 0.38rem 0.68rem;
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.45rem, 3vw, 2.1rem);
-    letter-spacing: -0.04em;
-  }
-
-  p {
-    margin: 0.8rem 0 1rem;
-    max-width: 42rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
-  }
-
 `

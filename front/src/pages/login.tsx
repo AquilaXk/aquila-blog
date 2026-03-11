@@ -4,6 +4,7 @@ import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
+import useAuthSession from "src/hooks/useAuthSession"
 import { isNavigationCancelledError } from "src/libs/router"
 
 type RsData<T> = {
@@ -14,6 +15,7 @@ type RsData<T> = {
 
 const LoginPage = () => {
   const router = useRouter()
+  const { refresh, setMe } = useAuthSession()
   const next = useMemo(() => {
     const raw = router.query.next
     const value = Array.isArray(raw) ? raw[0] : raw
@@ -48,9 +50,19 @@ const LoginPage = () => {
         method: "POST",
         body: JSON.stringify({ username, password }),
       })
+
+      // 로그인 응답의 Set-Cookie를 받은 직후 현재 세션을 한 번 동기화해서,
+      // 다음 페이지가 stale anonymous 캐시를 보는 일을 막는다.
+      try {
+        const refreshed = await refresh()
+        setMe(refreshed.data ?? null)
+      } catch {
+        // 세션 재조회 실패 시에도 이동은 계속한다.
+      }
+
       try {
         if (router.asPath !== next) {
-          await router.push(next)
+          await router.replace(next)
         }
       } catch (error) {
         if (!isNavigationCancelledError(error)) throw error

@@ -119,7 +119,7 @@ sequenceDiagram
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
 - 프론트 로그인/회원가입/API 쿠키 흐름 확인
 - 관리자 페이지의 글 목록, 글 발행, 서버 상태 조회 확인
-- 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
+- 관리자 프로필 이미지/글 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
 - Cloudflare Tunnel이 `caddy:80`으로 정상 연결되는지 확인
 
 ## 자주 보는 장애 유형
@@ -132,6 +132,8 @@ sequenceDiagram
   `CUSTOM_STORAGE_ENDPOINT`가 운영 Secret에서 깨진 상태
 - `MinIO password blank`:
   `HOME_SERVER_ENV`에 값이 누락되었거나 `#` 때문에 뒷부분이 주석 처리됨
+- `503` on `/profileImageFile` or `/posts/images`:
+  MinIO env 비활성화, placeholder 미치환, bucket/client init 실패
 
 ## 장애 대응 우선순위
 
@@ -140,7 +142,7 @@ sequenceDiagram
 | 프론트 로그인 실패 | 브라우저 네트워크 탭 | CORS, cookie domain, `/auth/me` 확인 |
 | API 502 | Caddy 로그, active alias | backend 컨테이너/resolve 확인 |
 | 배포 중 restart loop | backend 로그 | env, DB, Redis, MinIO 연결 확인 |
-| 글 발행 후 반영 안 됨 | revalidate 설정 | `/api/revalidate` 토큰/URL 확인 |
+| 글 발행 후 반영 안 됨 | 목록 API 응답, 캐시 헤더, revalidate hook | `/post/api/v1/posts`, `Cache-Control`, `/api/revalidate` 확인 |
 
 ## 로컬/서버에서 자주 쓰는 명령
 

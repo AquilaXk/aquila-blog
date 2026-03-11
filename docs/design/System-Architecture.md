@@ -4,7 +4,7 @@ Last updated: 2026-03-11
 
 ## 전체 그림
 
-현재 프로젝트는 "콘텐츠/인증/운영은 자체 백엔드", "정적 페이지 제공은 Next.js"로 분리된 블로그 시스템이다.
+현재 프로젝트는 "콘텐츠/인증/운영은 자체 백엔드", "사용자 화면은 Next.js SSR + 짧은 CDN 캐시"로 분리된 블로그 시스템이다.
 
 ```mermaid
 flowchart TD
@@ -14,7 +14,7 @@ flowchart TD
     B --> R["Redis"]
     B --> M["MinIO"]
     B --> K["Kakao OAuth"]
-    B --> RV["Next revalidate API"]
+    B --> RV["Next revalidate API (optional hook)"]
 ```
 
 ## 시스템 인터페이스 표
@@ -26,7 +26,7 @@ flowchart TD
 | Back -> DB | JDBC | `spring.datasource.url` | PostgreSQL |
 | Back -> Redis | TCP | `spring.data.redis.*` | session/cache/lock |
 | Back -> MinIO | S3 API | `CUSTOM_STORAGE_*` | 게시글/프로필 이미지 |
-| Back -> Front revalidate | HTTP POST | `/api/revalidate` | token 필요 |
+| Back -> Front revalidate | HTTP POST | `/api/revalidate` | 선택적 cache invalidation hook |
 
 ## 읽기 흐름
 
@@ -35,6 +35,7 @@ flowchart TD
 3. 상세 DTO는 Markdown 본문 전체를 받는다.
 4. 프론트는 본문에서 태그/카테고리 메타데이터를 추가 파싱한다.
 5. 상세 화면은 custom renderer로 코드블럭, 머메이드, 콜아웃, 테이블을 렌더링한다.
+6. 메인 페이지(`/`)는 `getServerSideProps` + `Cache-Control: public, s-maxage=30, stale-while-revalidate=120` 전략을 사용한다.
 
 ## 쓰기 흐름
 
@@ -42,8 +43,8 @@ flowchart TD
 2. `/admin`에서 글 작성/수정
 3. 백엔드가 게시글 저장
 4. 필요 시 이미지 업로드는 MinIO에 저장
-5. 글 변경 후 프론트 revalidate API 호출
-6. 메인 페이지와 상세 페이지가 새 데이터 기준으로 다시 렌더링
+5. 백엔드는 필요 시 프론트 revalidate hook을 비차단성으로 호출한다.
+6. 메인 페이지는 SSR + 짧은 CDN 캐시 만료 또는 revalidate hook을 통해 새 데이터 기준으로 갱신된다.
 
 ```mermaid
 sequenceDiagram
@@ -58,7 +59,9 @@ sequenceDiagram
         Front->>Back: POST /post/api/v1/posts/images
         Back->>MinIO: upload
     end
-    Back->>Revalidate: POST /api/revalidate
+    opt cache invalidation hook
+        Back->>Revalidate: POST /api/revalidate
+    end
     Back-->>Front: 글 저장 응답
     Front-->>Admin: 발행 결과 표시
 ```
@@ -113,6 +116,12 @@ Backend:
 - `CUSTOM__REVALIDATE__URL`
 - `CUSTOM__REVALIDATE__TOKEN`
 - `CUSTOM_STORAGE_*`
+
+현재 운영에서 특히 중요한 점:
+
+- 메인 피드는 정적 빌드가 아니라 API/SSR 기반이다.
+- `CUSTOM__REVALIDATE__*`는 즉시 반영 시간을 더 줄이기 위한 보조 장치이지, 데이터 정합성의 유일한 경로는 아니다.
+- 관리자 프로필 이미지 업로드도 MinIO(`CUSTOM_STORAGE_*`) 의존이다.
 
 ## 현재 구조의 장점
 

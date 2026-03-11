@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
 import React from "react"
-import { Emoji } from "src/components/Emoji"
+import { IoMoon, IoSunny } from "react-icons/io5"
 import useScheme from "src/hooks/useScheme"
 
 type Props = {}
@@ -19,7 +19,7 @@ const ThemeToggle: React.FC<Props> = () => {
       aria-label={scheme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"}
       title={scheme === "light" ? "다크 모드" : "라이트 모드"}
     >
-      <Emoji>{scheme === "light" ? "☀️" : "🌙"}</Emoji>
+      {scheme === "light" ? <IoSunny aria-hidden /> : <IoMoon aria-hidden />}
     </StyledWrapper>
   )
 }
@@ -40,7 +40,7 @@ const StyledWrapper = styled.button`
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
 
-  span {
+  svg {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -52,7 +52,7 @@ const StyledWrapper = styled.button`
     width: 40px;
     height: 40px;
 
-    span {
+    svg {
       font-size: 1.3rem;
     }
   }

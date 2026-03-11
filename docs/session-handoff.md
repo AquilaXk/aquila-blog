@@ -24,6 +24,7 @@ flowchart LR
 - `416428e` `fix: harden minio upload init and surface storage errors`
 - `fb0f1cc` `feat(profile): switch admin profile upload to minio and use direct url for fast render`
 - `74d28f9` `feat(profile): manage admin role/bio from admin page and reduce site.config dependency`
+- 로컬 워킹트리 기준으로 backend는 `adapter/application` 구조로 이동 중이며, 기존 `app/in/out`와 공존하는 과도기 상태다.
 
 ## 지금 가장 중요한 운영 메모
 
@@ -42,6 +43,7 @@ flowchart LR
 | 글 목록 비어 있음 | `front/src/apis/backend/posts.ts` | 목록 API 응답, `published/listed` |
 | 이미지 오류 | `PostImageStorageService.kt` | endpoint, accessKey, secretKey |
 | 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, alias, health |
+| 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/application` vs `app/in/out` 공존 여부 |
 
 ## 빠른 점검 포인트
 

@@ -19,7 +19,7 @@ flowchart LR
 | Context | 핵심 Aggregate | 담당 기능 | 외부 연결 |
 | --- | --- | --- | --- |
 | `member` | `Member` | 인증, 회원가입, 관리자 판별, 프로필 | Kakao OAuth, 쿠키 |
-| `post` | `Post` | 글/댓글/좋아요/조회/이미지 | MinIO, revalidate |
+| `post` | `Post` | 글/댓글/좋아요/조회/이미지 | MinIO, optional front cache invalidation |
 | `home` | 없음 또는 최소 엔드포인트 | 홈/루트 응답 | 없음 |
 | `global.system` | 없음 | 운영 상태 조회 | DB, Redis |
 | `global.task` | `Task` | 비동기 작업 처리 | Redis lock, JPA |
@@ -77,7 +77,7 @@ flowchart LR
 | 비로그인 사용자 | 글 읽기, 공개 글 탐색 | 비공개 글 접근 불가 |
 | 일반 회원 | 로그인, 댓글, 좋아요 | 관리자 API 접근 불가 |
 | 관리자 | 글 발행/수정/삭제, 서버 상태 확인 | `username == custom.admin.username` 필요 |
-| 시스템 작업자 | revalidate, background task 처리 | 장애가 본 기능을 막지 않도록 non-blocking 우선 |
+| 시스템 작업자 | revalidate hook, background task 처리 | 장애가 본 기능을 막지 않도록 non-blocking 우선 |
 
 ## 이벤트 및 사이드이펙트
 

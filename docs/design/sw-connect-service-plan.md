@@ -17,15 +17,15 @@ Last updated: 2026-03-11
 | Backend | Redis | Spring Session/Cache/ShedLock | 운영 중 |
 | Backend | MinIO | S3 API | 운영 중 |
 | Backend | Kakao | OAuth2 | 운영 중 |
-| Backend | Front revalidate API | HTTP POST | 운영 중 |
+| Backend | Front revalidate API | HTTP POST | 선택적 보조 경로 |
 | GitHub Actions | Home Server | Tailscale + SSH | 운영 중 |
 
 ### Frontend -> Backend
 
 - 데이터 조회: `front/src/apis/backend/posts.ts`
 - 인증 조회/로그인/로그아웃: `/member/api/v1/auth/*`
-- 관리자 기능: `/post/api/v1/adm/*`, `/system/api/v1/adm/*`
-- 이미지 업로드: `/post/api/v1/posts/images`
+- 관리자 기능: `/post/api/v1/adm/*`, `/member/api/v1/adm/*`, `/system/api/v1/adm/*`
+- 이미지 업로드: `/post/api/v1/posts/images`, `/member/api/v1/adm/members/{id}/profileImageFile`
 
 중요 설정:
 
@@ -40,6 +40,7 @@ Last updated: 2026-03-11
 - `custom.revalidate.token`
 
 현재 구현은 홈(`/`) 중심 재검증이며, 실패해도 글 작성/수정 자체를 막지 않도록 non-blocking 처리한다.
+다만 메인 피드 자체는 SSR + 짧은 CDN 캐시를 사용하므로, revalidate hook은 즉시 반영 시간을 줄이는 보조 수단으로 보는 편이 정확하다.
 
 ```mermaid
 sequenceDiagram
@@ -87,7 +88,7 @@ sequenceDiagram
 | Front -> Backend 글 조회 | 높음 | 엔드포인트/DTO가 단순 |
 | Front -> Backend 인증 | 중간 | 쿠키/CORS/도메인 설정 민감 |
 | Backend -> MinIO | 중간 | env 오타와 endpoint 형식에 민감 |
-| Backend -> Revalidate | 중간 | token/url 누락 시 침묵 실패 가능 |
+| Backend -> Revalidate | 중간 | token/url 누락 시 즉시 반영이 늦어질 수 있으나, 데이터 정합성 자체를 깨지는 않음 |
 | Actions -> Home Server | 중간 | Tailscale/SSH/Secret 의존 |
 
 ## 개선 우선순위
@@ -121,5 +122,5 @@ sequenceDiagram
 | --- | --- | --- |
 | 로그인 불가 | `/auth/login`, `/auth/me` | CORS, cookie, API base URL |
 | 이미지 업로드 실패 | `/posts/images` | MinIO env, bucket init, size/type |
-| 글은 저장되지만 메인 반영 안 됨 | revalidate API | token/url 누락 |
+| 글은 저장되지만 메인 반영 안 됨 | 목록 API, 캐시 헤더, revalidate API | SSR 캐시 구간, token/url 누락 |
 | 관리자 페이지 401 | `/system/api/v1/adm/health` | 로그인 상태, admin 판별 |

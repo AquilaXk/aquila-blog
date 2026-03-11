@@ -2,6 +2,8 @@ package com.back.boundedContexts.member.`in`
 
 import com.back.boundedContexts.member.app.MemberFacade
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.post.app.PostImageStorageService
+import com.back.global.app.AppConfig
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PageDto
 import jakarta.validation.Valid
@@ -13,13 +15,18 @@ import jakarta.validation.constraints.Size
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
+import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.*
+import org.springframework.web.multipart.MultipartFile
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @Validated
 @RestController
 @RequestMapping("/member/api/v1/adm/members")
 class ApiV1AdmMemberController(
     private val memberFacade: MemberFacade,
+    private val postImageStorageService: PostImageStorageService,
 ) {
     data class UpdateProfileImgRequest(
         @field:NotBlank
@@ -82,6 +89,25 @@ class ApiV1AdmMemberController(
     ): MemberWithUsernameDto {
         val member = memberFacade.findById(id).orElseThrow()
         memberFacade.modify(member, member.nickname, reqBody.profileImgUrl.trim())
+
+        return MemberWithUsernameDto(member)
+    }
+
+    @PostMapping("/{id}/profileImageFile")
+    @Transactional
+    fun uploadProfileImageFile(
+        @PathVariable
+        @Positive
+        id: Int,
+        @RequestPart("file") file: MultipartFile,
+    ): MemberWithUsernameDto {
+        val member = memberFacade.findById(id).orElseThrow()
+        val key = postImageStorageService.uploadPostImage(file)
+        val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
+            .replace("+", "%20")
+            .replace("%2F", "/")
+        val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
+        memberFacade.modify(member, member.nickname, imageUrl)
 
         return MemberWithUsernameDto(member)
     }

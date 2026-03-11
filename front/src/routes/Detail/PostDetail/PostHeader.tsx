@@ -11,6 +11,9 @@ type Props = {
 }
 
 const PostHeader: React.FC<Props> = ({ data }) => {
+  const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
+  const bypassOptimizer = authorImageSrc.includes("/redirectToProfileImg")
+
   return (
     <StyledWrapper>
       <h1 className="title">{data.title}</h1>
@@ -22,10 +25,11 @@ const PostHeader: React.FC<Props> = ({ data }) => {
                 <div className="author">
                   <Image
                     css={{ borderRadius: "50%" }}
-                    src={data.author[0].profile_photo || CONFIG.profile.image}
+                    src={authorImageSrc}
                     alt="profile_photo"
                     width={24}
                     height={24}
+                    unoptimized={bypassOptimizer}
                   />
                   <div className="">{data.author[0].name}</div>
                 </div>

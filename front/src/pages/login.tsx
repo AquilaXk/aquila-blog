@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { isNavigationCancelledError } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -45,7 +46,13 @@ const LoginPage = () => {
         method: "POST",
         body: JSON.stringify({ username, password }),
       })
-      await router.push(next)
+      try {
+        if (router.asPath !== next) {
+          await router.push(next)
+        }
+      } catch (error) {
+        if (!isNavigationCancelledError(error)) throw error
+      }
     } catch (error) {
       if (error instanceof Error) {
         const message = error.message.split(": ").slice(1).join(": ").trim()

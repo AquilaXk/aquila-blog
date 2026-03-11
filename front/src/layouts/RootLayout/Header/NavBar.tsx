@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { isNavigationCancelledError } from "src/libs/router"
 
 type MemberMe = {
   id: number
@@ -61,7 +62,16 @@ const NavBar: React.FC = () => {
     } finally {
       setMe(null)
       if (router.pathname === "/admin") {
-        await router.replace("/login?next=%2Fadmin")
+        const target = "/login?next=%2Fadmin"
+        if (router.asPath !== target) {
+          try {
+            await router.replace(target)
+          } catch (error) {
+            if (!isNavigationCancelledError(error)) {
+              console.error("logout redirect failed", error)
+            }
+          }
+        }
       }
     }
   }

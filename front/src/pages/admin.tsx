@@ -3,6 +3,7 @@ import { NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { isNavigationCancelledError } from "src/libs/router"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -271,6 +272,7 @@ const AdminPage: NextPage = () => {
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
+  const redirectingRef = useRef(false)
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -426,14 +428,33 @@ const AdminPage: NextPage = () => {
         if (!mounted) return
 
         if (!member?.isAdmin) {
-          await router.replace("/")
+          if (!redirectingRef.current && router.asPath !== "/") {
+            redirectingRef.current = true
+            try {
+              await router.replace("/")
+            } catch (error) {
+              if (!isNavigationCancelledError(error)) {
+                setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
+              }
+            }
+          }
           return
         }
 
         setMe(member)
       } catch {
         if (!mounted) return
-        await router.replace(`/login?next=${encodeURIComponent("/admin")}`)
+        const target = `/login?next=${encodeURIComponent("/admin")}`
+        if (!redirectingRef.current && router.asPath !== target) {
+          redirectingRef.current = true
+          try {
+            await router.replace(target)
+          } catch (error) {
+            if (!isNavigationCancelledError(error)) {
+              setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
+            }
+          }
+        }
         return
       } finally {
         if (mounted) setAuthLoading(false)

@@ -109,6 +109,33 @@ switch_caddy_upstream() {
   compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 }
 
+is_caddy_pointing_to() {
+  local expected_backend="$1"
+  local expected_backend_host
+  expected_backend_host="$(backend_host "${expected_backend}")"
+
+  if ! grep -Eq "reverse_proxy[[:space:]]+${expected_backend_host}:8080" "${CADDY_FILE}"; then
+    echo "host Caddyfile does not point to ${expected_backend_host}:8080" >&2
+    return 1
+  fi
+
+  if ! compose exec -T caddy sh -lc "grep -Eq 'reverse_proxy[[:space:]]+${expected_backend_host}:8080' /etc/caddy/Caddyfile"; then
+    echo "container Caddyfile does not point to ${expected_backend_host}:8080" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+probe_caddy_http_code() {
+  local api_domain="$1"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
+    -s -o /dev/null -w "%{http_code}" "http://caddy:80${HEALTHCHECK_PATH}" \
+    -H "Host: ${api_domain}" || true
+}
+
 verify_caddy_upstream() {
   local expected_backend="$1"
   local expected_backend_host
@@ -123,14 +150,15 @@ verify_caddy_upstream() {
 
   local attempt=1
   while [[ "${attempt}" -le "${CADDY_SWITCH_VERIFY_RETRIES}" ]]; do
+    if ! is_caddy_pointing_to "${expected_backend}"; then
+      echo "caddy config not yet switched to ${expected_backend_host} (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES})"
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
     local code
-    code="$(
-      docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-        --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
-        --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
-        -s -o /dev/null -w "%{http_code}" "http://caddy:80${HEALTHCHECK_PATH}" \
-        -H "Host: ${api_domain}" || true
-    )"
+    code="$(probe_caddy_http_code "${api_domain}")"
 
     if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
       echo "caddy switch verify ok: ${expected_backend} (status=${code})"
@@ -224,6 +252,19 @@ echo "${next_backend}" > "${STATE_FILE}"
 
 if [[ "${active_backend}" != "${next_backend}" ]]; then
   compose stop "${active_backend}" || true
+fi
+
+api_domain="$(env_value "API_DOMAIN")"
+if [[ -n "${api_domain}" ]]; then
+  post_stop_code="$(probe_caddy_http_code "${api_domain}")"
+  if ! [[ "${post_stop_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+    echo "post-stop verify failed (status=${post_stop_code:-none}), attempting recovery" >&2
+    compose up -d "${active_backend}" || true
+    switch_caddy_upstream "${active_backend}" || true
+    compose logs --no-color --tail=120 caddy >&2 || true
+    exit 1
+  fi
+  echo "post-stop verify ok (status=${post_stop_code})"
 fi
 
 compose ps

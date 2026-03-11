@@ -27,10 +27,33 @@ const ThemeToggle: React.FC<Props> = () => {
 export default ThemeToggle
 
 const StyledWrapper = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 999px;
-  padding: 0.2rem 0.45rem;
+  padding: 0;
   background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.45rem;
+    line-height: 1;
+  }
+
+  @media (max-width: 720px) {
+    width: 40px;
+    height: 40px;
+
+    span {
+      font-size: 1.3rem;
+    }
+  }
 `

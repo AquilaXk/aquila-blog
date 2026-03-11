@@ -12,4 +12,15 @@ const Logo = () => {
 
 export default Logo
 
-const StyledWrapper = styled(Link)``
+const StyledWrapper = styled(Link)`
+  display: inline-block;
+  min-width: 0;
+  color: ${({ theme }) => theme.colors.gray12};
+  font-weight: 700;
+  white-space: nowrap;
+
+  @media (max-width: 720px) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+`

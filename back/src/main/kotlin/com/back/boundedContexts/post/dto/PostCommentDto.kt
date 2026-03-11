@@ -12,7 +12,9 @@ data class PostCommentDto @JsonCreator constructor(
     val authorName: String,
     val authorUsername: String,
     val authorProfileImageUrl: String,
+    val authorProfileImageDirectUrl: String,
     val postId: Int,
+    val parentCommentId: Int?,
     val content: String,
     var actorCanModify: Boolean = false,
     var actorCanDelete: Boolean = false,
@@ -25,7 +27,9 @@ data class PostCommentDto @JsonCreator constructor(
         postComment.author.name,
         postComment.author.username,
         postComment.author.redirectToProfileImgUrlOrDefault,
+        postComment.author.profileImgUrlOrDefault,
         postComment.post.id,
+        postComment.parentComment?.id,
         postComment.content,
     )
 

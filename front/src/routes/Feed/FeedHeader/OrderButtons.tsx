@@ -51,17 +51,27 @@ export default OrderButtons
 
 const StyledWrapper = styled.div`
   display: flex;
-  gap: 0.5rem;
+  gap: 0.45rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
   button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    min-height: 38px;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray2};
     cursor: pointer;
     color: ${({ theme }) => theme.colors.gray10};
 
     &[data-active="true"] {
       font-weight: 700;
-
       color: ${({ theme }) => theme.colors.gray12};
+      border-color: ${({ theme }) => theme.colors.blue8};
+      background: ${({ theme }) => theme.colors.blue3};
     }
   }
 `

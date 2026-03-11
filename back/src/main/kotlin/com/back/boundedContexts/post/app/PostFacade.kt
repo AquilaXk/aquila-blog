@@ -4,21 +4,28 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.MemberProxy
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
+import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.out.shared.MemberAttrRepository
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.PostAttr
-import com.back.boundedContexts.post.domain.PostLike
-import com.back.boundedContexts.member.dto.MemberDto
-import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import com.back.boundedContexts.post.domain.PostLike
+import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
-import com.back.boundedContexts.post.event.*
+import com.back.boundedContexts.post.event.PostCommentDeletedEvent
+import com.back.boundedContexts.post.event.PostCommentModifiedEvent
+import com.back.boundedContexts.post.event.PostCommentWrittenEvent
+import com.back.boundedContexts.post.event.PostDeletedEvent
+import com.back.boundedContexts.post.event.PostLikedEvent
+import com.back.boundedContexts.post.event.PostModifiedEvent
+import com.back.boundedContexts.post.event.PostUnlikedEvent
+import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.boundedContexts.post.out.PostAttrRepository
 import com.back.boundedContexts.post.out.PostCommentRepository
 import com.back.boundedContexts.post.out.PostLikeRepository
@@ -29,7 +36,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.util.*
+import java.util.UUID
 import kotlin.jvm.optionals.getOrNull
 
 @Service
@@ -105,11 +112,18 @@ class PostFacade(
     }
 
     @Transactional
-    fun writeComment(author: Member, post: Post, content: String): PostComment {
+    fun writeComment(author: Member, post: Post, content: String, parentComment: PostComment? = null): PostComment {
         val persistenceAuthor = toPersistenceMember(author)
         hydratePostAttrs(post)
         hydrateMemberCounterAttrs(persistenceAuthor)
-        val comment = postCommentRepository.save(post.newComment(persistenceAuthor, content))
+        val persistedParentComment = parentComment?.let { findCommentById(post, it.id) ?: it }
+        val comment = postCommentRepository.save(
+            post.newComment(
+                author = persistenceAuthor,
+                content = content,
+                parentComment = persistedParentComment,
+            )
+        )
         post.onCommentAdded()
         savePostAttr(post.commentsCountAttr)
         persistenceAuthor.incrementPostCommentsCount()
@@ -140,19 +154,36 @@ class PostFacade(
     @Transactional
     fun deleteComment(post: Post, postComment: PostComment, actor: Member) {
         hydratePostAttrs(post)
-        hydrateMemberCounterAttrs(postComment.author)
-        val postCommentDto = PostCommentDto(postComment)
+        val allComments = postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post)
+        val commentsByParentId =
+            allComments
+                .mapNotNull { comment -> comment.parentComment?.id?.let { parentId -> parentId to comment } }
+                .groupBy({ it.first }, { it.second })
+        val commentsToDelete = mutableListOf<PostComment>()
+
+        fun collect(comment: PostComment) {
+            commentsByParentId[comment.id].orEmpty().forEach(::collect)
+            commentsToDelete += comment
+        }
+
+        collect(postComment)
+
+        commentsToDelete.forEach { hydrateMemberCounterAttrs(it.author) }
+
         val postDto = PostDto(post)
+        commentsToDelete.forEach { comment ->
+            val postCommentDto = PostCommentDto(comment)
+            comment.author.decrementPostCommentsCount()
+            saveMemberAttr(comment.author.postCommentsCountAttr)
+            post.onCommentDeleted()
+            postCommentRepository.delete(comment)
 
-        postComment.author.decrementPostCommentsCount()
-        saveMemberAttr(postComment.author.postCommentsCountAttr)
-        post.onCommentDeleted()
-        postCommentRepository.delete(postComment)
+            eventPublisher.publish(
+                PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor))
+            )
+        }
+
         savePostAttr(post.commentsCountAttr)
-
-        eventPublisher.publish(
-            PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor))
-        )
     }
 
     @Transactional
@@ -190,7 +221,7 @@ class PostFacade(
     }
 
     fun getComments(post: Post): List<PostComment> =
-        postCommentRepository.findByPostOrderByIdDesc(post).also { comments ->
+        postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post).also { comments ->
             hydrateMembersProfileImgAttrs(comments.map { it.author })
         }
 

@@ -12,12 +12,20 @@ interface PostHasComments : PostAware {
     var commentsCount: Int
         get() = post.commentsCountAttr?.intValue ?: COMMENTS_COUNT_DEFAULT_VALUE
         set(value) {
-            val attr = post.commentsCountAttr ?: PostAttr(0, post, COMMENTS_COUNT, value).also { post.commentsCountAttr = it }
+            val attr =
+                post.commentsCountAttr
+                    ?: PostAttr(0, post, COMMENTS_COUNT, value).also { post.commentsCountAttr = it }
             attr.intValue = value
         }
 
-    fun newComment(author: Member, content: String): PostComment =
-        PostComment(0, author, post, content)
+    fun newComment(author: Member, content: String, parentComment: PostComment? = null): PostComment =
+        PostComment(
+            id = 0,
+            author = author,
+            post = post,
+            content = content,
+            parentComment = parentComment,
+        )
 
     fun onCommentAdded() {
         commentsCount++

@@ -5,6 +5,7 @@ import { MdExpandMore } from "react-icons/md"
 import { DEFAULT_CATEGORY } from "src/constants"
 import styled from "@emotion/styled"
 import { useCategoriesQuery } from "src/hooks/useCategoriesQuery"
+import { splitCategoryDisplay } from "src/libs/utils"
 
 type Props = {}
 
@@ -17,6 +18,7 @@ const CategorySelect: React.FC<Props> = () => {
     typeof router.query.category === "string"
       ? router.query.category
       : DEFAULT_CATEGORY
+  const currentCategoryDisplay = splitCategoryDisplay(currentCategory)
 
   const handleOptionClick = (category: string) => {
     router.push(
@@ -42,23 +44,31 @@ const CategorySelect: React.FC<Props> = () => {
           aria-haspopup="listbox"
           aria-label="Filter posts by category"
         >
-          {currentCategory} Posts <MdExpandMore />
+          <span className="currentLabel">
+            {currentCategoryDisplay.emoji && <span className="emoji">{currentCategoryDisplay.emoji}</span>}
+            <span>{currentCategoryDisplay.label || currentCategory}</span>
+          </span>
+          <MdExpandMore />
         </button>
       </div>
       {opened && (
         <div className="content" role="listbox">
-          {Object.keys(data).map((key) => (
-            <button
-              type="button"
-              className="item"
-              key={key}
-              role="option"
-              aria-selected={key === currentCategory}
-              onClick={() => handleOptionClick(key)}
-            >
-              {`${key} (${data[key]})`}
-            </button>
-          ))}
+          {Object.keys(data).map((key) => {
+            const parsed = splitCategoryDisplay(key)
+
+            return (
+              <button
+                type="button"
+                className="item"
+                key={key}
+                role="option"
+                aria-selected={key === currentCategory}
+                onClick={() => handleOptionClick(key)}
+              >
+                {`${parsed.value || key} (${data[key]})`}
+              </button>
+            )
+          })}
         </div>
       )}
     </StyledWrapper>
@@ -71,14 +81,30 @@ const StyledWrapper = styled.div`
   position: relative;
   > .wrapper {
     display: flex;
-    margin-top: 0.5rem;
-    margin-bottom: 0.5rem;
     gap: 0.25rem;
     align-items: center;
-    font-size: 1.25rem;
-    line-height: 1.75rem;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 0 0.9rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.95rem;
+    line-height: 1.35;
     font-weight: 700;
     cursor: pointer;
+
+    .currentLabel {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+
+    .emoji {
+      flex: 0 0 auto;
+    }
   }
   > .content {
     position: absolute;

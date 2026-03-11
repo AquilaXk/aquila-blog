@@ -19,17 +19,17 @@ const PostDetail: React.FC<Props> = () => {
   return (
     <StyledWrapper>
       <article>
-        {category && (
-          <div css={{ marginBottom: "0.5rem" }}>
+        <TopMetaRow>
+          {category && (
             <Category readOnly={data.status?.[0] === "PublicOnDetail"}>
               {category}
             </Category>
-          </div>
-        )}
+          )}
+        </TopMetaRow>
         {data.type[0] === "Post" && <PostHeader data={data} />}
-        <div>
+        <BodyCard>
           <NotionRenderer content={data.content} />
-        </div>
+        </BodyCard>
         {data.type[0] === "Post" && (
           <>
             <Footer />
@@ -44,19 +44,30 @@ const PostDetail: React.FC<Props> = () => {
 export default PostDetail
 
 const StyledWrapper = styled.div`
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
-  padding-top: 3rem;
-  padding-bottom: 3rem;
-  border-radius: 1.5rem;
-  max-width: 56rem;
-  background-color: ${({ theme }) =>
-    theme.scheme === "light" ? "white" : theme.colors.gray4};
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  max-width: 72rem;
   margin: 0 auto;
+
   > article {
     margin: 0 auto;
-    max-width: 42rem;
+    max-width: 58rem;
+  }
+`
+
+const TopMetaRow = styled.div`
+  margin-bottom: 0.9rem;
+`
+
+const BodyCard = styled.div`
+  margin-top: 1.2rem;
+  padding: 1.1rem 1.35rem 1.5rem;
+  border-radius: 28px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.08);
+
+  @media (max-width: 768px) {
+    padding: 0.95rem 1rem 1.25rem;
+    border-radius: 22px;
   }
 `

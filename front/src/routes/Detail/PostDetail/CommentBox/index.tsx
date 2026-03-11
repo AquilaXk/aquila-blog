@@ -3,6 +3,9 @@ import { useRouter } from "next/router"
 import { TPost } from "src/types"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
+import Image from "next/image"
+import { CONFIG } from "site.config"
+import { formatShortDateTime } from "src/libs/utils"
 
 type Props = {
   data: TPost
@@ -12,19 +15,28 @@ type MemberMe = {
   id: number
   username: string
   nickname: string
-  profileImageUrl: string
+  profileImageUrl?: string
+  profileImageDirectUrl?: string
 }
 
 type PostComment = {
   id: number
+  createdAt: string
+  modifiedAt: string
   authorId: number
   authorName: string
   authorUsername?: string
   authorProfileImageUrl: string
+  authorProfileImageDirectUrl?: string
   postId: number
+  parentCommentId?: number | null
   content: string
   actorCanModify: boolean
   actorCanDelete: boolean
+}
+
+type CommentNode = PostComment & {
+  replies: CommentNode[]
 }
 
 type RsData<T> = {
@@ -42,6 +54,8 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   const [commentInput, setCommentInput] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingCommentInput, setEditingCommentInput] = useState("")
+  const [replyingToCommentId, setReplyingToCommentId] = useState<number | null>(null)
+  const [replyInput, setReplyInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const loginHref = useMemo(() => {
@@ -77,17 +91,39 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     void loadComments()
   }, [loadMe, loadComments])
 
-  const handleWriteComment = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const commentTree = useMemo(() => {
+    const map = new Map<number, CommentNode>()
+    const roots: CommentNode[] = []
+
+    comments.forEach((comment) => {
+      map.set(comment.id, { ...comment, replies: [] })
+    })
+
+    comments.forEach((comment) => {
+      const node = map.get(comment.id)
+      if (!node) return
+
+      if (comment.parentCommentId && map.has(comment.parentCommentId)) {
+        map.get(comment.parentCommentId)?.replies.push(node)
+      } else {
+        roots.push(node)
+      }
+    })
+
+    return roots
+  }, [comments])
+
+  const submitComment = async (content: string, parentCommentId?: number | null) => {
+    const trimmed = content.trim()
 
     if (!me) {
       setError("댓글 작성은 로그인 후 가능합니다.")
-      return
+      return false
     }
 
-    if (!commentInput.trim()) {
-      setError("댓글 내용을 입력해주세요.")
-      return
+    if (!trimmed) {
+      setError(parentCommentId ? "답글 내용을 입력해주세요." : "댓글 내용을 입력해주세요.")
+      return false
     }
 
     setIsLoading(true)
@@ -96,15 +132,33 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     try {
       await apiFetch<RsData<PostComment>>(`/post/api/v1/posts/${postId}/comments`, {
         method: "POST",
-        body: JSON.stringify({ content: commentInput }),
+        body: JSON.stringify({
+          content: trimmed,
+          ...(parentCommentId ? { parentCommentId } : {}),
+        }),
       })
-      setCommentInput("")
       await loadComments()
+      return true
     } catch {
-      setError("댓글 작성에 실패했습니다.")
+      setError(parentCommentId ? "답글 작성에 실패했습니다." : "댓글 작성에 실패했습니다.")
+      return false
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleWriteComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const ok = await submitComment(commentInput)
+    if (ok) setCommentInput("")
+  }
+
+  const handleReplySubmit = async (event: FormEvent<HTMLFormElement>, parentCommentId: number) => {
+    event.preventDefault()
+    const ok = await submitComment(replyInput, parentCommentId)
+    if (!ok) return
+    setReplyInput("")
+    setReplyingToCommentId(null)
   }
 
   const handleDeleteComment = async (commentId: number) => {
@@ -112,13 +166,16 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     setError("")
 
     try {
-      await apiFetch<RsData<unknown>>(
-        `/post/api/v1/posts/${postId}/comments/${commentId}`,
-        { method: "DELETE" }
-      )
+      await apiFetch<RsData<unknown>>(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+        method: "DELETE",
+      })
       if (editingCommentId === commentId) {
         setEditingCommentId(null)
         setEditingCommentInput("")
+      }
+      if (replyingToCommentId === commentId) {
+        setReplyingToCommentId(null)
+        setReplyInput("")
       }
       await loadComments()
     } catch {
@@ -131,12 +188,27 @@ const CommentBox: React.FC<Props> = ({ data }) => {
   const startEdit = (comment: PostComment) => {
     setEditingCommentId(comment.id)
     setEditingCommentInput(comment.content)
+    setReplyingToCommentId(null)
+    setReplyInput("")
     setError("")
   }
 
   const cancelEdit = () => {
     setEditingCommentId(null)
     setEditingCommentInput("")
+  }
+
+  const startReply = (commentId: number) => {
+    setReplyingToCommentId(commentId)
+    setReplyInput("")
+    setEditingCommentId(null)
+    setEditingCommentInput("")
+    setError("")
+  }
+
+  const cancelReply = () => {
+    setReplyingToCommentId(null)
+    setReplyInput("")
   }
 
   const handleModifyComment = async (commentId: number) => {
@@ -149,13 +221,10 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     setError("")
 
     try {
-      await apiFetch<RsData<unknown>>(
-        `/post/api/v1/posts/${postId}/comments/${commentId}`,
-        {
-          method: "PUT",
-          body: JSON.stringify({ content: editingCommentInput }),
-        }
-      )
+      await apiFetch<RsData<unknown>>(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ content: editingCommentInput }),
+      })
       setEditingCommentId(null)
       setEditingCommentInput("")
       await loadComments()
@@ -166,39 +235,56 @@ const CommentBox: React.FC<Props> = ({ data }) => {
     }
   }
 
-  return (
-    <StyledWrapper>
-      <h3>Comments</h3>
-      <div className="accountRow">
-        {me ? (
-          <span>{me.username} 계정으로 댓글 작성 가능</span>
-        ) : (
-          <span>
-            댓글 작성은 <a href={loginHref}>로그인</a> 후 가능합니다.
-          </span>
-        )}
-      </div>
+  const renderAvatar = (
+    profileImageDirectUrl: string | undefined,
+    profileImageUrl: string | undefined,
+    name: string,
+    size: number
+  ) => {
+    const imageSrc = profileImageDirectUrl || profileImageUrl || CONFIG.profile.image
+    const bypassOptimizer = imageSrc.includes("/redirectToProfileImg") || imageSrc.startsWith("data:")
 
-      <form onSubmit={handleWriteComment} className="writeForm">
-        <textarea
-          value={commentInput}
-          onChange={(event) => setCommentInput(event.target.value)}
-          placeholder={me ? "댓글을 입력하세요" : "로그인 후 댓글을 작성할 수 있습니다"}
-          disabled={!me || isLoading}
-        />
-        <button type="submit" disabled={!me || isLoading}>
-          댓글 작성
-        </button>
-      </form>
+    return (
+      <Avatar size={size}>
+        <Image src={imageSrc} alt={`${name} avatar`} fill unoptimized={bypassOptimizer} />
+      </Avatar>
+    )
+  }
 
-      {error && <p className="error">{error}</p>}
+  const renderComment = (comment: CommentNode, depth = 0) => {
+    const displayName = comment.authorUsername || comment.authorName
+    const createdLabel = formatShortDateTime(comment.createdAt, CONFIG.lang)
+    const edited = comment.modifiedAt !== comment.createdAt
 
-      <ul className="commentList">
-        {comments.map((comment) => (
-          <li key={comment.id}>
+    return (
+      <li key={comment.id}>
+        <CommentItem data-depth={depth}>
+          {renderAvatar(
+            comment.authorProfileImageDirectUrl,
+            comment.authorProfileImageUrl,
+            displayName,
+            depth > 0 ? 38 : 44
+          )}
+          <div className="commentBody">
             <div className="head">
-              <strong>{comment.authorUsername || comment.authorName}</strong>
+              <div className="meta">
+                <strong>{displayName}</strong>
+                <span>
+                  {createdLabel}
+                  {edited ? " · 수정됨" : ""}
+                </span>
+              </div>
               <div className="actions">
+                {me && (
+                  <button
+                    type="button"
+                    onClick={() => startReply(comment.id)}
+                    disabled={isLoading}
+                    className="subtle"
+                  >
+                    답글
+                  </button>
+                )}
                 {comment.actorCanModify && (
                   <button
                     type="button"
@@ -230,29 +316,109 @@ const CommentBox: React.FC<Props> = ({ data }) => {
                   disabled={isLoading}
                 />
                 <div className="editActions">
-                  <button
-                    type="button"
-                    onClick={() => handleModifyComment(comment.id)}
-                    disabled={isLoading}
-                  >
+                  <button type="button" onClick={() => handleModifyComment(comment.id)} disabled={isLoading}>
                     저장
                   </button>
-                  <button
-                    type="button"
-                    onClick={cancelEdit}
-                    disabled={isLoading}
-                    className="subtle"
-                  >
+                  <button type="button" onClick={cancelEdit} disabled={isLoading} className="subtle">
                     취소
                   </button>
                 </div>
               </div>
             ) : (
-              <p>{comment.content}</p>
+              <p className="content">{comment.content}</p>
             )}
-          </li>
-        ))}
-      </ul>
+
+            {replyingToCommentId === comment.id && (
+              <form className="replyForm" onSubmit={(event) => handleReplySubmit(event, comment.id)}>
+                <textarea
+                  value={replyInput}
+                  onChange={(event) => setReplyInput(event.target.value)}
+                  placeholder={`${displayName}님에게 답글 작성`}
+                  disabled={isLoading}
+                />
+                <div className="editActions">
+                  <button type="submit" disabled={isLoading}>
+                    답글 등록
+                  </button>
+                  <button type="button" onClick={cancelReply} disabled={isLoading} className="subtle">
+                    취소
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {comment.replies.length > 0 && (
+              <ul className="replyList">
+                {comment.replies.map((reply) => renderComment(reply, depth + 1))}
+              </ul>
+            )}
+          </div>
+        </CommentItem>
+      </li>
+    )
+  }
+
+  return (
+    <StyledWrapper>
+      <SectionHeader>
+        <div>
+          <span className="eyebrow">Community</span>
+          <h3>댓글</h3>
+          <p>읽은 뒤 느낀 점이나 질문을 남겨보세요. 답글로 대화를 이어갈 수 있습니다.</p>
+        </div>
+        <div className="countBadge">{comments.length} comments</div>
+      </SectionHeader>
+
+      <AccountCard>
+        {me ? (
+          <>
+            {renderAvatar(me.profileImageDirectUrl, me.profileImageUrl, me.username, 44)}
+            <div>
+              <strong>{me.nickname || me.username}</strong>
+              <span>로그인된 계정으로 바로 댓글과 답글을 작성할 수 있습니다.</span>
+            </div>
+          </>
+        ) : (
+          <div className="loginBox">
+            <div>
+              <strong>로그인이 필요합니다</strong>
+              <span>댓글과 답글 작성은 로그인 후 가능합니다.</span>
+            </div>
+            <a href={loginHref}>로그인</a>
+          </div>
+        )}
+      </AccountCard>
+
+      <form onSubmit={handleWriteComment} className="writeForm">
+        <div className="composerAvatar">
+          {renderAvatar(me?.profileImageDirectUrl, me?.profileImageUrl, me?.username || "guest", 44)}
+        </div>
+        <div className="composerBody">
+          <textarea
+            value={commentInput}
+            onChange={(event) => setCommentInput(event.target.value)}
+            placeholder={me ? "의견이나 질문을 남겨주세요." : "로그인 후 댓글을 작성할 수 있습니다."}
+            disabled={!me || isLoading}
+          />
+          <div className="composerFooter">
+            <span>대댓글은 각 댓글의 `답글` 버튼으로 이어서 작성할 수 있습니다.</span>
+            <button type="submit" disabled={!me || isLoading}>
+              댓글 작성
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {error && <p className="error">{error}</p>}
+
+      {commentTree.length > 0 ? (
+        <ul className="commentList">{commentTree.map((comment) => renderComment(comment))}</ul>
+      ) : (
+        <EmptyState>
+          <strong>첫 댓글을 남겨보세요.</strong>
+          <span>아직 등록된 댓글이 없습니다.</span>
+        </EmptyState>
+      )}
     </StyledWrapper>
   )
 }
@@ -260,51 +426,39 @@ const CommentBox: React.FC<Props> = ({ data }) => {
 export default CommentBox
 
 const StyledWrapper = styled.section`
-  margin-top: 2.5rem;
+  margin-top: 1.5rem;
+  padding: 1.15rem 1.2rem;
+  border-radius: 28px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 36%),
+    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
 
-  h3 {
-    margin-bottom: 0.75rem;
-    font-size: 1.125rem;
-    font-weight: 700;
-  }
-
-  .writeForm {
-    margin-bottom: 1rem;
-  }
-
-  .accountRow {
-    display: block;
-    margin-bottom: 1rem;
-    font-size: 0.875rem;
-    color: ${({ theme }) => theme.colors.gray11};
-
-    a {
-      color: ${({ theme }) => theme.colors.gray12};
-      text-decoration: underline;
-    }
-  }
-
-  input,
   textarea {
     width: 100%;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 0.5rem;
-    background-color: ${({ theme }) => theme.colors.gray3};
+    border-radius: 16px;
+    background-color: ${({ theme }) => theme.colors.gray1};
     color: ${({ theme }) => theme.colors.gray12};
-    padding: 0.625rem 0.75rem;
-  }
-
-  textarea {
-    min-height: 96px;
+    padding: 0.8rem 0.95rem;
+    min-height: 104px;
     resize: vertical;
+    line-height: 1.7;
   }
 
-  button {
-    border: none;
-    border-radius: 0.5rem;
-    background-color: ${({ theme }) => theme.colors.gray12};
-    color: ${({ theme }) => theme.colors.gray1};
-    padding: 0.625rem 0.9rem;
+  button,
+  a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 0.82rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background-color: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.8rem;
+    font-weight: 700;
     cursor: pointer;
 
     :disabled {
@@ -314,67 +468,272 @@ const StyledWrapper = styled.section`
   }
 
   button.subtle {
-    background-color: ${({ theme }) => theme.colors.gray6};
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.gray11};
   }
 
   button.danger {
-    background-color: #d14343;
-    color: #fff;
+    color: ${({ theme }) => theme.colors.red11};
+    border-color: ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+  }
+
+  .writeForm {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+
+    @media (max-width: 640px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .composerAvatar {
+    display: flex;
+    justify-content: center;
+  }
+
+  .composerBody {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .composerFooter {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+
+    span {
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
   }
 
   .error {
-    margin: 0.5rem 0 1rem;
-    color: #d14343;
+    margin: 0 0 0.9rem;
+    padding: 0.72rem 0.82rem;
+    border-radius: 14px;
+    border: 1px solid ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
     font-size: 0.875rem;
   }
 
-  .commentList {
+  .commentList,
+  .replyList {
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+
+  .commentList {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .replyList {
+    display: grid;
+    gap: 0.7rem;
+    margin-top: 0.85rem;
+  }
+`
+
+const SectionHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+
+  .eyebrow {
+    display: inline-flex;
+    margin-bottom: 0.45rem;
+    border-radius: 999px;
+    padding: 0.32rem 0.62rem;
+    border: 1px solid ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+    color: ${({ theme }) => theme.colors.green11};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 1.35rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0.45rem 0 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.65;
+  }
+
+  .countBadge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+`
+
+const AccountCard = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  strong {
+    display: block;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+  }
+
+  span {
+    display: block;
+    margin-top: 0.18rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .loginBox {
+    width: 100%;
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+`
 
-    li {
-      border: 1px solid ${({ theme }) => theme.colors.gray5};
-      border-radius: 0.75rem;
-      padding: 0.75rem;
-      background-color: ${({ theme }) => theme.colors.gray3};
+const Avatar = styled.div<{ size: number }>`
+  position: relative;
+  width: ${({ size }) => `${size}px`};
+  height: ${({ size }) => `${size}px`};
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  img {
+    object-fit: cover;
+    object-position: center 38%;
+  }
+`
+
+const CommentItem = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.85rem;
+  padding: 0.95rem;
+  border-radius: 22px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  &[data-depth="1"] {
+    margin-left: 1.1rem;
+  }
+
+  &[data-depth="2"] {
+    margin-left: 2.2rem;
+  }
+
+  &[data-depth="3"] {
+    margin-left: 3.3rem;
+  }
+
+  @media (max-width: 640px) {
+    &[data-depth="1"],
+    &[data-depth="2"],
+    &[data-depth="3"] {
+      margin-left: 0.55rem;
     }
+  }
 
-    .head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.35rem;
-    }
+  .commentBody {
+    min-width: 0;
+  }
 
-    .actions,
-    .editActions {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.45rem;
+  }
 
-      button {
-        padding: 0.35rem 0.55rem;
-        font-size: 0.75rem;
-      }
-    }
+  .meta {
+    display: grid;
+    gap: 0.14rem;
 
-    .editBox {
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
-    }
-
-    p {
-      margin: 0;
-      white-space: pre-wrap;
-      word-break: break-word;
+    strong {
       color: ${({ theme }) => theme.colors.gray12};
-      line-height: 1.55;
+      font-size: 0.92rem;
     }
+
+    span {
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.78rem;
+    }
+  }
+
+  .actions,
+  .editActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .content {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .editBox,
+  .replyForm {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.7rem;
+  }
+`
+
+const EmptyState = styled.div`
+  display: grid;
+  gap: 0.18rem;
+  padding: 1rem 1.05rem;
+  border-radius: 18px;
+  border: 1px dashed ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
   }
 `

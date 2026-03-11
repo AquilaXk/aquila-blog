@@ -31,8 +31,12 @@ export type TPost = {
   title: string
   status: TPostStatus[]
   createdTime: string
+  modifiedTime?: string
   fullWidth: boolean
   thumbnail?: string
+  likesCount?: number
+  commentsCount?: number
+  hitCount?: number
 }
 
 export type PostDetail = TPost & {

@@ -3,13 +3,16 @@ package com.back.boundedContexts.post.`in`
 import com.back.boundedContexts.member.out.shared.MemberApiClient
 import com.back.boundedContexts.post.app.PostFacade
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import com.back.standard.extensions.getOrThrow
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -48,4 +51,10 @@ class ApiV1AdmPostController(
         val postPage = postFacade.findPagedByKwForAdmin(kw, sort, validPage, validPageSize)
         return PageDto(postPage.map(::PostDto))
     }
+
+    @GetMapping("/{id}")
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자용 글 상세 (숨김글 포함)")
+    fun getItem(@PathVariable id: Int): PostWithContentDto =
+        PostWithContentDto(postFacade.findById(id).getOrThrow())
 }

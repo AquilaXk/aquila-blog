@@ -4,6 +4,7 @@ import { NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
@@ -85,6 +86,11 @@ type ToolbarGroup = {
   description: string
   actions: ToolbarAction[]
 }
+type ParsedEditorMeta = {
+  body: string
+  tags: string[]
+  category: string
+}
 
 const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
   if (!published) return "PRIVATE"
@@ -99,6 +105,108 @@ const toFlags = (visibility: PostVisibility): { published: boolean; listed: bool
 }
 
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
+
+const dedupeStrings = (items: string[]) =>
+  Array.from(
+    new Set(
+      items
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  )
+
+const normalizeMetaItems = (raw: string): string[] => {
+  const normalized = raw.trim().replace(/^\[|\]$/g, "")
+  if (!normalized) return []
+
+  return dedupeStrings(
+    normalized
+      .split(",")
+      .map((token) => token.trim().replace(/^['"]|['"]$/g, ""))
+  )
+}
+
+const parseEditorMeta = (content: string): ParsedEditorMeta => {
+  let trimmed = content.trimStart()
+  const tags: string[] = []
+  let category = ""
+
+  const pushTags = (items: string[]) => {
+    dedupeStrings(items).forEach((item) => {
+      if (!tags.includes(item)) tags.push(item)
+    })
+  }
+
+  const setCategory = (items: string[]) => {
+    const nextCategory = dedupeStrings(items)[0] || ""
+    if (nextCategory) category = nextCategory
+  }
+
+  if (trimmed.startsWith("---\n")) {
+    const closingIndex = trimmed.indexOf("\n---", 4)
+    if (closingIndex > 0) {
+      const block = trimmed.slice(4, closingIndex).split("\n")
+      block.forEach((line) => {
+        const [rawKey, ...rest] = line.split(":")
+        if (!rawKey || rest.length === 0) return
+        const key = rawKey.trim().toLowerCase()
+        const value = rest.join(":").trim()
+        if (!value) return
+
+        if (key === "tags" || key === "tag") pushTags(normalizeMetaItems(value))
+        if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
+      })
+      trimmed = trimmed.slice(closingIndex + 4).trimStart()
+    }
+  }
+
+  const lines = trimmed.split("\n")
+  const metadataLineRegex = /^\s*(tags?|categories?)\s*:\s*(.+)\s*$/i
+  let consumed = 0
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      consumed += 1
+      break
+    }
+
+    const match = line.match(metadataLineRegex)
+    if (!match) break
+
+    const key = match[1].toLowerCase()
+    const value = match[2]
+    if (key === "tag" || key === "tags") pushTags(normalizeMetaItems(value))
+    if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
+    consumed += 1
+  }
+
+  if (consumed > 0) {
+    trimmed = lines.slice(consumed).join("\n").trimStart()
+  }
+
+  return {
+    body: trimmed,
+    tags,
+    category,
+  }
+}
+
+const serializeMetaItems = (items: string[]) => items.map((item) => JSON.stringify(item)).join(", ")
+
+const composeEditorContent = (body: string, tags: string[], category: string) => {
+  const normalizedBody = body.trim()
+  const normalizedTags = dedupeStrings(tags)
+  const normalizedCategory = category.trim()
+  const metadataLines: string[] = []
+
+  if (normalizedCategory) metadataLines.push(`category: [${serializeMetaItems([normalizedCategory])}]`)
+  if (normalizedTags.length > 0) metadataLines.push(`tags: [${serializeMetaItems(normalizedTags)}]`)
+
+  if (metadataLines.length === 0) return normalizedBody
+  if (!normalizedBody) return `---\n${metadataLines.join("\n")}\n---`
+
+  return `---\n${metadataLines.join("\n")}\n---\n\n${normalizedBody}`
+}
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
@@ -281,13 +389,21 @@ const AdminPage: NextPage = () => {
   const [commentContent, setCommentContent] = useState("")
   const [postTitle, setPostTitle] = useState("")
   const [postContent, setPostContent] = useState("")
+  const [postTags, setPostTags] = useState<string[]>([])
+  const [postCategory, setPostCategory] = useState("")
+  const [tagDraft, setTagDraft] = useState("")
+  const [categoryDraft, setCategoryDraft] = useState("")
+  const [categoryEmoji, setCategoryEmoji] = useState<string>(CATEGORY_EMOJI_OPTIONS[0])
+  const [knownTags, setKnownTags] = useState<string[]>([])
+  const [knownCategories, setKnownCategories] = useState<string[]>([])
+  const [metaCatalogLoading, setMetaCatalogLoading] = useState(false)
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [publishNotice, setPublishNotice] = useState<{
     tone: NoticeTone
     text: string
   }>({
     tone: "idle",
-    text: "작성 후 ‘글 발행’을 누르면 결과가 여기에 표시됩니다.",
+    text: "작성 후 ‘글 작성’을 누르면 결과가 여기에 표시됩니다.",
   })
   const [profileNotice, setProfileNotice] = useState<{
     tone: NoticeTone
@@ -349,13 +465,98 @@ const AdminPage: NextPage = () => {
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
 
+  const syncEditorMeta = (content: string) => {
+    const parsed = parseEditorMeta(content)
+    const parsedCategory = splitCategoryDisplay(parsed.category)
+    setPostContent(parsed.body)
+    setPostTags(parsed.tags)
+    setPostCategory(parsed.category)
+    setCategoryEmoji(parsedCategory.emoji || CATEGORY_EMOJI_OPTIONS[0])
+    setKnownTags((prev) => dedupeStrings([...prev, ...parsed.tags]).sort((a, b) => a.localeCompare(b)))
+    setKnownCategories((prev) =>
+      dedupeStrings([...prev, ...(parsed.category ? [parsed.category] : [])]).sort((a, b) =>
+        a.localeCompare(b)
+      )
+    )
+  }
+
+  const refreshEditorMetaCatalog = async () => {
+    setMetaCatalogLoading(true)
+
+    try {
+      const firstPage = await apiFetch<PageDto<{ id: number }>>(
+        "/post/api/v1/adm/posts?page=1&pageSize=30&sort=CREATED_AT"
+      )
+      const totalPages = Math.max(1, firstPage.pageable?.totalPages ?? 1)
+      const pageRequests: Promise<PageDto<{ id: number }>>[] = []
+
+      for (let page = 2; page <= totalPages; page += 1) {
+        pageRequests.push(
+          apiFetch<PageDto<{ id: number }>>(
+            `/post/api/v1/adm/posts?page=${page}&pageSize=30&sort=CREATED_AT`
+          )
+        )
+      }
+
+      const restPages = pageRequests.length > 0 ? await Promise.all(pageRequests) : []
+      const ids = dedupeStrings(
+        [firstPage, ...restPages]
+          .flatMap((page) => page.content || [])
+          .map((row) => String(row.id))
+      ).map(Number)
+
+      const details = await Promise.allSettled(
+        ids.map((id) => apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${id}`))
+      )
+
+      const tags = new Set<string>()
+      const categories = new Set<string>()
+
+      details.forEach((result) => {
+        if (result.status !== "fulfilled") return
+        const parsed = parseEditorMeta(result.value.content || "")
+        parsed.tags.forEach((tag) => tags.add(tag))
+        if (parsed.category) categories.add(parsed.category)
+      })
+
+      setKnownTags(Array.from(tags).sort((a, b) => a.localeCompare(b)))
+      setKnownCategories(Array.from(categories).sort((a, b) => a.localeCompare(b)))
+    } finally {
+      setMetaCatalogLoading(false)
+    }
+  }
+
+  const addTagToPost = (value: string) => {
+    const normalized = value.trim()
+    if (!normalized) return
+    setPostTags((prev) => dedupeStrings([...prev, normalized]))
+    setKnownTags((prev) => dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b)))
+    setTagDraft("")
+  }
+
+  const removeTagFromPost = (value: string) => {
+    setPostTags((prev) => prev.filter((tag) => tag !== value))
+  }
+
+  const selectCategoryForPost = (value: string) => {
+    const normalized = value.trim()
+    const parsed = splitCategoryDisplay(normalized)
+    setPostCategory(normalized)
+    setCategoryEmoji(parsed.emoji || CATEGORY_EMOJI_OPTIONS[0])
+    if (!normalized) return
+    setKnownCategories((prev) =>
+      dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b))
+    )
+    setCategoryDraft("")
+  }
+
   const loadPostForEditor = async (targetPostId: string = postId) => {
     try {
       setLoadingKey("postOne")
-      const post = await apiFetch<PostForEditor>(`/post/api/v1/posts/${targetPostId}`)
+      const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
 
       setPostTitle(post.title ?? "")
-      setPostContent(post.content ?? "")
+      syncEditorMeta(post.content ?? "")
       setPostVisibility(toVisibility(!!post.published, !!post.listed))
       setPostId(String(post.id))
       setResult(pretty(post as unknown as JsonValue))
@@ -384,13 +585,14 @@ const AdminPage: NextPage = () => {
 
     try {
       setLoadingKey("writePost")
-      setPublishNotice({ tone: "loading", text: "글 발행 중입니다..." })
+      setPublishNotice({ tone: "loading", text: "글 작성 중입니다..." })
+      const contentWithMetadata = composeEditorContent(postContent, postTags, postCategory)
 
       const response = await apiFetch<RsData<PostWriteResult>>("/post/api/v1/posts", {
         method: "POST",
         body: JSON.stringify({
           title: postTitle,
-          content: postContent,
+          content: contentWithMetadata,
           ...toFlags(postVisibility),
         }),
       })
@@ -407,12 +609,55 @@ const AdminPage: NextPage = () => {
 
       setPublishNotice({
         tone: "success",
-        text: `발행 완료: ${response.msg} (공개 범위: ${visibilityText})`,
+        text: `작성 완료: ${response.msg} (공개 범위: ${visibilityText})`,
       })
+      setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
+      setKnownCategories((prev) =>
+        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort((a, b) =>
+          a.localeCompare(b)
+        )
+      )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
-      setPublishNotice({ tone: "error", text: `발행 실패: ${message}` })
+      setPublishNotice({ tone: "error", text: `작성 실패: ${message}` })
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const handleModifyPost = async () => {
+    if (!postId.trim()) {
+      const msg = "수정할 글 ID를 먼저 선택해주세요."
+      setPublishNotice({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return
+    }
+
+    try {
+      setLoadingKey("modifyPost")
+      setPublishNotice({ tone: "loading", text: "글 수정 중입니다..." })
+      const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: postTitle,
+          content: composeEditorContent(postContent, postTags, postCategory),
+          ...toFlags(postVisibility),
+        }),
+      })
+
+      setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
+      setKnownCategories((prev) =>
+        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort((a, b) =>
+          a.localeCompare(b)
+        )
+      )
+      setPublishNotice({ tone: "success", text: `수정 완료: ${response.msg}` })
+      setResult(pretty(response as unknown as JsonValue))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setPublishNotice({ tone: "error", text: `수정 실패: ${message}` })
+      setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
     }
@@ -469,6 +714,8 @@ const AdminPage: NextPage = () => {
         setPostId("")
         setPostTitle("")
         setPostContent("")
+        setPostTags([])
+        setPostCategory("")
       }
       return true
     } catch (error) {
@@ -606,6 +853,7 @@ const AdminPage: NextPage = () => {
           tone: "idle",
           text: "현재 저장된 관리자 프로필을 불러왔습니다. 입력창 값이 실제 저장값입니다.",
         })
+        void refreshEditorMetaCatalog()
       } catch {
         if (!mounted) return
         const target = `/login?next=${encodeURIComponent("/admin")}`
@@ -906,6 +1154,9 @@ const AdminPage: NextPage = () => {
   const lineCount = postContent ? postContent.split("\n").length : 0
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
+  const selectedCategoryText = postCategory || "미선택"
+  const selectedCategoryParts = splitCategoryDisplay(postCategory)
+  const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
@@ -977,7 +1228,23 @@ const AdminPage: NextPage = () => {
   ]
 
   if (authLoading || !me) {
-    return <Main>관리자 인증 확인 중...</Main>
+    return (
+      <Main>
+        <AdminGateCard>
+          <span className="eyebrow">Admin Access</span>
+          <h1>관리자 권한을 확인하는 중입니다</h1>
+          <p>
+            로그인 상태와 관리자 권한을 점검한 뒤 관리자 스튜디오를 열고 있습니다. 인증이 없으면 자동으로
+            로그인 화면으로 이동합니다.
+          </p>
+          <div className="pulseRow">
+            <span className="pulse large" />
+            <span className="pulse medium" />
+            <span className="pulse small" />
+          </div>
+        </AdminGateCard>
+      </Main>
+    )
   }
 
   return (
@@ -987,7 +1254,7 @@ const AdminPage: NextPage = () => {
           <HeroEyebrow>Admin Workspace</HeroEyebrow>
           <h1>운영 대시보드</h1>
           <p>
-            프로필, 글 발행, 댓글, 시스템 도구를 한 화면에서 관리합니다. 자주 쓰는 작업이 상단에
+            프로필, 글 작성, 댓글, 시스템 도구를 한 화면에서 관리합니다. 자주 쓰는 작업이 상단에
             먼저 오도록 배치했습니다.
           </p>
           <HeroNav>
@@ -1115,11 +1382,6 @@ const AdminPage: NextPage = () => {
               </ProfileCardPanel>
 
               <FormPanelCard>
-                <ProfileMetaCard>
-                  <span>편집 대상 관리자</span>
-                  <strong>@{me.username}</strong>
-                  <small>member #{me.id}</small>
-                </ProfileMetaCard>
                 <ProfileCurrentGrid>
                   <ProfileCurrentItem>
                     <label>현재 프로필 이미지</label>
@@ -1134,7 +1396,7 @@ const AdminPage: NextPage = () => {
                     <strong>{profileBioStatus}</strong>
                   </ProfileCurrentItem>
                   <ProfileCurrentItem>
-                    <label>마지막 반영 시각</label>
+                    <label>최종 수정 시각</label>
                     <strong>{profileUpdatedText}</strong>
                   </ProfileCurrentItem>
                 </ProfileCurrentGrid>
@@ -1373,18 +1635,7 @@ const AdminPage: NextPage = () => {
             <Button
               type="button"
               disabled={disabled("modifyPost")}
-              onClick={() =>
-                run("modifyPost", () =>
-                  apiFetch(`/post/api/v1/posts/${postId}`, {
-                    method: "PUT",
-                    body: JSON.stringify({
-                      title: postTitle,
-                      content: postContent,
-                      ...toFlags(postVisibility),
-                    }),
-                  })
-                )
-              }
+              onClick={() => void handleModifyPost()}
             >
               글 수정
             </Button>
@@ -1482,7 +1733,7 @@ const AdminPage: NextPage = () => {
             </VisibilityWrap>
             <PublishActionWrap>
               <PrimaryButton disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
-                {loadingKey === "writePost" ? "발행 중..." : "글 발행"}
+                {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
               </PrimaryButton>
             </PublishActionWrap>
           </WriterHeader>
@@ -1508,7 +1759,151 @@ const AdminPage: NextPage = () => {
               <span>삽입 블록</span>
               <strong>이미지 {imageCount}개 · 코드 {codeBlockCount}개</strong>
             </EditorInsightCard>
+            <EditorInsightCard>
+              <span>카테고리</span>
+              <strong>{selectedCategoryText}</strong>
+            </EditorInsightCard>
+            <EditorInsightCard>
+              <span>태그</span>
+              <strong>{tagSummaryText}</strong>
+            </EditorInsightCard>
           </EditorInsightGrid>
+
+          <MetadataSection>
+            <MetadataHeader>
+              <div>
+                <h3>태그 · 카테고리</h3>
+                <p>기존 글에서 추출한 값을 선택하거나, 새 값을 추가해서 현재 글에 바로 반영합니다.</p>
+              </div>
+              <MetadataBadge>
+                {metaCatalogLoading
+                  ? "메타데이터 불러오는 중"
+                  : `기존 태그 ${knownTags.length}개 · 카테고리 ${knownCategories.length}개`}
+              </MetadataBadge>
+            </MetadataHeader>
+
+            <MetadataGrid>
+              <MetadataPanel>
+                <label>카테고리 선택</label>
+                <MetadataHint>카테고리는 1개만 선택됩니다.</MetadataHint>
+                <SelectionRow>
+                  {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
+                    <SelectionChip
+                      key={emoji}
+                      type="button"
+                      data-active={categoryEmoji === emoji}
+                      onClick={() => setCategoryEmoji(emoji)}
+                      aria-label={`카테고리 이모지 ${emoji}`}
+                    >
+                      {emoji}
+                    </SelectionChip>
+                  ))}
+                </SelectionRow>
+                <SelectionRow>
+                  <SelectionChip
+                    type="button"
+                    data-active={postCategory.length === 0}
+                    onClick={() => selectCategoryForPost("")}
+                  >
+                    없음
+                  </SelectionChip>
+                  {knownCategories.map((category) => (
+                    <SelectionChip
+                      key={category}
+                      type="button"
+                      data-active={postCategory === category}
+                      onClick={() => selectCategoryForPost(category)}
+                    >
+                      {category}
+                    </SelectionChip>
+                  ))}
+                </SelectionRow>
+                <CreateRow>
+                  <Input
+                    placeholder="새 카테고리 이름 입력"
+                    value={categoryDraft}
+                    onChange={(e) => setCategoryDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))}
+                  >
+                    카테고리 추가
+                  </Button>
+                </CreateRow>
+              </MetadataPanel>
+
+              <MetadataPanel>
+                <label>태그 선택</label>
+                <MetadataHint>태그는 여러 개를 동시에 선택할 수 있습니다.</MetadataHint>
+                <SelectionRow>
+                  {knownTags.map((tag) => (
+                    <SelectionChip
+                      key={tag}
+                      type="button"
+                      data-active={postTags.includes(tag)}
+                      onClick={() =>
+                        postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag)
+                      }
+                    >
+                      {tag}
+                    </SelectionChip>
+                  ))}
+                  {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
+                </SelectionRow>
+                <CreateRow>
+                  <Input
+                    placeholder="새 태그 입력"
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        addTagToPost(tagDraft)
+                      }
+                    }}
+                  />
+                  <Button type="button" onClick={() => addTagToPost(tagDraft)}>
+                    태그 추가
+                  </Button>
+                </CreateRow>
+              </MetadataPanel>
+            </MetadataGrid>
+
+            <SelectedMetaRow>
+              <MetaSummaryCard>
+                <span>현재 카테고리</span>
+                <strong>
+                  {selectedCategoryText === "미선택"
+                    ? selectedCategoryText
+                    : `${selectedCategoryParts.emoji ? `${selectedCategoryParts.emoji} ` : ""}${selectedCategoryParts.label}`}
+                </strong>
+              </MetaSummaryCard>
+              <MetaSummaryCard className="wide">
+                <span>현재 태그</span>
+                <TagChipRow>
+                  {postTags.length > 0 ? (
+                    postTags.map((tag) => (
+                      <TagChip key={tag}>
+                        {tag}
+                        <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
+                          ×
+                        </button>
+                      </TagChip>
+                    ))
+                  ) : (
+                    <EmptyMetaText>선택된 태그가 없습니다.</EmptyMetaText>
+                  )}
+                </TagChipRow>
+              </MetaSummaryCard>
+            </SelectedMetaRow>
+          </MetadataSection>
 
           <input
             ref={postImageFileInputRef}
@@ -2036,6 +2431,7 @@ const ProfileStudioGrid = styled.div`
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 0.9rem;
+  align-items: start;
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -2048,15 +2444,18 @@ const ProfileCardPanel = styled.div`
   background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
   display: grid;
-  gap: 0.7rem;
+  gap: 0.85rem;
   width: 100%;
   min-width: 0;
   overflow: hidden;
   justify-items: center;
   text-align: center;
+  align-content: start;
 `
 
 const ProfilePreview = styled.div`
+  display: grid;
+  place-items: center;
   padding: 0.15rem;
   width: 124px;
   height: 124px;
@@ -2070,6 +2469,7 @@ const ProfilePreview = styled.div`
     width: 120px;
     height: 120px;
     object-fit: cover;
+    object-position: center 38%;
     border-radius: 999px;
     display: block;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
@@ -2132,34 +2532,6 @@ const FormPanelCard = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
-`
-
-const ProfileMetaCard = styled.div`
-  display: grid;
-  gap: 0.18rem;
-  padding: 0.8rem 0.9rem;
-  margin-bottom: 0.85rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.74rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
-  }
-
-  small {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
-  }
 `
 
 const ProfileCurrentGrid = styled.div`
@@ -2430,6 +2802,207 @@ const PublishNotice = styled.div`
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
   }
+`
+
+const MetadataSection = styled.section`
+  display: grid;
+  gap: 0.85rem;
+  margin: 0 0 0.85rem;
+  padding: 0.9rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 28%),
+    ${({ theme }) => theme.colors.gray1};
+`
+
+const MetadataHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+
+  h3 {
+    margin: 0;
+    font-size: 0.96rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0.24rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+`
+
+const MetadataBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 0.72rem;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: ${({ theme }) => theme.colors.blue3};
+  color: ${({ theme }) => theme.colors.blue11};
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+`
+
+const MetadataGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+
+  @media (max-width: 880px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const MetadataPanel = styled.div`
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.82rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  label {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+`
+
+const MetadataHint = styled.p`
+  margin: -0.2rem 0 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.76rem;
+  line-height: 1.45;
+`
+
+const SelectionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+`
+
+const SelectionChip = styled.button`
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.44rem 0.76rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    color: ${({ theme }) => theme.colors.blue11};
+    transform: translateY(-1px);
+  }
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+`
+
+const CreateRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const SelectedMetaRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 0.66fr);
+  gap: 0.8rem;
+
+  @media (max-width: 880px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const MetaSummaryCard = styled.div`
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+  padding: 0.78rem 0.84rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  &.wide {
+    min-width: 0;
+  }
+`
+
+const TagChipRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+`
+
+const TagChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.34rem 0.42rem 0.34rem 0.68rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+
+  button {
+    border: 0;
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray11};
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 999px;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+`
+
+const EmptyMetaText = styled.span`
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.78rem;
+  line-height: 1.5;
 `
 
 const EditorToolbar = styled.div`
@@ -2876,4 +3449,83 @@ const ResultPanel = styled.pre`
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 160px;
+`
+
+const AdminGateCard = styled.section`
+  width: min(720px, 100%);
+  margin: 3rem auto 0;
+  padding: 1.3rem;
+  border-radius: 24px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 36%),
+    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
+
+  .eyebrow {
+    display: inline-flex;
+    margin-bottom: 0.7rem;
+    border-radius: 999px;
+    padding: 0.38rem 0.68rem;
+    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: clamp(1.45rem, 3vw, 2.1rem);
+    letter-spacing: -0.04em;
+  }
+
+  p {
+    margin: 0.8rem 0 1rem;
+    max-width: 42rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.7;
+  }
+
+  .pulseRow {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .pulse {
+    display: block;
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      ${({ theme }) => theme.colors.gray4},
+      ${({ theme }) => theme.colors.gray5},
+      ${({ theme }) => theme.colors.gray4}
+    );
+    background-size: 200% 100%;
+    animation: admin-gate-shimmer 1.6s linear infinite;
+  }
+
+  .pulse.large {
+    width: 100%;
+  }
+
+  .pulse.medium {
+    width: 78%;
+  }
+
+  .pulse.small {
+    width: 52%;
+  }
+
+  @keyframes admin-gate-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
 `

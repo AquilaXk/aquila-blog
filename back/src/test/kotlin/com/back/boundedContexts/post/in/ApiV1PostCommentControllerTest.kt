@@ -14,7 +14,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.*
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
+import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import org.springframework.transaction.annotation.Transactional
 
@@ -127,7 +131,7 @@ class ApiV1PostCommentControllerTest {
                 content = """{"content": "새 댓글 내용"}"""
             }
 
-            val postComment = postFacade.getComments(postFacade.findById(postId).getOrThrow()).first()
+            val postComment = postFacade.getComments(postFacade.findById(postId).getOrThrow()).last()
 
             resultActions.andExpect {
                 match(handler().handlerType(ApiV1PostCommentController::class.java))
@@ -139,6 +143,23 @@ class ApiV1PostCommentControllerTest {
                 jsonPath("$.data.authorId") { value(postComment.author.id) }
                 jsonPath("$.data.postId") { value(postComment.post.id) }
                 jsonPath("$.data.content") { value("새 댓글 내용") }
+            }
+        }
+
+        @Test
+        @WithUserDetails("user3")
+        fun `인증된 사용자가 기존 댓글에 대댓글을 작성하면 부모 댓글 식별자가 함께 저장된다`() {
+            val postId = post.id
+
+            mvc.post("/post/api/v1/posts/$postId/comments") {
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"content": "대댓글 내용", "parentCommentId": ${commentByAuthor.id}}"""
+            }.andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("write"))
+                status { isCreated() }
+                jsonPath("$.data.content") { value("대댓글 내용") }
+                jsonPath("$.data.parentCommentId") { value(commentByAuthor.id) }
             }
         }
 
@@ -221,6 +242,25 @@ class ApiV1PostCommentControllerTest {
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
                 jsonPath("$.msg") { value("${id}번 댓글이 삭제되었습니다.") }
+            }
+        }
+
+        @Test
+        @WithUserDetails("user1")
+        fun `부모 댓글을 삭제하면 그 대댓글도 함께 삭제된다`() {
+            val reply = postFacade.writeComment(actorFacade.findByUsername("user3").getOrThrow(), post, "대댓글", commentByAuthor)
+            val postId = post.id
+            val id = commentByAuthor.id
+
+            mvc.delete("/post/api/v1/posts/$postId/comments/$id").andExpect {
+                match(handler().handlerType(ApiV1PostCommentController::class.java))
+                match(handler().methodName("delete"))
+                status { isOk() }
+            }
+
+            mvc.get("/post/api/v1/posts/$postId/comments").andExpect {
+                status { isOk() }
+                jsonPath("$.length()") { value(1) }
             }
         }
 

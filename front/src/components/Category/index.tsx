@@ -1,5 +1,6 @@
 import { useRouter } from "next/router"
 import React from "react"
+import { splitCategoryDisplay } from "src/libs/utils"
 import { COLOR_SET } from "./constants"
 import styled from "@emotion/styled"
 
@@ -32,7 +33,8 @@ type Props = {
 
 const Category: React.FC<Props> = ({ readOnly = false, children }) => {
   const router = useRouter()
-  const backgroundColor = getColorClassByName(children)
+  const { emoji, label } = splitCategoryDisplay(children)
+  const backgroundColor = getColorClassByName(label || children)
   const textColor = getReadableTextColor(backgroundColor)
 
   const buildFeedQuery = () => {
@@ -82,7 +84,8 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
         cursor: readOnly ? "default" : "pointer",
       }}
     >
-      {children}
+      {emoji && <span className="emoji">{emoji}</span>}
+      <span className="label">{label || children}</span>
     </StyledWrapper>
   )
 }
@@ -90,7 +93,9 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
 export default Category
 
 const StyledWrapper = styled.span`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
   padding-left: 0.5rem;
@@ -101,4 +106,13 @@ const StyledWrapper = styled.span`
   line-height: 1.25rem;
   opacity: 0.9;
   color: inherit;
+
+  > .emoji {
+    flex: 0 0 auto;
+    font-size: 0.92em;
+  }
+
+  > .label {
+    min-width: 0;
+  }
 `

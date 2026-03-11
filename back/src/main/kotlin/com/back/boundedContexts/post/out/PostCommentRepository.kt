@@ -6,11 +6,13 @@ import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface PostCommentRepository : JpaRepository<PostComment, Int> {
-    // 댓글 목록 DTO 매핑에서 author 접근 시 N+1이 발생하지 않도록 함께 로딩한다.
-    @EntityGraph(attributePaths = ["author"])
-    fun findByPostOrderByIdDesc(post: Post): List<PostComment>
+    /**
+     * 댓글 목록 DTO 매핑 시 author / parentComment lazy-load로 인한 N+1을 피한다.
+     */
+    @EntityGraph(attributePaths = ["author", "parentComment"])
+    fun findByPostOrderByCreatedAtAscIdAsc(post: Post): List<PostComment>
 
-    @EntityGraph(attributePaths = ["author"])
+    @EntityGraph(attributePaths = ["author", "parentComment"])
     fun findByPostAndId(post: Post, id: Int): PostComment?
 
     fun deleteByPost(post: Post)

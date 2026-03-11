@@ -12,6 +12,7 @@ import ContactCard from "./ContactCard"
 import PostList from "./PostList"
 import PinnedPosts from "./PostList/PinnedPosts"
 import { AdminProfile } from "src/hooks/useAdminProfile"
+import { CONFIG } from "site.config"
 
 const HEADER_HEIGHT = 73
 
@@ -21,6 +22,8 @@ type Props = {
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const [q, setQ] = useState("")
+  const displayName = initialAdminProfile?.username || CONFIG.profile.name
+  const displayRole = initialAdminProfile?.profileRole || CONFIG.profile.role
 
   return (
     <StyledWrapper>
@@ -34,12 +37,24 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
       </div>
       <div className="mid">
         <MobileProfileCard initialAdminProfile={initialAdminProfile} />
+        <IntroCard>
+          <span className="eyebrow">Aquila Blog</span>
+          <h1>{CONFIG.blog.title}</h1>
+          <p>{CONFIG.blog.description}</p>
+          <div className="meta">
+            <span>운영자 {displayName}</span>
+            <span>{displayRole}</span>
+            <span>{q.trim() ? `검색어: ${q.trim()}` : "최신 글을 탐색해보세요"}</span>
+          </div>
+        </IntroCard>
         <PinnedPosts q={q} />
-        <SearchInput value={q} onChange={(e) => setQ(e.target.value)} />
-        <div className="tags">
-          <TagList />
-        </div>
-        <FeedHeader />
+        <ExplorerCard>
+          <SearchInput value={q} onChange={(e) => setQ(e.target.value)} />
+          <div className="tags">
+            <TagList />
+          </div>
+          <FeedHeader />
+        </ExplorerCard>
         <PostList q={q} />
         <div className="footer">
           <Footer />
@@ -66,14 +81,13 @@ export default Feed
 
 const StyledWrapper = styled.div`
   grid-template-columns: repeat(12, minmax(0, 1fr));
-
-  padding: 2rem 0;
+  padding: 1.4rem 0 2.2rem;
   display: grid;
   gap: 1.5rem;
 
   @media (max-width: 768px) {
     display: block;
-    padding: 0.5rem 0;
+    padding: 0.5rem 0 1.2rem;
   }
 
   > .lt {
@@ -97,6 +111,8 @@ const StyledWrapper = styled.div`
 
   > .mid {
     grid-column: span 12 / span 12;
+    display: grid;
+    gap: 1rem;
 
     @media (min-width: 1024px) {
       grid-column: span 7 / span 7;
@@ -138,6 +154,78 @@ const StyledWrapper = styled.div`
 
     .footer {
       padding-top: 1rem;
+    }
+  }
+`
+
+const IntroCard = styled.section`
+  border-radius: 26px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 38%),
+    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
+  padding: 1.3rem 1.35rem;
+
+  .eyebrow {
+    display: inline-flex;
+    margin-bottom: 0.7rem;
+    border-radius: 999px;
+    padding: 0.36rem 0.7rem;
+    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: clamp(1.9rem, 4vw, 2.7rem);
+    letter-spacing: -0.05em;
+    line-height: 1.05;
+  }
+
+  p {
+    margin: 0.8rem 0 1rem;
+    max-width: 42rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.7;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+
+    span {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      min-height: 34px;
+      padding: 0 0.8rem;
+      border: 1px solid ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray1};
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+  }
+`
+
+const ExplorerCard = styled.section`
+  border-radius: 22px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1rem 1rem 0.2rem;
+
+  .tags {
+    display: block;
+
+    @media (min-width: 1024px) {
+      display: none;
     }
   }
 `

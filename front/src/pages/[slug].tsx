@@ -39,7 +39,7 @@ const DetailPage: NextPageWithLayout = () => {
   const post = usePostQuery()
   if (!post) return <CustomError />
 
-  const date = post.date?.start_date || post.createdTime || ""
+  const date = post.createdTime || post.date?.start_date || ""
   const publishedDate = new Date(date)
   const publishedDateIso = Number.isNaN(publishedDate.getTime())
     ? undefined

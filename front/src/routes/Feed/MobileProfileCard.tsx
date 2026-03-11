@@ -23,7 +23,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
 
   return (
     <StyledWrapper>
-      <div className="top">💻 {displayName}</div>
+      <div className="top">💻 Profile</div>
       <div className="mid">
         <div className="wrapper">
           <Image
@@ -34,6 +34,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
               position: "relative",
               borderRadius: "50%",
               objectFit: "cover",
+              objectPosition: "center 38%",
             }}
             alt="profile_image"
             unoptimized={bypassOptimizer}
@@ -59,36 +60,43 @@ const StyledWrapper = styled.div`
   }
 
   > .top {
-    padding: 0.25rem;
-    margin-bottom: 0.75rem;
+    padding: 0.15rem 0.1rem;
+    margin-bottom: 0.7rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    font-weight: 700;
   }
   > .mid {
-    padding: 0.5rem;
+    padding: 0.9rem;
     margin-bottom: 1rem;
-    border-radius: 1rem;
-    background-color: ${({ theme }) =>
-      theme.scheme === "light" ? "white" : theme.colors.gray4};
+    border-radius: 1.3rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background:
+      radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 38%),
+      ${({ theme }) => (theme.scheme === "light" ? "white" : theme.colors.gray4)};
     > .wrapper {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.85rem;
       align-items: center;
       > .wrapper {
         height: fit-content;
         > .top {
-          font-size: 1.25rem;
-          line-height: 1.75rem;
-          font-style: italic;
+          font-size: 1.18rem;
+          line-height: 1.35;
           font-weight: 700;
+          letter-spacing: -0.03em;
         }
         > .mid {
-          margin-bottom: 0.5rem;
+          margin: 0.35rem 0 0.5rem;
           font-size: 0.875rem;
-          line-height: 1.25rem;
-          color: ${({ theme }) => theme.colors.gray11};
+          line-height: 1.35;
+          color: ${({ theme }) => theme.colors.blue11};
+          font-weight: 700;
         }
         > .btm {
           font-size: 0.875rem;
-          line-height: 1.25rem;
+          line-height: 1.6;
+          color: ${({ theme }) => theme.colors.gray11};
         }
       }
     }

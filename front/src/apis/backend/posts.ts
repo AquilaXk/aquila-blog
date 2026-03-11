@@ -42,6 +42,9 @@ type ApiPostWithContentDto = {
   category?: string[]
   published: boolean
   listed: boolean
+  likesCount: number
+  commentsCount: number
+  hitCount: number
 }
 
 const slugify = (value: string) =>
@@ -192,6 +195,7 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
     : {}),
   status: toStatus(post.published, post.listed),
   createdTime: post.createdAt,
+  modifiedTime: post.modifiedAt,
   fullWidth: false,
 })
 
@@ -224,6 +228,10 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
     ...(category.length > 0 ? { category } : {}),
     summary: toSummary(normalizedContent),
     content: normalizedContent,
+    modifiedTime: post.modifiedAt,
+    likesCount: post.likesCount,
+    commentsCount: post.commentsCount,
+    hitCount: post.hitCount,
   }
 }
 

@@ -11,7 +11,15 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.annotation.Transactional
-import org.springframework.web.bind.annotation.*
+import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.ResponseStatus
+import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/post/api/v1/posts/{postId}/comments")
@@ -51,6 +59,7 @@ class ApiV1PostCommentController(
         @field:NotBlank
         @field:Size(min = 2, max = 100)
         val content: String,
+        val parentCommentId: Int? = null,
     )
 
     @PostMapping
@@ -61,7 +70,15 @@ class ApiV1PostCommentController(
         @Valid @RequestBody reqBody: PostCommentWriteRequest,
     ): RsData<PostCommentDto> {
         val post = postFacade.findById(postId).getOrThrow()
-        val postComment = postFacade.writeComment(rq.actor, post, reqBody.content)
+        val parentComment = reqBody.parentCommentId?.let { parentId ->
+            postFacade.findCommentById(post, parentId).getOrThrow()
+        }
+        val postComment = postFacade.writeComment(
+            author = rq.actor,
+            post = post,
+            content = reqBody.content,
+            parentComment = parentComment,
+        )
         return RsData("201-1", "${postComment.id}번 댓글이 작성되었습니다.", makePostCommentDto(postComment))
     }
 

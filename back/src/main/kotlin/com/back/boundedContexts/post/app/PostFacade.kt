@@ -1,9 +1,14 @@
 package com.back.boundedContexts.post.app
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.domain.PostAttr
+import com.back.boundedContexts.post.domain.PostLike
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
+import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
+import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -39,7 +44,6 @@ class PostFacade(
         published: Boolean = false,
         listed: Boolean = false,
     ): Post {
-        syncDomainRepositories()
         val post = Post(0, author, title, content, published, listed)
         val savedPost = postRepository.saveAndFlush(post)
         author.incrementPostsCount()
@@ -51,7 +55,9 @@ class PostFacade(
         return savedPost
     }
 
-    fun findById(id: Int): Post? = postRepository.findById(id).getOrNull()
+    fun findById(id: Int): Post? =
+        postRepository.findById(id).getOrNull()
+            ?.also(::hydratePostAttrs)
 
     fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 
@@ -64,6 +70,7 @@ class PostFacade(
         published: Boolean? = null,
         listed: Boolean? = null,
     ) {
+        hydratePostAttrs(post)
         post.modify(title, content, published, listed)
         postRepository.flush()
 
@@ -74,6 +81,7 @@ class PostFacade(
 
     @Transactional
     fun delete(post: Post, actor: Member) {
+        hydratePostAttrs(post)
         val postDto = PostDto(post)
 
         eventPublisher.publish(
@@ -86,8 +94,10 @@ class PostFacade(
 
     @Transactional
     fun writeComment(author: Member, post: Post, content: String): PostComment {
-        syncDomainRepositories()
-        val comment = post.addComment(author, content)
+        hydratePostAttrs(post)
+        val comment = postCommentRepository.save(post.newComment(author, content))
+        post.onCommentAdded()
+        savePostAttr(post.commentsCountAttr)
         author.incrementPostCommentsCount()
         postRepository.flush()
 
@@ -114,12 +124,14 @@ class PostFacade(
 
     @Transactional
     fun deleteComment(post: Post, postComment: PostComment, actor: Member) {
-        syncDomainRepositories()
+        hydratePostAttrs(post)
         val postCommentDto = PostCommentDto(postComment)
         val postDto = PostDto(post)
 
         postComment.author.decrementPostCommentsCount()
-        post.deleteComment(postComment)
+        post.onCommentDeleted()
+        postCommentRepository.delete(postComment)
+        savePostAttr(post.commentsCountAttr)
 
         eventPublisher.publish(
             PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor))
@@ -128,8 +140,18 @@ class PostFacade(
 
     @Transactional
     fun toggleLike(post: Post, actor: Member): PostLikeToggleResult {
-        syncDomainRepositories()
-        val likeResult = post.toggleLike(actor)
+        hydratePostAttrs(post)
+        val existingLike = postLikeRepository.findByLikerAndPost(actor, post)
+        val likeResult = if (existingLike != null) {
+            postLikeRepository.delete(existingLike)
+            post.onLikeRemoved()
+            PostLikeToggleResult(false, existingLike.id)
+        } else {
+            val savedLike = postLikeRepository.save(PostLike(0, actor, post))
+            post.onLikeAdded()
+            PostLikeToggleResult(true, savedLike.id)
+        }
+        savePostAttr(post.likesCountAttr)
         postRepository.flush()
 
         eventPublisher.publish(
@@ -144,8 +166,20 @@ class PostFacade(
 
     @Transactional
     fun incrementHit(post: Post) {
-        syncDomainRepositories()
+        hydratePostAttrs(post)
         post.incrementHitCount()
+        savePostAttr(post.hitCountAttr)
+    }
+
+    fun getComments(post: Post): List<PostComment> =
+        postCommentRepository.findByPostOrderByIdDesc(post)
+
+    fun findCommentById(post: Post, id: Int): PostComment? =
+        postCommentRepository.findByPostAndId(post, id)
+
+    fun isLiked(post: Post, liker: Member?): Boolean {
+        if (liker == null) return false
+        return postLikeRepository.findByLikerAndPost(liker, post) != null
     }
 
     fun findLikedPostIds(liker: Member?, posts: List<Post>): Set<Int> {
@@ -164,7 +198,10 @@ class PostFacade(
     ): Page<Post> = postRepository.findQPagedByKw(
         kw,
         PageRequest.of(page - 1, pageSize, sort.sortBy)
-    )
+    ).map { post ->
+        hydratePostAttrs(post)
+        post
+    }
 
     fun findPagedByKwForAdmin(
         kw: String,
@@ -174,7 +211,10 @@ class PostFacade(
     ): Page<Post> = postRepository.findQPagedByKwForAdmin(
         kw,
         PageRequest.of(page - 1, pageSize, sort.sortBy)
-    )
+    ).map { post ->
+        hydratePostAttrs(post)
+        post
+    }
 
     fun findPagedByAuthor(
         author: Member,
@@ -186,14 +226,16 @@ class PostFacade(
         author,
         kw,
         PageRequest.of(page - 1, pageSize, sort.sortBy)
-    )
+    ).map { post ->
+        hydratePostAttrs(post)
+        post
+    }
 
     fun findTemp(author: Member): Post? =
         postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
 
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
-        syncDomainRepositories()
         val existingTemp = findTemp(author)
         if (existingTemp != null) return existingTemp to false
 
@@ -201,9 +243,13 @@ class PostFacade(
         return postRepository.save(newPost) to true
     }
 
-    private fun syncDomainRepositories() {
-        Post.attrRepository_ = postAttrRepository
-        Post.commentRepository_ = postCommentRepository
-        Post.likeRepository_ = postLikeRepository
+    private fun hydratePostAttrs(post: Post) {
+        post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)?.let { post.likesCountAttr = it }
+        post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)?.let { post.commentsCountAttr = it }
+        post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
+    }
+
+    private fun savePostAttr(attr: PostAttr?) {
+        attr?.let(postAttrRepository::save)
     }
 }

@@ -5,9 +5,6 @@ import com.back.boundedContexts.post.domain.postMixin.PostHasComments
 import com.back.boundedContexts.post.domain.postMixin.PostHasHit
 import com.back.boundedContexts.post.domain.postMixin.PostHasLikes
 import com.back.boundedContexts.post.domain.postMixin.PostHasPolicy
-import com.back.boundedContexts.post.out.PostAttrRepository
-import com.back.boundedContexts.post.out.PostCommentRepository
-import com.back.boundedContexts.post.out.PostLikeRepository
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.*
@@ -91,20 +88,6 @@ class Post(
     var hitCountAttr: PostAttr? = null
 
     override val post: Post get() = this
-
-    companion object {
-        lateinit var attrRepository_: PostAttrRepository
-        val attrRepository
-            get() = attrRepository_
-
-        lateinit var commentRepository_: PostCommentRepository
-        val commentRepository
-            get() = commentRepository_
-
-        lateinit var likeRepository_: PostLikeRepository
-        val likeRepository
-            get() = likeRepository_
-    }
 
     fun modify(title: String, content: String, published: Boolean? = null, listed: Boolean? = null) {
         this.title = title

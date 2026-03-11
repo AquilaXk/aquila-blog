@@ -50,7 +50,7 @@ class ApiV1PostCommentControllerTest {
         @Test
         fun `게시글의 댓글 목록을 조회하면 생성된 댓글 목록이 정상 반환된다`() {
             val postId = post.id
-            val comments = postFacade.findById(postId).getOrThrow().getComments()
+            val comments = postFacade.getComments(postFacade.findById(postId).getOrThrow())
 
             val resultActions = mvc.get("/post/api/v1/posts/$postId/comments")
 
@@ -90,7 +90,7 @@ class ApiV1PostCommentControllerTest {
         fun `존재하는 댓글 식별자로 댓글을 조회하면 상세 정보가 정상 반환된다`() {
             val postId = post.id
             val id = commentByAuthor.id
-            val postComment = postFacade.findById(postId).getOrThrow().findCommentById(id).getOrThrow()
+            val postComment = postFacade.findCommentById(postFacade.findById(postId).getOrThrow(), id).getOrThrow()
 
             mvc.get("/post/api/v1/posts/$postId/comments/$id").andExpect {
                 match(handler().handlerType(ApiV1PostCommentController::class.java))
@@ -127,7 +127,7 @@ class ApiV1PostCommentControllerTest {
                 content = """{"content": "새 댓글 내용"}"""
             }
 
-            val postComment = postFacade.findById(postId).getOrThrow().getComments().first()
+            val postComment = postFacade.getComments(postFacade.findById(postId).getOrThrow()).first()
 
             resultActions.andExpect {
                 match(handler().handlerType(ApiV1PostCommentController::class.java))

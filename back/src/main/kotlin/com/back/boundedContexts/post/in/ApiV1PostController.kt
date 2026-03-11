@@ -39,7 +39,7 @@ class ApiV1PostController(
     private fun makePostWithContentDto(post: Post): PostWithContentDto {
         val actor = rq.actorOrNull
         return PostWithContentDto(post).apply {
-            actorHasLiked = post.isLikedBy(actor)
+            actorHasLiked = postFacade.isLiked(post, actor)
             actorCanModify = post.getCheckActorCanModifyRs(actor).isSuccess
             actorCanDelete = post.getCheckActorCanDeleteRs(actor).isSuccess
         }

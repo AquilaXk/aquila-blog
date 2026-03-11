@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import Image from "next/image"
 import { NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
@@ -787,140 +788,251 @@ const AdminPage: NextPage = () => {
     })
   }
 
+  const currentFlags = toFlags(postVisibility)
+  const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
+  const currentPostLabel = postTitle.trim() || (postId.trim() ? `#${postId} 불러온 글` : "새 글 초안")
+  const profilePreviewSrc = profileImgInputUrl.trim()
+  const adminTools = [
+    { href: "#profile-studio", label: "프로필" },
+    { href: "#content-studio", label: "글 관리" },
+    { href: "#comment-studio", label: "댓글" },
+    { href: "#system-tools", label: "시스템" },
+  ]
+
   if (authLoading || !me) {
     return <Main>관리자 인증 확인 중...</Main>
   }
 
   return (
     <Main>
-      <h1>Admin Tools</h1>
-      <p>
-        {me.username} 계정으로 인증됨.
-      </p>
-
-      <Section>
-        <h2>Auth</h2>
-        <Row>
-          <Button
-            disabled={disabled("me")}
-            onClick={() => run("me", () => apiFetch("/member/api/v1/auth/me"))}
-          >
-            내 정보
-          </Button>
-          <Button
-            disabled={disabled("logout")}
-            onClick={() =>
-              run("logout", () => apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }))
-            }
-          >
-            로그아웃
-          </Button>
-        </Row>
-      </Section>
-
-      <Section>
-        <h2>Member</h2>
-        <Row>
-          <Button
-            disabled={disabled("secureTip")}
-            onClick={() =>
-              run("secureTip", () =>
-                apiFetch("/member/api/v1/members/randomSecureTip").then((tip) => ({ tip }))
-              )
-            }
-          >
-            랜덤 보안 팁
-          </Button>
-          <Input
-            placeholder="member id"
-            value={memberId}
-            onChange={(e) => setMemberId(e.target.value)}
-          />
-          <Button
-            disabled={disabled("admMemberOne")}
-            onClick={() => run("admMemberOne", () => apiFetch(`/member/api/v1/adm/members/${memberId}`))}
-          >
-            관리자 회원 단건
-          </Button>
-          <Input
-            placeholder="profile member id"
-            value={profileImgMemberId}
-            onChange={(e) => setProfileImgMemberId(e.target.value)}
-          />
-          <input
-            ref={profileImageFileInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              setProfileImageFileName(file?.name || "")
-              if (file) {
-                void handleUploadMemberProfileImage(file)
+      <HeroCard>
+        <HeroIntro>
+          <HeroEyebrow>Admin Workspace</HeroEyebrow>
+          <h1>운영 대시보드</h1>
+          <p>
+            프로필, 글 발행, 댓글, 시스템 도구를 한 화면에서 관리합니다. 자주 쓰는 작업이 상단에
+            먼저 오도록 배치했습니다.
+          </p>
+          <HeroNav>
+            {adminTools.map((tool) => (
+              <AnchorButton key={tool.href} href={tool.href}>
+                {tool.label}
+              </AnchorButton>
+            ))}
+          </HeroNav>
+        </HeroIntro>
+        <HeroAside>
+          <MetricGrid>
+            <MetricCard>
+              <span>현재 계정</span>
+              <strong>{me.username}</strong>
+            </MetricCard>
+            <MetricCard>
+              <span>작업 중 글</span>
+              <strong>{currentPostLabel}</strong>
+            </MetricCard>
+            <MetricCard>
+              <span>공개 범위</span>
+              <strong>{currentVisibilityText}</strong>
+            </MetricCard>
+            <MetricCard>
+              <span>불러온 글 수</span>
+              <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개` : "미조회"}</strong>
+            </MetricCard>
+          </MetricGrid>
+          <ActionCluster>
+            <PrimaryButton
+              type="button"
+              disabled={disabled("postList")}
+              onClick={() => void loadAdminPosts()}
+            >
+              글 목록 새로고침
+            </PrimaryButton>
+            <Button
+              type="button"
+              disabled={disabled("me")}
+              onClick={() => run("me", () => apiFetch("/member/api/v1/auth/me"))}
+            >
+              내 정보
+            </Button>
+            <Button
+              type="button"
+              disabled={disabled("systemHealth")}
+              onClick={() => run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}
+            >
+              서버 상태
+            </Button>
+            <Button
+              type="button"
+              disabled={disabled("logout")}
+              onClick={() =>
+                run("logout", () => apiFetch("/member/api/v1/auth/logout", { method: "DELETE" }))
               }
-            }}
-          />
-          <Button
-            disabled={disabled("admMemberProfileImgUpdate")}
-            onClick={() => profileImageFileInputRef.current?.click()}
-          >
-            프로필 이미지 선택(즉시 적용)
-          </Button>
-          <Input
-            placeholder="선택된 파일"
-            value={profileImageFileName}
-            readOnly
-          />
-          <Input
-            placeholder="프로필 역할 (예: backend developer)"
-            value={profileRoleInput}
-            onChange={(e) => setProfileRoleInput(e.target.value)}
-          />
-          <Input
-            placeholder="프로필 소개문구"
-            value={profileBioInput}
-            onChange={(e) => setProfileBioInput(e.target.value)}
-          />
-          <Button
-            disabled={disabled("admMemberProfileCardUpdate")}
-            onClick={() => void handleUpdateMemberProfileCard()}
-          >
-            역할/소개 저장
-          </Button>
-        </Row>
-        {profileImgInputUrl.trim().length > 0 && (
-          <ProfilePreview>
-            <img
-              className="previewImage"
-              src={profileImgInputUrl.trim()}
-              alt="profile preview"
-            />
-          </ProfilePreview>
-        )}
-        <Row>
-          <Button
-            disabled={disabled("admMemberList")}
-            onClick={() =>
-              run("admMemberList", () =>
-                apiFetch(
-                  `/member/api/v1/adm/members?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-                    listKw
-                  )}&sort=${encodeURIComponent(listSort)}`
-                )
-              )
-            }
-          >
-            관리자 회원 목록
-          </Button>
-        </Row>
-      </Section>
+            >
+              로그아웃
+            </Button>
+          </ActionCluster>
+        </HeroAside>
+      </HeroCard>
 
-      <Section id="post-write">
-        <h2>Post</h2>
+      <WorkspaceGrid>
+        <WorkspaceMain>
+          <Section id="profile-studio">
+            <SectionTop>
+              <div>
+                <SectionEyebrow>Profile Studio</SectionEyebrow>
+                <h2>관리자 프로필 관리</h2>
+                <SectionDescription>
+                  프로필 사진은 파일 선택 즉시 업로드되고, 역할과 소개 문구는 별도 저장으로 반영됩니다.
+                </SectionDescription>
+              </div>
+            </SectionTop>
+            <ProfileStudioGrid>
+              <ProfileCardPanel>
+                <ProfilePreview>
+                  {profilePreviewSrc ? (
+                    <Image
+                      className="previewImage"
+                      src={profilePreviewSrc}
+                      alt="profile preview"
+                      width={120}
+                      height={120}
+                      unoptimized={profilePreviewSrc.includes("/redirectToProfileImg")}
+                    />
+                  ) : (
+                    <ProfileFallback>{me.username.slice(0, 2).toUpperCase()}</ProfileFallback>
+                  )}
+                </ProfilePreview>
+                <ProfileSummary>
+                  <strong>{me.username}</strong>
+                  <span>{profileRoleInput.trim() || "역할을 아직 입력하지 않았습니다."}</span>
+                  <p>{profileBioInput.trim() || "소개 문구를 입력하면 메인 프로필 카드에 반영됩니다."}</p>
+                </ProfileSummary>
+                <input
+                  ref={profileImageFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    setProfileImageFileName(file?.name || "")
+                    if (file) {
+                      void handleUploadMemberProfileImage(file)
+                    }
+                  }}
+                />
+                <PrimaryButton
+                  type="button"
+                  disabled={disabled("admMemberProfileImgUpdate")}
+                  onClick={() => profileImageFileInputRef.current?.click()}
+                >
+                  {loadingKey === "admMemberProfileImgUpdate" ? "업로드 중..." : "프로필 이미지 선택"}
+                </PrimaryButton>
+                <InlineHint>{profileImageFileName || "아직 선택된 파일이 없습니다."}</InlineHint>
+              </ProfileCardPanel>
+
+              <FormPanelCard>
+                <FieldGrid>
+                  <FieldBox>
+                    <FieldLabel htmlFor="profile-member-id">대상 member id</FieldLabel>
+                    <Input
+                      id="profile-member-id"
+                      placeholder="예: 1"
+                      value={profileImgMemberId}
+                      onChange={(e) => setProfileImgMemberId(e.target.value)}
+                    />
+                  </FieldBox>
+                  <FieldBox>
+                    <FieldLabel htmlFor="member-id">회원 조회 id</FieldLabel>
+                    <Input
+                      id="member-id"
+                      placeholder="예: 1"
+                      value={memberId}
+                      onChange={(e) => setMemberId(e.target.value)}
+                    />
+                  </FieldBox>
+                  <FieldBox>
+                    <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
+                    <Input
+                      id="profile-role"
+                      placeholder="예: backend developer"
+                      value={profileRoleInput}
+                      onChange={(e) => setProfileRoleInput(e.target.value)}
+                    />
+                  </FieldBox>
+                  <FieldBox className="wide">
+                    <FieldLabel htmlFor="profile-bio">소개 문구</FieldLabel>
+                    <Input
+                      id="profile-bio"
+                      placeholder="메인 페이지 소개문구"
+                      value={profileBioInput}
+                      onChange={(e) => setProfileBioInput(e.target.value)}
+                    />
+                  </FieldBox>
+                </FieldGrid>
+                <ActionRow>
+                  <PrimaryButton
+                    type="button"
+                    disabled={disabled("admMemberProfileCardUpdate")}
+                    onClick={() => void handleUpdateMemberProfileCard()}
+                  >
+                    역할/소개 저장
+                  </PrimaryButton>
+                  <Button
+                    type="button"
+                    disabled={disabled("admMemberOne")}
+                    onClick={() =>
+                      run("admMemberOne", () => apiFetch(`/member/api/v1/adm/members/${memberId}`))
+                    }
+                  >
+                    회원 단건 조회
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={disabled("admMemberList")}
+                    onClick={() =>
+                      run("admMemberList", () =>
+                        apiFetch(
+                          `/member/api/v1/adm/members?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
+                            listKw
+                          )}&sort=${encodeURIComponent(listSort)}`
+                        )
+                      )
+                    }
+                  >
+                    관리자 회원 목록
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={disabled("secureTip")}
+                    onClick={() =>
+                      run("secureTip", () =>
+                        apiFetch("/member/api/v1/members/randomSecureTip").then((tip) => ({ tip }))
+                      )
+                    }
+                  >
+                    랜덤 보안 팁
+                  </Button>
+                </ActionRow>
+              </FormPanelCard>
+            </ProfileStudioGrid>
+          </Section>
+
+          <Section id="content-studio">
+            <SectionTop>
+              <div>
+                <SectionEyebrow>Content Studio</SectionEyebrow>
+                <h2>글 작성 및 목록 관리</h2>
+                <SectionDescription>
+                  조회 조건, 관리자 글 리스트, 에디터를 한 구역에 모아서 운영 흐름이 끊기지 않도록
+                  정리했습니다.
+                </SectionDescription>
+              </div>
+            </SectionTop>
         <QueryPanel>
           <QueryHeader>
             <h3>글 목록 조회 조건</h3>
-            <p>아래 조건으로 전체 글/내 글 목록을 조회할 수 있습니다.</p>
+            <p>전체 글, 내 글, 임시글을 불러오는 조건입니다.</p>
           </QueryHeader>
           <QueryGrid>
             <FieldBox>
@@ -1319,102 +1431,148 @@ const AdminPage: NextPage = () => {
             좋아요 토글
           </Button>
         </Row>
-      </Section>
+          </Section>
 
-      <Section>
-        <h2>Comments</h2>
-        <Row>
-          <Input placeholder="post id" value={postId} onChange={(e) => setPostId(e.target.value)} />
-          <Input
-            placeholder="comment id"
-            value={commentId}
-            onChange={(e) => setCommentId(e.target.value)}
-          />
-          <Input
-            placeholder="comment content"
-            value={commentContent}
-            onChange={(e) => setCommentContent(e.target.value)}
-          />
-          <Button
-            disabled={disabled("commentList")}
-            onClick={() => run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`))}
-          >
-            댓글 목록
-          </Button>
-          <Button
-            disabled={disabled("commentOne")}
-            onClick={() =>
-              run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`))
-            }
-          >
-            댓글 단건
-          </Button>
-          <Button
-            disabled={disabled("commentWrite")}
-            onClick={() =>
-              run("commentWrite", () =>
-                apiFetch(`/post/api/v1/posts/${postId}/comments`, {
-                  method: "POST",
-                  body: JSON.stringify({ content: commentContent }),
-                })
-              )
-            }
-          >
-            댓글 작성
-          </Button>
-          <Button
-            disabled={disabled("commentModify")}
-            onClick={() =>
-              run("commentModify", () =>
-                apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-                  method: "PUT",
-                  body: JSON.stringify({ content: commentContent }),
-                })
-              )
-            }
-          >
-            댓글 수정
-          </Button>
-          <Button
-            disabled={disabled("commentDelete")}
-            onClick={() =>
-              run("commentDelete", () =>
-                apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-                  method: "DELETE",
-                })
-              )
-            }
-          >
-            댓글 삭제
-          </Button>
-        </Row>
-      </Section>
+          <UtilityGrid>
+            <Section id="comment-studio">
+              <SectionTop>
+                <div>
+                  <SectionEyebrow>Comment Studio</SectionEyebrow>
+                  <h2>댓글 테스트 도구</h2>
+                  <SectionDescription>댓글 CRUD 동작을 빠르게 점검할 때 사용하는 영역입니다.</SectionDescription>
+                </div>
+              </SectionTop>
+              <FieldGrid>
+                <FieldBox>
+                  <FieldLabel htmlFor="comment-post-id">post id</FieldLabel>
+                  <Input
+                    id="comment-post-id"
+                    placeholder="예: 1"
+                    value={postId}
+                    onChange={(e) => setPostId(e.target.value)}
+                  />
+                </FieldBox>
+                <FieldBox>
+                  <FieldLabel htmlFor="comment-id">comment id</FieldLabel>
+                  <Input
+                    id="comment-id"
+                    placeholder="예: 1"
+                    value={commentId}
+                    onChange={(e) => setCommentId(e.target.value)}
+                  />
+                </FieldBox>
+                <FieldBox className="wide">
+                  <FieldLabel htmlFor="comment-content">comment content</FieldLabel>
+                  <Input
+                    id="comment-content"
+                    placeholder="댓글 내용을 입력하세요"
+                    value={commentContent}
+                    onChange={(e) => setCommentContent(e.target.value)}
+                  />
+                </FieldBox>
+              </FieldGrid>
+              <ActionRow>
+                <Button
+                  type="button"
+                  disabled={disabled("commentList")}
+                  onClick={() => run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`))}
+                >
+                  댓글 목록
+                </Button>
+                <Button
+                  type="button"
+                  disabled={disabled("commentOne")}
+                  onClick={() =>
+                    run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`))
+                  }
+                >
+                  댓글 단건
+                </Button>
+                <Button
+                  type="button"
+                  disabled={disabled("commentWrite")}
+                  onClick={() =>
+                    run("commentWrite", () =>
+                      apiFetch(`/post/api/v1/posts/${postId}/comments`, {
+                        method: "POST",
+                        body: JSON.stringify({ content: commentContent }),
+                      })
+                    )
+                  }
+                >
+                  댓글 작성
+                </Button>
+                <Button
+                  type="button"
+                  disabled={disabled("commentModify")}
+                  onClick={() =>
+                    run("commentModify", () =>
+                      apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+                        method: "PUT",
+                        body: JSON.stringify({ content: commentContent }),
+                      })
+                    )
+                  }
+                >
+                  댓글 수정
+                </Button>
+                <Button
+                  type="button"
+                  disabled={disabled("commentDelete")}
+                  onClick={() =>
+                    run("commentDelete", () =>
+                      apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+                        method: "DELETE",
+                      })
+                    )
+                  }
+                >
+                  댓글 삭제
+                </Button>
+              </ActionRow>
+            </Section>
 
-      <Section>
-        <h2>Admin Post</h2>
-        <Row>
-          <Button
-            disabled={disabled("admPostCount")}
-            onClick={() => run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}
-          >
-            전체 글 개수 + 보안팁
-          </Button>
-        </Row>
-      </Section>
+            <Section id="system-tools">
+              <SectionTop>
+                <div>
+                  <SectionEyebrow>System Tools</SectionEyebrow>
+                  <h2>운영 점검 도구</h2>
+                  <SectionDescription>자주 확인하는 관리성 API를 한곳에 모았습니다.</SectionDescription>
+                </div>
+              </SectionTop>
+              <ActionRow>
+                <Button
+                  type="button"
+                  disabled={disabled("admPostCount")}
+                  onClick={() => run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}
+                >
+                  전체 글 개수 + 보안팁
+                </Button>
+                <Button
+                  type="button"
+                  disabled={disabled("systemHealth")}
+                  onClick={() => run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}
+                >
+                  서버 상태 조회
+                </Button>
+              </ActionRow>
+            </Section>
+          </UtilityGrid>
+        </WorkspaceMain>
 
-      <Section>
-        <h2>System</h2>
-        <Row>
-          <Button
-            disabled={disabled("systemHealth")}
-            onClick={() => run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}
-          >
-            서버 상태 조회
-          </Button>
-        </Row>
-      </Section>
-
-      <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
+        <WorkspaceAside>
+          <StickyAsideCard>
+            <AsideHeader>
+              <div>
+                <SectionEyebrow>Console</SectionEyebrow>
+                <h2>최근 API 응답</h2>
+              </div>
+              <span>{loadingKey ? `실행 중: ${loadingKey}` : "대기 중"}</span>
+            </AsideHeader>
+            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
+          </StickyAsideCard>
+        </WorkspaceAside>
+      </WorkspaceGrid>
     </Main>
   )
 }
@@ -1422,32 +1580,206 @@ const AdminPage: NextPage = () => {
 export default AdminPage
 
 const Main = styled.main`
-  max-width: 1080px;
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 2rem 1rem 3.2rem;
+`
+
+const HeroCard = styled.section`
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 1rem;
+  border-radius: 24px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 34%),
+    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
+  padding: 1.2rem;
+  margin-bottom: 1rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const HeroIntro = styled.div`
+  display: grid;
+  gap: 0.8rem;
 
   h1 {
-    margin: 0 0 0.75rem;
-    font-size: 1.8rem;
+    margin: 0;
+    font-size: clamp(1.9rem, 3vw, 2.7rem);
+    letter-spacing: -0.05em;
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
-    margin: 0 0 1.5rem;
+    margin: 0;
+    max-width: 44rem;
     color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.7;
+  }
+`
+
+const HeroEyebrow = styled.span`
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.38rem 0.7rem;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: ${({ theme }) => theme.colors.blue3};
+  color: ${({ theme }) => theme.colors.blue11};
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+`
+
+const HeroNav = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+`
+
+const AnchorButton = styled.a`
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  text-decoration: none;
+  padding: 0.52rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+`
+
+const HeroAside = styled.aside`
+  display: grid;
+  gap: 0.85rem;
+`
+
+const MetricGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const MetricCard = styled.div`
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.85rem 0.9rem;
+
+  span {
+    display: block;
+    font-size: 0.76rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    margin-bottom: 0.32rem;
+  }
+
+  strong {
+    display: block;
+    font-size: 0.98rem;
+    color: ${({ theme }) => theme.colors.gray12};
+    line-height: 1.45;
+  }
+`
+
+const ActionCluster = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+`
+
+const WorkspaceGrid = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 1rem;
+
+  @media (max-width: 1180px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const WorkspaceMain = styled.div`
+  min-width: 0;
+`
+
+const WorkspaceAside = styled.aside`
+  min-width: 0;
+`
+
+const StickyAsideCard = styled.section`
+  position: sticky;
+  top: 1rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1rem;
+
+  @media (max-width: 1180px) {
+    position: static;
+  }
+`
+
+const AsideHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+
+  h2 {
+    margin: 0.2rem 0 0;
+    font-size: 1rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    white-space: nowrap;
   }
 `
 
 const Section = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
+  border-radius: 20px;
   padding: 1.1rem;
   margin-bottom: 1rem;
   background: ${({ theme }) => theme.colors.gray1};
 
   h2 {
-    margin: 0 0 0.75rem;
-    font-size: 1.05rem;
+    margin: 0;
+    font-size: 1.2rem;
+    color: ${({ theme }) => theme.colors.gray12};
   }
+`
+
+const SectionTop = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.95rem;
+`
+
+const SectionEyebrow = styled.span`
+  display: inline-flex;
+  margin-bottom: 0.35rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+`
+
+const SectionDescription = styled.p`
+  margin: 0.3rem 0 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.65;
 `
 
 const Row = styled.div`
@@ -1505,6 +1837,14 @@ const QueryGrid = styled.div`
 const FieldBox = styled.div`
   display: grid;
   gap: 0.26rem;
+
+  &.wide {
+    grid-column: span 2;
+
+    @media (max-width: 720px) {
+      grid-column: span 1;
+    }
+  }
 `
 
 const FieldLabel = styled.label`
@@ -1519,17 +1859,36 @@ const QueryActions = styled.div`
   gap: 0.45rem;
 `
 
-const ProfilePreview = styled.div`
-  margin: 0.5rem 0 0.7rem;
-  padding: 0.55rem;
+const ProfileStudioGrid = styled.div`
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 0.9rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ProfileCardPanel = styled.div`
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 10px;
-  width: fit-content;
   background: ${({ theme }) => theme.colors.gray2};
+  padding: 1rem;
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+  text-align: center;
+`
+
+const ProfilePreview = styled.div`
+  padding: 0.15rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
 
   .previewImage {
-    width: 92px;
-    height: 92px;
+    width: 120px;
+    height: 120px;
     object-fit: cover;
     border-radius: 999px;
     display: block;
@@ -1537,13 +1896,95 @@ const ProfilePreview = styled.div`
   }
 `
 
+const ProfileFallback = styled.div`
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, ${({ theme }) => theme.colors.blue8}, ${({ theme }) => theme.colors.green8});
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 800;
+`
+
+const ProfileSummary = styled.div`
+  display: grid;
+  gap: 0.18rem;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1rem;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.blue11};
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0.2rem 0 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    line-height: 1.6;
+    font-size: 0.85rem;
+  }
+`
+
+const InlineHint = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  line-height: 1.5;
+`
+
+const FormPanelCard = styled.div`
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 1rem;
+`
+
+const FieldGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ActionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+`
+
+const UtilityGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`
+
 const Input = styled.input`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 8px;
-  padding: 0.5rem 0.65rem;
+  border-radius: 12px;
+  padding: 0.72rem 0.8rem;
   min-width: 120px;
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
+  }
 `
 
 const TitleInput = styled(Input)`
@@ -1563,11 +2004,12 @@ const SmallHint = styled.p`
 const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray8};
   border-radius: 999px;
-  padding: 0.42rem 0.72rem;
+  padding: 0.58rem 0.88rem;
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 600;
 
   &:disabled {
     opacity: 0.45;
@@ -1915,7 +2357,7 @@ const PreviewCard = styled.div`
 `
 
 const ResultPanel = styled.pre`
-  margin: 1rem 0 0;
+  margin: 0;
   padding: 1rem;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};

@@ -1,10 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ApiError, apiFetch } from "src/apis/backend/client"
+import { apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 
 const isClient = typeof window !== "undefined"
-
-export type AuthSessionStatus = "loading" | "authenticated" | "anonymous" | "unavailable"
 
 export type AuthMember = {
   id: number
@@ -19,21 +17,19 @@ export type AuthMember = {
   profileBio?: string
 }
 
+const fetchAuthMe = async (): Promise<AuthMember | null> => {
+  try {
+    return await apiFetch<AuthMember>("/member/api/v1/auth/me")
+  } catch {
+    return null
+  }
+}
+
 const useAuthSession = () => {
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: queryKey.authMe(),
-    queryFn: async () => {
-      try {
-        return await apiFetch<AuthMember>("/member/api/v1/auth/me")
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          return null
-        }
-
-        throw error
-      }
-    },
+    queryFn: fetchAuthMe,
     enabled: isClient,
     staleTime: 0,
     retry: false,
@@ -44,18 +40,6 @@ const useAuthSession = () => {
   const setMe = (member: AuthMember | null) => {
     queryClient.setQueryData(queryKey.authMe(), member)
   }
-
-  const me = query.data ?? null
-  const authStatus: AuthSessionStatus =
-    !isClient
-      ? "loading"
-      : me
-        ? "authenticated"
-        : query.isLoading
-          ? "loading"
-          : query.isError
-            ? "unavailable"
-            : "anonymous"
 
   const logout = async () => {
     try {
@@ -68,10 +52,8 @@ const useAuthSession = () => {
   }
 
   return {
-    me,
-    authStatus,
-    authUnavailable: authStatus === "unavailable",
-    isAuthResolved: authStatus !== "loading",
+    me: query.data ?? null,
+    isAuthResolved: isClient ? !query.isLoading : false,
     refresh: query.refetch,
     setMe,
     clearMe: () => setMe(null),

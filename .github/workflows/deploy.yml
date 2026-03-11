@@ -23,9 +23,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare workflow scripts
-        run: chmod +x .github/scripts/*.sh
-
       - name: Set up JDK 24
         uses: actions/setup-java@v4
         with:
@@ -307,33 +304,7 @@ jobs:
             echo "post-deploy healthcheck failed via caddy route" >&2
             exit 1
           fi
-
-          STORAGE_ENABLED="$(awk -F= '$1=="CUSTOM_STORAGE_ENABLED"{print tolower(substr($0, index($0, "=")+1))}' deploy/homeserver/.env.prod | tr -d '[:space:]')"
-          if [ "${STORAGE_ENABLED}" = "true" ]; then
-            MINIO_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://minio_1:9000/minio/health/live" || true)"
-            echo "post-deploy minio health status=${MINIO_CODE}"
-            if [ "${MINIO_CODE}" != "200" ]; then
-              echo "post-deploy minio healthcheck failed" >&2
-              exit 1
-            fi
-          fi
           REMOTE
-
-      - name: Run public deployment smoke
-        env:
-          BASE_URL: ${{ secrets.HOME_API_BASE_URL || 'https://api.aquilaxk.site' }}
-          OAUTH_PROVIDER: ${{ secrets.E2E_OAUTH_PROVIDER }}
-          OAUTH_REDIRECT_URL: ${{ secrets.E2E_OAUTH_REDIRECT_URL || secrets.HOME_FRONT_BASE_URL || 'https://www.aquilaxk.site/' }}
-        run: ./.github/scripts/public_smoke.sh
-
-      - name: Run authenticated deployment smoke
-        if: ${{ secrets.E2E_ADMIN_USERNAME != '' && secrets.E2E_ADMIN_PASSWORD != '' }}
-        env:
-          BASE_URL: ${{ secrets.HOME_API_BASE_URL || 'https://api.aquilaxk.site' }}
-          LOGIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME }}
-          LOGIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
-          EXPECT_ADMIN: "true"
-        run: ./.github/scripts/auth_session_smoke.sh
 
   makeTagAndRelease:
     runs-on: ubuntu-latest

@@ -4,20 +4,6 @@ const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
-export class ApiError extends Error {
-  status: number
-  url: string
-  body: string
-
-  constructor(status: number, url: string, body: string) {
-    super(`API request failed (${status}) ${url}: ${body}`)
-    this.name = "ApiError"
-    this.status = status
-    this.url = url
-    this.body = body
-  }
-}
-
 export const getApiBaseUrl = () => {
   const serverUrl = process.env.BACKEND_INTERNAL_URL
   const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
@@ -50,7 +36,7 @@ export const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!response.ok) {
     const body = await response.text().catch(() => "")
-    throw new ApiError(response.status, url, body)
+    throw new Error(`API request failed (${response.status}) ${url}: ${body}`)
   }
 
   return response.json() as Promise<T>

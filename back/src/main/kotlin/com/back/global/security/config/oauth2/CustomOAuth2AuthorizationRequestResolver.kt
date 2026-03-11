@@ -13,17 +13,19 @@ import org.springframework.stereotype.Component
 class CustomOAuth2AuthorizationRequestResolver(
     private val clientRegistrationRepository: ClientRegistrationRepository,
 ) : OAuth2AuthorizationRequestResolver {
-
-    private val delegate = DefaultOAuth2AuthorizationRequestResolver(
-        clientRegistrationRepository,
-        OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI,
-    )
+    private val delegate =
+        DefaultOAuth2AuthorizationRequestResolver(
+            clientRegistrationRepository,
+            OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI,
+        )
 
     override fun resolve(request: HttpServletRequest): OAuth2AuthorizationRequest? =
         delegate.resolve(request)?.let { customizeState(it, request) }
 
-    override fun resolve(request: HttpServletRequest, clientRegistrationId: String?): OAuth2AuthorizationRequest? =
-        delegate.resolve(request, clientRegistrationId)?.let { customizeState(it, request) }
+    override fun resolve(
+        request: HttpServletRequest,
+        clientRegistrationId: String?,
+    ): OAuth2AuthorizationRequest? = delegate.resolve(request, clientRegistrationId)?.let { customizeState(it, request) }
 
     private fun customizeState(
         req: OAuth2AuthorizationRequest,
@@ -31,7 +33,8 @@ class CustomOAuth2AuthorizationRequestResolver(
     ): OAuth2AuthorizationRequest {
         val state = OAuth2State.of(request.getParameter("redirectUrl") ?: "")
 
-        return OAuth2AuthorizationRequest.from(req)
+        return OAuth2AuthorizationRequest
+            .from(req)
             .state(state.encode())
             .build()
     }

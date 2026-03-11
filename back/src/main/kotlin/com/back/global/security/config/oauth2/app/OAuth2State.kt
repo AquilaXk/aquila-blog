@@ -9,13 +9,12 @@ private const val DEFAULT_REDIRECT_URL = "/"
 
 data class OAuth2State(
     val redirectUrl: String = DEFAULT_REDIRECT_URL,
-    val originState: String = UUID.randomUUID().toString()
+    val originState: String = UUID.randomUUID().toString(),
 ) {
     fun encode(): String = "$redirectUrl$DELIMITER$originState".base64Encode()
 
     companion object {
-        fun of(redirectUrl: String): OAuth2State =
-            OAuth2State(redirectUrl.takeIf { it.isNotBlank() } ?: DEFAULT_REDIRECT_URL)
+        fun of(redirectUrl: String): OAuth2State = OAuth2State(redirectUrl.takeIf { it.isNotBlank() } ?: DEFAULT_REDIRECT_URL)
 
         fun decode(encoded: String): OAuth2State {
             val decoded = encoded.base64Decode()
@@ -23,7 +22,7 @@ data class OAuth2State(
 
             return OAuth2State(
                 parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: DEFAULT_REDIRECT_URL,
-                parts.getOrNull(1).orEmpty()
+                parts.getOrNull(1).orEmpty(),
             )
         }
     }

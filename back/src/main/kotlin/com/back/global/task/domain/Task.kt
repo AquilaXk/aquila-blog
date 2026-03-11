@@ -9,7 +9,10 @@ import java.util.*
 import kotlin.math.pow
 
 enum class TaskStatus {
-    PENDING, PROCESSING, COMPLETED, FAILED
+    PENDING,
+    PROCESSING,
+    COMPLETED,
+    FAILED,
 }
 
 @Entity
@@ -19,30 +22,28 @@ class Task(
     @field:SequenceGenerator(name = "task_seq_gen", sequenceName = "task_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "task_seq_gen")
     override val id: Int = 0,
-
     @field:Column(unique = true)
     val uid: UUID,
-
     val aggregateType: String,
     val aggregateId: Int,
     val taskType: String,
-
     @field:Column(columnDefinition = "TEXT")
     val payload: String,
-
     @field:Enumerated(EnumType.STRING)
     var status: TaskStatus = TaskStatus.PENDING,
-
     var retryCount: Int = 0,
     var maxRetries: Int = 10,
     var nextRetryAt: Instant = Instant.now(),
-
     @field:Column(columnDefinition = "TEXT")
     var errorMessage: String? = null,
 ) : BaseTime(id) {
-
     constructor(uid: UUID, aggregateType: String, aggregateId: Int, taskType: String, payload: String) : this(
-        0, uid, aggregateType, aggregateId, taskType, payload
+        0,
+        uid,
+        aggregateType,
+        aggregateId,
+        taskType,
+        payload,
     )
 
     fun scheduleRetry() {

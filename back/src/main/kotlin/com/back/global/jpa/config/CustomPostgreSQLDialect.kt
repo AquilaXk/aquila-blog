@@ -11,18 +11,19 @@ open class CustomPostgreSQLDialect : PostgreSQLDialect() {
         super.initializeFunctionRegistry(functionContributions)
 
         @Suppress("UNCHECKED_CAST")
-        val booleanType = functionContributions.typeConfiguration
-            .basicTypeRegistry
-            .resolve(Boolean::class.javaObjectType, SqlTypes.BOOLEAN) as BasicType<Boolean>
+        val booleanType =
+            functionContributions.typeConfiguration
+                .basicTypeRegistry
+                .resolve(Boolean::class.javaObjectType, SqlTypes.BOOLEAN) as BasicType<Boolean>
 
         functionContributions.functionRegistry.register(
             "pgroonga_match",
-            PGroongaCompositeMatchFunction("pgroonga_match", booleanType)
+            PGroongaCompositeMatchFunction("pgroonga_match", booleanType),
         )
 
         functionContributions.functionRegistry.register(
             "pgroonga_post_match",
-            PGroongaCompositeMatchFunction("pgroonga_post_match", booleanType)
+            PGroongaCompositeMatchFunction("pgroonga_post_match", booleanType),
         )
     }
 }

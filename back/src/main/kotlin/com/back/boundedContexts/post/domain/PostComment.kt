@@ -21,22 +21,19 @@ class PostComment(
     @field:SequenceGenerator(name = "post_comment_seq_gen", sequenceName = "post_comment_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "post_comment_seq_gen")
     override val id: Int = 0,
-
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val author: Member,
-
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val post: Post,
-
     @field:Column(nullable = false)
     var content: String,
-
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(name = "parent_comment_id")
     val parentComment: PostComment? = null,
-) : BaseTime(id), PostCommentHasPolicy {
+) : BaseTime(id),
+    PostCommentHasPolicy {
     override val postComment get() = this
 
     fun modify(content: String) {

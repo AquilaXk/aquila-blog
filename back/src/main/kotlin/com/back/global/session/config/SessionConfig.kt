@@ -9,10 +9,11 @@ import org.springframework.session.web.http.HttpSessionIdResolver
 
 @Configuration
 class SessionConfig {
-    private val sessionPathsPrefixes = listOf(
-        "/oauth2/",
-        "/login/oauth2/"
-    )
+    private val sessionPathsPrefixes =
+        listOf(
+            "/oauth2/",
+            "/login/oauth2/",
+        )
 
     @Bean
     fun httpSessionIdResolver(): HttpSessionIdResolver {
@@ -24,18 +25,24 @@ class SessionConfig {
                 return delegate.resolveSessionIds(request)
             }
 
-            override fun setSessionId(request: HttpServletRequest, response: HttpServletResponse, sessionId: String) {
+            override fun setSessionId(
+                request: HttpServletRequest,
+                response: HttpServletResponse,
+                sessionId: String,
+            ) {
                 if (!shouldUseSession(request.requestURI)) return
                 delegate.setSessionId(request, response, sessionId)
             }
 
-            override fun expireSession(request: HttpServletRequest, response: HttpServletResponse) {
+            override fun expireSession(
+                request: HttpServletRequest,
+                response: HttpServletResponse,
+            ) {
                 if (!shouldUseSession(request.requestURI)) return
                 delegate.expireSession(request, response)
             }
 
-            private fun shouldUseSession(uri: String): Boolean =
-                sessionPathsPrefixes.any { uri.startsWith(it) }
+            private fun shouldUseSession(uri: String): Boolean = sessionPathsPrefixes.any { uri.startsWith(it) }
         }
     }
 }

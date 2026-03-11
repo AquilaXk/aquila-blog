@@ -5,10 +5,11 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 
 interface MemberHasSecurity : MemberAware {
     val authoritiesAsStringList: List<String>
-        get() = buildList {
-            add("ROLE_MEMBER")
-            if (member.isAdmin) add("ROLE_ADMIN")
-        }
+        get() =
+            buildList {
+                add("ROLE_MEMBER")
+                if (member.isAdmin) add("ROLE_ADMIN")
+            }
 
     val authorities: Collection<GrantedAuthority>
         get() = authoritiesAsStringList.map(::SimpleGrantedAuthority)

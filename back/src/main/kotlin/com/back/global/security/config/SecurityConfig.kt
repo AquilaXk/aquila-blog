@@ -72,17 +72,19 @@ class SecurityConfig(
             addFilterBefore<UsernamePasswordAuthenticationFilter>(customAuthenticationFilter)
 
             exceptionHandling {
-                authenticationEntryPoint = AuthenticationEntryPoint { _, response, _ ->
-                    response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-                    response.status = 401
-                    response.writer.write(objectMapper.writeValueAsString(RsData<Void>("401-1", "로그인 후 이용해주세요.")))
-                }
+                authenticationEntryPoint =
+                    AuthenticationEntryPoint { _, response, _ ->
+                        response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
+                        response.status = 401
+                        response.writer.write(objectMapper.writeValueAsString(RsData<Void>("401-1", "로그인 후 이용해주세요.")))
+                    }
 
-                accessDeniedHandler = AccessDeniedHandler { _, response, _ ->
-                    response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
-                    response.status = 403
-                    response.writer.write(objectMapper.writeValueAsString(RsData<Void>("403-1", "권한이 없습니다.")))
-                }
+                accessDeniedHandler =
+                    AccessDeniedHandler { _, response, _ ->
+                        response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
+                        response.status = 403
+                        response.writer.write(objectMapper.writeValueAsString(RsData<Void>("403-1", "권한이 없습니다.")))
+                    }
             }
         }
 
@@ -91,16 +93,18 @@ class SecurityConfig(
 
     @Bean
     fun corsConfigurationSource(): UrlBasedCorsConfigurationSource {
-        val configuration = CorsConfiguration().apply {
-            allowedOriginPatterns = listOf(
-                AppConfig.siteFrontUrl,
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-            )
-            allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-            allowCredentials = true
-            allowedHeaders = listOf("*")
-        }
+        val configuration =
+            CorsConfiguration().apply {
+                allowedOriginPatterns =
+                    listOf(
+                        AppConfig.siteFrontUrl,
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+                    )
+                allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                allowCredentials = true
+                allowedHeaders = listOf("*")
+            }
 
         return UrlBasedCorsConfigurationSource().apply {
             registerCorsConfiguration("/*/api/**", configuration)

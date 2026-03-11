@@ -16,20 +16,24 @@ class RevalidateService(
     @Value("\${custom.revalidate.token:}")
     private val revalidateToken: String,
 ) {
-    private val httpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(2))
-        .build()
+    private val httpClient =
+        HttpClient
+            .newBuilder()
+            .connectTimeout(Duration.ofSeconds(2))
+            .build()
 
     fun revalidateHome() {
         if (revalidateUrl.isBlank() || revalidateToken.isBlank()) return
 
-        val req = HttpRequest.newBuilder()
-            .uri(URI.create(revalidateUrl))
-            .timeout(Duration.ofSeconds(3))
-            .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-            .header("x-revalidate-token", revalidateToken)
-            .POST(HttpRequest.BodyPublishers.ofString("""{"path":"/"}"""))
-            .build()
+        val req =
+            HttpRequest
+                .newBuilder()
+                .uri(URI.create(revalidateUrl))
+                .timeout(Duration.ofSeconds(3))
+                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .header("x-revalidate-token", revalidateToken)
+                .POST(HttpRequest.BodyPublishers.ofString("""{"path":"/"}"""))
+                .build()
 
         runCatching {
             httpClient.send(req, HttpResponse.BodyHandlers.discarding())
@@ -39,4 +43,3 @@ class RevalidateService(
         }
     }
 }
-

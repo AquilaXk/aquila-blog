@@ -1,0 +1,26 @@
+package com.back.boundedContexts.post.adapter.out.persistence
+
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.out.PostLikeRepositoryPort
+import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.PostLike
+import org.springframework.stereotype.Component
+
+@Component
+class PostLikeRepositoryAdapter(
+    private val postLikeRepository: PostLikeRepository,
+) : PostLikeRepositoryPort {
+    override fun save(postLike: PostLike): PostLike = postLikeRepository.save(postLike)
+
+    override fun delete(postLike: PostLike) = postLikeRepository.delete(postLike)
+
+    override fun findByLikerAndPost(
+        liker: Member,
+        post: Post,
+    ): PostLike? = postLikeRepository.findByLikerAndPost(liker, post)
+
+    override fun findByLikerAndPostIn(
+        liker: Member,
+        posts: List<Post>,
+    ): List<PostLike> = postLikeRepository.findByLikerAndPostIn(liker, posts)
+}

@@ -1,6 +1,5 @@
 package com.back.boundedContexts.post.domain.postMixin
 
-import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 
 const val HIT_COUNT = "hitCount"

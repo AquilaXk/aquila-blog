@@ -1,6 +1,5 @@
 package com.back.boundedContexts.member.domain.shared.memberMixin
 
-import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.global.app.AppConfig
 
@@ -20,8 +19,9 @@ interface MemberHasProfileImgUrl : MemberAware {
         }
 
     val profileImgUrlOrDefault: String
-        get() = profileImgUrl.takeIf { it.isNotBlank() }
-            ?: "https://placehold.co/600x600?text=U_U"
+        get() =
+            profileImgUrl.takeIf { it.isNotBlank() }
+                ?: "https://placehold.co/600x600?text=U_U"
 
     val redirectToProfileImgUrlOrDefault: String
         get() = "${AppConfig.siteBackUrl}/member/api/v1/members/${member.id}/redirectToProfileImg"

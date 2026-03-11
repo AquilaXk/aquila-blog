@@ -1,6 +1,6 @@
 package com.back.boundedContexts.member.domain.shared.memberExtensions
 
-import com.back.boundedContexts.member.app.MemberFacade
+import com.back.boundedContexts.member.application.service.MemberApplicationService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional
 @Transactional
 class MemberSecurityExtensionsTest {
     @Autowired
-    private lateinit var memberFacade: MemberFacade
+    private lateinit var memberFacade: MemberApplicationService
 
     @Test
     fun `관리자 회원은 ROLE_ADMIN 권한을 가진다`() {

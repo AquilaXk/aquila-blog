@@ -4,7 +4,10 @@ import com.back.standard.dto.TaskPayload
 import org.springframework.stereotype.Component
 import java.lang.reflect.Method
 
-data class TaskHandlerMethod(val bean: Any, val method: Method)
+data class TaskHandlerMethod(
+    val bean: Any,
+    val method: Method,
+)
 
 data class TaskHandlerEntry(
     val payloadClass: Class<out TaskPayload>,
@@ -16,7 +19,10 @@ class TaskHandlerRegistry {
     private val byType = mutableMapOf<String, TaskHandlerEntry>()
     private val typeByClass = mutableMapOf<Class<out TaskPayload>, String>()
 
-    internal fun register(type: String, entry: TaskHandlerEntry) {
+    internal fun register(
+        type: String,
+        entry: TaskHandlerEntry,
+    ) {
         check(!byType.containsKey(type)) {
             "Duplicate @TaskHandler for type '$type': " +
                 "already registered by ${byType[type]!!.handlerMethod.method.declaringClass.simpleName}, " +

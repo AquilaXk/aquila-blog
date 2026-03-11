@@ -12,24 +12,28 @@ abstract class BaseEntity : Persistable<Int> {
     abstract val id: Int
 
     @Transient
-    private var _isNew: Boolean = true
+    // Spring Data Persistable 규약: true면 insert, false면 update 경로로 처리된다.
+    private var isNewEntity: Boolean = true
 
     @Transient
+    // 동일 요청 내에서 계산/조회한 파생 속성을 캐시해 중복 연산을 줄인다.
     private val attrCache: MutableMap<String, Any> = mutableMapOf()
 
     override fun getId(): Int = id
 
-    override fun isNew(): Boolean = _isNew
+    override fun isNew(): Boolean = isNewEntity
 
     @PostPersist
     @PostLoad
     private fun markNotNew() {
-        _isNew = false
+        isNewEntity = false
     }
 
     @Suppress("UNCHECKED_CAST")
-    fun <T : Any> getOrPutAttr(key: String, defaultValue: () -> T): T =
-        attrCache.getOrPut(key, defaultValue) as T
+    fun <T : Any> getOrPutAttr(
+        key: String,
+        defaultValue: () -> T,
+    ): T = attrCache.getOrPut(key, defaultValue) as T
 
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
@@ -41,11 +45,12 @@ abstract class BaseEntity : Persistable<Int> {
         return id == other.id
     }
 
-    override fun hashCode(): Int = if (id == 0) {
-        identityClass(this).hashCode()
-    } else {
-        31 * identityClass(this).hashCode() + id.hashCode()
-    }
+    override fun hashCode(): Int =
+        if (id == 0) {
+            identityClass(this).hashCode()
+        } else {
+            31 * identityClass(this).hashCode() + id.hashCode()
+        }
 
     private fun effectiveClass(entity: Any): Class<*> = Hibernate.getClass(entity)
 

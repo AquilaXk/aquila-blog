@@ -1,6 +1,5 @@
 package com.back.boundedContexts.member.domain.shared.memberMixin
 
-import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 
 const val PROFILE_ROLE = "profileRole"

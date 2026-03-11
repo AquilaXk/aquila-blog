@@ -17,12 +17,12 @@ class PGroongaCompositeMatchFunction(
     functionName: String,
     booleanType: BasicType<Boolean>,
 ) : AbstractSqmSelfRenderingFunctionDescriptor(
-    functionName,
-    FunctionKind.NORMAL,
-    MinArgumentCountValidator(2),
-    StandardFunctionReturnTypeResolvers.invariant(booleanType),
-    null,
-) {
+        functionName,
+        FunctionKind.NORMAL,
+        MinArgumentCountValidator(2),
+        StandardFunctionReturnTypeResolvers.invariant(booleanType),
+        null,
+    ) {
     override fun render(
         sqlAppender: SqlAppender,
         sqlAstArguments: List<SqlAstNode>,
@@ -54,7 +54,10 @@ class PGroongaCompositeMatchFunction(
             validateCount(arguments.size, functionName)
         }
 
-        private fun validateCount(size: Int, functionName: String) {
+        private fun validateCount(
+            size: Int,
+            functionName: String,
+        ) {
             if (size >= minCount) return
 
             throw FunctionArgumentException(

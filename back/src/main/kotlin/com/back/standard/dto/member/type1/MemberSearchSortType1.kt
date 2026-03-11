@@ -8,17 +8,19 @@ enum class MemberSearchSortType1 {
     USERNAME,
     USERNAME_ASC,
     NICKNAME,
-    NICKNAME_ASC;
+    NICKNAME_ASC,
+    ;
 
     val sortBy: Sort by lazy {
         Sort.by(
             if (isAsc) Sort.Direction.ASC else Sort.Direction.DESC,
-            property
+            property,
         )
     }
 
     val property: String by lazy {
-        name.removeSuffix("_ASC")
+        name
+            .removeSuffix("_ASC")
             .lowercase()
             .split("_")
             .let { parts ->

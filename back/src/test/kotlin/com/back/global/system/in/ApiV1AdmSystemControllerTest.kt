@@ -1,6 +1,6 @@
 package com.back.global.system.`in`
 
-import com.back.boundedContexts.member.app.MemberFacade
+import com.back.boundedContexts.member.application.service.MemberApplicationService
 import jakarta.servlet.http.Cookie
 import org.hamcrest.Matchers.anyOf
 import org.hamcrest.Matchers.equalTo
@@ -23,18 +23,19 @@ class ApiV1AdmSystemControllerTest {
     private lateinit var mvc: MockMvc
 
     @Autowired
-    private lateinit var memberFacade: MemberFacade
+    private lateinit var memberFacade: MemberApplicationService
 
     @Test
     fun `관리자 apiKey 쿠키로 시스템 헬스 상태를 조회할 수 있다`() {
         val admin = memberFacade.findByUsername("admin")!!
 
-        mvc.get("/system/api/v1/adm/health") {
-            cookie(Cookie("apiKey", admin.apiKey))
-        }.andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("UP") }
-        }
+        mvc
+            .get("/system/api/v1/adm/health") {
+                cookie(Cookie("apiKey", admin.apiKey))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.status") { value("UP") }
+            }
     }
 
     @Test

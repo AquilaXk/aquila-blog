@@ -4,8 +4,9 @@ fun String.toCamelCase() =
     this
         .split("_")
         .mapIndexed { index, word ->
-            if (index == 0)
+            if (index == 0) {
                 word.lowercase()
-            else
+            } else {
                 word.lowercase().replaceFirstChar { it.uppercase() }
+            }
         }.joinToString("")

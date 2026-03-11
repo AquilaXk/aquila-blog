@@ -15,26 +15,28 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 @RestControllerAdvice
 class ExceptionHandler {
     @ExceptionHandler(NoSuchElementException::class)
-    fun handleNoSuchElementException(@Suppress("UNUSED_PARAMETER") ex: NoSuchElementException): ResponseEntity<RsData<Void>> =
+    fun handleNoSuchElementException(
+        @Suppress("UNUSED_PARAMETER") ex: NoSuchElementException,
+    ): ResponseEntity<RsData<Void>> =
         ResponseEntity
             .status(HttpStatus.NOT_FOUND)
             .body(RsData("404-1", "해당 데이터가 존재하지 않습니다."))
 
     @ExceptionHandler(ConstraintViolationException::class)
     fun handleConstraintViolationException(e: ConstraintViolationException): ResponseEntity<RsData<Void>> {
-        val message = e.constraintViolations
-            .asSequence()
-            .map { violation ->
-                val path = violation.propertyPath.toString()
-                val field = path.split(".", limit = 2).getOrElse(1) { path }
+        val message =
+            e.constraintViolations
+                .asSequence()
+                .map { violation ->
+                    val path = violation.propertyPath.toString()
+                    val field = path.split(".", limit = 2).getOrElse(1) { path }
 
-                val bits = violation.messageTemplate.split(".")
-                val code = bits.getOrNull(bits.size - 2) ?: "Unknown"
+                    val bits = violation.messageTemplate.split(".")
+                    val code = bits.getOrNull(bits.size - 2) ?: "Unknown"
 
-                "$field-$code-${violation.message}"
-            }
-            .sorted()
-            .joinToString("\n")
+                    "$field-$code-${violation.message}"
+                }.sorted()
+                .joinToString("\n")
 
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
@@ -43,13 +45,14 @@ class ExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleMethodArgumentNotValidException(e: MethodArgumentNotValidException): ResponseEntity<RsData<Void>> {
-        val message = e.bindingResult
-            .allErrors
-            .asSequence()
-            .filterIsInstance<FieldError>()
-            .map { err -> "${err.field}-${err.code}-${err.defaultMessage}" }
-            .sorted()
-            .joinToString("\n")
+        val message =
+            e.bindingResult
+                .allErrors
+                .asSequence()
+                .filterIsInstance<FieldError>()
+                .map { err -> "${err.field}-${err.code}-${err.defaultMessage}" }
+                .sorted()
+                .joinToString("\n")
 
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
@@ -57,7 +60,9 @@ class ExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
-    fun handleHttpMessageNotReadableException(@Suppress("UNUSED_PARAMETER") e: HttpMessageNotReadableException): ResponseEntity<RsData<Void>> =
+    fun handleHttpMessageNotReadableException(
+        @Suppress("UNUSED_PARAMETER") e: HttpMessageNotReadableException,
+    ): ResponseEntity<RsData<Void>> =
         ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(RsData("400-1", "요청 본문이 올바르지 않습니다."))
@@ -72,9 +77,9 @@ class ExceptionHandler {
                     "%s-%s-%s".format(
                         e.headerName,
                         "NotBlank",
-                        e.localizedMessage
-                    )
-                )
+                        e.localizedMessage,
+                    ),
+                ),
             )
 
     @ExceptionHandler(AppException::class)

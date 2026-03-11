@@ -8,14 +8,15 @@ data class PageDto<T : Any>(
 ) {
     constructor(page: Page<T>) : this(
         content = page.content,
-        pageable = PageableDto(
-            pageNumber = page.pageable.pageNumber + 1,
-            pageSize = page.pageable.pageSize,
-            offset = page.pageable.offset,
-            totalElements = page.totalElements,
-            totalPages = page.totalPages,
-            numberOfElements = page.numberOfElements,
-            paged = page.pageable.isPaged,
-        )
+        pageable =
+            PageableDto(
+                pageNumber = page.pageable.pageNumber + 1,
+                pageSize = page.pageable.pageSize,
+                offset = page.pageable.offset,
+                totalElements = page.totalElements,
+                totalPages = page.totalPages,
+                numberOfElements = page.numberOfElements,
+                paged = page.pageable.isPaged,
+            ),
     )
 }

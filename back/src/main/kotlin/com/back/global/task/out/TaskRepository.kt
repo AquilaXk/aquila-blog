@@ -15,7 +15,7 @@ interface TaskRepository : JpaRepository<Task, Int> {
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
         """,
-        nativeQuery = true
+        nativeQuery = true,
     )
     fun findPendingTasksWithLock(limit: Int = 10): List<Task>
 }

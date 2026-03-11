@@ -10,7 +10,9 @@ class SecurityUser(
     password: String,
     val nickname: String,
     authorities: Collection<GrantedAuthority>,
-) : User(username, password, authorities), OAuth2User {
+) : User(username, password, authorities),
+    OAuth2User {
     override fun getAttributes(): Map<String, Any> = emptyMap()
+
     override fun getName(): String = username
 }

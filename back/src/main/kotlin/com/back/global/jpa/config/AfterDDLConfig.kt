@@ -11,7 +11,6 @@ import javax.sql.DataSource
 
 @Configuration
 class AfterDDLConfig {
-
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Bean
@@ -20,12 +19,14 @@ class AfterDDLConfig {
         dataSource: DataSource,
         entityManagerFactory: EntityManagerFactory,
     ) = ApplicationRunner {
-        val entityClasses = entityManagerFactory.metamodel.entities
-            .mapNotNull { it.javaType }
+        val entityClasses =
+            entityManagerFactory.metamodel.entities
+                .mapNotNull { it.javaType }
 
-        val ddlStatements = entityClasses.flatMap { entityClass ->
-            entityClass.getAnnotationsByType(AfterDDL::class.java).map { it.sql }
-        }
+        val ddlStatements =
+            entityClasses.flatMap { entityClass ->
+                entityClass.getAnnotationsByType(AfterDDL::class.java).map { it.sql }
+            }
 
         if (ddlStatements.isEmpty()) return@ApplicationRunner
 

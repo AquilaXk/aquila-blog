@@ -1,8 +1,9 @@
 import styled from "@emotion/styled"
 import { NextPage } from "next"
+import Image from "next/image"
 import { useRouter } from "next/router"
-import { ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { ClipboardEvent, useEffect, useRef, useState } from "react"
+import { apiFetch } from "src/apis/backend/client"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -196,11 +197,7 @@ const AdminPage: NextPage = () => {
   const [listSort, setListSort] = useState("CREATED_AT")
 
   const [profileImgMemberId, setProfileImgMemberId] = useState("1")
-  const profileImgUrl = useMemo(
-    () =>
-      `${getApiBaseUrl()}/member/api/v1/members/${profileImgMemberId}/redirectToProfileImg`,
-    [profileImgMemberId]
-  )
+  const [profileImgInputUrl, setProfileImgInputUrl] = useState("")
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -489,10 +486,44 @@ const AdminPage: NextPage = () => {
             value={profileImgMemberId}
             onChange={(e) => setProfileImgMemberId(e.target.value)}
           />
-          <a href={profileImgUrl} target="_blank" rel="noreferrer">
-            프로필 이미지 리다이렉트 열기
-          </a>
+          <Input
+            placeholder="https://... 프로필 이미지 URL"
+            value={profileImgInputUrl}
+            onChange={(e) => setProfileImgInputUrl(e.target.value)}
+          />
+          <Button
+            disabled={disabled("admMemberProfileImgUpdate")}
+            onClick={() => {
+              const nextUrl = profileImgInputUrl.trim()
+              if (!nextUrl) {
+                setResult(pretty({ error: "프로필 이미지 URL을 입력해주세요." }))
+                return
+              }
+
+              void run("admMemberProfileImgUpdate", () =>
+                apiFetch(`/member/api/v1/adm/members/${profileImgMemberId}/profileImgUrl`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    profileImgUrl: nextUrl,
+                  }),
+                })
+              )
+            }}
+          >
+            프로필 이미지 변경
+          </Button>
         </Row>
+        {profileImgInputUrl.trim().length > 0 && (
+          <ProfilePreview>
+            <Image
+              className="previewImage"
+              src={profileImgInputUrl.trim()}
+              alt="profile preview"
+              width={92}
+              height={92}
+            />
+          </ProfilePreview>
+        )}
         <Row>
           <Button
             disabled={disabled("admMemberList")}
@@ -1008,6 +1039,24 @@ const QueryActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+`
+
+const ProfilePreview = styled.div`
+  margin: 0.5rem 0 0.7rem;
+  padding: 0.55rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  width: fit-content;
+  background: ${({ theme }) => theme.colors.gray2};
+
+  .previewImage {
+    width: 92px;
+    height: 92px;
+    object-fit: cover;
+    border-radius: 999px;
+    display: block;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+  }
 `
 
 const Input = styled.input`

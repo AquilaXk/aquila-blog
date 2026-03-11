@@ -41,15 +41,19 @@ spring:
     redis:
       host: ${custom.site.redisHost}
       port: 6379
-      password: lldj123414
+      password: ${SPRING__DATA__REDIS__PASSWORD:}
       database: ${custom.site.redisDatabase}
   datasource:
     url: jdbc:postgresql://${custom.site.dbHost}:5432/${custom.site.dbName}?reWriteBatchedInserts=true
     username: postgres
-    password: lldj123414
+    password: ${SPRING__DATASOURCE__PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       auto-commit: false
+  servlet:
+    multipart:
+      max-file-size: ${CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE:10MB}
+      max-request-size: ${CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE:10MB}
   sql:
     init:
       mode: always
@@ -107,12 +111,16 @@ custom:
     dbName: "${custom.dev.dbName}"
     redisHost: "${custom.dev.redisHost}"
     redisDatabase: "${custom.dev.redisDatabase}"
-  systemMemberApiKey: "${CUSTOM__SYSTEM_MEMBER_API_KEY:system}"
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"
+  auth:
+    login:
+      maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}
+      windowSeconds: ${CUSTOM__AUTH__LOGIN__WINDOW_SECONDS:300}
+      lockSeconds: ${CUSTOM__AUTH__LOGIN__LOCK_SECONDS:600}
   jwt:
-    secretKey: "${CUSTOM__JWT__SECRET_KEY:12345678901234567890123456789012}"
+    secretKey: "${CUSTOM__JWT__SECRET_KEY:}"
   accessToken:
     expirationSeconds: 1200
   task:

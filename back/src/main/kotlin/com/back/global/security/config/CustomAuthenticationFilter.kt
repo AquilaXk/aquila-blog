@@ -2,8 +2,6 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.MemberPolicy
-import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
@@ -62,12 +60,6 @@ class CustomAuthenticationFilter(
         val (apiKey, accessToken) = extractTokens()
 
         if (apiKey.isBlank() && accessToken.isBlank()) return
-
-        if (apiKey == AppConfig.systemMemberApiKey && accessToken.isBlank()) {
-            // 서버 간 내부 호출은 시스템 멤버 권한으로 바로 인증한다.
-            authenticate(MemberPolicy.SYSTEM)
-            return
-        }
 
         val payloadMember =
             accessToken

@@ -1,6 +1,11 @@
 spring:
   config:
     import: optional:file:.env.test[.properties]
+  data:
+    redis:
+      password: ${SPRING__DATA__REDIS__PASSWORD:lldj123414}
+  datasource:
+    password: ${SPRING__DATASOURCE__PASSWORD:lldj123414}
   jpa:
     hibernate:
       ddl-auto: create
@@ -13,6 +18,8 @@ spring:
 custom:
   admin:
     username: admin
+  jwt:
+    secretKey: "${CUSTOM__JWT__SECRET_KEY:abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789}"
   site:
     cookieDomain: "${custom.test.cookieDomain}"
     frontUrl: "${custom.test.frontUrl}"

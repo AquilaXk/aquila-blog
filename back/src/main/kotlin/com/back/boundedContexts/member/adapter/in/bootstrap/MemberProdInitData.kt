@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.adapter.`in`.bootstrap
 
 import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.ApplicationRunner
@@ -34,7 +35,14 @@ class MemberProdInitData(
 
         if (adminUsername.isBlank()) return
         if (adminPassword.isBlank()) return
-        if (memberUseCase.findByUsername(adminUsername) != null) return
+        val existingAdmin = memberUseCase.findByUsername(adminUsername)
+        if (existingAdmin != null) {
+            // 과거 배포에서 username 기반 apiKey가 남아있을 수 있어 최초 1회 회전한다.
+            if (existingAdmin.apiKey.isBlank() || existingAdmin.apiKey == existingAdmin.username) {
+                existingAdmin.modifyApiKey(MemberPolicy.genApiKey())
+            }
+            return
+        }
 
         val member =
             memberUseCase.join(
@@ -44,6 +52,8 @@ class MemberProdInitData(
                 profileImgUrl = null,
             )
 
-        member.modifyApiKey(member.username)
+        if (member.apiKey.isBlank() || member.apiKey == member.username) {
+            member.modifyApiKey(MemberPolicy.genApiKey())
+        }
     }
 }

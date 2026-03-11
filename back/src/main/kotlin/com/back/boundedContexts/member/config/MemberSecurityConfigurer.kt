@@ -11,6 +11,7 @@ class MemberSecurityConfigurer : PublicApiRouteContributor {
     override fun publicApiRoutes() =
         listOf(
             PublicApiRouteSpec("/member/api/*/members", HttpMethod.POST),
+            PublicApiRouteSpec("/member/api/*/members/randomSecureTip", HttpMethod.GET),
             PublicApiRouteSpec("/member/api/*/members/adminProfile", HttpMethod.GET),
             PublicApiRouteSpec("/member/api/*/members/{id:\\d+}/redirectToProfileImg", HttpMethod.GET),
         )

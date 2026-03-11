@@ -1,5 +1,7 @@
 package com.back.boundedContexts.home.`in`
 
+import com.back.global.app.app.AppFacade
+import com.back.global.exception.app.AppException
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpSession
@@ -14,7 +16,16 @@ class HomeController {
     @GetMapping(produces = [MediaType.TEXT_HTML_VALUE])
     @Operation(summary = "메인 페이지")
     fun main(): String {
-        val localHost = InetAddress.getLocalHost()
+        val hostInfoBlock =
+            if (AppFacade.isProd) {
+                ""
+            } else {
+                val localHost = InetAddress.getLocalHost()
+                """
+                |  <p>Host Name: ${localHost.hostName}</p>
+                |  <p>Host Address: ${localHost.hostAddress}</p>
+                """.trimMargin()
+            }
 
         return """
             |<!doctype html>
@@ -59,8 +70,7 @@ class HomeController {
             |</head>
             |<body>
             |  <h1>API 서버__</h1>
-            |  <p>Host Name: ${localHost.hostName}</p>
-            |  <p>Host Address: ${localHost.hostAddress}</p>
+            |${hostInfoBlock}
             |</body>
             |</html>
             """.trimMargin()
@@ -68,8 +78,11 @@ class HomeController {
 
     @GetMapping("/session")
     @Operation(summary = "세션 확인")
-    fun session(session: HttpSession): Map<String, Any> =
-        session.attributeNames
+    fun session(session: HttpSession): Map<String, Any> {
+        if (AppFacade.isProd) throw AppException("404-1", "존재하지 않는 엔드포인트입니다.")
+
+        return session.attributeNames
             .asSequence()
             .associateWith { name -> session.getAttribute(name) }
+    }
 }

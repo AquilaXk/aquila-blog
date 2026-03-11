@@ -37,7 +37,7 @@ class ApiV1AuthControllerTest {
     @Nested
     inner class Login {
         @Test
-        fun `로그인 요청이 성공하면 회원 정보와 토큰 그리고 쿠키를 반환한다`() {
+        fun `로그인 요청이 성공하면 회원 정보와 인증 쿠키를 반환한다`() {
             val resultActions =
                 mvc.post("/member/api/v1/auth/login") {
                     contentType = MediaType.APPLICATION_JSON
@@ -64,8 +64,6 @@ class ApiV1AuthControllerTest {
                 jsonPath("$.data.item.isAdmin") { value(member.isAdmin) }
                 jsonPath("$.data.item.name") { value(member.name) }
                 jsonPath("$.data.item.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
-                jsonPath("$.data.apiKey") { value(member.apiKey) }
-                jsonPath("$.data.accessToken") { exists() }
             }
 
             val result = resultActions.andReturn()
@@ -102,7 +100,7 @@ class ApiV1AuthControllerTest {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("login"))
                     jsonPath("$.resultCode") { value("401-1") }
-                    jsonPath("$.msg") { value("비밀번호가 일치하지 않습니다.") }
+                    jsonPath("$.msg") { value("아이디 또는 비밀번호가 올바르지 않습니다.") }
                 }
         }
 
@@ -123,7 +121,42 @@ class ApiV1AuthControllerTest {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("login"))
                     jsonPath("$.resultCode") { value("401-1") }
-                    jsonPath("$.msg") { value("존재하지 않는 아이디입니다.") }
+                    jsonPath("$.msg") { value("아이디 또는 비밀번호가 올바르지 않습니다.") }
+                }
+        }
+
+        @Test
+        fun `로그인 실패가 누적되면 429를 반환한다`() {
+            repeat(4) {
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "username": "rate_limit_user",
+                                "password": "wrong-password"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isUnauthorized() }
+                        jsonPath("$.resultCode") { value("401-1") }
+                    }
+            }
+
+            mvc
+                .post("/member/api/v1/auth/login") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "username": "rate_limit_user",
+                            "password": "wrong-password"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isTooManyRequests() }
+                    jsonPath("$.resultCode") { value("429-1") }
                 }
         }
     }

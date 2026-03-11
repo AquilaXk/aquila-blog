@@ -12,8 +12,6 @@ class AppConfig(
     siteBackUrl: String,
     @Value("\${custom.site.frontUrl}")
     siteFrontUrl: String,
-    @Value("\${custom.systemMemberApiKey}")
-    systemMemberApiKey: String,
     @Value("\${custom.admin.username:}")
     adminUsername: String,
     @Value("\${custom.admin.password:}")
@@ -22,7 +20,6 @@ class AppConfig(
     init {
         Companion.siteBackUrl = siteBackUrl
         Companion.siteFrontUrl = siteFrontUrl
-        Companion.systemMemberApiKey = systemMemberApiKey
         Companion.adminUsername = adminUsername
         Companion.adminPassword = adminPassword
     }
@@ -34,8 +31,6 @@ class AppConfig(
         lateinit var siteBackUrl: String
             private set
         lateinit var siteFrontUrl: String
-            private set
-        lateinit var systemMemberApiKey: String
             private set
         lateinit var adminUsername: String
             private set

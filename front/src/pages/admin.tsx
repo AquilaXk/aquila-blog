@@ -22,6 +22,20 @@ type PostForEditor = {
   listed: boolean
 }
 
+type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
+
+const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
+  if (!published) return "PRIVATE"
+  if (!listed) return "PUBLIC_UNLISTED"
+  return "PUBLIC_LISTED"
+}
+
+const toFlags = (visibility: PostVisibility): { published: boolean; listed: boolean } => {
+  if (visibility === "PRIVATE") return { published: false, listed: false }
+  if (visibility === "PUBLIC_UNLISTED") return { published: true, listed: false }
+  return { published: true, listed: true }
+}
+
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
 
 const escapePipes = (value: string) => value.replace(/\|/g, "\\|")
@@ -193,8 +207,7 @@ const AdminPage: NextPage = () => {
   const [commentContent, setCommentContent] = useState("")
   const [postTitle, setPostTitle] = useState("")
   const [postContent, setPostContent] = useState("")
-  const [postPublished, setPostPublished] = useState(true)
-  const [postListed, setPostListed] = useState(true)
+  const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
 
@@ -228,8 +241,7 @@ const AdminPage: NextPage = () => {
 
       setPostTitle(post.title ?? "")
       setPostContent(post.content ?? "")
-      setPostPublished(!!post.published)
-      setPostListed(!!post.listed)
+      setPostVisibility(toVisibility(!!post.published, !!post.listed))
       setResult(pretty(post as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -662,22 +674,18 @@ const AdminPage: NextPage = () => {
               <SmallHint>메인 페이지 노출 조건: `공개` + `목록 노출`</SmallHint>
             </div>
             <div className="actions">
-              <CheckLabel>
-                <input
-                  type="checkbox"
-                  checked={postPublished}
-                  onChange={(e) => setPostPublished(e.target.checked)}
-                />
-                공개
-              </CheckLabel>
-              <CheckLabel>
-                <input
-                  type="checkbox"
-                  checked={postListed}
-                  onChange={(e) => setPostListed(e.target.checked)}
-                />
-                목록 노출
-              </CheckLabel>
+              <VisibilityWrap>
+                <label htmlFor="post-visibility">공개 범위</label>
+                <VisibilitySelect
+                  id="post-visibility"
+                  value={postVisibility}
+                  onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
+                >
+                  <option value="PRIVATE">비공개</option>
+                  <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
+                  <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
+                </VisibilitySelect>
+              </VisibilityWrap>
               <PrimaryButton
                 disabled={disabled("writePost")}
                 onClick={() =>
@@ -687,8 +695,7 @@ const AdminPage: NextPage = () => {
                       body: JSON.stringify({
                         title: postTitle,
                         content: postContent,
-                        published: postPublished,
-                        listed: postListed,
+                        ...toFlags(postVisibility),
                       }),
                     })
                   )
@@ -843,8 +850,7 @@ const AdminPage: NextPage = () => {
                   body: JSON.stringify({
                     title: postTitle,
                     content: postContent,
-                    published: postPublished,
-                    listed: postListed,
+                    ...toFlags(postVisibility),
                   }),
                 })
               )
@@ -1142,12 +1148,24 @@ const PrimaryButton = styled(Button)`
   font-weight: 700;
 `
 
-const CheckLabel = styled.label`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.9rem;
+const VisibilityWrap = styled.div`
+  display: grid;
+  gap: 0.22rem;
+  min-width: 220px;
+
+  label {
+    font-size: 0.75rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+`
+
+const VisibilitySelect = styled.select`
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 10px;
+  padding: 0.52rem 0.62rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.86rem;
 `
 
 const EditorSection = styled.div`

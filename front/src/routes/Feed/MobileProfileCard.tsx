@@ -2,19 +2,25 @@ import { CONFIG } from "site.config"
 import Image from "next/image"
 import React from "react"
 import styled from "@emotion/styled"
+import { useAdminProfile } from "src/hooks/useAdminProfile"
 
 type Props = {
   className?: string
 }
 
 const MobileProfileCard: React.FC<Props> = () => {
+  const adminProfile = useAdminProfile()
+  const imageSrc = adminProfile?.profileImageUrl || CONFIG.profile.image
+  const displayName = adminProfile?.username || CONFIG.profile.name
+  const bypassOptimizer = imageSrc.includes("/redirectToProfileImg")
+
   return (
     <StyledWrapper>
       <div className="top">💻 Profile</div>
       <div className="mid">
         <div className="wrapper">
           <Image
-            src={CONFIG.profile.image}
+            src={imageSrc}
             width={90}
             height={90}
             css={{
@@ -23,9 +29,10 @@ const MobileProfileCard: React.FC<Props> = () => {
               objectFit: "cover",
             }}
             alt="profile_image"
+            unoptimized={bypassOptimizer}
           />
           <div className="wrapper">
-            <div className="top">{CONFIG.profile.name}</div>
+            <div className="top">{displayName}</div>
             <div className="mid">{CONFIG.profile.role}</div>
             <div className="btm">{CONFIG.profile.bio}</div>
           </div>

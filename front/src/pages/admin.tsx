@@ -268,6 +268,8 @@ const AdminPage: NextPage = () => {
 
   const [profileImgMemberId, setProfileImgMemberId] = useState("1")
   const [profileImgInputUrl, setProfileImgInputUrl] = useState("")
+  const [profileImageFileName, setProfileImageFileName] = useState("")
+  const profileImageFileInputRef = useRef<HTMLInputElement>(null)
   const [adminPostRows, setAdminPostRows] = useState<AdminPostListItem[]>([])
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
@@ -415,6 +417,67 @@ const AdminPage: NextPage = () => {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
       return false
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const handleUploadMemberProfileImage = async () => {
+    const file = profileImageFileInputRef.current?.files?.[0]
+    if (!file) {
+      setResult(pretty({ error: "업로드할 이미지 파일을 선택해주세요." }))
+      return
+    }
+
+    const targetMemberId = profileImgMemberId.trim()
+    if (!targetMemberId) {
+      setResult(pretty({ error: "프로필을 변경할 member id를 입력해주세요." }))
+      return
+    }
+
+    try {
+      setLoadingKey("admMemberProfileImgUpdate")
+
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const uploadResponse = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      })
+
+      if (!uploadResponse.ok) {
+        const text = await uploadResponse.text().catch(() => "")
+        throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${text}`.trim())
+      }
+
+      const uploadData = (await uploadResponse.json()) as UploadPostImageResponse
+      const uploadedUrl = uploadData?.data?.url?.trim()
+      if (!uploadedUrl) {
+        throw new Error("업로드 응답에 이미지 URL이 없습니다.")
+      }
+
+      const patchedMember = await apiFetch<JsonValue>(
+        `/member/api/v1/adm/members/${targetMemberId}/profileImgUrl`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            profileImgUrl: uploadedUrl,
+          }),
+        }
+      )
+
+      setProfileImgInputUrl(uploadedUrl)
+      setResult(
+        pretty({
+          uploadedUrl,
+          member: patchedMember,
+        })
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
     }
@@ -743,31 +806,32 @@ const AdminPage: NextPage = () => {
             value={profileImgMemberId}
             onChange={(e) => setProfileImgMemberId(e.target.value)}
           />
-          <Input
-            placeholder="https://... 프로필 이미지 URL"
-            value={profileImgInputUrl}
-            onChange={(e) => setProfileImgInputUrl(e.target.value)}
+          <input
+            ref={profileImageFileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              setProfileImageFileName(file?.name || "")
+            }}
           />
           <Button
             disabled={disabled("admMemberProfileImgUpdate")}
-            onClick={() => {
-              const nextUrl = profileImgInputUrl.trim()
-              if (!nextUrl) {
-                setResult(pretty({ error: "프로필 이미지 URL을 입력해주세요." }))
-                return
-              }
-
-              void run("admMemberProfileImgUpdate", () =>
-                apiFetch(`/member/api/v1/adm/members/${profileImgMemberId}/profileImgUrl`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    profileImgUrl: nextUrl,
-                  }),
-                })
-              )
-            }}
+            onClick={() => profileImageFileInputRef.current?.click()}
           >
-            프로필 이미지 변경
+            프로필 이미지 선택
+          </Button>
+          <Input
+            placeholder="선택된 파일"
+            value={profileImageFileName}
+            readOnly
+          />
+          <Button
+            disabled={disabled("admMemberProfileImgUpdate")}
+            onClick={() => void handleUploadMemberProfileImage()}
+          >
+            프로필 이미지 업로드/적용
           </Button>
         </Row>
         {profileImgInputUrl.trim().length > 0 && (

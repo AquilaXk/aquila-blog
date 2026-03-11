@@ -61,7 +61,6 @@ class HomeController {
             |  <h1>API 서버__</h1>
             |  <p>Host Name: ${localHost.hostName}</p>
             |  <p>Host Address: ${localHost.hostAddress}</p>
-            |  <a href="/swagger-ui/index.html">API 문서</a>
             |</body>
             |</html>
         """.trimMargin()

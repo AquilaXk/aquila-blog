@@ -3,10 +3,16 @@ import Image from "next/image"
 import React from "react"
 import { CONFIG } from "site.config"
 import { Emoji } from "src/components/Emoji"
+import { useAdminProfile } from "src/hooks/useAdminProfile"
 
 type Props = {}
 
 const ProfileCard: React.FC<Props> = () => {
+  const adminProfile = useAdminProfile()
+  const imageSrc = adminProfile?.profileImageUrl || CONFIG.profile.image
+  const displayName = adminProfile?.username || CONFIG.profile.name
+  const bypassOptimizer = imageSrc.includes("/redirectToProfileImg")
+
   return (
     <StyledWrapper>
       <div className="title">
@@ -14,10 +20,10 @@ const ProfileCard: React.FC<Props> = () => {
       </div>
       <div className="content">
         <div className="top">
-          <Image src={CONFIG.profile.image} fill alt="" />
+          <Image src={imageSrc} fill alt="" unoptimized={bypassOptimizer} />
         </div>
         <div className="mid">
-          <div className=" name">{CONFIG.profile.name}</div>
+          <div className=" name">{displayName}</div>
           <div className="role">{CONFIG.profile.role}</div>
           <div className="text-sm mb-2">{CONFIG.profile.bio}</div>
         </div>

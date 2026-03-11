@@ -17,6 +17,7 @@ type ApiPostDto = {
   modifiedAt: string
   authorId: number
   authorName: string
+  authorUsername?: string
   authorProfileImgUrl: string
   title: string
   summary?: string
@@ -32,6 +33,7 @@ type ApiPostWithContentDto = {
   modifiedAt: string
   authorId: number
   authorName: string
+  authorUsername?: string
   authorProfileImageUrl?: string
   authorProfileImgUrl?: string
   title: string
@@ -177,7 +179,7 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
   author: [
     {
       id: String(post.authorId),
-      name: post.authorName,
+      name: post.authorUsername || post.authorName,
       profile_photo: post.authorProfileImgUrl,
     },
   ],
@@ -208,6 +210,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
       modifiedAt: post.modifiedAt,
       authorId: post.authorId,
       authorName: post.authorName,
+      authorUsername: post.authorUsername,
       authorProfileImgUrl:
         post.authorProfileImageUrl || post.authorProfileImgUrl || "",
       title: post.title,

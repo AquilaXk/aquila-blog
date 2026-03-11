@@ -22,7 +22,7 @@ class HomeControllerTest {
         mvc.get("/").andExpect {
             status { isOk() }
             content { string(org.hamcrest.Matchers.containsString("API 서버")) }
-            content { string(org.hamcrest.Matchers.containsString("/swagger-ui/index.html")) }
+            content { string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("/swagger-ui/index.html"))) }
         }
     }
 

@@ -1,6 +1,9 @@
 package com.back.boundedContexts.member.`in`
 
 import com.back.boundedContexts.member.app.MemberFacade
+import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.global.app.AppConfig
+import com.back.global.exception.app.AppException
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.global.rsData.RsData
 import jakarta.validation.Valid
@@ -23,6 +26,20 @@ class ApiV1MemberController(
     @GetMapping("/randomSecureTip")
     fun randomSecureTip() =
         "비밀번호는 영문, 숫자, 특수문자를 조합하여 8자 이상으로 설정하세요."
+
+    @GetMapping("/adminProfile")
+    @Transactional(readOnly = true)
+    fun getAdminProfile(): MemberWithUsernameDto {
+        val adminUsername = AppConfig.adminUsernameOrBlank.trim()
+        if (adminUsername.isBlank()) {
+            throw AppException("404-1", "관리자 프로필이 설정되지 않았습니다.")
+        }
+
+        val adminMember = memberFacade.findByUsername(adminUsername)
+            ?: throw AppException("404-1", "관리자 프로필을 찾을 수 없습니다.")
+
+        return MemberWithUsernameDto(adminMember)
+    }
 
     @GetMapping("/{id}/redirectToProfileImg")
     @ResponseStatus(HttpStatus.FOUND)

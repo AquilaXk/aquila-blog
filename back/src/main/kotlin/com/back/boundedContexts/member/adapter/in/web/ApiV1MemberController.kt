@@ -16,7 +16,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 import java.net.URI
-import java.util.concurrent.TimeUnit
 
 @RestController
 @RequestMapping("/member/api/v1/members")
@@ -50,11 +49,8 @@ class ApiV1MemberController(
     ): ResponseEntity<Void> {
         val member = memberUseCase.findById(id).orElseThrow()
 
-        val cacheControl =
-            CacheControl
-                .maxAge(20, TimeUnit.MINUTES)
-                .cachePublic()
-                .immutable()
+        // 프로필 사진은 변경 가능한 자산이므로 redirect 응답을 강하게 캐시하지 않는다.
+        val cacheControl = CacheControl.noCache().cachePrivate()
 
         return ResponseEntity
             .status(HttpStatus.FOUND)

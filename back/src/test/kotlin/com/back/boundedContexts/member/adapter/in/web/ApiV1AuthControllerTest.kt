@@ -70,13 +70,15 @@ class ApiV1AuthControllerTest {
 
             val result = resultActions.andReturn()
 
-            val apiKeyCookie = result.response.getCookie("apiKey")
+            val apiKeyCookie =
+                result.response.cookies.firstOrNull { it.name == "apiKey" && it.value == member.apiKey }
             assertThat(apiKeyCookie).isNotNull
             assertThat(apiKeyCookie!!.value).isEqualTo(member.apiKey)
             assertThat(apiKeyCookie.path).isEqualTo("/")
             assertThat(apiKeyCookie.isHttpOnly).isTrue
 
-            val accessTokenCookie = result.response.getCookie("accessToken")
+            val accessTokenCookie =
+                result.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
             assertThat(accessTokenCookie).isNotNull
             assertThat(accessTokenCookie!!.value).isNotBlank()
             assertThat(accessTokenCookie.path).isEqualTo("/")
@@ -229,7 +231,8 @@ class ApiV1AuthControllerTest {
                     }
 
             val result = resultActions.andReturn()
-            val accessTokenCookie = result.response.getCookie("accessToken")
+            val accessTokenCookie =
+                result.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
 
             assertThat(accessTokenCookie).isNotNull
             assertThat(accessTokenCookie!!.value).isNotBlank()
@@ -266,6 +269,25 @@ class ApiV1AuthControllerTest {
 
             assertThat(result.response.getCookie("accessToken")).isNull()
             assertThat(result.response.getHeader(HttpHeaders.AUTHORIZATION)).isNull()
+        }
+
+        @Test
+        fun `내 정보 조회에서 표준 Bearer accessToken 형식도 허용한다`() {
+            val member = memberFacade.findByUsername("user1")!!
+            val accessToken = authTokenService.genAccessToken(member)
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    header(HttpHeaders.AUTHORIZATION, "Bearer $accessToken")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AuthController::class.java))
+                    match(handler().methodName("me"))
+                    jsonPath("$.id") { value(member.id) }
+                    jsonPath("$.username") { value(member.username) }
+                    jsonPath("$.nickname") { value(member.nickname) }
+                    jsonPath("$.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                }
         }
     }
 }

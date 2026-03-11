@@ -1,78 +1,26 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useEffect, useState } from "react"
-import { apiFetch } from "src/apis/backend/client"
+import useAuthSession from "src/hooks/useAuthSession"
 import { isNavigationCancelledError } from "src/libs/router"
-
-type MemberMe = {
-  id: number
-  username: string
-  nickname?: string
-  isAdmin?: boolean
-}
 
 const NavBar: React.FC = () => {
   const router = useRouter()
-  const [me, setMe] = useState<MemberMe | null>(null)
-  const [isAuthResolved, setIsAuthResolved] = useState(false)
-
-  useEffect(() => {
-    let mounted = true
-    const shouldSkipAuthCheck = router.pathname === "/login" || router.pathname === "/signup"
-
-    const loadMe = async () => {
-      if (shouldSkipAuthCheck) {
-        if (!mounted) return
-        setMe(null)
-        setIsAuthResolved(true)
-        return
-      }
-
-      try {
-        const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
-        if (!mounted) return
-        setMe(member)
-      } catch {
-        if (!mounted) return
-        setMe(null)
-      } finally {
-        if (mounted) setIsAuthResolved(true)
-      }
-    }
-
-    void loadMe()
-
-    const onFocus = () => void loadMe()
-    const onRouteDone = () => void loadMe()
-    window.addEventListener("focus", onFocus)
-    router.events.on("routeChangeComplete", onRouteDone)
-
-    return () => {
-      mounted = false
-      window.removeEventListener("focus", onFocus)
-      router.events.off("routeChangeComplete", onRouteDone)
-    }
-  }, [router.events, router.pathname])
+  const { me, isAuthResolved, logout } = useAuthSession()
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
 
   const handleLogout = async () => {
-    try {
-      await apiFetch("/member/api/v1/auth/logout", { method: "DELETE" })
-    } catch {
-      // Even if API fails, clear local auth UI state to prevent stale header.
-    } finally {
-      setMe(null)
-      if (router.pathname === "/admin") {
-        const target = "/login?next=%2Fadmin"
-        if (router.asPath !== target) {
-          try {
-            await router.replace(target)
-          } catch (error) {
-            if (!isNavigationCancelledError(error)) {
-              console.error("logout redirect failed", error)
-            }
+    await logout()
+
+    if (router.pathname === "/admin") {
+      const target = "/login?next=%2Fadmin"
+      if (router.asPath !== target) {
+        try {
+          await router.replace(target)
+        } catch (error) {
+          if (!isNavigationCancelledError(error)) {
+            console.error("logout redirect failed", error)
           }
         }
       }
@@ -135,10 +83,25 @@ const StyledWrapper = styled.div`
     display: flex;
     flex-direction: row;
     align-items: center;
+    gap: 0.28rem;
 
     li {
       display: block;
+    }
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 32px;
+      padding: 0 0.68rem;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray3};
       color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.82rem;
+      font-weight: 600;
+      line-height: 1;
     }
   }
 
@@ -208,6 +171,14 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 720px) {
     gap: 0.55rem;
+
+    .primaryLinks {
+      a {
+        min-height: 30px;
+        padding: 0 0.58rem;
+        font-size: 0.76rem;
+      }
+    }
 
     .authArea {
       min-width: 0;

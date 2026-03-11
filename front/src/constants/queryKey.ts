@@ -1,5 +1,6 @@
 export const queryKey = {
   scheme: () => ["scheme"] as const,
+  authMe: () => ["auth", "me"] as const,
   posts: () => ["posts"] as const,
   tags: () => ["tags"] as const,
   categories: () => ["categories"] as const,

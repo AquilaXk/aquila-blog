@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
+import com.back.global.security.app.AuthCookieService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.app.Rq
 import jakarta.servlet.FilterChain
@@ -24,6 +25,7 @@ import tools.jackson.databind.ObjectMapper
 @Component
 class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
+    private val authCookieService: AuthCookieService,
     private val objectMapper: ObjectMapper,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
@@ -97,7 +99,7 @@ class CustomAuthenticationFilter(
                 ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
         val newAccessToken = actorApplicationService.genAccessToken(member)
-        rq.setCookie("accessToken", newAccessToken)
+        authCookieService.issueAccessToken(newAccessToken)
         rq.setHeader(HttpHeaders.AUTHORIZATION, newAccessToken)
 
         authenticate(member)
@@ -114,7 +116,10 @@ class CustomAuthenticationFilter(
             }
 
             val bits = headerAuthorization.split(" ", limit = 3)
-            bits.getOrNull(1).orEmpty() to bits.getOrNull(2).orEmpty()
+            when (bits.size) {
+                2 -> "" to bits.getOrNull(1).orEmpty()
+                else -> bits.getOrNull(1).orEmpty() to bits.getOrNull(2).orEmpty()
+            }
         } else {
             rq.getCookieValue("apiKey", "") to rq.getCookieValue("accessToken", "")
         }

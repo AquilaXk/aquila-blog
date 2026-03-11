@@ -22,9 +22,7 @@ services:
       - ./.env.prod
 
   back_blue:
-    build:
-      context: ../../back
-      dockerfile: Dockerfile
+    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
     env_file:
       - ./.env.prod
@@ -40,11 +38,10 @@ services:
       default:
         aliases:
           - back-blue
+          - back_active
 
   back_green:
-    build:
-      context: ../../back
-      dockerfile: Dockerfile
+    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
     env_file:
       - ./.env.prod
@@ -60,6 +57,7 @@ services:
       default:
         aliases:
           - back-green
+          - back_active
 
   db_1:
     image: jangka512/pgj:latest

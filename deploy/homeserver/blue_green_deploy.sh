@@ -64,20 +64,6 @@ detect_active_backend() {
     fi
   fi
 
-  local active_from_caddy
-  active_from_caddy="$(grep -Eo 'back[-_](blue|green):8080' "${CADDY_FILE}" | head -n 1 | cut -d: -f1 || true)"
-  active_from_caddy="${active_from_caddy//-/_}"
-
-  if [[ "${active_from_caddy}" == "back_blue" && "${is_blue_running}" == "true" ]]; then
-    echo "back_blue"
-    return
-  fi
-
-  if [[ "${active_from_caddy}" == "back_green" && "${is_green_running}" == "true" ]]; then
-    echo "back_green"
-    return
-  fi
-
   if [[ "${is_blue_running}" == "true" && "${is_green_running}" != "true" ]]; then
     echo "back_blue"
     return
@@ -88,43 +74,7 @@ detect_active_backend() {
     return
   fi
 
-  if [[ "${active_from_caddy}" == "back_blue" || "${active_from_caddy}" == "back_green" ]]; then
-    echo "${active_from_caddy}"
-    return
-  fi
-
   echo "back_blue"
-}
-
-switch_caddy_upstream() {
-  local next_backend="$1"
-  local next_backend_host
-  next_backend_host="$(backend_host "${next_backend}")"
-  local tmp_file
-  tmp_file="$(mktemp)"
-
-  sed -E "s/back[-_](blue|green):8080/${next_backend_host}:8080/" "${CADDY_FILE}" > "${tmp_file}"
-  mv "${tmp_file}" "${CADDY_FILE}"
-
-  compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
-}
-
-is_caddy_pointing_to() {
-  local expected_backend="$1"
-  local expected_backend_host
-  expected_backend_host="$(backend_host "${expected_backend}")"
-
-  if ! grep -Eq "reverse_proxy[[:space:]]+${expected_backend_host}:8080" "${CADDY_FILE}"; then
-    echo "host Caddyfile does not point to ${expected_backend_host}:8080" >&2
-    return 1
-  fi
-
-  if ! compose exec -T caddy sh -lc "grep -Eq 'reverse_proxy[[:space:]]+${expected_backend_host}:8080' /etc/caddy/Caddyfile"; then
-    echo "container Caddyfile does not point to ${expected_backend_host}:8080" >&2
-    return 1
-  fi
-
-  return 0
 }
 
 probe_caddy_http_code() {
@@ -136,10 +86,15 @@ probe_caddy_http_code() {
     -H "Host: ${api_domain}" || true
 }
 
-verify_caddy_upstream() {
-  local expected_backend="$1"
-  local expected_backend_host
-  expected_backend_host="$(backend_host "${expected_backend}")"
+resolve_in_caddy() {
+  local host="$1"
+  compose exec -T caddy getent hosts "${host}" >/dev/null 2>&1
+}
+
+verify_caddy_route_ready() {
+  local next_backend="$1"
+  local next_backend_host
+  next_backend_host="$(backend_host "${next_backend}")"
   local api_domain
   api_domain="$(env_value "API_DOMAIN")"
 
@@ -150,8 +105,16 @@ verify_caddy_upstream() {
 
   local attempt=1
   while [[ "${attempt}" -le "${CADDY_SWITCH_VERIFY_RETRIES}" ]]; do
-    if ! is_caddy_pointing_to "${expected_backend}"; then
-      echo "caddy config not yet switched to ${expected_backend_host} (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES})"
+    # Ensure both blue/green names and fixed active alias are resolvable inside caddy.
+    if ! resolve_in_caddy "back_blue" || ! resolve_in_caddy "back_green" || ! resolve_in_caddy "back_active"; then
+      echo "caddy DNS resolve pending for back_blue/back_green/back_active (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES})"
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    if ! resolve_in_caddy "${next_backend_host}"; then
+      echo "caddy DNS resolve pending for ${next_backend_host} (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES})"
       sleep 1
       attempt=$((attempt + 1))
       continue
@@ -161,16 +124,16 @@ verify_caddy_upstream() {
     code="$(probe_caddy_http_code "${api_domain}")"
 
     if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
-      echo "caddy switch verify ok: ${expected_backend} (status=${code})"
+      echo "caddy route verify ok (next=${next_backend}, status=${code})"
       return 0
     fi
 
-    echo "caddy switch verify pending: ${expected_backend} (try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES}, status=${code:-none})"
+    echo "caddy route verify pending (next=${next_backend}, try ${attempt}/${CADDY_SWITCH_VERIFY_RETRIES}, status=${code:-none})"
     sleep 1
     attempt=$((attempt + 1))
   done
 
-  echo "caddy switch verify failed: expected ${expected_backend_host}" >&2
+  echo "caddy route verify failed: next=${next_backend_host}" >&2
   compose logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
@@ -235,20 +198,18 @@ fi
 
 echo "active backend: ${active_backend}"
 echo "next backend: ${next_backend}"
+echo "BACK_IMAGE: ${BACK_IMAGE:-unset}"
 
 compose up -d db_1 redis_1 caddy cloudflared
-compose up -d --build "${next_backend}"
+compose pull "${next_backend}"
+compose up -d "${next_backend}"
 
 check_backend_health "${next_backend}"
-switch_caddy_upstream "${next_backend}"
-
-if ! verify_caddy_upstream "${next_backend}"; then
-  echo "rolling back caddy upstream to ${active_backend}" >&2
-  switch_caddy_upstream "${active_backend}" || true
+if ! verify_caddy_route_ready "${next_backend}"; then
+  echo "route verify failed before cutover; keeping ${active_backend} running and stopping ${next_backend}" >&2
+  compose stop "${next_backend}" || true
   exit 1
 fi
-
-echo "${next_backend}" > "${STATE_FILE}"
 
 if [[ "${active_backend}" != "${next_backend}" ]]; then
   compose stop "${active_backend}" || true
@@ -258,13 +219,37 @@ api_domain="$(env_value "API_DOMAIN")"
 if [[ -n "${api_domain}" ]]; then
   post_stop_code="$(probe_caddy_http_code "${api_domain}")"
   if ! [[ "${post_stop_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
-    echo "post-stop verify failed (status=${post_stop_code:-none}), attempting recovery" >&2
+    echo "post-stop verify failed (status=${post_stop_code:-none}), attempting rollback to ${active_backend}" >&2
     compose up -d "${active_backend}" || true
-    switch_caddy_upstream "${active_backend}" || true
+
+    rollback_host="$(backend_host "${active_backend}")"
+    if ! resolve_in_caddy "${rollback_host}"; then
+      echo "rollback skipped: ${rollback_host} is not resolvable from caddy" >&2
+      compose logs --no-color --tail=120 caddy >&2 || true
+      exit 1
+    fi
+
+    if ! check_backend_health "${active_backend}"; then
+      echo "rollback skipped: ${active_backend} healthcheck failed" >&2
+      compose logs --no-color --tail=120 "${active_backend}" >&2 || true
+      exit 1
+    fi
+
+    rollback_code="$(probe_caddy_http_code "${api_domain}")"
+    if ! [[ "${rollback_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+      echo "rollback failed: caddy status=${rollback_code:-none}" >&2
+      compose logs --no-color --tail=120 caddy >&2 || true
+      exit 1
+    fi
+
+    echo "${active_backend}" > "${STATE_FILE}"
+    echo "rollback recovered with ${active_backend} (status=${rollback_code})"
     compose logs --no-color --tail=120 caddy >&2 || true
     exit 1
   fi
   echo "post-stop verify ok (status=${post_stop_code})"
 fi
+
+echo "${next_backend}" > "${STATE_FILE}"
 
 compose ps

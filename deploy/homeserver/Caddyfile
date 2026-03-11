@@ -6,6 +6,6 @@
 http://{$API_DOMAIN} {
   encode gzip zstd
 
-  # Active backend is switched by deploy/homeserver/blue_green_deploy.sh.
-  reverse_proxy back_blue:8080
+  # Blue/Green backends share `back_active` alias on Docker network.
+  reverse_proxy back_active:8080
 }

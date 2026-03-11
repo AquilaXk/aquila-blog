@@ -198,11 +198,10 @@ curl -I https://api.example.com
 `.github/workflows/deploy.yml`는 다음 순서로 동작합니다.
 
 1. `test` 잡
-2. backend 테스트 성공 시 `deploy` 잡
-3. (권장) Tailscale 네트워크 연결 후 SSH로 홈서버 접속
-4. `git pull --ff-only`
-5. 필요 시 `.env.prod` 갱신
-6. `./deploy/homeserver/blue_green_deploy.sh` 실행
+2. `calculateTag` 잡에서 이미지/릴리즈 태그 계산
+3. `buildAndPush` 잡에서 backend Docker 이미지 빌드 후 GHCR 푸시
+4. `blueGreenDeploy` 잡에서 홈서버 SSH 접속 후 새 이미지 pull + Blue/Green 전환
+5. `makeTagAndRelease` 잡에서 배포 릴리즈 태그 생성
 
 ### 7.2 GitHub Actions 시크릿
 
@@ -221,6 +220,7 @@ curl -I https://api.example.com
 - `HOME_SSH_PORT`: 기본 `22`
 - `HOME_KNOWN_HOSTS`: `ssh-keyscan -p <HOME_SSH_PORT> -H <HOME_SSH_HOST>` 결과
 - `HOME_SERVER_ENV`: `.env.prod` 전체 멀티라인 값
+- `HOME_GHCR_USERNAME`, `HOME_GHCR_TOKEN`: GHCR private 이미지 pull이 필요한 경우
 - `HOME_HEALTHCHECK_URL` (선택): 모니터링 워크플로 헬스체크 URL (기본 `https://api.aquilaxk.site/actuator/health`)
 - `HOME_ALERT_WEBHOOK_URL` (선택): 장애 알림 Webhook URL
 
@@ -276,15 +276,15 @@ GitHub 시크릿:
 
 스크립트는 아래 순서를 따릅니다.
 
-1. 현재 active backend 판별 (`Caddyfile` 또는 `.active_backend`)
+1. 현재 active backend 판별 (`.active_backend` + 실행중 컨테이너 기준)
 2. 다음 배포 대상 색상 결정
 3. `db_1`, `redis_1`, `caddy` 기동 보장
-4. 비활성 색상 backend 빌드 및 기동
+4. 비활성 색상 backend 이미지 pull 및 기동
 5. Docker 네트워크 내부 HTTP 헬스체크 수행
-6. 헬스체크 성공 시 Caddy upstream 변경 후 reload
-7. Caddy 경유 health 검증 실패 시 즉시 upstream 롤백
-8. `.active_backend` 상태 파일 갱신
-9. 이전 active backend 정지
+6. Caddy 내부 DNS(`back_blue`/`back_green`/`back_active`) 해석 및 Caddy 경유 health 검증
+7. 검증 성공 시 이전 active backend 정지
+8. post-stop health 실패 시 `resolve + health` 조건 충족 시에만 롤백 시도
+9. `.active_backend` 상태 파일 갱신
 
 ### 8.3 헬스체크 튜닝 변수
 
@@ -537,7 +537,7 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 
 추가 점검:
 
-- `deploy/homeserver/Caddyfile` upstream이 의도한 색상을 가리키는지
+- `deploy/homeserver/Caddyfile` upstream이 `back_active:8080`인지
 - `.active_backend` 값이 실제 의도와 맞는지
 
 ### 12.9 헬스체크 타임아웃
@@ -548,28 +548,31 @@ docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docke
 HEALTHCHECK_RETRIES=90 HEALTHCHECK_INTERVAL_SECONDS=2 ./deploy/homeserver/blue_green_deploy.sh
 ```
 
-### 12.10 Caddy 업스트림 DNS 조회 실패 (`lookup back-blue ...`)
+### 12.10 Caddy 업스트림 DNS 조회 실패 (`lookup back_active ...`)
 
 증상:
 
-- `caddy switch verify pending ... status=502` 반복
-- Caddy 로그에 `lookup back-blue on 127.0.0.11:53` 오류
+- `caddy route verify pending ...` 반복
+- Caddy 로그에 `lookup back_active on 127.0.0.11:53` 오류
 
 원인:
 
-- Caddy upstream 호스트명과 Docker Compose 서비스 DNS 이름이 불일치하거나, 하이픈 별칭 해석이 불안정한 경우
+- `back_active` alias가 Docker 네트워크에서 정상 해석되지 않거나 backend 컨테이너 상태 불안정
 
 해결:
 
-- upstream을 Compose 서비스명(`back_blue`/`back_green`)과 동일하게 사용
-- 배포 스크립트/`Caddyfile`도 같은 표기(`back_blue`/`back_green`)로 통일
+- `back_blue`, `back_green` 서비스가 모두 up 상태인지 확인
+- Caddy 컨테이너 내부에서 `back_blue`, `back_green`, `back_active`가 모두 resolve 되는지 확인
+- `deploy/homeserver/Caddyfile`이 `reverse_proxy back_active:8080`인지 확인
 
 점검 명령:
 
 ```bash
 docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps
 grep -n "reverse_proxy" deploy/homeserver/Caddyfile
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -n 'reverse_proxy' /etc/caddy/Caddyfile"
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy getent hosts back_blue
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy getent hosts back_green
+docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy getent hosts back_active
 ```
 
 ---

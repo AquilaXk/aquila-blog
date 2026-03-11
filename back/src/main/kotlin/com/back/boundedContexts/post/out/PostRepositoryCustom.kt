@@ -7,5 +7,6 @@ import org.springframework.data.domain.Pageable
 
 interface PostRepositoryCustom {
     fun findQPagedByKw(kw: String, pageable: Pageable): Page<Post>
+    fun findQPagedByKwForAdmin(kw: String, pageable: Pageable): Page<Post>
     fun findQPagedByAuthorAndKw(author: Member, kw: String, pageable: Pageable): Page<Post>
 }

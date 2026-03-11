@@ -2,11 +2,15 @@ package com.back.boundedContexts.post.`in`
 
 import com.back.boundedContexts.member.out.shared.MemberApiClient
 import com.back.boundedContexts.post.app.PostFacade
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.standard.dto.page.PageDto
+import com.back.standard.dto.post.type1.PostSearchSortType1
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -28,5 +32,20 @@ class ApiV1AdmPostController(
             postFacade.count(),
             memberApiClient.randomSecureTip
         )
+    }
+
+    @GetMapping
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자용 전체 글 목록 (숨김글 포함)")
+    fun getItems(
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "") kw: String,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): PageDto<PostDto> {
+        val validPage = page.coerceAtLeast(1)
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val postPage = postFacade.findPagedByKwForAdmin(kw, sort, validPage, validPageSize)
+        return PageDto(postPage.map(::PostDto))
     }
 }

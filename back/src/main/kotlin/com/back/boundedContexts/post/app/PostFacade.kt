@@ -166,6 +166,16 @@ class PostFacade(
         PageRequest.of(page - 1, pageSize, sort.sortBy)
     )
 
+    fun findPagedByKwForAdmin(
+        kw: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): Page<Post> = postRepository.findQPagedByKwForAdmin(
+        kw,
+        PageRequest.of(page - 1, pageSize, sort.sortBy)
+    )
+
     fun findPagedByAuthor(
         author: Member,
         kw: String,

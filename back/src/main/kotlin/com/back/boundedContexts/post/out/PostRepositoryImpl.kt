@@ -20,6 +20,9 @@ class PostRepositoryImpl(
     override fun findQPagedByKw(kw: String, pageable: Pageable): Page<Post> =
         findPosts(null, kw, pageable, publicOnly = true)
 
+    override fun findQPagedByKwForAdmin(kw: String, pageable: Pageable): Page<Post> =
+        findPosts(null, kw, pageable, publicOnly = false)
+
     override fun findQPagedByAuthorAndKw(author: Member, kw: String, pageable: Pageable): Page<Post> =
         findPosts(author, kw, pageable, publicOnly = false)
 

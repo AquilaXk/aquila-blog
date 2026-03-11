@@ -2207,18 +2207,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PaneChip>{imageCount} images</PaneChip>
               </PaneHeader>
               <PreviewCard>
-                <PreviewTitle>{postTitle.trim() || "제목을 입력하세요"}</PreviewTitle>
-                <PreviewMetaRow>
-                  <PreviewMetaPill>{currentVisibilityText}</PreviewMetaPill>
-                  <PreviewMetaPill>
-                    {selectedCategoryText === "미선택"
-                      ? "카테고리 미선택"
-                      : `${selectedCategoryParts.emoji ? `${selectedCategoryParts.emoji} ` : ""}${selectedCategoryParts.label}`}
-                  </PreviewMetaPill>
-                  {postTags.map((tag) => (
-                    <PreviewMetaPill key={tag}>#{tag}</PreviewMetaPill>
-                  ))}
-                </PreviewMetaRow>
                 <NotionRenderer content={postContent} />
               </PreviewCard>
             </PreviewPane>
@@ -3873,36 +3861,8 @@ const PreviewCard = styled.div`
   padding: 0 0 0.25rem;
 
   > .aq-markdown {
-    margin-top: 0.6rem;
+    margin-top: 0;
   }
-`
-
-const PreviewTitle = styled.h2`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: clamp(2rem, 3.2vw, 2.7rem);
-  line-height: 1.12;
-  letter-spacing: -0.03em;
-`
-
-const PreviewMetaRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1rem 0 1.2rem;
-`
-
-const PreviewMetaPill = styled.span`
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  border-radius: 999px;
-  padding: 0 0.72rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-  font-weight: 700;
 `
 
 const WriterFooterBar = styled.div`

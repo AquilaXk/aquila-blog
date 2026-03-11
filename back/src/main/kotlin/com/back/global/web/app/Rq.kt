@@ -42,9 +42,10 @@ class Rq(
         defaultValue: String,
     ): String =
         req.cookies
-            ?.firstOrNull { it.name == name }
-            ?.value
-            ?.takeIf { it.isNotBlank() }
+            ?.asSequence()
+            ?.filter { it.name == name }
+            ?.mapNotNull { it.value.takeIf(String::isNotBlank) }
+            ?.lastOrNull()
             ?: defaultValue
 
     fun setCookie(

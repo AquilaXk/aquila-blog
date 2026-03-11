@@ -44,8 +44,13 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   ])
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
-  // Velog-like strategy: SSR + short CDN cache.
-  res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120")
+  // 프로필 조회 실패 시 fallback HTML을 CDN에 캐시하지 않도록 한다.
+  res.setHeader(
+    "Cache-Control",
+    initialAdminProfile
+      ? "public, s-maxage=30, stale-while-revalidate=120"
+      : "private, no-store"
+  )
 
   return {
     props: {

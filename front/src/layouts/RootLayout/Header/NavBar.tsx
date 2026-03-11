@@ -6,7 +6,7 @@ import { isNavigationCancelledError } from "src/libs/router"
 
 const NavBar: React.FC = () => {
   const router = useRouter()
-  const { me, isAuthResolved, logout } = useAuthSession()
+  const { me, authStatus, logout } = useAuthSession()
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
 
@@ -37,13 +37,13 @@ const NavBar: React.FC = () => {
         ))}
       </ul>
       <div className="authArea">
-        {!isAuthResolved && (
+        {authStatus === "loading" && (
           <>
             <span className="authSkeleton short" />
             <span className="authSkeleton medium" />
           </>
         )}
-        {isAuthResolved && !me && (
+        {authStatus === "anonymous" && (
           <>
             <Link href="/login" className="navPill">
               Login
@@ -53,12 +53,13 @@ const NavBar: React.FC = () => {
             </Link>
           </>
         )}
-        {isAuthResolved && me?.isAdmin && (
+        {authStatus === "unavailable" && !me && <span className="authNotice">Auth unavailable</span>}
+        {authStatus === "authenticated" && me?.isAdmin && (
           <Link href="/admin" className="navPill">
             Admin
           </Link>
         )}
-        {isAuthResolved && me && (
+        {authStatus === "authenticated" && me && (
           <>
             <span className="identity">{me.nickname || me.username}</span>
             <button type="button" onClick={handleLogout} className="logoutBtn">
@@ -153,6 +154,12 @@ const StyledWrapper = styled.div`
     text-overflow: ellipsis;
   }
 
+  .authNotice {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
   .logoutBtn {
     display: inline-flex;
     align-items: center;
@@ -187,6 +194,10 @@ const StyledWrapper = styled.div`
 
     .identity {
       display: none;
+    }
+
+    .authNotice {
+      font-size: 0.74rem;
     }
 
     .navPill,

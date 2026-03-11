@@ -5,12 +5,14 @@ import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.standard.extensions.getOrThrow
+import jakarta.servlet.http.Cookie
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.context.ActiveProfiles
@@ -85,6 +87,20 @@ class ApiV1PostCommentControllerTest {
                 status { isNotFound() }
                 jsonPath("$.resultCode") { value("404-1") }
             }
+        }
+
+        @Test
+        fun `댓글 목록 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
+            mvc
+                .get("/post/api/v1/posts/${post.id}/comments") {
+                    cookie(Cookie("apiKey", "invalid-api-key"))
+                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("getItems"))
+                }
         }
     }
 

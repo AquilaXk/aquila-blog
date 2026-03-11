@@ -443,38 +443,34 @@ const AdminPage: NextPage = () => {
       const formData = new FormData()
       formData.append("file", file)
 
-      const uploadResponse = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      })
+      const uploadResponse = await fetch(
+        `${getApiBaseUrl()}/member/api/v1/adm/members/${targetMemberId}/profileImageFile`,
+        {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        }
+      )
 
       if (!uploadResponse.ok) {
         const text = await uploadResponse.text().catch(() => "")
         throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${text}`.trim())
       }
 
-      const uploadData = (await uploadResponse.json()) as UploadPostImageResponse
-      const uploadedUrl = uploadData?.data?.url?.trim()
+      const uploadData = (await uploadResponse.json()) as {
+        profileImageUrl?: string
+        profileImageDirectUrl?: string
+      }
+      const uploadedUrl = (uploadData?.profileImageDirectUrl || uploadData?.profileImageUrl || "").trim()
       if (!uploadedUrl) {
         throw new Error("업로드 응답에 이미지 URL이 없습니다.")
       }
-
-      const patchedMember = await apiFetch<JsonValue>(
-        `/member/api/v1/adm/members/${targetMemberId}/profileImgUrl`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            profileImgUrl: uploadedUrl,
-          }),
-        }
-      )
 
       setProfileImgInputUrl(uploadedUrl)
       setResult(
         pretty({
           uploadedUrl,
-          member: patchedMember,
+          member: uploadData,
         })
       )
     } catch (error) {

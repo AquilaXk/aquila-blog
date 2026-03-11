@@ -12,6 +12,7 @@ data class MemberWithUsernameDto(
     val name: String,
     val nickname: String,
     val profileImageUrl: String,
+    val profileImageDirectUrl: String,
     val profileRole: String,
     val profileBio: String,
 ) {
@@ -24,6 +25,7 @@ data class MemberWithUsernameDto(
         name = member.name,
         nickname = member.nickname,
         profileImageUrl = member.redirectToProfileImgUrlOrDefault,
+        profileImageDirectUrl = member.profileImgUrlOrDefault,
         profileRole = member.profileRole,
         profileBio = member.profileBio,
     )

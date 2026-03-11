@@ -11,11 +11,12 @@ type Props = {
 
 const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
-  const imageSrc = adminProfile?.profileImageUrl || CONFIG.profile.image
+  const imageSrc =
+    adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
   const displayName = adminProfile?.username || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
-  const bypassOptimizer = imageSrc.includes("/redirectToProfileImg")
+  const bypassOptimizer = imageSrc.includes("/redirectToProfileImg") || imageSrc.startsWith("data:")
 
   return (
     <StyledWrapper>

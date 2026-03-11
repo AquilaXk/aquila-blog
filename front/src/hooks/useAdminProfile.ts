@@ -6,6 +6,7 @@ export type AdminProfile = {
   name: string
   nickname: string
   profileImageUrl: string
+  profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
 }

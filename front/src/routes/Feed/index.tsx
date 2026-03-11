@@ -22,8 +22,6 @@ type Props = {
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const [q, setQ] = useState("")
-  const displayName = initialAdminProfile?.username || CONFIG.profile.name
-  const displayRole = initialAdminProfile?.profileRole || CONFIG.profile.role
 
   return (
     <StyledWrapper>
@@ -38,14 +36,8 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
       <div className="mid">
         <MobileProfileCard initialAdminProfile={initialAdminProfile} />
         <IntroCard>
-          <span className="eyebrow">Aquila Blog</span>
           <h1>{CONFIG.blog.title}</h1>
           <p>{CONFIG.blog.description}</p>
-          <div className="meta">
-            <span>운영자 {displayName}</span>
-            <span>{displayRole}</span>
-            <span>{q.trim() ? `검색어: ${q.trim()}` : "최신 글을 탐색해보세요"}</span>
-          </div>
         </IntroCard>
         <PinnedPosts q={q} />
         <ExplorerCard>
@@ -159,59 +151,24 @@ const StyledWrapper = styled.div`
 `
 
 const IntroCard = styled.section`
-  border-radius: 26px;
+  border-radius: 20px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 38%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
-  padding: 1.3rem 1.35rem;
-
-  .eyebrow {
-    display: inline-flex;
-    margin-bottom: 0.7rem;
-    border-radius: 999px;
-    padding: 0.36rem 0.7rem;
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1.1rem 1.2rem;
 
   h1 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.9rem, 4vw, 2.7rem);
-    letter-spacing: -0.05em;
-    line-height: 1.05;
+    font-size: clamp(1.8rem, 3.4vw, 2.4rem);
+    letter-spacing: -0.04em;
+    line-height: 1.1;
   }
 
   p {
-    margin: 0.8rem 0 1rem;
-    max-width: 42rem;
+    margin: 0.55rem 0 0;
+    max-width: 38rem;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
-  }
-
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-
-    span {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      min-height: 34px;
-      padding: 0 0.8rem;
-      border: 1px solid ${({ theme }) => theme.colors.gray7};
-      background: ${({ theme }) => theme.colors.gray1};
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
+    line-height: 1.6;
   }
 `
 

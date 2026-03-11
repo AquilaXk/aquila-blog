@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import Image from "next/image"
 import { NextPage } from "next"
 import { useRouter } from "next/router"
-import { ChangeEvent, ClipboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
@@ -91,6 +91,11 @@ type ParsedEditorMeta = {
   tags: string[]
   category: string
 }
+
+type MetaUsageMap = Record<string, number>
+
+const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
+const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
 
 const toVisibility = (published: boolean, listed: boolean): PostVisibility => {
   if (!published) return "PRIVATE"
@@ -206,6 +211,26 @@ const composeEditorContent = (body: string, tags: string[], category: string) =>
   if (!normalizedBody) return `---\n${metadataLines.join("\n")}\n---`
 
   return `---\n${metadataLines.join("\n")}\n---\n\n${normalizedBody}`
+}
+
+const readStoredCatalog = (storageKey: string) => {
+  if (typeof window === "undefined") return []
+
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed)
+      ? dedupeStrings(parsed.filter((item): item is string => typeof item === "string"))
+      : []
+  } catch {
+    return []
+  }
+}
+
+const persistCatalog = (storageKey: string, values: string[]) => {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(storageKey, JSON.stringify(dedupeStrings(values)))
 }
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
@@ -394,8 +419,12 @@ const AdminPage: NextPage = () => {
   const [tagDraft, setTagDraft] = useState("")
   const [categoryDraft, setCategoryDraft] = useState("")
   const [categoryEmoji, setCategoryEmoji] = useState<string>(CATEGORY_EMOJI_OPTIONS[0])
+  const [customTagCatalog, setCustomTagCatalog] = useState<string[]>([])
+  const [customCategoryCatalog, setCustomCategoryCatalog] = useState<string[]>([])
   const [knownTags, setKnownTags] = useState<string[]>([])
   const [knownCategories, setKnownCategories] = useState<string[]>([])
+  const [tagUsageMap, setTagUsageMap] = useState<MetaUsageMap>({})
+  const [categoryUsageMap, setCategoryUsageMap] = useState<MetaUsageMap>({})
   const [metaCatalogLoading, setMetaCatalogLoading] = useState(false)
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [publishNotice, setPublishNotice] = useState<{
@@ -412,6 +441,15 @@ const AdminPage: NextPage = () => {
     tone: "idle",
     text: "현재 저장된 관리자 프로필 값이 입력창에 자동으로 채워집니다.",
   })
+  const [metaNotice, setMetaNotice] = useState<{
+    tone: NoticeTone
+    text: string
+  }>({
+    tone: "idle",
+    text: "기존 글의 태그/카테고리를 선택하거나 새 값을 추가할 수 있습니다. 사용 중인 값은 삭제할 수 없습니다.",
+  })
+  const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
+  const [activeToolbarMenu, setActiveToolbarMenu] = useState<string | null>(null)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
@@ -480,7 +518,7 @@ const AdminPage: NextPage = () => {
     )
   }
 
-  const refreshEditorMetaCatalog = async () => {
+  const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
 
     try {
@@ -509,28 +547,44 @@ const AdminPage: NextPage = () => {
         ids.map((id) => apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${id}`))
       )
 
-      const tags = new Set<string>()
-      const categories = new Set<string>()
+      const nextTagUsageMap: MetaUsageMap = {}
+      const nextCategoryUsageMap: MetaUsageMap = {}
 
       details.forEach((result) => {
         if (result.status !== "fulfilled") return
         const parsed = parseEditorMeta(result.value.content || "")
-        parsed.tags.forEach((tag) => tags.add(tag))
-        if (parsed.category) categories.add(parsed.category)
+        parsed.tags.forEach((tag) => {
+          nextTagUsageMap[tag] = (nextTagUsageMap[tag] || 0) + 1
+        })
+        if (parsed.category) {
+          nextCategoryUsageMap[parsed.category] = (nextCategoryUsageMap[parsed.category] || 0) + 1
+        }
       })
 
-      setKnownTags(Array.from(tags).sort((a, b) => a.localeCompare(b)))
-      setKnownCategories(Array.from(categories).sort((a, b) => a.localeCompare(b)))
+      setTagUsageMap(nextTagUsageMap)
+      setCategoryUsageMap(nextCategoryUsageMap)
+      setKnownTags(
+        dedupeStrings([...Object.keys(nextTagUsageMap), ...customTagCatalog]).sort((a, b) =>
+          a.localeCompare(b)
+        )
+      )
+      setKnownCategories(
+        dedupeStrings([...Object.keys(nextCategoryUsageMap), ...customCategoryCatalog]).sort((a, b) =>
+          a.localeCompare(b)
+        )
+      )
     } finally {
       setMetaCatalogLoading(false)
     }
-  }
+  }, [customCategoryCatalog, customTagCatalog])
 
   const addTagToPost = (value: string) => {
     const normalized = value.trim()
     if (!normalized) return
     setPostTags((prev) => dedupeStrings([...prev, normalized]))
     setKnownTags((prev) => dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b)))
+    setCustomTagCatalog((prev) => dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b)))
+    setMetaNotice({ tone: "success", text: `태그 "${normalized}"를 추가했습니다. 현재 글에서 바로 사용할 수 있습니다.` })
     setTagDraft("")
   }
 
@@ -547,7 +601,56 @@ const AdminPage: NextPage = () => {
     setKnownCategories((prev) =>
       dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b))
     )
+    setCustomCategoryCatalog((prev) =>
+      dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b))
+    )
+    setMetaNotice({
+      tone: "success",
+      text: `카테고리 "${normalized}"를 선택했습니다. 현재 글 메타데이터에 반영됩니다.`,
+    })
     setCategoryDraft("")
+  }
+
+  const deleteTagFromCatalog = (tag: string) => {
+    const usageCount = tagUsageMap[tag] || 0
+
+    if (usageCount > 0) {
+      setMetaNotice({
+        tone: "error",
+        text: `사용 중인 태그 "${tag}"는 삭제할 수 없습니다. 현재 ${usageCount}개 글에서 사용 중입니다.`,
+      })
+      return
+    }
+
+    setCustomTagCatalog((prev) => prev.filter((item) => item !== tag))
+    setKnownTags((prev) => prev.filter((item) => item !== tag))
+    setPostTags((prev) => prev.filter((item) => item !== tag))
+    setMetaNotice({
+      tone: "success",
+      text: `태그 "${tag}"를 카탈로그에서 삭제했습니다.`,
+    })
+  }
+
+  const deleteCategoryFromCatalog = (category: string) => {
+    const usageCount = categoryUsageMap[category] || 0
+
+    if (usageCount > 0) {
+      setMetaNotice({
+        tone: "error",
+        text: `사용 중인 카테고리 "${category}"는 삭제할 수 없습니다. 현재 ${usageCount}개 글에서 사용 중입니다.`,
+      })
+      return
+    }
+
+    setCustomCategoryCatalog((prev) => prev.filter((item) => item !== category))
+    setKnownCategories((prev) => prev.filter((item) => item !== category))
+    if (postCategory === category) {
+      setPostCategory("")
+    }
+    setMetaNotice({
+      tone: "success",
+      text: `카테고리 "${category}"를 카탈로그에서 삭제했습니다.`,
+    })
   }
 
   const loadPostForEditor = async (targetPostId: string = postId) => {
@@ -821,6 +924,38 @@ const AdminPage: NextPage = () => {
   }
 
   useEffect(() => {
+    setCustomTagCatalog(readStoredCatalog(TAG_CATALOG_STORAGE_KEY))
+    setCustomCategoryCatalog(readStoredCatalog(CATEGORY_CATALOG_STORAGE_KEY))
+  }, [])
+
+  useEffect(() => {
+    persistCatalog(TAG_CATALOG_STORAGE_KEY, customTagCatalog)
+  }, [customTagCatalog])
+
+  useEffect(() => {
+    persistCatalog(CATEGORY_CATALOG_STORAGE_KEY, customCategoryCatalog)
+  }, [customCategoryCatalog])
+
+  useEffect(() => {
+    setKnownTags((prev) =>
+      dedupeStrings([...prev, ...Object.keys(tagUsageMap), ...customTagCatalog, ...postTags]).sort((a, b) =>
+        a.localeCompare(b)
+      )
+    )
+  }, [customTagCatalog, postTags, tagUsageMap])
+
+  useEffect(() => {
+    setKnownCategories((prev) =>
+      dedupeStrings([
+        ...prev,
+        ...Object.keys(categoryUsageMap),
+        ...customCategoryCatalog,
+        ...(postCategory ? [postCategory] : []),
+      ]).sort((a, b) => a.localeCompare(b))
+    )
+  }, [categoryUsageMap, customCategoryCatalog, postCategory])
+
+  useEffect(() => {
     let mounted = true
     const verifyAdmin = async () => {
       try {
@@ -878,7 +1013,7 @@ const AdminPage: NextPage = () => {
     return () => {
       mounted = false
     }
-  }, [router])
+  }, [refreshEditorMetaCatalog, router])
 
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
@@ -1085,6 +1220,7 @@ const AdminPage: NextPage = () => {
   ) => {
     insertBlockSnippet(`> [!${kind}]\n> ${body}`)
     setIsCalloutMenuOpen(false)
+    setActiveToolbarMenu(null)
   }
 
   const handlePasteFromNotion = (e: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -1220,6 +1356,7 @@ const AdminPage: NextPage = () => {
       ],
     },
   ]
+  const activeToolbarGroup = toolbarGroups.find((group) => group.label === activeToolbarMenu) || null
   const adminTools = [
     { href: "#profile-studio", label: "프로필" },
     { href: "#content-studio", label: "글 관리" },
@@ -1237,11 +1374,6 @@ const AdminPage: NextPage = () => {
             로그인 상태와 관리자 권한을 점검한 뒤 관리자 스튜디오를 열고 있습니다. 인증이 없으면 자동으로
             로그인 화면으로 이동합니다.
           </p>
-          <div className="pulseRow">
-            <span className="pulse large" />
-            <span className="pulse medium" />
-            <span className="pulse small" />
-          </div>
         </AdminGateCard>
       </Main>
     )
@@ -1707,203 +1839,211 @@ const AdminPage: NextPage = () => {
             </ConfirmModal>
           </ModalBackdrop>
         )}
-
         <EditorSection>
           <WriterHeader>
             <div className="titleField">
-              <FieldLabel htmlFor="post-title">글 제목</FieldLabel>
               <TitleInput
                 id="post-title"
                 placeholder="제목을 입력하세요"
                 value={postTitle}
                 onChange={(e) => setPostTitle(e.target.value)}
               />
+              <WriterAccent />
+              <WriterMetaStrip>
+                <InlineTagComposer>
+                  <span className="label">태그</span>
+                  <InlineTagList>
+                    {postTags.length > 0 ? (
+                      postTags.map((tag) => (
+                        <TagChip key={tag}>
+                          {tag}
+                          <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
+                            ×
+                          </button>
+                        </TagChip>
+                      ))
+                    ) : (
+                      <EmptyMetaText>아직 선택된 태그가 없습니다.</EmptyMetaText>
+                    )}
+                  </InlineTagList>
+                  <InlineMetaComposer>
+                    <InlineMetaInput
+                      placeholder="태그를 입력하고 Enter"
+                      value={tagDraft}
+                      onChange={(e) => setTagDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          addTagToPost(tagDraft)
+                        }
+                      }}
+                    />
+                    <Button type="button" onClick={() => addTagToPost(tagDraft)}>
+                      추가
+                    </Button>
+                  </InlineMetaComposer>
+                </InlineTagComposer>
+                <WriterMetaActions>
+                  <MetaToggleButton
+                    type="button"
+                    data-active={activeMetaPanel === "tag"}
+                    onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
+                  >
+                    태그 선택
+                  </MetaToggleButton>
+                  <MetaToggleButton
+                    type="button"
+                    data-active={activeMetaPanel === "category"}
+                    onClick={() =>
+                      setActiveMetaPanel((prev) => (prev === "category" ? null : "category"))
+                    }
+                  >
+                    {selectedCategoryText === "미선택"
+                      ? "카테고리 선택"
+                      : `${selectedCategoryParts.emoji ? `${selectedCategoryParts.emoji} ` : ""}${selectedCategoryParts.label}`}
+                  </MetaToggleButton>
+                  <VisibilityWrap>
+                    <FieldLabel htmlFor="post-visibility">공개 범위</FieldLabel>
+                    <VisibilitySelect
+                      id="post-visibility"
+                      value={postVisibility}
+                      onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
+                    >
+                      <option value="PRIVATE">비공개</option>
+                      <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
+                      <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
+                    </VisibilitySelect>
+                  </VisibilityWrap>
+                </WriterMetaActions>
+              </WriterMetaStrip>
             </div>
-            <VisibilityWrap>
-              <FieldLabel htmlFor="post-visibility">공개 범위</FieldLabel>
-              <VisibilitySelect
-                id="post-visibility"
-                value={postVisibility}
-                onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
-              >
-                <option value="PRIVATE">비공개</option>
-                <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
-                <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
-              </VisibilitySelect>
-            </VisibilityWrap>
-            <PublishActionWrap>
-              <PrimaryButton disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
-                {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
-              </PrimaryButton>
-            </PublishActionWrap>
           </WriterHeader>
           <EditorMetaRow>
             <SmallHint>메인 페이지 노출 조건: `공개` + `목록 노출`</SmallHint>
             <EditorContextChip>{currentPostLabel}</EditorContextChip>
           </EditorMetaRow>
           <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
-          <EditorInsightGrid>
-            <EditorInsightCard>
-              <span>현재 문서</span>
-              <strong>{currentPostLabel}</strong>
-            </EditorInsightCard>
-            <EditorInsightCard>
-              <span>공개 상태</span>
-              <strong>{currentVisibilityText}</strong>
-            </EditorInsightCard>
-            <EditorInsightCard>
-              <span>본문 분량</span>
-              <strong>{contentLength}자 · {lineCount}줄</strong>
-            </EditorInsightCard>
-            <EditorInsightCard>
-              <span>삽입 블록</span>
-              <strong>이미지 {imageCount}개 · 코드 {codeBlockCount}개</strong>
-            </EditorInsightCard>
-            <EditorInsightCard>
-              <span>카테고리</span>
-              <strong>{selectedCategoryText}</strong>
-            </EditorInsightCard>
-            <EditorInsightCard>
-              <span>태그</span>
-              <strong>{tagSummaryText}</strong>
-            </EditorInsightCard>
-          </EditorInsightGrid>
-
-          <MetadataSection>
-            <MetadataHeader>
-              <div>
-                <h3>태그 · 카테고리</h3>
-                <p>기존 글에서 추출한 값을 선택하거나, 새 값을 추가해서 현재 글에 바로 반영합니다.</p>
-              </div>
-              <MetadataBadge>
-                {metaCatalogLoading
-                  ? "메타데이터 불러오는 중"
-                  : `기존 태그 ${knownTags.length}개 · 카테고리 ${knownCategories.length}개`}
-              </MetadataBadge>
-            </MetadataHeader>
-
-            <MetadataGrid>
-              <MetadataPanel>
-                <label>카테고리 선택</label>
-                <MetadataHint>카테고리는 1개만 선택됩니다.</MetadataHint>
-                <SelectionRow>
-                  {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
+          {activeMetaPanel && (
+            <CompactMetaPanel>
+              <CompactMetaPanelTop>
+                <div>
+                  <h3>{activeMetaPanel === "category" ? "카테고리 관리" : "태그 관리"}</h3>
+                  <p>
+                    {activeMetaPanel === "category"
+                      ? "카테고리는 1개만 선택됩니다. 사용 중인 카테고리는 삭제할 수 없습니다."
+                      : "기존 태그를 선택하거나 새 태그를 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다."}
+                  </p>
+                </div>
+                <MetadataBadge>
+                  {metaCatalogLoading
+                    ? "메타데이터 불러오는 중"
+                    : `기존 태그 ${knownTags.length}개 · 카테고리 ${knownCategories.length}개`}
+                </MetadataBadge>
+              </CompactMetaPanelTop>
+              <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
+              {activeMetaPanel === "category" ? (
+                <MetadataPanel>
+                  <label>카테고리 선택</label>
+                  <SelectionRow>
+                    {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
+                      <SelectionChip
+                        key={emoji}
+                        type="button"
+                        data-active={categoryEmoji === emoji}
+                        onClick={() => setCategoryEmoji(emoji)}
+                        aria-label={`카테고리 이모지 ${emoji}`}
+                      >
+                        {emoji}
+                      </SelectionChip>
+                    ))}
+                  </SelectionRow>
+                  <SelectionRow>
                     <SelectionChip
-                      key={emoji}
                       type="button"
-                      data-active={categoryEmoji === emoji}
-                      onClick={() => setCategoryEmoji(emoji)}
-                      aria-label={`카테고리 이모지 ${emoji}`}
+                      data-active={postCategory.length === 0}
+                      onClick={() => selectCategoryForPost("")}
                     >
-                      {emoji}
+                      없음
                     </SelectionChip>
-                  ))}
-                </SelectionRow>
-                <SelectionRow>
-                  <SelectionChip
-                    type="button"
-                    data-active={postCategory.length === 0}
-                    onClick={() => selectCategoryForPost("")}
-                  >
-                    없음
-                  </SelectionChip>
-                  {knownCategories.map((category) => (
-                    <SelectionChip
-                      key={category}
-                      type="button"
-                      data-active={postCategory === category}
-                      onClick={() => selectCategoryForPost(category)}
-                    >
-                      {category}
-                    </SelectionChip>
-                  ))}
-                </SelectionRow>
-                <CreateRow>
-                  <Input
-                    placeholder="새 카테고리 이름 입력"
-                    value={categoryDraft}
-                    onChange={(e) => setCategoryDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))}
-                  >
-                    카테고리 추가
-                  </Button>
-                </CreateRow>
-              </MetadataPanel>
-
-              <MetadataPanel>
-                <label>태그 선택</label>
-                <MetadataHint>태그는 여러 개를 동시에 선택할 수 있습니다.</MetadataHint>
-                <SelectionRow>
-                  {knownTags.map((tag) => (
-                    <SelectionChip
-                      key={tag}
-                      type="button"
-                      data-active={postTags.includes(tag)}
-                      onClick={() =>
-                        postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag)
-                      }
-                    >
-                      {tag}
-                    </SelectionChip>
-                  ))}
-                  {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
-                </SelectionRow>
-                <CreateRow>
-                  <Input
-                    placeholder="새 태그 입력"
-                    value={tagDraft}
-                    onChange={(e) => setTagDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        addTagToPost(tagDraft)
-                      }
-                    }}
-                  />
-                  <Button type="button" onClick={() => addTagToPost(tagDraft)}>
-                    태그 추가
-                  </Button>
-                </CreateRow>
-              </MetadataPanel>
-            </MetadataGrid>
-
-            <SelectedMetaRow>
-              <MetaSummaryCard>
-                <span>현재 카테고리</span>
-                <strong>
-                  {selectedCategoryText === "미선택"
-                    ? selectedCategoryText
-                    : `${selectedCategoryParts.emoji ? `${selectedCategoryParts.emoji} ` : ""}${selectedCategoryParts.label}`}
-                </strong>
-              </MetaSummaryCard>
-              <MetaSummaryCard className="wide">
-                <span>현재 태그</span>
-                <TagChipRow>
-                  {postTags.length > 0 ? (
-                    postTags.map((tag) => (
-                      <TagChip key={tag}>
-                        {tag}
-                        <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
+                    {knownCategories.map((category) => (
+                      <CatalogChipGroup key={category}>
+                        <SelectionChip
+                          type="button"
+                          data-active={postCategory === category}
+                          onClick={() => selectCategoryForPost(category)}
+                        >
+                          {category}
+                          {(categoryUsageMap[category] || 0) > 0 ? ` (${categoryUsageMap[category]})` : ""}
+                        </SelectionChip>
+                        <CatalogDeleteButton
+                          type="button"
+                          disabled={(categoryUsageMap[category] || 0) > 0}
+                          title={
+                            (categoryUsageMap[category] || 0) > 0
+                              ? "사용 중인 카테고리는 삭제할 수 없습니다."
+                              : "카테고리 삭제"
+                          }
+                          onClick={() => deleteCategoryFromCatalog(category)}
+                        >
                           ×
-                        </button>
-                      </TagChip>
-                    ))
-                  ) : (
-                    <EmptyMetaText>선택된 태그가 없습니다.</EmptyMetaText>
-                  )}
-                </TagChipRow>
-              </MetaSummaryCard>
-            </SelectedMetaRow>
-          </MetadataSection>
+                        </CatalogDeleteButton>
+                      </CatalogChipGroup>
+                    ))}
+                  </SelectionRow>
+                  <CreateRow>
+                    <Input
+                      placeholder="새 카테고리 이름 입력"
+                      value={categoryDraft}
+                      onChange={(e) => setCategoryDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))}
+                    >
+                      카테고리 추가
+                    </Button>
+                  </CreateRow>
+                </MetadataPanel>
+              ) : (
+                <MetadataPanel>
+                  <label>태그 선택</label>
+                  <SelectionRow>
+                    {knownTags.map((tag) => (
+                      <CatalogChipGroup key={tag}>
+                        <SelectionChip
+                          type="button"
+                          data-active={postTags.includes(tag)}
+                          onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
+                        >
+                          {tag}
+                          {(tagUsageMap[tag] || 0) > 0 ? ` (${tagUsageMap[tag] || 0})` : ""}
+                        </SelectionChip>
+                        <CatalogDeleteButton
+                          type="button"
+                          disabled={(tagUsageMap[tag] || 0) > 0}
+                          title={
+                            (tagUsageMap[tag] || 0) > 0
+                              ? "사용 중인 태그는 삭제할 수 없습니다."
+                              : "태그 삭제"
+                          }
+                          onClick={() => deleteTagFromCatalog(tag)}
+                        >
+                          ×
+                        </CatalogDeleteButton>
+                      </CatalogChipGroup>
+                    ))}
+                    {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
+                  </SelectionRow>
+                </MetadataPanel>
+              )}
+            </CompactMetaPanel>
+          )}
 
           <input
             ref={postImageFileInputRef}
@@ -1913,17 +2053,32 @@ const AdminPage: NextPage = () => {
             style={{ display: "none" }}
           />
           <EditorToolbar>
-            {toolbarGroups.map((group) => (
-              <ToolbarGroup key={group.label}>
+            <ToolbarMenuBar>
+              {toolbarGroups.map((group) => (
+                <ToolbarMenuTrigger
+                  key={group.label}
+                  type="button"
+                  data-active={activeToolbarMenu === group.label}
+                  onClick={() => {
+                    setActiveToolbarMenu((prev) => (prev === group.label ? null : group.label))
+                    setIsCalloutMenuOpen(false)
+                  }}
+                >
+                  {group.label} ▾
+                </ToolbarMenuTrigger>
+              ))}
+            </ToolbarMenuBar>
+            {activeToolbarGroup && (
+              <ToolbarMenuPanel>
                 <ToolbarGroupHeader>
-                  <strong>{group.label}</strong>
-                  <span>{group.description}</span>
+                  <strong>{activeToolbarGroup.label}</strong>
+                  <span>{activeToolbarGroup.description}</span>
                 </ToolbarGroupHeader>
                 <ToolbarActionGrid>
-                  {group.actions.map((action) =>
+                  {activeToolbarGroup.actions.map((action) =>
                     action.calloutTrigger ? (
                       <CalloutDropdown key={action.label}>
-                        <ToolbarActionButton type="button" onClick={action.onClick}>
+                        <ToolbarActionButton type="button" onClick={() => setIsCalloutMenuOpen((prev) => !prev)}>
                           {action.label} ▾
                         </ToolbarActionButton>
                         {isCalloutMenuOpen && (
@@ -1940,22 +2095,13 @@ const AdminPage: NextPage = () => {
                             >
                               WARNING
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}
-                            >
+                            <button type="button" onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}>
                               OUTLINE
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}
-                            >
+                            <button type="button" onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}>
                               EXAMPLE
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}
-                            >
+                            <button type="button" onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}>
                               SUMMARY
                             </button>
                           </CalloutMenu>
@@ -1967,32 +2113,32 @@ const AdminPage: NextPage = () => {
                         type="button"
                         disabled={action.primary ? disabled("uploadPostImage") : false}
                         data-variant={action.primary ? "primary" : "default"}
-                        onClick={action.onClick}
+                        onClick={() => {
+                          action.onClick()
+                          setActiveToolbarMenu(null)
+                          setIsCalloutMenuOpen(false)
+                        }}
                       >
                         {action.label}
                       </ToolbarActionButton>
                     )
                   )}
                 </ToolbarActionGrid>
-              </ToolbarGroup>
-            ))}
+              </ToolbarMenuPanel>
+            )}
           </EditorToolbar>
-          <EditorSupportNote>
-            이미지는 업로드 후 본문에 블록 형태로 삽입되고, 미리보기와 실제 글에서 자동으로 폭이 제한됩니다.
-            콜아웃은 유형을 고르면 바로 템플릿이 들어갑니다.
-          </EditorSupportNote>
           <EditorGrid>
             <EditorPane>
               <PaneHeader>
                 <div>
-                  <PaneTitle>Markdown 입력</PaneTitle>
-                  <PaneDescription>본문을 직접 작성하거나 위 도구로 블록 템플릿을 삽입합니다.</PaneDescription>
+                  <PaneTitle>작성</PaneTitle>
+                  <PaneDescription>왼쪽에서 작성하고 오른쪽에서 바로 확인합니다.</PaneDescription>
                 </div>
                 <PaneChip>{lineCount} lines</PaneChip>
               </PaneHeader>
               <ContentInput
                 ref={postContentRef}
-                placeholder="Markdown으로 본문을 작성하세요."
+                placeholder="당신의 이야기를 적어보세요..."
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
                 onPaste={handlePasteFromNotion}
@@ -2001,16 +2147,43 @@ const AdminPage: NextPage = () => {
             <PreviewPane>
               <PaneHeader>
                 <div>
-                  <PaneTitle>실시간 미리보기</PaneTitle>
-                  <PaneDescription>실제 글 상세 화면과 같은 렌더러로 바로 확인합니다.</PaneDescription>
+                  <PaneTitle>미리보기</PaneTitle>
+                  <PaneDescription>오른쪽에서 최종 렌더링 형태를 바로 확인합니다.</PaneDescription>
                 </div>
                 <PaneChip>{imageCount} images</PaneChip>
               </PaneHeader>
               <PreviewCard>
+                <PreviewTitle>{postTitle.trim() || "제목을 입력하세요"}</PreviewTitle>
+                <PreviewMetaRow>
+                  <PreviewMetaPill>{currentVisibilityText}</PreviewMetaPill>
+                  <PreviewMetaPill>
+                    {selectedCategoryText === "미선택"
+                      ? "카테고리 미선택"
+                      : `${selectedCategoryParts.emoji ? `${selectedCategoryParts.emoji} ` : ""}${selectedCategoryParts.label}`}
+                  </PreviewMetaPill>
+                  {postTags.map((tag) => (
+                    <PreviewMetaPill key={tag}>#{tag}</PreviewMetaPill>
+                  ))}
+                </PreviewMetaRow>
                 <NotionRenderer content={postContent} />
               </PreviewCard>
             </PreviewPane>
           </EditorGrid>
+          <WriterFooterBar>
+            <WriterFooterSummary>
+              <span>{currentPostLabel}</span>
+              <span>{tagSummaryText} · {selectedCategoryText}</span>
+              <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
+            </WriterFooterSummary>
+            <WriterFooterActions>
+              <Button type="button" disabled={disabled("modifyPost")} onClick={() => void handleModifyPost()}>
+                선택 글 수정
+              </Button>
+              <PrimaryButton type="button" disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
+                {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
+              </PrimaryButton>
+            </WriterFooterActions>
+          </WriterFooterBar>
         </EditorSection>
 
           </Section>
@@ -2652,10 +2825,25 @@ const Input = styled.input`
 
 const TitleInput = styled(Input)`
   width: 100%;
-  min-width: 260px;
-  font-size: 1rem;
-  border-radius: 10px;
-  padding: 0.68rem 0.78rem;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray9};
+  }
+
+  &:focus {
+    box-shadow: none;
+    border-color: transparent;
+  }
 `
 
 const SmallHint = styled.p`
@@ -2691,8 +2879,8 @@ const PrimaryButton = styled(Button)`
 
 const VisibilityWrap = styled.div`
   display: grid;
-  gap: 0.22rem;
-  min-width: 220px;
+  gap: 0.32rem;
+  min-width: 210px;
 `
 
 const VisibilitySelect = styled.select`
@@ -2707,29 +2895,24 @@ const VisibilitySelect = styled.select`
 const EditorSection = styled.div`
   margin: 0.85rem 0 0.25rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  padding: 0.85rem;
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 24px;
+  padding: 1.5rem;
+  background: ${({ theme }) => theme.colors.gray1};
+
+  @media (max-width: 720px) {
+    padding: 1rem;
+  }
 `
 
 const WriterHeader = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px) auto;
-  gap: 0.75rem;
-  align-items: flex-end;
-  margin-bottom: 0.45rem;
-
-  @media (max-width: 980px) {
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
-  }
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 0.55rem;
 
   .titleField {
     display: grid;
-    gap: 0.35rem;
+    gap: 1rem;
     min-width: 0;
   }
 `
@@ -2748,6 +2931,94 @@ const PublishActionWrap = styled.div`
     ${PrimaryButton} {
       width: 100%;
     }
+  }
+`
+
+const WriterAccent = styled.div`
+  width: 5rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray8};
+`
+
+const WriterMetaStrip = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: end;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const InlineTagComposer = styled.div`
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+
+  .label {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+`
+
+const InlineTagList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-height: 2rem;
+  align-items: center;
+`
+
+const InlineMetaComposer = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const InlineMetaInput = styled(Input)`
+  min-width: 0;
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const WriterMetaActions = styled.div`
+  display: flex;
+  align-items: end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+
+  @media (max-width: 980px) {
+    justify-content: flex-start;
+  }
+`
+
+const MetaToggleButton = styled.button`
+  min-height: 42px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0 0.95rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
   }
 `
 
@@ -2837,6 +3108,37 @@ const MetadataHeader = styled.div`
   }
 `
 
+const MetadataStatus = styled.div`
+  padding: 0.62rem 0.74rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+
+  &[data-tone="idle"] {
+    color: ${({ theme }) => theme.colors.gray11};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
+  &[data-tone="loading"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
+
+  &[data-tone="success"] {
+    color: ${({ theme }) => theme.colors.green11};
+    border: 1px solid ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+  }
+
+  &[data-tone="error"] {
+    color: ${({ theme }) => theme.colors.red11};
+    border: 1px solid ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+  }
+`
+
 const MetadataBadge = styled.span`
   display: inline-flex;
   align-items: center;
@@ -2849,6 +3151,37 @@ const MetadataBadge = styled.span`
   font-size: 0.76rem;
   font-weight: 700;
   white-space: nowrap;
+`
+
+const CompactMetaPanel = styled.section`
+  display: grid;
+  gap: 0.85rem;
+  margin: 0 0 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const CompactMetaPanelTop = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+
+  h3 {
+    margin: 0;
+    font-size: 0.96rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0.24rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
 `
 
 const MetadataGrid = styled.div`
@@ -2891,6 +3224,13 @@ const SelectionRow = styled.div`
   min-width: 0;
 `
 
+const CatalogChipGroup = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+`
+
 const SelectionChip = styled.button`
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
@@ -2916,6 +3256,22 @@ const SelectionChip = styled.button`
     border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
+  }
+`
+
+const CatalogDeleteButton = styled.button`
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  cursor: pointer;
+  flex: 0 0 auto;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 `
 
@@ -3007,15 +3363,44 @@ const EmptyMetaText = styled.span`
 
 const EditorToolbar = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
-  margin-bottom: 0.6rem;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px dashed ${({ theme }) => theme.colors.gray7};
+  margin: 0 0 1rem;
+  padding: 0.9rem 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+`
 
-  @media (max-width: 1080px) {
-    grid-template-columns: 1fr;
+const ToolbarMenuBar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+`
+
+const ToolbarMenuTrigger = styled.button`
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  min-height: 42px;
+  padding: 0 0.92rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
   }
+`
+
+const ToolbarMenuPanel = styled.div`
+  display: grid;
+  gap: 0.55rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.78rem;
 `
 
 const ToolbarGroup = styled.div`
@@ -3098,8 +3483,13 @@ const CalloutMenu = styled.div`
 
 const EditorGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
-  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  min-height: 42rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 22px;
+  background: ${({ theme }) => theme.colors.gray2};
+  overflow: hidden;
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -3319,27 +3709,36 @@ const ConfirmModal = styled.div`
 
 const EditorPane = styled.section`
   min-width: 0;
+  padding: 1.4rem 1.4rem 1.2rem;
 `
 
-const PreviewPane = styled(EditorPane)``
+const PreviewPane = styled(EditorPane)`
+  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  @media (max-width: 980px) {
+    border-left: 0;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  }
+`
 
 const PaneHeader = styled.div`
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.55rem;
+  margin-bottom: 1rem;
 `
 
 const PaneTitle = styled.h3`
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 1rem;
   color: ${({ theme }) => theme.colors.gray12};
 `
 
 const PaneDescription = styled.p`
   margin: 0.18rem 0 0;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: ${({ theme }) => theme.colors.gray11};
   line-height: 1.5;
 `
@@ -3361,31 +3760,90 @@ const PaneChip = styled.span`
 
 const ContentInput = styled.textarea`
   width: 100%;
-  min-height: 560px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 16px;
-  padding: 1rem 1.05rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  min-height: 32rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  line-height: 1.7;
-  font-size: 0.94rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  line-height: 1.82;
+  font-size: 1.02rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   resize: vertical;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
+
+  &:focus {
+    outline: none;
+  }
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray9};
+  }
 `
 
 const PreviewCard = styled.div`
-  min-height: 560px;
-  max-height: 820px;
+  min-height: 32rem;
+  max-height: 48rem;
   overflow: auto;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.15rem 1.05rem 1rem;
+  padding: 0 0 0.25rem;
 
   > .aq-markdown {
-    margin-top: 0.35rem;
+    margin-top: 0.6rem;
   }
+`
+
+const PreviewTitle = styled.h2`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: clamp(2rem, 3.2vw, 2.7rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+`
+
+const PreviewMetaRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 1.2rem;
+`
+
+const PreviewMetaPill = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  border-radius: 999px;
+  padding: 0 0.72rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
+  font-weight: 700;
+`
+
+const WriterFooterBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.95rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+`
+
+const WriterFooterSummary = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  line-height: 1.5;
+`
+
+const WriterFooterActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 `
 
 const EditorInsightGrid = styled.div`
@@ -3489,43 +3947,4 @@ const AdminGateCard = styled.section`
     line-height: 1.7;
   }
 
-  .pulseRow {
-    display: grid;
-    gap: 0.6rem;
-  }
-
-  .pulse {
-    display: block;
-    height: 14px;
-    border-radius: 999px;
-    background: linear-gradient(
-      90deg,
-      ${({ theme }) => theme.colors.gray4},
-      ${({ theme }) => theme.colors.gray5},
-      ${({ theme }) => theme.colors.gray4}
-    );
-    background-size: 200% 100%;
-    animation: admin-gate-shimmer 1.6s linear infinite;
-  }
-
-  .pulse.large {
-    width: 100%;
-  }
-
-  .pulse.medium {
-    width: 78%;
-  }
-
-  .pulse.small {
-    width: 52%;
-  }
-
-  @keyframes admin-gate-shimmer {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -200% 0;
-    }
-  }
 `

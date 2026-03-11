@@ -71,20 +71,10 @@ const LoginPage = () => {
     <AuthShell
       activeTab="login"
       title="로그인"
-      subtitle="작성된 글을 관리하거나 댓글 기능을 쓰려면 계정 인증이 필요합니다."
+      subtitle="계정 정보를 입력하세요."
       eyebrow="Access Portal"
-      heroTitle="블로그 운영 화면으로 들어가는 가장 짧은 경로"
-      heroDescription="관리자 도구, 댓글 기능, 개인 세션은 모두 동일한 인증 흐름을 사용합니다. 로그인 후에는 현재 페이지로 바로 되돌아갑니다."
-      statItems={[
-        { label: "Redirect", value: next },
-        { label: "Session", value: "쿠키 기반 유지" },
-        { label: "OAuth", value: "Kakao 지원" },
-      ]}
-      tips={[
-        "관리자 권한은 별도 계정 플래그로 제어됩니다. 일반 계정으로 로그인해도 어드민 화면은 열리지 않습니다.",
-        "카카오 로그인은 동일한 세션 쿠키를 사용하므로 브라우저에서 바로 관리자/댓글 기능과 연결됩니다.",
-        "로그인 실패 시 서버 메시지를 그대로 보여주므로 아이디 오타나 비밀번호 규칙 문제를 빠르게 확인할 수 있습니다.",
-      ]}
+      heroTitle="로그인"
+      heroDescription={next !== "/" ? `로그인 후 ${next}로 돌아갑니다.` : "로그인 후 이전 흐름으로 돌아갑니다."}
       footer={
         <FooterText>
           계정이 없으면 <Link href="/signup">회원가입</Link>
@@ -95,7 +85,7 @@ const LoginPage = () => {
         <Field>
           <FieldTop>
             <Label htmlFor="username">아이디</Label>
-            <FieldHint>관리자 계정도 동일한 아이디 필드를 사용합니다.</FieldHint>
+            <FieldHint>로그인 식별자</FieldHint>
           </FieldTop>
           <Input
             id="username"
@@ -109,7 +99,7 @@ const LoginPage = () => {
         <Field>
           <FieldTop>
             <Label htmlFor="password">비밀번호</Label>
-            <FieldHint>브라우저 자동완성을 켜두면 다음 로그인도 더 빠릅니다.</FieldHint>
+            <FieldHint>계정 비밀번호</FieldHint>
           </FieldTop>
           <PasswordRow>
             <Input

@@ -27,16 +27,18 @@ class CustomAuthenticationFilter(
     private val objectMapper: ObjectMapper,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
-    private val publicApiPaths = setOf(
-        "/member/api/v1/members/auth/login",
-        "/member/api/v1/members/auth/logout",
-        "/member/api/v1/members",
-        "/member/api/v1/members/randomSecureTip",
-    )
+    private val publicApiPaths =
+        setOf(
+            "/member/api/v1/auth/login",
+            "/member/api/v1/auth/logout",
+            "/member/api/v1/members",
+            "/member/api/v1/members/randomSecureTip",
+        )
 
-    private val publicApiPatterns = listOf(
-        Regex("/member/api/v1/members/\\d+/redirectToProfileImg")
-    )
+    private val publicApiPatterns =
+        listOf(
+            Regex("/member/api/v1/members/\\d+/redirectToProfileImg"),
+        )
 
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/")
 
@@ -65,28 +67,34 @@ class CustomAuthenticationFilter(
         }
     }
 
-    private fun authenticateIfPossible(request: HttpServletRequest, response: HttpServletResponse) {
+    private fun authenticateIfPossible(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ) {
         val (apiKey, accessToken) = extractTokens()
 
         if (apiKey.isBlank() && accessToken.isBlank()) return
 
         if (apiKey == AppConfig.systemMemberApiKey && accessToken.isBlank()) {
+            // 서버 간 내부 호출은 시스템 멤버 권한으로 바로 인증한다.
             authenticate(MemberPolicy.SYSTEM)
             return
         }
 
-        val payloadMember = accessToken
-            .takeIf { it.isNotBlank() }
-            ?.let(actorFacade::payload)
-            ?.let { Member(it.id, it.username, null, it.name) }
+        val payloadMember =
+            accessToken
+                .takeIf { it.isNotBlank() }
+                ?.let(actorFacade::payload)
+                ?.let { Member(it.id, it.username, null, it.name) }
 
         if (payloadMember != null) {
             authenticate(payloadMember)
             return
         }
 
-        val member = actorFacade.findByApiKey(apiKey)
-            ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
+        val member =
+            actorFacade.findByApiKey(apiKey)
+                ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
         val newAccessToken = actorFacade.genAccessToken(member)
         rq.setCookie("accessToken", newAccessToken)
@@ -99,6 +107,8 @@ class CustomAuthenticationFilter(
         val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "")
 
         return if (headerAuthorization.isNotBlank()) {
+            // 우리 포맷: "Bearer {apiKey} {accessToken}".
+            // accessToken만 사용하는 경우 apiKey 자리에는 빈 문자열이 들어올 수 있다.
             if (!headerAuthorization.startsWith("Bearer ")) {
                 throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
             }
@@ -111,13 +121,14 @@ class CustomAuthenticationFilter(
     }
 
     private fun authenticate(member: Member) {
-        val user: UserDetails = SecurityUser(
-            member.id,
-            member.username,
-            "",
-            member.name,
-            member.authorities,
-        )
+        val user: UserDetails =
+            SecurityUser(
+                member.id,
+                member.username,
+                "",
+                member.name,
+                member.authorities,
+            )
 
         val authentication: Authentication =
             UsernamePasswordAuthenticationToken(user, user.password, user.authorities)

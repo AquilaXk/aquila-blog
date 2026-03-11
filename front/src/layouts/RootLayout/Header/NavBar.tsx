@@ -19,8 +19,16 @@ const NavBar: React.FC = () => {
 
   useEffect(() => {
     let mounted = true
+    const shouldSkipAuthCheck = router.pathname === "/login" || router.pathname === "/signup"
 
     const loadMe = async () => {
+      if (shouldSkipAuthCheck) {
+        if (!mounted) return
+        setMe(null)
+        setIsAuthResolved(true)
+        return
+      }
+
       try {
         const member = await apiFetch<MemberMe>("/member/api/v1/auth/me")
         if (!mounted) return
@@ -45,7 +53,7 @@ const NavBar: React.FC = () => {
       window.removeEventListener("focus", onFocus)
       router.events.off("routeChangeComplete", onRouteDone)
     }
-  }, [router.events])
+  }, [router.events, router.pathname])
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
 

@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
-import React, { InputHTMLAttributes, ReactNode } from "react"
-import { Emoji } from "src/components/Emoji"
+import React, { InputHTMLAttributes } from "react"
+import { FiSearch } from "react-icons/fi"
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -8,7 +8,7 @@ const SearchInput: React.FC<Props> = ({ ...props }) => {
   return (
     <StyledWrapper>
       <label className="top" htmlFor="feed-search-input">
-        <Emoji>🔎</Emoji> Search
+        <FiSearch aria-hidden="true" /> Search
       </label>
       <div className="field">
         <span className="icon">⌘K</span>

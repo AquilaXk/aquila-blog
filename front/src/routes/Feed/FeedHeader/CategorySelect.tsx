@@ -1,12 +1,13 @@
 import useDropdown from "src/hooks/useDropdown"
 import { useRouter } from "next/router"
-import React from "react"
+import React, { useMemo } from "react"
 import { MdExpandMore } from "react-icons/md"
+import CategoryIcon from "src/components/CategoryIcon"
 import { DEFAULT_CATEGORY } from "src/constants"
 import styled from "@emotion/styled"
-import { Emoji } from "src/components/Emoji"
 import { useCategoriesQuery } from "src/hooks/useCategoriesQuery"
-import { splitCategoryDisplay } from "src/libs/utils"
+import { compareCategoryValues, normalizeCategoryValue, splitCategoryDisplay } from "src/libs/utils"
+import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {}
 
@@ -17,48 +18,52 @@ const CategorySelect: React.FC<Props> = () => {
 
   const currentCategory =
     typeof router.query.category === "string"
-      ? router.query.category
+      ? normalizeCategoryValue(router.query.category)
       : DEFAULT_CATEGORY
   const currentCategoryDisplay = splitCategoryDisplay(currentCategory)
+  const categoryEntries = useMemo(
+    () =>
+      Object.entries(data).sort(([left], [right]) => {
+        if (left === DEFAULT_CATEGORY) return -1
+        if (right === DEFAULT_CATEGORY) return 1
+        return compareCategoryValues(left, right)
+      }),
+    [data]
+  )
 
   const handleOptionClick = (category: string) => {
-    router.push(
-      {
-        pathname: "/",
-        query: {
-          ...router.query,
-          category,
-        },
+    const normalizedCategory = normalizeCategoryValue(category)
+
+    replaceShallowRoutePreservingScroll(router, {
+      pathname: "/",
+      query: {
+        ...router.query,
+        category: normalizedCategory === DEFAULT_CATEGORY ? undefined : normalizedCategory,
       },
-      undefined,
-      { shallow: true, scroll: false }
-    )
+    })
   }
+
   return (
-    <StyledWrapper>
-      <div ref={dropdownRef}>
-        <button
-          type="button"
-          className="wrapper"
-          onClick={handleOpen}
-          aria-expanded={opened}
-          aria-haspopup="listbox"
-          aria-label="Filter posts by category"
-        >
-          <span className="currentLabel">
-            {currentCategoryDisplay.emoji && (
-              <span className="emoji">
-                <Emoji>{currentCategoryDisplay.emoji}</Emoji>
-              </span>
-            )}
-            <span>{currentCategoryDisplay.label || currentCategory}</span>
+    <StyledWrapper ref={dropdownRef}>
+      <button
+        type="button"
+        className="wrapper"
+        onClick={handleOpen}
+        aria-expanded={opened}
+        aria-haspopup="listbox"
+        aria-label="Filter posts by category"
+      >
+        <span className="currentLabel">
+          <CategoryIcon iconId={currentCategoryDisplay.iconId} className="categoryIcon" />
+          <span className="labelText">
+            {currentCategoryDisplay.label || currentCategory}
           </span>
-          <MdExpandMore />
-        </button>
-      </div>
+        </span>
+        <MdExpandMore className="chevron" />
+      </button>
       {opened && (
         <div className="content" role="listbox">
-          {Object.keys(data).map((key) => {
+          {categoryEntries.map(([key, count]) => {
             const parsed = splitCategoryDisplay(key)
 
             return (
@@ -71,14 +76,10 @@ const CategorySelect: React.FC<Props> = () => {
                 onClick={() => handleOptionClick(key)}
               >
                 <span className="itemLabel">
-                  {parsed.emoji && (
-                    <span className="emoji">
-                      <Emoji>{parsed.emoji}</Emoji>
-                    </span>
-                  )}
-                  <span>{parsed.label || key}</span>
+                  <CategoryIcon iconId={parsed.iconId} className="categoryIcon" />
+                  <span className="labelText">{parsed.label || key}</span>
                 </span>
-                <span className="count">({data[key]})</span>
+                <span className="count">({count})</span>
               </button>
             )
           })}
@@ -92,11 +93,14 @@ export default CategorySelect
 
 const StyledWrapper = styled.div`
   position: relative;
+  width: 100%;
+
   > .wrapper {
-    display: flex;
+    display: inline-flex;
     gap: 0.25rem;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
     min-height: 42px;
     padding: 0 0.9rem;
     border-radius: 999px;
@@ -107,20 +111,38 @@ const StyledWrapper = styled.div`
     line-height: 1.35;
     font-weight: 700;
     cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      color 0.18s ease;
 
     .currentLabel {
       display: inline-flex;
       align-items: center;
       gap: 0.48rem;
       min-width: 0;
+      overflow: hidden;
     }
 
-    .emoji {
+    .categoryIcon {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
       margin-right: 0.04rem;
+      font-size: 1rem;
+      color: ${({ theme }) => theme.colors.gray11};
+    }
+
+    .labelText {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chevron {
+      flex: 0 0 auto;
     }
   }
   > .content {
@@ -163,11 +185,19 @@ const StyledWrapper = styled.div`
         min-width: 0;
       }
 
-      .emoji {
+      .categoryIcon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         flex: 0 0 auto;
+        font-size: 0.95rem;
+        color: ${({ theme }) => theme.colors.gray11};
+      }
+
+      .labelText {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .count {

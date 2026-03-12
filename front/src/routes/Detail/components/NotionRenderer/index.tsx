@@ -275,14 +275,33 @@ const StyledWrapper = styled.div`
   h2,
   h3,
   h4 {
-    line-height: 1.35;
-    letter-spacing: -0.01em;
-    margin-top: 1.4rem;
-    margin-bottom: 0.55rem;
+    line-height: 1.32;
+    letter-spacing: -0.015em;
+    margin-top: 1.35rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+  }
+
+  h1 {
+    font-size: clamp(1.72rem, 2.7vw, 2.15rem);
+  }
+
+  h2 {
+    font-size: clamp(1.38rem, 2.2vw, 1.68rem);
+  }
+
+  h3 {
+    font-size: clamp(1.14rem, 1.75vw, 1.32rem);
+  }
+
+  h4 {
+    font-size: 1rem;
   }
 
   p {
     margin: 0.5rem 0;
+    font-size: 1rem;
+    line-height: 1.72;
   }
 
   figure {
@@ -322,6 +341,10 @@ const StyledWrapper = styled.div`
 
   li + li {
     margin-top: 0.22rem;
+  }
+
+  li {
+    line-height: 1.72;
   }
 
   hr {
@@ -504,7 +527,7 @@ const StyledWrapper = styled.div`
     top: calc(var(--ad-header-h) / 2);
     transform: translateY(-50%);
     color: var(--ad-accent);
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     font-weight: 600;
     line-height: 1.1;
   }
@@ -525,8 +548,8 @@ const StyledWrapper = styled.div`
 
   .aq-callout.notion-admonition .notion-text {
     color: var(--ad-text);
-    font-size: 0.98rem;
-    line-height: 1.6;
+    font-size: 0.96rem;
+    line-height: 1.65;
   }
 
   .aq-callout.notion-admonition-tip {

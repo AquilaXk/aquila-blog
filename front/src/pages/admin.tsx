@@ -8,7 +8,14 @@ import { queryKey } from "src/constants/queryKey"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import { createQueryClient } from "src/libs/react-query"
-import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
+import CategoryIcon from "src/components/CategoryIcon"
+import {
+  CATEGORY_ICON_OPTIONS,
+  compareCategoryValues,
+  composeCategoryDisplay,
+  normalizeCategoryValue,
+  splitCategoryDisplay,
+} from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
 import { guardAdminRequest } from "src/libs/server/adminGuard"
 import ProfileImage from "src/components/ProfileImage"
@@ -172,7 +179,7 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
   }
 
   const setCategory = (items: string[]) => {
-    const nextCategory = dedupeStrings(items)[0] || ""
+    const nextCategory = dedupeStrings(items).map(normalizeCategoryValue)[0] || ""
     if (nextCategory) category = nextCategory
   }
 
@@ -231,6 +238,8 @@ const composeEditorContent = (body: string, tags: string[], category: string) =>
   const normalizedBody = body.trim()
   const normalizedTags = dedupeStrings(tags)
   const normalizedCategory = category.trim()
+    ? normalizeCategoryValue(category)
+    : ""
   const metadataLines: string[] = []
 
   if (normalizedCategory) metadataLines.push(`category: [${serializeMetaItems([normalizedCategory])}]`)
@@ -452,7 +461,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [postCategory, setPostCategory] = useState("")
   const [tagDraft, setTagDraft] = useState("")
   const [categoryDraft, setCategoryDraft] = useState("")
-  const [categoryEmoji, setCategoryEmoji] = useState<string>(CATEGORY_EMOJI_OPTIONS[0])
+  const [categoryIconId, setCategoryIconId] = useState<(typeof CATEGORY_ICON_OPTIONS)[number]["id"]>(
+    CATEGORY_ICON_OPTIONS[0].id
+  )
   const [customTagCatalog, setCustomTagCatalog] = useState<string[]>([])
   const [customCategoryCatalog, setCustomCategoryCatalog] = useState<string[]>([])
   const [knownTags, setKnownTags] = useState<string[]>([])
@@ -576,12 +587,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostContent(parsed.body)
     setPostTags(parsed.tags)
     setPostCategory(parsed.category)
-    setCategoryEmoji(parsedCategory.emoji || CATEGORY_EMOJI_OPTIONS[0])
+    setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
     setKnownTags((prev) => dedupeStrings([...prev, ...parsed.tags]).sort((a, b) => a.localeCompare(b)))
     setKnownCategories((prev) =>
-      dedupeStrings([...prev, ...(parsed.category ? [parsed.category] : [])]).sort((a, b) =>
-        a.localeCompare(b)
-      )
+      dedupeStrings([...prev, ...(parsed.category ? [parsed.category] : [])]).sort(compareCategoryValues)
     )
   }
 
@@ -636,9 +645,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         )
       )
       setKnownCategories(
-        dedupeStrings([...Object.keys(nextCategoryUsageMap), ...customCategoryCatalog]).sort((a, b) =>
-          a.localeCompare(b)
-        )
+        dedupeStrings([...Object.keys(nextCategoryUsageMap), ...customCategoryCatalog]).sort(compareCategoryValues)
       )
     } finally {
       setMetaCatalogLoading(false)
@@ -660,20 +667,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const selectCategoryForPost = (value: string) => {
-    const normalized = value.trim()
+    const normalized = value.trim() ? normalizeCategoryValue(value) : ""
     const parsed = splitCategoryDisplay(normalized)
     setPostCategory(normalized)
-    setCategoryEmoji(parsed.emoji || CATEGORY_EMOJI_OPTIONS[0])
-    if (!normalized) return
+    setCategoryIconId(parsed.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsed.iconId)
+    if (!normalized) {
+      setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
+      setMetaNotice({
+        tone: "success",
+        text: "현재 글의 카테고리를 비웠습니다.",
+      })
+      return
+    }
     setKnownCategories((prev) =>
-      dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b))
+      dedupeStrings([...prev, normalized]).sort(compareCategoryValues)
     )
     setCustomCategoryCatalog((prev) =>
-      dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b))
+      dedupeStrings([...prev, normalized]).sort(compareCategoryValues)
     )
     setMetaNotice({
       tone: "success",
-      text: `카테고리 "${normalized}"를 선택했습니다. 현재 글 메타데이터에 반영됩니다.`,
+      text: `카테고리 "${parsed.label}"를 선택했습니다. 현재 글 메타데이터에 반영됩니다.`,
     })
     setCategoryDraft("")
   }
@@ -699,12 +713,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const deleteCategoryFromCatalog = (category: string) => {
+    const parsedCategory = splitCategoryDisplay(category)
     const usageCount = categoryUsageMap[category] || 0
 
     if (usageCount > 0) {
       setMetaNotice({
         tone: "error",
-        text: `사용 중인 카테고리 "${category}"는 삭제할 수 없습니다. 현재 ${usageCount}개 글에서 사용 중입니다.`,
+        text: `사용 중인 카테고리 "${parsedCategory.label}"는 삭제할 수 없습니다. 현재 ${usageCount}개 글에서 사용 중입니다.`,
       })
       return
     }
@@ -713,10 +728,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setKnownCategories((prev) => prev.filter((item) => item !== category))
     if (postCategory === category) {
       setPostCategory("")
+      setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
     }
     setMetaNotice({
       tone: "success",
-      text: `카테고리 "${category}"를 카탈로그에서 삭제했습니다.`,
+      text: `카테고리 "${parsedCategory.label}"를 카탈로그에서 삭제했습니다.`,
     })
   }
 
@@ -783,9 +799,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       })
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setKnownCategories((prev) =>
-        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort((a, b) =>
-          a.localeCompare(b)
-        )
+        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -818,9 +832,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setKnownCategories((prev) =>
-        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort((a, b) =>
-          a.localeCompare(b)
-        )
+        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
       )
       setPublishNotice({ tone: "success", text: `수정 완료: ${response.msg}` })
       setResult(pretty(response as unknown as JsonValue))
@@ -992,7 +1004,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     setCustomTagCatalog(readStoredCatalog(TAG_CATALOG_STORAGE_KEY))
-    setCustomCategoryCatalog(readStoredCatalog(CATEGORY_CATALOG_STORAGE_KEY))
+    setCustomCategoryCatalog(
+      dedupeStrings(readStoredCatalog(CATEGORY_CATALOG_STORAGE_KEY).map(normalizeCategoryValue)).sort(
+        compareCategoryValues
+      )
+    )
   }, [])
 
   useEffect(() => {
@@ -1018,7 +1034,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         ...Object.keys(categoryUsageMap),
         ...customCategoryCatalog,
         ...(postCategory ? [postCategory] : []),
-      ]).sort((a, b) => a.localeCompare(b))
+      ]).sort(compareCategoryValues)
     )
   }, [categoryUsageMap, customCategoryCatalog, postCategory])
 
@@ -1349,8 +1365,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const lineCount = postContent ? postContent.split("\n").length : 0
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
-  const selectedCategoryText = postCategory || "미선택"
   const selectedCategoryParts = splitCategoryDisplay(postCategory)
+  const selectedCategoryText = postCategory ? selectedCategoryParts.label : "미선택"
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
@@ -1949,9 +1965,19 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       setActiveMetaPanel((prev) => (prev === "category" ? null : "category"))
                     }
                   >
-                    {selectedCategoryText === "미선택"
-                      ? "카테고리 선택"
-                      : `${selectedCategoryParts.emoji ? `${selectedCategoryParts.emoji} ` : ""}${selectedCategoryParts.label}`}
+                    <CategoryButtonContent>
+                      {selectedCategoryText === "미선택" ? (
+                        <>
+                          <CategoryIcon iconId={CATEGORY_ICON_OPTIONS[0].id} className="categoryIcon" />
+                          <span>카테고리 선택</span>
+                        </>
+                      ) : (
+                        <>
+                          <CategoryIcon iconId={selectedCategoryParts.iconId} className="categoryIcon" />
+                          <span>{selectedCategoryParts.label}</span>
+                        </>
+                      )}
+                    </CategoryButtonContent>
                   </MetaToggleButton>
                   <VisibilityWrap>
                     <FieldLabel htmlFor="post-visibility">공개 범위</FieldLabel>
@@ -1994,17 +2020,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
               {activeMetaPanel === "category" ? (
                 <MetadataPanel>
-                  <label>카테고리 선택</label>
+                  <label>카테고리 아이콘 선택</label>
                   <SelectionRow>
-                    {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
+                    {CATEGORY_ICON_OPTIONS.map((option) => (
                       <SelectionChip
-                        key={emoji}
+                        key={option.id}
                         type="button"
-                        data-active={categoryEmoji === emoji}
-                        onClick={() => setCategoryEmoji(emoji)}
-                        aria-label={`카테고리 이모지 ${emoji}`}
+                        data-active={categoryIconId === option.id}
+                        onClick={() => setCategoryIconId(option.id)}
+                        aria-label={`카테고리 아이콘 ${option.label}`}
                       >
-                        {emoji}
+                        <CategoryChipContent>
+                          <CategoryIcon iconId={option.id} className="categoryIcon" />
+                          <span>{option.label}</span>
+                        </CategoryChipContent>
                       </SelectionChip>
                     ))}
                   </SelectionRow>
@@ -2023,8 +2052,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           data-active={postCategory === category}
                           onClick={() => selectCategoryForPost(category)}
                         >
-                          {category}
-                          {(categoryUsageMap[category] || 0) > 0 ? ` (${categoryUsageMap[category]})` : ""}
+                          <CategoryChipContent>
+                            <CategoryIcon
+                              iconId={splitCategoryDisplay(category).iconId}
+                              className="categoryIcon"
+                            />
+                            <span>{splitCategoryDisplay(category).label}</span>
+                            {(categoryUsageMap[category] || 0) > 0 ? (
+                              <span className="count">({categoryUsageMap[category]})</span>
+                            ) : null}
+                          </CategoryChipContent>
                         </SelectionChip>
                         <CatalogDeleteButton
                           type="button"
@@ -2049,13 +2086,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault()
-                          selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))
+                          selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryIconId))
                         }
                       }}
                     />
                     <Button
                       type="button"
-                      onClick={() => selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryEmoji))}
+                      onClick={() => selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryIconId))}
                     >
                       카테고리 추가
                     </Button>
@@ -2870,10 +2907,10 @@ const TitleInput = styled(Input)`
   padding: 0;
   background: transparent;
   box-shadow: none;
-  font-size: clamp(1.9rem, 3.8vw, 3rem);
-  font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.04em;
+  font-size: clamp(1.7rem, 3vw, 2.45rem);
+  font-weight: 720;
+  line-height: 1.22;
+  letter-spacing: -0.025em;
 
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray9};
@@ -2882,6 +2919,10 @@ const TitleInput = styled(Input)`
   &:focus {
     box-shadow: none;
     border-color: transparent;
+  }
+
+  @media (max-width: 720px) {
+    font-size: clamp(1.45rem, 6vw, 2rem);
   }
 `
 
@@ -3040,6 +3081,9 @@ const WriterMetaActions = styled.div`
 `
 
 const MetaToggleButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 42px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
@@ -3058,6 +3102,25 @@ const MetaToggleButton = styled.button`
     border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
+  }
+`
+
+const CategoryButtonContent = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+
+  .categoryIcon {
+    flex: 0 0 auto;
+    font-size: 0.95rem;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 `
 
@@ -3276,6 +3339,9 @@ const CatalogChipGroup = styled.div`
 `
 
 const SelectionChip = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 0;
   border: 0;
   background: transparent;
@@ -3298,6 +3364,29 @@ const SelectionChip = styled.button`
   &[data-active="true"] {
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
+  }
+`
+
+const CategoryChipContent = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+
+  .categoryIcon {
+    flex: 0 0 auto;
+    font-size: 0.92rem;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .count {
+    color: ${({ theme }) => theme.colors.gray10};
   }
 `
 

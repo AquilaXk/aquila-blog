@@ -109,9 +109,9 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.55rem;
-    min-width: 230px;
+    min-width: 0;
   }
 
   .navPill {

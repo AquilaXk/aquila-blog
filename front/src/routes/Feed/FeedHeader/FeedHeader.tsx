@@ -20,6 +20,7 @@ export default FeedHeader
 const StyledWrapper = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
   margin-bottom: 1rem;
   padding-top: 0.9rem;
   align-items: center;

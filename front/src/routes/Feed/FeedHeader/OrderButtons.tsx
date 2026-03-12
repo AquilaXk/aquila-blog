@@ -52,6 +52,8 @@ const StyledWrapper = styled.div`
   font-size: 0.875rem;
   line-height: 1.25rem;
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
 
   @media (max-width: 900px) {
     display: grid;
@@ -70,6 +72,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: center;
     min-width: 92px;
+    max-width: 100%;
     min-height: 38px;
     padding: 0 0.72rem;
     border-radius: 999px;

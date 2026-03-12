@@ -29,6 +29,7 @@ export default SearchInput
 
 const StyledWrapper = styled.div`
   margin-bottom: 1rem;
+  min-width: 0;
 
   @media (min-width: 768px) {
     margin-bottom: 1.1rem;
@@ -48,6 +49,7 @@ const StyledWrapper = styled.div`
     display: flex;
     align-items: center;
     gap: 0.7rem;
+    min-width: 0;
     padding: 0.8rem 0.95rem;
     border-radius: 18px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -71,6 +73,7 @@ const StyledWrapper = styled.div`
 
   > .field > .mid {
     width: 100%;
+    min-width: 0;
     font-size: 0.95rem;
     line-height: 1.5;
     color: ${({ theme }) => theme.colors.gray12};

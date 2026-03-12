@@ -105,6 +105,7 @@ const StyledWrapper = styled.div`
   > .mid {
     grid-column: span 12 / span 12;
     display: grid;
+    min-width: 0;
     gap: 1rem;
 
     @media (min-width: 1024px) {
@@ -181,6 +182,8 @@ const ExplorerCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   padding: 1rem 1rem 0.2rem;
+  min-width: 0;
+  overflow: clip;
 
   .tags {
     display: block;

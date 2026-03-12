@@ -95,6 +95,7 @@ const StyledWrapper = styled.div`
   position: relative;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
 
   > .wrapper {
     display: inline-flex;
@@ -102,6 +103,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    max-width: 100%;
     min-height: 42px;
     padding: 0 0.9rem;
     border-radius: 999px;
@@ -152,6 +154,7 @@ const StyledWrapper = styled.div`
     left: 0;
     z-index: 40;
     width: 100%;
+    right: 0;
     min-width: min(14rem, 100%);
     max-width: min(22rem, calc(100vw - 2rem));
     max-height: min(18rem, calc(100vh - 9rem));
@@ -216,6 +219,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 900px) {
     > .content {
       max-width: 100%;
+      width: 100%;
     }
   }
 
@@ -223,6 +227,7 @@ const StyledWrapper = styled.div`
     > .content {
       max-width: 100%;
       min-width: 0;
+      width: 100%;
     }
   }
 `

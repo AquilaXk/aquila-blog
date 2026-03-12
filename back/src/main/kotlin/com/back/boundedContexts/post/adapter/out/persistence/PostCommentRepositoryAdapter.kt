@@ -11,8 +11,6 @@ class PostCommentRepositoryAdapter(
 ) : PostCommentRepositoryPort {
     override fun save(comment: PostComment): PostComment = postCommentRepository.save(comment)
 
-    override fun delete(comment: PostComment) = postCommentRepository.delete(comment)
-
     override fun findByPostOrderByCreatedAtAscIdAsc(post: Post): List<PostComment> =
         postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post)
 

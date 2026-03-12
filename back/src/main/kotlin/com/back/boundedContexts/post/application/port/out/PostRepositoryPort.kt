@@ -39,4 +39,6 @@ interface PostRepositoryPort {
         kw: String,
         pageable: Pageable,
     ): Page<Post>
+
+    fun existsByContentContaining(contentFragment: String): Boolean
 }

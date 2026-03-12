@@ -13,6 +13,7 @@ import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
@@ -144,6 +145,24 @@ class PostImageStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
             throw AppException("500-1", "이미지를 불러오지 못했습니다. ${e.message ?: ""}".trim())
+        }
+    }
+
+    override fun deletePostImage(objectKey: String) {
+        val client = requireClient()
+        validateObjectKey(objectKey)
+
+        try {
+            client.deleteObject(
+                DeleteObjectRequest
+                    .builder()
+                    .bucket(properties.bucket)
+                    .key(objectKey)
+                    .build(),
+            )
+        } catch (e: S3Exception) {
+            if (e.statusCode() == 404) return
+            throw AppException("500-1", "이미지 삭제에 실패했습니다. ${e.message ?: ""}".trim())
         }
     }
 

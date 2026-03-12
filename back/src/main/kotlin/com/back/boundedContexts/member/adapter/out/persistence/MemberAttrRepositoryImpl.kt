@@ -40,4 +40,21 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
             .setParameter("names", names)
             .resultList
     }
+
+    override fun existsByNameAndStrValue(
+        name: String,
+        strValue: String,
+    ): Boolean =
+        entityManager
+            .createQuery(
+                """
+                select count(a) > 0
+                from MemberAttr a
+                where a.name = :name
+                  and a.strValue = :strValue
+                """.trimIndent(),
+                java.lang.Boolean::class.java,
+            ).setParameter("name", name)
+            .setParameter("strValue", strValue)
+            .singleResult == true
 }

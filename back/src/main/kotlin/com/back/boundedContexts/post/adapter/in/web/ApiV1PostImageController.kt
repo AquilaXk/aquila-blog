@@ -4,6 +4,8 @@ import com.back.boundedContexts.post.application.port.out.PostImageStoragePort
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
+import com.back.global.storage.app.UploadedFileRetentionService
+import com.back.global.storage.domain.UploadedFilePurpose
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.CacheControl
 import org.springframework.http.MediaType
@@ -24,6 +26,7 @@ import java.util.concurrent.TimeUnit
 @RequestMapping("/post/api/v1")
 class ApiV1PostImageController(
     private val postImageStorageService: PostImageStoragePort,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     data class UploadPostImageResBody(
         val key: String,
@@ -37,6 +40,12 @@ class ApiV1PostImageController(
         @RequestPart("file") file: MultipartFile,
     ): RsData<UploadPostImageResBody> {
         val key = postImageStorageService.uploadPostImage(file)
+        uploadedFileRetentionService.registerTempUpload(
+            objectKey = key,
+            contentType = file.contentType.orEmpty(),
+            fileSize = file.size,
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
         val encodedKey =
             URLEncoder
                 .encode(key, StandardCharsets.UTF_8)

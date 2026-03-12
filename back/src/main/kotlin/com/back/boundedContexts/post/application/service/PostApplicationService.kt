@@ -32,6 +32,7 @@ import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.event.app.EventPublisher
+import com.back.global.storage.app.UploadedFileRetentionService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
@@ -50,6 +51,7 @@ class PostApplicationService(
     private val postLikeRepository: PostLikeRepositoryPort,
     private val secureTipPort: SecureTipPort,
     private val eventPublisher: EventPublisher,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     fun count(): Long = postRepository.count()
 
@@ -66,6 +68,7 @@ class PostApplicationService(
         val persistenceAuthor = toPersistenceMember(author)
         val post = Post(0, persistenceAuthor, title, content, published, listed)
         val savedPost = postRepository.saveAndFlush(post)
+        uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
         hydrateMemberCounterAttrs(persistenceAuthor)
         persistenceAuthor.incrementPostsCount()
         saveMemberAttr(persistenceAuthor.postsCountAttr)
@@ -98,8 +101,10 @@ class PostApplicationService(
         listed: Boolean? = null,
     ) {
         hydratePostAttrs(post)
+        val previousContent = post.content
         post.modify(title, content, published, listed)
         postRepository.flush()
+        uploadedFileRetentionService.syncPostContent(post.id, previousContent, post.content)
 
         eventPublisher.publish(
             PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor)),
@@ -114,6 +119,7 @@ class PostApplicationService(
         hydratePostAttrs(post)
         hydrateMemberCounterAttrs(post.author)
         val postDto = PostDto(post)
+        uploadedFileRetentionService.scheduleDeletedPostAttachments(post.content)
 
         eventPublisher.publish(
             PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor)),
@@ -187,6 +193,7 @@ class PostApplicationService(
                 .mapNotNull { comment -> comment.parentComment?.id?.let { parentId -> parentId to comment } }
                 .groupBy({ it.first }, { it.second })
         val commentsToDelete = mutableListOf<PostComment>()
+        val persistedTargetComment = allComments.firstOrNull { it.id == postComment.id } ?: postComment
 
         // 트리 형태 댓글을 후위 순회로 수집해, 자식 -> 부모 순서로 안전하게 삭제한다.
         fun collect(comment: PostComment) {
@@ -194,7 +201,7 @@ class PostApplicationService(
             commentsToDelete += comment
         }
 
-        collect(postComment)
+        collect(persistedTargetComment)
 
         commentsToDelete.forEach { hydrateMemberCounterAttrs(it.author) }
 
@@ -204,7 +211,7 @@ class PostApplicationService(
             comment.author.decrementPostCommentsCount()
             saveMemberAttr(comment.author.postCommentsCountAttr)
             post.onCommentDeleted()
-            postCommentRepository.delete(comment)
+            comment.softDelete()
 
             eventPublisher.publish(
                 PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
@@ -212,6 +219,7 @@ class PostApplicationService(
         }
 
         savePostAttr(post.commentsCountAttr)
+        postRepository.flush()
     }
 
     @Transactional

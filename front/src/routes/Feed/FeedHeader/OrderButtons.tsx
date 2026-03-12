@@ -52,10 +52,10 @@ const StyledWrapper = styled.div`
   font-size: 0.875rem;
   line-height: 1.25rem;
   flex: 0 0 auto;
-  min-width: 236px;
+  min-width: 248px;
   width: fit-content;
   max-width: min(100%, 18rem);
-  padding: 0.18rem;
+  padding: 0.22rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
@@ -72,7 +72,7 @@ const StyledWrapper = styled.div`
     min-width: 0;
     max-width: 100%;
     flex: 1 1 0;
-    min-height: 36px;
+    min-height: 38px;
     padding: 0 0.82rem;
     border-radius: 999px;
     border: 0;

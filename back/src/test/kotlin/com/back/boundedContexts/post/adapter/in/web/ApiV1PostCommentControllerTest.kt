@@ -15,6 +15,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithUserDetails
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
@@ -37,6 +38,9 @@ class ApiV1PostCommentControllerTest {
 
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
 
     private lateinit var post: Post
     private lateinit var commentByAuthor: PostComment
@@ -265,6 +269,15 @@ class ApiV1PostCommentControllerTest {
                 jsonPath("$.resultCode") { value("200-1") }
                 jsonPath("$.msg") { value("${id}번 댓글이 삭제되었습니다.") }
             }
+
+            val deletedAtExists =
+                jdbcTemplate.queryForObject(
+                    "select count(*) from post_comment where id = ? and deleted_at is not null",
+                    Int::class.java,
+                    id,
+                )
+
+            org.assertj.core.api.Assertions.assertThat(deletedAtExists).isEqualTo(1)
         }
 
         @Test
@@ -284,6 +297,16 @@ class ApiV1PostCommentControllerTest {
                 status { isOk() }
                 jsonPath("$.length()") { value(1) }
             }
+
+            val deletedRepliesCount =
+                jdbcTemplate.queryForObject(
+                    "select count(*) from post_comment where id in (?, ?) and deleted_at is not null",
+                    Int::class.java,
+                    id,
+                    reply.id,
+                )
+
+            org.assertj.core.api.Assertions.assertThat(deletedRepliesCount).isEqualTo(2)
         }
 
         @Test

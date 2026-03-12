@@ -14,5 +14,10 @@ interface MemberAttrRepositoryPort {
         names: List<String>,
     ): List<MemberAttr>
 
+    fun existsByNameAndStrValue(
+        name: String,
+        strValue: String,
+    ): Boolean
+
     fun save(attr: MemberAttr): MemberAttr
 }

@@ -103,8 +103,8 @@ const StyledWrapper = styled.div`
     justify-content: space-between;
     width: 100%;
     max-width: 100%;
-    min-height: 44px;
-    padding: 0 0.9rem;
+    min-height: 48px;
+    padding: 0 1rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray2};
@@ -218,7 +218,7 @@ const StyledWrapper = styled.div`
     max-width: none;
 
     > .wrapper {
-      min-height: 42px;
+      min-height: 46px;
     }
 
     > .content {

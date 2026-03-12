@@ -392,10 +392,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   return (
     <StyledWrapper>
       <SectionHeader>
-        <div>
-          <span className="eyebrow">Community</span>
-          <h3>댓글</h3>
-        </div>
+        <h3>댓글</h3>
         <div className="countBadge">댓글 {comments.length}</div>
       </SectionHeader>
 
@@ -578,25 +575,11 @@ const StyledWrapper = styled.section`
 
 const SectionHeader = styled.div`
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.9rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
-
-  .eyebrow {
-    display: inline-flex;
-    margin-bottom: 0.45rem;
-    border-radius: 999px;
-    padding: 0.32rem 0.62rem;
-    border: 1px solid ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
-    color: ${({ theme }) => theme.colors.green11};
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
 
   h3 {
     margin: 0;

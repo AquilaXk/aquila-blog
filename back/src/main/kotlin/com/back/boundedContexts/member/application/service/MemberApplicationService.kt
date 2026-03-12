@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
+import com.back.global.storage.app.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import org.springframework.data.domain.PageRequest
 import org.springframework.security.crypto.password.PasswordEncoder
@@ -18,6 +19,7 @@ class MemberApplicationService(
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val memberProfileHydrator: MemberProfileHydrator,
     private val passwordEncoder: PasswordEncoder,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     @Transactional(readOnly = true)
     fun count(): Long = memberRepository.count()
@@ -53,10 +55,11 @@ class MemberApplicationService(
             }
 
         val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
+        memberProfileHydrator.hydrate(member)
         profileImgUrl?.let {
-            memberProfileHydrator.hydrate(member)
             member.profileImgUrl = it
             saveProfileImgUrlAttr(member)
+            uploadedFileRetentionService.syncProfileImage(member.id, null, member.profileImgUrl)
         }
 
         return member
@@ -94,8 +97,12 @@ class MemberApplicationService(
         profileImgUrl: String?,
     ) {
         memberProfileHydrator.hydrate(member)
+        val previousProfileImgUrl = member.profileImgUrl
         member.modify(nickname, profileImgUrl)
-        if (profileImgUrl != null) saveProfileImgUrlAttr(member)
+        if (profileImgUrl != null) {
+            saveProfileImgUrlAttr(member)
+            uploadedFileRetentionService.syncProfileImage(member.id, previousProfileImgUrl, member.profileImgUrl)
+        }
     }
 
     @Transactional

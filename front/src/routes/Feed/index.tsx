@@ -178,12 +178,14 @@ const IntroCard = styled.section`
 `
 
 const ExplorerCard = styled.section`
+  display: grid;
+  gap: 0.95rem;
   border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem 0.9rem 0.2rem;
+  padding: 1rem;
   min-width: 0;
-  overflow: clip;
+  overflow: visible;
 
   .tags {
     display: block;
@@ -194,6 +196,7 @@ const ExplorerCard = styled.section`
   }
 
   @media (max-width: 768px) {
-    padding: 0.8rem 0.8rem 0.15rem;
+    gap: 0.85rem;
+    padding: 0.9rem;
   }
 `

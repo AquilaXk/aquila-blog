@@ -102,6 +102,7 @@ GitHub Actions 기준 필수값:
 - `CUSTOM_STORAGE_ENDPOINT`는 `http://minio_1:9000` 같은 완성된 URI여야 한다.
 - 배포 스크립트는 이제 `http:` 같은 깨진 endpoint나 `${...}` placeholder가 남아 있으면 즉시 실패시킨다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
+- 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
 
 ## Blue/Green 전환 원칙
 
@@ -150,6 +151,7 @@ sequenceDiagram
 - 관리자 페이지의 글 목록, 글 발행, 서버 상태 조회 확인
 - task backlog가 있으면 1분 내 `PENDING -> PROCESSING/COMPLETED`로 이동하는지 확인
 - 관리자 프로필 이미지/글 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
+- 이미지 정리 정책을 바꿨다면 `uploaded_file` 상태(`TEMP`, `PENDING_DELETE`)와 MinIO 사용량 추이를 같이 본다
 - Cloudflare Tunnel이 `caddy:80`으로 정상 연결되는지 확인
 
 ## 자주 보는 장애 유형
@@ -164,6 +166,8 @@ sequenceDiagram
   `HOME_SERVER_ENV`에 값이 누락되었거나 `#` 때문에 뒷부분이 주석 처리됨
 - `503` on `/profileImageFile` or `/posts/images`:
   MinIO env 비활성화, placeholder 미치환, bucket/client init 실패
+- 업로드는 되는데 나중에 파일이 정리되지 않음:
+  `uploaded_file` purge job 설정, `CUSTOM__STORAGE__RETENTION__*` 값, 본문/프로필 참조 여부 확인
 
 ## 장애 대응 우선순위
 

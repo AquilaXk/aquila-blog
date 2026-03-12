@@ -37,9 +37,9 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: 0.65rem;
     min-width: 0;
-    min-height: 48px;
-    padding: 0 0.85rem;
-    border-radius: 14px;
+    min-height: 52px;
+    padding: 0 0.95rem;
+    border-radius: 18px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
 
@@ -77,7 +77,7 @@ const StyledWrapper = styled.div`
   > .field > .mid {
     width: 100%;
     min-width: 0;
-    font-size: 0.92rem;
+    font-size: 0.95rem;
     line-height: 1.5;
     color: ${({ theme }) => theme.colors.gray12};
     border: 0;

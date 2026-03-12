@@ -4,6 +4,8 @@ import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.out.PostImageStoragePort
 import com.back.global.app.AppConfig
+import com.back.global.storage.app.UploadedFileRetentionService
+import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PageDto
 import jakarta.validation.Valid
@@ -27,6 +29,7 @@ import java.nio.charset.StandardCharsets
 class ApiV1AdmMemberController(
     private val memberUseCase: MemberUseCase,
     private val postImageStorageService: PostImageStoragePort,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     data class UpdateProfileImgRequest(
         @field:NotBlank
@@ -104,6 +107,12 @@ class ApiV1AdmMemberController(
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
         val key = postImageStorageService.uploadPostImage(file)
+        uploadedFileRetentionService.registerTempUpload(
+            objectKey = key,
+            contentType = file.contentType.orEmpty(),
+            fileSize = file.size,
+            purpose = UploadedFilePurpose.PROFILE_IMAGE,
+        )
         val encodedKey =
             URLEncoder
                 .encode(key, StandardCharsets.UTF_8)

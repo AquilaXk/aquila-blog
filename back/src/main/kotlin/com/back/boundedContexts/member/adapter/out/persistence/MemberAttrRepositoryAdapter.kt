@@ -19,5 +19,10 @@ class MemberAttrPersistenceAdapter(
         names: List<String>,
     ): List<MemberAttr> = memberAttrRepository.findBySubjectInAndNameIn(subjects, names)
 
+    override fun existsByNameAndStrValue(
+        name: String,
+        strValue: String,
+    ): Boolean = memberAttrRepository.existsByNameAndStrValue(name, strValue)
+
     override fun save(attr: MemberAttr): MemberAttr = memberAttrRepository.save(attr)
 }

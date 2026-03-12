@@ -11,4 +11,6 @@ interface PostImageStoragePort {
     fun uploadPostImage(file: MultipartFile): String
 
     fun getPostImage(objectKey: String): StoredImage?
+
+    fun deletePostImage(objectKey: String)
 }

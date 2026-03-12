@@ -13,4 +13,9 @@ interface MemberAttrRepositoryCustom {
         subjects: List<Member>,
         names: List<String>,
     ): List<MemberAttr>
+
+    fun existsByNameAndStrValue(
+        name: String,
+        strValue: String,
+    ): Boolean
 }

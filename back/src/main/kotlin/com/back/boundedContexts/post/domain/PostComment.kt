@@ -13,9 +13,12 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.SequenceGenerator
 import org.hibernate.annotations.DynamicUpdate
+import org.hibernate.annotations.SQLRestriction
+import java.time.Instant
 
 @Entity
 @DynamicUpdate
+@SQLRestriction("deleted_at IS NULL")
 class PostComment(
     @field:Id
     @field:SequenceGenerator(name = "post_comment_seq_gen", sequenceName = "post_comment_seq", allocationSize = 50)
@@ -34,10 +37,17 @@ class PostComment(
     val parentComment: PostComment? = null,
 ) : BaseTime(id),
     PostCommentHasPolicy {
+    @field:Column
+    var deletedAt: Instant? = null
+
     override val postComment get() = this
 
     fun modify(content: String) {
         this.content = content
+    }
+
+    fun softDelete() {
+        deletedAt = Instant.now()
     }
 
     val isReply: Boolean

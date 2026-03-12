@@ -37,12 +37,27 @@ type ApiRsData<T> = {
   data: T
 }
 
+const ACTION_LABELS: Record<string, string> = {
+  commentList: "댓글 목록 조회",
+  commentOne: "댓글 단건 조회",
+  commentWrite: "댓글 작성",
+  commentModify: "댓글 수정",
+  commentDelete: "댓글 삭제",
+  admPostCount: "전체 글 개수 확인",
+  systemHealth: "서버 상태 조회",
+  mailStatus: "메일 준비 상태 새로고침",
+  mailConnectivity: "SMTP 연결 확인",
+  mailTest: "테스트 메일 발송",
+  logout: "로그아웃",
+}
+
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const { me, logout } = useAuthSession()
   const sessionMember = me ?? initialMember
   const [loadingKey, setLoadingKey] = useState("")
   const [result, setResult] = useState("")
+  const [lastActionLabel, setLastActionLabel] = useState("")
   const [postId, setPostId] = useState("1")
   const [commentId, setCommentId] = useState("1")
   const [commentContent, setCommentContent] = useState("")
@@ -54,6 +69,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
       setLoadingKey(key)
+      setLastActionLabel(ACTION_LABELS[key] || key)
       const data = await fn()
       setResult(pretty(data))
     } catch (error) {
@@ -66,7 +82,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const fetchSignupMailDiagnostics = async (checkConnection = false) => {
     try {
-      setLoadingKey(checkConnection ? "mailConnectivity" : "mailStatus")
+      const actionKey = checkConnection ? "mailConnectivity" : "mailStatus"
+      setLoadingKey(actionKey)
+      setLastActionLabel(ACTION_LABELS[actionKey] || actionKey)
       setMailDiagnosticsError("")
       setMailTestNotice("")
       const diagnostics = await apiFetch<SignupMailDiagnostics>(
@@ -92,6 +110,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("mailTest")
+      setLastActionLabel(ACTION_LABELS.mailTest)
       setMailTestNotice("")
       const response = await apiFetch<ApiRsData<{ email: string }>>("/system/api/v1/adm/mail/signup/test", {
         method: "POST",
@@ -123,6 +142,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   if (!sessionMember) return null
+
+  const consoleStatus = loadingKey
+    ? `${ACTION_LABELS[loadingKey] || loadingKey} 실행 중입니다.`
+    : lastActionLabel
+      ? `${lastActionLabel} 결과를 아래에서 확인할 수 있습니다.`
+      : "도구를 실행하면 API 원본 응답이 여기에 표시됩니다."
 
   return (
     <Main>
@@ -281,14 +306,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </InlineNotice>
           )}
           {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
-          <ActionRow>
-            <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(false)}>
-              메일 준비 상태 새로고침
-            </Button>
-            <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(true)}>
-              SMTP 연결 확인
-            </Button>
-          </ActionRow>
 
           <MailTestBox>
             <FieldBox className="wide">
@@ -313,11 +330,20 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ConsoleHeader>
           <div>
             <SectionEyebrow>Console</SectionEyebrow>
-            <h2>최근 API 응답</h2>
+            <h2>실행 결과 콘솔</h2>
+            <ConsoleDescription>메일 진단 버튼과 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
           </div>
-          <span>{loadingKey ? `실행 중: ${loadingKey}` : `${sessionMember.username} 준비 완료`}</span>
+          <ConsoleStatus>{consoleStatus}</ConsoleStatus>
         </ConsoleHeader>
-        <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
+        <ConsoleActionRow>
+          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(false)}>
+            메일 준비 상태 새로고침
+          </Button>
+          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(true)}>
+            SMTP 연결 확인
+          </Button>
+        </ConsoleActionRow>
+        <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
       </ConsoleCard>
     </Main>
   )
@@ -624,10 +650,28 @@ const ConsoleHeader = styled.div`
     font-size: 1.1rem;
   }
 
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+  @media (max-width: 760px) {
+    flex-direction: column;
   }
+`
+
+const ConsoleDescription = styled.p`
+  margin: 0.35rem 0 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.65;
+`
+
+const ConsoleStatus = styled.span`
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.84rem;
+  line-height: 1.6;
+`
+
+const ConsoleActionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
 `
 
 const ResultPanel = styled.pre`

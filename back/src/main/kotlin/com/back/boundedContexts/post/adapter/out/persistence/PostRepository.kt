@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository
 interface PostRepository :
     JpaRepository<Post, Int>,
     PostRepositoryCustom {
+    fun existsByContentContaining(contentFragment: String): Boolean
+
     fun findFirstByOrderByIdDesc(): Post?
 
     fun findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(

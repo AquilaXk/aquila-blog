@@ -1,6 +1,6 @@
 # Git Workflow
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 ## 이 문서가 보여주는 것
 
@@ -27,6 +27,8 @@ flowchart LR
 1. `main` 최신 상태 pull
 2. 기능 또는 버그 수정은 별도 브랜치에서 작업
 3. 로컬 검증
+   - 백엔드: `cd back && ./gradlew ktlintCheck`
+   - 백엔드: `cd back && ./gradlew compileKotlin`
    - 백엔드: `cd back && ./gradlew test`
    - 프론트: `cd front && yarn build`
 4. 커밋 메시지는 현재 저장소 흐름처럼 `feat:`, `fix:`, `refactor:`, `test:` 형식을 유지
@@ -49,9 +51,25 @@ flowchart LR
 | 작업 유형 | 브랜치 분리 | 최소 검증 | 배포 전 체크 |
 | --- | --- | --- | --- |
 | UI 수정 | 권장 | `front/yarn build` | API base URL 영향 여부 |
-| 도메인/비즈니스 로직 | 필수 수준 권장 | `back/gradlew test` | DB/권한 회귀 |
+| 도메인/비즈니스 로직 | 필수 수준 권장 | `back/gradlew ktlintCheck`, `compileKotlin`, `test` | DB/권한 회귀 |
 | 인프라/배포 | 필수 | workflow/스크립트 리뷰 | Secret, alias, health check |
 | 운영 hotfix | 상황 따라 `main` 직접 가능 | 최소 재현 + 핵심 테스트 | 즉시 smoke test |
+
+## 백엔드 수정 필수 검증
+
+백엔드 코드를 수정했다면 아래 3개는 선택이 아니라 기본 검증으로 본다.
+
+1. `cd back && ./gradlew ktlintCheck`
+2. `cd back && ./gradlew compileKotlin`
+3. `cd back && ./gradlew test`
+
+의미:
+
+- `ktlintCheck`: Kotlin 스타일/포맷 규칙 위반 차단
+- `compileKotlin`: 전체 Kotlin 컴파일 및 generated code 영향 확인
+- `test`: 기능 회귀 및 아키텍처/통합 테스트 확인
+
+부분 테스트만 먼저 돌릴 수는 있지만, 최종 커밋 전에는 위 3개를 전체 기준으로 다시 확인한다.
 
 ## 배포 안전 규칙
 

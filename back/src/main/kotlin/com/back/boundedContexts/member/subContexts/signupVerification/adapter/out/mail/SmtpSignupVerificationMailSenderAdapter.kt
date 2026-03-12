@@ -7,10 +7,10 @@ import org.springframework.context.annotation.Profile
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Component
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.nio.charset.StandardCharsets
 
 @Profile("!test")
 @Component
@@ -103,7 +103,9 @@ class SmtpSignupVerificationMailSenderAdapter(
                           <p style="margin:0;">본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.</p>
                         </div>
                         <div style="padding:28px 0 18px; text-align:center;">
-                          <a href="${escapeHtmlAttribute(verificationLink)}" style="display:inline-block; min-width:240px; padding:18px 32px; border-radius:18px; background:linear-gradient(135deg, #2563eb, #3b82f6); color:#ffffff; font-size:26px; font-weight:800; text-decoration:none; box-shadow:0 14px 28px rgba(37, 99, 235, 0.28);">
+                          <a href="${escapeHtmlAttribute(
+            verificationLink,
+        )}" style="display:inline-block; min-width:240px; padding:18px 32px; border-radius:18px; background:linear-gradient(135deg, #2563eb, #3b82f6); color:#ffffff; font-size:26px; font-weight:800; text-decoration:none; box-shadow:0 14px 28px rgba(37, 99, 235, 0.28);">
                             계속하기
                           </a>
                         </div>
@@ -111,7 +113,9 @@ class SmtpSignupVerificationMailSenderAdapter(
                           버튼이 동작하지 않으면 아래 링크를 브라우저에 붙여넣어 열어주세요.
                         </div>
                         <div style="padding-top:12px; text-align:center; word-break:break-all;">
-                          <a href="${escapeHtmlAttribute(verificationLink)}" style="color:#2563eb; font-size:15px; line-height:1.8; text-decoration:underline;">
+                          <a href="${escapeHtmlAttribute(
+            verificationLink,
+        )}" style="color:#2563eb; font-size:15px; line-height:1.8; text-decoration:underline;">
                             ${escapeHtml(verificationLink)}
                           </a>
                         </div>

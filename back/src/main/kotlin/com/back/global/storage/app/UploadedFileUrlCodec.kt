@@ -8,9 +8,7 @@ import java.nio.charset.StandardCharsets
 object UploadedFileUrlCodec {
     private const val IMAGE_PATH_PREFIX = "/post/api/v1/images/"
 
-    fun buildImageUrl(objectKey: String): String {
-        return "${AppConfig.siteBackUrl}${buildRelativeImagePath(objectKey)}"
-    }
+    fun buildImageUrl(objectKey: String): String = "${AppConfig.siteBackUrl}${buildRelativeImagePath(objectKey)}"
 
     fun buildRelativeImagePath(objectKey: String): String {
         val encodedKey =

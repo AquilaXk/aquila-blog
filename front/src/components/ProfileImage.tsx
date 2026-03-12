@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import Head from "next/head"
 import React from "react"
 
 type Props = React.ImgHTMLAttributes<HTMLImageElement> & {
@@ -13,29 +14,43 @@ const ProfileImage: React.FC<Props> = ({
   alt,
   style,
   ...props
-}) => (
-  <img
-    alt={alt}
-    loading={loading || (priority ? "eager" : "lazy")}
-    fetchPriority={priority ? "high" : "auto"}
-    decoding={priority ? "sync" : "async"}
-    draggable={false}
-    style={{
-      display: "block",
-      objectFit: "cover",
-      objectPosition: "center 38%",
-      ...(fillContainer
-        ? {
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-          }
-        : {}),
-      ...style,
-    }}
-    {...props}
-  />
-)
+}) => {
+  const preloadHref =
+    priority && typeof props.src === "string" && props.src.trim() && !props.src.startsWith("data:")
+      ? props.src
+      : null
+
+  return (
+    <>
+      {preloadHref ? (
+        <Head>
+          <link key={`profile-image-preload:${preloadHref}`} rel="preload" as="image" href={preloadHref} />
+        </Head>
+      ) : null}
+      <img
+        alt={alt}
+        loading={loading || (priority ? "eager" : "lazy")}
+        fetchPriority={priority ? "high" : "auto"}
+        decoding={priority ? "sync" : "async"}
+        draggable={false}
+        style={{
+          display: "block",
+          objectFit: "cover",
+          objectPosition: "center 38%",
+          ...(fillContainer
+            ? {
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+              }
+            : {}),
+          ...style,
+        }}
+        {...props}
+      />
+    </>
+  )
+}
 
 export default ProfileImage

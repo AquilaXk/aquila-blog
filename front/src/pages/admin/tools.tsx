@@ -307,22 +307,24 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           )}
           {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
 
-          <MailTestBox>
-            <FieldBox className="wide">
-              <FieldLabel htmlFor="signup-mail-test-email">테스트 메일 주소</FieldLabel>
-              <Input
-                id="signup-mail-test-email"
-                type="email"
-                value={testEmail}
-                placeholder="메일 수신을 확인할 이메일을 입력하세요"
-                onChange={(e) => setTestEmail(e.target.value)}
-              />
-            </FieldBox>
-            <PrimaryButton type="button" disabled={!!loadingKey} onClick={() => void sendSignupTestMail()}>
-              테스트 메일 발송
-            </PrimaryButton>
-          </MailTestBox>
-          {!!mailTestNotice && <InlineNotice data-tone="success">{mailTestNotice}</InlineNotice>}
+          <MailTestSection>
+            <MailTestBox>
+              <FieldBox className="wide">
+                <FieldLabel htmlFor="signup-mail-test-email">테스트 메일 주소</FieldLabel>
+                <Input
+                  id="signup-mail-test-email"
+                  type="email"
+                  value={testEmail}
+                  placeholder="메일 수신을 확인할 이메일을 입력하세요"
+                  onChange={(e) => setTestEmail(e.target.value)}
+                />
+              </FieldBox>
+              <PrimaryButton type="button" disabled={!!loadingKey} onClick={() => void sendSignupTestMail()}>
+                테스트 메일 발송
+              </PrimaryButton>
+            </MailTestBox>
+            {!!mailTestNotice && <InlineNotice data-tone="success">{mailTestNotice}</InlineNotice>}
+          </MailTestSection>
         </SectionCard>
       </Grid>
 
@@ -619,8 +621,13 @@ const InlineNotice = styled.p`
   }
 `
 
+const MailTestSection = styled.div`
+  margin-top: 1.1rem;
+  display: grid;
+  gap: 0.95rem;
+`
+
 const MailTestBox = styled.div`
-  margin-top: 1rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.8rem;

@@ -34,7 +34,8 @@ interface MemberHasProfileImgUrl : MemberAware {
 
     val profileImgUrlVersionedOrDefault: String
         get() =
-            profileImgUrl.takeIf { it.isNotBlank() }
+            profileImgUrl
+                .takeIf { it.isNotBlank() }
                 ?.let(::appendProfileImgVersion)
                 ?: profileImgUrlOrDefault
 

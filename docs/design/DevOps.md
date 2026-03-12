@@ -143,6 +143,7 @@ sequenceDiagram
 
 ## 운영 체크리스트
 
+- 백엔드 코드 변경이 포함된 배포라면 배포 전에 `./gradlew ktlintCheck`, `./gradlew compileKotlin`, `./gradlew test`를 모두 통과시킨다
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
 - `GET /system/api/v1/adm/mail/signup`으로 회원가입 메일 준비 상태 확인
 - 필요 시 `POST /system/api/v1/adm/mail/signup/test`로 테스트 메일 1통 발송

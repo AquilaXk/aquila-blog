@@ -64,13 +64,13 @@ class Member(
         nickname: String,
         email: String?,
     ) : this(
-            id,
-            username,
-            password,
-            nickname,
-            email,
-            MemberPolicy.genApiKey(),
-        )
+        id,
+        username,
+        password,
+        nickname,
+        email,
+        MemberPolicy.genApiKey(),
+    )
 
     constructor(
         id: Int,
@@ -78,12 +78,12 @@ class Member(
         password: String?,
         nickname: String,
     ) : this(
-            id,
-            username,
-            password,
-            nickname,
-            null,
-        )
+        id,
+        username,
+        password,
+        nickname,
+        null,
+    )
 
     internal constructor(id: Int) : this(id, "", null, "", null, "")
 

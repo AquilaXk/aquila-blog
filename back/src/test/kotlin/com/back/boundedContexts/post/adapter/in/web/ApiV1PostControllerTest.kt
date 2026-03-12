@@ -1,8 +1,8 @@
 package com.back.boundedContexts.post.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import jakarta.servlet.http.Cookie
@@ -17,7 +17,11 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.web.servlet.*
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
+import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import org.springframework.transaction.annotation.Transactional
 
@@ -394,17 +398,18 @@ class ApiV1PostControllerTest {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
             val initialHitCount = post.hitCount
 
-            mvc.post("/post/api/v1/posts/${post.id}/hit") {
-                header("X-Forwarded-For", "203.0.113.10")
-                header(HttpHeaders.USER_AGENT, "JUnit-hit-single")
-            }.andExpect {
-                match(handler().handlerType(ApiV1PostController::class.java))
-                match(handler().methodName("incrementHit"))
-                status { isOk() }
-                jsonPath("$.resultCode") { value("200-1") }
-                jsonPath("$.msg") { value("조회수를 반영했습니다.") }
-                jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
-            }
+            mvc
+                .post("/post/api/v1/posts/${post.id}/hit") {
+                    header("X-Forwarded-For", "203.0.113.10")
+                    header(HttpHeaders.USER_AGENT, "JUnit-hit-single")
+                }.andExpect {
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("incrementHit"))
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.msg") { value("조회수를 반영했습니다.") }
+                    jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
+                }
         }
 
         @Test
@@ -420,21 +425,23 @@ class ApiV1PostControllerTest {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
             val initialHitCount = post.hitCount
 
-            mvc.post("/post/api/v1/posts/${post.id}/hit") {
-                header("X-Forwarded-For", "203.0.113.11")
-                header(HttpHeaders.USER_AGENT, "JUnit-hit-dedup")
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
-            }
+            mvc
+                .post("/post/api/v1/posts/${post.id}/hit") {
+                    header("X-Forwarded-For", "203.0.113.11")
+                    header(HttpHeaders.USER_AGENT, "JUnit-hit-dedup")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
+                }
 
-            mvc.post("/post/api/v1/posts/${post.id}/hit") {
-                header("X-Forwarded-For", "203.0.113.11")
-                header(HttpHeaders.USER_AGENT, "JUnit-hit-dedup")
-            }.andExpect {
-                status { isOk() }
-                jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
-            }
+            mvc
+                .post("/post/api/v1/posts/${post.id}/hit") {
+                    header("X-Forwarded-For", "203.0.113.11")
+                    header(HttpHeaders.USER_AGENT, "JUnit-hit-dedup")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
+                }
         }
     }
 

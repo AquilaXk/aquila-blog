@@ -14,8 +14,8 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
-import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
@@ -277,7 +277,9 @@ class ApiV1PostCommentControllerTest {
                     id,
                 )
 
-            org.assertj.core.api.Assertions.assertThat(deletedAtExists).isEqualTo(1)
+            org.assertj.core.api.Assertions
+                .assertThat(deletedAtExists)
+                .isEqualTo(1)
         }
 
         @Test
@@ -306,7 +308,9 @@ class ApiV1PostCommentControllerTest {
                     reply.id,
                 )
 
-            org.assertj.core.api.Assertions.assertThat(deletedRepliesCount).isEqualTo(2)
+            org.assertj.core.api.Assertions
+                .assertThat(deletedRepliesCount)
+                .isEqualTo(2)
         }
 
         @Test

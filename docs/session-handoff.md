@@ -67,6 +67,7 @@ flowchart LR
 
 | 명령/화면 | 기대 결과 |
 | --- | --- |
+| `./gradlew ktlintCheck` | Kotlin 스타일 검사 통과 |
 | `./gradlew test` | 백엔드 테스트 green |
 | `./gradlew compileKotlin` | Kotlin 컴파일 성공 |
 | `yarn build` | 프론트 프로덕션 빌드 성공 |
@@ -88,10 +89,16 @@ flowchart LR
 ## 로컬 검증 명령
 
 ```bash
+cd back && ./gradlew ktlintCheck
 cd back && ./gradlew test
 cd back && ./gradlew compileKotlin
 cd front && yarn build
 ```
+
+## 백엔드 수정 규칙
+
+- 백엔드 코드를 수정한 턴에서는 `ktlintCheck`, `compileKotlin`, `test`를 전체 기준으로 확인하는 것을 기본 원칙으로 본다.
+- 단일 테스트만 먼저 돌렸더라도, 최종 반영 전에는 전체 백엔드 검증으로 다시 닫는다.
 
 ## 다음에 손대기 좋은 영역
 

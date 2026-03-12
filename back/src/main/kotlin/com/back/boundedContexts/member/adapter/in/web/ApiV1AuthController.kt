@@ -61,7 +61,8 @@ class ApiV1AuthController(
         }
 
         val member =
-            memberUseCase.findByUsername(username)
+            memberUseCase
+                .findByUsername(username)
                 ?.takeIf { isPasswordValid(it, reqBody.password) }
                 ?: run {
                     val blocked = loginAttemptService.recordFailure(username, clientIp)
@@ -111,7 +112,12 @@ class ApiV1AuthController(
     private fun extractClientIp(request: HttpServletRequest): String {
         val xForwardedFor = request.getHeader("X-Forwarded-For").orEmpty()
         if (xForwardedFor.isNotBlank()) {
-            return xForwardedFor.split(",").firstOrNull().orEmpty().trim().ifBlank { request.remoteAddr.orEmpty() }
+            return xForwardedFor
+                .split(",")
+                .firstOrNull()
+                .orEmpty()
+                .trim()
+                .ifBlank { request.remoteAddr.orEmpty() }
         }
 
         val xRealIp = request.getHeader("X-Real-IP").orEmpty().trim()

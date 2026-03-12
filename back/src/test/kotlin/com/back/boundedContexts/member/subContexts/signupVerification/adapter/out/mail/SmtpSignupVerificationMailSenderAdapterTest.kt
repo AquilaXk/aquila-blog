@@ -150,13 +150,9 @@ class SmtpSignupVerificationMailSenderAdapterTest {
             mimeMessagePreparators.forEach { send(it) }
         }
 
-        override fun send(simpleMessage: SimpleMailMessage) {
-            throw unsupported()
-        }
+        override fun send(simpleMessage: SimpleMailMessage) = throw unsupported()
 
-        override fun send(vararg simpleMessages: SimpleMailMessage) {
-            throw unsupported()
-        }
+        override fun send(vararg simpleMessages: SimpleMailMessage) = throw unsupported()
 
         private fun unsupported(): MailException = MailParseException("simple mail message is not supported in this test")
     }

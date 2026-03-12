@@ -70,7 +70,7 @@ class HomeController {
             |</head>
             |<body>
             |  <h1>API 서버__</h1>
-            |${hostInfoBlock}
+            |$hostInfoBlock
             |</body>
             |</html>
             """.trimMargin()

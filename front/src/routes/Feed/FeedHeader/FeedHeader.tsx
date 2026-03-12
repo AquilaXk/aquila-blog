@@ -8,10 +8,12 @@ type Props = {}
 const FeedHeader: React.FC<Props> = () => {
   return (
     <StyledWrapper>
-      <CategorySelect />
-      <OrderRow>
+      <FilterRow>
+        <CategorySlot>
+          <CategorySelect />
+        </CategorySlot>
         <OrderButtons />
-      </OrderRow>
+      </FilterRow>
     </StyledWrapper>
   )
 }
@@ -21,17 +23,32 @@ export default FeedHeader
 const StyledWrapper = styled.div`
   display: grid;
   min-width: 0;
-  padding-top: 0.95rem;
-  gap: 0.85rem;
+  padding-top: 1rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
 `
 
-const OrderRow = styled.div`
+const FilterRow = styled.div`
   display: flex;
-  justify-content: flex-end;
-  padding-bottom: 0.05rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  min-width: 0;
 
   @media (max-width: 640px) {
-    justify-content: stretch;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+  }
+`
+
+const CategorySlot = styled.div`
+  flex: 0 1 clamp(12rem, 28vw, 17rem);
+  max-width: clamp(12rem, 28vw, 17rem);
+  min-width: 0;
+
+  @media (max-width: 640px) {
+    flex-basis: auto;
+    max-width: none;
   }
 `

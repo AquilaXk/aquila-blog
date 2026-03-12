@@ -153,9 +153,9 @@ const StyledWrapper = styled.div`
     top: calc(100% + 0.35rem);
     left: 0;
     z-index: 40;
-    width: min(18rem, calc(100vw - 2rem));
-    min-width: min(14rem, 100%);
-    max-width: min(18rem, calc(100vw - 2rem));
+    width: max-content;
+    min-width: 100%;
+    max-width: min(20rem, calc(100vw - 2rem));
     max-height: min(18rem, calc(100vh - 9rem));
     overflow-y: auto;
     scrollbar-gutter: stable both-edges;
@@ -223,6 +223,8 @@ const StyledWrapper = styled.div`
 
     > .content {
       width: 100%;
+      min-width: 0;
+      max-width: 100%;
     }
   }
 `

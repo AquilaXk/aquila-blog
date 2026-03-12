@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 ## 현재 상태 요약
 
@@ -24,6 +24,7 @@ flowchart LR
 - `416428e` `fix: harden minio upload init and surface storage errors`
 - `fb0f1cc` `feat(profile): switch admin profile upload to minio and use direct url for fast render`
 - `74d28f9` `feat(profile): manage admin role/bio from admin page and reduce site.config dependency`
+- `66bb820` `fix(back): harden login throttling and task queue processing`
 - 로컬 워킹트리 기준으로 backend는 `adapter/application` 구조로 이동 중이며, 기존 `app/in/out`와 공존하는 과도기 상태다.
 
 ## 지금 가장 중요한 운영 메모
@@ -33,15 +34,18 @@ flowchart LR
   잘못 넣으면 `URISyntaxException: Expected scheme-specific part at index 5: http:` 류의 장애가 난다.
 - `MINIO_ROOT_PASSWORD` 같은 값에 `#`가 들어가면 반드시 큰따옴표로 감싼다.
 - 프론트 SSR과 브라우저 런타임 API 주소는 각각 `BACKEND_INTERNAL_URL`, `NEXT_PUBLIC_BACKEND_URL`로 분리된다.
+- 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
+- task processor 기본값은 `60초`, batch size는 `50`이다.
 
 ## 빠른 트리아지 표
 
 | 증상 | 제일 먼저 볼 파일/지점 | 확인 포인트 |
 | --- | --- | --- |
 | 로그인 실패 | `front/src/apis/backend/client.ts` | API base URL, credentials 포함 여부 |
+| 로그인 차단이 제멋대로임 | `LoginAttemptService`, Redis 연결 | Redis TTL 키 공유 여부, fallback 여부 |
 | 관리자 401 | `ApiV1AuthController`, admin env | `me.isAdmin`, username 규칙 |
 | 글 목록 비어 있음 | `front/src/apis/backend/posts.ts` | 목록 API 응답, `published/listed` |
-| 이미지 오류 | `PostImageStorageService.kt` | endpoint, accessKey, secretKey |
+| 이미지 오류 | `back/src/main/kotlin/com/back/boundedContexts/post/adapter/out/storage/PostImageStorageAdapter.kt` | endpoint, accessKey, secretKey |
 | 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, alias, health |
 | 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/application` vs `app/in/out` 공존 여부 |
 
@@ -62,6 +66,7 @@ flowchart LR
 | `yarn build` | 프론트 프로덕션 빌드 성공 |
 | `https://api.<domain>/actuator/health` | health 응답 |
 | `/admin` | 관리자 도구 표시 및 API 정상 |
+| task backlog 존재 시 1분 후 재조회 | `PENDING` 감소 또는 `PROCESSING/COMPLETED` 증가 |
 
 ## 자주 보는 파일
 

@@ -1,6 +1,6 @@
 # DevOps
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 ## 배포 파이프라인 요약
 
@@ -76,12 +76,14 @@ GitHub Actions 기준 필수값:
 
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
+- 로그인 시도 제한은 Redis가 살아 있으면 Redis TTL 키를 사용해 인스턴스 간 상태를 공유하고, Redis가 없을 때만 인메모리 fallback을 사용한다.
 - storage 관련 값은 placeholder 치환에 의존하지 말고 완성된 문자열로 넣어야 한다.
   예: `CUSTOM_STORAGE_SECRETKEY=${MINIO_ROOT_PASSWORD}` 금지, 실제 비밀번호 문자열 사용.
 - `#`가 들어가는 값은 반드시 큰따옴표로 감싼다.
   예: `MINIO_ROOT_PASSWORD="V7#qL2m@9Tz!4xRb8KpD"`
 - `CUSTOM_STORAGE_ENDPOINT`는 `http://minio_1:9000` 같은 완성된 URI여야 한다.
 - 배포 스크립트는 이제 `http:` 같은 깨진 endpoint나 `${...}` placeholder가 남아 있으면 즉시 실패시킨다.
+- task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
 
 ## Blue/Green 전환 원칙
 
@@ -109,6 +111,7 @@ sequenceDiagram
 | 단계 | 검증 내용 | 실패 시 |
 | --- | --- | --- |
 | storage env 검사 | endpoint, secret placeholder 확인 | 배포 중단 |
+| auth throttle 확인 | Redis 연결 및 TTL 키 동작 | brute-force 완화 불능 |
 | 신규 backend 기동 | 컨테이너 실행/헬스체크 | cutover 전 중단 |
 | alias 전환 | `back_active` IP 일치 여부 | rollback 시도 |
 | Caddy 경유 검증 | `Host` 헤더 기반 health 확인 | rollback 시도 |
@@ -118,7 +121,9 @@ sequenceDiagram
 
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
 - 프론트 로그인/회원가입/API 쿠키 흐름 확인
+- 연속 로그인 실패 시 차단 상태가 인스턴스 간 일관되게 유지되는지 확인
 - 관리자 페이지의 글 목록, 글 발행, 서버 상태 조회 확인
+- task backlog가 있으면 1분 내 `PENDING -> PROCESSING/COMPLETED`로 이동하는지 확인
 - 관리자 프로필 이미지/글 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
 - Cloudflare Tunnel이 `caddy:80`으로 정상 연결되는지 확인
 

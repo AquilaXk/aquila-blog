@@ -102,11 +102,12 @@ const StyledWrapper = styled.header`
 
   .title {
     margin: 0;
-    font-size: clamp(2.5rem, 5vw, 4.4rem);
-    line-height: 1.12;
-    letter-spacing: -0.05em;
-    font-weight: 800;
+    font-size: clamp(2rem, 4.2vw, 3.2rem);
+    line-height: 1.18;
+    letter-spacing: -0.035em;
+    font-weight: 780;
     color: ${({ theme }) => theme.colors.gray12};
+    max-width: 18ch;
   }
 
   .metaRow {
@@ -196,7 +197,8 @@ const StyledWrapper = styled.header`
     }
 
     .title {
-      font-size: clamp(2rem, 10vw, 3rem);
+      font-size: clamp(1.8rem, 8vw, 2.4rem);
+      line-height: 1.2;
     }
 
     .metaRow {

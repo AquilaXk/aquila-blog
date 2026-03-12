@@ -1,6 +1,9 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
 import React from "react"
+import { DEFAULT_CATEGORY } from "src/constants"
+import { replaceShallowRoutePreservingScroll } from "src/libs/router"
+import { normalizeCategoryValue } from "src/libs/utils"
 
 type Props = {
   children: string
@@ -12,7 +15,10 @@ const Tag: React.FC<Props> = ({ children }) => {
   const buildFeedQuery = () => {
     const query: Record<string, string> = { tag: children }
     if (router.query.category && typeof router.query.category === "string") {
-      query.category = router.query.category
+      const normalizedCategory = normalizeCategoryValue(router.query.category)
+      if (normalizedCategory !== DEFAULT_CATEGORY) {
+        query.category = normalizedCategory
+      }
     }
     if (
       router.query.order &&
@@ -26,14 +32,10 @@ const Tag: React.FC<Props> = ({ children }) => {
   const handleClick = (event?: React.SyntheticEvent) => {
     event?.preventDefault()
     event?.stopPropagation()
-    router.push(
-      {
-        pathname: "/",
-        query: buildFeedQuery(),
-      },
-      undefined,
-      { shallow: true, scroll: false }
-    )
+    replaceShallowRoutePreservingScroll(router, {
+      pathname: "/",
+      query: buildFeedQuery(),
+    })
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {

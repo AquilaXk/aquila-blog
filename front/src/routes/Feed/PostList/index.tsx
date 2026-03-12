@@ -1,8 +1,10 @@
 import { useRouter } from "next/router"
 import React, { useMemo } from "react"
+import styled from "@emotion/styled"
 import PostCard from "src/routes/Feed/PostList/PostCard"
 import { DEFAULT_CATEGORY } from "src/constants"
 import usePostsQuery from "src/hooks/usePostsQuery"
+import { normalizeCategoryValue } from "src/libs/utils"
 import { filterPosts } from "./filterPosts"
 
 type Props = {
@@ -17,7 +19,7 @@ const PostList: React.FC<Props> = ({ q }) => {
     typeof router.query.tag === "string" ? router.query.tag : undefined
   const currentCategory =
     typeof router.query.category === "string"
-      ? router.query.category
+      ? normalizeCategoryValue(router.query.category)
       : DEFAULT_CATEGORY
   const currentOrder =
     router.query.order === "asc" || router.query.order === "desc"
@@ -37,17 +39,24 @@ const PostList: React.FC<Props> = ({ q }) => {
   )
 
   return (
-    <>
-      <div className="my-2">
-        {!filteredPosts.length && (
-          <p className="text-gray-500 dark:text-gray-300">Nothing! 😺</p>
-        )}
-        {filteredPosts.map((post) => (
-          <PostCard key={post.id} data={post} />
-        ))}
-      </div>
-    </>
+    <StyledWrapper>
+      {!filteredPosts.length && (
+        <p className="empty">Nothing! 😺</p>
+      )}
+      {filteredPosts.map((post) => (
+        <PostCard key={post.id} data={post} />
+      ))}
+    </StyledWrapper>
   )
 }
 
 export default PostList
+
+const StyledWrapper = styled.div`
+  margin: 0.5rem 0;
+  overflow-anchor: none;
+
+  .empty {
+    color: ${({ theme }) => theme.colors.gray10};
+  }
+`

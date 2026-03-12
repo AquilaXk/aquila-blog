@@ -1,6 +1,7 @@
 import { useRouter } from "next/router"
 import React from "react"
-import { Emoji } from "src/components/Emoji"
+import CategoryIcon from "src/components/CategoryIcon"
+import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { splitCategoryDisplay } from "src/libs/utils"
 import { COLOR_SET } from "./constants"
 import styled from "@emotion/styled"
@@ -34,12 +35,12 @@ type Props = {
 
 const Category: React.FC<Props> = ({ readOnly = false, children }) => {
   const router = useRouter()
-  const { emoji, label } = splitCategoryDisplay(children)
+  const { iconId, label, value } = splitCategoryDisplay(children)
   const backgroundColor = getColorClassByName(label || children)
   const textColor = getReadableTextColor(backgroundColor)
 
   const buildFeedQuery = () => {
-    const query: Record<string, string> = { category: children }
+    const query: Record<string, string> = { category: value }
     if (router.query.tag && typeof router.query.tag === "string") {
       query.tag = router.query.tag
     }
@@ -56,14 +57,10 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
     if (readOnly) return
     event?.preventDefault()
     event?.stopPropagation()
-    router.push(
-      {
-        pathname: "/",
-        query: buildFeedQuery(),
-      },
-      undefined,
-      { shallow: true, scroll: false }
-    )
+    replaceShallowRoutePreservingScroll(router, {
+      pathname: "/",
+      query: buildFeedQuery(),
+    })
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
@@ -78,18 +75,14 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
       tabIndex={readOnly ? undefined : 0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      aria-label={readOnly ? undefined : `Filter by category: ${children}`}
+      aria-label={readOnly ? undefined : `Filter by category: ${label || children}`}
       css={{
         backgroundColor,
         color: textColor,
         cursor: readOnly ? "default" : "pointer",
       }}
     >
-      {emoji && (
-        <span className="emoji">
-          <Emoji>{emoji}</Emoji>
-        </span>
-      )}
+      <CategoryIcon iconId={iconId} className="categoryIcon" />
       <span className="label">{label || children}</span>
     </StyledWrapper>
   )
@@ -112,7 +105,7 @@ const StyledWrapper = styled.span`
   opacity: 0.9;
   color: inherit;
 
-  > .emoji {
+  > .categoryIcon {
     display: inline-flex;
     align-items: center;
     justify-content: center;

@@ -1,4 +1,5 @@
 import { PostDetail, TPost } from "src/types"
+import { normalizeCategoryValue } from "src/libs/utils"
 import { apiFetch } from "./client"
 
 type PageDto<T> = {
@@ -94,7 +95,7 @@ const parsePostMeta = (content: string): ParsedPostMeta => {
     })
   }
   const pushCategories = (items: string[]) => {
-    items.forEach((item) => {
+    items.map(normalizeCategoryValue).forEach((item) => {
       if (!categories.includes(item)) categories.push(item)
     })
   }
@@ -174,6 +175,9 @@ const normalizeStringArray = (value?: string[]) => {
   )
 }
 
+const normalizeCategoryArray = (value?: string[]) =>
+  normalizeStringArray(value).map(normalizeCategoryValue)
+
 const mapPostDto = (post: ApiPostDto): TPost => ({
   id: String(post.id),
   date: { start_date: post.createdAt.slice(0, 10) },
@@ -191,8 +195,8 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
   ...(normalizeStringArray(post.tags).length > 0
     ? { tags: normalizeStringArray(post.tags) }
     : {}),
-  ...(normalizeStringArray(post.category).length > 0
-    ? { category: normalizeStringArray(post.category) }
+  ...(normalizeCategoryArray(post.category).length > 0
+    ? { category: normalizeCategoryArray(post.category) }
     : {}),
   status: toStatus(post.published, post.listed),
   createdTime: post.createdAt,
@@ -203,7 +207,7 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
 const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
   const parsed = parsePostMeta(post.content)
   const dtoTags = normalizeStringArray(post.tags)
-  const dtoCategories = normalizeStringArray(post.category)
+  const dtoCategories = normalizeCategoryArray(post.category)
   const tags = dtoTags.length > 0 ? dtoTags : parsed.tags
   const category = dtoCategories.length > 0 ? dtoCategories : parsed.category
   const normalizedContent = parsed.content

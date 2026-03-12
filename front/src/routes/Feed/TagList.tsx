@@ -1,8 +1,9 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
 import React from "react"
-import { Emoji } from "src/components/Emoji"
+import { HiOutlineTag } from "react-icons/hi"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
+import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {}
 
@@ -15,38 +16,30 @@ const TagList: React.FC<Props> = () => {
   const handleClickTag = (value: string) => {
     // delete
     if (currentTag === value) {
-      router.push(
-        {
-          pathname: "/",
-          query: {
-            ...router.query,
-            tag: undefined,
-          },
+      replaceShallowRoutePreservingScroll(router, {
+        pathname: "/",
+        query: {
+          ...router.query,
+          tag: undefined,
         },
-        undefined,
-        { shallow: true, scroll: false }
-      )
+      })
     }
     // add
     else {
-      router.push(
-        {
-          pathname: "/",
-          query: {
-            ...router.query,
-            tag: value,
-          },
+      replaceShallowRoutePreservingScroll(router, {
+        pathname: "/",
+        query: {
+          ...router.query,
+          tag: value,
         },
-        undefined,
-        { shallow: true, scroll: false }
-      )
+      })
     }
   }
 
   return (
     <StyledWrapper>
       <div className="top">
-        <Emoji>🏷️</Emoji> Tags
+        <HiOutlineTag aria-hidden="true" /> Tags
       </div>
       <div className="list">
         {Object.keys(data).map((key) => (
@@ -73,9 +66,11 @@ const StyledWrapper = styled.div`
     display: none;
     padding: 0.25rem;
     margin-bottom: 0.75rem;
+    align-items: center;
+    gap: 0.35rem;
 
     @media (min-width: 1024px) {
-      display: block;
+      display: inline-flex;
     }
   }
 

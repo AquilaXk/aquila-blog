@@ -8,6 +8,7 @@ import MetaConfig from "src/components/MetaConfig"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { createQueryClient } from "src/libs/react-query"
+import { queryKey } from "src/constants/queryKey"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import { NextPageWithLayout } from "../types"
 
@@ -40,11 +41,12 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
   const initialAdminProfile = await fetchAdminProfile(req)
   await hydrateServerAuthSession(queryClient, req)
+  queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
 
   res.setHeader(
     "Cache-Control",
     initialAdminProfile
-      ? "public, s-maxage=30, stale-while-revalidate=120"
+      ? "public, s-maxage=10, stale-while-revalidate=30"
       : "private, no-store"
   )
 

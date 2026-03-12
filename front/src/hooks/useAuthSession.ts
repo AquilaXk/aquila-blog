@@ -46,16 +46,15 @@ const useAuthSession = () => {
   }
 
   const me = query.data ?? null
+  const hasResolvedSnapshot = query.status === "success" || query.data !== undefined
   const authStatus: AuthSessionStatus =
-    !isClient
-      ? "loading"
+    query.isError
+      ? "unavailable"
       : me
         ? "authenticated"
-        : query.isLoading
-          ? "loading"
-          : query.isError
-            ? "unavailable"
-            : "anonymous"
+        : hasResolvedSnapshot
+          ? "anonymous"
+          : "loading"
 
   const logout = async () => {
     try {

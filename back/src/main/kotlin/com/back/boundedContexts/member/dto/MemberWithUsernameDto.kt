@@ -24,8 +24,8 @@ data class MemberWithUsernameDto(
         username = member.username,
         name = member.name,
         nickname = member.nickname,
-        profileImageUrl = member.redirectToProfileImgUrlOrDefault,
-        profileImageDirectUrl = member.profileImgUrlOrDefault,
+        profileImageUrl = member.redirectToProfileImgUrlVersionedOrDefault,
+        profileImageDirectUrl = member.profileImgUrlVersionedOrDefault,
         profileRole = member.profileRole,
         profileBio = member.profileBio,
     )

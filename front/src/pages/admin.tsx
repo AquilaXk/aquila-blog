@@ -1,11 +1,12 @@
 import styled from "@emotion/styled"
-import { dehydrate } from "@tanstack/react-query"
+import { dehydrate, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 import useAuthSession from "src/hooks/useAuthSession"
+import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import { createQueryClient } from "src/libs/react-query"
 import { CATEGORY_EMOJI_OPTIONS, composeCategoryDisplay, splitCategoryDisplay } from "src/libs/utils"
 import { isNavigationCancelledError } from "src/libs/router"
@@ -437,6 +438,7 @@ type AdminPageProps = {
 
 const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { me, authStatus, setMe, refresh, logout } = useAuthSession()
   const sessionMember = me ?? initialMember
   const [result, setResult] = useState<string>("")
@@ -512,8 +514,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const syncProfileState = useCallback((member: MemberMe) => {
     setMe(member)
+    setAdminProfileCache(queryClient, toAdminProfile(member))
     applyProfileState(member)
-  }, [applyProfileState, setMe])
+  }, [applyProfileState, queryClient, setMe])
 
   const refreshAdminProfile = useCallback(async (memberId: number, fallback?: MemberMe) => {
     try {

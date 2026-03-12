@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react"
+import { QueryClient, useQuery } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
+import { queryKey } from "src/constants/queryKey"
 
 export type AdminProfile = {
   username: string
@@ -11,35 +12,40 @@ export type AdminProfile = {
   profileBio?: string
 }
 
+type AdminProfileLike = {
+  username: string
+  name?: string
+  nickname?: string
+  profileImageUrl?: string
+  profileImageDirectUrl?: string
+  profileRole?: string
+  profileBio?: string
+}
+
+export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
+  username: value.username,
+  name: value.name || value.nickname || value.username,
+  nickname: value.nickname || value.name || value.username,
+  profileImageUrl: value.profileImageUrl || "",
+  profileImageDirectUrl: value.profileImageDirectUrl,
+  profileRole: value.profileRole,
+  profileBio: value.profileBio,
+})
+
+export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminProfile | null) => {
+  queryClient.setQueryData(queryKey.adminProfile(), profile)
+}
+
 export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
-  const [profile, setProfile] = useState<AdminProfile | null>(initialProfile)
+  const query = useQuery<AdminProfile | null>({
+    queryKey: queryKey.adminProfile(),
+    queryFn: async () => await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile"),
+    initialData: initialProfile,
+    staleTime: initialProfile ? 60 * 1000 : 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: !initialProfile,
+  })
 
-  useEffect(() => {
-    if (initialProfile) {
-      setProfile(initialProfile)
-      return
-    }
-
-    let mounted = true
-
-    const load = async () => {
-      try {
-        const data = await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
-        if (!mounted) return
-        setProfile(data)
-      } catch {
-        if (!mounted) return
-        // 공개 프로필 재조회가 일시 실패하더라도 마지막 정상값은 유지한다.
-        setProfile((current) => current ?? initialProfile)
-      }
-    }
-
-    void load()
-
-    return () => {
-      mounted = false
-    }
-  }, [initialProfile])
-
-  return profile ?? initialProfile
+  return query.data ?? initialProfile
 }

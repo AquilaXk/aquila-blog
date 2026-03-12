@@ -63,7 +63,7 @@ class ApiV1AuthControllerTest {
                 jsonPath("$.data.item.modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                 jsonPath("$.data.item.isAdmin") { value(member.isAdmin) }
                 jsonPath("$.data.item.name") { value(member.name) }
-                jsonPath("$.data.item.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                jsonPath("$.data.item.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
             }
 
             val result = resultActions.andReturn()
@@ -214,7 +214,7 @@ class ApiV1AuthControllerTest {
                     jsonPath("$.username") { value(member.username) }
                     jsonPath("$.name") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
-                    jsonPath("$.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                    jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                 }
         }
 
@@ -260,7 +260,7 @@ class ApiV1AuthControllerTest {
                         jsonPath("$.username") { value(member.username) }
                         jsonPath("$.name") { value(member.name) }
                         jsonPath("$.nickname") { value(member.nickname) }
-                        jsonPath("$.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                        jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                     }
 
             val result = resultActions.andReturn()
@@ -295,7 +295,7 @@ class ApiV1AuthControllerTest {
                         jsonPath("$.username") { value(member.username) }
                         jsonPath("$.name") { value(member.name) }
                         jsonPath("$.nickname") { value(member.nickname) }
-                        jsonPath("$.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                        jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                     }
 
             val result = resultActions.andReturn()
@@ -319,7 +319,7 @@ class ApiV1AuthControllerTest {
                     jsonPath("$.id") { value(member.id) }
                     jsonPath("$.username") { value(member.username) }
                     jsonPath("$.nickname") { value(member.nickname) }
-                    jsonPath("$.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                    jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                 }
         }
     }

@@ -22,6 +22,6 @@ data class MemberDto
             modifiedAt = member.modifiedAt,
             isAdmin = member.isAdmin,
             name = member.name,
-            profileImageUrl = member.redirectToProfileImgUrlOrDefault,
+            profileImageUrl = member.redirectToProfileImgUrlVersionedOrDefault,
         )
     }

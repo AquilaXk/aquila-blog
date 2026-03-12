@@ -48,7 +48,7 @@ class ApiV1MemberControllerTest {
                     match(handler().methodName("getAdminProfile"))
                     jsonPath("$.username") { value(adminMember.username) }
                     jsonPath("$.nickname") { value(adminMember.nickname) }
-                    jsonPath("$.profileImageUrl") { value(adminMember.redirectToProfileImgUrlOrDefault) }
+                    jsonPath("$.profileImageUrl") { value(startsWith(adminMember.redirectToProfileImgUrlOrDefault)) }
                 }
         }
     }
@@ -159,7 +159,7 @@ class ApiV1MemberControllerTest {
                     jsonPath("$.data.modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                     jsonPath("$.data.isAdmin") { value(member.isAdmin) }
                     jsonPath("$.data.name") { value(member.name) }
-                    jsonPath("$.data.profileImageUrl") { value(member.redirectToProfileImgUrlOrDefault) }
+                    jsonPath("$.data.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                 }
             }
         }

@@ -44,13 +44,14 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
     fetchAdminProfile(req),
   ])
   await hydrateServerAuthSession(queryClient, req)
+  queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
   // 프로필 조회 실패 시 fallback HTML을 CDN에 캐시하지 않도록 한다.
   res.setHeader(
     "Cache-Control",
     initialAdminProfile
-      ? "public, s-maxage=30, stale-while-revalidate=120"
+      ? "public, s-maxage=10, stale-while-revalidate=30"
       : "private, no-store"
   )
 

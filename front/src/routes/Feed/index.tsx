@@ -181,7 +181,7 @@ const ExplorerCard = styled.section`
   border-radius: 22px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 1rem 1rem 0.2rem;
+  padding: 0.9rem 0.9rem 0.2rem;
   min-width: 0;
   overflow: clip;
 
@@ -191,5 +191,9 @@ const ExplorerCard = styled.section`
     @media (min-width: 1024px) {
       display: none;
     }
+  }
+
+  @media (max-width: 768px) {
+    padding: 0.8rem 0.8rem 0.15rem;
   }
 `

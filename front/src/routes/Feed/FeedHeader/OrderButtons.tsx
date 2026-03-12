@@ -48,22 +48,22 @@ export default OrderButtons
 
 const StyledWrapper = styled.div`
   display: flex;
-  gap: 0.45rem;
+  gap: 0.18rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
   flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
+  padding: 0.18rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
 
   @media (max-width: 900px) {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
+    width: auto;
   }
 
-  @container (max-width: 760px) {
-    display: grid;
-    grid-template-columns: 1fr;
+  @media (max-width: 640px) {
     width: 100%;
   }
 
@@ -71,13 +71,13 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 92px;
+    min-width: 96px;
     max-width: 100%;
-    min-height: 38px;
-    padding: 0 0.72rem;
+    min-height: 36px;
+    padding: 0 0.82rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
+    border: 0;
+    background: transparent;
     cursor: pointer;
     color: ${({ theme }) => theme.colors.gray10};
     transition:
@@ -88,16 +88,15 @@ const StyledWrapper = styled.div`
     &[data-active="true"] {
       font-weight: 700;
       color: ${({ theme }) => theme.colors.gray12};
-      border-color: ${({ theme }) => theme.colors.blue8};
       background: ${({ theme }) => theme.colors.blue3};
+      box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.blue8};
     }
 
     @media (max-width: 900px) {
-      width: 100%;
       min-width: 0;
     }
 
-    @container (max-width: 760px) {
+    @media (max-width: 640px) {
       width: 100%;
       min-width: 0;
     }

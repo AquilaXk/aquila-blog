@@ -12,7 +12,11 @@ interface MemberRepositoryPort {
 
     fun saveAndFlush(member: Member): Member
 
+    fun existsByEmail(email: String): Boolean
+
     fun findByUsername(username: String): Member?
+
+    fun findByEmail(email: String): Member?
 
     fun findByApiKey(apiKey: String): Member?
 

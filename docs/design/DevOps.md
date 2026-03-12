@@ -66,6 +66,20 @@ GitHub Actions 기준 필수값:
 - `HOME_GHCR_USERNAME`
 - `HOME_GHCR_TOKEN`
 
+회원가입 이메일 인증을 실제로 쓰려면 아래 값도 필요하다.
+
+- `SPRING__MAIL__HOST`
+- `SPRING__MAIL__PORT`
+- `SPRING__MAIL__USERNAME`
+- `SPRING__MAIL__PASSWORD`
+- `SPRING__MAIL__PROPERTIES__MAIL__SMTP__AUTH`
+- `SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE`
+- `CUSTOM__MEMBER__SIGNUP__MAIL_FROM`
+- `CUSTOM__MEMBER__SIGNUP__MAIL_SUBJECT`
+- `CUSTOM__MEMBER__SIGNUP__VERIFY_PATH`
+- `CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS`
+- `CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS`
+
 ## Secret 책임 표
 
 | Secret | 사용 위치 | 책임 |
@@ -124,6 +138,8 @@ sequenceDiagram
 ## 운영 체크리스트
 
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
+- `GET /system/api/v1/adm/mail/signup`으로 회원가입 메일 준비 상태 확인
+- 필요 시 `POST /system/api/v1/adm/mail/signup/test`로 테스트 메일 1통 발송
 - 프론트 로그인/회원가입/API 쿠키 흐름 확인
 - 연속 로그인 실패 시 차단 상태가 인스턴스 간 일관되게 유지되는지 확인
 - 관리자 페이지의 글 목록, 글 발행, 서버 상태 조회 확인
@@ -151,6 +167,7 @@ sequenceDiagram
 | 프론트 로그인 실패 | 브라우저 네트워크 탭 | CORS, cookie domain, `/auth/me` 확인 |
 | API 502 | Caddy 로그, active alias | backend 컨테이너/resolve 확인 |
 | 배포 중 restart loop | backend 로그 | env, DB, Redis, MinIO 연결 확인 |
+| 회원가입 메일이 안 감 | `/system/api/v1/adm/mail/signup` | SMTP host/from/username/password, 연결 여부 확인 |
 | 글 발행 후 반영 안 됨 | 목록 API 응답, 캐시 헤더, revalidate hook | `/post/api/v1/posts`, `Cache-Control`, `/api/revalidate` 확인 |
 
 ## 로컬/서버에서 자주 쓰는 명령

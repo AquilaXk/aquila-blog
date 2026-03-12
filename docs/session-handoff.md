@@ -40,6 +40,7 @@ flowchart LR
 - 프론트 SSR과 브라우저 런타임 API 주소는 각각 `BACKEND_INTERNAL_URL`, `NEXT_PUBLIC_BACKEND_URL`로 분리된다.
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
+- 회원가입 메일 설정은 `/system/api/v1/adm/mail/signup`에서 준비 상태를 바로 볼 수 있다.
 
 ## 빠른 트리아지 표
 
@@ -56,10 +57,11 @@ flowchart LR
 ## 빠른 점검 포인트
 
 1. `https://api.<domain>/actuator/health`
-2. 프론트 로그인 후 `/member/api/v1/auth/me`
-3. 관리자 페이지에서 글 발행
-4. 메인 페이지 목록 반영
-5. 이미지 업로드와 프로필 이미지 표시
+2. `/system/api/v1/adm/mail/signup`
+3. 프론트 로그인 후 `/member/api/v1/auth/me`
+4. 관리자 페이지에서 글 발행
+5. 메인 페이지 목록 반영
+6. 이미지 업로드와 프로필 이미지 표시
 
 ## 점검 명령과 성공 기준
 

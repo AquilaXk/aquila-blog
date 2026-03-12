@@ -10,7 +10,7 @@
 | Backend | Spring Boot 4, Kotlin, JPA, PostgreSQL |
 | Infra | Vercel, Home Server, Docker Compose, Caddy, Cloudflare Tunnel |
 | Storage | PostgreSQL, Redis, MinIO |
-| Auth | ID/PW 로그인, Kakao OAuth, Cookie 기반 세션 |
+| Auth | ID/PW 로그인, Kakao OAuth, 이메일 인증 회원가입, Cookie 기반 세션 |
 | Deployment | GitHub Actions + GHCR + Blue/Green Deploy |
 
 ## Why This Project Exists
@@ -29,6 +29,7 @@
 - Markdown 기반 글 상세 페이지
 - 댓글, 좋아요, 조회수
 - 일반 로그인과 Kakao OAuth 로그인
+- 이메일 인증 기반 회원가입
 - 관리자 프로필, 글 작성, 운영 도구
 
 ### 운영 관점

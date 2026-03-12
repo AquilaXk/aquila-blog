@@ -48,6 +48,8 @@ class Member(
     var password: String? = null,
     @field:Column(nullable = false)
     var nickname: String,
+    @field:Column(unique = true, nullable = true)
+    var email: String? = null,
     @field:Column(unique = true, nullable = false)
     var apiKey: String,
 ) : BaseTime(id),
@@ -55,15 +57,35 @@ class Member(
     MemberHasSecurity,
     MemberHasProfileImgUrl,
     MemberHasProfileCard {
-    constructor(id: Int, username: String, password: String?, nickname: String) : this(
-        id,
-        username,
-        password,
-        nickname,
-        MemberPolicy.genApiKey(),
-    )
+    constructor(
+        id: Int,
+        username: String,
+        password: String?,
+        nickname: String,
+        email: String?,
+    ) : this(
+            id,
+            username,
+            password,
+            nickname,
+            email,
+            MemberPolicy.genApiKey(),
+        )
 
-    internal constructor(id: Int) : this(id, "", null, "", "")
+    constructor(
+        id: Int,
+        username: String,
+        password: String?,
+        nickname: String,
+    ) : this(
+            id,
+            username,
+            password,
+            nickname,
+            null,
+        )
+
+    internal constructor(id: Int) : this(id, "", null, "", null, "")
 
     @field:Column
     var deletedAt: Instant? = null

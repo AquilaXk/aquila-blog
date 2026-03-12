@@ -16,6 +16,8 @@ type AuthShellProps = {
   tips?: string[]
   footer: ReactNode
   children: ReactNode
+  loginHref?: string
+  signupHref?: string
 }
 
 const AuthShell = ({
@@ -24,6 +26,8 @@ const AuthShell = ({
   subtitle,
   footer,
   children,
+  loginHref = "/login",
+  signupHref = "/signup",
 }: AuthShellProps) => {
   return (
     <Main>
@@ -39,11 +43,11 @@ const AuthShell = ({
             {activeTab === "login" ? (
               <>
                 <ActiveTab>로그인</ActiveTab>
-                <PassiveTab href="/signup">회원가입</PassiveTab>
+                <PassiveTab href={signupHref}>회원가입</PassiveTab>
               </>
             ) : (
               <>
-                <PassiveTab href="/login">로그인</PassiveTab>
+                <PassiveTab href={loginHref}>로그인</PassiveTab>
                 <ActiveTab>회원가입</ActiveTab>
               </>
             )}

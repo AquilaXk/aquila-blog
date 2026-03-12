@@ -1,14 +1,21 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
+import { useMemo, useState } from "react"
+import AuthEntryModal from "src/components/auth/AuthEntryModal"
 import useAuthSession from "src/hooks/useAuthSession"
 import { isNavigationCancelledError } from "src/libs/router"
 
 const NavBar: React.FC = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
+  const [authModalOpen, setAuthModalOpen] = useState(false)
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
+  const nextPath = useMemo(() => {
+    if (!router.asPath || !router.asPath.startsWith("/")) return "/"
+    return router.asPath
+  }, [router.asPath])
 
   const handleLogout = async () => {
     await logout()
@@ -40,18 +47,12 @@ const NavBar: React.FC = () => {
         {authStatus === "loading" && (
           <>
             <span className="authSkeleton short" />
-            <span className="authSkeleton medium" />
           </>
         )}
         {authStatus === "anonymous" && (
-          <>
-            <Link href="/login" className="navPill">
-              Login
-            </Link>
-            <Link href="/signup" className="navPill">
-              Signup
-            </Link>
-          </>
+          <button type="button" className="navPill" onClick={() => setAuthModalOpen(true)}>
+            Login
+          </button>
         )}
         {authStatus === "unavailable" && !me && <span className="authNotice">Auth unavailable</span>}
         {authStatus === "authenticated" && me?.isAdmin && (
@@ -68,6 +69,15 @@ const NavBar: React.FC = () => {
           </>
         )}
       </div>
+      <AuthEntryModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        nextPath={nextPath}
+        title="로그인"
+        description="로그인 후 지금 보고 있는 화면으로 바로 돌아옵니다."
+        visualTitle="환영합니다!"
+        visualDescription="로그인하면 댓글 작성, 관리자 화면, 개인 기능을 같은 흐름 안에서 바로 이어서 사용할 수 있습니다."
+      />
     </StyledWrapper>
   )
 }

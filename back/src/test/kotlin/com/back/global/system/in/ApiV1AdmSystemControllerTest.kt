@@ -12,6 +12,7 @@ import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import org.springframework.transaction.annotation.Transactional
 
 @ActiveProfiles("test")
@@ -49,7 +50,38 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.version") { isString() }
             jsonPath("$.checks.db") { value("UP") }
             jsonPath("$.checks.redis") { value(anyOf(equalTo("UP"), equalTo("SKIPPED"))) }
+            jsonPath("$.checks.signupMail") { value(anyOf(equalTo("TEST_MODE"), equalTo("READY"), equalTo("MISCONFIGURED"))) }
         }
+    }
+
+    @Test
+    @WithUserDetails("admin")
+    fun `관리자는 회원가입 메일 진단 상태를 조회할 수 있다`() {
+        mvc.get("/system/api/v1/adm/mail/signup").andExpect {
+            status { isOk() }
+            jsonPath("$.status") { value(anyOf(equalTo("TEST_MODE"), equalTo("READY"), equalTo("MISCONFIGURED"))) }
+            jsonPath("$.adapter") { isString() }
+            jsonPath("$.verifyPath") { value("/signup/verify") }
+        }
+    }
+
+    @Test
+    @WithUserDetails("admin")
+    fun `관리자는 회원가입 테스트 메일 발송을 요청할 수 있다`() {
+        mvc
+            .post("/system/api/v1/adm/mail/signup/test") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "email": "tester@example.com"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isAccepted() }
+                jsonPath("$.resultCode") { value("202-3") }
+                jsonPath("$.data.email") { value("tester@example.com") }
+            }
     }
 
     @Test

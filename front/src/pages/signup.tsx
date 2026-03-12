@@ -1,8 +1,9 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { FormEvent, useState } from "react"
-import { apiFetch } from "src/apis/backend/client"
+import { FormEvent, useMemo, useState } from "react"
+import { RiKakaoTalkFill } from "react-icons/ri"
+import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
 
 type RsData<T> = {
@@ -11,40 +12,35 @@ type RsData<T> = {
   data: T
 }
 
+type SignupEmailStartResult = {
+  email: string
+}
+
 const SignupPage = () => {
   const router = useRouter()
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
-  const [passwordConfirm, setPasswordConfirm] = useState("")
-  const [nickname, setNickname] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
+  const next = useMemo(() => {
+    const raw = router.query.next
+    const value = Array.isArray(raw) ? raw[0] : raw
+    if (!value || !value.startsWith("/")) return "/"
+    return value
+  }, [router.query.next])
+
+  const [email, setEmail] = useState("")
+  const [sentEmail, setSentEmail] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,64}$/
 
-  const passwordChecks = [
-    { label: "8~64자", ok: password.length >= 8 && password.length <= 64 },
-    { label: "대문자", ok: /[A-Z]/.test(password) },
-    { label: "소문자", ok: /[a-z]/.test(password) },
-    { label: "숫자", ok: /\d/.test(password) },
-    { label: "특수문자", ok: /[^A-Za-z0-9]/.test(password) },
-  ]
+  const kakaoAuthUrl = useMemo(() => {
+    if (typeof window === "undefined") return ""
+    const redirectUrl = `${window.location.origin}${next}`
+    return `${getApiBaseUrl()}/oauth2/authorization/kakao?redirectUrl=${encodeURIComponent(redirectUrl)}`
+  }, [next])
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
 
-    if (!username.trim() || !password.trim() || !passwordConfirm.trim() || !nickname.trim()) {
-      setError("아이디, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.")
-      return
-    }
-
-    if (!passwordRule.test(password)) {
-      setError("비밀번호는 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다.")
-      return
-    }
-
-    if (password !== passwordConfirm) {
-      setError("비밀번호와 비밀번호 확인이 일치하지 않습니다.")
+    if (!email.trim()) {
+      setError("이메일을 입력해주세요.")
       return
     }
 
@@ -52,17 +48,20 @@ const SignupPage = () => {
     setError("")
 
     try {
-      await apiFetch<RsData<unknown>>("/member/api/v1/members", {
+      const response = await apiFetch<RsData<SignupEmailStartResult>>("/member/api/v1/signup/email/start", {
         method: "POST",
-        body: JSON.stringify({ username, password, nickname }),
+        body: JSON.stringify({
+          email: email.trim(),
+          nextPath: next,
+        }),
       })
-      await router.push("/login")
-    } catch (error) {
-      if (error instanceof Error) {
-        const message = error.message.split(": ").slice(1).join(": ").trim()
-        setError(message || "회원가입에 실패했습니다.")
+      setSentEmail(response.data.email)
+    } catch (signupError) {
+      if (signupError instanceof Error) {
+        const message = signupError.message.split(": ").slice(1).join(": ").trim()
+        setError(message || "회원가입 메일 전송에 실패했습니다.")
       } else {
-        setError("회원가입에 실패했습니다.")
+        setError("회원가입 메일 전송에 실패했습니다.")
       }
     } finally {
       setLoading(false)
@@ -73,112 +72,63 @@ const SignupPage = () => {
     <AuthShell
       activeTab="signup"
       title="회원가입"
-      subtitle="새 계정을 등록합니다."
+      subtitle="이메일 인증 후 아이디와 비밀번호를 등록합니다."
       eyebrow="Account Setup"
       heroTitle="회원가입"
-      heroDescription="아이디, 비밀번호, 닉네임을 입력해 계정을 만듭니다."
+      heroDescription="먼저 이메일을 확인한 뒤, 메일 안의 링크를 통해 마지막 가입 단계로 이어집니다."
       footer={
         <FooterText>
-          이미 계정이 있으면 <Link href="/login">로그인</Link>
+          이미 계정이 있으면 <Link href={`/login?next=${encodeURIComponent(next)}`}>로그인</Link>
         </FooterText>
       }
+      loginHref={`/login?next=${encodeURIComponent(next)}`}
+      signupHref={`/signup?next=${encodeURIComponent(next)}`}
     >
       <form onSubmit={onSubmit}>
         <Field>
           <FieldTop>
-            <Label htmlFor="username">아이디</Label>
-            <FieldHint>로그인 식별자</FieldHint>
+            <Label htmlFor="signup-email">이메일</Label>
+            <FieldHint>메일로 가입 링크를 보냅니다.</FieldHint>
           </FieldTop>
           <Input
-            id="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="2~30자 아이디"
-            autoComplete="username"
+            id="signup-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="이메일을 입력하세요"
+            autoComplete="email"
           />
         </Field>
 
-        <Field>
-          <FieldTop>
-            <Label htmlFor="password">비밀번호</Label>
-            <FieldHint>규칙을 만족해야 합니다.</FieldHint>
-          </FieldTop>
-          <PasswordRow>
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="안전한 비밀번호를 입력하세요"
-              autoComplete="new-password"
-            />
-            <GhostButton
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label="비밀번호 표시 전환"
-            >
-              {showPassword ? "숨기기" : "표시"}
-            </GhostButton>
-          </PasswordRow>
-          <RuleList>
-            {passwordChecks.map((rule) => (
-              <li key={rule.label} data-ok={rule.ok}>
-                {rule.label}
-              </li>
-            ))}
-          </RuleList>
-        </Field>
-
-        <Field>
-          <FieldTop>
-            <Label htmlFor="password-confirm">비밀번호 확인</Label>
-            <FieldHint>같은 값 다시 입력</FieldHint>
-          </FieldTop>
-          <PasswordRow>
-            <Input
-              id="password-confirm"
-              type={showPassword ? "text" : "password"}
-              value={passwordConfirm}
-              onChange={(e) => setPasswordConfirm(e.target.value)}
-              placeholder="비밀번호를 다시 입력하세요"
-              autoComplete="new-password"
-            />
-            <GhostButton
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label="비밀번호 표시 전환"
-            >
-              {showPassword ? "숨기기" : "표시"}
-            </GhostButton>
-          </PasswordRow>
-          <ConfirmStatus data-ok={passwordConfirm.length > 0 && password === passwordConfirm}>
-            {passwordConfirm.length === 0
-              ? "비밀번호 확인을 입력하면 일치 여부를 바로 보여줍니다."
-              : password === passwordConfirm
-                ? "비밀번호가 일치합니다."
-                : "비밀번호가 일치하지 않습니다."}
-          </ConfirmStatus>
-        </Field>
-
-        <Field>
-          <FieldTop>
-            <Label htmlFor="nickname">닉네임</Label>
-            <FieldHint>화면 표시 이름</FieldHint>
-          </FieldTop>
-          <Input
-            id="nickname"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="표시할 닉네임"
-            autoComplete="nickname"
-          />
-        </Field>
-
-        {error ? <ErrorText>{error}</ErrorText> : <InfoText>가입이 완료되면 로그인 페이지로 이동합니다.</InfoText>}
+        {error && <ErrorText>{error}</ErrorText>}
+        {!error && sentEmail && (
+          <SuccessText>
+            <strong>{sentEmail}</strong>으로 회원가입 링크를 보냈습니다. 받은편지함에서 메일을 열고 계속 진행해주세요.
+          </SuccessText>
+        )}
+        {!error && !sentEmail && <InfoText>메일 링크를 통해 이메일이 확인된 뒤에만 최종 회원가입 폼으로 이동합니다.</InfoText>}
 
         <PrimaryButton type="submit" disabled={loading}>
-          {loading ? "가입 중..." : "회원가입"}
+          {loading ? "메일 보내는 중..." : "인증 메일 보내기"}
         </PrimaryButton>
+
+        <SocialSection>
+          <span>소셜 계정으로 계속하기</span>
+          <SocialButtonRow>
+            <SocialIconButton
+              type="button"
+              disabled={!kakaoAuthUrl}
+              onClick={() => {
+                if (!kakaoAuthUrl) return
+                window.location.href = kakaoAuthUrl
+              }}
+              aria-label="카카오로 로그인"
+              title="카카오로 로그인"
+            >
+              <RiKakaoTalkFill aria-hidden="true" />
+            </SocialIconButton>
+          </SocialButtonRow>
+        </SocialSection>
       </form>
     </AuthShell>
   )
@@ -214,12 +164,6 @@ const FieldHint = styled.span`
   font-size: 0.78rem;
 `
 
-const PasswordRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.5rem;
-`
-
 const Input = styled.input`
   width: 100%;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
@@ -237,59 +181,11 @@ const Input = styled.input`
   }
 `
 
-const GhostButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 14px;
-  padding: 0.82rem 0.9rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
-  cursor: pointer;
-  white-space: nowrap;
-`
-
-const RuleList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-
-  li {
-    border-radius: 999px;
-    padding: 0.34rem 0.62rem;
-    font-size: 0.78rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-
-  li[data-ok="true"] {
-    border-color: ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
-    color: ${({ theme }) => theme.colors.green11};
-  }
-`
-
-const ConfirmStatus = styled.p`
-  margin: 0;
-  font-size: 0.8rem;
-  color: ${({ theme }) => theme.colors.gray11};
-
-  &[data-ok="true"] {
-    color: ${({ theme }) => theme.colors.green11};
-  }
-
-  &[data-ok="false"] {
-    color: ${({ theme }) => theme.colors.red11};
-  }
-`
-
 const PrimaryButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.blue9};
+  border: 1px solid ${({ theme }) => theme.colors.green8};
   border-radius: 14px;
   padding: 0.9rem 1rem;
-  background: linear-gradient(135deg, ${({ theme }) => theme.colors.blue9}, #2563eb);
+  background: linear-gradient(135deg, #10b981, #34d399);
   color: #fff;
   font-weight: 700;
   cursor: pointer;
@@ -311,6 +207,21 @@ const ErrorText = styled.p`
   line-height: 1.55;
 `
 
+const SuccessText = styled.p`
+  margin: 0;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.green7};
+  background: ${({ theme }) => theme.colors.green3};
+  color: ${({ theme }) => theme.colors.green11};
+  padding: 0.82rem 0.9rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+
+  strong {
+    word-break: break-all;
+  }
+`
+
 const InfoText = styled.p`
   margin: 0;
   border-radius: 14px;
@@ -319,9 +230,43 @@ const InfoText = styled.p`
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.82rem 0.9rem;
   font-size: 0.87rem;
-  line-height: 1.55;
 `
 
-const FooterText = styled.p`
-  margin: 0;
+const SocialSection = styled.div`
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.2rem;
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+`
+
+const SocialButtonRow = styled.div`
+  display: flex;
+  gap: 1rem;
+`
+
+const SocialIconButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  min-height: 72px;
+  border-radius: 50%;
+  border: 1px solid rgba(230, 194, 0, 0.72);
+  background: linear-gradient(180deg, #fee500, #facc15);
+  color: #241b00;
+  box-shadow: 0 10px 24px rgba(250, 204, 21, 0.18);
+
+  svg {
+    font-size: 1.95rem;
+  }
+`
+
+const FooterText = styled.div`
+  font-size: 0.9rem;
 `

@@ -37,6 +37,17 @@ spring:
             token-uri: https://kauth.kakao.com/oauth/token
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
+  mail:
+    host: ${SPRING__MAIL__HOST:}
+    port: ${SPRING__MAIL__PORT:587}
+    username: ${SPRING__MAIL__USERNAME:}
+    password: ${SPRING__MAIL__PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__AUTH:true}
+          starttls:
+            enable: ${SPRING__MAIL__PROPERTIES__MAIL__SMTP__STARTTLS__ENABLE:true}
   data:
     redis:
       host: ${custom.site.redisHost}
@@ -111,6 +122,13 @@ custom:
     dbName: "${custom.dev.dbName}"
     redisHost: "${custom.dev.redisHost}"
     redisDatabase: "${custom.dev.redisDatabase}"
+  member:
+    signup:
+      verifyPath: ${CUSTOM__MEMBER__SIGNUP__VERIFY_PATH:/signup/verify}
+      emailExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS:86400}
+      sessionExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS:3600}
+      mailFrom: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:}
+      mailSubject: ${CUSTOM__MEMBER__SIGNUP__MAIL_SUBJECT:[AquilaXk] 회원가입 이메일 인증}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"

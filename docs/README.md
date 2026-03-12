@@ -26,6 +26,9 @@ flowchart LR
 | [Infrastructure Architecture](design/Infrastructure-Architecture.md) | 실제 운영 인프라와 트래픽 흐름 | 배포/런타임 구성을 보려는 사람 |
 | [Database Design](design/Database-Design.md) | 저장소 역할 분리와 데이터 모델 | 데이터 설계를 보려는 사람 |
 | [Package Structure](design/package-structure.md) | 코드베이스 구조와 리팩터링 방향 | 코드 읽기 진입점을 찾는 사람 |
+| [Frontend Working Guide](design/Frontend-Working-Guide.md) | 프론트 UX 수정 기준과 화면별 원칙 | 프론트 화면을 계속 다듬어야 하는 사람 |
+| [Backend Auth Member Guide](design/Backend-Auth-Member-Guide.md) | 로그인/회원가입 백엔드 지원 범위와 한계 | 인증/회원 흐름을 바꾸려는 사람 |
+| [Signup Verification Working Guide](design/Signup-Verification-Working-Guide.md) | 이메일 인증 회원가입 플로우와 구현 기준 | 인증 회원가입을 이어서 다듬어야 하는 사람 |
 
 ## 2. Delivery & Operations
 
@@ -52,6 +55,16 @@ flowchart LR
 - 실제로 어떻게 검증했는가
 
 즉, 단순한 "구현 설명"보다 `의사결정 과정`과 `운영 가능한 결과물`을 보여주는 데 초점을 두고 있습니다.
+
+## Working Docs Policy
+
+아래 working guide 문서들은 일회성 메모가 아니라, 실제 구현을 진행하면서 계속 읽고 수정하는 기준 문서다.
+
+- Frontend Working Guide
+- Backend Auth Member Guide
+- Signup Verification Working Guide
+
+새 기능을 길게 다룰 필요가 생기면 `design/` 아래에 새 guide를 추가하고, 작업이 끝나면 문서 인덱스에도 함께 반영한다.
 
 ## Suggested Paths By Interest
 

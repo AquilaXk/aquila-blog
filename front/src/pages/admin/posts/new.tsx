@@ -1895,7 +1895,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <WriterAccent />
               <WriterMetaStrip>
                 <InlineTagComposer>
-                  <span className="label">태그</span>
+                  <div className="headerRow">
+                    <span className="label">태그</span>
+                    <span className="status">
+                      {postTags.length > 0 ? `${postTags.length}개 선택됨` : "선택된 태그 없음"}
+                    </span>
+                  </div>
                   <InlineTagList>
                     {postTags.length > 0 ? (
                       postTags.map((tag) => (
@@ -1907,12 +1912,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         </TagChip>
                       ))
                     ) : (
-                      <EmptyMetaText>아직 선택된 태그가 없습니다.</EmptyMetaText>
+                      <EmptyMetaText>아직 추가된 태그가 없습니다.</EmptyMetaText>
                     )}
                   </InlineTagList>
                   <InlineMetaComposer>
                     <InlineMetaInput
-                      placeholder="태그를 입력하고 Enter"
+                      placeholder="새 태그 입력 후 Enter"
                       value={tagDraft}
                       onChange={(e) => setTagDraft(e.target.value)}
                       onKeyDown={(e) => {
@@ -1923,39 +1928,41 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       }}
                     />
                     <Button type="button" onClick={() => addTagToPost(tagDraft)}>
-                      추가
+                      태그 추가
                     </Button>
                   </InlineMetaComposer>
                 </InlineTagComposer>
                 <WriterMetaActions>
-                  <MetaToggleButton
-                    type="button"
-                    data-active={activeMetaPanel === "tag"}
-                    onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
-                  >
-                    태그 선택
-                  </MetaToggleButton>
-                  <MetaToggleButton
-                    type="button"
-                    data-active={activeMetaPanel === "category"}
-                    onClick={() =>
-                      setActiveMetaPanel((prev) => (prev === "category" ? null : "category"))
-                    }
-                  >
-                    <CategoryButtonContent>
-                      {selectedCategoryText === "미선택" ? (
-                        <>
-                          <CategoryIcon iconId={CATEGORY_ICON_OPTIONS[0].id} className="categoryIcon" />
-                          <span>카테고리 선택</span>
-                        </>
-                      ) : (
-                        <>
-                          <CategoryIcon iconId={selectedCategoryParts.iconId} className="categoryIcon" />
-                          <span>{selectedCategoryParts.label}</span>
-                        </>
-                      )}
-                    </CategoryButtonContent>
-                  </MetaToggleButton>
+                  <MetaActionRow>
+                    <MetaToggleButton
+                      type="button"
+                      data-active={activeMetaPanel === "tag"}
+                      onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
+                    >
+                      태그 관리
+                    </MetaToggleButton>
+                    <MetaToggleButton
+                      type="button"
+                      data-active={activeMetaPanel === "category"}
+                      onClick={() =>
+                        setActiveMetaPanel((prev) => (prev === "category" ? null : "category"))
+                      }
+                    >
+                      <CategoryButtonContent>
+                        {selectedCategoryText === "미선택" ? (
+                          <>
+                            <CategoryIcon iconId={CATEGORY_ICON_OPTIONS[0].id} className="categoryIcon" />
+                            <span>카테고리 미선택</span>
+                          </>
+                        ) : (
+                          <>
+                            <CategoryIcon iconId={selectedCategoryParts.iconId} className="categoryIcon" />
+                            <span>{selectedCategoryParts.label}</span>
+                          </>
+                        )}
+                      </CategoryButtonContent>
+                    </MetaToggleButton>
+                  </MetaActionRow>
                   <VisibilityWrap>
                     <FieldLabel htmlFor="post-visibility">공개 범위</FieldLabel>
                     <VisibilitySelect
@@ -1967,15 +1974,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
                       <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
                     </VisibilitySelect>
+                    <FieldHelp>전체 공개만 메인 페이지 목록에 노출됩니다.</FieldHelp>
                   </VisibilityWrap>
                 </WriterMetaActions>
               </WriterMetaStrip>
             </div>
           </WriterHeader>
-          <EditorMetaRow>
-            <SmallHint>메인 페이지 노출 조건: `공개` + `목록 노출`</SmallHint>
-            <EditorContextChip>{currentPostLabel}</EditorContextChip>
-          </EditorMetaRow>
+          <EditorContextChip>{currentPostLabel}</EditorContextChip>
           <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
           {activeMetaPanel && (
             <CompactMetaPanel>
@@ -2370,19 +2375,22 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           )}
         </WorkspaceMain>
 
-        <WorkspaceAside>
-          <StickyAsideCard>
-            <AsideHeader>
-              <div>
-                <SectionEyebrow>Console</SectionEyebrow>
-                <h2>최근 API 응답</h2>
-              </div>
-              <span>{loadingKey ? `실행 중: ${loadingKey}` : "대기 중"}</span>
-            </AsideHeader>
-            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
-          </StickyAsideCard>
-        </WorkspaceAside>
       </WorkspaceGrid>
+
+      {(loadingKey || result) && (
+        <DevConsoleSection>
+          <details open={Boolean(loadingKey)}>
+            <summary>
+              <div>
+                <SectionEyebrow>Developer Console</SectionEyebrow>
+                <strong>{loadingKey ? "작업 응답 확인 중" : "최근 작업 응답 보기"}</strong>
+              </div>
+              <span>{loadingKey ? `실행 중: ${loadingKey}` : "접어서 숨길 수 있습니다"}</span>
+            </summary>
+            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
+          </details>
+        </DevConsoleSection>
+      )}
     </Main>
   )
 }
@@ -2504,54 +2512,11 @@ const ActionCluster = styled.div`
 `
 
 const WorkspaceGrid = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 1rem;
-
-  @media (max-width: 1180px) {
-    grid-template-columns: 1fr;
-  }
+  display: block;
 `
 
 const WorkspaceMain = styled.div`
   min-width: 0;
-`
-
-const WorkspaceAside = styled.aside`
-  min-width: 0;
-`
-
-const StickyAsideCard = styled.section`
-  position: sticky;
-  top: 1rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 1rem;
-
-  @media (max-width: 1180px) {
-    position: static;
-  }
-`
-
-const AsideHeader = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-
-  h2 {
-    margin: 0.2rem 0 0;
-    font-size: 1rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
-    white-space: nowrap;
-  }
 `
 
 const Section = styled.section`
@@ -2905,12 +2870,6 @@ const TitleInput = styled(Input)`
   }
 `
 
-const SmallHint = styled.p`
-  margin: 0;
-  font-size: 0.76rem;
-  color: ${({ theme }) => theme.colors.gray11};
-`
-
 const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray8};
   border-radius: 999px;
@@ -3002,9 +2961,9 @@ const WriterAccent = styled.div`
 
 const WriterMetaStrip = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.44fr);
   gap: 1rem;
-  align-items: end;
+  align-items: start;
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -3020,6 +2979,20 @@ const InlineTagComposer = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.88rem;
     font-weight: 700;
+  }
+
+  .headerRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .status {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.78rem;
+    font-weight: 600;
   }
 `
 
@@ -3048,15 +3021,20 @@ const InlineMetaInput = styled(Input)`
 `
 
 const WriterMetaActions = styled.div`
-  display: flex;
-  align-items: end;
-  gap: 0.65rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  gap: 0.72rem;
+  justify-items: stretch;
+  align-content: start;
 
   @media (max-width: 980px) {
-    justify-content: flex-start;
+    justify-items: stretch;
   }
+`
+
+const MetaActionRow = styled.div`
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 `
 
 const MetaToggleButton = styled.button`
@@ -3103,15 +3081,6 @@ const CategoryButtonContent = styled.span`
   }
 `
 
-const EditorMetaRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.7rem;
-`
-
 const EditorContextChip = styled.span`
   display: inline-flex;
   align-items: center;
@@ -3122,6 +3091,13 @@ const EditorContextChip = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.76rem;
   font-weight: 600;
+  margin-bottom: 0.65rem;
+`
+
+const FieldHelp = styled.span`
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.76rem;
+  line-height: 1.5;
 `
 
 const PublishNotice = styled.div`
@@ -4017,4 +3993,58 @@ const ResultPanel = styled.pre`
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 160px;
+`
+
+const DevConsoleSection = styled.section`
+  margin-top: 1rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+
+  details {
+    display: grid;
+  }
+
+  summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.95rem 1rem;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  strong {
+    display: block;
+    margin-top: 0.18rem;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.96rem;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.78rem;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  ${ResultPanel} {
+    margin: 0 1rem 1rem;
+  }
+
+  @media (max-width: 720px) {
+    summary {
+      flex-direction: column;
+    }
+
+    span {
+      white-space: normal;
+    }
+  }
 `

@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
@@ -15,6 +15,28 @@ type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean
 
 const pretty = (value: JsonValue) => JSON.stringify(value, null, 2)
 
+type SignupMailDiagnostics = {
+  status: string
+  adapter: string
+  host: string | null
+  port: number | null
+  mailFrom: string | null
+  usernameConfigured: boolean
+  passwordConfigured: boolean
+  smtpAuth: boolean
+  startTlsEnabled: boolean
+  missing: string[]
+  canConnect: boolean | null
+  checkedAt: string
+  verifyPath: string
+}
+
+type ApiRsData<T> = {
+  resultCode: string
+  msg: string
+  data: T
+}
+
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const { me, logout } = useAuthSession()
@@ -24,6 +46,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [postId, setPostId] = useState("1")
   const [commentId, setCommentId] = useState("1")
   const [commentContent, setCommentContent] = useState("")
+  const [mailDiagnostics, setMailDiagnostics] = useState<SignupMailDiagnostics | null>(null)
+  const [mailDiagnosticsError, setMailDiagnosticsError] = useState("")
+  const [testEmail, setTestEmail] = useState("")
+  const [mailNotice, setMailNotice] = useState("")
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -37,6 +63,54 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("")
     }
   }
+
+  const fetchSignupMailDiagnostics = async (checkConnection = false) => {
+    try {
+      setLoadingKey(checkConnection ? "mailConnectivity" : "mailStatus")
+      setMailDiagnosticsError("")
+      setMailNotice("")
+      const diagnostics = await apiFetch<SignupMailDiagnostics>(
+        `/system/api/v1/adm/mail/signup${checkConnection ? "?checkConnection=true" : ""}`
+      )
+      setMailDiagnostics(diagnostics)
+      setResult(pretty(diagnostics))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setMailDiagnosticsError(message)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const sendSignupTestMail = async () => {
+    const email = testEmail.trim()
+    if (!email) {
+      setMailNotice("테스트 메일을 받을 이메일을 먼저 입력해주세요.")
+      return
+    }
+
+    try {
+      setLoadingKey("mailTest")
+      setMailNotice("")
+      const response = await apiFetch<ApiRsData<{ email: string }>>("/system/api/v1/adm/mail/signup/test", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      })
+      setMailNotice(`${response.data.email} 주소로 테스트 메일을 요청했습니다.`)
+      setResult(pretty(response))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setMailNotice(message)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  useEffect(() => {
+    void fetchSignupMailDiagnostics(false)
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -171,6 +245,69 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </Button>
           </ActionRow>
         </SectionCard>
+
+        <SectionCard>
+          <SectionTop>
+            <div>
+              <SectionEyebrow>Signup Mail</SectionEyebrow>
+              <h2>회원가입 메일 진단</h2>
+              <SectionDescription>SMTP 준비 상태를 보고, 테스트 메일을 바로 발송할 수 있습니다.</SectionDescription>
+            </div>
+            <StatusBadge data-status={mailDiagnostics?.status || "unknown"}>{mailDiagnostics?.status || "LOADING"}</StatusBadge>
+          </SectionTop>
+
+          <MetaGrid>
+            <MetaBox>
+              <small>메일 어댑터</small>
+              <strong>{mailDiagnostics?.adapter || "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>SMTP 호스트</small>
+              <strong>{mailDiagnostics?.host || "미설정"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>발신 주소</small>
+              <strong>{mailDiagnostics?.mailFrom || "미설정"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>검증 경로</small>
+              <strong>{mailDiagnostics?.verifyPath || "/signup/verify"}</strong>
+            </MetaBox>
+          </MetaGrid>
+
+          {!!mailDiagnostics?.missing.length && (
+            <InlineNotice data-tone="warning">
+              누락된 설정: {mailDiagnostics.missing.join(", ")}
+            </InlineNotice>
+          )}
+          {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
+          {!!mailNotice && <InlineNotice data-tone="success">{mailNotice}</InlineNotice>}
+
+          <ActionRow>
+            <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(false)}>
+              메일 준비 상태 새로고침
+            </Button>
+            <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(true)}>
+              SMTP 연결 확인
+            </Button>
+          </ActionRow>
+
+          <MailTestBox>
+            <FieldBox className="wide">
+              <FieldLabel htmlFor="signup-mail-test-email">테스트 메일 주소</FieldLabel>
+              <Input
+                id="signup-mail-test-email"
+                type="email"
+                value={testEmail}
+                placeholder="메일 수신을 확인할 이메일을 입력하세요"
+                onChange={(e) => setTestEmail(e.target.value)}
+              />
+            </FieldBox>
+            <PrimaryButton type="button" disabled={!!loadingKey} onClick={() => void sendSignupTestMail()}>
+              테스트 메일 발송
+            </PrimaryButton>
+          </MailTestBox>
+        </SectionCard>
       </Grid>
 
       <ConsoleCard>
@@ -286,10 +423,18 @@ const SectionCard = styled.section`
 
 const SectionTop = styled.div`
   margin-bottom: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  align-items: flex-start;
 
   h2 {
     margin: 0;
     font-size: 1.2rem;
+  }
+
+  @media (max-width: 760px) {
+    flex-direction: column;
   }
 `
 
@@ -353,6 +498,105 @@ const ActionRow = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
+`
+
+const MetaGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const MetaBox = styled.div`
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  small {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  strong {
+    font-size: 0.98rem;
+    word-break: break-word;
+  }
+`
+
+const StatusBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+
+  &[data-status="READY"],
+  &[data-status="TEST_MODE"] {
+    border-color: ${({ theme }) => theme.colors.green8};
+    background: ${({ theme }) => theme.colors.green3};
+    color: ${({ theme }) => theme.colors.green11};
+  }
+
+  &[data-status="MISCONFIGURED"],
+  &[data-status="CONNECTION_FAILED"] {
+    border-color: ${({ theme }) => theme.colors.red8};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
+  }
+`
+
+const InlineNotice = styled.p`
+  margin: 0 0 0.9rem;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  line-height: 1.6;
+
+  &[data-tone="warning"] {
+    border-color: ${({ theme }) => theme.colors.indigo8};
+    background: ${({ theme }) => theme.colors.indigo3};
+    color: ${({ theme }) => theme.colors.indigo11};
+  }
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.red8};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
+  }
+
+  &[data-tone="success"] {
+    border-color: ${({ theme }) => theme.colors.green8};
+    background: ${({ theme }) => theme.colors.green3};
+    color: ${({ theme }) => theme.colors.green11};
+  }
+`
+
+const MailTestBox = styled.div`
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: end;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const ConsoleCard = styled.section`

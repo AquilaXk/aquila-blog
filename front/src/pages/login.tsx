@@ -1,7 +1,8 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { FormEvent, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
+import { RiKakaoTalkFill } from "react-icons/ri"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -22,12 +23,27 @@ const LoginPage = () => {
     if (!value || !value.startsWith("/")) return "/"
     return value
   }, [router.query.next])
+  const signupDone = useMemo(() => {
+    const raw = router.query.signup
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return value === "done"
+  }, [router.query.signup])
+  const usernamePrefill = useMemo(() => {
+    const raw = router.query.username
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return value?.trim() || ""
+  }, [router.query.username])
 
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!usernamePrefill) return
+    setUsername(usernamePrefill)
+  }, [usernamePrefill])
 
   const kakaoAuthUrl = useMemo(() => {
     if (typeof window === "undefined") return ""
@@ -89,9 +105,11 @@ const LoginPage = () => {
       heroDescription={next !== "/" ? `로그인 후 ${next}로 돌아갑니다.` : "로그인 후 이전 흐름으로 돌아갑니다."}
       footer={
         <FooterText>
-          계정이 없으면 <Link href="/signup">회원가입</Link>
+          계정이 없으면 <Link href={`/signup?next=${encodeURIComponent(next)}`}>회원가입</Link>
         </FooterText>
       }
+      loginHref={`/login?next=${encodeURIComponent(next)}`}
+      signupHref={`/signup?next=${encodeURIComponent(next)}`}
     >
       <form onSubmit={onSubmit}>
         <Field>
@@ -132,21 +150,37 @@ const LoginPage = () => {
           </PasswordRow>
         </Field>
 
-        {error ? <ErrorText>{error}</ErrorText> : <InfoText>로그인 후 이전에 보던 화면으로 바로 이동합니다.</InfoText>}
+        {error ? (
+          <ErrorText>{error}</ErrorText>
+        ) : signupDone ? (
+          <SuccessText>
+            회원가입이 완료되었습니다. <strong>{usernamePrefill || "방금 만든 아이디"}</strong>로 로그인하면 됩니다.
+          </SuccessText>
+        ) : (
+          <InfoText>로그인 후 이전에 보던 화면으로 바로 이동합니다.</InfoText>
+        )}
 
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}
         </PrimaryButton>
-        <KakaoButton
-          type="button"
-          disabled={!kakaoAuthUrl}
-          onClick={() => {
-            if (!kakaoAuthUrl) return
-            window.location.href = kakaoAuthUrl
-          }}
-        >
-          카카오로 계속하기
-        </KakaoButton>
+
+        <SocialSection>
+          <span>소셜 계정으로 로그인</span>
+          <SocialButtonRow>
+            <SocialIconButton
+              type="button"
+              disabled={!kakaoAuthUrl}
+              onClick={() => {
+                if (!kakaoAuthUrl) return
+                window.location.href = kakaoAuthUrl
+              }}
+              aria-label="카카오로 로그인"
+              title="카카오로 로그인"
+            >
+              <RiKakaoTalkFill aria-hidden="true" />
+            </SocialIconButton>
+          </SocialButtonRow>
+        </SocialSection>
       </form>
     </AuthShell>
   )
@@ -230,21 +264,6 @@ const GhostButton = styled.button`
   white-space: nowrap;
 `
 
-const KakaoButton = styled.button`
-  border: 1px solid #e6c200;
-  border-radius: 14px;
-  padding: 0.9rem 1rem;
-  background: linear-gradient(135deg, #fee500, #facc15);
-  color: #241b00;
-  font-weight: 800;
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-`
-
 const ErrorText = styled.p`
   margin: 0;
   border-radius: 14px;
@@ -267,6 +286,62 @@ const InfoText = styled.p`
   line-height: 1.55;
 `
 
+const SuccessText = styled.p`
+  margin: 0;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.green7};
+  background: ${({ theme }) => theme.colors.green3};
+  color: ${({ theme }) => theme.colors.green11};
+  padding: 0.82rem 0.9rem;
+  font-size: 0.87rem;
+  line-height: 1.65;
+
+  strong {
+    font-weight: 800;
+  }
+`
+
 const FooterText = styled.p`
   margin: 0;
+`
+
+const SocialSection = styled.div`
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.15rem;
+
+  > span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+`
+
+const SocialButtonRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`
+
+const SocialIconButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: 1px solid rgba(230, 194, 0, 0.72);
+  background: linear-gradient(180deg, #fee500, #facc15);
+  color: #241b00;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(250, 204, 21, 0.18);
+
+  svg {
+    font-size: 2rem;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
 `

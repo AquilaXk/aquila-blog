@@ -21,20 +21,24 @@ const StyledWrapper = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
-  margin-bottom: 1rem;
-  padding-top: 0.9rem;
+  margin-bottom: 0.15rem;
+  padding-top: 0.75rem;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.65rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   container-type: inline-size;
 
   @media (max-width: 900px) {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: stretch;
   }
 
-  @container (max-width: 760px) {
+  @media (max-width: 640px) {
     grid-template-columns: 1fr;
+  }
+
+  @container (max-width: 600px) {
     align-items: stretch;
+    grid-template-columns: 1fr;
   }
 `

@@ -14,6 +14,9 @@ class MemberSecurityConfigurer : PublicApiRouteContributor {
             PublicApiRouteSpec("/member/api/*/members/randomSecureTip", HttpMethod.GET),
             PublicApiRouteSpec("/member/api/*/members/adminProfile", HttpMethod.GET),
             PublicApiRouteSpec("/member/api/*/members/{id:\\d+}/redirectToProfileImg", HttpMethod.GET),
+            PublicApiRouteSpec("/member/api/*/signup/email/start", HttpMethod.POST),
+            PublicApiRouteSpec("/member/api/*/signup/email/verify", HttpMethod.GET),
+            PublicApiRouteSpec("/member/api/*/signup/complete", HttpMethod.POST),
         )
 
     fun configure(authorize: AuthorizeHttpRequestsDsl) {

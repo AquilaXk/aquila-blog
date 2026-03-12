@@ -28,9 +28,21 @@ class MemberApplicationService(
         password: String?,
         nickname: String,
         profileImgUrl: String?,
+        email: String? = null,
     ): Member {
+        val normalizedEmail =
+            email
+                ?.trim()
+                ?.lowercase(Locale.ROOT)
+                ?.takeIf(String::isNotBlank)
+
         memberRepository.findByUsername(username)?.let {
             throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
+        }
+        normalizedEmail?.let {
+            if (memberRepository.existsByEmail(it)) {
+                throw AppException("409-2", "이미 사용 중인 이메일입니다.")
+            }
         }
 
         val encodedPassword =
@@ -40,7 +52,7 @@ class MemberApplicationService(
                 null
             }
 
-        val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname))
+        val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
         profileImgUrl?.let {
             memberProfileHydrator.hydrate(member)
             member.profileImgUrl = it

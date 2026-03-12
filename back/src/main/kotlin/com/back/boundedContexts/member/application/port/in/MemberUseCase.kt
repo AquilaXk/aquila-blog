@@ -14,6 +14,7 @@ interface MemberUseCase {
         password: String?,
         nickname: String,
         profileImgUrl: String?,
+        email: String? = null,
     ): Member
 
     fun findByUsername(username: String): Member?

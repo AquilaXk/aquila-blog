@@ -2,7 +2,9 @@ import { apiFetch } from "src/apis/backend/client"
 import { useRouter } from "next/router"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
+import { FiCornerDownRight, FiEdit2, FiTrash2 } from "react-icons/fi"
 import { CONFIG } from "site.config"
+import AuthEntryModal from "src/components/auth/AuthEntryModal"
 import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
@@ -36,6 +38,10 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
   const hasInitialComments = initialComments !== null
+  const nextPath = useMemo(() => {
+    if (router.asPath && router.asPath.startsWith("/")) return router.asPath
+    return toCanonicalPostPath(data.id)
+  }, [data.id, router.asPath])
 
   const { me, authStatus, authUnavailable } = useAuthSession()
   const [comments, setComments] = useState<TPostComment[]>(initialComments ?? [])
@@ -46,10 +52,20 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const [replyInput, setReplyInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const loginHref = useMemo(() => {
-    const next = router.asPath || toCanonicalPostPath(data.id)
-    return `/login?next=${encodeURIComponent(next)}`
-  }, [data.id, router.asPath])
+  const [authPromptOpen, setAuthPromptOpen] = useState(false)
+
+  const openAuthPrompt = useCallback(() => {
+    if (authStatus === "unavailable") {
+      setError("인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
+      return
+    }
+
+    setAuthPromptOpen(true)
+  }, [authStatus])
+
+  const closeAuthPrompt = useCallback(() => {
+    setAuthPromptOpen(false)
+  }, [])
 
   const loadComments = useCallback(async () => {
     if (!Number.isInteger(postId) || postId <= 0) {
@@ -74,6 +90,11 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     if (hasInitialComments) return
     void loadComments()
   }, [hasInitialComments, loadComments])
+
+  useEffect(() => {
+    if (!me) return
+    setAuthPromptOpen(false)
+  }, [me])
 
   const commentTree = useMemo(() => {
     const map = new Map<number, CommentNode>()
@@ -106,7 +127,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     }
 
     if (!me) {
-      setError("댓글 작성은 로그인 후 가능합니다.")
+      openAuthPrompt()
       return false
     }
 
@@ -188,6 +209,11 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   }
 
   const startReply = (commentId: number) => {
+    if (!me) {
+      openAuthPrompt()
+      return
+    }
+
     setReplyingToCommentId(commentId)
     setReplyInput("")
     setEditingCommentId(null)
@@ -247,9 +273,12 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   }
 
   const renderComment = (comment: CommentNode, depth = 0) => {
-    const displayName = comment.authorUsername || comment.authorName
+    const displayName = comment.authorName || comment.authorUsername || "익명"
     const createdLabel = formatShortDateTime(comment.createdAt, CONFIG.lang)
     const edited = comment.modifiedAt !== comment.createdAt
+    const isOwner = me?.id === comment.authorId
+    const canModify = comment.actorCanModify || isOwner
+    const canDelete = comment.actorCanDelete || isOwner
 
     return (
       <li key={comment.id}>
@@ -270,34 +299,26 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                   {edited ? " · 수정됨" : ""}
                 </span>
               </div>
-              <div className="actions">
-                {me && (
-                  <button
-                    type="button"
-                    onClick={() => startReply(comment.id)}
-                    disabled={isLoading}
-                    className="subtle"
-                  >
-                    답글
-                  </button>
-                )}
-                {comment.actorCanModify && (
+              <div className="actions topActions">
+                {canModify && (
                   <button
                     type="button"
                     onClick={() => startEdit(comment)}
                     disabled={isLoading}
                     className="subtle"
                   >
+                    <FiEdit2 aria-hidden="true" />
                     수정
                   </button>
                 )}
-                {comment.actorCanDelete && (
+                {canDelete && (
                   <button
                     type="button"
                     onClick={() => handleDeleteComment(comment.id)}
                     disabled={isLoading}
                     className="danger"
                   >
+                    <FiTrash2 aria-hidden="true" />
                     삭제
                   </button>
                 )}
@@ -323,6 +344,20 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
             ) : (
               <p className="content">{comment.content}</p>
             )}
+
+            <div className="foot">
+              {!authUnavailable && (
+                <button
+                  type="button"
+                  onClick={() => startReply(comment.id)}
+                  disabled={isLoading}
+                  className="replyTrigger"
+                >
+                  <FiCornerDownRight aria-hidden="true" />
+                  답글 달기
+                </button>
+              )}
+            </div>
 
             {replyingToCommentId === comment.id && (
               <form className="replyForm" onSubmit={(event) => handleReplySubmit(event, comment.id)}>
@@ -361,35 +396,8 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           <span className="eyebrow">Community</span>
           <h3>댓글</h3>
         </div>
-        <div className="countBadge">{comments.length} comments</div>
+        <div className="countBadge">댓글 {comments.length}</div>
       </SectionHeader>
-
-      <AccountCard>
-        {me ? (
-          <>
-            {renderAvatar(me.profileImageDirectUrl, me.profileImageUrl, me.username, 44, true)}
-            <div>
-              <strong>{me.nickname || me.username}</strong>
-              <span>로그인된 계정으로 바로 댓글과 답글을 작성할 수 있습니다.</span>
-            </div>
-          </>
-        ) : authStatus === "unavailable" ? (
-          <div className="loginBox">
-            <div>
-              <strong>인증 상태를 확인할 수 없습니다</strong>
-              <span>네트워크가 안정되면 댓글 작성 영역이 다시 활성화됩니다.</span>
-            </div>
-          </div>
-        ) : (
-          <div className="loginBox">
-            <div>
-              <strong>로그인이 필요합니다</strong>
-              <span>댓글과 답글 작성은 로그인 후 가능합니다.</span>
-            </div>
-            <a href={loginHref}>로그인</a>
-          </div>
-        )}
-      </AccountCard>
 
       <form onSubmit={handleWriteComment} className="writeForm">
         <div className="composerAvatar">
@@ -399,18 +407,20 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           <textarea
             value={commentInput}
             onChange={(event) => setCommentInput(event.target.value)}
+            onFocus={() => {
+              if (!me && !authUnavailable) openAuthPrompt()
+            }}
+            onClick={() => {
+              if (!me && !authUnavailable) openAuthPrompt()
+            }}
             placeholder={
-              me
-                ? "의견이나 질문을 남겨주세요."
-                : authStatus === "unavailable"
-                  ? "인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
-                  : "로그인 후 댓글을 작성할 수 있습니다."
+              authUnavailable ? "인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요." : "의견이나 질문을 남겨주세요."
             }
-            disabled={!me || isLoading || authUnavailable}
+            readOnly={!me}
+            disabled={isLoading || authUnavailable}
           />
           <div className="composerFooter">
-            <span>대댓글은 각 댓글의 `답글` 버튼으로 이어서 작성할 수 있습니다.</span>
-            <button type="submit" disabled={!me || isLoading || authUnavailable}>
+            <button type="submit" disabled={isLoading || authUnavailable}>
               댓글 작성
             </button>
           </div>
@@ -427,6 +437,15 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           <span>아직 등록된 댓글이 없습니다.</span>
         </EmptyState>
       )}
+      <AuthEntryModal
+        open={authPromptOpen}
+        onClose={closeAuthPrompt}
+        nextPath={nextPath}
+        title="로그인"
+        description="댓글을 작성하려면 계정 로그인이 필요합니다."
+        visualTitle="환영합니다!"
+        visualDescription="로그인하면 지금 보고 있는 글로 바로 돌아와 댓글과 답글을 자연스럽게 이어서 작성할 수 있습니다."
+      />
     </StyledWrapper>
   )
 }
@@ -459,6 +478,7 @@ const StyledWrapper = styled.section`
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.35rem;
     min-height: 38px;
     padding: 0 0.82rem;
     border-radius: 999px;
@@ -477,6 +497,17 @@ const StyledWrapper = styled.section`
 
   button.subtle {
     color: ${({ theme }) => theme.colors.gray11};
+  }
+
+  button.replyTrigger {
+    justify-content: flex-start;
+    padding: 0;
+    min-height: auto;
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.green11};
+    font-size: 0.84rem;
+    font-weight: 700;
   }
 
   button.danger {
@@ -510,16 +541,10 @@ const StyledWrapper = styled.section`
 
   .composerFooter {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 0.75rem;
     align-items: center;
     flex-wrap: wrap;
-
-    span {
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.78rem;
-      line-height: 1.5;
-    }
   }
 
   .error {
@@ -593,40 +618,6 @@ const SectionHeader = styled.div`
   }
 `
 
-const AccountCard = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  margin-bottom: 1rem;
-  padding: 0.85rem 0.95rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-
-  strong {
-    display: block;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-  }
-
-  span {
-    display: block;
-    margin-top: 0.18rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    line-height: 1.5;
-  }
-
-  .loginBox {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-`
-
 const Avatar = styled.div<{ size: number }>`
   position: relative;
   width: ${({ size }) => `${size}px`};
@@ -647,8 +638,8 @@ const CommentItem = styled.div`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.85rem;
-  padding: 0.95rem;
-  border-radius: 22px;
+  padding: 1rem 1rem 0.95rem;
+  border-radius: 24px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -680,9 +671,9 @@ const CommentItem = styled.div`
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 0.7rem;
+    gap: 0.85rem;
     flex-wrap: wrap;
-    margin-bottom: 0.45rem;
+    margin-bottom: 0.65rem;
   }
 
   .meta {
@@ -707,6 +698,10 @@ const CommentItem = styled.div`
     gap: 0.35rem;
   }
 
+  .topActions {
+    margin-left: auto;
+  }
+
   .content {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
@@ -715,11 +710,37 @@ const CommentItem = styled.div`
     word-break: break-word;
   }
 
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-top: 0.95rem;
+  }
+
   .editBox,
   .replyForm {
     display: grid;
     gap: 0.55rem;
     margin-top: 0.7rem;
+  }
+
+  .replyList {
+    padding-left: 0.8rem;
+    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+
+    .topActions {
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .replyList {
+      padding-left: 0.65rem;
+    }
   }
 `
 

@@ -17,7 +17,11 @@ class MemberRepositoryAdapter(
 
     override fun saveAndFlush(member: Member): Member = memberRepository.saveAndFlush(member)
 
+    override fun existsByEmail(email: String): Boolean = memberRepository.existsByEmail(email)
+
     override fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)
+
+    override fun findByEmail(email: String): Member? = memberRepository.findByEmail(email)
 
     override fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)
 

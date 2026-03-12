@@ -93,9 +93,10 @@ export default CategorySelect
 
 const StyledWrapper = styled.div`
   position: relative;
-  width: 100%;
+  width: auto;
+  flex: 1 1 0;
   min-width: 0;
-  max-width: 100%;
+  max-width: 230px;
 
   > .wrapper {
     display: inline-flex;
@@ -104,13 +105,13 @@ const StyledWrapper = styled.div`
     justify-content: space-between;
     width: 100%;
     max-width: 100%;
-    min-height: 42px;
-    padding: 0 0.9rem;
+    min-height: 40px;
+    padding: 0 0.82rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     line-height: 1.35;
     font-weight: 700;
     cursor: pointer;
@@ -122,7 +123,7 @@ const StyledWrapper = styled.div`
     .currentLabel {
       display: inline-flex;
       align-items: center;
-      gap: 0.48rem;
+      gap: 0.4rem;
       min-width: 0;
       overflow: hidden;
     }
@@ -133,7 +134,7 @@ const StyledWrapper = styled.div`
       justify-content: center;
       flex: 0 0 auto;
       margin-right: 0.04rem;
-      font-size: 1rem;
+      font-size: 0.95rem;
       color: ${({ theme }) => theme.colors.gray11};
     }
 
@@ -146,17 +147,17 @@ const StyledWrapper = styled.div`
 
     .chevron {
       flex: 0 0 auto;
+      font-size: 1.1rem;
     }
   }
   > .content {
     position: absolute;
-    top: calc(100% + 0.45rem);
+    top: calc(100% + 0.35rem);
     left: 0;
     z-index: 40;
-    width: 100%;
-    right: 0;
+    width: min(18rem, calc(100vw - 2rem));
     min-width: min(14rem, 100%);
-    max-width: min(22rem, calc(100vw - 2rem));
+    max-width: min(18rem, calc(100vw - 2rem));
     max-height: min(18rem, calc(100vh - 9rem));
     overflow-y: auto;
     scrollbar-gutter: stable both-edges;
@@ -173,9 +174,7 @@ const StyledWrapper = styled.div`
       gap: 0.6rem;
       width: 100%;
       text-align: left;
-      padding: 0.25rem;
-      padding-left: 0.5rem;
-      padding-right: 0.5rem;
+      padding: 0.45rem 0.55rem;
       border-radius: 0.75rem;
       font-size: 0.875rem;
       line-height: 1.25rem;
@@ -217,13 +216,24 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 900px) {
+    max-width: none;
+
+    > .wrapper {
+      min-height: 42px;
+    }
+
     > .content {
       max-width: 100%;
       width: 100%;
     }
   }
 
-  @container (max-width: 760px) {
+  @media (max-width: 640px) {
+    width: 100%;
+    max-width: none;
+  }
+
+  @container (max-width: 600px) {
     > .content {
       max-width: 100%;
       min-width: 0;

@@ -49,7 +49,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [mailDiagnostics, setMailDiagnostics] = useState<SignupMailDiagnostics | null>(null)
   const [mailDiagnosticsError, setMailDiagnosticsError] = useState("")
   const [testEmail, setTestEmail] = useState("")
-  const [mailNotice, setMailNotice] = useState("")
+  const [mailTestNotice, setMailTestNotice] = useState("")
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -68,7 +68,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey(checkConnection ? "mailConnectivity" : "mailStatus")
       setMailDiagnosticsError("")
-      setMailNotice("")
+      setMailTestNotice("")
       const diagnostics = await apiFetch<SignupMailDiagnostics>(
         `/system/api/v1/adm/mail/signup${checkConnection ? "?checkConnection=true" : ""}`
       )
@@ -86,22 +86,22 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const sendSignupTestMail = async () => {
     const email = testEmail.trim()
     if (!email) {
-      setMailNotice("테스트 메일을 받을 이메일을 먼저 입력해주세요.")
+      setMailTestNotice("테스트 메일을 받을 이메일을 먼저 입력해주세요.")
       return
     }
 
     try {
       setLoadingKey("mailTest")
-      setMailNotice("")
+      setMailTestNotice("")
       const response = await apiFetch<ApiRsData<{ email: string }>>("/system/api/v1/adm/mail/signup/test", {
         method: "POST",
         body: JSON.stringify({ email }),
       })
-      setMailNotice(`${response.data.email} 주소로 테스트 메일을 요청했습니다.`)
+      setMailTestNotice(`${response.data.email} 주소로 테스트 메일을 요청했습니다.`)
       setResult(pretty(response))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setMailNotice(message)
+      setMailTestNotice(message)
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -127,11 +127,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   return (
     <Main>
       <HeaderCard>
-        <div>
+        <HeaderCopy>
           <Eyebrow>Admin Tools</Eyebrow>
           <h1>운영 도구</h1>
           <p>댓글 CRUD 점검과 시스템 상태 확인을 글 작업실에서 분리했습니다.</p>
-        </div>
+        </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
             <NavLink>허브</NavLink>
@@ -281,8 +281,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </InlineNotice>
           )}
           {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
-          {!!mailNotice && <InlineNotice data-tone="success">{mailNotice}</InlineNotice>}
-
           <ActionRow>
             <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(false)}>
               메일 준비 상태 새로고침
@@ -307,6 +305,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               테스트 메일 발송
             </PrimaryButton>
           </MailTestBox>
+          {!!mailTestNotice && <InlineNotice data-tone="success">{mailTestNotice}</InlineNotice>}
         </SectionCard>
       </Grid>
 
@@ -336,8 +335,8 @@ const Main = styled.main`
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 0.9rem;
-  padding: 1.2rem;
+  gap: 1.15rem;
+  padding: 1.35rem 1.25rem 1.25rem;
   border-radius: 24px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background:
@@ -345,26 +344,33 @@ const HeaderCard = styled.section`
     linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
 
   h1 {
-    margin: 0.1rem 0 0;
-    font-size: clamp(1.9rem, 4vw, 2.5rem);
+    margin: 0;
+    font-size: clamp(1.85rem, 4vw, 2.4rem);
     letter-spacing: -0.05em;
+    line-height: 1.08;
   }
 
   p {
-    margin: 0.45rem 0 0;
+    margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
+    line-height: 1.75;
   }
+`
+
+const HeaderCopy = styled.div`
+  display: grid;
+  gap: 0.7rem;
+  max-width: 38rem;
 `
 
 const Eyebrow = styled.span`
   width: fit-content;
   border-radius: 999px;
-  padding: 0.38rem 0.7rem;
+  padding: 0.42rem 0.82rem;
   border: 1px solid ${({ theme }) => theme.colors.blue7};
   background: ${({ theme }) => theme.colors.blue3};
   color: ${({ theme }) => theme.colors.blue11};
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;

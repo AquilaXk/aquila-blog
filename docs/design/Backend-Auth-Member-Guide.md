@@ -77,6 +77,7 @@ sequenceDiagram
 - `spring-boot-starter-mail`
 - SMTP adapter
 - test profile용 fake mail sender
+- 회원가입 메일은 UTF-8 HTML 본문과 UTF-8 subject를 함께 사용하고, subject에 깨진 문자(`�`)가 섞이면 코드 기본 제목으로 대체한다
 - UTF-8 HTML 회원가입 메일 템플릿과 CTA 버튼
 
 관련 파일:

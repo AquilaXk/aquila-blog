@@ -94,24 +94,22 @@ export default CategorySelect
 const StyledWrapper = styled.div`
   position: relative;
   width: 100%;
-  flex: 1 1 auto;
   min-width: 0;
-  max-width: none;
 
   > .wrapper {
-    display: inline-flex;
+    display: flex;
     gap: 0.4rem;
     align-items: center;
     justify-content: space-between;
     width: 100%;
     max-width: 100%;
-    min-height: 40px;
-    padding: 0 0.82rem;
+    min-height: 44px;
+    padding: 0 0.9rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.98rem;
     line-height: 1.35;
     font-weight: 700;
     cursor: pointer;
@@ -224,8 +222,6 @@ const StyledWrapper = styled.div`
     }
 
     > .content {
-      max-width: 100%;
-      min-width: 0;
       width: 100%;
     }
   }

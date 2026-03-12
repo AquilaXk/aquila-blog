@@ -52,24 +52,26 @@ const StyledWrapper = styled.div`
   font-size: 0.875rem;
   line-height: 1.25rem;
   flex: 0 0 auto;
-  min-width: 0;
+  min-width: 236px;
   width: fit-content;
-  max-width: 100%;
+  max-width: min(100%, 18rem);
   padding: 0.18rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
 
-  @media (max-width: 560px) {
+  @media (max-width: 640px) {
     width: 100%;
+    min-width: 0;
   }
 
   button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 96px;
+    min-width: 0;
     max-width: 100%;
+    flex: 1 1 0;
     min-height: 36px;
     padding: 0 0.82rem;
     border-radius: 999px;

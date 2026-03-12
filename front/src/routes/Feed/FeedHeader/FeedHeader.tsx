@@ -1,4 +1,3 @@
-import { TCategories } from "src/types"
 import React from "react"
 import CategorySelect from "./CategorySelect"
 import OrderButtons from "./OrderButtons"
@@ -10,7 +9,9 @@ const FeedHeader: React.FC<Props> = () => {
   return (
     <StyledWrapper>
       <CategorySelect />
-      <OrderButtons />
+      <OrderRow>
+        <OrderButtons />
+      </OrderRow>
     </StyledWrapper>
   )
 }
@@ -19,16 +20,17 @@ export default FeedHeader
 
 const StyledWrapper = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
   min-width: 0;
-  margin-bottom: 0.15rem;
   padding-top: 0.8rem;
-  align-items: center;
-  gap: 0.75rem;
+  gap: 0.72rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+`
 
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+const OrderRow = styled.div`
+  display: flex;
+  justify-content: flex-end;
+
+  @media (max-width: 640px) {
+    justify-content: stretch;
   }
 `

@@ -1,7 +1,10 @@
 package com.back.boundedContexts.member.application.service
 
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
@@ -13,6 +16,7 @@ class LoginAttemptService(
     private val windowSeconds: Long,
     @param:Value("\${custom.auth.login.lockSeconds:600}")
     private val lockSeconds: Long,
+    private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
     private data class LoginAttemptState(
         var windowStartedAt: Long,
@@ -26,8 +30,14 @@ class LoginAttemptService(
         username: String,
         clientIp: String,
     ): Boolean {
-        val now = nowEpochSeconds()
         val key = key(username, clientIp)
+        val redisTemplate = redisTemplateProvider.getIfAvailable()
+
+        if (redisTemplate != null) {
+            return isBlockedInRedis(redisTemplate, key)
+        }
+
+        val now = nowEpochSeconds()
         val state = states[key] ?: return false
 
         if (state.blockedUntil > now) return true
@@ -44,8 +54,14 @@ class LoginAttemptService(
         username: String,
         clientIp: String,
     ): Boolean {
-        val now = nowEpochSeconds()
         val key = key(username, clientIp)
+        val redisTemplate = redisTemplateProvider.getIfAvailable()
+
+        if (redisTemplate != null) {
+            return recordFailureInRedis(redisTemplate, key)
+        }
+
+        val now = nowEpochSeconds()
         val nextState =
             states.compute(key) { _, current ->
                 val state =
@@ -76,13 +92,64 @@ class LoginAttemptService(
         username: String,
         clientIp: String,
     ) {
-        states.remove(key(username, clientIp))
+        val key = key(username, clientIp)
+        val redisTemplate = redisTemplateProvider.getIfAvailable()
+
+        if (redisTemplate != null) {
+            redisTemplate.delete(listOf(redisFailureKey(key), redisBlockedKey(key)))
+            return
+        }
+
+        states.remove(key)
     }
 
     private fun key(
         username: String,
         clientIp: String,
     ): String = "${username.trim().lowercase()}|${clientIp.trim()}"
+
+    private fun isBlockedInRedis(
+        redisTemplate: StringRedisTemplate,
+        key: String,
+    ): Boolean {
+        val blockedUntil =
+            redisTemplate
+                .opsForValue()
+                .get(redisBlockedKey(key))
+                ?.toLongOrNull()
+                ?: return false
+
+        return blockedUntil > nowEpochSeconds()
+    }
+
+    private fun recordFailureInRedis(
+        redisTemplate: StringRedisTemplate,
+        key: String,
+    ): Boolean {
+        if (isBlockedInRedis(redisTemplate, key)) return true
+
+        val failureKey = redisFailureKey(key)
+        val blockedKey = redisBlockedKey(key)
+        val ops = redisTemplate.opsForValue()
+        val failures = ops.increment(failureKey) ?: 0L
+
+        if (failures == 1L) {
+            redisTemplate.expire(failureKey, Duration.ofSeconds(windowSeconds))
+        }
+
+        if (failures >= maxAttempts.toLong()) {
+            val blockedUntil = nowEpochSeconds() + lockSeconds
+            ops.set(blockedKey, blockedUntil.toString(), Duration.ofSeconds(lockSeconds))
+            redisTemplate.delete(failureKey)
+            return true
+        }
+
+        return false
+    }
+
+    private fun redisFailureKey(key: String): String = "auth:login:fail:$key"
+
+    private fun redisBlockedKey(key: String): String = "auth:login:blocked:$key"
 
     private fun nowEpochSeconds(): Long = Instant.now().epochSecond
 }

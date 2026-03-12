@@ -125,7 +125,8 @@ custom:
     expirationSeconds: 1200
   task:
     processor:
-      fixedDelayMs: "#{1000*60*60*24}"
+      fixedDelayMs: ${CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS:60000}
+      batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:50}
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }

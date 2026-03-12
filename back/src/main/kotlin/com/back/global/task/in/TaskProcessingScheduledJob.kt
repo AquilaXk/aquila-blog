@@ -6,6 +6,7 @@ import com.back.standard.dto.TaskPayload
 import com.back.standard.util.Ut
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
@@ -16,6 +17,8 @@ class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val transactionTemplate: TransactionTemplate,
+    @param:Value("\${custom.task.processor.batchSize:50}")
+    private val batchSize: Int,
 ) {
     private val logger = LoggerFactory.getLogger(TaskProcessingScheduledJob::class.java)
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
@@ -23,14 +26,15 @@ class TaskProcessingScheduledJob(
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M")
     fun processTasks() {
+        val safeBatchSize = batchSize.coerceIn(1, 500)
         val taskIds =
             transactionTemplate.execute {
-                val pendingTasks = taskRepository.findPendingTasksWithLock(10)
+                val pendingTasks = taskRepository.findPendingTasksWithLock(safeBatchSize)
                 pendingTasks.forEach { it.markAsProcessing() }
                 pendingTasks.map { it.id }
             }
 
-        taskIds?.forEach { taskId ->
+        taskIds.orEmpty().forEach { taskId ->
             executor.submit { executeTask(taskId) }
         }
     }

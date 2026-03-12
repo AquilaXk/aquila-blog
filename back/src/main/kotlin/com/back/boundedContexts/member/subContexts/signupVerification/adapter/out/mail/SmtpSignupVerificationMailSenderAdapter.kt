@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.nio.charset.StandardCharsets
 
 @Profile("!test")
 @Component
@@ -32,10 +33,12 @@ class SmtpSignupVerificationMailSenderAdapter(
         val expiresAtText = expiresAt.atZone(SEOUL_ZONE_ID).format(EXPIRES_AT_FORMATTER)
         val message = javaMailSender.createMimeMessage()
         val helper = MimeMessageHelper(message, true, "UTF-8")
+        val resolvedMailSubject = resolveMailSubject()
 
         helper.setFrom(mailFrom)
         helper.setTo(toEmail)
-        helper.setSubject(mailSubject)
+        message.setSubject(resolvedMailSubject, StandardCharsets.UTF_8.name())
+        message.setHeader("Content-Language", "ko")
         helper.setText(
             buildPlainTextBody(verificationLink = verificationLink, expiresAtText = expiresAtText),
             buildHtmlBody(verificationLink = verificationLink, expiresAtText = expiresAtText),
@@ -50,12 +53,15 @@ class SmtpSignupVerificationMailSenderAdapter(
     ): String =
         """
         안녕하세요.
+
+        Aquila Blog 회원가입을 시작해주셔서 감사합니다.
         
-        회원가입을 계속하려면 아래 링크를 눌러주세요.
+        아래 버튼을 누르면 이메일 인증이 완료되고 가입 절차를 계속 진행할 수 있습니다.
         $verificationLink
         
-        이 링크는 $expiresAtText 까지 유효합니다.
         본인이 요청하지 않았다면 이 메일을 무시하셔도 됩니다.
+
+        이 링크는 $expiresAtText 까지 유효합니다.
         """.trimIndent()
 
     private fun buildHtmlBody(
@@ -68,7 +74,7 @@ class SmtpSignupVerificationMailSenderAdapter(
           <head>
             <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>${escapeHtml(mailSubject)}</title>
+            <title>${escapeHtml(resolveMailSubject())}</title>
           </head>
           <body style="margin:0; padding:0; background-color:#f4f7fb; color:#111827; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
             <span style="display:none; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden;">
@@ -91,9 +97,10 @@ class SmtpSignupVerificationMailSenderAdapter(
                           회원가입을 이어서 진행해주세요
                         </div>
                         <div style="margin:18px auto 0; max-width:520px; padding:18px 20px; border-radius:18px; background:#f8fbff; border:1px solid #dbe5f2; color:#5b6472; font-size:18px; line-height:1.75; text-align:left;">
-                          안녕하세요. Aquila Blog 회원가입을 시작해주셔서 감사합니다.
-                          아래 버튼을 누르면 이메일 인증이 완료되고 가입 절차를 계속 진행할 수 있습니다.
-                          본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.
+                          <p style="margin:0 0 18px; font-weight:700; color:#344054;">안녕하세요.</p>
+                          <p style="margin:0 0 18px;">Aquila Blog 회원가입을 시작해주셔서 감사합니다.</p>
+                          <p style="margin:0 0 18px;">아래 버튼을 누르면 이메일 인증이 완료되고 가입 절차를 계속 진행할 수 있습니다.</p>
+                          <p style="margin:0;">본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.</p>
                         </div>
                         <div style="padding:28px 0 18px; text-align:center;">
                           <a href="${escapeHtmlAttribute(verificationLink)}" style="display:inline-block; min-width:240px; padding:18px 32px; border-radius:18px; background:linear-gradient(135deg, #2563eb, #3b82f6); color:#ffffff; font-size:26px; font-weight:800; text-decoration:none; box-shadow:0 14px 28px rgba(37, 99, 235, 0.28);">
@@ -121,6 +128,15 @@ class SmtpSignupVerificationMailSenderAdapter(
         </html>
         """.trimIndent()
 
+    private fun resolveMailSubject(): String {
+        val trimmedSubject = mailSubject.trim()
+        if (trimmedSubject.isBlank()) {
+            return DEFAULT_MAIL_SUBJECT
+        }
+
+        return if (trimmedSubject.contains(REPLACEMENT_CHARACTER)) DEFAULT_MAIL_SUBJECT else trimmedSubject
+    }
+
     private fun escapeHtml(value: String): String =
         value
             .replace("&", "&amp;")
@@ -131,6 +147,8 @@ class SmtpSignupVerificationMailSenderAdapter(
     private fun escapeHtmlAttribute(value: String): String = escapeHtml(value)
 
     companion object {
+        private const val DEFAULT_MAIL_SUBJECT = "Aquila Blog 회원가입"
+        private const val REPLACEMENT_CHARACTER = '\uFFFD'
         private val SEOUL_ZONE_ID: ZoneId = ZoneId.of("Asia/Seoul")
         private val EXPIRES_AT_FORMATTER: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm 'KST'")

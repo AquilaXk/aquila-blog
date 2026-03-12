@@ -40,7 +40,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [loadingKey, setLoadingKey] = useState("")
   const [notice, setNotice] = useState<{ tone: NoticeTone; text: string }>({
     tone: "idle",
-    text: "현재 로그인한 관리자 프로필만 수정합니다.",
+    text: "",
   })
   const [profileRoleInput, setProfileRoleInput] = useState(initialMember.profileRole || "")
   const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
@@ -152,11 +152,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   return (
     <Main>
       <HeaderCard>
-        <div>
+        <HeaderCopy>
           <Eyebrow>Profile Studio</Eyebrow>
           <h1>관리자 프로필 관리</h1>
           <p>관리자 1명의 프로필 카드 정보만 여기서 수정합니다.</p>
-        </div>
+        </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
             <LinkButton>허브로 돌아가기</LinkButton>
@@ -214,7 +214,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <strong>{profileUpdatedText}</strong>
             </InfoItem>
           </InfoGrid>
-          <Notice data-tone={notice.tone}>{notice.text}</Notice>
+          {notice.text ? <Notice data-tone={notice.tone}>{notice.text}</Notice> : null}
           <FieldGrid>
             <FieldBox>
               <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
@@ -277,8 +277,8 @@ const Main = styled.main`
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 0.9rem;
-  padding: 1.2rem;
+  gap: 1.15rem;
+  padding: 1.35rem 1.25rem 1.25rem;
   border-radius: 24px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background:
@@ -286,26 +286,33 @@ const HeaderCard = styled.section`
     linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
 
   h1 {
-    margin: 0.1rem 0 0;
-    font-size: clamp(1.9rem, 4vw, 2.5rem);
+    margin: 0;
+    font-size: clamp(1.85rem, 4vw, 2.4rem);
     letter-spacing: -0.05em;
+    line-height: 1.08;
   }
 
   p {
-    margin: 0.45rem 0 0;
+    margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
+    line-height: 1.75;
   }
+`
+
+const HeaderCopy = styled.div`
+  display: grid;
+  gap: 0.7rem;
+  max-width: 38rem;
 `
 
 const Eyebrow = styled.span`
   width: fit-content;
   border-radius: 999px;
-  padding: 0.38rem 0.7rem;
+  padding: 0.42rem 0.82rem;
   border: 1px solid ${({ theme }) => theme.colors.blue7};
   background: ${({ theme }) => theme.colors.blue3};
   color: ${({ theme }) => theme.colors.blue11};
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;

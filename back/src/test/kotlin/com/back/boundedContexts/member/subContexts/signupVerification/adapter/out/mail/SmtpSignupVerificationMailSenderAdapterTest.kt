@@ -38,13 +38,38 @@ class SmtpSignupVerificationMailSenderAdapterTest {
         val parts = extractTextParts(sentMessage.content)
 
         assertThat(sentMessage.subject).isEqualTo("Aquila 블로그 회원가입")
+        assertThat(sentMessage.getHeader("Subject", null)).contains("=?UTF-8?")
         assertThat(sentMessage.from.map { it.toString() }).contains("verify@aquila.site")
         assertThat(parts.html).contains("계속하기")
         assertThat(parts.html).contains("Aquila Blog")
+        assertThat(parts.html).contains("<p style=\"margin:0 0 18px; font-weight:700; color:#344054;\">안녕하세요.</p>")
+        assertThat(parts.html).contains("<p style=\"margin:0 0 18px;\">Aquila Blog 회원가입을 시작해주셔서 감사합니다.</p>")
         assertThat(parts.html).contains(verificationLink)
-        assertThat(parts.plain).contains("회원가입을 계속하려면 아래 링크를 눌러주세요.")
+        assertThat(parts.plain).contains("Aquila Blog 회원가입을 시작해주셔서 감사합니다.")
+        assertThat(parts.plain).contains("아래 버튼을 누르면 이메일 인증이 완료되고 가입 절차를 계속 진행할 수 있습니다.")
         assertThat(parts.plain).contains(verificationLink)
         assertThat(parts.plain).contains("2026.03.12 19:05 KST")
+    }
+
+    @Test
+    fun `깨진 제목이 들어오면 기본 제목으로 대체한다`() {
+        val mailSender = CapturingJavaMailSender()
+        val adapter =
+            SmtpSignupVerificationMailSenderAdapter(
+                javaMailSender = mailSender,
+                mailFrom = "verify@aquila.site",
+                mailSubject = "Aquila ${'\uFFFD'}${'\uFFFD'}${'\uFFFD'}",
+            )
+
+        adapter.send(
+            toEmail = "tester@example.com",
+            verificationLink = "https://www.aquilaxk.site/signup/verify?token=test-token",
+            expiresAt = Instant.parse("2026-03-12T10:05:13Z"),
+        )
+
+        val sentMessage = requireNotNull(mailSender.sentMessage)
+        assertThat(sentMessage.subject).isEqualTo("Aquila Blog 회원가입")
+        assertThat(sentMessage.getHeader("Subject", null)).contains("=?UTF-8?")
     }
 
     private fun extractTextParts(content: Any?): ExtractedTextParts =

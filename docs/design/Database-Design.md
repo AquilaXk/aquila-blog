@@ -1,6 +1,6 @@
 # Database Design
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 ## 목적
 
@@ -68,6 +68,7 @@ erDiagram
 - `post`는 목록/정렬 성능을 위해 `listed + created_at`, `listed + modified_at`, `author_id + created_at`, `author_id + modified_at` 조합 인덱스를 둔다.
 - `post_like`는 `(liker_id, post_id)` 유니크 제약으로 중복 좋아요를 방지한다.
 - `member_attr`, `post_attr`는 `(subject_id, name)` 유니크 제약으로 속성 중복 저장을 막는다.
+- `task`는 pending 작업 poll 비용을 줄이기 위해 `(status, next_retry_at)` 복합 인덱스를 둔다.
 
 ## 조회 패턴과 테이블 영향
 
@@ -84,6 +85,7 @@ erDiagram
 - Spring Session 저장소
 - 애플리케이션 캐시
 - ShedLock 기반 분산 락
+- 로그인 시도 제한 카운터/차단 TTL 키
 - 운영 헬스체크에서 ping 대상으로 사용
 
 ## MinIO 사용 범위

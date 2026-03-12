@@ -1,6 +1,6 @@
 # Domain Design
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 ## Bounded Context
 
@@ -39,6 +39,7 @@ flowchart LR
 - 관리자 여부는 `Member.username == custom.admin.username` 규칙으로 판별한다.
 - 관리자 비밀번호는 DB 비밀번호보다 환경변수 `custom.admin.password`를 우선 적용할 수 있다.
 - 일반 계정 비밀번호는 BCrypt 해시를 사용한다.
+- 로그인 시도 제한은 Redis 연결 시 공유 상태를 사용하고, 로컬/비상 상황에서는 메모리 fallback으로 동작한다.
 
 ### `post`
 
@@ -69,6 +70,8 @@ flowchart LR
 
 - 비동기 작업 큐
 - 재시도, 지수 백오프, 상태 추적
+- poll 주기와 batch 크기는 운영 환경변수로 조정 가능
+- `status + next_retry_at` 인덱스를 기준으로 pending 작업을 잡아간다
 
 ## 주요 액터와 유스케이스
 

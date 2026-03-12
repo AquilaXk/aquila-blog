@@ -93,14 +93,14 @@ export default CategorySelect
 
 const StyledWrapper = styled.div`
   position: relative;
-  width: auto;
-  flex: 1 1 0;
+  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 230px;
+  max-width: none;
 
   > .wrapper {
     display: inline-flex;
-    gap: 0.25rem;
+    gap: 0.4rem;
     align-items: center;
     justify-content: space-between;
     width: 100%;
@@ -215,25 +215,14 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 560px) {
+    width: 100%;
     max-width: none;
 
     > .wrapper {
       min-height: 42px;
     }
 
-    > .content {
-      max-width: 100%;
-      width: 100%;
-    }
-  }
-
-  @media (max-width: 640px) {
-    width: 100%;
-    max-width: none;
-  }
-
-  @container (max-width: 600px) {
     > .content {
       max-width: 100%;
       min-width: 0;

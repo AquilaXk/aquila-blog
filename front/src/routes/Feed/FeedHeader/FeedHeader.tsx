@@ -19,26 +19,16 @@ export default FeedHeader
 
 const StyledWrapper = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   min-width: 0;
   margin-bottom: 0.15rem;
-  padding-top: 0.75rem;
+  padding-top: 0.8rem;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.75rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  container-type: inline-size;
 
-  @media (max-width: 900px) {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: stretch;
-  }
-
-  @media (max-width: 640px) {
+  @media (max-width: 560px) {
     grid-template-columns: 1fr;
-  }
-
-  @container (max-width: 600px) {
     align-items: stretch;
-    grid-template-columns: 1fr;
   }
 `

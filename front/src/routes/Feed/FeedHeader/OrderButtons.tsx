@@ -53,17 +53,14 @@ const StyledWrapper = styled.div`
   line-height: 1.25rem;
   flex: 0 0 auto;
   min-width: 0;
+  width: fit-content;
   max-width: 100%;
   padding: 0.18rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
 
-  @media (max-width: 900px) {
-    width: auto;
-  }
-
-  @media (max-width: 640px) {
+  @media (max-width: 560px) {
     width: 100%;
   }
 
@@ -92,11 +89,7 @@ const StyledWrapper = styled.div`
       box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.blue8};
     }
 
-    @media (max-width: 900px) {
-      min-width: 0;
-    }
-
-    @media (max-width: 640px) {
+    @media (max-width: 560px) {
       width: 100%;
       min-width: 0;
     }

@@ -94,6 +94,7 @@ export default CategorySelect
 const StyledWrapper = styled.div`
   position: relative;
   width: 100%;
+  min-width: 0;
 
   > .wrapper {
     display: inline-flex;
@@ -147,8 +148,12 @@ const StyledWrapper = styled.div`
   }
   > .content {
     position: absolute;
+    top: calc(100% + 0.45rem);
+    left: 0;
     z-index: 40;
+    width: 100%;
     min-width: 14rem;
+    max-width: min(22rem, calc(100vw - 2rem));
     max-height: min(18rem, calc(100vh - 9rem));
     overflow-y: auto;
     scrollbar-gutter: stable both-edges;
@@ -201,9 +206,16 @@ const StyledWrapper = styled.div`
       }
 
       .count {
+        margin-left: auto;
         flex: 0 0 auto;
         color: ${({ theme }) => theme.colors.gray10};
       }
+    }
+  }
+
+  @media (max-width: 900px) {
+    > .content {
+      max-width: 100%;
     }
   }
 `

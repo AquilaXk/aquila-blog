@@ -18,16 +18,16 @@ const FeedHeader: React.FC<Props> = () => {
 export default FeedHeader
 
 const StyledWrapper = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   margin-bottom: 1rem;
   padding-top: 0.9rem;
-  justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
 
-  @media (max-width: 640px) {
-    flex-direction: column;
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
     align-items: stretch;
   }
 `

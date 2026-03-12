@@ -228,7 +228,8 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     profileImageDirectUrl: string | undefined,
     profileImageUrl: string | undefined,
     name: string,
-    size: number
+    size: number,
+    priority = false
   ) => {
     const imageSrc = profileImageDirectUrl || profileImageUrl || CONFIG.profile.image
     return (
@@ -236,7 +237,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
         <ProfileImage
           src={imageSrc}
           alt={`${name} avatar`}
-          priority={size >= 44}
+          priority={priority}
           fillContainer
           width={size}
           height={size}
@@ -257,7 +258,8 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
             comment.authorProfileImageDirectUrl,
             comment.authorProfileImageUrl,
             displayName,
-            depth > 0 ? 38 : 44
+            depth > 0 ? 38 : 44,
+            depth === 0
           )}
           <div className="commentBody">
             <div className="head">
@@ -366,7 +368,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
       <AccountCard>
         {me ? (
           <>
-            {renderAvatar(me.profileImageDirectUrl, me.profileImageUrl, me.username, 44)}
+            {renderAvatar(me.profileImageDirectUrl, me.profileImageUrl, me.username, 44, true)}
             <div>
               <strong>{me.nickname || me.username}</strong>
               <span>로그인된 계정으로 바로 댓글과 답글을 작성할 수 있습니다.</span>
@@ -392,7 +394,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
 
       <form onSubmit={handleWriteComment} className="writeForm">
         <div className="composerAvatar">
-          {renderAvatar(me?.profileImageDirectUrl, me?.profileImageUrl, me?.username || "guest", 44)}
+          {renderAvatar(me?.profileImageDirectUrl, me?.profileImageUrl, me?.username || "guest", 44, true)}
         </div>
         <div className="composerBody">
           <textarea
@@ -487,6 +489,7 @@ const StyledWrapper = styled.section`
   .writeForm {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
     gap: 0.85rem;
     margin-bottom: 1rem;
 
@@ -497,7 +500,8 @@ const StyledWrapper = styled.section`
 
   .composerAvatar {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
+    align-items: flex-start;
   }
 
   .composerBody {

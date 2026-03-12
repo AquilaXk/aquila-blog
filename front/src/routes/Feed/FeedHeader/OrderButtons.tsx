@@ -51,10 +51,12 @@ const StyledWrapper = styled.div`
   gap: 0.45rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
+  flex: 0 0 auto;
 
-  @media (max-width: 640px) {
+  @media (max-width: 900px) {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
   }
 
   button {
@@ -81,7 +83,7 @@ const StyledWrapper = styled.div`
       background: ${({ theme }) => theme.colors.blue3};
     }
 
-    @media (max-width: 640px) {
+    @media (max-width: 900px) {
       width: 100%;
       min-width: 0;
     }

@@ -88,6 +88,14 @@ logging:
     org.hibernate.orm.jdbc.extract: TRACE
     org.hibernate.orm.jdbc.batch: TRACE
     org.springframework.transaction.interceptor: TRACE
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: ping,db
 custom:
   dbBaseName: blog
   dev:

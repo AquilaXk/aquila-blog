@@ -83,6 +83,15 @@ backend_host() {
   echo "back_green"
 }
 
+backend_http_host() {
+  local backend="$1"
+  if [[ "${backend}" == "back_blue" ]]; then
+    echo "back-blue"
+    return
+  fi
+  echo "back-green"
+}
+
 other_backend() {
   local backend="$1"
   if [[ "${backend}" == "back_blue" ]]; then
@@ -156,7 +165,7 @@ probe_caddy_http_code() {
 check_backend_health() {
   local backend="$1"
   local host
-  host="$(backend_host "${backend}")"
+  host="$(backend_http_host "${backend}")"
   local attempt=1
 
   while [[ "${attempt}" -le "${HEALTHCHECK_RETRIES}" ]]; do

@@ -13,6 +13,10 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+reload_caddy() {
+  compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || true
+}
+
 latest_backup() {
   ls -1dt "${BACKUP_ROOT}"/* 2>/dev/null | head -n 1
 }
@@ -66,7 +70,7 @@ if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
 fi
 
 compose up -d db_1 redis_1 caddy cloudflared back_blue back_green
-compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || true
+reload_caddy
 
 if [[ -f "${STATE_FILE}" ]]; then
   target_backend="$(cat "${STATE_FILE}" || true)"
@@ -78,6 +82,8 @@ if [[ -f "${STATE_FILE}" ]]; then
 
     connect_backend_network "${target_backend}" "true" || true
     connect_backend_network "${other_backend}" "false" || true
+
+    reload_caddy
 
     compose stop "${other_backend}" || true
   fi

@@ -107,6 +107,7 @@ GitHub Actions 기준 필수값:
 
 - Caddy는 색상별 서비스명을 직접 바라보지 않고 `back_active:8080`으로 라우팅한다.
 - 신규 컨테이너가 올라오면 health check 통과 후 `back_active` alias를 새 컨테이너로 옮긴다.
+- alias 전환 직후 Caddy를 다시 reload해서 `back_active`의 새 IP를 기준으로 upstream을 재해석하게 만든다.
 - Caddy 라우팅 검증이 끝나기 전에는 기존 active를 내리지 않는다.
 - 실패 시 rollback 스크립트가 backup 상태를 기준으로 복구한다.
 
@@ -130,9 +131,9 @@ sequenceDiagram
 | --- | --- | --- |
 | storage env 검사 | endpoint, secret placeholder 확인 | 배포 중단 |
 | auth throttle 확인 | Redis 연결 및 TTL 키 동작 | brute-force 완화 불능 |
-| 신규 backend 기동 | 컨테이너 실행/헬스체크 | cutover 전 중단 |
+| 신규 backend 기동 | `/actuator/health` 가 `200` 응답 | cutover 전 중단 |
 | alias 전환 | `back_active` IP 일치 여부 | rollback 시도 |
-| Caddy 경유 검증 | `Host` 헤더 기반 health 확인 | rollback 시도 |
+| Caddy 경유 검증 | `Host` 헤더 기반 `/actuator/health` 가 `200` 응답 | rollback 시도 |
 | post-check | active backend와 alias 1:1 매칭 확인 | workflow 실패 |
 
 ## 운영 체크리스트

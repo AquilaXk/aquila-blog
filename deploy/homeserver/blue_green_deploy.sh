@@ -8,7 +8,7 @@ ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_FILE="${SCRIPT_DIR}/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 NETWORK_NAME="blog_home_default"
-HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/}"
+HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-120}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
@@ -112,7 +112,16 @@ ensure_caddyfile_back_active() {
   tmp_file="$(mktemp)"
   sed -E "s/back[-_](blue|green|active):8080/back_active:8080/" "${CADDY_FILE}" > "${tmp_file}"
   mv "${tmp_file}" "${CADDY_FILE}"
+  reload_caddy
+}
+
+reload_caddy() {
   compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+}
+
+is_healthy_http_code() {
+  local code="$1"
+  [[ "${code}" == "200" ]]
 }
 
 check_backend_dns_from_caddy() {
@@ -159,7 +168,7 @@ check_backend_health() {
         -s -o /dev/null -w "%{http_code}" "http://${host}:8080${HEALTHCHECK_PATH}"
     } || true)"
 
-    if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+    if is_healthy_http_code "${code}"; then
       echo "healthcheck ok: ${backend} (status=${code})"
       return 0
     fi
@@ -225,6 +234,9 @@ switch_active_alias() {
     return 1
   fi
 
+  # Force Caddy to resolve the updated back_active alias before public route verification.
+  reload_caddy
+
   echo "back_active alias switched to ${target} (${active_ip})"
 }
 
@@ -246,7 +258,7 @@ verify_caddy_route() {
     if [[ -n "${active_ip}" && "${active_ip}" == "${expected_ip}" ]]; then
       local code
       code="$(probe_caddy_http_code "${api_domain}")"
-      if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+      if is_healthy_http_code "${code}"; then
         echo "caddy route verify ok: ${expected_backend} (status=${code})"
         return 0
       fi
@@ -380,7 +392,7 @@ if [[ "${active_backend}" != "${next_backend}" ]]; then
 fi
 
 post_code="$(probe_caddy_http_code "${api_domain}")"
-if ! [[ "${post_code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+if ! is_healthy_http_code "${post_code}"; then
   echo "post-stop verify failed (status=${post_code:-none})" >&2
   rollback_to_backend "${active_backend}" "${api_domain}" || true
   exit 1

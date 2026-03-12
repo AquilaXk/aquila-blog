@@ -108,6 +108,7 @@ GitHub Actions 기준 필수값:
 - Caddy는 색상별 서비스명을 직접 바라보지 않고 `back_active:8080`으로 라우팅한다.
 - 신규 컨테이너가 올라오면 health check 통과 후 `back_active` alias를 새 컨테이너로 옮긴다.
 - alias 전환 직후 Caddy를 다시 reload해서 `back_active`의 새 IP를 기준으로 upstream을 재해석하게 만든다.
+- 직접 backend health probe는 Tomcat의 Host 검증에 걸리지 않도록 `back-blue`, `back-green` 같은 HTTP-safe alias로 호출한다.
 - Caddy 라우팅 검증이 끝나기 전에는 기존 active를 내리지 않는다.
 - 실패 시 rollback 스크립트가 backup 상태를 기준으로 복구한다.
 

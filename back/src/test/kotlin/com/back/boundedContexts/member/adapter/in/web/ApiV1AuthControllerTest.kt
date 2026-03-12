@@ -1,10 +1,12 @@
 package com.back.boundedContexts.member.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.service.AuthTokenService
+import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -33,6 +35,14 @@ class ApiV1AuthControllerTest {
 
     @Autowired
     private lateinit var authTokenService: AuthTokenService
+
+    @Autowired
+    private lateinit var loginAttemptService: LoginAttemptService
+
+    @AfterEach
+    fun clearLoginAttemptState() {
+        loginAttemptService.clearAllForTest()
+    }
 
     @Nested
     inner class Login {

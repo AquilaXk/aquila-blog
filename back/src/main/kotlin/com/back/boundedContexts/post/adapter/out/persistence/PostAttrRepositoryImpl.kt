@@ -40,4 +40,24 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
             .setParameter("names", names)
             .resultList
     }
+
+    override fun incrementIntValue(
+        subject: Post,
+        name: String,
+        delta: Int,
+    ): Int =
+        (entityManager
+            .createNativeQuery(
+                """
+                insert into post_attr (id, subject_id, name, int_value)
+                values (nextval('post_attr_seq'), :subjectId, :name, :delta)
+                on conflict (subject_id, name)
+                do update set int_value = post_attr.int_value + excluded.int_value
+                returning int_value
+                """.trimIndent(),
+            ).setParameter("subjectId", subject.id)
+            .setParameter("name", name)
+            .setParameter("delta", delta)
+            .singleResult as Number)
+            .toInt()
 }

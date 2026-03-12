@@ -152,7 +152,7 @@ const StyledWrapper = styled.div`
     left: 0;
     z-index: 40;
     width: 100%;
-    min-width: 14rem;
+    min-width: min(14rem, 100%);
     max-width: min(22rem, calc(100vw - 2rem));
     max-height: min(18rem, calc(100vh - 9rem));
     overflow-y: auto;
@@ -216,6 +216,13 @@ const StyledWrapper = styled.div`
   @media (max-width: 900px) {
     > .content {
       max-width: 100%;
+    }
+  }
+
+  @container (max-width: 760px) {
+    > .content {
+      max-width: 100%;
+      min-width: 0;
     }
   }
 `

@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import Image from "next/image"
 import React from "react"
+import { MdFavorite, MdFavoriteBorder } from "react-icons/md"
 import { CONFIG } from "site.config"
 import Category from "src/components/Category"
 import ProfileImage from "src/components/ProfileImage"
@@ -11,9 +12,22 @@ import { TPost } from "src/types"
 type Props = {
   data: TPost
   category?: string
+  likesCount?: number
+  hitCount?: number
+  actorHasLiked?: boolean
+  likePending?: boolean
+  onToggleLike?: () => void
 }
 
-const PostHeader: React.FC<Props> = ({ data, category }) => {
+const PostHeader: React.FC<Props> = ({
+  data,
+  category,
+  likesCount,
+  hitCount,
+  actorHasLiked = false,
+  likePending = false,
+  onToggleLike,
+}) => {
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
@@ -60,12 +74,24 @@ const PostHeader: React.FC<Props> = ({ data, category }) => {
           </div>
         )}
 
-        <div className="stats" aria-label="post stats">
-          <span>댓글 {data.commentsCount ?? 0}</span>
-          <span className="dot" />
-          <span>좋아요 {data.likesCount ?? 0}</span>
-          <span className="dot" />
-          <span>조회 {data.hitCount ?? 0}</span>
+        <div className="actions">
+          <button
+            type="button"
+            className="likeButton"
+            aria-pressed={actorHasLiked}
+            data-active={actorHasLiked}
+            disabled={likePending}
+            onClick={onToggleLike}
+          >
+            {actorHasLiked ? <MdFavorite /> : <MdFavoriteBorder />}
+            <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
+          </button>
+
+          <div className="stats" aria-label="post stats">
+            <span>댓글 {data.commentsCount ?? 0}</span>
+            <span className="dot" />
+            <span>조회 {hitCount ?? data.hitCount ?? 0}</span>
+          </div>
         </div>
       </div>
 
@@ -163,6 +189,48 @@ const StyledWrapper = styled.header`
     font-weight: 500;
   }
 
+  .actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+
+  .likeButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 40px;
+    padding: 0 0.9rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      color 0.18s ease;
+
+    svg {
+      font-size: 1.05rem;
+    }
+
+    &[data-active="true"] {
+      border-color: ${({ theme }) => theme.colors.red7};
+      background: ${({ theme }) => theme.colors.red3};
+      color: ${({ theme }) => theme.colors.red11};
+    }
+
+    :disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+    }
+  }
+
   .dot {
     width: 0.22rem;
     height: 0.22rem;
@@ -204,6 +272,11 @@ const StyledWrapper = styled.header`
     .metaRow {
       margin-top: 1.15rem;
       align-items: flex-start;
+    }
+
+    .actions {
+      width: 100%;
+      justify-content: flex-start;
     }
 
     .metaText,

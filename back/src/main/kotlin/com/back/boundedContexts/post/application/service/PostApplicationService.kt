@@ -33,6 +33,7 @@ import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.event.app.EventPublisher
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -217,39 +218,67 @@ class PostApplicationService(
     fun toggleLike(
         post: Post,
         actor: Member,
+    ): PostLikeToggleResult = if (isLiked(post, actor)) unlike(post, actor) else like(post, actor)
+
+    @Transactional
+    fun like(
+        post: Post,
+        actor: Member,
     ): PostLikeToggleResult {
         val persistenceActor = toPersistenceMember(actor)
         hydratePostAttrs(post)
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
-        val likeResult =
-            if (existingLike != null) {
-                postLikeRepository.delete(existingLike)
-                post.onLikeRemoved()
-                PostLikeToggleResult(false, existingLike.id)
-            } else {
-                val savedLike = postLikeRepository.save(PostLike(0, persistenceActor, post))
-                post.onLikeAdded()
-                PostLikeToggleResult(true, savedLike.id)
-            }
-        savePostAttr(post.likesCountAttr)
+        if (existingLike != null) {
+            syncLikesCount(post)
+            return PostLikeToggleResult(true, existingLike.id)
+        }
+
+        return try {
+            val savedLike = postLikeRepository.save(PostLike(0, persistenceActor, post))
+            syncLikesCount(post)
+            postRepository.flush()
+
+            eventPublisher.publish(
+                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, savedLike.id, MemberDto(actor)),
+            )
+
+            PostLikeToggleResult(true, savedLike.id)
+        } catch (exception: DataIntegrityViolationException) {
+            val resolvedLike = postLikeRepository.findByLikerAndPost(persistenceActor, post) ?: throw exception
+            syncLikesCount(post)
+            PostLikeToggleResult(true, resolvedLike.id)
+        }
+    }
+
+    @Transactional
+    fun unlike(
+        post: Post,
+        actor: Member,
+    ): PostLikeToggleResult {
+        val persistenceActor = toPersistenceMember(actor)
+        hydratePostAttrs(post)
+        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
+        val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
+        syncLikesCount(post)
         postRepository.flush()
 
-        eventPublisher.publish(
-            if (likeResult.isLiked) {
-                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, likeResult.likeId, MemberDto(actor))
-            } else {
-                PostUnlikedEvent(UUID.randomUUID(), post.id, post.author.id, likeResult.likeId, MemberDto(actor))
-            },
-        )
+        if (deletedCount > 0 && existingLike != null) {
+            eventPublisher.publish(
+                PostUnlikedEvent(UUID.randomUUID(), post.id, post.author.id, existingLike.id, MemberDto(actor)),
+            )
+        }
 
-        return likeResult
+        return PostLikeToggleResult(false, existingLike?.id ?: 0)
     }
 
     @Transactional
     fun incrementHit(post: Post) {
-        hydratePostAttrs(post)
-        post.incrementHitCount()
-        savePostAttr(post.hitCountAttr)
+        val updatedHitCount = postAttrRepository.incrementIntValue(post, HIT_COUNT)
+        val refreshedAttr = post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)
+        refreshedAttr?.let {
+            it.intValue = updatedHitCount
+            post.hitCountAttr = it
+        }
     }
 
     fun getComments(post: Post): List<PostComment> =
@@ -389,6 +418,12 @@ class PostApplicationService(
 
     private fun savePostAttr(attr: PostAttr?) {
         attr?.let(postAttrRepository::save)
+    }
+
+    private fun syncLikesCount(post: Post) {
+        val actualLikesCount = postLikeRepository.countByPost(post).toInt()
+        post.likesCount = actualLikesCount
+        savePostAttr(post.likesCountAttr)
     }
 
     private fun saveMemberAttr(attr: MemberAttr?) {

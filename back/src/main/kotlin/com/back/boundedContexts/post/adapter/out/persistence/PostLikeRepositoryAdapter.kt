@@ -14,6 +14,11 @@ class PostLikeRepositoryAdapter(
 
     override fun delete(postLike: PostLike) = postLikeRepository.delete(postLike)
 
+    override fun deleteByLikerAndPost(
+        liker: Member,
+        post: Post,
+    ): Int = postLikeRepository.deleteByLikerAndPost(liker, post)
+
     override fun findByLikerAndPost(
         liker: Member,
         post: Post,
@@ -23,4 +28,6 @@ class PostLikeRepositoryAdapter(
         liker: Member,
         posts: List<Post>,
     ): List<PostLike> = postLikeRepository.findByLikerAndPostIn(liker, posts)
+
+    override fun countByPost(post: Post): Long = postLikeRepository.countByPost(post)
 }

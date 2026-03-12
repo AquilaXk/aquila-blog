@@ -14,5 +14,11 @@ interface PostAttrRepositoryPort {
         names: List<String>,
     ): List<PostAttr>
 
+    fun incrementIntValue(
+        subject: Post,
+        name: String,
+        delta: Int = 1,
+    ): Int
+
     fun save(attr: PostAttr): PostAttr
 }

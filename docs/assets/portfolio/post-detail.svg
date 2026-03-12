@@ -1,0 +1,41 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1200" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="panel2" x1="0" y1="0" x2="860" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#171717"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" rx="32" fill="url(#bg2)"/>
+  <rect x="28" y="28" width="1144" height="664" rx="28" stroke="#2F3542"/>
+  <text x="56" y="78" fill="#F3F4F6" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="700">Post Detail</text>
+  <text x="56" y="112" fill="#9CA3AF" font-size="17" font-family="Arial, Helvetica, sans-serif">Canonical detail URL, author profile, like, hit count, and comments.</text>
+
+  <text x="56" y="184" fill="#F8FAFC" font-size="58" font-family="Arial, Helvetica, sans-serif" font-weight="700">Like &amp; Hit Count</text>
+  <text x="56" y="230" fill="#9CA3AF" font-size="24" font-family="Arial, Helvetica, sans-serif">Idempotent reactions, deduped views, and markdown-first reading.</text>
+
+  <rect x="56" y="278" width="1088" height="156" rx="28" fill="url(#panel2)" stroke="#30343F"/>
+  <circle cx="124" cy="356" r="42" fill="#1E293B"/>
+  <circle cx="124" cy="346" r="24" fill="#F59E0B"/>
+  <path d="M101 378C109 362 139 362 147 378V390H101V378Z" fill="#334155"/>
+  <text x="188" y="346" fill="#F8FAFC" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="700">aquila</text>
+  <text x="188" y="382" fill="#94A3B8" font-size="20" font-family="Arial, Helvetica, sans-serif">2026.03.12 · canonical /posts/:id</text>
+
+  <rect x="876" y="320" width="88" height="46" rx="23" fill="#111827" stroke="#374151"/>
+  <text x="904" y="350" fill="#E5E7EB" font-size="22" font-family="Arial, Helvetica, sans-serif">12</text>
+  <rect x="978" y="320" width="88" height="46" rx="23" fill="#3B0820" stroke="#F43F5E"/>
+  <text x="1000" y="350" fill="#FBCFE8" font-size="22" font-family="Arial, Helvetica, sans-serif">♥ 8</text>
+  <rect x="1080" y="320" width="48" height="46" rx="23" fill="#101826"/>
+  <text x="1095" y="350" fill="#F8FAFC" font-size="24" font-family="Arial, Helvetica, sans-serif">↗</text>
+
+  <rect x="56" y="470" width="1088" height="194" rx="28" fill="url(#panel2)" stroke="#30343F"/>
+  <text x="96" y="532" fill="#F8FAFC" font-size="40" font-family="Arial, Helvetica, sans-serif" font-weight="700">01. Problem</text>
+  <text x="96" y="582" fill="#D1D5DB" font-size="26" font-family="Arial, Helvetica, sans-serif">A like button looks simple, but real traffic turns it into</text>
+  <text x="96" y="618" fill="#D1D5DB" font-size="26" font-family="Arial, Helvetica, sans-serif">a concurrency and idempotency problem.</text>
+  <rect x="820" y="520" width="262" height="104" rx="24" fill="#101826" stroke="#334155"/>
+  <text x="848" y="562" fill="#60A5FA" font-size="22" font-family="Arial, Helvetica, sans-serif">Comments</text>
+  <text x="848" y="596" fill="#E5E7EB" font-size="18" font-family="Arial, Helvetica, sans-serif">SSR preloaded avatars</text>
+</svg>

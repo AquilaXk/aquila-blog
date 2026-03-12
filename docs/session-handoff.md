@@ -2,6 +2,10 @@
 
 Last updated: 2026-03-12
 
+## 이 문서가 보여주는 것
+
+이 문서는 단순한 인수인계 메모가 아니라, 실제 운영 중 어떤 지점을 가장 먼저 확인하고 어떤 방식으로 빠르게 트리아지하는지를 보여주는 운영 노트다.
+
 ## 현재 상태 요약
 
 - 운영 구조는 `Vercel(front) + Home Server(back/db/redis/minio/caddy/cloudflared)`이다.

@@ -25,8 +25,14 @@ const StyledWrapper = styled.div`
   align-items: center;
   gap: 0.75rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  container-type: inline-size;
 
   @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  @container (max-width: 760px) {
     grid-template-columns: 1fr;
     align-items: stretch;
   }

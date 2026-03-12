@@ -9,6 +9,11 @@ interface PostLikeRepositoryPort {
 
     fun delete(postLike: PostLike)
 
+    fun deleteByLikerAndPost(
+        liker: Member,
+        post: Post,
+    ): Int
+
     fun findByLikerAndPost(
         liker: Member,
         post: Post,
@@ -18,4 +23,6 @@ interface PostLikeRepositoryPort {
         liker: Member,
         posts: List<Post>,
     ): List<PostLike>
+
+    fun countByPost(post: Post): Long
 }

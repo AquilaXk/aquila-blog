@@ -59,6 +59,12 @@ const StyledWrapper = styled.div`
     width: 100%;
   }
 
+  @container (max-width: 760px) {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
   button {
     display: inline-flex;
     align-items: center;
@@ -84,6 +90,11 @@ const StyledWrapper = styled.div`
     }
 
     @media (max-width: 900px) {
+      width: 100%;
+      min-width: 0;
+    }
+
+    @container (max-width: 760px) {
       width: 100%;
       min-width: 0;
     }

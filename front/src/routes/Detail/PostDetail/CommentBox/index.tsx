@@ -360,7 +360,6 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
         <div>
           <span className="eyebrow">Community</span>
           <h3>댓글</h3>
-          <p>읽은 뒤 느낀 점이나 질문을 남겨보세요. 답글로 대화를 이어갈 수 있습니다.</p>
         </div>
         <div className="countBadge">{comments.length} comments</div>
       </SectionHeader>
@@ -578,12 +577,6 @@ const SectionHeader = styled.div`
     margin: 0;
     font-size: 1.35rem;
     color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0.45rem 0 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.65;
   }
 
   .countBadge {

@@ -1,11 +1,13 @@
 package com.back.boundedContexts.post.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import jakarta.servlet.http.Cookie
 import org.hamcrest.Matchers
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -32,6 +34,14 @@ class ApiV1PostControllerTest {
 
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
+
+    @Autowired
+    private lateinit var postHitDedupService: PostHitDedupService
+
+    @AfterEach
+    fun clearHitDedupState() {
+        postHitDedupService.clearAllForTest()
+    }
 
     @Nested
     inner class Write {
@@ -382,14 +392,18 @@ class ApiV1PostControllerTest {
         @Test
         fun `글 조회가 호출되면 조회수 증가가 정상 반영된다`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
+            val initialHitCount = post.hitCount
 
-            mvc.post("/post/api/v1/posts/${post.id}/hit").andExpect {
+            mvc.post("/post/api/v1/posts/${post.id}/hit") {
+                header("X-Forwarded-For", "203.0.113.10")
+                header(HttpHeaders.USER_AGENT, "JUnit-hit-single")
+            }.andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
                 match(handler().methodName("incrementHit"))
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
-                jsonPath("$.msg") { value("조회수가 증가했습니다.") }
-                jsonPath("$.data.hitCount") { isNumber() }
+                jsonPath("$.msg") { value("조회수를 반영했습니다.") }
+                jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
             }
         }
 
@@ -398,6 +412,28 @@ class ApiV1PostControllerTest {
             mvc.post("/post/api/v1/posts/${Int.MAX_VALUE}/hit").andExpect {
                 status { isNotFound() }
                 jsonPath("$.resultCode") { value("404-1") }
+            }
+        }
+
+        @Test
+        fun `같은 방문자의 반복 조회는 일정 시간 동안 한번만 반영된다`() {
+            val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
+            val initialHitCount = post.hitCount
+
+            mvc.post("/post/api/v1/posts/${post.id}/hit") {
+                header("X-Forwarded-For", "203.0.113.11")
+                header(HttpHeaders.USER_AGENT, "JUnit-hit-dedup")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
+            }
+
+            mvc.post("/post/api/v1/posts/${post.id}/hit") {
+                header("X-Forwarded-For", "203.0.113.11")
+                header(HttpHeaders.USER_AGENT, "JUnit-hit-dedup")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
             }
         }
     }
@@ -441,6 +477,48 @@ class ApiV1PostControllerTest {
             mvc.post("/post/api/v1/posts/${post.id}/like").andExpect {
                 status { isUnauthorized() }
                 jsonPath("$.resultCode") { value("401-1") }
+            }
+        }
+
+        @Test
+        @WithUserDetails("user1")
+        fun `멱등 like 요청은 여러 번 보내도 좋아요가 한번만 유지된다`() {
+            val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
+            val initialLikesCount = post.likesCount
+
+            mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.msg") { value("좋아요를 반영했습니다.") }
+                jsonPath("$.data.liked") { value(true) }
+                jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+            }
+
+            mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.data.liked") { value(true) }
+                jsonPath("$.data.likesCount") { value(initialLikesCount + 1) }
+            }
+        }
+
+        @Test
+        @WithUserDetails("user1")
+        fun `멱등 unlike 요청은 여러 번 보내도 취소 상태가 유지된다`() {
+            val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
+            val initialLikesCount = post.likesCount
+
+            mvc.put("/post/api/v1/posts/${post.id}/like")
+
+            mvc.delete("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.msg") { value("좋아요 취소를 반영했습니다.") }
+                jsonPath("$.data.liked") { value(false) }
+                jsonPath("$.data.likesCount") { value(initialLikesCount) }
+            }
+
+            mvc.delete("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.data.liked") { value(false) }
+                jsonPath("$.data.likesCount") { value(initialLikesCount) }
             }
         }
     }

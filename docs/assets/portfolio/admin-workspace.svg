@@ -1,0 +1,45 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1200" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A0F1F"/>
+      <stop offset="1" stop-color="#141414"/>
+    </linearGradient>
+    <linearGradient id="card3" x1="0" y1="0" x2="480" y2="340" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#171717"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" rx="32" fill="url(#bg3)"/>
+  <rect x="28" y="28" width="1144" height="664" rx="28" stroke="#2F3542"/>
+  <text x="56" y="78" fill="#F3F4F6" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="700">Admin Workspace</text>
+  <text x="56" y="112" fill="#9CA3AF" font-size="17" font-family="Arial, Helvetica, sans-serif">Hub, profile, writing studio, and tools split into focused routes.</text>
+
+  <rect x="56" y="156" width="340" height="220" rx="28" fill="url(#card3)" stroke="#30343F"/>
+  <text x="88" y="206" fill="#F8FAFC" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="700">/admin</text>
+  <text x="88" y="246" fill="#9CA3AF" font-size="22" font-family="Arial, Helvetica, sans-serif">Hub page with quick links</text>
+  <rect x="88" y="282" width="122" height="44" rx="18" fill="#0B2B57" stroke="#2563EB"/>
+  <text x="121" y="311" fill="#F8FAFC" font-size="20" font-family="Arial, Helvetica, sans-serif">Hub</text>
+
+  <rect x="430" y="156" width="340" height="220" rx="28" fill="url(#card3)" stroke="#30343F"/>
+  <text x="462" y="206" fill="#F8FAFC" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="700">/admin/profile</text>
+  <text x="462" y="246" fill="#9CA3AF" font-size="22" font-family="Arial, Helvetica, sans-serif">Profile image, role, and bio</text>
+  <circle cx="528" cy="314" r="36" fill="#0F172A" stroke="#3B4252"/>
+  <text x="584" y="321" fill="#E5E7EB" font-size="20" font-family="Arial, Helvetica, sans-serif">eager avatar render</text>
+
+  <rect x="804" y="156" width="340" height="220" rx="28" fill="url(#card3)" stroke="#30343F"/>
+  <text x="836" y="206" fill="#F8FAFC" font-size="30" font-family="Arial, Helvetica, sans-serif" font-weight="700">/admin/posts/new</text>
+  <text x="836" y="246" fill="#9CA3AF" font-size="22" font-family="Arial, Helvetica, sans-serif">Writing studio and preview</text>
+  <rect x="836" y="282" width="248" height="62" rx="18" fill="#09090B" stroke="#374151"/>
+  <text x="864" y="320" fill="#6B7280" font-size="24" font-family="Arial, Helvetica, sans-serif">Title input</text>
+
+  <rect x="56" y="416" width="1088" height="248" rx="28" fill="url(#card3)" stroke="#30343F"/>
+  <text x="96" y="474" fill="#F8FAFC" font-size="42" font-family="Arial, Helvetica, sans-serif" font-weight="700">Why split the admin page?</text>
+  <text x="96" y="526" fill="#D1D5DB" font-size="25" font-family="Arial, Helvetica, sans-serif">One page was handling profile editing, writing, comments, and tools.</text>
+  <text x="96" y="564" fill="#D1D5DB" font-size="25" font-family="Arial, Helvetica, sans-serif">Splitting routes reduced hydration risk, state coupling, and UI complexity.</text>
+  <rect x="96" y="598" width="196" height="38" rx="19" fill="#0C3B2E"/>
+  <text x="122" y="623" fill="#34D399" font-size="18" font-family="Arial, Helvetica, sans-serif">Lower coupling</text>
+  <rect x="308" y="598" width="196" height="38" rx="19" fill="#101826"/>
+  <text x="338" y="623" fill="#60A5FA" font-size="18" font-family="Arial, Helvetica, sans-serif">Clearer ownership</text>
+  <rect x="520" y="598" width="196" height="38" rx="19" fill="#3B0820"/>
+  <text x="553" y="623" fill="#F9A8D4" font-size="18" font-family="Arial, Helvetica, sans-serif">Safer SSR</text>
+</svg>

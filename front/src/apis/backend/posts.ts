@@ -26,6 +26,7 @@ type ApiPostDto = {
   category?: string[]
   published: boolean
   listed: boolean
+  actorHasLiked?: boolean
 }
 
 type ApiPostWithContentDto = {
@@ -47,6 +48,7 @@ type ApiPostWithContentDto = {
   likesCount: number
   commentsCount: number
   hitCount: number
+  actorHasLiked?: boolean
 }
 
 const slugify = (value: string) =>
@@ -202,6 +204,7 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
   createdTime: post.createdAt,
   modifiedTime: post.modifiedAt,
   fullWidth: false,
+  actorHasLiked: post.actorHasLiked,
 })
 
 const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
@@ -237,6 +240,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
     hitCount: post.hitCount,
+    actorHasLiked: post.actorHasLiked,
   }
 }
 

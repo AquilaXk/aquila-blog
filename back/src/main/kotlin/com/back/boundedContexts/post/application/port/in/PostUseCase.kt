@@ -62,6 +62,16 @@ interface PostUseCase {
         actor: Member,
     ): PostLikeToggleResult
 
+    fun like(
+        post: Post,
+        actor: Member,
+    ): PostLikeToggleResult
+
+    fun unlike(
+        post: Post,
+        actor: Member,
+    ): PostLikeToggleResult
+
     fun incrementHit(post: Post)
 
     fun getComments(post: Post): List<PostComment>

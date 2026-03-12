@@ -19,5 +19,11 @@ class PostAttrRepositoryAdapter(
         names: List<String>,
     ): List<PostAttr> = postAttrRepository.findBySubjectInAndNameIn(subjects, names)
 
+    override fun incrementIntValue(
+        subject: Post,
+        name: String,
+        delta: Int,
+    ): Int = postAttrRepository.incrementIntValue(subject, name, delta)
+
     override fun save(attr: PostAttr): PostAttr = postAttrRepository.save(attr)
 }

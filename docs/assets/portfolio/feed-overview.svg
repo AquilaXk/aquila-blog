@@ -1,0 +1,52 @@
+<svg width="1200" height="720" viewBox="0 0 1200 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#121212"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="720" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#171717"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="720" rx="32" fill="url(#bg)"/>
+  <rect x="28" y="28" width="1144" height="664" rx="28" stroke="#2F3542"/>
+  <text x="56" y="78" fill="#F3F4F6" font-size="26" font-family="Arial, Helvetica, sans-serif" font-weight="700">Feed Overview</text>
+  <text x="56" y="112" fill="#9CA3AF" font-size="17" font-family="Arial, Helvetica, sans-serif">Search, filter, profile card, and article feed optimized for SSR.</text>
+
+  <rect x="56" y="156" width="250" height="476" rx="28" fill="url(#card)" stroke="#30343F"/>
+  <text x="84" y="196" fill="#D1D5DB" font-size="18" font-family="Arial, Helvetica, sans-serif">Profile</text>
+  <circle cx="181" cy="286" r="88" fill="#0F172A" stroke="#3B4252"/>
+  <circle cx="181" cy="272" r="52" fill="#F59E0B"/>
+  <circle cx="181" cy="272" r="48" fill="#FED7AA"/>
+  <path d="M138 332C156 302 206 302 224 332V348H138V332Z" fill="#334155"/>
+  <text x="126" y="408" fill="#F8FAFC" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="700">aquila</text>
+  <text x="104" y="450" fill="#60A5FA" font-size="20" font-family="Arial, Helvetica, sans-serif" font-weight="600">Backend Developer</text>
+  <text x="93" y="500" fill="#9CA3AF" font-size="18" font-family="Arial, Helvetica, sans-serif">Hello World!</text>
+  <rect x="84" y="548" width="194" height="56" rx="18" fill="#101826" stroke="#2B3242"/>
+  <text x="120" y="584" fill="#E5E7EB" font-size="20" font-family="Arial, Helvetica, sans-serif">github / email</text>
+
+  <rect x="338" y="156" width="806" height="108" rx="28" fill="#09090B" stroke="#30343F"/>
+  <text x="378" y="202" fill="#E5E7EB" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">Search &amp; Filter</text>
+  <rect x="378" y="220" width="728" height="26" rx="13" fill="#111827"/>
+  <rect x="378" y="292" width="540" height="58" rx="24" fill="#111827" stroke="#3B4252"/>
+  <text x="410" y="329" fill="#F8FAFC" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">All Categories</text>
+  <rect x="940" y="292" width="166" height="58" rx="24" fill="#0B2B57" stroke="#2563EB"/>
+  <text x="993" y="329" fill="#F8FAFC" font-size="22" font-family="Arial, Helvetica, sans-serif" font-weight="700">Latest</text>
+
+  <rect x="338" y="384" width="806" height="110" rx="26" fill="url(#card)" stroke="#30343F"/>
+  <text x="378" y="432" fill="#F8FAFC" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="700">Concurrency &amp; Idempotency</text>
+  <text x="378" y="470" fill="#9CA3AF" font-size="20" font-family="Arial, Helvetica, sans-serif">How likes and hit counts were made safe for real traffic.</text>
+  <rect x="996" y="412" width="108" height="36" rx="18" fill="#101826"/>
+  <text x="1028" y="436" fill="#60A5FA" font-size="18" font-family="Arial, Helvetica, sans-serif">POST</text>
+
+  <rect x="338" y="522" width="806" height="110" rx="26" fill="url(#card)" stroke="#30343F"/>
+  <text x="378" y="570" fill="#F8FAFC" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="700">Admin Workspace Redesign</text>
+  <text x="378" y="608" fill="#9CA3AF" font-size="20" font-family="Arial, Helvetica, sans-serif">Split profile, writing, and operations into clearer routes.</text>
+  <rect x="992" y="550" width="112" height="36" rx="18" fill="#0C3B2E"/>
+  <text x="1024" y="574" fill="#34D399" font-size="18" font-family="Arial, Helvetica, sans-serif">CASE</text>
+</svg>

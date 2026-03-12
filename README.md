@@ -1,665 +1,199 @@
-# Aquila Blog 홈서버 운영 가이드 (처음 구축 -> 무중단 배포)
+# Aquila Blog
 
-이 문서는 현재 저장소 구성을 기준으로, 안 쓰는 노트북(또는 미니PC)을 홈서버로 구성하고 `Vercel(Front) + Home Server(Back/DB/Redis/MinIO/Caddy) + GitHub Actions(CI/CD) + GHCR` 형태로 운영하는 전체 과정을 설명합니다.
+개인 기술 블로그를 넘어, `콘텐츠 발행`, `인증`, `운영 자동화`, `홈서버 배포`, `실서비스 트러블슈팅`까지 직접 설계하고 운영한 풀스택 프로젝트입니다.
 
-핵심 목표는 다음 2가지입니다.
-- `main` 브랜치 push 시 자동 배포
-- Blue/Green 전환으로 API 다운타임 최소화
+## Project Snapshot
 
----
+| 항목 | 내용 |
+| --- | --- |
+| Frontend | Next.js Pages Router, React Query, Emotion |
+| Backend | Spring Boot 4, Kotlin, JPA, PostgreSQL |
+| Infra | Vercel, Home Server, Docker Compose, Caddy, Cloudflare Tunnel |
+| Storage | PostgreSQL, Redis, MinIO |
+| Auth | ID/PW 로그인, Kakao OAuth, Cookie 기반 세션 |
+| Deployment | GitHub Actions + GHCR + Blue/Green Deploy |
 
-## 0. 이 프로젝트의 실제 운영 구성
+## Why This Project Exists
 
-### 0.1 아키텍처
+이 프로젝트는 단순한 블로그 구현이 아니라, 아래 질문에 답하기 위해 만들었습니다.
 
-- Front: `front/` -> Vercel 배포
-- Back/API: `back/` -> 홈서버 Docker Compose
-- DB/Redis/MinIO: 홈서버 Docker Compose 내부 네트워크
-- Reverse Proxy + TLS: Caddy
-- CI/CD: GitHub Actions가 GHCR에 이미지를 push하고, 홈서버에 SSH 접속해서 배포
-- Front 메인 페이지: SSR + 짧은 CDN 캐시(`s-maxage=30`, `stale-while-revalidate=120`)
+- 정적 블로그와 CMS의 중간 지점에서 어떤 설계가 가장 운영하기 좋은가
+- 개인 규모 서비스에서도 인증, 이미지 저장, 배포 안정성을 얼마나 실무적으로 가져갈 수 있는가
+- "기능 구현"을 넘어 "운영 가능한 구조"를 어떻게 설계하고 검증할 것인가
 
-요약 흐름:
+## What I Built
 
-1. 개발자가 `main`에 push
-2. GitHub Actions `test` -> `calculateTag` -> `buildAndPush` 순으로 실행
-3. 백엔드 이미지가 GHCR에 push됨
-4. `blueGreenDeploy`가 홈서버에 SSH 접속
-5. 홈서버에서 `deploy/homeserver/blue_green_deploy.sh` 실행
-6. 비활성 색상 backend 기동 -> 헬스체크 통과 -> `back_active` alias 전환 -> 이전 색상 종료
-7. 성공 시 `makeTagAndRelease`가 GitHub release/tag 생성
+### 사용자 경험
 
-### 0.2 관련 파일
+- 메인 피드, 검색, 정렬, 카테고리 필터
+- Markdown 기반 글 상세 페이지
+- 댓글, 좋아요, 조회수
+- 일반 로그인과 Kakao OAuth 로그인
+- 관리자 프로필, 글 작성, 운영 도구
 
-- 배포 워크플로: `.github/workflows/deploy.yml`
-- 홈서버 Compose: `deploy/homeserver/docker-compose.prod.yml`
-- Caddy 설정: `deploy/homeserver/Caddyfile`
-- 배포 스크립트: `deploy/homeserver/blue_green_deploy.sh`
-- 운영 환경 변수 예시: `deploy/homeserver/.env.prod.example`
-- 보안 하드닝: `deploy/homeserver/HARDENING.md`
+### 운영 관점
 
----
+- `Front(Vercel)` + `Back(Home Server)` 하이브리드 아키텍처
+- Blue/Green 배포
+- Redis 기반 로그인 제한과 조회수 dedupe
+- MinIO 기반 게시글/프로필 이미지 저장
+- 캐시와 SSR을 함께 활용한 빠른 초기 렌더
 
-## 1. 사전 준비
+## Representative Screens
 
-### 1.1 준비물 체크리스트
+<table>
+  <tr>
+    <td width="33%">
+      <img src="docs/assets/portfolio/feed-overview.svg" alt="Feed overview" />
+      <p><strong>Feed Experience</strong><br/>검색, 카테고리 필터, 프로필 카드, 정렬이 한 화면에서 동작하는 메인 피드</p>
+    </td>
+    <td width="33%">
+      <img src="docs/assets/portfolio/post-detail.svg" alt="Post detail" />
+      <p><strong>Post Detail</strong><br/>canonical URL, 작성자 정보, 댓글, 좋아요/조회수 흐름을 포함한 상세 화면</p>
+    </td>
+    <td width="33%">
+      <img src="docs/assets/portfolio/admin-workspace.svg" alt="Admin workspace" />
+      <p><strong>Admin Workspace</strong><br/>허브, 프로필, 글 작업실, 도구를 분리한 관리자 워크스페이스</p>
+    </td>
+  </tr>
+</table>
 
-- Ubuntu Server 24.04 LTS 설치된 장비 1대
-- 도메인 1개 (예: `example.com`)
-- GitHub 저장소 접근 권한
-- 공유기 포트포워딩 설정 권한
-- Vercel 계정
+## System Overview
 
-### 1.2 권장 네이밍
-
-- Front 도메인: `www.example.com`
-- API 도메인: `api.example.com`
-- 서버 앱 경로: `/home/<user>/app`
-
----
-
-## 2. 홈서버 기본 세팅
-
-Ubuntu 기준:
-
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y git docker.io docker-compose-plugin curl
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
+```mermaid
+flowchart LR
+    User["User Browser"] --> Front["Next.js Frontend<br/>Vercel"]
+    Front --> Api["Spring Boot API<br/>Home Server"]
+    Api --> DB["PostgreSQL"]
+    Api --> Redis["Redis"]
+    Api --> MinIO["MinIO"]
+    Api --> OAuth["Kakao OAuth"]
+    GH["GitHub Actions"] --> GHCR["GHCR"]
+    GH --> Deploy["Blue/Green Deploy"]
+    Deploy --> Api
 ```
 
-재로그인 후 확인:
+## Request Flow
 
-```bash
-docker --version
-docker compose version
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant B as Backend
+    participant D as Database
+    participant S as Storage
+
+    U->>F: Open feed / detail / admin
+    F->>B: SSR or client API request
+    B->>D: Read posts, comments, counters
+    opt image upload
+        B->>S: Upload object to MinIO
+    end
+    B-->>F: DTO + auth/session state
+    F-->>U: Rendered UI
 ```
 
----
+## Key Design Decisions
 
-## 3. 네트워크 및 DNS
+## 1. Front와 Back을 분리한 이유
 
-### 3.1 공유기 포트포워딩
+정적 페이지 생성만으로는 관리자 도구, 인증, 댓글, 이미지 업로드, 운영성 요구를 감당하기 어려웠습니다.  
+그래서 `Next.js`는 사용자 경험과 SSR에 집중시키고, `Spring Boot`는 도메인 로직과 인증, 저장소 접근을 맡도록 역할을 분리했습니다.
 
-- `80` -> 홈서버 `80`
-- `443` -> 홈서버 `443`
-- `SSH 외부포트` -> 홈서버 `22` (외부포트 변경 권장, `Tailscale` 사용 시 생략 가능)
+## 2. 홈서버 + Vercel 하이브리드 구성을 선택한 이유
 
-Cloudflare Tunnel을 사용하면 `80/443` 포트포워딩 없이도 public HTTPS 운영이 가능합니다.
+- 프론트는 글로벌 배포와 빠른 캐시가 중요
+- 백엔드는 데이터, 스토리지, 운영 제어권이 중요
 
-### 3.2 DNS
+이 요구가 달라서, 프론트는 Vercel에 두고 백엔드는 홈서버에서 직접 운영하는 구성을 택했습니다.
 
-- `api.example.com` -> 집 공인 IP 또는 DDNS
-- `www.example.com` -> Vercel 프로젝트에 연결
+## 3. "서비스 규모에 맞는 설계"를 우선한 이유
 
-주의:
-- TLS 인증서 발급은 Caddy가 80/443 접근 가능해야 정상 동작합니다.
-  - 단, Cloudflare Tunnel 모드에서는 Caddy가 직접 인증서를 발급하지 않으므로 이 제약이 사라집니다.
+이 프로젝트는 대형 서비스가 아니기 때문에, 모든 문제를 대규모 분산 시스템처럼 풀지 않았습니다.
 
-### 3.3 Cloudflare Tunnel 모드 (권장)
+대신 아래 기준을 유지했습니다.
 
-1. Cloudflare Zero Trust에서 Tunnel 생성
-2. Public Hostname 추가
-   - Hostname: `api.example.com`
-   - Service: `http://caddy:80`
-3. 발급된 Tunnel token을 `.env.prod`의 `CF_TUNNEL_TOKEN`에 설정
-4. 배포 시 `cloudflared` 컨테이너가 자동 기동되어 외부 트래픽을 Caddy로 전달
+- 과한 복잡도는 피한다
+- 하지만 운영 중 실제로 깨질 수 있는 지점은 방치하지 않는다
+- 기존 구조를 무너뜨리지 않고 확장한다
 
----
+예:
 
-## 4. 서버에 프로젝트 배치
+- 좋아요: 토글 API 대신 `PUT/DELETE` 멱등 API 도입
+- 조회수: 이벤트 수집 시스템 대신 `Redis dedupe + TTL` 도입
+- 이미지: 외부 스토리지 직접 URL + 버전 파라미터 사용
 
-```bash
-mkdir -p ~/app
-cd ~/app
-git clone <YOUR_REPO_URL> .
-cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
+## Portfolio Highlights
+
+### 아키텍처 리팩터링
+
+- 백엔드 구조를 `adapter / application / domain` 방향으로 정리
+- ArchUnit 규칙으로 레이어 위반을 테스트로 고정
+- 관리자 화면을 허브/프로필/글 작업실/운영 도구로 분리
+
+### 운영 안정성
+
+- Blue/Green 배포 파이프라인 구축
+- MinIO 초기화 실패 시 앱 전체를 죽이지 않도록 방어 로직 추가
+- 로그인 시도 제한과 Redis fallback 설계
+
+### 사용자 경험 개선
+
+- SSR + React Query hydrate로 인증 상태와 프로필 이미지 지연 최소화
+- 상세 페이지 canonical URL을 `/posts/:id`로 정리
+- 모바일/반응형 레이아웃 흔들림 제거
+
+## Documentation Map
+
+포트폴리오 관점에서 문서를 읽으려면 아래 순서를 추천합니다.
+
+1. [문서 인덱스](docs/README.md)
+2. [System Architecture](docs/design/System-Architecture.md)
+3. [Domain Design](docs/design/Domain-Design.md)
+4. [Infrastructure Architecture](docs/design/Infrastructure-Architecture.md)
+5. [좋아요/조회수 동시성·멱등성 개선기](docs/troubleshooting/post-like-hit-concurrency.md)
+
+## Repository Structure
+
+```text
+.
+├── back          # Spring Boot + Kotlin API
+├── front         # Next.js frontend
+├── deploy        # home server deployment scripts
+├── docs          # architecture / operations / troubleshooting
+└── .github       # CI/CD workflows
 ```
 
-### 4.1 `.env.prod` 필수 값
+세부 구조 설명:
 
-아래 값은 반드시 수정하세요.
+- [Package Structure](docs/design/package-structure.md)
 
-- `API_DOMAIN`
-- `CADDY_EMAIL`
-- `PROD___SPRING__DATASOURCE__PASSWORD`
-- `PROD___SPRING__DATA__REDIS__PASSWORD`
-- `CUSTOM_PROD_COOKIEDOMAIN`
-- `CUSTOM_PROD_FRONTURL`
-- `CUSTOM_PROD_BACKURL`
+## Validation
 
-Cloudflare Tunnel 모드 사용 시 추가:
-
-- `CF_TUNNEL_TOKEN`
-
-권장 추가:
-
-- `CUSTOM__JWT__SECRET_KEY`를 충분히 긴 랜덤 문자열로 설정
-- 로그인 브루트포스 완화를 위해 필요 시 아래 값을 조정:
-  - `CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS`
-  - `CUSTOM__AUTH__LOGIN__WINDOW_SECONDS`
-  - `CUSTOM__AUTH__LOGIN__LOCK_SECONDS`
-- 백그라운드 task 처리량을 운영 상황에 맞게 조정:
-  - `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`
-  - `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`
-
-이미지 업로드(글 이미지 + 관리자 프로필 이미지)를 쓸 경우 사실상 필수:
-
-- `MINIO_ROOT_USER`
-- `MINIO_ROOT_PASSWORD`
-- `CUSTOM_STORAGE_ENABLED=true`
-- `CUSTOM_STORAGE_ENDPOINT=http://minio_1:9000`
-- `CUSTOM_STORAGE_REGION`
-- `CUSTOM_STORAGE_BUCKET`
-- `CUSTOM_STORAGE_ACCESSKEY`
-- `CUSTOM_STORAGE_SECRETKEY`
-- `CUSTOM_STORAGE_PATHSTYLEACCESS=true`
-
-중요:
-
-- `CUSTOM_STORAGE_ACCESSKEY=${MINIO_ROOT_USER}` 같은 placeholder 문자열을 넣지 말고, 실제 값을 직접 넣어야 합니다.
-- `MINIO_ROOT_PASSWORD`나 `CUSTOM_STORAGE_SECRETKEY`에 `#`가 들어가면 반드시 큰따옴표로 감싸세요.
-- 운영에서는 GitHub Actions Secret `HOME_SERVER_ENV`가 배포 시 `.env.prod`를 덮어쓰므로, 로컬 서버 파일보다 Secret 값이 우선입니다.
-- 로그인 시도 제한은 Redis가 연결되어 있으면 Redis TTL 키로 공유되고, Redis가 없을 때만 프로세스 메모리 fallback을 사용합니다.
-- task processor 기본값은 `60초` poll, `50건` batch입니다.
-
----
-
-## 5. 보안 하드닝 (강력 권장)
-
-문서: `deploy/homeserver/HARDENING.md`
-
-실행:
+프로젝트 변경 시 기본적으로 아래 검증을 통과시켰습니다.
 
 ```bash
-cd ~/app
-sudo ./deploy/homeserver/hardening/setup_hardening.sh 22 <your_linux_user>
+cd back && ./gradlew test --rerun-tasks
+cd front && npm run lint
+cd front && npm run build
 ```
 
-적용 내용:
+운영성 변경은 추가로 아래 관점에서 확인했습니다.
 
-- SSH root 로그인 차단
-- SSH 비밀번호 로그인 차단 (키 로그인만 허용)
-- `AllowUsers` 제한
-- UFW 최소 포트 허용
-- fail2ban 적용
+- 인증/세션 회귀 여부
+- 관리자 경로 접근 제어
+- 이미지 업로드/표시
+- 홈 피드 반영
+- 배포 후 헬스체크
 
-검증:
+## What This Project Demonstrates
 
-```bash
-sudo ufw status verbose
-sudo fail2ban-client status sshd
-sudo sshd -t
-```
+- 단순 CRUD를 넘어선 서비스 설계 능력
+- 운영 중 발생하는 문제를 구조와 테스트로 해결하는 방식
+- 서비스 규모에 맞는 기술 선택
+- 프론트엔드/백엔드/인프라를 하나의 시스템으로 다루는 시각
 
-중요:
-- SSH 포트를 바꿨다면 GitHub Actions 시크릿 `HOME_SSH_PORT`도 반드시 같은 값으로 맞춰야 합니다.
+## Notes
 
----
-
-## 6. 1회 수동 배포로 동작 확인
-
-최초 1회는 CI/CD 전에 직접 실행해서 상태를 확인합니다.
-
-```bash
-cd ~/app
-./deploy/homeserver/blue_green_deploy.sh
-```
-
-확인:
-
-```bash
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps
-curl -I https://api.example.com
-```
-
-정상 시 기대:
-- Caddy, db_1, redis_1, back_blue/back_green 중 1개 색상 active
-- `curl -I`가 2xx/3xx/4xx 응답 (TLS handshake 포함)
-- 대기 중인 task가 있으면 1분 주기 내에 처리 상태가 바뀔 준비가 되어 있음
-
----
-
-## 7. GitHub Actions CI/CD 연결
-
-### 7.1 워크플로 개요
-
-`.github/workflows/deploy.yml`는 다음 순서로 동작합니다.
-
-1. `test` 잡
-2. `calculateTag` 잡에서 이미지/릴리즈 태그 계산
-3. `buildAndPush` 잡에서 backend Docker 이미지 빌드 후 GHCR 푸시
-4. `blueGreenDeploy` 잡에서 홈서버 SSH 접속 후 새 이미지 pull + Blue/Green 전환
-5. `makeTagAndRelease` 잡에서 배포 릴리즈 태그 생성
-
-### 7.2 GitHub Actions 시크릿
-
-`Repository -> Settings -> Secrets and variables -> Actions`
-
-필수:
-
-- `HOME_SSH_HOST`: 홈서버 주소(공인 IP/DDNS 또는 Tailscale IP/호스트명)
-- `HOME_SSH_USER`: 서버 사용자
-- `HOME_SSH_KEY`: 배포용 개인키
-- `HOME_APP_DIR`: 예) `/home/aquila/app`
-- `TS_AUTHKEY`: Tailscale auth key (권장)
-
-선택:
-
-- `HOME_SSH_PORT`: 기본 `22`
-- `HOME_KNOWN_HOSTS`: `ssh-keyscan -p <HOME_SSH_PORT> -H <HOME_SSH_HOST>` 결과
-- `HOME_SERVER_ENV`: `.env.prod` 전체 멀티라인 값
-- `HOME_GHCR_USERNAME`, `HOME_GHCR_TOKEN`: GHCR private 이미지 pull이 필요한 경우
-- `HOME_HEALTHCHECK_URL` (선택): 모니터링 워크플로 헬스체크 URL (기본 `https://api.aquilaxk.site/actuator/health`)
-- `HOME_ALERT_WEBHOOK_URL` (선택): 장애 알림 Webhook URL
-
-`HOME_SERVER_ENV`를 사용하면 배포 시 `.env.prod`를 자동 동기화할 수 있습니다.
-현재 운영에서는 사실상 `HOME_SERVER_ENV`가 `.env.prod`의 source of truth 역할을 합니다.
-
-운영에서 자주 조정하는 값:
-
-- `CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS`
-- `CUSTOM__AUTH__LOGIN__WINDOW_SECONDS`
-- `CUSTOM__AUTH__LOGIN__LOCK_SECONDS`
-- `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`
-- `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`
-
-호환용(구 이름):
-
-- `HOME_HOST`: `HOME_SSH_HOST`를 대체하는 구 이름
-- `HOME_SSH_PRIVATE_KEY`: `HOME_SSH_KEY`를 대체하는 구 이름
-- `HOME_TAILSCALE_HOST` 또는 `HOME_TS_HOST`: Tailscale 호스트를 별도로 분리해 쓰고 싶을 때
-
-주의(중요):
-
-- 워크플로의 실제 host 우선순위는 `HOME_TAILSCALE_HOST -> HOME_TS_HOST -> HOME_SSH_HOST -> HOME_HOST` 입니다.
-- 과거 시크릿 값이 남아 있으면 의도와 다른 host로 접속을 시도할 수 있으므로, 사용하지 않는 host 시크릿은 비우거나 삭제하세요.
-- `HOME_APP_DIR`는 서버에 실제로 존재하는 Git 저장소 경로여야 합니다. (예: `/home/aquila/app`)
-- `HOME_APP_DIR` 시크릿 값에는 따옴표/개행/앞뒤 공백을 넣지 마세요.
-
-### 7.3 Tailscale 기반 배포(포트포워딩 문제 우회)
-
-공유기/회선 환경에서 SSH 인바운드가 불안정하면 Tailscale 경로를 권장합니다.
-
-홈서버:
-
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up --ssh
-tailscale ip -4
-```
-
-GitHub 시크릿:
-
-- `TS_AUTHKEY` 추가
-- `HOME_SSH_HOST`에 홈서버의 Tailscale IP(또는 MagicDNS 호스트명) 입력
-
-이 경우 `HOME_SSH_PORT`는 기본 `22`를 사용하면 됩니다.
-
----
-
-## 8. Blue/Green 무중단 배포 동작 원리
-
-### 8.1 서비스 구성
-
-`deploy/homeserver/docker-compose.prod.yml` 기준:
-
-- `back_blue`
-- `back_green`
-- `caddy`
-- `cloudflared`
-- `db_1`
-- `redis_1`
-- `minio_1`
-
-### 8.2 전환 알고리즘 (`blue_green_deploy.sh`)
-
-스크립트는 아래 순서를 따릅니다.
-
-1. 현재 active backend 판별 (`.active_backend` + 실행중 컨테이너 기준)
-2. 다음 배포 대상 색상 결정
-3. `db_1`, `redis_1`, `caddy` 기동 보장
-4. 비활성 색상 backend 이미지 pull 및 기동
-5. Docker 네트워크 내부 HTTP 헬스체크 수행
-6. Caddy 내부 DNS(`back_blue`/`back_green`/`back_active`) 해석 및 Caddy 경유 health 검증
-7. 검증 성공 시 이전 active backend 정지
-8. post-stop health 실패 시 `resolve + health` 조건 충족 시에만 롤백 시도
-9. `.active_backend` 상태 파일 갱신
-
-### 8.3 헬스체크 튜닝 변수
-
-스크립트는 다음 환경변수를 지원합니다.
-
-- `HEALTHCHECK_PATH` (기본 `/`)
-- `HEALTHCHECK_RETRIES` (기본 `120`)
-- `HEALTHCHECK_INTERVAL_SECONDS` (기본 `2`)
-- `CADDY_SWITCH_VERIFY_RETRIES` (기본 `15`)
-
-기본값 기준 backend 대기 시간은 약 240초입니다.
-
-### 8.4 왜 다운타임이 줄어드는가
-
-- 기존 active는 유지한 채 새 색상을 먼저 올립니다.
-- 새 색상 준비 완료 후에만 라우팅을 바꾸므로 요청 끊김 구간이 짧습니다.
-- 장애가 나면 전환 이전 단계에서 실패하므로 트래픽이 기존 색상에 남습니다.
-
----
-
-## 9. 롤백 방법
-
-### 9.1 자동 롤백(기본)
-
-`deploy.yml`은 서버 배포 전에 `deploy/homeserver/.deploy-backups/<timestamp>` 백업을 만들고,
-배포 실패 시 같은 백업으로 자동 롤백을 시도합니다.
-
-백업 스크립트:
-
-```bash
-./deploy/homeserver/create_deploy_backup.sh
-```
-
-롤백 스크립트:
-
-```bash
-./deploy/homeserver/rollback_last_deploy.sh
-```
-
-### 9.2 Git 기반 롤백
-
-실패 직후 `main`을 이전 정상 커밋으로 되돌리고 push:
-
-```bash
-git revert <bad_commit_sha>
-git push origin main
-```
-
-새 워크플로가 실행되면서 반대 색상에 이전 버전이 올라가고, 다시 전환됩니다.
-
-### 9.3 릴리즈 포인트 롤백
-
-배포 성공 시 GitHub Release(`deploy-<run_id>-<sha7>`)가 자동 생성됩니다.
-문제 발생 시 해당 Release의 커밋 기준으로 `revert` 또는 `cherry-pick`해 복구할 수 있습니다.
-
----
-
-## 10. DB 마이그레이션 규칙 (Expand/Contract)
-
-Blue/Green 무중단에서 DB 변경은 반드시 하위 호환이어야 합니다.
-
-현재 `back/src/main/resources/application-prod.yaml`의 JPA 설정은 `ddl-auto: update` 입니다.
-이는 간단한 변경에는 편하지만, 무중단 관점에서는 위험할 수 있습니다.
-
-권장 원칙:
-
-1. Expand
-- 컬럼/테이블/인덱스 추가
-- 구버전/신버전이 동시에 읽고 쓸 수 있게 유지
-
-2. Migrate
-- 애플리케이션을 새 스키마 사용 코드로 배포
-- 필요 시 백필 배치 수행
-
-3. Contract
-- 구버전 트래픽 0 확인 후 구 스키마 제거
-
-예시 (`nickname` -> `display_name`):
-
-1. `display_name` 추가
-2. 코드에서 두 컬럼 모두 처리
-3. 데이터 백필
-4. 구버전 제거 확인
-5. `nickname` 제거
-
-금지 사항:
-
-- 배포와 동시에 컬럼 rename/drop
-- 구버전 코드가 참조하는 제약/컬럼 즉시 삭제
-
----
-
-## 11. 운영 체크리스트
-
-### 11.1 매 배포 전
-
-- `main` 기준 CI 성공 여부 확인
-- `.env.prod` 변경 여부 확인
-- DB 변경 포함 여부 확인
-
-### 11.2 매 배포 후
-
-- `/` 헬스체크 응답 확인
-- 핵심 API 1~2개 수동 호출
-- 메인 글 목록과 상세 페이지가 새 데이터 기준으로 반영되는지 확인
-- 로그인 연속 실패 시 차단 정책이 의도대로 동작하는지 확인
-- 대기 중인 task가 있다면 1분 이내 `PENDING -> PROCESSING/COMPLETED`로 이동하는지 확인
-- Caddy/backend 로그 확인
-
-### 11.3 정기 작업
-
-- `.deploy-backups` 보관 주기 관리 (예: 7~30일)
-- 볼륨 백업 정책 수립
-- SSH 키/시크릿 회전
-- 장애 복구 리허설
-- 모니터링 워크플로(`Monitor Home Server`) 실패 알림 확인
-
----
-
-## 12. 트러블슈팅
-
-### 12.1 인증서 발급 실패
-
-- DNS A 레코드가 정확한지 확인
-- 80/443 포트포워딩 확인
-- Caddy 로그 확인
-
-```bash
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs caddy
-```
-
-### 12.2 배포 SSH 실패
-
-- `HOME_SSH_KEY`(또는 `HOME_SSH_PRIVATE_KEY`) 줄바꿈 손상 여부 확인
-- `HOME_KNOWN_HOSTS` 재생성
-- 서버 하드닝 적용 시 포트/유저가 시크릿과 일치하는지 확인
-- 포트포워딩이 불안정하면 `TS_AUTHKEY` + Tailscale 경로로 전환
-
-추가 점검(권장):
-
-- 서버 SSH 리슨 확인: `ss -lntp | grep ':22'`
-- 서버 SSH 서비스 확인: `sudo systemctl status ssh --no-pager`
-- UFW 확인: `sudo ufw status verbose`
-- Tailscale 경로로 SSH를 사용할 때는 `sudo ufw allow in on tailscale0 to any port 22 proto tcp` 규칙을 추가하면 문제를 줄일 수 있습니다.
-
-### 12.3 Tailscale `no matching peer` 오류
-
-증상:
-
-- 워크플로 로그에 `tailscale ping ...` 실패
-- `no matching peer`
-
-원인:
-
-- GitHub Runner와 홈서버가 서로 다른 Tailnet에 연결됨
-
-해결:
-
-1. 홈서버를 Actions가 사용하는 동일 Tailnet으로 재로그인
-2. 홈서버 Tailscale IP 재확인 (`tailscale ip -4`)
-3. 시크릿 `HOME_TAILSCALE_HOST`(또는 `HOME_SSH_HOST`)를 새 IP로 갱신
-
-### 12.4 Tailscale SSH `additional check`로 배포 멈춤
-
-증상:
-
-- `Tailscale SSH requires an additional check`
-- 브라우저 승인 URL 출력 후 CI 정지
-
-원인:
-
-- Tailnet SSH policy의 `check`(추가 인증) 규칙 때문에 non-interactive CI SSH가 차단됨
-
-해결(권장):
-
-- 홈서버에서 OpenSSH(22)만 사용하도록 Tailscale SSH 비활성화
-
-```bash
-sudo tailscale up --ssh=false
-```
-
-대안:
-
-- Tailnet ACL/SSH 정책에서 CI 경로의 `check` 요구를 제거
-
-### 12.5 Tailscale ping은 되는데 `direct connection not established`로 실패
-
-증상:
-
-- `tailscale ping -c 3 <HOME_HOST>` 결과에 `pong ... via DERP(...)` 출력
-- 마지막에 `direct connection not established`
-- 진단 스텝이 `exit code 1`로 실패
-
-원인:
-
-- GitHub Hosted Runner 네트워크 특성상 direct UDP 경로가 자주 성립하지 않음
-- DERP 릴레이 경유 자체는 정상 통신인데, `tailscale ping`은 direct 미성립 시 실패 코드를 반환할 수 있음
-
-해결:
-
-- 워크플로에서 `tailscale ping`은 soft-fail 처리
-- 최종 성공/실패 기준은 TCP SSH 연결 테스트(`nc -zv` 또는 `/dev/tcp`)로 판정
-- 현재 저장소의 `.github/workflows/deploy.yml`에 이미 반영됨
-
-### 12.6 `cd: $HOME_APP_DIR: No such file or directory`
-
-원인:
-
-- `HOME_APP_DIR` 시크릿 경로가 서버 실제 경로와 다름
-
-해결:
-
-1. 서버에서 실제 Git 저장소 경로 확인
-2. `HOME_APP_DIR`를 그 경로로 수정 (예: `/home/aquila/app`)
-3. 경로 존재 확인
-
-```bash
-ls -ld /home/aquila/app
-ls -la /home/aquila/app/.git
-```
-
-### 12.7 `Cannot connect to the Docker daemon`
-
-증상:
-
-- `Cannot connect to the Docker daemon at unix:///var/run/docker.sock`
-
-원인:
-
-- Docker 데몬 미기동 또는 배포 사용자의 Docker 그룹 권한 누락
-
-해결:
-
-```bash
-sudo systemctl enable --now docker
-sudo usermod -aG docker <deploy_user>
-```
-
-### 12.8 관리자 프로필 이미지 업로드 시 `503 Service Unavailable`
-
-증상:
-
-- `/member/api/v1/adm/members/<id>/profileImageFile` 호출이 `503`
-
-원인:
-
-- MinIO 관련 env가 비활성화되었거나,
-- `CUSTOM_STORAGE_ENDPOINT`가 잘못되었거나,
-- `CUSTOM_STORAGE_ACCESSKEY`/`CUSTOM_STORAGE_SECRETKEY`에 `${...}` placeholder가 남아 있거나,
-- `HOME_SERVER_ENV`가 서버 `.env.prod`를 덮어쓰며 잘못된 값을 주입하고 있음
-
-해결:
-
-```bash
-grep -nE 'MINIO_ROOT_|CUSTOM_STORAGE_' deploy/homeserver/.env.prod
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps minio_1
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --tail=200 minio_1
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --tail=200 back_blue
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --tail=200 back_green
-```
-
-### 12.9 API 502/504
-
-```bash
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs caddy
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs back_blue
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs back_green
-```
-
-추가 점검:
-
-- `deploy/homeserver/Caddyfile` upstream이 `back_active:8080`인지
-- `.active_backend` 값이 실제 의도와 맞는지
-
-### 12.10 헬스체크 타임아웃
-
-- 앱 기동 시간이 긴 경우 재시도 증가
-
-```bash
-HEALTHCHECK_RETRIES=90 HEALTHCHECK_INTERVAL_SECONDS=2 ./deploy/homeserver/blue_green_deploy.sh
-```
-
-### 12.11 Caddy 업스트림 DNS 조회 실패 (`lookup back_active ...`)
-
-증상:
-
-- `caddy route verify pending ...` 반복
-- Caddy 로그에 `lookup back_active on 127.0.0.11:53` 오류
-
-원인:
-
-- `back_active` alias가 Docker 네트워크에서 정상 해석되지 않거나 backend 컨테이너 상태 불안정
-
-해결:
-
-- `back_blue`, `back_green` 서비스가 모두 up 상태인지 확인
-- Caddy 컨테이너 내부에서 `back_blue`, `back_green`, `back_active`가 모두 resolve 되는지 확인
-- `deploy/homeserver/Caddyfile`이 `reverse_proxy back_active:8080`인지 확인
-
-점검 명령:
-
-```bash
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps
-grep -n "reverse_proxy" deploy/homeserver/Caddyfile
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy getent hosts back_blue
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy getent hosts back_green
-docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy getent hosts back_active
-```
-
----
-
-## 13. 프론트엔드 배포
-
-프론트는 Vercel에서 별도 배포됩니다.
-
-- `front/`를 Vercel 프로젝트와 연결
-- 환경변수에서 backend API URL을 `https://api.example.com`으로 설정
-- 도메인 `www.example.com` 연결
-
-백엔드 배포와 프론트 배포는 독립적으로 진행됩니다.
-
----
-
-## 14. 빠른 실행 요약
-
-처음 구축할 때 최소 순서:
-
-1. 서버 Docker 설치
-2. 포트포워딩 + DNS 설정
-3. 레포 clone + `.env.prod` 작성
-4. 하드닝 적용
-5. 서버에서 `./deploy/homeserver/blue_green_deploy.sh` 수동 실행
-6. GitHub Actions 시크릿 등록
-7. `main` push로 자동 배포 검증
-8. DB 변경은 expand/contract 원칙으로만 진행
-
-이 순서를 지키면, 현재 저장소 기준으로 홈서버 운영과 Blue/Green 무중단 배포를 안정적으로 시작할 수 있습니다.
+- 운영 가이드는 이제 `README`가 아니라 `docs` 아래 문서로 분리해 두었습니다.
+- 이 저장소의 문서는 "어떻게 만들었는가"뿐 아니라 "왜 그렇게 선택했는가"를 함께 설명하는 포트폴리오 자료를 목표로 합니다.

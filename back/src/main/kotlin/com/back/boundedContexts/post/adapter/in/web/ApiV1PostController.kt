@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.`in`.web
 
 import com.back.boundedContexts.post.application.port.`in`.PostUseCase
+import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/post/api/v1/posts")
 class ApiV1PostController(
     private val postUseCase: PostUseCase,
+    private val postHitDedupService: PostHitDedupService,
     private val rq: Rq,
 ) {
     private fun makePostDtoPage(postPage: org.springframework.data.domain.Page<Post>): PageDto<PostDto> {
@@ -141,10 +143,12 @@ class ApiV1PostController(
         @PathVariable @Positive id: Int,
     ): RsData<PostHitResBody> {
         val post = postUseCase.findById(id).getOrThrow()
-        postUseCase.incrementHit(post)
+        if (postHitDedupService.shouldCountHit(id, resolveHitViewerKey())) {
+            postUseCase.incrementHit(post)
+        }
         return RsData(
             "200-1",
-            "조회수가 증가했습니다.",
+            "조회수를 반영했습니다.",
             PostHitResBody(post.hitCount),
         )
     }
@@ -165,6 +169,40 @@ class ApiV1PostController(
         return RsData(
             "200-1",
             msg,
+            PostLikeToggleResBody(
+                likeResult.isLiked,
+                post.likesCount,
+            ),
+        )
+    }
+
+    @PutMapping("/{id}/like")
+    @Transactional
+    fun like(
+        @PathVariable @Positive id: Int,
+    ): RsData<PostLikeToggleResBody> {
+        val post = postUseCase.findById(id).getOrThrow()
+        val likeResult = postUseCase.like(post, rq.actor)
+        return RsData(
+            "200-1",
+            "좋아요를 반영했습니다.",
+            PostLikeToggleResBody(
+                likeResult.isLiked,
+                post.likesCount,
+            ),
+        )
+    }
+
+    @DeleteMapping("/{id}/like")
+    @Transactional
+    fun unlike(
+        @PathVariable @Positive id: Int,
+    ): RsData<PostLikeToggleResBody> {
+        val post = postUseCase.findById(id).getOrThrow()
+        val likeResult = postUseCase.unlike(post, rq.actor)
+        return RsData(
+            "200-1",
+            "좋아요 취소를 반영했습니다.",
             PostLikeToggleResBody(
                 likeResult.isLiked,
                 post.likesCount,
@@ -197,4 +235,9 @@ class ApiV1PostController(
             RsData("200-1", "기존 임시저장 글을 불러옵니다.", makePostWithContentDto(post))
         }
     }
+
+    private fun resolveHitViewerKey(): String =
+        rq.actorOrNull
+            ?.let { "member:${it.id}" }
+            ?: "anon:${rq.clientIp}|${rq.userAgent}"
 }

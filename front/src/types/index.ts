@@ -37,6 +37,7 @@ export type TPost = {
   likesCount?: number
   commentsCount?: number
   hitCount?: number
+  actorHasLiked?: boolean
 }
 
 export type PostDetail = TPost & {

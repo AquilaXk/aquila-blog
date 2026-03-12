@@ -4,6 +4,8 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostLike
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
 
 interface PostLikeRepository : JpaRepository<PostLike, Int> {
     fun findByLikerAndPost(
@@ -15,6 +17,15 @@ interface PostLikeRepository : JpaRepository<PostLike, Int> {
         liker: Member,
         posts: List<Post>,
     ): List<PostLike>
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from PostLike pl where pl.liker = :liker and pl.post = :post")
+    fun deleteByLikerAndPost(
+        liker: Member,
+        post: Post,
+    ): Int
+
+    fun countByPost(post: Post): Long
 
     fun deleteByPost(post: Post)
 }

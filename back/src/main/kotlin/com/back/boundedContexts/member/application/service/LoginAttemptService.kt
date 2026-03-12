@@ -103,6 +103,14 @@ class LoginAttemptService(
         states.remove(key)
     }
 
+    fun clearAllForTest() {
+        states.clear()
+        redisTemplateProvider.getIfAvailable()?.let { redisTemplate ->
+            val keys = redisTemplate.keys("auth:login:*")
+            if (!keys.isNullOrEmpty()) redisTemplate.delete(keys)
+        }
+    }
+
     private fun key(
         username: String,
         clientIp: String,

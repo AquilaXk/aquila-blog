@@ -46,8 +46,8 @@ export default async function handler(
       const posts = await getPosts()
       const pathsToRevalidate = new Set<string>(["/"])
       posts.forEach((row) => {
-        if (row?.slug) {
-          pathsToRevalidate.add(`/${row.slug}`)
+        if (row?.id) {
+          pathsToRevalidate.add(`/posts/${row.id}`)
         }
       })
       paths = [...pathsToRevalidate]

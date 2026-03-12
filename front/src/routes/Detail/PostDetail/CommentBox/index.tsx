@@ -5,6 +5,7 @@ import styled from "@emotion/styled"
 import { CONFIG } from "site.config"
 import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
+import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import ProfileImage from "src/components/ProfileImage"
 import { TPost, TPostComment } from "src/types"
 
@@ -46,9 +47,9 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const loginHref = useMemo(() => {
-    const next = router.asPath || `/${data.slug}`
+    const next = router.asPath || toCanonicalPostPath(data.id)
     return `/login?next=${encodeURIComponent(next)}`
-  }, [data.slug, router.asPath])
+  }, [data.id, router.asPath])
 
   const loadComments = useCallback(async () => {
     if (!Number.isInteger(postId) || postId <= 0) {

@@ -2,6 +2,7 @@ import { CONFIG } from "site.config"
 import { useEffect } from "react"
 import styled from "@emotion/styled"
 import useScheme from "src/hooks/useScheme"
+import { toCanonicalPostPath } from "src/libs/utils/postPath"
 
 type CusdisApi = {
   initial?: () => void
@@ -9,11 +10,10 @@ type CusdisApi = {
 
 type Props = {
   id: string
-  slug: string
   title: string
 }
 
-const Cusdis: React.FC<Props> = ({ id, slug, title }) => {
+const Cusdis: React.FC<Props> = ({ id, title }) => {
   const [scheme] = useScheme()
 
   useEffect(() => {
@@ -26,7 +26,7 @@ const Cusdis: React.FC<Props> = ({ id, slug, title }) => {
     thread.setAttribute("data-app-id", CONFIG.cusdis.config.appid)
     thread.setAttribute("data-page-id", id)
     thread.setAttribute("data-page-title", title)
-    thread.setAttribute("data-page-url", `${CONFIG.link}/${slug}`)
+    thread.setAttribute("data-page-url", `${CONFIG.link}${toCanonicalPostPath(id)}`)
     thread.setAttribute("data-theme", scheme)
 
     const initialize = () => {
@@ -47,7 +47,7 @@ const Cusdis: React.FC<Props> = ({ id, slug, title }) => {
     script.defer = true
     script.onload = initialize
     document.body.appendChild(script)
-  }, [id, scheme, slug, title])
+  }, [id, scheme, title])
 
   return (
     <>

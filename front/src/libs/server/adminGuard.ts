@@ -8,9 +8,10 @@ type AdminGuardResult =
 
 export const guardAdminRequest = async (req: IncomingMessage): Promise<AdminGuardResult> => {
   const response = await serverApiFetch(req, "/member/api/v1/auth/me")
+  const requestedPath = req.url?.startsWith("/") ? req.url : "/admin"
 
   if (response.status === 401) {
-    return { ok: false, destination: "/login?next=%2Fadmin" }
+    return { ok: false, destination: `/login?next=${encodeURIComponent(requestedPath || "/admin")}` }
   }
 
   if (!response.ok) {

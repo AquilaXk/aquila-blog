@@ -77,6 +77,7 @@ sequenceDiagram
 - `spring-boot-starter-mail`
 - SMTP adapter
 - test profile용 fake mail sender
+- UTF-8 HTML 회원가입 메일 템플릿과 CTA 버튼
 
 관련 파일:
 

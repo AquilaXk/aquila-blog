@@ -282,7 +282,7 @@ jobs:
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created: ${BACKUP_DIR}"
 
-          if ! HEALTHCHECK_PATH=/actuator/health HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
             echo "deploy failed, rollback from backup: ${BACKUP_DIR}" >&2
             ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
             exit 1
@@ -314,9 +314,9 @@ jobs:
             exit 1
           fi
 
-          HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health" -H "Host: ${API_DOMAIN}" || true)"
+          HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health/readiness" -H "Host: ${API_DOMAIN}" || true)"
           echo "post-deploy caddy health status=${HTTP_CODE}"
-          if ! echo "${HTTP_CODE}" | grep -Eq '^[1-4][0-9][0-9]$'; then
+          if ! echo "${HTTP_CODE}" | grep -Eq '^200$'; then
             echo "post-deploy healthcheck failed via caddy route" >&2
             exit 1
           fi

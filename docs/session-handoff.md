@@ -56,7 +56,7 @@ flowchart LR
 
 ## 빠른 점검 포인트
 
-1. `https://api.<domain>/actuator/health`
+1. `https://api.<domain>/actuator/health/readiness`
 2. `/system/api/v1/adm/mail/signup`
 3. 프론트 로그인 후 `/member/api/v1/auth/me`
 4. 관리자 페이지에서 글 발행
@@ -70,7 +70,7 @@ flowchart LR
 | `./gradlew test` | 백엔드 테스트 green |
 | `./gradlew compileKotlin` | Kotlin 컴파일 성공 |
 | `yarn build` | 프론트 프로덕션 빌드 성공 |
-| `https://api.<domain>/actuator/health` | health 응답 |
+| `https://api.<domain>/actuator/health/readiness` | readiness 응답 |
 | `/admin` | 관리자 도구 표시 및 API 정상 |
 | task backlog 존재 시 1분 후 재조회 | `PENDING` 감소 또는 `PROCESSING/COMPLETED` 증가 |
 

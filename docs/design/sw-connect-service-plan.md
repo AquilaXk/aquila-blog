@@ -118,7 +118,7 @@ sequenceDiagram
 - 관리자 페이지 진입 가능 여부
 - 글 발행 후 메인 목록 반영
 - 이미지 업로드 후 MinIO object URL 로드
-- `api.<domain>/actuator/health` 성공
+- `api.<domain>/actuator/health/readiness` 성공
 
 ## 연결 이상 시 우선 확인 표
 

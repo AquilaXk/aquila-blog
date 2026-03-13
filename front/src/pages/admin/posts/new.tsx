@@ -38,6 +38,7 @@ type PostForEditor = {
   id: number
   title: string
   content: string
+  version?: number
   published: boolean
   listed: boolean
 }
@@ -61,6 +62,7 @@ type RsData<T> = {
 type PostWriteResult = {
   id: number
   title: string
+  version?: number
   published: boolean
   listed: boolean
 }
@@ -86,6 +88,7 @@ type PageDto<T> = {
 }
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
+type EditorMode = "create" | "edit"
 type ToolbarAction = {
   label: string
   onClick: () => void
@@ -214,6 +217,13 @@ const getTagToneStyle = (value: string): CSSProperties => {
 const isComposingKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => {
   const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean; keyCode?: number }
   return nativeEvent.isComposing === true || nativeEvent.keyCode === 229
+}
+
+const generateIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `post-write-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 const normalizeMetaItems = (raw: string): string[] => {
@@ -508,7 +518,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const sessionMember = authStatus === "loading" ? initialMember : me
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
-  const [postId, setPostId] = useState("1")
+  const [postId, setPostId] = useState("")
+  const [postVersion, setPostVersion] = useState<number | null>(null)
+  const [editorMode, setEditorMode] = useState<EditorMode>("create")
+  const [isTempDraftMode, setIsTempDraftMode] = useState(false)
   const [commentId, setCommentId] = useState("1")
   const [commentContent, setCommentContent] = useState("")
   const [postTitle, setPostTitle] = useState("")
@@ -576,6 +589,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const redirectingRef = useRef(false)
   const hydratedAdminIdRef = useRef<number | null>(null)
   const autoLoadedPostIdRef = useRef<string | null>(null)
+  const lastWriteFingerprintRef = useRef<string>("")
+  const lastWriteIdempotencyKeyRef = useRef<string>("")
   const applyProfileState = useCallback((member: MemberMe) => {
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
@@ -769,6 +784,36 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
   }
 
+  const switchToCreateMode = useCallback((options?: { keepContent?: boolean }) => {
+    const keepContent = options?.keepContent ?? true
+    setEditorMode("create")
+    setIsTempDraftMode(false)
+    setPostId("")
+    setPostVersion(null)
+    lastWriteFingerprintRef.current = ""
+    lastWriteIdempotencyKeyRef.current = ""
+    if (!keepContent) {
+      setPostTitle("")
+      setPostContent("")
+      setPostTags([])
+      setPostCategory("")
+      setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
+    }
+    setPublishNotice({
+      tone: "idle",
+      text: "새 글 모드입니다. 글 작성 버튼은 새 글 생성에만 사용됩니다.",
+    })
+  }, [])
+
+  const applyLoadedPostContext = useCallback((post: PostForEditor) => {
+    setPostId(String(post.id))
+    setPostVersion(typeof post.version === "number" ? post.version : null)
+    setEditorMode("edit")
+    setIsTempDraftMode(post.title.trim() === "임시글" && !post.published && !post.listed)
+    lastWriteFingerprintRef.current = ""
+    lastWriteIdempotencyKeyRef.current = ""
+  }, [])
+
   const loadPostForEditor = useCallback(async (targetPostId: string = postId) => {
     try {
       setLoadingKey("postOne")
@@ -777,7 +822,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostTitle(post.title ?? "")
       syncEditorMeta(post.content ?? "")
       setPostVisibility(toVisibility(!!post.published, !!post.listed))
-      setPostId(String(post.id))
+      applyLoadedPostContext(post)
       setResult(pretty(post as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -785,9 +830,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }, [postId, syncEditorMeta])
+  }, [applyLoadedPostContext, postId, syncEditorMeta])
 
   const handleWritePost = async () => {
+    if (editorMode === "edit" || postId.trim()) {
+      const msg = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
+      setPublishNotice({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return
+    }
+
     if (!postTitle.trim()) {
       const msg = "제목을 입력해주세요."
       setPublishNotice({ tone: "error", text: msg })
@@ -806,9 +858,17 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("writePost")
       setPublishNotice({ tone: "loading", text: "글 작성 중입니다..." })
       const contentWithMetadata = composeEditorContent(postContent, postTags, postCategory)
+      const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
+      if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
+        lastWriteFingerprintRef.current = fingerprint
+        lastWriteIdempotencyKeyRef.current = generateIdempotencyKey()
+      }
 
       const response = await apiFetch<RsData<PostWriteResult>>("/post/api/v1/posts", {
         method: "POST",
+        headers: {
+          "Idempotency-Key": lastWriteIdempotencyKeyRef.current,
+        },
         body: JSON.stringify({
           title: postTitle,
           content: contentWithMetadata,
@@ -817,7 +877,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       })
 
       setResult(pretty(response as unknown as JsonValue))
-      if (response?.data?.id) setPostId(String(response.data.id))
+      if (response?.data?.id) {
+        setPostId(String(response.data.id))
+        setPostVersion(typeof response.data.version === "number" ? response.data.version : null)
+        setEditorMode("edit")
+        setIsTempDraftMode(false)
+        lastWriteFingerprintRef.current = ""
+        lastWriteIdempotencyKeyRef.current = ""
+      }
 
       const visibilityText =
         postVisibility === "PUBLIC_LISTED"
@@ -844,7 +911,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const handleModifyPost = async () => {
-    if (!postId.trim()) {
+    if (editorMode !== "edit" || !postId.trim()) {
       const msg = "수정할 글 ID를 먼저 선택해주세요."
       setPublishNotice({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
@@ -860,6 +927,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           title: postTitle,
           content: composeEditorContent(postContent, postTags, postCategory),
           ...toFlags(postVisibility),
+          version: postVersion ?? undefined,
         }),
       })
 
@@ -867,11 +935,73 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setKnownCategories((prev) =>
         dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
       )
+      setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
+      setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
       setPublishNotice({ tone: "success", text: `수정 완료: ${response.msg}` })
       setResult(pretty(response as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setPublishNotice({ tone: "error", text: `수정 실패: ${message}` })
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const handleLoadOrCreateTempPost = async () => {
+    try {
+      setLoadingKey("postTemp")
+      setPublishNotice({ tone: "loading", text: "임시글을 불러오는 중입니다..." })
+      const response = await apiFetch<RsData<PostForEditor>>("/post/api/v1/posts/temp", { method: "POST" })
+      const tempPost = response.data
+      setPostTitle(tempPost.title ?? "")
+      syncEditorMeta(tempPost.content ?? "")
+      setPostVisibility(toVisibility(!!tempPost.published, !!tempPost.listed))
+      applyLoadedPostContext(tempPost)
+      setIsTempDraftMode(true)
+      setPublishNotice({
+        tone: "success",
+        text: "임시글 편집 모드입니다. 내용 저장은 '선택 글 수정', 공개하려면 '임시글 발행'을 사용하세요.",
+      })
+      setResult(pretty(response as unknown as JsonValue))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setPublishNotice({ tone: "error", text: `임시글 불러오기 실패: ${message}` })
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const handlePublishTempDraft = async () => {
+    if (editorMode !== "edit" || !postId.trim()) {
+      const msg = "발행할 임시글을 먼저 불러와주세요."
+      setPublishNotice({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return
+    }
+
+    try {
+      setLoadingKey("publishTempPost")
+      setPublishNotice({ tone: "loading", text: "임시글을 발행하는 중입니다..." })
+      const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: postTitle,
+          content: composeEditorContent(postContent, postTags, postCategory),
+          published: true,
+          listed: true,
+          version: postVersion ?? undefined,
+        }),
+      })
+      setPostVisibility("PUBLIC_LISTED")
+      setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
+      setIsTempDraftMode(false)
+      setPublishNotice({ tone: "success", text: "임시글 발행이 완료되었습니다." })
+      setResult(pretty(response as unknown as JsonValue))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setPublishNotice({ tone: "error", text: `임시글 발행 실패: ${message}` })
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -926,11 +1056,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setAdminPostRows((prev) => prev.filter((row) => row.id !== targetId))
       setAdminPostTotal((prev) => Math.max(0, prev - 1))
       if (postId === String(targetId)) {
-        setPostId("")
-        setPostTitle("")
-        setPostContent("")
-        setPostTags([])
-        setPostCategory("")
+        switchToCreateMode({ keepContent: false })
       }
       return true
     } catch (error) {
@@ -1412,8 +1538,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const currentFlags = toFlags(postVisibility)
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
-  const currentPostLabel = postTitle.trim() || (postId.trim() ? `#${postId} 불러온 글` : "새 글 초안")
-  const selectedPostLabel = postId.trim() ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
+  const editorModeLabel = editorMode === "edit" ? "수정 모드" : "새 글 모드"
+  const currentPostLabel =
+    editorMode === "edit" && postId.trim()
+      ? `${postTitle.trim() || "제목 없음"} · #${postId}`
+      : postTitle.trim() || "새 글 초안"
+  const selectedPostLabel =
+    editorMode === "edit" && postId.trim() ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
   const contentLength = postContent.trim().length
   const lineCount = postContent ? postContent.split("\n").length : 0
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
@@ -1767,7 +1898,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </Button>
             <Button
               disabled={disabled("postTemp")}
-              onClick={() => run("postTemp", () => apiFetch("/post/api/v1/posts/temp", { method: "POST" }))}
+              onClick={() => void handleLoadOrCreateTempPost()}
             >
               임시글 불러오기/없으면 생성
             </Button>
@@ -1847,7 +1978,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <h3>선택한 글 작업</h3>
               <p>목록에서 불러온 글이나 직접 입력한 `post id` 기준으로 수정, 삭제, 동작 점검을 수행합니다.</p>
             </div>
-            <SelectedPostBadge>{selectedPostLabel}</SelectedPostBadge>
+            <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
           </SelectedPostHeader>
           <SelectedPostGrid>
             <FieldBox>
@@ -1856,11 +1987,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 id="selected-post-id"
                 placeholder="예: 1"
                 value={postId}
-                onChange={(e) => setPostId(e.target.value)}
+                onChange={(e) => {
+                  const nextId = e.target.value.trim()
+                  setPostId(nextId)
+                  if (!nextId) {
+                    setEditorMode("create")
+                    setPostVersion(null)
+                    setIsTempDraftMode(false)
+                  }
+                }}
               />
             </FieldBox>
           </SelectedPostGrid>
           <ActionRow>
+            <Button
+              type="button"
+              disabled={loadingKey.length > 0}
+              onClick={() => switchToCreateMode({ keepContent: true })}
+            >
+              새 글 모드 전환
+            </Button>
             <Button
               type="button"
               disabled={disabled("postOne")}
@@ -1870,7 +2016,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </Button>
             <Button
               type="button"
-              disabled={disabled("modifyPost")}
+              disabled={editorMode !== "edit" || disabled("modifyPost")}
               onClick={() => void handleModifyPost()}
             >
               글 수정
@@ -2041,7 +2187,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </WriterMetaStrip>
             </div>
           </WriterHeader>
-          <EditorContextChip>{currentPostLabel}</EditorContextChip>
+          <EditorContextChip>{`${editorModeLabel} · ${currentPostLabel}`}</EditorContextChip>
           {activeMetaPanel && (
             <CompactMetaPanel>
               <CompactMetaPanelTop>
@@ -2326,10 +2472,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <WriterFooterControls>
               <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
               <WriterFooterActions>
-                <Button type="button" disabled={disabled("modifyPost")} onClick={() => void handleModifyPost()}>
+                <Button type="button" disabled={loadingKey.length > 0} onClick={() => switchToCreateMode({ keepContent: true })}>
+                  새 글 모드
+                </Button>
+                <Button
+                  type="button"
+                  disabled={editorMode !== "edit" || disabled("modifyPost")}
+                  onClick={() => void handleModifyPost()}
+                >
                   선택 글 수정
                 </Button>
-                <PrimaryButton type="button" disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
+                {isTempDraftMode && (
+                  <PrimaryButton
+                    type="button"
+                    disabled={editorMode !== "edit" || disabled("publishTempPost")}
+                    onClick={() => void handlePublishTempDraft()}
+                  >
+                    {loadingKey === "publishTempPost" ? "발행 중..." : "임시글 발행"}
+                  </PrimaryButton>
+                )}
+                <PrimaryButton
+                  type="button"
+                  disabled={editorMode !== "create" || disabled("writePost")}
+                  onClick={() => void handleWritePost()}
+                >
                   {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
                 </PrimaryButton>
               </WriterFooterActions>

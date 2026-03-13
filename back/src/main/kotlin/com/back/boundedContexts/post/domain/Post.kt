@@ -60,6 +60,8 @@ class Post(
     @field:Basic(fetch = FetchType.LAZY)
     @field:Column(columnDefinition = "TEXT", nullable = false)
     var content: String,
+    @field:Version
+    var version: Long? = null,
     @field:Column(nullable = false)
     var published: Boolean = false,
     @field:Column(nullable = false)

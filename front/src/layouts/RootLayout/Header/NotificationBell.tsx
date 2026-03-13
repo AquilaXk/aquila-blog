@@ -21,6 +21,9 @@ type Props = {
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const reconnectAttemptRef = useRef(0)
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<TMemberNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -61,36 +64,78 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   useEffect(() => {
     if (!enabled) return
 
-    const eventSource = new EventSource(buildNotificationStreamUrl(), { withCredentials: true })
+    let disposed = false
 
-    const handleNotification = (event: MessageEvent<string>) => {
-      try {
-        const payload = JSON.parse(event.data) as TMemberNotificationStreamPayload
-        pushNotification(payload.notification)
-        setUnreadCount(payload.unreadCount)
-        setIsReady(true)
-      } catch {
-        // ignore malformed payloads
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
       }
     }
 
-    const handleConnected = () => {
-      setIsReady(true)
+    const scheduleReconnect = () => {
+      if (disposed || reconnectTimerRef.current !== null) return
+
+      setIsReady(false)
+      const nextAttempt = reconnectAttemptRef.current + 1
+      reconnectAttemptRef.current = nextAttempt
+      const retryDelay = Math.min(1500 * nextAttempt, 10000)
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null
+        attachEventSource()
+      }, retryDelay)
     }
 
-    eventSource.addEventListener("connected", handleConnected)
-    eventSource.addEventListener("notification", handleNotification)
-    eventSource.onerror = () => {
-      eventSource.close()
-      setIsReady(false)
+    const attachEventSource = () => {
+      if (disposed) return
+
+      clearReconnectTimer()
+      eventSourceRef.current?.close()
+
+      const eventSource = new EventSource(buildNotificationStreamUrl(), { withCredentials: true })
+      eventSourceRef.current = eventSource
+
+      const handleNotification = (event: MessageEvent<string>) => {
+        try {
+          const payload = JSON.parse(event.data) as TMemberNotificationStreamPayload
+          pushNotification(payload.notification)
+          setUnreadCount(payload.unreadCount)
+          setIsReady(true)
+        } catch {
+          // ignore malformed payloads
+        }
+      }
+
+      const handleConnected = () => {
+        const recovered = reconnectAttemptRef.current > 0
+        reconnectAttemptRef.current = 0
+        setIsReady(true)
+
+        if (recovered) {
+          void loadSnapshot()
+        }
+      }
+
+      eventSource.addEventListener("connected", handleConnected)
+      eventSource.addEventListener("notification", handleNotification)
+      eventSource.onerror = () => {
+        eventSource.removeEventListener("connected", handleConnected)
+        eventSource.removeEventListener("notification", handleNotification)
+        eventSource.close()
+        scheduleReconnect()
+      }
     }
+
+    attachEventSource()
 
     return () => {
-      eventSource.removeEventListener("connected", handleConnected)
-      eventSource.removeEventListener("notification", handleNotification)
-      eventSource.close()
+      disposed = true
+      clearReconnectTimer()
+      eventSourceRef.current?.close()
+      eventSourceRef.current = null
     }
-  }, [enabled, pushNotification])
+  }, [enabled, loadSnapshot, pushNotification])
 
   useEffect(() => {
     if (!open) return
@@ -231,14 +276,20 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: 31px;
+    height: 31px;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.2rem;
     flex-shrink: 0;
+
+    svg {
+      width: 17px;
+      height: 17px;
+      display: block;
+      transform: translateY(-0.5px);
+    }
   }
 
   .badge {
@@ -420,8 +471,13 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 720px) {
     .trigger {
-    width: 30px;
-    height: 30px;
+      width: 29px;
+      height: 29px;
+
+      svg {
+        width: 16px;
+        height: 16px;
+      }
     }
 
     .panel {

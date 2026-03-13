@@ -31,8 +31,8 @@ const StyledWrapper = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 999px;
   padding: 0;
@@ -41,19 +41,19 @@ const StyledWrapper = styled.button`
   cursor: pointer;
 
   svg {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.18rem;
-    line-height: 1;
+    width: 15px;
+    height: 15px;
+    display: block;
+    transform: translate(-0.2px, -0.45px);
   }
 
   @media (max-width: 720px) {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
 
     svg {
-      font-size: 1rem;
+      width: 14px;
+      height: 14px;
     }
   }
 `

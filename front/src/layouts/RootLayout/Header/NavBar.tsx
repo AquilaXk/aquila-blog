@@ -99,7 +99,7 @@ export default NavBar
 const StyledWrapper = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.75rem;
   flex-shrink: 0;
 
   .primaryLinks {
@@ -134,7 +134,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: flex-end;
     gap: 0.55rem;
-    min-width: 16.8rem;
+    min-width: 0;
   }
 
   .navPill,

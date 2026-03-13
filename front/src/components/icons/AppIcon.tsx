@@ -55,9 +55,9 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       )
     case "bell":
       return (
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.1" className={className} aria-hidden="true" {...props}>
-          <path d="M8 17.5h8M9 17.5v-5.1a3 3 0 1 1 6 0v5.1l1.8 1.7H7.2L9 17.5Z" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M10.5 20.2a1.7 1.7 0 0 0 3 0" strokeLinecap="round" />
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.9" className={className} aria-hidden="true" {...props}>
+          <path d="M10.35 20a1.8 1.8 0 0 0 3.3 0" strokeLinecap="round" />
+          <path d="M5.2 16.2c1.1-1.1 1.95-2.54 1.95-5A4.85 4.85 0 0 1 12 6.35a4.85 4.85 0 0 1 4.85 4.85c0 2.46.85 3.9 1.95 5H5.2Z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case "chevron-down":
@@ -68,12 +68,8 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       )
     case "moon":
       return (
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.2" className={className} aria-hidden="true" {...props}>
-          <path
-            d="M18.8 14.6A7.9 7.9 0 1 1 10 5.2a6.6 6.6 0 0 0 8.8 9.4Z"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true" {...props}>
+          <path d="M19.35 14.15A7.95 7.95 0 1 1 10.05 4.7a6.45 6.45 0 0 0 9.3 9.45Z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case "sun":

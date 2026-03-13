@@ -87,6 +87,7 @@ class ApiV1PostController(
     @Transactional
     fun write(
         @Valid @RequestBody reqBody: PostWriteRequest,
+        @RequestHeader(name = "Idempotency-Key", required = false) idempotencyKey: String?,
     ): RsData<PostDto> {
         val post =
             postUseCase.write(
@@ -95,6 +96,7 @@ class ApiV1PostController(
                 reqBody.content,
                 reqBody.published ?: false,
                 reqBody.listed ?: false,
+                idempotencyKey,
             )
         return RsData("201-1", "${post.id}번 글이 작성되었습니다.", PostDto(post))
     }
@@ -108,6 +110,7 @@ class ApiV1PostController(
         val content: String,
         val published: Boolean? = null,
         val listed: Boolean? = null,
+        val version: Long? = null,
     )
 
     @PutMapping("/{id}")
@@ -118,7 +121,15 @@ class ApiV1PostController(
     ): RsData<PostDto> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanModify(rq.actor)
-        postUseCase.modify(rq.actor, post, reqBody.title, reqBody.content, reqBody.published, reqBody.listed)
+        postUseCase.modify(
+            rq.actor,
+            post,
+            reqBody.title,
+            reqBody.content,
+            reqBody.published,
+            reqBody.listed,
+            reqBody.version,
+        )
         return RsData("200-1", "${post.id}번 글이 수정되었습니다.", PostDto(post))
     }
 

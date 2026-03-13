@@ -58,6 +58,12 @@ flowchart TD
 5. 백엔드는 필요 시 프론트 revalidate task를 큐에 적재하고, task worker가 비차단성으로 revalidate hook을 호출한다.
 6. 메인 페이지는 SSR + 짧은 CDN 캐시 만료 또는 revalidate task 처리 결과를 통해 새 데이터 기준으로 갱신된다.
 
+쓰기 안전장치:
+
+- `POST /post/api/v1/posts`는 `Idempotency-Key` 헤더를 지원한다.
+- 동일 작성자 + 동일 키 재시도는 중복 글을 만들지 않고 기존 결과를 재사용한다.
+- `PUT /post/api/v1/posts/{id}`는 `version`(낙관적 락)으로 동시 수정 충돌을 막고, 충돌 시 `409-1`을 반환한다.
+
 ```mermaid
 sequenceDiagram
     participant Admin
@@ -102,7 +108,7 @@ sequenceDiagram
 | 댓글/답글 알림 | 임의 페이지 | `/member/api/v1/notifications/*`, SSE stream | 헤더 알림벨 |
 | 로그인 | `/login` | `/member/api/v1/auth/login` | 쿠키 발급 |
 | 회원가입 | `/signup`, `/signup/verify` | `/member/api/v1/members`, `/member/api/v1/signup/*` | 일반 가입 + 이메일 인증 가입, 메일 발송은 task queue |
-| 관리자 작성 | `/admin/posts/new` | `/post/api/v1/posts`, `/post/api/v1/adm/posts` | 발행/검색/수정 |
+| 관리자 작성 | `/admin/posts/new` | `/post/api/v1/posts`(Idempotency-Key), `/post/api/v1/adm/posts` | 발행/검색/수정 |
 
 추가 규칙:
 

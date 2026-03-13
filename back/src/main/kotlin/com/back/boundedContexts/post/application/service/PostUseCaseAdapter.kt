@@ -23,7 +23,8 @@ class PostUseCaseAdapter(
         content: String,
         published: Boolean,
         listed: Boolean,
-    ): Post = postApplicationService.write(author, title, content, published, listed)
+        idempotencyKey: String?,
+    ): Post = postApplicationService.write(author, title, content, published, listed, idempotencyKey)
 
     override fun findById(id: Int): Post? = postApplicationService.findById(id)
 
@@ -36,7 +37,8 @@ class PostUseCaseAdapter(
         content: String,
         published: Boolean?,
         listed: Boolean?,
-    ) = postApplicationService.modify(actor, post, title, content, published, listed)
+        expectedVersion: Long?,
+    ) = postApplicationService.modify(actor, post, title, content, published, listed, expectedVersion)
 
     override fun delete(
         post: Post,

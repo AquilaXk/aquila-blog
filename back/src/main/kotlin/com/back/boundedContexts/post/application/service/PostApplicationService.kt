@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.application.port.out.PostAttrRepositoryPort
 import com.back.boundedContexts.post.application.port.out.PostCommentRepositoryPort
 import com.back.boundedContexts.post.application.port.out.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.out.PostRepositoryPort
+import com.back.boundedContexts.post.application.port.out.PostWriteRequestIdempotencyRepositoryPort
 import com.back.boundedContexts.post.application.port.out.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
@@ -17,6 +18,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.PostLike
+import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
@@ -32,11 +34,13 @@ import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.event.app.EventPublisher
+import com.back.global.exception.app.AppException
 import com.back.global.storage.app.UploadedFileRetentionService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -49,6 +53,7 @@ class PostApplicationService(
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val postCommentRepository: PostCommentRepositoryPort,
     private val postLikeRepository: PostLikeRepositoryPort,
+    private val postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepositoryPort,
     private val secureTipPort: SecureTipPort,
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
@@ -64,20 +69,54 @@ class PostApplicationService(
         content: String,
         published: Boolean = false,
         listed: Boolean = false,
+        idempotencyKey: String? = null,
     ): Post {
         val persistenceAuthor = toPersistenceMember(author)
-        val post = Post(0, persistenceAuthor, title, content, published, listed)
-        val savedPost = postRepository.saveAndFlush(post)
-        uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
-        hydrateMemberCounterAttrs(persistenceAuthor)
-        persistenceAuthor.incrementPostsCount()
-        saveMemberAttr(persistenceAuthor.postsCountAttr)
+        val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
-        eventPublisher.publish(
-            PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author)),
-        )
+        if (normalizedIdempotencyKey == null) {
+            return writeNewPost(
+                author = author,
+                persistenceAuthor = persistenceAuthor,
+                title = title,
+                content = content,
+                published = published,
+                listed = listed,
+            )
+        }
 
-        return savedPost
+        val existingRequest =
+            postWriteRequestIdempotencyRepository.findByActorAndRequestKey(
+                persistenceAuthor,
+                normalizedIdempotencyKey,
+            )
+
+        if (existingRequest?.postId != null) {
+            return postRepository.findById(existingRequest.postId!!).getOrNull()
+                ?: throw AppException("409-1", "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
+        }
+
+        val requestSlot = existingRequest ?: createIdempotencyRequestSlot(persistenceAuthor, normalizedIdempotencyKey)
+
+        if (requestSlot.postId != null) {
+            return postRepository.findById(requestSlot.postId!!).getOrNull()
+                ?: throw AppException("409-1", "이전 작성 요청 결과를 확인할 수 없습니다. 다시 시도해주세요.")
+        }
+
+        val createdPost =
+            writeNewPost(
+                author = author,
+                persistenceAuthor = persistenceAuthor,
+                title = title,
+                content = content,
+                published = published,
+                listed = listed,
+            )
+
+        requestSlot.postId = createdPost.id
+        postWriteRequestIdempotencyRepository.save(requestSlot)
+
+        return createdPost
     }
 
     fun findById(id: Int): Post? =
@@ -99,16 +138,73 @@ class PostApplicationService(
         content: String,
         published: Boolean? = null,
         listed: Boolean? = null,
+        expectedVersion: Long? = null,
     ) {
         hydratePostAttrs(post)
+        val currentVersion = post.version ?: 0L
+        if (expectedVersion != null && expectedVersion != currentVersion) {
+            throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
+        }
+
         val previousContent = post.content
-        post.modify(title, content, published, listed)
-        postRepository.flush()
+        try {
+            post.modify(title, content, published, listed)
+            postRepository.flush()
+        } catch (exception: ObjectOptimisticLockingFailureException) {
+            throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
+        }
         uploadedFileRetentionService.syncPostContent(post.id, previousContent, post.content)
 
         eventPublisher.publish(
             PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor)),
         )
+    }
+
+    private fun writeNewPost(
+        author: Member,
+        persistenceAuthor: Member,
+        title: String,
+        content: String,
+        published: Boolean,
+        listed: Boolean,
+    ): Post {
+        val post = Post(0, persistenceAuthor, title, content, null, published, listed)
+        val savedPost = postRepository.saveAndFlush(post)
+        uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
+        hydrateMemberCounterAttrs(persistenceAuthor)
+        persistenceAuthor.incrementPostsCount()
+        saveMemberAttr(persistenceAuthor.postsCountAttr)
+
+        eventPublisher.publish(
+            PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author)),
+        )
+
+        return savedPost
+    }
+
+    private fun createIdempotencyRequestSlot(
+        persistenceAuthor: Member,
+        idempotencyKey: String,
+    ): PostWriteRequestIdempotency {
+        try {
+            return postWriteRequestIdempotencyRepository.saveAndFlush(
+                PostWriteRequestIdempotency(
+                    actor = persistenceAuthor,
+                    requestKey = idempotencyKey,
+                ),
+            )
+        } catch (exception: DataIntegrityViolationException) {
+            val concurrentRequest =
+                postWriteRequestIdempotencyRepository.findByActorAndRequestKey(
+                    persistenceAuthor,
+                    idempotencyKey,
+                ) ?: throw exception
+
+            if (concurrentRequest.postId != null) {
+                return concurrentRequest
+            }
+            throw AppException("409-1", "동일한 글 작성 요청이 처리 중입니다. 잠시 후 다시 시도해주세요.")
+        }
     }
 
     @Transactional

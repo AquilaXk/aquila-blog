@@ -7,6 +7,7 @@ import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.SeededSpringBootTestSupport
 import jakarta.servlet.http.Cookie
+import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Nested
@@ -131,6 +132,34 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     status { isUnauthorized() }
                     jsonPath("$.resultCode") { value("401-3") }
                 }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `동일 Idempotency-Key 로 글 작성 요청을 재시도하면 중복 생성되지 않는다`() {
+            val beforeCount = postFacade.count()
+            val idempotencyKey = "same-write-key-001"
+
+            mvc
+                .post("/post/api/v1/posts") {
+                    header("Idempotency-Key", idempotencyKey)
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "멱등 글", "content": "멱등 내용"}"""
+                }.andExpect {
+                    status { isCreated() }
+                }
+
+            mvc
+                .post("/post/api/v1/posts") {
+                    header("Idempotency-Key", idempotencyKey)
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "멱등 글", "content": "멱등 내용"}"""
+                }.andExpect {
+                    status { isCreated() }
+                }
+
+            val afterCount = postFacade.count()
+            assertThat(afterCount).isEqualTo(beforeCount + 1)
         }
     }
 
@@ -336,6 +365,23 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                 }.andExpect {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-1") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `실패 - 요청 version 이 현재 version 과 다르면 409`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val staleVersion = (post.version ?: 0L) + 1
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "제목 new", "content": "내용 new", "version": $staleVersion}"""
+                }.andExpect {
+                    status { isConflict() }
+                    jsonPath("$.resultCode") { value("409-1") }
                 }
         }
     }

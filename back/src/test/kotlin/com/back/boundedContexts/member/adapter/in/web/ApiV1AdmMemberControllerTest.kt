@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.adapter.`in`.web
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.support.SeededSpringBootTestSupport
 import org.assertj.core.api.Assertions.assertThat
+import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -88,6 +89,95 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             assertThat(updatedMember.contactLinks).hasSize(1)
             assertThat(updatedMember.contactLinks[0].label).isEqualTo(newContactLabel)
             assertThat(updatedMember.contactLinks[0].href).isEqualTo(newContactHref)
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `관리자는 서비스와 연락처 링크를 모두 비운 상태로 저장할 수 있다`() {
+            val member = memberFacade.findByUsername("admin")!!
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "Backend Developer",
+                            "bio": "bio",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.serviceLinks.length()") { value(0) }
+                    jsonPath("$.contactLinks.length()") { value(0) }
+                }
+
+            val updatedMember = memberFacade.findById(member.id).orElseThrow()
+            assertThat(updatedMember.serviceLinks).isEmpty()
+            assertThat(updatedMember.contactLinks).isEmpty()
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `서비스 링크 아이콘이 허용 목록에 없으면 400을 반환한다`() {
+            val member = memberFacade.findByUsername("admin")!!
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "role",
+                            "bio": "bio",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "serviceLinks": [
+                                {"icon": "unknown-icon", "label": "서비스", "href": "https://example.com"}
+                            ],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-1") }
+                    jsonPath("$.msg") { value(containsString("serviceLinks[0].icon")) }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `연락처 링크 아이콘이 비어 있으면 contact 기본 아이콘으로 저장된다`() {
+            val member = memberFacade.findByUsername("admin")!!
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "role",
+                            "bio": "bio",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "serviceLinks": [],
+                            "contactLinks": [
+                                {"icon": "", "label": "email", "href": "mailto:admin@example.com"}
+                            ]
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.contactLinks[0].icon") { value("message") }
+                }
+
+            val updatedMember = memberFacade.findById(member.id).orElseThrow()
+            assertThat(updatedMember.contactLinks).hasSize(1)
+            assertThat(updatedMember.contactLinks[0].icon).isEqualTo("message")
         }
 
         @Test

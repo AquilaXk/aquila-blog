@@ -76,12 +76,13 @@ const normalizeLinkList = (
     .filter((item): item is ProfileCardLinkItem => item !== null)
 
 export const resolveServiceLinks = (source?: ProfileLinkSource | null): ProfileCardLinkItem[] => {
+  if (!source || source.serviceLinks === undefined) return FALLBACK_SERVICE_LINKS
   const links = normalizeLinkList(source?.serviceLinks, DEFAULT_SERVICE_ITEM_ICON)
-  return links.length > 0 ? links : FALLBACK_SERVICE_LINKS
+  return links
 }
 
 export const resolveContactLinks = (source?: ProfileLinkSource | null): ProfileCardLinkItem[] => {
+  if (!source || source.contactLinks === undefined) return FALLBACK_CONTACT_LINKS
   const links = normalizeLinkList(source?.contactLinks, DEFAULT_CONTACT_ITEM_ICON)
-  return links.length > 0 ? links : FALLBACK_CONTACT_LINKS
+  return links
 }
-

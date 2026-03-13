@@ -2,9 +2,14 @@ package com.back.boundedContexts.member.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_ICON_ALLOWED
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_ICON_ALLOWED
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.out.PostImageStoragePort
 import com.back.global.app.AppConfig
+import com.back.global.exception.app.AppException
 import com.back.global.storage.app.UploadedFileRetentionService
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.standard.dto.member.type1.MemberSearchSortType1
@@ -32,6 +37,15 @@ class ApiV1AdmMemberController(
     private val postImageStorageService: PostImageStoragePort,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    private enum class LinkSection(
+        val displayName: String,
+        val defaultIcon: String,
+        val allowedIcons: Set<String>,
+    ) {
+        SERVICE("serviceLinks", PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE, PROFILE_SERVICE_ICON_ALLOWED),
+        CONTACT("contactLinks", PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE, PROFILE_CONTACT_ICON_ALLOWED),
+    }
+
     data class UpdateProfileImgRequest(
         @field:NotBlank
         @field:Size(max = 2000)
@@ -159,23 +173,26 @@ class ApiV1AdmMemberController(
             bio = reqBody.bio.trim(),
             homeIntroTitle = reqBody.homeIntroTitle.trim(),
             homeIntroDescription = reqBody.homeIntroDescription.trim(),
-            serviceLinks =
-                reqBody.serviceLinks.map { link ->
-                    MemberProfileLinkItem(
-                        icon = link.icon.trim(),
-                        label = link.label.trim(),
-                        href = link.href.trim(),
-                    )
-                },
-            contactLinks =
-                reqBody.contactLinks.map { link ->
-                    MemberProfileLinkItem(
-                        icon = link.icon.trim(),
-                        label = link.label.trim(),
-                        href = link.href.trim(),
-                    )
-                },
+            serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),
+            contactLinks = reqBody.contactLinks.normalize(LinkSection.CONTACT),
         )
         return MemberWithUsernameDto(member)
     }
+
+    private fun List<ProfileCardLinkItemRequest>.normalize(section: LinkSection): List<MemberProfileLinkItem> =
+        mapIndexed { index, link ->
+            val normalizedIcon = link.icon.trim().ifBlank { section.defaultIcon }
+            if (normalizedIcon !in section.allowedIcons) {
+                throw AppException(
+                    "400-1",
+                    "${section.displayName}[$index].icon 값이 유효하지 않습니다: $normalizedIcon",
+                )
+            }
+
+            MemberProfileLinkItem(
+                icon = normalizedIcon,
+                label = link.label.trim(),
+                href = link.href.trim(),
+            )
+        }
 }

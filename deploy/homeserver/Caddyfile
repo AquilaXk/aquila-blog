@@ -4,8 +4,6 @@
 
 # Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
 http://{$API_DOMAIN} {
-  encode gzip zstd
-
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"
@@ -14,14 +12,33 @@ http://{$API_DOMAIN} {
     Permissions-Policy "camera=(), microphone=(), geolocation=()"
   }
 
+  @notificationSse path /member/api/v1/notifications/stream
+  handle @notificationSse {
+    header {
+      Cache-Control "no-cache, no-transform"
+    }
+
+    reverse_proxy back_active:8080 {
+      header_up Host {host}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      flush_interval -1
+    }
+  }
+
   # Blue/Green backends share `back_active` alias on Docker network.
-  reverse_proxy back_active:8080 {
-    # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
-    # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
-    # callback URLs, so we pin the upstream scheme/host to the external URL.
-    header_up Host {host}
-    header_up X-Forwarded-Host {host}
-    header_up X-Forwarded-Proto https
-    header_up X-Forwarded-Port 443
+  handle {
+    encode gzip zstd
+
+    reverse_proxy back_active:8080 {
+      # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
+      # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
+      # callback URLs, so we pin the upstream scheme/host to the external URL.
+      header_up Host {host}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+    }
   }
 }

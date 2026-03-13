@@ -9,9 +9,11 @@ import ProfileImage from "src/components/ProfileImage"
 import {
   DEFAULT_CONTACT_ITEM_ICON,
   DEFAULT_SERVICE_ITEM_ICON,
+  getProfileCardIconOptions,
   normalizeProfileCardLinkItem,
-  PROFILE_CARD_ICON_OPTIONS,
+  ProfileCardIconOption,
   ProfileCardLinkItem,
+  ProfileCardLinkSection,
 } from "src/constants/profileCardLinks"
 import useAuthSession, { AuthMember } from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
@@ -26,6 +28,7 @@ type NoticeTone = "idle" | "loading" | "success" | "error"
 
 type MemberMe = AuthMember
 type LinkSectionType = "service" | "contact"
+type OpenIconPicker = `${LinkSectionType}:${number}` | null
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
@@ -56,6 +59,27 @@ const toPayloadLinks = (items: ProfileCardLinkItem[], defaultIcon: IconName): Pr
     href: item.href.trim(),
   }))
 
+const validateLinkInputs = (
+  sectionLabel: "Service" | "Contact",
+  items: ProfileCardLinkItem[]
+): string | null => {
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]
+    const label = item.label.trim()
+    const href = item.href.trim()
+    const rowLabel = `${sectionLabel} ${index + 1}번 항목`
+
+    if (!label && !href) {
+      return `${rowLabel}이 비어 있습니다. 입력하거나 삭제해주세요.`
+    }
+    if (!label || !href) {
+      return `${rowLabel}은 표시 이름과 링크를 모두 입력해야 합니다.`
+    }
+  }
+
+  return null
+}
+
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const queryClient = useQueryClient()
   const { me, authStatus, setMe } = useAuthSession()
@@ -79,6 +103,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(
     () => (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
   )
+  const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
 
   const syncProfileState = useCallback((member: MemberMe) => {
@@ -109,6 +134,35 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (authStatus === "loading") return
     syncProfileState(sessionMember)
   }, [authStatus, sessionMember, syncProfileState])
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (target.closest("[data-icon-picker-root='true']")) return
+      setOpenIconPicker(null)
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenIconPicker(null)
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown)
+    document.addEventListener("keydown", handleEscape)
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown)
+      document.removeEventListener("keydown", handleEscape)
+    }
+  }, [])
+
+  const toPickerKey = useCallback((section: LinkSectionType, index: number): OpenIconPicker => {
+    return `${section}:${index}`
+  }, [])
+
+  const getSectionIconOptions = useCallback((section: ProfileCardLinkSection): ProfileCardIconOption[] => {
+    return getProfileCardIconOptions(section)
+  }, [])
 
   const updateLinkItem = useCallback(
     (
@@ -156,6 +210,10 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } else {
       setContactLinksInput(updater)
     }
+    setOpenIconPicker((current) => {
+      if (current === `${section}:${index}`) return null
+      return current
+    })
   }, [])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
@@ -197,6 +255,18 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const handleUpdateMemberProfileCard = async () => {
     if (!sessionMember?.id) return
+
+    const serviceValidationError = validateLinkInputs("Service", serviceLinksInput)
+    if (serviceValidationError) {
+      setNotice({ tone: "error", text: serviceValidationError })
+      return
+    }
+
+    const contactValidationError = validateLinkInputs("Contact", contactLinksInput)
+    if (contactValidationError) {
+      setNotice({ tone: "error", text: contactValidationError })
+      return
+    }
 
     try {
       setLoadingKey("save")
@@ -339,35 +409,73 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   항목 추가
                 </Button>
               </LinkSectionHeader>
+              <LinkSectionHint>
+                아이콘은 목록에서 고르고, 표시 이름은 직접 입력합니다.
+              </LinkSectionHint>
               <LinkItemsWrap>
                 {serviceLinksInput.length > 0 ? (
                   serviceLinksInput.map((item, index) => (
                     <LinkItemRow key={`service-${index}`}>
-                      <IconPickerField>
-                        <IconPreview>
-                          <AppIcon name={item.icon} />
-                        </IconPreview>
-                        <IconPickerSelect
-                          value={item.icon}
-                          onChange={(e) => updateLinkItem("service", index, "icon", e.target.value)}
+                      <IconPickerField data-icon-picker-root="true">
+                        <FieldLabel as="span">아이콘</FieldLabel>
+                        <IconPickerButton
+                          type="button"
+                          aria-expanded={openIconPicker === toPickerKey("service", index)}
+                          onClick={() =>
+                            setOpenIconPicker((current) =>
+                              current === toPickerKey("service", index) ? null : toPickerKey("service", index)
+                            )
+                          }
                         >
-                          {PROFILE_CARD_ICON_OPTIONS.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </IconPickerSelect>
+                          <IconPreview>
+                            <AppIcon name={item.icon} />
+                          </IconPreview>
+                          <IconPickerCopy>
+                            <strong>{getSectionIconOptions("service").find((option) => option.id === item.icon)?.label || "서비스"}</strong>
+                            <span>아이콘만 선택</span>
+                          </IconPickerCopy>
+                          <AppIcon name="chevron-down" />
+                        </IconPickerButton>
+                        {openIconPicker === toPickerKey("service", index) && (
+                          <IconPickerPanel role="listbox" aria-label="서비스 아이콘 선택">
+                            {getSectionIconOptions("service").map((option) => (
+                              <IconOptionButton
+                                key={option.id}
+                                type="button"
+                                data-selected={option.id === item.icon}
+                                onClick={() => {
+                                  updateLinkItem("service", index, "icon", option.id)
+                                  setOpenIconPicker(null)
+                                }}
+                              >
+                                <IconPreview data-compact="true">
+                                  <AppIcon name={option.id} />
+                                </IconPreview>
+                                <IconOptionText>
+                                  <strong>{option.label}</strong>
+                                  <span>{option.id}</span>
+                                </IconOptionText>
+                              </IconOptionButton>
+                            ))}
+                          </IconPickerPanel>
+                        )}
                       </IconPickerField>
-                      <Input
-                        placeholder="노출 텍스트 (예: aquila-blog)"
-                        value={item.label}
-                        onChange={(e) => updateLinkItem("service", index, "label", e.target.value)}
-                      />
-                      <Input
-                        placeholder="이동 링크 URL"
-                        value={item.href}
-                        onChange={(e) => updateLinkItem("service", index, "href", e.target.value)}
-                      />
+                      <FieldBox>
+                        <FieldLabel as="span">표시 이름</FieldLabel>
+                        <Input
+                          placeholder="예: aquila-blog"
+                          value={item.label}
+                          onChange={(e) => updateLinkItem("service", index, "label", e.target.value)}
+                        />
+                      </FieldBox>
+                      <FieldBox>
+                        <FieldLabel as="span">이동 링크</FieldLabel>
+                        <Input
+                          placeholder="https://..."
+                          value={item.href}
+                          onChange={(e) => updateLinkItem("service", index, "href", e.target.value)}
+                        />
+                      </FieldBox>
                       <RemoveButton type="button" onClick={() => removeLinkItem("service", index)}>
                         삭제
                       </RemoveButton>
@@ -388,35 +496,73 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   항목 추가
                 </Button>
               </LinkSectionHeader>
+              <LinkSectionHint>
+                아이콘은 목록에서 고르고, 표시 이름은 직접 입력합니다.
+              </LinkSectionHint>
               <LinkItemsWrap>
                 {contactLinksInput.length > 0 ? (
                   contactLinksInput.map((item, index) => (
                     <LinkItemRow key={`contact-${index}`}>
-                      <IconPickerField>
-                        <IconPreview>
-                          <AppIcon name={item.icon} />
-                        </IconPreview>
-                        <IconPickerSelect
-                          value={item.icon}
-                          onChange={(e) => updateLinkItem("contact", index, "icon", e.target.value)}
+                      <IconPickerField data-icon-picker-root="true">
+                        <FieldLabel as="span">아이콘</FieldLabel>
+                        <IconPickerButton
+                          type="button"
+                          aria-expanded={openIconPicker === toPickerKey("contact", index)}
+                          onClick={() =>
+                            setOpenIconPicker((current) =>
+                              current === toPickerKey("contact", index) ? null : toPickerKey("contact", index)
+                            )
+                          }
                         >
-                          {PROFILE_CARD_ICON_OPTIONS.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </IconPickerSelect>
+                          <IconPreview>
+                            <AppIcon name={item.icon} />
+                          </IconPreview>
+                          <IconPickerCopy>
+                            <strong>{getSectionIconOptions("contact").find((option) => option.id === item.icon)?.label || "메시지"}</strong>
+                            <span>아이콘만 선택</span>
+                          </IconPickerCopy>
+                          <AppIcon name="chevron-down" />
+                        </IconPickerButton>
+                        {openIconPicker === toPickerKey("contact", index) && (
+                          <IconPickerPanel role="listbox" aria-label="연락처 아이콘 선택">
+                            {getSectionIconOptions("contact").map((option) => (
+                              <IconOptionButton
+                                key={option.id}
+                                type="button"
+                                data-selected={option.id === item.icon}
+                                onClick={() => {
+                                  updateLinkItem("contact", index, "icon", option.id)
+                                  setOpenIconPicker(null)
+                                }}
+                              >
+                                <IconPreview data-compact="true">
+                                  <AppIcon name={option.id} />
+                                </IconPreview>
+                                <IconOptionText>
+                                  <strong>{option.label}</strong>
+                                  <span>{option.id}</span>
+                                </IconOptionText>
+                              </IconOptionButton>
+                            ))}
+                          </IconPickerPanel>
+                        )}
                       </IconPickerField>
-                      <Input
-                        placeholder="노출 텍스트 (예: github)"
-                        value={item.label}
-                        onChange={(e) => updateLinkItem("contact", index, "label", e.target.value)}
-                      />
-                      <Input
-                        placeholder="이동 링크 URL (예: mailto:me@example.com)"
-                        value={item.href}
-                        onChange={(e) => updateLinkItem("contact", index, "href", e.target.value)}
-                      />
+                      <FieldBox>
+                        <FieldLabel as="span">표시 이름</FieldLabel>
+                        <Input
+                          placeholder="예: github"
+                          value={item.label}
+                          onChange={(e) => updateLinkItem("contact", index, "label", e.target.value)}
+                        />
+                      </FieldBox>
+                      <FieldBox>
+                        <FieldLabel as="span">이동 링크</FieldLabel>
+                        <Input
+                          placeholder="예: mailto:me@example.com"
+                          value={item.href}
+                          onChange={(e) => updateLinkItem("contact", index, "href", e.target.value)}
+                        />
+                      </FieldBox>
                       <RemoveButton type="button" onClick={() => removeLinkItem("contact", index)}>
                         삭제
                       </RemoveButton>
@@ -756,29 +902,70 @@ const LinkSectionHeader = styled.div`
   }
 `
 
+const LinkSectionHint = styled.p`
+  margin: -0.15rem 0 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.82rem;
+  line-height: 1.5;
+`
+
 const LinkItemsWrap = styled.div`
   display: grid;
-  gap: 0.55rem;
+  gap: 0.8rem;
 `
 
 const LinkItemRow = styled.div`
   display: grid;
-  grid-template-columns: 156px minmax(0, 1fr) minmax(0, 1fr) auto;
-  gap: 0.5rem;
-  align-items: center;
+  grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.85rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
   }
 `
 
-const IconPickerField = styled.label`
-  display: flex;
-  align-items: center;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+const IconPickerField = styled.div`
+  display: grid;
+  gap: 0.45rem;
   min-width: 0;
+  position: relative;
+  align-self: stretch;
+`
+
+const IconPickerButton = styled.button`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.72rem;
+  width: 100%;
+  min-height: 3.45rem;
+  padding: 0.5rem 0.72rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  min-width: 0;
+  cursor: pointer;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray8};
+  }
+
+  &[aria-expanded="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue7};
+  }
+
+  > svg:last-of-type {
+    font-size: 1rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    flex-shrink: 0;
+  }
 `
 
 const IconPreview = styled.span`
@@ -788,22 +975,102 @@ const IconPreview = styled.span`
   align-items: center;
   justify-content: center;
   color: ${({ theme }) => theme.colors.gray11};
-  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
   flex-shrink: 0;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
 
   svg {
     font-size: 1.08rem;
   }
+
+  &[data-compact="true"] {
+    width: 1.95rem;
+    height: 1.95rem;
+    border-radius: 10px;
+  }
 `
 
-const IconPickerSelect = styled.select`
+const IconPickerCopy = styled.span`
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+
+  strong {
+    font-size: 0.96rem;
+    line-height: 1.2;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  span {
+    font-size: 0.75rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    line-height: 1.2;
+  }
+`
+
+const IconPickerPanel = styled.div`
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 40;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 3rem));
+  max-height: 16rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.45rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow:
+    0 18px 48px rgba(15, 23, 42, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  scrollbar-gutter: stable;
+`
+
+const IconOptionButton = styled.button`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
   width: 100%;
+  min-height: 2.85rem;
+  padding: 0.46rem 0.52rem;
   border: 0;
+  border-radius: 14px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.62rem 0.72rem;
-  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.gray3};
+  }
+
+  &[data-selected="true"] {
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+`
+
+const IconOptionText = styled.span`
+  display: grid;
+  gap: 0.08rem;
   min-width: 0;
+
+  strong {
+    font-size: 0.92rem;
+    line-height: 1.2;
+    word-break: keep-all;
+  }
+
+  span {
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    line-height: 1.2;
+  }
 `
 
 const RemoveButton = styled(Button)`
@@ -811,6 +1078,7 @@ const RemoveButton = styled(Button)`
   border-color: ${({ theme }) => theme.colors.red7};
   background: ${({ theme }) => theme.colors.red3};
   white-space: nowrap;
+  min-height: 3.45rem;
 `
 
 const InlineEmpty = styled.p`

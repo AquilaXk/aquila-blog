@@ -5,6 +5,7 @@ import { FormEvent, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
+import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -19,10 +20,7 @@ type SignupEmailStartResult = {
 const SignupPage = () => {
   const router = useRouter()
   const next = useMemo(() => {
-    const raw = router.query.next
-    const value = Array.isArray(raw) ? raw[0] : raw
-    if (!value || !value.startsWith("/")) return "/"
-    return value
+    return normalizeNextPath(router.query.next)
   }, [router.query.next])
 
   const [email, setEmail] = useState("")
@@ -78,11 +76,11 @@ const SignupPage = () => {
       heroDescription="먼저 이메일을 확인한 뒤, 메일 안의 링크를 통해 마지막 가입 단계로 이어집니다."
       footer={
         <FooterText>
-          이미 계정이 있으면 <Link href={`/login?next=${encodeURIComponent(next)}`}>로그인</Link>
+          이미 계정이 있으면 <Link href={toLoginPath(next)}>로그인</Link>
         </FooterText>
       }
-      loginHref={`/login?next=${encodeURIComponent(next)}`}
-      signupHref={`/signup?next=${encodeURIComponent(next)}`}
+      loginHref={toLoginPath(next)}
+      signupHref={toSignupPath(next)}
     >
       <form onSubmit={onSubmit}>
         <Field>

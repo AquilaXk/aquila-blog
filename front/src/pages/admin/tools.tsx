@@ -5,6 +5,7 @@ import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
+import { replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -93,8 +94,8 @@ const ACTION_LABELS: Record<string, string> = {
 
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
-  const { me, logout } = useAuthSession()
-  const sessionMember = me ?? initialMember
+  const { me, authStatus, logout } = useAuthSession()
+  const sessionMember = authStatus === "loading" ? initialMember : me
   const [loadingKey, setLoadingKey] = useState("")
   const [result, setResult] = useState("")
   const [lastActionLabel, setLastActionLabel] = useState("")
@@ -228,7 +229,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("logout")
       await logout()
     } finally {
-      await router.replace(`/login?next=${encodeURIComponent("/admin/tools")}`)
+      await replaceRoute(router, toLoginPath("/admin/tools"), { preferHardNavigation: true })
       setLoadingKey("")
     }
   }

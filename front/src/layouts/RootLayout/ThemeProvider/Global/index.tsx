@@ -12,6 +12,8 @@ export const Global = () => {
         html {
           min-height: 100%;
           scrollbar-gutter: stable both-edges;
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
         }
 
         body {
@@ -24,6 +26,9 @@ export const Global = () => {
           font-family: ${pretendard.style.fontFamily};
           font-weight: ${pretendard.style.fontWeight};
           font-style: ${pretendard.style.fontStyle};
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          font-synthesis: none;
         }
 
         * {

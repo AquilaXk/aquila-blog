@@ -6,7 +6,7 @@ import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
-import { isNavigationCancelledError } from "src/libs/router"
+import { isNavigationCancelledError, normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -18,10 +18,7 @@ const LoginPage = () => {
   const router = useRouter()
   const { refresh, setMe } = useAuthSession()
   const next = useMemo(() => {
-    const raw = router.query.next
-    const value = Array.isArray(raw) ? raw[0] : raw
-    if (!value || !value.startsWith("/")) return "/"
-    return value
+    return normalizeNextPath(router.query.next)
   }, [router.query.next])
   const signupDone = useMemo(() => {
     const raw = router.query.signup
@@ -105,11 +102,11 @@ const LoginPage = () => {
       heroDescription={next !== "/" ? `로그인 후 ${next}로 돌아갑니다.` : "로그인 후 이전 흐름으로 돌아갑니다."}
       footer={
         <FooterText>
-          계정이 없으면 <Link href={`/signup?next=${encodeURIComponent(next)}`}>회원가입</Link>
+          계정이 없으면 <Link href={toSignupPath(next)}>회원가입</Link>
         </FooterText>
       }
-      loginHref={`/login?next=${encodeURIComponent(next)}`}
-      signupHref={`/signup?next=${encodeURIComponent(next)}`}
+      loginHref={toLoginPath(next)}
+      signupHref={toSignupPath(next)}
     >
       <form onSubmit={onSubmit}>
         <Field>

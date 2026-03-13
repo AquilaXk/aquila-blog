@@ -6,6 +6,7 @@ import dynamic from "next/dynamic"
 import { CONFIG } from "site.config"
 import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
+import { normalizeNextPath } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
@@ -50,8 +51,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const postId = useMemo(() => Number(data.id), [data.id])
   const hasInitialComments = initialComments !== null
   const nextPath = useMemo(() => {
-    if (router.asPath && router.asPath.startsWith("/")) return router.asPath
-    return toCanonicalPostPath(data.id)
+    return normalizeNextPath(router.asPath, toCanonicalPostPath(data.id))
   }, [data.id, router.asPath])
 
   const { me, authStatus, authUnavailable } = useAuthSession()
@@ -304,11 +304,18 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           <div className="commentBody">
             <div className="head">
               <div className="meta">
-                <strong>{displayName}</strong>
-                <span>
-                  {createdLabel}
-                  {edited ? " · 수정됨" : ""}
-                </span>
+                <div className="metaPrimary">
+                  {depth > 0 && (
+                    <span className="replyContext" aria-hidden="true">
+                      <AppIcon name="reply" aria-hidden="true" />
+                    </span>
+                  )}
+                  <strong>{displayName}</strong>
+                  <span>
+                    {createdLabel}
+                    {edited ? " · 수정됨" : ""}
+                  </span>
+                </div>
               </div>
               <div className="actions topActions">
                 {canModify && (
@@ -576,13 +583,18 @@ const StyledWrapper = styled.section`
 
   .commentList {
     display: grid;
-    gap: 0.8rem;
+    gap: 0;
   }
 
   .replyList {
     display: grid;
-    gap: 0.7rem;
+    gap: 0;
     margin-top: 0.85rem;
+  }
+
+  .commentList > li + li,
+  .replyList > li + li {
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 `
 
@@ -634,28 +646,25 @@ const CommentItem = styled.div`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.85rem;
-  padding: 1rem 1rem 0.95rem;
-  border-radius: 24px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1.05rem 0;
 
   &[data-depth="1"] {
-    margin-left: 1.1rem;
+    margin-left: 2rem;
   }
 
   &[data-depth="2"] {
-    margin-left: 2.2rem;
+    margin-left: 4rem;
   }
 
   &[data-depth="3"] {
-    margin-left: 3.3rem;
+    margin-left: 6rem;
   }
 
   @media (max-width: 640px) {
     &[data-depth="1"],
     &[data-depth="2"],
     &[data-depth="3"] {
-      margin-left: 0.55rem;
+      margin-left: 1rem;
     }
   }
 
@@ -675,6 +684,13 @@ const CommentItem = styled.div`
   .meta {
     display: grid;
     gap: 0.14rem;
+  }
+
+  .metaPrimary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.38rem 0.52rem;
 
     strong {
       color: ${({ theme }) => theme.colors.gray12};
@@ -685,6 +701,16 @@ const CommentItem = styled.div`
       color: ${({ theme }) => theme.colors.gray11};
       font-size: 0.78rem;
     }
+  }
+
+  .replyContext {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    flex-shrink: 0;
   }
 
   .actions,
@@ -721,21 +747,48 @@ const CommentItem = styled.div`
   }
 
   .replyList {
-    padding-left: 0.8rem;
-    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+    padding-left: 0;
   }
 
   @media (max-width: 640px) {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.75rem;
+    padding: 0.95rem 0;
+
+    &[data-depth="0"] {
+      padding-top: 0;
+    }
+
+    &[data-depth="1"],
+    &[data-depth="2"],
+    &[data-depth="3"] {
+      margin-left: 0;
+      padding-left: 0.9rem;
+    }
 
     .topActions {
       width: 100%;
       margin-left: 0;
+      justify-content: flex-start;
     }
 
     .replyList {
-      padding-left: 0.65rem;
+      margin-top: 0.55rem;
+      padding-left: 0;
+      gap: 0;
+    }
+
+    .metaPrimary {
+      gap: 0.22rem 0.45rem;
+    }
+
+    .content {
+      font-size: 0.96rem;
+      line-height: 1.65;
+    }
+
+    .foot {
+      margin-top: 0.72rem;
     }
   }
 `

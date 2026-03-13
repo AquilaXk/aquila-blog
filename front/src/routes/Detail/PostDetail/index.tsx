@@ -9,6 +9,7 @@ import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
+import { toLoginPath } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
@@ -41,7 +42,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const category = data?.category?.[0] || undefined
   const loginHref = useMemo(() => {
     const next = router.asPath || toCanonicalPostPath(postId)
-    return `/login?next=${encodeURIComponent(next)}`
+    return toLoginPath(next, toCanonicalPostPath(postId))
   }, [postId, router.asPath])
 
   useEffect(() => {

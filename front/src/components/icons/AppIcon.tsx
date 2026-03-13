@@ -20,6 +20,12 @@ type IconName =
   | "check-circle"
   | "close"
   | "kakao"
+  | "laptop"
+  | "spark"
+  | "briefcase"
+  | "camera"
+  | "question"
+  | "rocket"
 
 type Props = {
   name: IconName
@@ -93,6 +99,48 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       return (
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
           <path d="M6.5 18.5 4 20V6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H6.5Z" strokeLinejoin="round" />
+        </svg>
+      )
+    case "laptop":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <rect x="4" y="5" width="16" height="10" rx="1.8" />
+          <path d="M2.8 18.5h18.4M9 18.5h6" strokeLinecap="round" />
+        </svg>
+      )
+    case "spark":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" className={className} aria-hidden="true" {...props}>
+          <path d="m12 2.8 1.7 5 5.5.4-4.3 3.3 1.4 5.2-4.3-3-4.3 3 1.4-5.2-4.3-3.3 5.5-.4L12 2.8Zm7.2 13.7.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" />
+        </svg>
+      )
+    case "briefcase":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <rect x="3.5" y="7" width="17" height="11.5" rx="2" />
+          <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7M3.5 11.2h17" />
+        </svg>
+      )
+    case "camera":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M7.5 6.5 9 4.5h6l1.5 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2h2.5Z" strokeLinejoin="round" />
+          <circle cx="12" cy="12.5" r="3.6" />
+        </svg>
+      )
+    case "question":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M9.6 9.2a2.5 2.5 0 1 1 4.4 1.6c-.7.7-1.6 1.1-1.6 2.2M12 16.8h.01" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case "rocket":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M14.6 4.6c2.7 0 4.9 2.2 4.9 4.9 0 4.1-3.6 8-9.5 9.8.5-1.8.9-3.5 1.9-4.9l-3-3c1.4-1 3.1-1.4 4.9-1.9.8-3.7 2.1-4.9.8-4.9Z" strokeLinejoin="round" />
+          <circle cx="15.8" cy="8.3" r="1.1" />
+          <path d="m5 14 3 3M4.5 19.5l2.3-5.1" strokeLinecap="round" />
         </svg>
       )
     case "check-circle":

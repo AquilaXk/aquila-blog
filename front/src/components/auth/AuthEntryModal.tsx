@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
+import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -92,18 +93,11 @@ const AuthEntryModal: React.FC<Props> = ({
   const [sentEmail, setSentEmail] = useState("")
 
   const normalizedNextPath = useMemo(() => {
-    if (!nextPath || !nextPath.startsWith("/")) return "/"
-    return nextPath
+    return normalizeNextPath(nextPath)
   }, [nextPath])
 
-  const loginHref = useMemo(
-    () => `/login?next=${encodeURIComponent(normalizedNextPath)}`,
-    [normalizedNextPath]
-  )
-  const signupHref = useMemo(
-    () => `/signup?next=${encodeURIComponent(normalizedNextPath)}`,
-    [normalizedNextPath]
-  )
+  const loginHref = useMemo(() => toLoginPath(normalizedNextPath), [normalizedNextPath])
+  const signupHref = useMemo(() => toSignupPath(normalizedNextPath), [normalizedNextPath])
   const kakaoAuthUrl = useMemo(() => {
     if (typeof window === "undefined") return ""
     const redirectUrl = `${window.location.origin}${normalizedNextPath}`

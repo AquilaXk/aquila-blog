@@ -14,7 +14,7 @@ import {
   normalizeCategoryValue,
   splitCategoryDisplay,
 } from "src/libs/utils"
-import { isNavigationCancelledError } from "src/libs/router"
+import { isNavigationCancelledError, replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
@@ -424,7 +424,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { me, authStatus, setMe, refresh, logout } = useAuthSession()
-  const sessionMember = me ?? initialMember
+  const sessionMember = authStatus === "loading" ? initialMember : me
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("1")
@@ -539,12 +539,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ warn: `로그아웃 API 호출 실패: ${message}` }))
     } finally {
-      const target = `/login?next=${encodeURIComponent("/admin/posts/new")}`
+      const target = toLoginPath("/admin/posts/new")
 
       if (!redirectingRef.current && router.asPath !== target) {
         redirectingRef.current = true
         try {
-          await router.replace(target)
+          await replaceRoute(router, target, { preferHardNavigation: true })
         } catch (error) {
           if (!isNavigationCancelledError(error)) {
             setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
@@ -1017,12 +1017,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (authStatus === "loading" || authStatus === "unavailable") return
 
     if (!me) {
-      const target = `/login?next=${encodeURIComponent("/admin/posts/new")}`
+      const target = toLoginPath("/admin/posts/new")
       if (!redirectingRef.current && router.asPath !== target) {
         redirectingRef.current = true
         void (async () => {
           try {
-            await router.replace(target)
+            await replaceRoute(router, target, { preferHardNavigation: true })
           } catch (error) {
             if (!isNavigationCancelledError(error)) {
               setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
@@ -1420,6 +1420,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     return null
   }
 
+  const member = sessionMember
+
   return (
     <Main>
       <HeroCard>
@@ -1442,7 +1444,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <MetricGrid>
             <MetricCard>
               <span>현재 계정</span>
-              <strong>{sessionMember.username}</strong>
+              <strong>{member.username}</strong>
             </MetricCard>
             <MetricCard>
               <span>작업 중 글</span>
@@ -1525,11 +1527,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       priority
                     />
                   ) : (
-                    <ProfileFallback>{sessionMember.username.slice(0, 2).toUpperCase()}</ProfileFallback>
+                    <ProfileFallback>{member.username.slice(0, 2).toUpperCase()}</ProfileFallback>
                   )}
                 </ProfilePreview>
                 <ProfileSummary>
-                  <strong>{sessionMember.username}</strong>
+                  <strong>{member.username}</strong>
                   <span>{profileRoleInput.trim() || "역할을 아직 입력하지 않았습니다."}</span>
                   <p>{profileBioInput.trim() || "소개 문구를 입력하면 메인 프로필 카드에 반영됩니다."}</p>
                 </ProfileSummary>
@@ -1602,9 +1604,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     disabled={disabled("admMemberProfileRefresh")}
                     onClick={() =>
                       run("admMemberProfileRefresh", async () => {
-                        if (!sessionMember?.id) throw new Error("현재 관리자 정보를 확인할 수 없습니다.")
+                        if (!member.id) throw new Error("현재 관리자 정보를 확인할 수 없습니다.")
                         setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
-                        const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
+                        const refreshed = await refreshAdminProfile(member.id, member)
                         if (!refreshed) throw new Error("현재 저장값을 불러오지 못했습니다.")
                         setProfileNotice({
                           tone: "success",

@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
 import React from "react"
-import { Emoji } from "src/components/Emoji"
+import AppIcon from "src/components/icons/AppIcon"
 
 type Props = {}
 
@@ -10,7 +10,7 @@ const CustomError: React.FC<Props> = () => {
       <div className="wrapper">
         <div className="top">
           <div>4</div>
-          <Emoji>🤔</Emoji>
+          <AppIcon name="question" className="questionIcon" />
           <div>4</div>
         </div>
         <div className="text">Post not found</div>
@@ -39,8 +39,14 @@ const StyledWrapper = styled.div`
     > .top {
       display: flex;
       align-items: center;
+      gap: 0.3rem;
       font-size: 3.75rem;
       line-height: 1;
+
+      .questionIcon {
+        font-size: 3.1rem;
+        flex: 0 0 auto;
+      }
     }
     > .text {
       font-size: 1.875rem;

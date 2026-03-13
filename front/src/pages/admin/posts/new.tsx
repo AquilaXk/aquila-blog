@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
-import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ChangeEvent, ClipboardEvent, CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
@@ -108,6 +108,54 @@ type MetaUsageMap = Record<string, number>
 const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
 
+const TAG_TONES = [
+  {
+    bg: "linear-gradient(135deg, rgba(37, 99, 235, 0.26), rgba(59, 130, 246, 0.14))",
+    border: "rgba(96, 165, 250, 0.7)",
+    text: "#dbeafe",
+    shadow: "0 14px 30px rgba(37, 99, 235, 0.18)",
+    divider: "rgba(147, 197, 253, 0.24)",
+    buttonBg: "rgba(15, 23, 42, 0.14)",
+    buttonText: "#bfdbfe",
+  },
+  {
+    bg: "linear-gradient(135deg, rgba(8, 145, 178, 0.25), rgba(45, 212, 191, 0.14))",
+    border: "rgba(94, 234, 212, 0.62)",
+    text: "#ccfbf1",
+    shadow: "0 14px 30px rgba(13, 148, 136, 0.16)",
+    divider: "rgba(153, 246, 228, 0.2)",
+    buttonBg: "rgba(15, 23, 42, 0.14)",
+    buttonText: "#99f6e4",
+  },
+  {
+    bg: "linear-gradient(135deg, rgba(147, 51, 234, 0.24), rgba(192, 132, 252, 0.14))",
+    border: "rgba(216, 180, 254, 0.56)",
+    text: "#f3e8ff",
+    shadow: "0 14px 30px rgba(147, 51, 234, 0.15)",
+    divider: "rgba(233, 213, 255, 0.22)",
+    buttonBg: "rgba(15, 23, 42, 0.15)",
+    buttonText: "#e9d5ff",
+  },
+  {
+    bg: "linear-gradient(135deg, rgba(234, 88, 12, 0.24), rgba(251, 146, 60, 0.15))",
+    border: "rgba(253, 186, 116, 0.58)",
+    text: "#ffedd5",
+    shadow: "0 14px 30px rgba(234, 88, 12, 0.16)",
+    divider: "rgba(254, 215, 170, 0.22)",
+    buttonBg: "rgba(15, 23, 42, 0.15)",
+    buttonText: "#fdba74",
+  },
+  {
+    bg: "linear-gradient(135deg, rgba(5, 150, 105, 0.24), rgba(74, 222, 128, 0.14))",
+    border: "rgba(110, 231, 183, 0.58)",
+    text: "#d1fae5",
+    shadow: "0 14px 30px rgba(5, 150, 105, 0.16)",
+    divider: "rgba(167, 243, 208, 0.22)",
+    buttonBg: "rgba(15, 23, 42, 0.15)",
+    buttonText: "#a7f3d0",
+  },
+] as const
+
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   return await getAdminPageProps(req)
 }
@@ -134,6 +182,23 @@ const dedupeStrings = (items: string[]) =>
         .filter(Boolean)
     )
   )
+
+const hashString = (value: string) =>
+  Array.from(value).reduce((acc, char) => acc * 31 + char.charCodeAt(0), 7)
+
+const getTagToneStyle = (value: string): CSSProperties => {
+  const tone = TAG_TONES[Math.abs(hashString(value)) % TAG_TONES.length]
+
+  return {
+    "--tag-chip-bg": tone.bg,
+    "--tag-chip-border": tone.border,
+    "--tag-chip-text": tone.text,
+    "--tag-chip-shadow": tone.shadow,
+    "--tag-chip-divider": tone.divider,
+    "--tag-chip-button-bg": tone.buttonBg,
+    "--tag-chip-button-text": tone.buttonText,
+  } as CSSProperties
+}
 
 const isComposingKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => {
   const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean; keyCode?: number }
@@ -1891,12 +1956,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <InlineTagList>
                     {postTags.length > 0 ? (
                       postTags.map((tag) => (
-                        <TagChip key={tag}>
-                          {tag}
+                        <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
+                          <span className="label">{tag}</span>
                           <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
                             ×
                           </button>
-                        </TagChip>
+                        </SelectedTagChip>
                       ))
                     ) : (
                       <EmptyMetaText>아직 추가된 태그가 없습니다.</EmptyMetaText>
@@ -2073,17 +2138,24 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <label>태그 선택</label>
                   <SelectionRow>
                     {knownTags.map((tag) => (
-                      <CatalogChipGroup key={tag}>
-                        <SelectionChip
+                      <TagCatalogChipGroup
+                        key={tag}
+                        data-active={postTags.includes(tag)}
+                        style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
+                      >
+                        <TagCatalogToggle
                           type="button"
                           data-active={postTags.includes(tag)}
                           onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
                         >
-                          {tag}
-                          {(tagUsageMap[tag] || 0) > 0 ? ` (${tagUsageMap[tag] || 0})` : ""}
-                        </SelectionChip>
-                        <CatalogDeleteButton
+                          <span className="label">{tag}</span>
+                          {(tagUsageMap[tag] || 0) > 0 ? (
+                            <span className="count">{tagUsageMap[tag] || 0}</span>
+                          ) : null}
+                        </TagCatalogToggle>
+                        <TagCatalogDeleteButton
                           type="button"
+                          data-active={postTags.includes(tag)}
                           disabled={(tagUsageMap[tag] || 0) > 0}
                           title={
                             (tagUsageMap[tag] || 0) > 0
@@ -2093,8 +2165,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           onClick={() => deleteTagFromCatalog(tag)}
                         >
                           ×
-                        </CatalogDeleteButton>
-                      </CatalogChipGroup>
+                        </TagCatalogDeleteButton>
+                      </TagCatalogChipGroup>
                     ))}
                     {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
                   </SelectionRow>
@@ -3422,20 +3494,28 @@ const TagChipRow = styled.div`
   min-width: 0;
 `
 
-const TagChip = styled.span`
+const SelectedTagChip = styled.span`
   display: inline-flex;
   align-items: center;
   gap: 0;
   min-width: 0;
   max-width: 100%;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  padding-left: 0.68rem;
-  font-size: 0.78rem;
-  font-weight: 600;
+  border: 1px solid var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
+  background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
+  color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+  padding-left: 0.82rem;
+  font-size: 0.8rem;
+  font-weight: 700;
   overflow: hidden;
+  box-shadow: var(--tag-chip-shadow, 0 12px 24px rgba(37, 99, 235, 0.14));
+
+  .label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   > button {
     margin-left: 0.45rem;
@@ -3449,18 +3529,144 @@ const TagChip = styled.span`
     min-width: 1.9rem;
     padding: 0 0.5rem;
     border: 0;
-    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
+    border-left: 1px solid var(--tag-chip-divider, rgba(147, 197, 253, 0.2));
+    background: var(--tag-chip-button-bg, rgba(15, 23, 42, 0.16));
+    color: var(--tag-chip-button-text, ${({ theme }) => theme.colors.blue11});
     cursor: pointer;
     flex: 0 0 auto;
     font-size: 0.92rem;
     line-height: 1;
+    transition:
+      transform 0.18s ease,
+      background 0.18s ease,
+      color 0.18s ease;
 
     &:hover {
-      background: ${({ theme }) => theme.colors.red3};
-      color: ${({ theme }) => theme.colors.red11};
+      transform: translateY(-1px);
+      background: rgba(15, 23, 42, 0.28);
+      color: #ffffff;
     }
+  }
+`
+
+const TagCatalogChipGroup = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease;
+
+  &[data-active="true"] {
+    border-color: var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
+    background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
+    box-shadow: var(--tag-chip-shadow, 0 12px 24px rgba(37, 99, 235, 0.14));
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+`
+
+const TagCatalogToggle = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.46rem;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.5rem 0.88rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+
+  .label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.16);
+    color: currentColor;
+    font-size: 0.7rem;
+    line-height: 1;
+  }
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+
+  &[data-active="true"] {
+    color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+
+    &:hover {
+      background: transparent;
+      color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+    }
+
+    .count {
+      background: rgba(15, 23, 42, 0.2);
+    }
+  }
+`
+
+const TagCatalogDeleteButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-width: 2.05rem;
+  padding: 0 0.58rem;
+  border: 0;
+  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.98rem;
+  line-height: 1;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+
+  &[data-active="true"] {
+    border-left-color: var(--tag-chip-divider, rgba(147, 197, 253, 0.24));
+    background: var(--tag-chip-button-bg, rgba(15, 23, 42, 0.16));
+    color: var(--tag-chip-button-text, ${({ theme }) => theme.colors.blue11});
+  }
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 `
 

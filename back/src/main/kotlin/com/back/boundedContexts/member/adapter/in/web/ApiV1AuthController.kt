@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.port.`in`.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
+import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.domain.shared.Member
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController
 class ApiV1AuthController(
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val memberUseCase: MemberUseCase,
+    private val actorApplicationService: ActorApplicationService,
     private val authTokenService: AuthTokenService,
     private val authCookieService: AuthCookieService,
     private val loginAttemptService: LoginAttemptService,
@@ -60,8 +62,8 @@ class ApiV1AuthController(
             throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
 
-        val member =
-            memberUseCase
+        val authCandidate =
+            actorApplicationService
                 .findByUsername(username)
                 ?.takeIf { isPasswordValid(it, reqBody.password) }
                 ?: run {
@@ -69,6 +71,11 @@ class ApiV1AuthController(
                     if (blocked) throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
                     throw AppException("401-1", "아이디 또는 비밀번호가 올바르지 않습니다.")
                 }
+
+        val member =
+            memberUseCase
+                .findById(authCandidate.id)
+                .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
 
         loginAttemptService.clear(username, clientIp)
 

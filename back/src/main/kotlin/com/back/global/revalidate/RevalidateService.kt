@@ -22,8 +22,15 @@ class RevalidateService(
             .connectTimeout(Duration.ofSeconds(2))
             .build()
 
-    fun revalidateHome() {
+    fun revalidateHome() = revalidatePath("/")
+
+    fun revalidatePath(path: String) {
         if (revalidateUrl.isBlank() || revalidateToken.isBlank()) return
+        val normalizedPath =
+            path
+                .trim()
+                .takeIf { it.startsWith("/") && !it.startsWith("//") }
+                ?: "/"
 
         val req =
             HttpRequest
@@ -32,7 +39,7 @@ class RevalidateService(
                 .timeout(Duration.ofSeconds(3))
                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .header("x-revalidate-token", revalidateToken)
-                .POST(HttpRequest.BodyPublishers.ofString("""{"path":"/"}"""))
+                .POST(HttpRequest.BodyPublishers.ofString("""{"path":"$normalizedPath"}"""))
                 .build()
 
         runCatching {

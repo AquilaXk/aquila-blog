@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "next/router"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
-import CommentBox from "./CommentBox"
 import styled from "@emotion/styled"
 import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
@@ -12,6 +11,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPostComment } from "src/types"
+import DeferredCommentBox from "./DeferredCommentBox"
 
 type Props = {
   initialComments?: TPostComment[] | null
@@ -141,7 +141,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         {data.type[0] === "Post" && (
           <>
             <Footer />
-            <CommentBox data={data} initialComments={initialComments} />
+            <DeferredCommentBox data={data} initialComments={initialComments} />
           </>
         )}
       </article>

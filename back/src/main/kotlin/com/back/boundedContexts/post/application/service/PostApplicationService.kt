@@ -187,21 +187,10 @@ class PostApplicationService(
         actor: Member,
     ) {
         hydratePostAttrs(post)
-        val allComments = postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post)
-        val commentsByParentId =
-            allComments
-                .mapNotNull { comment -> comment.parentComment?.id?.let { parentId -> parentId to comment } }
-                .groupBy({ it.first }, { it.second })
-        val commentsToDelete = mutableListOf<PostComment>()
-        val persistedTargetComment = allComments.firstOrNull { it.id == postComment.id } ?: postComment
-
-        // 트리 형태 댓글을 후위 순회로 수집해, 자식 -> 부모 순서로 안전하게 삭제한다.
-        fun collect(comment: PostComment) {
-            commentsByParentId[comment.id].orEmpty().forEach(::collect)
-            commentsToDelete += comment
-        }
-
-        collect(persistedTargetComment)
+        val commentsToDelete =
+            postCommentRepository
+                .findActiveSubtreeByPostAndRootCommentId(post, postComment.id)
+                .ifEmpty { listOf(postComment) }
 
         commentsToDelete.forEach { hydrateMemberCounterAttrs(it.author) }
 

@@ -2,6 +2,8 @@ package com.back.boundedContexts.member.subContexts.signupVerification.adapter.`
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.subContexts.signupVerification.adapter.out.persistence.MemberSignupVerificationRepository
+import com.back.global.task.domain.TaskStatus
+import com.back.global.task.out.TaskRepository
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
@@ -31,6 +33,9 @@ class ApiV1SignupVerificationControllerTest {
     @Autowired
     private lateinit var memberSignupVerificationRepository: MemberSignupVerificationRepository
 
+    @Autowired
+    private lateinit var taskRepository: TaskRepository
+
     @Nested
     inner class EmailStart {
         @Test
@@ -57,6 +62,11 @@ class ApiV1SignupVerificationControllerTest {
 
             checkNotNull(verification)
             assertThat(verification.emailVerificationToken).isNotBlank()
+            val mailTasks =
+                taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
+            assertThat(mailTasks).hasSize(1)
+            assertThat(mailTasks.single().aggregateId).isEqualTo(verification.id)
+            assertThat(mailTasks.single().status).isEqualTo(TaskStatus.COMPLETED)
         }
 
         @Test

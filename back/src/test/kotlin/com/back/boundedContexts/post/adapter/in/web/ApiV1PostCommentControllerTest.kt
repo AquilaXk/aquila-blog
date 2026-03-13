@@ -286,6 +286,7 @@ class ApiV1PostCommentControllerTest {
         @WithUserDetails("user1")
         fun `부모 댓글을 삭제하면 그 대댓글도 함께 삭제된다`() {
             val reply = postFacade.writeComment(actorApplicationService.findByUsername("user3").getOrThrow(), post, "대댓글", commentByAuthor)
+            val nestedReply = postFacade.writeComment(actorApplicationService.findByUsername("user1").getOrThrow(), post, "중첩 대댓글", reply)
             val postId = post.id
             val id = commentByAuthor.id
 
@@ -302,15 +303,16 @@ class ApiV1PostCommentControllerTest {
 
             val deletedRepliesCount =
                 jdbcTemplate.queryForObject(
-                    "select count(*) from post_comment where id in (?, ?) and deleted_at is not null",
+                    "select count(*) from post_comment where id in (?, ?, ?) and deleted_at is not null",
                     Int::class.java,
                     id,
                     reply.id,
+                    nestedReply.id,
                 )
 
             org.assertj.core.api.Assertions
                 .assertThat(deletedRepliesCount)
-                .isEqualTo(2)
+                .isEqualTo(3)
         }
 
         @Test

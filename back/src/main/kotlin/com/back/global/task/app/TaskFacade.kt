@@ -32,6 +32,7 @@ class TaskFacade(
         if (AppFacade.isNotProd) {
             fire(payload)
             task.markAsCompleted()
+            taskRepository.save(task)
         }
     }
 

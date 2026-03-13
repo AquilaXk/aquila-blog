@@ -14,6 +14,11 @@ class PostCommentRepositoryAdapter(
     override fun findByPostOrderByCreatedAtAscIdAsc(post: Post): List<PostComment> =
         postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post)
 
+    override fun findActiveSubtreeByPostAndRootCommentId(
+        post: Post,
+        rootCommentId: Int,
+    ): List<PostComment> = postCommentRepository.findActiveSubtreeByPostAndRootCommentId(post, rootCommentId)
+
     override fun findByPostAndId(
         post: Post,
         id: Int,

@@ -128,8 +128,8 @@ class PostImageStorageAdapter(
         validateObjectKey(objectKey)
 
         return try {
-            val bytes =
-                client.getObjectAsBytes(
+            val response =
+                client.getObject(
                     GetObjectRequest
                         .builder()
                         .bucket(properties.bucket)
@@ -137,8 +137,9 @@ class PostImageStorageAdapter(
                         .build(),
                 )
             PostImageStoragePort.StoredImage(
-                bytes = bytes.asByteArray(),
-                contentType = bytes.response().contentType() ?: "application/octet-stream",
+                inputStream = response,
+                contentType = response.response().contentType() ?: "application/octet-stream",
+                contentLength = response.response().contentLength(),
             )
         } catch (_: NoSuchKeyException) {
             null

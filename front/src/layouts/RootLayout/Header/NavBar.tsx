@@ -1,10 +1,19 @@
 import styled from "@emotion/styled"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo, useState } from "react"
-import AuthEntryModal from "src/components/auth/AuthEntryModal"
 import useAuthSession from "src/hooks/useAuthSession"
 import { isNavigationCancelledError } from "src/libs/router"
+
+const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
+  ssr: false,
+  loading: () => null,
+})
+
+const preloadAuthEntryModal = () => {
+  void import("src/components/auth/AuthEntryModal")
+}
 
 const NavBar: React.FC = () => {
   const router = useRouter()
@@ -50,7 +59,13 @@ const NavBar: React.FC = () => {
           </>
         )}
         {authStatus === "anonymous" && (
-          <button type="button" className="navPill" onClick={() => setAuthModalOpen(true)}>
+          <button
+            type="button"
+            className="navPill"
+            onMouseEnter={preloadAuthEntryModal}
+            onFocus={preloadAuthEntryModal}
+            onClick={() => setAuthModalOpen(true)}
+          >
             Login
           </button>
         )}

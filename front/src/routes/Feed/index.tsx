@@ -1,7 +1,3 @@
-import { useState } from "react"
-
-import SearchInput from "./SearchInput"
-import { FeedHeader } from "./FeedHeader"
 import Footer from "./Footer"
 import styled from "@emotion/styled"
 import TagList from "./TagList"
@@ -9,10 +5,11 @@ import MobileProfileCard from "./MobileProfileCard"
 import ProfileCard from "./ProfileCard"
 import ServiceCard from "./ServiceCard"
 import ContactCard from "./ContactCard"
-import PostList from "./PostList"
-import PinnedPosts from "./PostList/PinnedPosts"
 import { AdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
+import dynamic from "next/dynamic"
+
+const FeedExplorer = dynamic(() => import("./FeedExplorer"))
 
 const HEADER_HEIGHT = 73
 
@@ -21,8 +18,6 @@ type Props = {
 }
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
-  const [q, setQ] = useState("")
-
   return (
     <StyledWrapper>
       <div
@@ -39,15 +34,7 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
           <h1>{CONFIG.blog.title}</h1>
           <p>{CONFIG.blog.description}</p>
         </IntroCard>
-        <PinnedPosts q={q} />
-        <ExplorerCard>
-          <SearchInput value={q} onChange={(e) => setQ(e.target.value)} />
-          <div className="tags">
-            <TagList />
-          </div>
-          <FeedHeader />
-        </ExplorerCard>
-        <PostList q={q} />
+        <FeedExplorer />
         <div className="footer">
           <Footer />
         </div>
@@ -174,29 +161,5 @@ const IntroCard = styled.section`
     max-width: 42rem;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.7;
-  }
-`
-
-const ExplorerCard = styled.section`
-  display: grid;
-  gap: 0.95rem;
-  border-radius: 22px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 1rem;
-  min-width: 0;
-  overflow: visible;
-
-  .tags {
-    display: block;
-
-    @media (min-width: 1024px) {
-      display: none;
-    }
-  }
-
-  @media (max-width: 768px) {
-    gap: 0.85rem;
-    padding: 0.9rem;
   }
 `

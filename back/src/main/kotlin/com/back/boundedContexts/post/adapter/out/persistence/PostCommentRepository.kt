@@ -5,7 +5,9 @@ import com.back.boundedContexts.post.domain.PostComment
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 
-interface PostCommentRepository : JpaRepository<PostComment, Int> {
+interface PostCommentRepository :
+    JpaRepository<PostComment, Int>,
+    PostCommentRepositoryCustom {
     /**
      * 댓글 목록 DTO 매핑 시 author / parentComment lazy-load로 인한 N+1을 피한다.
      */

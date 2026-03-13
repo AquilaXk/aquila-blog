@@ -4,10 +4,11 @@ import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.out.MemberSignupVerificationRepositoryPort
-import com.back.boundedContexts.member.subContexts.signupVerification.application.port.out.SignupVerificationMailSenderPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
+import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
+import com.back.global.task.app.TaskFacade
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -30,7 +31,7 @@ class MemberSignupVerificationService(
     private val memberRepository: MemberRepositoryPort,
     private val memberApplicationService: MemberApplicationService,
     private val memberSignupVerificationRepository: MemberSignupVerificationRepositoryPort,
-    private val signupVerificationMailSender: SignupVerificationMailSenderPort,
+    private val taskFacade: TaskFacade,
     @Value("\${custom.member.signup.verifyPath:/signup/verify}")
     private val verifyPath: String,
     @Value("\${custom.member.signup.emailExpirationSeconds:86400}")
@@ -62,10 +63,15 @@ class MemberSignupVerificationService(
                 ),
             )
 
-        signupVerificationMailSender.send(
-            toEmail = normalizedEmail,
-            verificationLink = buildVerificationLink(verification.emailVerificationToken, nextPath),
-            expiresAt = verificationExpiresAt,
+        taskFacade.addToQueue(
+            SendSignupVerificationMailPayload(
+                uid = UUID.randomUUID(),
+                aggregateType = MemberSignupVerification::class.simpleName!!,
+                aggregateId = verification.id,
+                toEmail = normalizedEmail,
+                verificationLink = buildVerificationLink(verification.emailVerificationToken, nextPath),
+                expiresAt = verificationExpiresAt,
+            ),
         )
 
         return SignupEmailStartResult(email = normalizedEmail)

@@ -17,6 +17,8 @@ Last updated: 2026-03-12
 
 프론트는 `Next.js Pages Router` 기반이고, `src/pages`는 엔트리, `src/routes`는 화면 조합, `src/apis`는 백엔드 계약, `src/components`는 범용 UI 역할을 맡는다.
 
+성능 최적화 기준은 별도 문서인 [Frontend Performance Guide](./Frontend-Performance-Guide.md)를 함께 본다. 특히 hydration 경계, `next/dynamic`, third-party script 지연 로딩은 그 문서를 우선 기준으로 삼는다.
+
 ```mermaid
 flowchart LR
     Pages["src/pages"] --> Routes["src/routes"]

@@ -7,6 +7,7 @@ import com.back.global.rsData.RsData
 import com.back.global.storage.app.UploadedFileRetentionService
 import com.back.global.storage.domain.UploadedFilePurpose
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.core.io.InputStreamResource
 import org.springframework.http.CacheControl
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -66,21 +67,30 @@ class ApiV1PostImageController(
 
     @GetMapping("/images/**")
     @Transactional(readOnly = true)
-    fun getPostImage(request: HttpServletRequest): ResponseEntity<ByteArray> {
+    fun getPostImage(request: HttpServletRequest): ResponseEntity<InputStreamResource> {
         val objectKey = extractObjectKey(request)
         val image =
             postImageStorageService.getPostImage(objectKey)
                 ?: throw AppException("404-1", "이미지를 찾을 수 없습니다.")
 
-        return ResponseEntity
-            .ok()
-            .contentType(MediaType.parseMediaType(image.contentType))
-            .cacheControl(
-                CacheControl
-                    .maxAge(30, TimeUnit.DAYS)
-                    .cachePublic()
-                    .immutable(),
-            ).body(image.bytes)
+        val responseBuilder =
+            ResponseEntity
+                .ok()
+                .contentType(MediaType.parseMediaType(image.contentType))
+                .cacheControl(
+                    CacheControl
+                        .maxAge(30, TimeUnit.DAYS)
+                        .cachePublic()
+                        .immutable(),
+                )
+
+        val finalizedBuilder =
+            image.contentLength
+                ?.takeIf { it >= 0 }
+                ?.let(responseBuilder::contentLength)
+                ?: responseBuilder
+
+        return finalizedBuilder.body(InputStreamResource(image.inputStream))
     }
 
     private fun extractObjectKey(request: HttpServletRequest): String {

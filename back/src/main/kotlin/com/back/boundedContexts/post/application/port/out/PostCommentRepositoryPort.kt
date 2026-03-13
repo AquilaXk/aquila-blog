@@ -8,6 +8,11 @@ interface PostCommentRepositoryPort {
 
     fun findByPostOrderByCreatedAtAscIdAsc(post: Post): List<PostComment>
 
+    fun findActiveSubtreeByPostAndRootCommentId(
+        post: Post,
+        rootCommentId: Int,
+    ): List<PostComment>
+
     fun findByPostAndId(
         post: Post,
         id: Int,

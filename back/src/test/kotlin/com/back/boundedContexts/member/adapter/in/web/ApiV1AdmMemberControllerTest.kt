@@ -141,6 +141,26 @@ class ApiV1AdmMemberControllerTest {
                     jsonPath("$.msg") { value("권한이 없습니다.") }
                 }
         }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `회원 목록 조회는 프로필 role 과 bio 도 함께 hydrate 한다`() {
+            val member = memberFacade.join("profile-list-user", "1234", "프로필 사용자", null)
+            memberFacade.modifyProfileCard(member, "Backend Engineer", "회원 목록 hydrate 검증용 bio")
+
+            mvc
+                .get("/member/api/v1/adm/members") {
+                    param("kw", "profile-list-user")
+                    param("page", "1")
+                    param("pageSize", "10")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(1) }
+                    jsonPath("$.content[0].username") { value("profile-list-user") }
+                    jsonPath("$.content[0].profileRole") { value("Backend Engineer") }
+                    jsonPath("$.content[0].profileBio") { value("회원 목록 hydrate 검증용 bio") }
+                }
+        }
     }
 
     @Nested

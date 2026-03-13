@@ -41,6 +41,10 @@ flowchart LR
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
 - 회원가입 메일 설정은 `/system/api/v1/adm/mail/signup`에서 준비 상태를 바로 볼 수 있다.
+- 회원가입 메일 발송과 홈 revalidate는 task queue를 통해 처리되므로, write API 직후 외부 I/O가 바로 보이지 않아도 정상일 수 있다.
+- 관리자 회원 목록은 프로필 이미지/role/bio를 batch hydrate 하므로, attr 조회 로직을 손볼 때는 `MemberProfileHydrator`의 단건/목록 경로를 같이 봐야 한다.
+- 로그인은 실패 시 raw member만 조회하고, 비밀번호 검증이 끝난 뒤에만 hydrated member를 다시 읽는다.
+- 댓글 삭제는 게시글 전체 댓글을 스캔하지 않고 subtree 전용 recursive 조회로 대상 댓글만 soft delete 한다.
 - Kakao 로그인 점검 시에는 브라우저에서 `/oauth2/authorization/kakao` 응답의 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 먼저 본다.
 
 ## 빠른 트리아지 표

@@ -31,6 +31,7 @@ flowchart LR
 ### `member`
 
 - 회원가입
+- 이메일 인증 메일 task 적재/발송
 - 일반 로그인
 - 카카오 OAuth 로그인
 - 현재 로그인 사용자 조회
@@ -44,6 +45,7 @@ flowchart LR
 - 관리자 비밀번호는 DB 비밀번호보다 환경변수 `custom.admin.password`를 우선 적용할 수 있다.
 - 일반 계정 비밀번호는 BCrypt 해시를 사용한다.
 - 로그인 시도 제한은 Redis 연결 시 공유 상태를 사용하고, 로컬/비상 상황에서는 메모리 fallback으로 동작한다.
+- 이메일 인증 시작은 verification row를 저장한 뒤, 메일 발송을 task queue로 넘겨 요청 응답과 분리한다.
 
 ### `post`
 
@@ -60,6 +62,7 @@ flowchart LR
 - `published=true`, `listed=false`는 상세 링크 접근 전용 공개 글이다.
 - `published=true`, `listed=true`는 메인 피드 노출 대상이다.
 - 댓글/좋아요/수정/삭제 권한은 `postMixin`, `postCommentMixin` 정책 믹스인에서 계산한다.
+- 게시글 이미지는 MinIO에서 읽을 때 스트리밍 응답을 사용해 메모리 사용량을 줄인다.
 
 ### `home`
 
@@ -76,6 +79,7 @@ flowchart LR
 - 재시도, 지수 백오프, 상태 추적
 - poll 주기와 batch 크기는 운영 환경변수로 조정 가능
 - `status + next_retry_at` 인덱스를 기준으로 pending 작업을 잡아간다
+- 회원가입 메일 발송과 프론트 revalidate 같은 외부 I/O를 write API latency에서 분리한다
 
 ## 주요 액터와 유스케이스
 
@@ -96,13 +100,16 @@ flowchart LR
 - 댓글 작성/수정/삭제 이벤트
 - 좋아요/좋아요 취소 이벤트
 - 사용자 액션 로그 적재
+- 회원가입 메일 발송 task 적재
+- 홈 revalidate task 적재
 
 ```mermaid
 flowchart TD
     Write["Post write/modify/delete"] --> Event["Domain event"]
     Event --> Log["Member action log"]
-    Event --> Revalidate["Front revalidate"]
-    Event --> Task["Task queue 확장 가능"]
+    Event --> Task["Task queue"]
+    Task --> Revalidate["Front revalidate"]
+    Task --> Mail["Signup verification mail"]
 ```
 
 ## 프론트와의 계약

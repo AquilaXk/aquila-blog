@@ -1,9 +1,8 @@
+import { useMemo } from "react"
 import usePostsQuery from "./usePostsQuery"
 import { getAllSelectItemsFromPosts } from "src/libs/utils/notion"
 
 export const useTagsQuery = () => {
   const posts = usePostsQuery()
-  const tags = getAllSelectItemsFromPosts("tags", posts)
-
-  return tags
+  return useMemo(() => getAllSelectItemsFromPosts("tags", posts), [posts])
 }

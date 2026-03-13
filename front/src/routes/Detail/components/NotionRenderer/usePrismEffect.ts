@@ -5,56 +5,113 @@ type PrismLike = {
 }
 
 let prismLoader: Promise<PrismLike> | null = null
+const loadedLoaders = new Set<string>()
 
-const loadPrism = async () => {
+const prismLanguageLoaders: Record<string, (() => Promise<unknown>)[]> = {
+  markup: [() => import("prismjs/components/prism-markup.js")],
+  html: [() => import("prismjs/components/prism-markup.js")],
+  xml: [() => import("prismjs/components/prism-markup.js")],
+  svg: [() => import("prismjs/components/prism-markup.js")],
+  javascript: [
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-javascript.js"),
+  ],
+  js: [
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-javascript.js"),
+  ],
+  jsx: [
+    () => import("prismjs/components/prism-markup.js"),
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-javascript.js"),
+    () => import("prismjs/components/prism-jsx.js"),
+  ],
+  typescript: [
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-javascript.js"),
+    () => import("prismjs/components/prism-typescript.js"),
+  ],
+  ts: [
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-javascript.js"),
+    () => import("prismjs/components/prism-typescript.js"),
+  ],
+  tsx: [
+    () => import("prismjs/components/prism-markup.js"),
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-javascript.js"),
+    () => import("prismjs/components/prism-typescript.js"),
+    () => import("prismjs/components/prism-jsx.js"),
+    () => import("prismjs/components/prism-tsx.js"),
+  ],
+  bash: [() => import("prismjs/components/prism-bash.js")],
+  shell: [() => import("prismjs/components/prism-bash.js")],
+  sh: [() => import("prismjs/components/prism-bash.js")],
+  c: [() => import("prismjs/components/prism-c.js")],
+  cpp: [() => import("prismjs/components/prism-cpp.js")],
+  "c++": [() => import("prismjs/components/prism-cpp.js")],
+  csharp: [() => import("prismjs/components/prism-csharp.js")],
+  cs: [() => import("prismjs/components/prism-csharp.js")],
+  diff: [() => import("prismjs/components/prism-diff.js")],
+  docker: [() => import("prismjs/components/prism-docker.js")],
+  dockerfile: [() => import("prismjs/components/prism-docker.js")],
+  git: [() => import("prismjs/components/prism-git.js")],
+  go: [() => import("prismjs/components/prism-go.js")],
+  graphql: [() => import("prismjs/components/prism-graphql.js")],
+  handlebars: [
+    () => import("prismjs/components/prism-markup-templating.js"),
+    () => import("prismjs/components/prism-handlebars.js"),
+  ],
+  java: [() => import("prismjs/components/prism-java.js")],
+  kotlin: [() => import("prismjs/components/prism-kotlin.js")],
+  kt: [() => import("prismjs/components/prism-kotlin.js")],
+  less: [() => import("prismjs/components/prism-less.js")],
+  makefile: [() => import("prismjs/components/prism-makefile.js")],
+  markdown: [() => import("prismjs/components/prism-markdown.js")],
+  md: [() => import("prismjs/components/prism-markdown.js")],
+  objectivec: [() => import("prismjs/components/prism-objectivec.js")],
+  objc: [() => import("prismjs/components/prism-objectivec.js")],
+  ocaml: [() => import("prismjs/components/prism-ocaml.js")],
+  python: [() => import("prismjs/components/prism-python.js")],
+  py: [() => import("prismjs/components/prism-python.js")],
+  reason: [() => import("prismjs/components/prism-reason.js")],
+  rust: [() => import("prismjs/components/prism-rust.js")],
+  rs: [() => import("prismjs/components/prism-rust.js")],
+  sass: [() => import("prismjs/components/prism-sass.js")],
+  scss: [() => import("prismjs/components/prism-scss.js")],
+  solidity: [() => import("prismjs/components/prism-solidity.js")],
+  sol: [() => import("prismjs/components/prism-solidity.js")],
+  sql: [() => import("prismjs/components/prism-sql.js")],
+  stylus: [() => import("prismjs/components/prism-stylus.js")],
+  swift: [() => import("prismjs/components/prism-swift.js")],
+  wasm: [() => import("prismjs/components/prism-wasm.js")],
+  yaml: [() => import("prismjs/components/prism-yaml.js")],
+  yml: [() => import("prismjs/components/prism-yaml.js")],
+}
+
+const normalizeLanguage = (className: string) => className.replace("language-", "").trim().toLowerCase()
+
+const loadPrismCore = async () => {
   if (!prismLoader) {
-    prismLoader = (async () => {
-      const prismModule = await import("prismjs")
-
-      // Prism components mutate shared grammars; load order must be deterministic.
-      const componentLoaders = [
-        () => import("prismjs/components/prism-markup-templating.js"),
-        () => import("prismjs/components/prism-markup.js"),
-        () => import("prismjs/components/prism-js-templates.js"),
-        () => import("prismjs/components/prism-bash.js"),
-        () => import("prismjs/components/prism-c.js"),
-        () => import("prismjs/components/prism-cpp.js"),
-        () => import("prismjs/components/prism-csharp.js"),
-        () => import("prismjs/components/prism-coffeescript.js"),
-        () => import("prismjs/components/prism-diff.js"),
-        () => import("prismjs/components/prism-docker.js"),
-        () => import("prismjs/components/prism-git.js"),
-        () => import("prismjs/components/prism-go.js"),
-        () => import("prismjs/components/prism-graphql.js"),
-        () => import("prismjs/components/prism-handlebars.js"),
-        () => import("prismjs/components/prism-java.js"),
-        () => import("prismjs/components/prism-kotlin.js"),
-        () => import("prismjs/components/prism-less.js"),
-        () => import("prismjs/components/prism-makefile.js"),
-        () => import("prismjs/components/prism-markdown.js"),
-        () => import("prismjs/components/prism-objectivec.js"),
-        () => import("prismjs/components/prism-ocaml.js"),
-        () => import("prismjs/components/prism-python.js"),
-        () => import("prismjs/components/prism-reason.js"),
-        () => import("prismjs/components/prism-rust.js"),
-        () => import("prismjs/components/prism-sass.js"),
-        () => import("prismjs/components/prism-scss.js"),
-        () => import("prismjs/components/prism-solidity.js"),
-        () => import("prismjs/components/prism-sql.js"),
-        () => import("prismjs/components/prism-stylus.js"),
-        () => import("prismjs/components/prism-swift.js"),
-        () => import("prismjs/components/prism-wasm.js"),
-        () => import("prismjs/components/prism-yaml.js"),
-      ] as const
-
-      for (const load of componentLoaders) {
-        await load()
-      }
-
-      return prismModule.default as PrismLike
-    })()
+    prismLoader = import("prismjs").then((prismModule) => prismModule.default as PrismLike)
   }
+
   return prismLoader
+}
+
+const ensurePrismLanguages = async (languages: string[]) => {
+  const uniqueLanguages = Array.from(new Set(languages.map(normalizeLanguage)))
+
+  for (const language of uniqueLanguages) {
+    const loaders = prismLanguageLoaders[language] || []
+
+    for (const load of loaders) {
+      const cacheKey = `${language}:${load.toString()}`
+      if (loadedLoaders.has(cacheKey)) continue
+      await load()
+      loadedLoaders.add(cacheKey)
+    }
+  }
 }
 
 const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => {
@@ -63,7 +120,24 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => 
     const root = rootRef.current
     if (!root) return
 
-    loadPrism()
+    const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code[class*='language-']"))
+    if (!codeBlocks.length) return
+
+    const languages = codeBlocks
+      .flatMap((block) =>
+        Array.from(block.classList)
+          .filter((className) => className.startsWith("language-"))
+          .map(normalizeLanguage)
+      )
+      .filter((language) => language !== "mermaid")
+
+    if (!languages.length) return
+
+    loadPrismCore()
+      .then(async (Prism) => {
+        await ensurePrismLanguages(languages)
+        return Prism
+      })
       .then((Prism) => {
         if (disposed) return
         Prism.highlightAllUnder(root)

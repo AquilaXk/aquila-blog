@@ -2,14 +2,23 @@ import { apiFetch } from "src/apis/backend/client"
 import { useRouter } from "next/router"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
+import dynamic from "next/dynamic"
 import { FiCornerDownRight, FiEdit2, FiTrash2 } from "react-icons/fi"
 import { CONFIG } from "site.config"
-import AuthEntryModal from "src/components/auth/AuthEntryModal"
 import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import ProfileImage from "src/components/ProfileImage"
 import { TPost, TPostComment } from "src/types"
+
+const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
+  ssr: false,
+  loading: () => null,
+})
+
+const preloadAuthEntryModal = () => {
+  void import("src/components/auth/AuthEntryModal")
+}
 
 type Props = {
   data: TPost
@@ -405,9 +414,11 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
             value={commentInput}
             onChange={(event) => setCommentInput(event.target.value)}
             onFocus={() => {
+              preloadAuthEntryModal()
               if (!me && !authUnavailable) openAuthPrompt()
             }}
             onClick={() => {
+              preloadAuthEntryModal()
               if (!me && !authUnavailable) openAuthPrompt()
             }}
             placeholder={

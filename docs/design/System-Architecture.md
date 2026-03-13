@@ -46,9 +46,9 @@ flowchart TD
 1. 관리자 로그인
 2. `/admin`은 허브 역할만 담당하고, 실제 글 작성/수정은 `/admin/posts/new`에서 처리한다.
 3. 백엔드가 게시글 저장
-4. 필요 시 이미지 업로드는 MinIO에 저장
-5. 백엔드는 필요 시 프론트 revalidate hook을 비차단성으로 호출한다.
-6. 메인 페이지는 SSR + 짧은 CDN 캐시 만료 또는 revalidate hook을 통해 새 데이터 기준으로 갱신된다.
+4. 필요 시 이미지 업로드는 MinIO에 저장하고, 이미지 조회는 백엔드가 전체 바이트를 메모리에 올리지 않고 스트리밍으로 전달한다.
+5. 백엔드는 필요 시 프론트 revalidate task를 큐에 적재하고, task worker가 비차단성으로 revalidate hook을 호출한다.
+6. 메인 페이지는 SSR + 짧은 CDN 캐시 만료 또는 revalidate task 처리 결과를 통해 새 데이터 기준으로 갱신된다.
 
 ```mermaid
 sequenceDiagram
@@ -63,7 +63,8 @@ sequenceDiagram
         Front->>Back: POST /post/api/v1/posts/images
         Back->>MinIO: upload
     end
-    opt cache invalidation hook
+    opt cache invalidation task
+        Back->>Back: enqueue revalidate task
         Back->>Revalidate: POST /api/revalidate
     end
     Back-->>Front: 글 저장 응답
@@ -91,7 +92,7 @@ sequenceDiagram
 | 공개 글 탐색 | `/` | `/post/api/v1/posts` | 목록/검색/필터 |
 | 글 상세 조회 | `/posts/:id` | `/post/api/v1/posts/{id}` | Markdown 렌더 |
 | 로그인 | `/login` | `/member/api/v1/auth/login` | 쿠키 발급 |
-| 회원가입 | `/signup`, `/signup/verify` | `/member/api/v1/members`, `/member/api/v1/signup/*` | 일반 가입 + 이메일 인증 가입 |
+| 회원가입 | `/signup`, `/signup/verify` | `/member/api/v1/members`, `/member/api/v1/signup/*` | 일반 가입 + 이메일 인증 가입, 메일 발송은 task queue |
 | 관리자 작성 | `/admin/posts/new` | `/post/api/v1/posts`, `/post/api/v1/adm/posts` | 발행/검색/수정 |
 
 추가 규칙:
@@ -132,6 +133,7 @@ Backend:
 
 - 메인 피드는 정적 빌드가 아니라 API/SSR 기반이다.
 - `CUSTOM__REVALIDATE__*`는 즉시 반영 시간을 더 줄이기 위한 보조 장치이지, 데이터 정합성의 유일한 경로는 아니다.
+- 회원가입 메일 발송과 revalidate는 모두 task queue를 거쳐 write API latency와 분리된다.
 - 관리자 프로필 이미지 업로드도 MinIO(`CUSTOM_STORAGE_*`) 의존이다.
 - OAuth callback URL은 프록시 추론이 아니라 `${custom.site.backUrl}` 기준으로 고정한다.
 

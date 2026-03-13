@@ -145,8 +145,8 @@ class MemberApplicationService(
         .findQPagedByKw(
             kw,
             PageRequest.of(page - 1, pageSize, sort.sortBy),
-        ).map { member ->
-            memberProfileHydrator.hydrate(member)
+        ).also { memberPage ->
+            memberProfileHydrator.hydrateAll(memberPage.content)
         }
 
     private fun saveProfileImgUrlAttr(member: Member) {

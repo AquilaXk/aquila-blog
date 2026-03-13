@@ -60,7 +60,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         theme: "base",
         themeVariables: mermaidThemeVariables,
         flowchart: {
-          htmlLabels: true,
+          htmlLabels: false,
           curve: "basis",
           useMaxWidth: true,
           rankSpacing: 54,
@@ -129,19 +129,28 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           if (disposed) return
 
           const parser = new DOMParser()
-          const svgDocument = parser.parseFromString(svg, "image/svg+xml")
-          const renderedSvg = svgDocument.documentElement
-          const rawWidth = Number.parseFloat(renderedSvg.getAttribute("width") || "")
-          const rawHeight = Number.parseFloat(renderedSvg.getAttribute("height") || "")
+          const svgDocument = parser.parseFromString(svg, "text/html")
+          const renderedSvg = svgDocument.querySelector("svg")
+          if (!renderedSvg) {
+            throw new Error("Mermaid SVG 파싱 실패")
+          }
+          const parseDimension = (value: string | null) => {
+            if (!value) return 0
+            const parsed = Number.parseFloat(value.replace(/[^\d.]/g, ""))
+            return Number.isFinite(parsed) ? parsed : 0
+          }
+          const rawWidth = parseDimension(renderedSvg.getAttribute("width"))
+          const rawHeight = parseDimension(renderedSvg.getAttribute("height"))
 
           if (!renderedSvg.getAttribute("viewBox") && rawWidth > 0 && rawHeight > 0) {
             renderedSvg.setAttribute("viewBox", `0 0 ${rawWidth} ${rawHeight}`)
           }
 
+          renderedSvg.setAttribute("preserveAspectRatio", "xMidYMin meet")
           renderedSvg.removeAttribute("width")
           renderedSvg.removeAttribute("height")
 
-          const targetWidth = Math.min(Math.max(rawWidth || 0, 520), 920)
+          const targetWidth = Math.min(Math.max(rawWidth || 560, 420), 780)
           const wrappedSvg = `
             <div class="aq-mermaid-stage" style="--aq-mermaid-target-width:${targetWidth}px;">
               ${renderedSvg.outerHTML}

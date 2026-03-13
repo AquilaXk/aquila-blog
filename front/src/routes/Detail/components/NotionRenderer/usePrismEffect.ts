@@ -92,6 +92,13 @@ const prismLanguageLoaders: Record<string, (() => Promise<unknown>)[]> = {
 
 const normalizeLanguage = (className: string) => className.replace("language-", "").trim().toLowerCase()
 
+const extractLanguageFromClassList = (block: HTMLElement) =>
+  Array.from(block.classList)
+    .find((className) => className.startsWith("language-"))
+    ?.replace("language-", "")
+    .trim()
+    .toLowerCase() || ""
+
 const loadPrismCore = async () => {
   if (!prismLoader) {
     prismLoader = import("prismjs").then((prismModule) => prismModule.default as PrismLike)
@@ -124,12 +131,14 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => 
     const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code[class*='language-']"))
     if (!codeBlocks.length) return
 
-    const languages = codeBlocks
-      .flatMap((block) =>
-        Array.from(block.classList)
-          .filter((className) => className.startsWith("language-"))
-          .map(normalizeLanguage)
-      )
+    const languageByBlock = codeBlocks
+      .map((block) => ({
+        block,
+        language: extractLanguageFromClassList(block),
+      }))
+      .filter((entry) => entry.language.length > 0)
+    const languages = languageByBlock
+      .map((entry) => entry.language)
       .filter((language) => language !== "mermaid")
 
     if (!languages.length) return
@@ -141,7 +150,14 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => 
       })
       .then((Prism) => {
         if (disposed) return
-        codeBlocks.forEach((block) => Prism.highlightElement(block))
+        languageByBlock.forEach(({ block, language }) => {
+          if (language === "mermaid") return
+          Array.from(block.classList)
+            .filter((className) => className.startsWith("language-"))
+            .forEach((className) => block.classList.remove(className))
+          block.classList.add(`language-${language}`)
+          Prism.highlightElement(block)
+        })
       })
       .catch((error) => console.warn(error))
 

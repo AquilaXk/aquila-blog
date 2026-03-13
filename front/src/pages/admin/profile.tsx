@@ -73,8 +73,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     if (!sessionMember) return
+    if (authStatus === "loading") return
     syncProfileState(sessionMember)
-  }, [sessionMember, syncProfileState])
+  }, [authStatus, sessionMember, syncProfileState])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
     const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
@@ -197,16 +198,17 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </PreviewCard>
 
         <FormCard>
-          <InfoGrid>
-            <InfoItem>
-              <label>현재 계정</label>
+          <MetaBar aria-label="프로필 메타 정보">
+            <MetaItem>
+              <span>현재 계정</span>
               <strong>{sessionMember.username}</strong>
-            </InfoItem>
-            <InfoItem>
-              <label>최종 수정 시각</label>
+            </MetaItem>
+            <MetaDivider aria-hidden="true" />
+            <MetaItem>
+              <span>최종 수정 시각</span>
               <strong>{profileUpdatedText}</strong>
-            </InfoItem>
-          </InfoGrid>
+            </MetaItem>
+          </MetaBar>
           {notice.text ? <Notice data-tone={notice.tone}>{notice.text}</Notice> : null}
           <FieldGrid>
             <FieldBox>
@@ -438,32 +440,49 @@ const FormCard = styled(PanelCard)`
   gap: 1rem;
 `
 
-const InfoGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+const MetaBar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.15rem 0.1rem 0.05rem;
+  color: ${({ theme }) => theme.colors.gray11};
 
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
+  @media (max-width: 760px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
   }
 `
 
-const InfoItem = styled.div`
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.85rem 0.9rem;
+const MetaItem = styled.div`
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
 
-  label {
-    display: block;
-    margin-bottom: 0.35rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.78rem;
+  span {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: ${({ theme }) => theme.colors.gray10};
+    white-space: nowrap;
   }
 
   strong {
+    font-size: 0.92rem;
+    font-weight: 700;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
+    white-space: nowrap;
+  }
+`
+
+const MetaDivider = styled.span`
+  width: 1px;
+  height: 0.9rem;
+  background: ${({ theme }) => theme.colors.gray6};
+
+  @media (max-width: 760px) {
+    display: none;
   }
 `
 

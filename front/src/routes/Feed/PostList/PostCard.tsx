@@ -66,17 +66,15 @@ const StyledWrapper = styled(Link)`
   article {
     overflow: hidden;
     position: relative;
-    margin-bottom: 1.5rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     border-radius: 1rem;
     background-color: ${({ theme }) =>
       theme.scheme === "light" ? "white" : theme.colors.gray4};
     transition-property: box-shadow;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 300ms;
-
-    @media (min-width: 768px) {
-      margin-bottom: 2rem;
-    }
 
     :hover {
       box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
@@ -93,14 +91,17 @@ const StyledWrapper = styled(Link)`
       position: relative;
       width: 100%;
       background-color: ${({ theme }) => theme.colors.gray2};
-      padding-bottom: 66%;
+      padding-bottom: 52%;
 
       @media (min-width: 1024px) {
-        padding-bottom: 50%;
+        padding-bottom: 42%;
       }
     }
     > .content {
+      display: grid;
+      align-content: start;
       padding: 1rem;
+      min-height: 0;
 
       &[data-thumb="false"] {
         padding-top: 3.5rem;
@@ -148,13 +149,12 @@ const StyledWrapper = styled(Link)`
       > .summary {
         margin-bottom: 1rem;
         p {
-          display: none;
-          line-height: 2rem;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          line-height: 1.72;
           color: ${({ theme }) => theme.colors.gray11};
-
-          @media (min-width: 768px) {
-            display: block;
-          }
         }
       }
       > .tags {

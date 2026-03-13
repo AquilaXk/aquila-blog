@@ -53,10 +53,19 @@ const PostList: React.FC<Props> = ({ q }) => {
 export default PostList
 
 const StyledWrapper = styled.div`
-  margin: 0.5rem 0;
+  margin: 0.65rem 0 0.25rem;
+  display: grid;
+  gap: 1rem;
+  align-items: start;
   overflow-anchor: none;
+
+  @media (min-width: 980px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.2rem;
+  }
 
   .empty {
     color: ${({ theme }) => theme.colors.gray10};
+    grid-column: 1 / -1;
   }
 `

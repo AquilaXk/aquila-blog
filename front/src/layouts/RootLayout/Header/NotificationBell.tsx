@@ -231,29 +231,29 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
+    font-size: 1.1rem;
     flex-shrink: 0;
   }
 
   .badge {
     position: absolute;
-    top: -4px;
-    right: -3px;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 0.24rem;
+    top: -5px;
+    right: -4px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 0.27rem;
     border-radius: 999px;
     background: ${({ theme }) => theme.colors.red10};
     color: white;
-    font-size: 0.62rem;
+    font-size: 0.65rem;
     font-weight: 700;
-    line-height: 17px;
+    line-height: 19px;
     text-align: center;
     border: 2px solid ${({ theme }) => theme.colors.gray2};
   }
@@ -420,8 +420,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 720px) {
     .trigger {
-      width: 30px;
-      height: 30px;
+      width: 33px;
+      height: 33px;
     }
 
     .panel {

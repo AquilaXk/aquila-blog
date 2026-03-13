@@ -225,6 +225,7 @@ const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
           title={copied ? "복사됨" : "복사"}
         >
           <AppIcon name={copied ? "check-circle" : "copy"} />
+          <span className="aq-code-copy-label">{copied ? "복사됨" : "복사"}</span>
         </button>
       </div>
     </div>
@@ -656,17 +657,19 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.42rem;
     border: 1px solid
       ${({ theme }) =>
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.12)"};
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
-    border-radius: 999px;
-    width: 2.55rem;
-    height: 2.55rem;
-    padding: 0;
-    font-size: 1rem;
+    border-radius: 12px;
+    min-width: 6rem;
+    height: 2.45rem;
+    padding: 0 0.72rem;
+    font-size: 0.92rem;
+    font-weight: 700;
     cursor: pointer;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
   }
@@ -679,14 +682,19 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-copy svg {
-    width: 1.02rem;
-    height: 1.02rem;
+    width: 1.18rem;
+    height: 1.18rem;
+  }
+
+  .aq-code-copy-label {
+    line-height: 1;
+    letter-spacing: 0.01em;
   }
 
   .aq-code-copy-bottom {
     position: absolute;
-    right: 0.95rem;
-    bottom: 0.95rem;
+    right: 0.82rem;
+    bottom: 0.82rem;
     z-index: 1;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
   }
@@ -766,7 +774,6 @@ const StyledWrapper = styled.div`
 
   .aq-mermaid-stage {
     width: min(100%, var(--aq-mermaid-target-width, 760px));
-    min-width: min(100%, 32rem);
     margin: 0 auto;
   }
 
@@ -794,7 +801,7 @@ const StyledWrapper = styled.div`
   .aq-code .token.prolog,
   .aq-code .token.doctype,
   .aq-code .token.cdata {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#808ca0" : "#6b7280")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#7f8ea3" : "#6b7280")};
     font-style: italic;
   }
 
@@ -807,12 +814,12 @@ const StyledWrapper = styled.div`
   .aq-code .token.constant,
   .aq-code .token.symbol,
   .aq-code .token.deleted {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#f07178" : "#c2410c")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#f7768e" : "#c2410c")};
   }
 
   .aq-code .token.boolean,
   .aq-code .token.number {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#d19a66" : "#b45309")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#e0af68" : "#b45309")};
   }
 
   .aq-code .token.selector,
@@ -821,14 +828,14 @@ const StyledWrapper = styled.div`
   .aq-code .token.char,
   .aq-code .token.builtin,
   .aq-code .token.inserted {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#98c379" : "#047857")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#9ece6a" : "#047857")};
   }
 
   .aq-code .token.operator,
   .aq-code .token.entity,
   .aq-code .token.url,
   .aq-code .token.variable {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#c678dd" : "#7c3aed")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#bb9af7" : "#7c3aed")};
   }
 
   .aq-code .token.atrule,
@@ -836,18 +843,18 @@ const StyledWrapper = styled.div`
   .aq-code .token.keyword,
   .aq-code .token.annotation,
   .aq-code .token.decorator {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#c792ea" : "#1d4ed8")};
     font-weight: 600;
   }
 
   .aq-code .token.function,
   .aq-code .token.class-name {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffc66d" : "#be185d")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#7dcfff" : "#be185d")};
   }
 
   .aq-code .token.regex,
   .aq-code .token.important {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#56b6c2" : "#92400e")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#7aa2f7" : "#92400e")};
   }
 
   @media (max-width: 768px) {
@@ -868,8 +875,20 @@ const StyledWrapper = styled.div`
     }
 
     .aq-code-copy-bottom {
-      right: 0.78rem;
-      bottom: 0.78rem;
+      right: 0.72rem;
+      bottom: 0.72rem;
+    }
+
+    .aq-code-copy {
+      min-width: 5.2rem;
+      height: 2.2rem;
+      padding: 0 0.58rem;
+      font-size: 0.84rem;
+    }
+
+    .aq-code-copy svg {
+      width: 1.02rem;
+      height: 1.02rem;
     }
   }
 

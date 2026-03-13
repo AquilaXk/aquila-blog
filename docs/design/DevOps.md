@@ -58,6 +58,8 @@ GitHub Actions 기준 필수값:
 - `HOME_TAILSCALE_HOST` 또는 `HOME_TS_HOST` 또는 `HOME_SSH_HOST`
 - `HOME_SSH_KEY`
 - `HOME_SERVER_ENV`
+- `CI_DB_PASSWORD`
+- `CI_REDIS_PASSWORD`
 
 선택값:
 
@@ -85,6 +87,7 @@ GitHub Actions 기준 필수값:
 | Secret | 사용 위치 | 책임 |
 | --- | --- | --- |
 | `HOME_SERVER_ENV` | 홈서버 `.env.prod` 생성 | 운영 환경변수 단일 원본 |
+| `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` test job | Docker 기반 test infra와 Spring test profile 비밀번호 정합성 유지 |
 | `TS_AUTHKEY` | GitHub Actions | Tailscale 연결 |
 | `HOME_SSH_KEY` | GitHub Actions | 서버 SSH 접속 |
 | `HOME_APP_DIR` | GitHub Actions -> SSH 원격 실행 | 서버 Git 저장소 경로 |
@@ -101,6 +104,7 @@ GitHub Actions 기준 필수값:
   예: `MINIO_ROOT_PASSWORD="V7#qL2m@9Tz!4xRb8KpD"`
 - `CUSTOM_STORAGE_ENDPOINT`는 `http://minio_1:9000` 같은 완성된 URI여야 한다.
 - 배포 스크립트는 이제 `http:` 같은 깨진 endpoint나 `${...}` placeholder가 남아 있으면 즉시 실패시킨다.
+- deploy workflow의 test job은 `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD`를 Docker Compose와 Spring test env 양쪽에 동일하게 주입한다. 둘 중 한쪽만 맞추면 CI에서는 대량 `CannotGetJdbcConnectionException`가 난다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
 
@@ -154,6 +158,7 @@ sequenceDiagram
 - 관리자 프로필 이미지/글 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
 - 이미지 정리 정책을 바꿨다면 `uploaded_file` 상태(`TEMP`, `PENDING_DELETE`)와 MinIO 사용량 추이를 같이 본다
 - Cloudflare Tunnel이 `caddy:80`으로 정상 연결되는지 확인
+- Kakao 로그인 점검 시 `/oauth2/authorization/kakao` 응답 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 확인
 
 ## 자주 보는 장애 유형
 
@@ -163,6 +168,8 @@ sequenceDiagram
   Caddy upstream alias 불일치, backend 미기동, DNS resolve 실패
 - `URISyntaxException: http:`:
   `CUSTOM_STORAGE_ENDPOINT`가 운영 Secret에서 깨진 상태
+- `KOE006`:
+  Caddy forwarded header 또는 `custom.site.backUrl` 불일치로 OAuth `redirect_uri`가 `http://...`로 생성됨
 - `MinIO password blank`:
   `HOME_SERVER_ENV`에 값이 누락되었거나 `#` 때문에 뒷부분이 주석 처리됨
 - `503` on `/profileImageFile` or `/posts/images`:

@@ -1,6 +1,6 @@
 # System Architecture
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## 이 문서가 보여주는 것
 
@@ -39,12 +39,12 @@ flowchart TD
 3. 상세 DTO는 Markdown 본문 전체를 받는다.
 4. 프론트는 본문에서 태그/카테고리 메타데이터를 추가 파싱한다.
 5. 상세 화면은 custom renderer로 코드블럭, 머메이드, 콜아웃, 테이블을 렌더링한다.
-6. 메인 페이지(`/`)는 `getServerSideProps` + `Cache-Control: public, s-maxage=30, stale-while-revalidate=120` 전략을 사용한다.
+6. 메인 페이지(`/`)와 About 페이지(`/about`)는 `getServerSideProps` + 짧은 CDN 캐시를 사용하고, 관리자 프로필은 SSR 초기값을 먼저 사용한다.
 
 ## 쓰기 흐름
 
 1. 관리자 로그인
-2. `/admin`에서 글 작성/수정
+2. `/admin`은 허브 역할만 담당하고, 실제 글 작성/수정은 `/admin/posts/new`에서 처리한다.
 3. 백엔드가 게시글 저장
 4. 필요 시 이미지 업로드는 MinIO에 저장
 5. 백엔드는 필요 시 프론트 revalidate hook을 비차단성으로 호출한다.
@@ -89,20 +89,27 @@ sequenceDiagram
 | 여정 | 시작점 | 핵심 API | 결과 |
 | --- | --- | --- | --- |
 | 공개 글 탐색 | `/` | `/post/api/v1/posts` | 목록/검색/필터 |
-| 글 상세 조회 | `/:slug` | `/post/api/v1/posts/{id}` | Markdown 렌더 |
+| 글 상세 조회 | `/posts/:id` | `/post/api/v1/posts/{id}` | Markdown 렌더 |
 | 로그인 | `/login` | `/member/api/v1/auth/login` | 쿠키 발급 |
-| 회원가입 | `/signup` | `/member/api/v1/members` | 계정 생성 |
-| 관리자 작성 | `/admin` | `/post/api/v1/posts`, `/post/api/v1/adm/posts` | 발행/검색/수정 |
+| 회원가입 | `/signup`, `/signup/verify` | `/member/api/v1/members`, `/member/api/v1/signup/*` | 일반 가입 + 이메일 인증 가입 |
+| 관리자 작성 | `/admin/posts/new` | `/post/api/v1/posts`, `/post/api/v1/adm/posts` | 발행/검색/수정 |
+
+추가 규칙:
+
+- 기존 `/:slug` 경로는 legacy 링크 호환을 위해 유지하지만, 실제 렌더는 `/posts/:id` canonical 경로로 리다이렉트한다.
 
 ## 관리자 구조
 
-관리자 페이지는 다음 기능을 한 화면에 묶어 둔다.
+관리자 페이지는 한 화면 집중형 구조에서 역할별 화면으로 분리됐다.
 
-- 글 작성/수정/삭제
-- 관리자용 전체 글 검색
-- 서버 상태 조회
-- 관리자 프로필 이미지/역할/소개 관리
-- 이미지 업로드 도우미
+- `/admin`
+  허브, 빠른 이동, 현재 계정 요약
+- `/admin/profile`
+  관리자 프로필 이미지/역할/소개 관리
+- `/admin/posts/new`
+  글 작성/수정/삭제, 관리자용 전체 글 검색
+- `/admin/tools`
+  댓글 점검, 시스템 상태 조회, 회원가입 메일 진단
 
 ## 설정 경계
 
@@ -126,6 +133,7 @@ Backend:
 - 메인 피드는 정적 빌드가 아니라 API/SSR 기반이다.
 - `CUSTOM__REVALIDATE__*`는 즉시 반영 시간을 더 줄이기 위한 보조 장치이지, 데이터 정합성의 유일한 경로는 아니다.
 - 관리자 프로필 이미지 업로드도 MinIO(`CUSTOM_STORAGE_*`) 의존이다.
+- OAuth callback URL은 프록시 추론이 아니라 `${custom.site.backUrl}` 기준으로 고정한다.
 
 ## 현재 구조의 장점
 
@@ -138,3 +146,4 @@ Backend:
 - 프론트 일부 파일명과 컴포넌트명은 과거 템플릿 유산이 남아 있다.
 - 태그/카테고리 계산이 프론트 파싱에 일부 의존한다.
 - 운영 환경변수 실수는 빌드 성공 후 런타임 장애로 이어질 수 있다.
+- legacy `/:slug` 라우트는 검색엔진/공유 링크 호환용 redirect 레이어라서, 실제 상세 페이지를 분석할 때는 `/posts/:id` 기준으로 보는 편이 안전하다.

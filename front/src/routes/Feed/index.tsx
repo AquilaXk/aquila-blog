@@ -53,8 +53,8 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
         }}
       >
         <ProfileCard initialAdminProfile={initialAdminProfile} />
-        <ServiceCard />
-        <ContactCard />
+        <ServiceCard initialAdminProfile={initialAdminProfile} />
+        <ContactCard initialAdminProfile={initialAdminProfile} />
         <div className="footer">
           <Footer />
         </div>

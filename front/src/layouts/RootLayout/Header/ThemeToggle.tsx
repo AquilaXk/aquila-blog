@@ -31,8 +31,8 @@ const StyledWrapper = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   border-radius: 999px;
   padding: 0;
@@ -44,13 +44,13 @@ const StyledWrapper = styled.button`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.12rem;
+    font-size: 1.18rem;
     line-height: 1;
   }
 
   @media (max-width: 720px) {
-    width: 33px;
-    height: 33px;
+    width: 30px;
+    height: 30px;
 
     svg {
       font-size: 1rem;

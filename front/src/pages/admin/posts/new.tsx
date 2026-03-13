@@ -91,6 +91,7 @@ type ToolbarAction = {
   onClick: () => void
   primary?: boolean
   calloutTrigger?: boolean
+  colorTrigger?: boolean
 }
 type ToolbarGroup = {
   label: string
@@ -154,6 +155,16 @@ const TAG_TONES = [
     buttonBg: "rgba(15, 23, 42, 0.15)",
     buttonText: "#a7f3d0",
   },
+] as const
+
+const INLINE_TEXT_COLOR_OPTIONS = [
+  { label: "하늘", value: "#60a5fa" },
+  { label: "바이올렛", value: "#a78bfa" },
+  { label: "그린", value: "#34d399" },
+  { label: "오렌지", value: "#fb923c" },
+  { label: "로즈", value: "#f472b6" },
+  { label: "옐로", value: "#facc15" },
+  { label: "슬레이트", value: "#94a3b8" },
 ] as const
 
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
@@ -541,6 +552,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<string | null>(null)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
+  const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
   const deferredPostContent = useDeferredValue(postContent)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
@@ -1333,6 +1345,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setActiveToolbarMenu(null)
   }
 
+  const applyInlineTextColor = (color: string) => {
+    wrapSelection(`{{color:${color}|`, "}}", "색상 텍스트")
+    setIsColorMenuOpen(false)
+    setActiveToolbarMenu(null)
+  }
+
   const handlePasteFromNotion = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const html = e.clipboardData.getData("text/html")
     if (!html) return
@@ -1436,6 +1454,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         { label: "취소선", onClick: () => wrapSelection("~~", "~~", "취소선 텍스트") },
         { label: "인라인코드", onClick: () => wrapSelection("`", "`", "코드") },
         { label: "링크", onClick: insertLink },
+        { label: "글자색", onClick: () => setIsColorMenuOpen((prev) => !prev), colorTrigger: true },
       ],
     },
     {
@@ -2044,9 +2063,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               {activeMetaPanel === "category" ? (
                 <MetadataPanel>
                   <label>카테고리 아이콘 선택</label>
-                  <SelectionRow>
+                  <IconChoiceRow>
                     {CATEGORY_ICON_OPTIONS.map((option) => (
-                      <SelectionChip
+                      <IconChoiceChip
                         key={option.id}
                         type="button"
                         data-active={categoryIconId === option.id}
@@ -2057,9 +2076,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           <CategoryIcon iconId={option.id} className="categoryIcon" />
                           <span>{option.label}</span>
                         </CategoryChipContent>
-                      </SelectionChip>
+                      </IconChoiceChip>
                     ))}
-                  </SelectionRow>
+                  </IconChoiceRow>
                   <SelectionRow>
                     <SelectionChip
                       type="button"
@@ -2181,6 +2200,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   onClick={() => {
                     setActiveToolbarMenu((prev) => (prev === group.label ? null : group.label))
                     setIsCalloutMenuOpen(false)
+                    setIsColorMenuOpen(false)
                   }}
                 >
                   {group.label} ▾
@@ -2226,6 +2246,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           </CalloutMenu>
                         )}
                       </CalloutDropdown>
+                    ) : action.colorTrigger ? (
+                      <ColorDropdown key={action.label}>
+                        <ToolbarActionButton type="button" onClick={() => setIsColorMenuOpen((prev) => !prev)}>
+                          {action.label} ▾
+                        </ToolbarActionButton>
+                        {isColorMenuOpen && (
+                          <ColorMenu>
+                            {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
+                              <button
+                                type="button"
+                                key={option.value}
+                                onClick={() => applyInlineTextColor(option.value)}
+                              >
+                                <ColorSwatch style={{ background: option.value }} aria-hidden="true" />
+                                <span>{option.label}</span>
+                              </button>
+                            ))}
+                          </ColorMenu>
+                        )}
+                      </ColorDropdown>
                     ) : (
                       <ToolbarActionButton
                         key={action.label}
@@ -2236,6 +2276,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           action.onClick()
                           setActiveToolbarMenu(null)
                           setIsCalloutMenuOpen(false)
+                          setIsColorMenuOpen(false)
                         }}
                       >
                         {action.label}
@@ -3339,6 +3380,50 @@ const SelectionRow = styled.div`
   min-width: 0;
 `
 
+const IconChoiceRow = styled(SelectionRow)`
+  gap: 0.5rem;
+`
+
+const IconChoiceChip = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.1rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.46rem 0.88rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+
+  .categoryIcon {
+    font-size: 0.92rem;
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.16);
+  }
+`
+
 const CatalogChipGroup = styled.div`
   display: inline-flex;
   align-items: center;
@@ -3486,29 +3571,42 @@ const TagChipRow = styled.div`
 
 const SelectedTagChip = styled.span`
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0;
   min-width: 0;
   max-width: 100%;
+  min-height: 2.1rem;
   border-radius: 999px;
   border: 1px solid var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
   background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
-  color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
-  padding-left: 0.82rem;
-  font-size: 0.8rem;
-  font-weight: 700;
   overflow: hidden;
   box-shadow: var(--tag-chip-shadow, 0 12px 24px rgba(37, 99, 235, 0.14));
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+  }
 
   .label {
+    display: inline-flex;
+    align-items: center;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding: 0.5rem 0.88rem;
+    color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.2;
   }
 
   > button {
-    margin-left: 0.45rem;
+    margin-left: 0;
   }
 
   button {
@@ -3516,15 +3614,15 @@ const SelectedTagChip = styled.span`
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    min-width: 1.9rem;
-    padding: 0 0.5rem;
+    min-width: 2.05rem;
+    padding: 0 0.58rem;
     border: 0;
-    border-left: 1px solid var(--tag-chip-divider, rgba(147, 197, 253, 0.2));
+    border-left: 1px solid var(--tag-chip-divider, rgba(147, 197, 253, 0.24));
     background: var(--tag-chip-button-bg, rgba(15, 23, 42, 0.16));
     color: var(--tag-chip-button-text, ${({ theme }) => theme.colors.blue11});
     cursor: pointer;
     flex: 0 0 auto;
-    font-size: 0.92rem;
+    font-size: 0.98rem;
     line-height: 1;
     transition:
       transform 0.18s ease,
@@ -3668,9 +3766,9 @@ const EmptyMetaText = styled.span`
 
 const EditorToolbar = styled.div`
   display: grid;
-  gap: 0.7rem;
-  margin: 0 0 1rem;
-  padding: 0.9rem 0;
+  gap: 0.52rem;
+  margin: 0 0 0.72rem;
+  padding: 0.54rem 0 0.46rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray5};
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 `
@@ -3678,7 +3776,7 @@ const EditorToolbar = styled.div`
 const ToolbarMenuBar = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  gap: 0.42rem;
 `
 
 const ToolbarMenuTrigger = styled.button`
@@ -3686,11 +3784,15 @@ const ToolbarMenuTrigger = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
-  min-height: 42px;
-  padding: 0 0.92rem;
-  font-size: 0.85rem;
+  min-height: 36px;
+  padding: 0 0.78rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
 
   &[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.blue8};
@@ -3701,11 +3803,11 @@ const ToolbarMenuTrigger = styled.button`
 
 const ToolbarMenuPanel = styled.div`
   display: grid;
-  gap: 0.55rem;
-  border-radius: 16px;
+  gap: 0.45rem;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.78rem;
+  padding: 0.62rem 0.68rem;
 `
 
 const ToolbarGroup = styled.div`
@@ -3719,30 +3821,32 @@ const ToolbarGroup = styled.div`
 
 const ToolbarGroupHeader = styled.div`
   display: grid;
-  gap: 0.18rem;
+  gap: 0.14rem;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
+    font-size: 0.82rem;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
-    line-height: 1.45;
+    font-size: 0.74rem;
+    line-height: 1.35;
   }
 `
 
 const ToolbarActionGrid = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.34rem;
 `
 
 const ToolbarActionButton = styled(Button)`
-  border-radius: 10px;
+  border-radius: 9px;
   background: ${({ theme }) => theme.colors.gray2};
-  min-height: 38px;
+  min-height: 33px;
+  padding: 0.44rem 0.72rem;
+  font-size: 0.79rem;
 
   &[data-variant="primary"] {
     border-color: ${({ theme }) => theme.colors.blue8};
@@ -3754,6 +3858,8 @@ const ToolbarActionButton = styled(Button)`
 const CalloutDropdown = styled.div`
   position: relative;
 `
+
+const ColorDropdown = styled(CalloutDropdown)``
 
 const CalloutMenu = styled.div`
   position: absolute;
@@ -3784,6 +3890,24 @@ const CalloutMenu = styled.div`
       border-color: ${({ theme }) => theme.colors.gray6};
     }
   }
+`
+
+const ColorMenu = styled(CalloutMenu)`
+  min-width: 9.2rem;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+`
+
+const ColorSwatch = styled.span`
+  width: 0.88rem;
+  height: 0.88rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.24);
 `
 
 const EditorGrid = styled.div`

@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.out.PostImageStoragePort
 import com.back.global.app.AppConfig
@@ -46,6 +47,21 @@ class ApiV1AdmMemberController(
         val homeIntroTitle: String,
         @field:Size(max = 500)
         val homeIntroDescription: String,
+        @field:Size(max = 30)
+        val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+        @field:Size(max = 30)
+        val contactLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+    )
+
+    data class ProfileCardLinkItemRequest(
+        @field:Size(max = 40)
+        val icon: String = "",
+        @field:NotBlank
+        @field:Size(max = 80)
+        val label: String,
+        @field:NotBlank
+        @field:Size(max = 2000)
+        val href: String,
     )
 
     @GetMapping
@@ -143,6 +159,22 @@ class ApiV1AdmMemberController(
             bio = reqBody.bio.trim(),
             homeIntroTitle = reqBody.homeIntroTitle.trim(),
             homeIntroDescription = reqBody.homeIntroDescription.trim(),
+            serviceLinks =
+                reqBody.serviceLinks.map { link ->
+                    MemberProfileLinkItem(
+                        icon = link.icon.trim(),
+                        label = link.label.trim(),
+                        href = link.href.trim(),
+                    )
+                },
+            contactLinks =
+                reqBody.contactLinks.map { link ->
+                    MemberProfileLinkItem(
+                        icon = link.icon.trim(),
+                        label = link.label.trim(),
+                        href = link.href.trim(),
+                    )
+                },
         )
         return MemberWithUsernameDto(member)
     }

@@ -1,5 +1,6 @@
 import { QueryClient, useQuery } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
+import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import { queryKey } from "src/constants/queryKey"
 
 export type AdminProfile = {
@@ -12,6 +13,8 @@ export type AdminProfile = {
   profileBio?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  serviceLinks?: ProfileCardLinkItem[]
+  contactLinks?: ProfileCardLinkItem[]
 }
 
 type AdminProfileLike = {
@@ -24,6 +27,8 @@ type AdminProfileLike = {
   profileBio?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  serviceLinks?: ProfileCardLinkItem[]
+  contactLinks?: ProfileCardLinkItem[]
 }
 
 export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
@@ -36,6 +41,8 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   profileBio: value.profileBio,
   homeIntroTitle: value.homeIntroTitle,
   homeIntroDescription: value.homeIntroDescription,
+  serviceLinks: value.serviceLinks || [],
+  contactLinks: value.contactLinks || [],
 })
 
 export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminProfile | null) => {

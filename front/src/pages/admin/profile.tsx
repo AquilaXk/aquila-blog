@@ -4,9 +4,18 @@ import Link from "next/link"
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import AppIcon, { IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import {
+  DEFAULT_CONTACT_ITEM_ICON,
+  DEFAULT_SERVICE_ITEM_ICON,
+  normalizeProfileCardLinkItem,
+  PROFILE_CARD_ICON_OPTIONS,
+  ProfileCardLinkItem,
+} from "src/constants/profileCardLinks"
 import useAuthSession, { AuthMember } from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
+import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -16,6 +25,7 @@ export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ r
 type NoticeTone = "idle" | "loading" | "success" | "error"
 
 type MemberMe = AuthMember
+type LinkSectionType = "service" | "contact"
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
@@ -31,6 +41,21 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
   }
 }
 
+const normalizeLinkInputs = (
+  items: ProfileCardLinkItem[],
+  defaultIcon: IconName
+): ProfileCardLinkItem[] =>
+  items
+    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon))
+    .filter((item): item is ProfileCardLinkItem => item !== null)
+
+const toPayloadLinks = (items: ProfileCardLinkItem[], defaultIcon: IconName): ProfileCardLinkItem[] =>
+  normalizeLinkInputs(items, defaultIcon).map((item) => ({
+    icon: item.icon,
+    label: item.label.trim(),
+    href: item.href.trim(),
+  }))
+
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const queryClient = useQueryClient()
   const { me, authStatus, setMe } = useAuthSession()
@@ -44,6 +69,12 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
   const [homeIntroTitleInput, setHomeIntroTitleInput] = useState(initialMember.homeIntroTitle || "")
   const [homeIntroDescriptionInput, setHomeIntroDescriptionInput] = useState(initialMember.homeIntroDescription || "")
+  const [serviceLinksInput, setServiceLinksInput] = useState<ProfileCardLinkItem[]>(
+    resolveServiceLinks(initialMember)
+  )
+  const [contactLinksInput, setContactLinksInput] = useState<ProfileCardLinkItem[]>(
+    resolveContactLinks(initialMember)
+  )
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(
     () => (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
@@ -57,6 +88,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setProfileBioInput(member.profileBio || "")
     setHomeIntroTitleInput(member.homeIntroTitle || "")
     setHomeIntroDescriptionInput(member.homeIntroDescription || "")
+    setServiceLinksInput(resolveServiceLinks(member))
+    setContactLinksInput(resolveContactLinks(member))
     setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
   }, [queryClient, setMe])
 
@@ -76,6 +109,54 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (authStatus === "loading") return
     syncProfileState(sessionMember)
   }, [authStatus, sessionMember, syncProfileState])
+
+  const updateLinkItem = useCallback(
+    (
+      section: LinkSectionType,
+      index: number,
+      field: keyof ProfileCardLinkItem,
+      value: string
+    ) => {
+      const updater = (items: ProfileCardLinkItem[]) =>
+        items.map((item, itemIndex) =>
+          itemIndex === index
+            ? {
+                ...item,
+                [field]: value,
+              }
+            : item
+        )
+
+      if (section === "service") {
+        setServiceLinksInput(updater)
+      } else {
+        setContactLinksInput(updater)
+      }
+    },
+    []
+  )
+
+  const appendLinkItem = useCallback((section: LinkSectionType) => {
+    const blankItem: ProfileCardLinkItem =
+      section === "service"
+        ? { icon: DEFAULT_SERVICE_ITEM_ICON, label: "", href: "" }
+        : { icon: DEFAULT_CONTACT_ITEM_ICON, label: "", href: "" }
+
+    if (section === "service") {
+      setServiceLinksInput((prev) => [...prev, blankItem])
+    } else {
+      setContactLinksInput((prev) => [...prev, blankItem])
+    }
+  }, [])
+
+  const removeLinkItem = useCallback((section: LinkSectionType, index: number) => {
+    const updater = (items: ProfileCardLinkItem[]) => items.filter((_, itemIndex) => itemIndex !== index)
+    if (section === "service") {
+      setServiceLinksInput(updater)
+    } else {
+      setContactLinksInput(updater)
+    }
+  }, [])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
     const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
@@ -127,6 +208,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           bio: profileBioInput.trim(),
           homeIntroTitle: homeIntroTitleInput.trim(),
           homeIntroDescription: homeIntroDescriptionInput.trim(),
+          serviceLinks: toPayloadLinks(serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON),
+          contactLinks: toPayloadLinks(contactLinksInput, DEFAULT_CONTACT_ITEM_ICON),
         }),
       })
       syncProfileState(updated)
@@ -203,7 +286,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <span>현재 계정</span>
               <strong>{sessionMember.username}</strong>
             </MetaItem>
-            <MetaDivider aria-hidden="true" />
             <MetaItem>
               <span>최종 수정 시각</span>
               <strong>{profileUpdatedText}</strong>
@@ -247,6 +329,104 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 onChange={(e) => setHomeIntroDescriptionInput(e.target.value)}
               />
             </FieldBox>
+            <LinkSectionCard>
+              <LinkSectionHeader>
+                <div>
+                  <h3>Service 항목</h3>
+                  <p>메인 페이지 Service 카드에 표시할 링크를 순서대로 관리합니다.</p>
+                </div>
+                <Button type="button" onClick={() => appendLinkItem("service")}>
+                  항목 추가
+                </Button>
+              </LinkSectionHeader>
+              <LinkItemsWrap>
+                {serviceLinksInput.length > 0 ? (
+                  serviceLinksInput.map((item, index) => (
+                    <LinkItemRow key={`service-${index}`}>
+                      <IconPickerField>
+                        <IconPreview>
+                          <AppIcon name={item.icon} />
+                        </IconPreview>
+                        <IconPickerSelect
+                          value={item.icon}
+                          onChange={(e) => updateLinkItem("service", index, "icon", e.target.value)}
+                        >
+                          {PROFILE_CARD_ICON_OPTIONS.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </IconPickerSelect>
+                      </IconPickerField>
+                      <Input
+                        placeholder="노출 텍스트 (예: aquila-blog)"
+                        value={item.label}
+                        onChange={(e) => updateLinkItem("service", index, "label", e.target.value)}
+                      />
+                      <Input
+                        placeholder="이동 링크 URL"
+                        value={item.href}
+                        onChange={(e) => updateLinkItem("service", index, "href", e.target.value)}
+                      />
+                      <RemoveButton type="button" onClick={() => removeLinkItem("service", index)}>
+                        삭제
+                      </RemoveButton>
+                    </LinkItemRow>
+                  ))
+                ) : (
+                  <InlineEmpty>Service 링크가 없습니다. 항목 추가를 눌러 시작하세요.</InlineEmpty>
+                )}
+              </LinkItemsWrap>
+            </LinkSectionCard>
+            <LinkSectionCard>
+              <LinkSectionHeader>
+                <div>
+                  <h3>Contact 항목</h3>
+                  <p>메인 페이지 Contact 카드에 표시할 연락처 링크를 관리합니다.</p>
+                </div>
+                <Button type="button" onClick={() => appendLinkItem("contact")}>
+                  항목 추가
+                </Button>
+              </LinkSectionHeader>
+              <LinkItemsWrap>
+                {contactLinksInput.length > 0 ? (
+                  contactLinksInput.map((item, index) => (
+                    <LinkItemRow key={`contact-${index}`}>
+                      <IconPickerField>
+                        <IconPreview>
+                          <AppIcon name={item.icon} />
+                        </IconPreview>
+                        <IconPickerSelect
+                          value={item.icon}
+                          onChange={(e) => updateLinkItem("contact", index, "icon", e.target.value)}
+                        >
+                          {PROFILE_CARD_ICON_OPTIONS.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </IconPickerSelect>
+                      </IconPickerField>
+                      <Input
+                        placeholder="노출 텍스트 (예: github)"
+                        value={item.label}
+                        onChange={(e) => updateLinkItem("contact", index, "label", e.target.value)}
+                      />
+                      <Input
+                        placeholder="이동 링크 URL (예: mailto:me@example.com)"
+                        value={item.href}
+                        onChange={(e) => updateLinkItem("contact", index, "href", e.target.value)}
+                      />
+                      <RemoveButton type="button" onClick={() => removeLinkItem("contact", index)}>
+                        삭제
+                      </RemoveButton>
+                    </LinkItemRow>
+                  ))
+                ) : (
+                  <InlineEmpty>Contact 링크가 없습니다. 항목 추가를 눌러 시작하세요.</InlineEmpty>
+                )}
+              </LinkItemsWrap>
+            </LinkSectionCard>
           </FieldGrid>
           <ActionRow>
             <Button
@@ -374,6 +554,7 @@ const ProfileGrid = styled.section`
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 1rem;
+  align-items: start;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -393,6 +574,8 @@ const PreviewCard = styled(PanelCard)`
   align-content: start;
   gap: 0.65rem;
   text-align: center;
+  align-self: start;
+  height: fit-content;
 
   strong {
     font-size: 1.15rem;
@@ -441,48 +624,39 @@ const FormCard = styled(PanelCard)`
 `
 
 const MetaBar = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.15rem 0.1rem 0.05rem;
-  color: ${({ theme }) => theme.colors.gray11};
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
 
   @media (max-width: 760px) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.45rem;
+    grid-template-columns: 1fr;
   }
 `
 
 const MetaItem = styled.div`
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.45rem;
+  display: grid;
+  gap: 0.32rem;
   min-width: 0;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.72rem 0.9rem;
 
   span {
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     font-weight: 700;
     color: ${({ theme }) => theme.colors.gray10};
-    white-space: nowrap;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
 
   strong {
-    font-size: 0.92rem;
-    font-weight: 700;
+    font-size: 1.08rem;
+    font-weight: 800;
     color: ${({ theme }) => theme.colors.gray12};
-    white-space: nowrap;
-  }
-`
-
-const MetaDivider = styled.span`
-  width: 1px;
-  height: 0.9rem;
-  background: ${({ theme }) => theme.colors.gray6};
-
-  @media (max-width: 760px) {
-    display: none;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    word-break: break-word;
   }
 `
 
@@ -550,6 +724,102 @@ const TextArea = styled.textarea`
   font-size: 0.98rem;
   line-height: 1.7;
   resize: vertical;
+`
+
+const LinkSectionCard = styled.section`
+  display: grid;
+  gap: 0.7rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.85rem;
+`
+
+const LinkSectionHeader = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: space-between;
+  align-items: center;
+
+  h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.35;
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.86rem;
+    line-height: 1.55;
+  }
+`
+
+const LinkItemsWrap = styled.div`
+  display: grid;
+  gap: 0.55rem;
+`
+
+const LinkItemRow = styled.div`
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const IconPickerField = styled.label`
+  display: flex;
+  align-items: center;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  min-width: 0;
+`
+
+const IconPreview = styled.span`
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.colors.gray11};
+  border-right: 1px solid ${({ theme }) => theme.colors.gray6};
+  flex-shrink: 0;
+
+  svg {
+    font-size: 1.08rem;
+  }
+`
+
+const IconPickerSelect = styled.select`
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.62rem 0.72rem;
+  font-size: 0.88rem;
+  min-width: 0;
+`
+
+const RemoveButton = styled(Button)`
+  color: ${({ theme }) => theme.colors.red11};
+  border-color: ${({ theme }) => theme.colors.red7};
+  background: ${({ theme }) => theme.colors.red3};
+  white-space: nowrap;
+`
+
+const InlineEmpty = styled.p`
+  margin: 0;
+  border-radius: 12px;
+  border: 1px dashed ${({ theme }) => theme.colors.gray7};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.72rem 0.8rem;
+  font-size: 0.88rem;
 `
 
 const ActionRow = styled.div`

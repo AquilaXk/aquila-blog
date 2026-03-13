@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.application.port.`in`
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import org.springframework.data.domain.Page
@@ -38,6 +39,8 @@ interface MemberUseCase {
         bio: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
+        serviceLinks: List<MemberProfileLinkItem>,
+        contactLinks: List<MemberProfileLinkItem>,
     )
 
     fun modifyOrJoin(

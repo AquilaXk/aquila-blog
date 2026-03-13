@@ -231,20 +231,20 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.1rem;
+    font-size: 1.2rem;
     flex-shrink: 0;
   }
 
   .badge {
     position: absolute;
-    top: -5px;
-    right: -4px;
+    top: -6px;
+    right: -5px;
     min-width: 19px;
     height: 19px;
     padding: 0 0.27rem;
@@ -420,8 +420,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 720px) {
     .trigger {
-      width: 33px;
-      height: 33px;
+    width: 30px;
+    height: 30px;
     }
 
     .panel {

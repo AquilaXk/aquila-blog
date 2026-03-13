@@ -1,56 +1,36 @@
 import styled from "@emotion/styled"
 import React from "react"
-import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
+import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
+import { resolveContactLinks } from "src/libs/utils/profileCardLinks"
 
-const ContactCard: React.FC = () => {
+type Props = {
+  initialAdminProfile?: AdminProfile | null
+}
+
+const ContactCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
+  const adminProfile = useAdminProfile(initialAdminProfile)
+  const links = resolveContactLinks(adminProfile)
+  if (links.length === 0) return null
+
   return (
     <>
       <StyledTitle>
         <AppIcon name="message" className="titleIcon" /> Contact
       </StyledTitle>
       <StyledWrapper>
-        {CONFIG.profile.github && (
+        {links.map((item) => (
           <a
-            href={`https://github.com/${CONFIG.profile.github}`}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <AppIcon name="github" className="icon" />
-            <div className="name">github</div>
-          </a>
-        )}
-        {CONFIG.profile.instagram && (
-          <a
-            href={`https://www.instagram.com/${CONFIG.profile.instagram}`}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <AppIcon name="instagram" className="icon" />
-            <div className="name">instagram</div>
-          </a>
-        )}
-        {CONFIG.profile.email && (
-          <a
-            href={`mailto:${CONFIG.profile.email}`}
+            key={`${item.href}-${item.label}`}
+            href={item.href}
             rel="noreferrer"
             target="_blank"
             css={{ overflow: "hidden" }}
           >
-            <AppIcon name="mail" className="icon" />
-            <div className="name">email</div>
+            <AppIcon name={item.icon} className="icon" />
+            <div className="name">{item.label}</div>
           </a>
-        )}
-        {CONFIG.profile.linkedin && (
-          <a
-            href={`https://www.linkedin.com/in/${CONFIG.profile.linkedin}`}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <AppIcon name="linkedin" className="icon" />
-            <div className="name">linkedin</div>
-          </a>
-        )}
+        ))}
       </StyledWrapper>
     </>
   )

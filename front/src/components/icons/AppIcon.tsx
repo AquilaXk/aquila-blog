@@ -1,6 +1,6 @@
 import React from "react"
 
-type IconName =
+export type IconName =
   | "search"
   | "tag"
   | "bell"
@@ -28,6 +28,9 @@ type IconName =
   | "camera"
   | "question"
   | "rocket"
+  | "globe"
+  | "link"
+  | "phone"
 
 type Props = {
   name: IconName
@@ -52,7 +55,7 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       )
     case "bell":
       return (
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.1" className={className} aria-hidden="true" {...props}>
           <path d="M8 17.5h8M9 17.5v-5.1a3 3 0 1 1 6 0v5.1l1.8 1.7H7.2L9 17.5Z" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M10.5 20.2a1.7 1.7 0 0 0 3 0" strokeLinecap="round" />
         </svg>
@@ -65,7 +68,7 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       )
     case "moon":
       return (
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.9" className={className} aria-hidden="true" {...props}>
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.2" className={className} aria-hidden="true" {...props}>
           <path
             d="M18.8 14.6A7.9 7.9 0 1 1 10 5.2a6.6 6.6 0 0 0 8.8 9.4Z"
             strokeLinecap="round"
@@ -154,6 +157,27 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
           <path d="M14.6 4.6c2.7 0 4.9 2.2 4.9 4.9 0 4.1-3.6 8-9.5 9.8.5-1.8.9-3.5 1.9-4.9l-3-3c1.4-1 3.1-1.4 4.9-1.9.8-3.7 2.1-4.9.8-4.9Z" strokeLinejoin="round" />
           <circle cx="15.8" cy="8.3" r="1.1" />
           <path d="m5 14 3 3M4.5 19.5l2.3-5.1" strokeLinecap="round" />
+        </svg>
+      )
+    case "globe":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M3.8 12h16.4M12 3.5a12.2 12.2 0 0 1 0 17M12 3.5a12.2 12.2 0 0 0 0 17" />
+        </svg>
+      )
+    case "link":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M10.2 13.8 8.5 15.5a3.2 3.2 0 1 1-4.5-4.5l2.6-2.6a3.2 3.2 0 0 1 4.5 0" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M13.8 10.2 15.5 8.5a3.2 3.2 0 1 1 4.5 4.5l-2.6 2.6a3.2 3.2 0 0 1-4.5 0" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="m9 15 6-6" strokeLinecap="round" />
+        </svg>
+      )
+    case "phone":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M5 4.8a1.8 1.8 0 0 1 2.4-.7l2.2 1.1a1.8 1.8 0 0 1 .9 2.2l-.7 2.1a1.8 1.8 0 0 0 .4 1.8l2.5 2.5a1.8 1.8 0 0 0 1.8.4l2.1-.7a1.8 1.8 0 0 1 2.2.9l1.1 2.2a1.8 1.8 0 0 1-.7 2.4l-1 .6a4 4 0 0 1-4.1 0 21.3 21.3 0 0 1-7.9-7.9 4 4 0 0 1 0-4.1l.8-1Z" strokeLinejoin="round" />
         </svg>
       )
     case "check-circle":

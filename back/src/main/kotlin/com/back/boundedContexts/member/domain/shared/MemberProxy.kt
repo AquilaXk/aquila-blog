@@ -63,6 +63,18 @@ class MemberProxy(
             real.homeIntroDescription = value
         }
 
+    override var serviceLinks
+        get() = real.serviceLinks
+        set(value) {
+            real.serviceLinks = value
+        }
+
+    override var contactLinks
+        get() = real.contactLinks
+        set(value) {
+            real.contactLinks = value
+        }
+
     override var apiKey
         get() = real.apiKey
         set(value) {

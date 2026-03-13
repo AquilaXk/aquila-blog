@@ -42,17 +42,16 @@ const StyledWrapper = styled.div`
 
 const FilterRow = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 17rem) minmax(0, 18rem);
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) minmax(12.8rem, 18rem);
+  justify-content: stretch;
   align-items: flex-start;
   gap: 1rem;
   width: 100%;
   padding-top: 1rem;
   min-width: 0;
 
-  @container feed-filters (max-width: 44rem) {
+  @container feed-filters (max-width: 32rem) {
     grid-template-columns: 1fr;
-    justify-content: start;
     justify-items: stretch;
     gap: 0.8rem;
   }
@@ -64,13 +63,13 @@ const FilterRow = styled.div`
 
 const CategorySlot = styled.div`
   width: 100%;
-  max-width: 17rem;
+  max-width: 100%;
   min-width: 0;
-  justify-self: start;
+  justify-self: stretch;
 
-  @container feed-filters (max-width: 44rem) {
+  @container feed-filters (max-width: 32rem) {
     width: 100%;
-    max-width: min(100%, 20rem);
+    max-width: 100%;
   }
 
   @container feed-filters (max-width: 28rem) {
@@ -84,7 +83,7 @@ const OrderSlot = styled.div`
   max-width: 18rem;
   min-width: 0;
 
-  @container feed-filters (max-width: 44rem) {
+  @container feed-filters (max-width: 32rem) {
     justify-self: start;
     width: 100%;
     max-width: 18rem;

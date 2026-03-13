@@ -1,7 +1,20 @@
 package com.back.boundedContexts.member.dto
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import java.time.Instant
+
+data class MemberProfileLinkItemDto(
+    val icon: String,
+    val label: String,
+    val href: String,
+) {
+    constructor(item: MemberProfileLinkItem) : this(
+        icon = item.icon,
+        label = item.label,
+        href = item.href,
+    )
+}
 
 data class MemberWithUsernameDto(
     val id: Int,
@@ -17,6 +30,8 @@ data class MemberWithUsernameDto(
     val profileBio: String,
     val homeIntroTitle: String,
     val homeIntroDescription: String,
+    val serviceLinks: List<MemberProfileLinkItemDto>,
+    val contactLinks: List<MemberProfileLinkItemDto>,
 ) {
     constructor(member: Member) : this(
         id = member.id,
@@ -32,5 +47,7 @@ data class MemberWithUsernameDto(
         profileBio = member.profileBio,
         homeIntroTitle = member.homeIntroTitle,
         homeIntroDescription = member.homeIntroDescription,
+        serviceLinks = member.serviceLinks.map(::MemberProfileLinkItemDto),
+        contactLinks = member.contactLinks.map(::MemberProfileLinkItemDto),
     )
 }

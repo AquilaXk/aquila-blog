@@ -39,6 +39,10 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             val newBio = "블로그 운영자 소개 문구"
             val newIntroTitle = "aquilaXk's Backend Log"
             val newIntroDescription = "실전 백엔드 운영과 개발 메모를 남기는 공간입니다."
+            val newServiceLabel = "aquila-blog"
+            val newServiceHref = "https://github.com/AquilaXk/aquila-blog"
+            val newContactLabel = "email"
+            val newContactHref = "mailto:admin@example.com"
 
             mvc
                 .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
@@ -49,7 +53,13 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                             "role": "$newRole",
                             "bio": "$newBio",
                             "homeIntroTitle": "$newIntroTitle",
-                            "homeIntroDescription": "$newIntroDescription"
+                            "homeIntroDescription": "$newIntroDescription",
+                            "serviceLinks": [
+                                {"icon": "service", "label": "$newServiceLabel", "href": "$newServiceHref"}
+                            ],
+                            "contactLinks": [
+                                {"icon": "mail", "label": "$newContactLabel", "href": "$newContactHref"}
+                            ]
                         }
                         """.trimIndent()
                 }.andExpect {
@@ -61,6 +71,10 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.profileBio") { value(newBio) }
                     jsonPath("$.homeIntroTitle") { value(newIntroTitle) }
                     jsonPath("$.homeIntroDescription") { value(newIntroDescription) }
+                    jsonPath("$.serviceLinks[0].label") { value(newServiceLabel) }
+                    jsonPath("$.serviceLinks[0].href") { value(newServiceHref) }
+                    jsonPath("$.contactLinks[0].label") { value(newContactLabel) }
+                    jsonPath("$.contactLinks[0].href") { value(newContactHref) }
                 }
 
             val updatedMember = memberFacade.findById(member.id).orElseThrow()
@@ -68,6 +82,12 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             assertThat(updatedMember.profileBio).isEqualTo(newBio)
             assertThat(updatedMember.homeIntroTitle).isEqualTo(newIntroTitle)
             assertThat(updatedMember.homeIntroDescription).isEqualTo(newIntroDescription)
+            assertThat(updatedMember.serviceLinks).hasSize(1)
+            assertThat(updatedMember.serviceLinks[0].label).isEqualTo(newServiceLabel)
+            assertThat(updatedMember.serviceLinks[0].href).isEqualTo(newServiceHref)
+            assertThat(updatedMember.contactLinks).hasSize(1)
+            assertThat(updatedMember.contactLinks[0].label).isEqualTo(newContactLabel)
+            assertThat(updatedMember.contactLinks[0].href).isEqualTo(newContactHref)
         }
 
         @Test

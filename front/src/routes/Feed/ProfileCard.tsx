@@ -43,14 +43,11 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.15rem 0.1rem;
-    margin-bottom: 0.7rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    font-weight: 700;
+    padding: 0.25rem;
+    margin-bottom: 0.75rem;
 
     .titleIcon {
-      font-size: 0.96rem;
+      font-size: 1rem;
       flex: 0 0 auto;
     }
   }

@@ -101,7 +101,11 @@ const extractLanguageFromClassList = (block: HTMLElement) =>
 
 const loadPrismCore = async () => {
   if (!prismLoader) {
-    prismLoader = import("prismjs").then((prismModule) => prismModule.default as PrismLike)
+    prismLoader = import("prismjs").then((prismModule) => {
+      const prism = (prismModule.default || prismModule) as PrismLike
+      ;(globalThis as { Prism?: PrismLike }).Prism = prism
+      return prism
+    })
   }
 
   return prismLoader
@@ -125,44 +129,76 @@ const ensurePrismLanguages = async (languages: string[]) => {
 const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => {
   useEffect(() => {
     let disposed = false
+    let running = false
     const root = rootRef.current
     if (!root) return
 
-    const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code[class*='language-']"))
-    if (!codeBlocks.length) return
+    const run = async () => {
+      if (disposed || running) return
+      running = true
+      try {
+        const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code[class*='language-']"))
+        if (!codeBlocks.length) return
 
-    const languageByBlock = codeBlocks
-      .map((block) => ({
-        block,
-        language: extractLanguageFromClassList(block),
-      }))
-      .filter((entry) => entry.language.length > 0)
-    const languages = languageByBlock
-      .map((entry) => entry.language)
-      .filter((language) => language !== "mermaid")
+        const languageByBlock = codeBlocks
+          .map((block) => ({
+            block,
+            language: extractLanguageFromClassList(block),
+            source: block.textContent || "",
+          }))
+          .filter((entry) => entry.language.length > 0)
 
-    if (!languages.length) return
+        const languages = languageByBlock
+          .map((entry) => entry.language)
+          .filter((language) => language !== "mermaid")
 
-    loadPrismCore()
-      .then(async (Prism) => {
+        if (!languages.length) return
+
+        const Prism = await loadPrismCore()
         await ensurePrismLanguages(languages)
-        return Prism
-      })
-      .then((Prism) => {
         if (disposed) return
-        languageByBlock.forEach(({ block, language }) => {
+
+        languageByBlock.forEach(({ block, language, source }) => {
           if (language === "mermaid") return
+
+          const alreadyHighlighted =
+            block.dataset.prismLanguage === language &&
+            block.dataset.prismSource === source &&
+            block.querySelector(".token") !== null
+          if (alreadyHighlighted) return
+
           Array.from(block.classList)
             .filter((className) => className.startsWith("language-"))
             .forEach((className) => block.classList.remove(className))
           block.classList.add(`language-${language}`)
+
           Prism.highlightElement(block)
+          block.dataset.prismLanguage = language
+          block.dataset.prismSource = source
         })
-      })
-      .catch((error) => console.warn(error))
+      } catch (error) {
+        console.warn(error)
+      } finally {
+        running = false
+      }
+    }
+
+    run()
+
+    const observer = new MutationObserver(() => {
+      if (disposed) return
+      run()
+    })
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
 
     return () => {
       disposed = true
+      observer.disconnect()
     }
   }, [contentKey, rootRef])
 }

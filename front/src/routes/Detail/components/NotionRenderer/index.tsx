@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm"
 import AppIcon from "src/components/icons/AppIcon"
 import usePrismEffect from "./usePrismEffect"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
+import useInlineColorEffect from "./useInlineColorEffect"
 
 type Props = {
   content?: string
@@ -27,6 +28,7 @@ const MARKDOWN_GUIDE = `### 작성 가이드
 - 코드블록: \`\`\`ts
 const x = 1
 \`\`\`
+- 글자색: \`{{color:#60a5fa|강조 텍스트}}\`
 - 머메이드: \`\`\`mermaid
 graph TD
   A[Start] --> B{Check}
@@ -224,8 +226,7 @@ const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
           aria-label={copied ? "코드가 복사되었습니다" : "코드 복사"}
           title={copied ? "복사됨" : "복사"}
         >
-          <AppIcon name={copied ? "check-circle" : "copy"} />
-          <span className="aq-code-copy-label">{copied ? "복사됨" : "복사"}</span>
+          {copied ? <span className="aq-code-copy-done">Copy</span> : <AppIcon name="copy" />}
         </button>
       </div>
     </div>
@@ -372,6 +373,7 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
 
 const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
   const rootRef = useRef<HTMLDivElement>(null)
+  const imageRenderOrderRef = useRef(0)
   const normalizedContent = useMemo(() => content?.trim() || "", [content])
   const segments = useMemo(
     () => parseMarkdownSegments(normalizedContent),
@@ -384,6 +386,11 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
 
   usePrismEffect(rootRef, renderKey)
   useMermaidEffect(rootRef, renderKey)
+  useInlineColorEffect(rootRef, renderKey)
+
+  useEffect(() => {
+    imageRenderOrderRef.current = 0
+  }, [renderKey])
 
   const renderMarkdown = (markdown: string, key: string, inCallout = false) => (
     <ReactMarkdown
@@ -397,11 +404,19 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
         img({ src, alt }) {
           const imageSrc = typeof src === "string" ? src : ""
           if (!imageSrc) return null
+          const isFirstImage = imageRenderOrderRef.current === 0
+          imageRenderOrderRef.current += 1
 
           return (
             <figure className="aq-image-frame">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageSrc} alt={alt || ""} loading="lazy" />
+              <img
+                src={imageSrc}
+                alt={alt || ""}
+                loading={isFirstImage ? "eager" : "lazy"}
+                fetchPriority={isFirstImage ? "high" : "auto"}
+                decoding="async"
+              />
               {alt ? <figcaption>{alt}</figcaption> : null}
             </figure>
           )
@@ -577,6 +592,11 @@ const StyledWrapper = styled.div`
     font-size: 0.92em;
   }
 
+  .aq-inline-color {
+    color: var(--aq-inline-color, inherit);
+    font-weight: 700;
+  }
+
   .aq-code,
   .aq-mermaid {
     border-radius: 18px;
@@ -612,8 +632,8 @@ const StyledWrapper = styled.div`
     padding: 0.9rem 1rem 0.82rem;
     background: ${({ theme }) =>
       theme.scheme === "dark"
-        ? "linear-gradient(180deg, #3b3f52, #3a3e51)"
-        : "linear-gradient(180deg, #dfe4ee, #d6dde8)"};
+        ? "linear-gradient(180deg, #3a3f59, #363b54)"
+        : "linear-gradient(180deg, #dee4ef, #d6dde8)"};
     border-bottom: 1px solid
       ${({ theme }) =>
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(17, 24, 39, 0.08)"};
@@ -650,25 +670,25 @@ const StyledWrapper = styled.div`
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#ff8f5a" : "#7b4b2a")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ff9d62" : "#7b4b2a")};
   }
 
   .aq-code-copy {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.42rem;
     border: 1px solid
       ${({ theme }) =>
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.12)"};
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
-    border-radius: 12px;
-    min-width: 6rem;
-    height: 2.45rem;
-    padding: 0 0.72rem;
-    font-size: 0.92rem;
+    border-radius: 10px;
+    width: 2.4rem;
+    min-width: 2.4rem;
+    height: 2.2rem;
+    padding: 0;
+    font-size: 0.8rem;
     font-weight: 700;
     cursor: pointer;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
@@ -682,13 +702,16 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-copy svg {
-    width: 1.18rem;
-    height: 1.18rem;
+    width: 1rem;
+    height: 1rem;
   }
 
-  .aq-code-copy-label {
+  .aq-code-copy-done {
     line-height: 1;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    padding-top: 0.04rem;
   }
 
   .aq-code-copy-bottom {
@@ -705,6 +728,9 @@ const StyledWrapper = styled.div`
       theme.scheme === "dark" ? "rgba(152, 195, 121, 0.35)" : "rgba(21, 128, 61, 0.22)"};
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(152, 195, 121, 0.12)" : "rgba(220, 252, 231, 0.95)"};
+    width: auto;
+    min-width: 3.3rem;
+    padding: 0 0.58rem;
   }
 
   .aq-code-shell {
@@ -714,7 +740,7 @@ const StyledWrapper = styled.div`
     overflow: auto;
     position: relative;
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "#2b2f3d" : "#f7f8fb"};
+      theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
   }
 
   .aq-code-gutter {
@@ -724,11 +750,11 @@ const StyledWrapper = styled.div`
     padding: 1.1rem 0.75rem 1.1rem 0.95rem;
     min-width: 3.2rem;
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "#252938" : "#eef2f7"};
+      theme.scheme === "dark" ? "#252734" : "#e9edf4"};
     border-right: 1px solid
       ${({ theme }) =>
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(17, 24, 39, 0.08)"};
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#5f6b80" : "#94a3b8")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#6d768b" : "#90a0b7")};
     text-align: right;
     user-select: none;
   }
@@ -749,7 +775,8 @@ const StyledWrapper = styled.div`
     padding: 1.1rem 1.25rem 4.25rem;
     min-width: 0;
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "#2b2f3d" : "#f7f8fb"};
+      theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#a9b7c6" : "#2f3747")};
   }
 
   .aq-code code,
@@ -766,14 +793,15 @@ const StyledWrapper = styled.div`
   }
 
   .aq-mermaid {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    place-items: start center;
     overflow-x: auto;
-    padding-inline: clamp(0.15rem, 1vw, 0.5rem);
+    padding: clamp(0.45rem, 0.9vw, 0.82rem) clamp(0.12rem, 0.8vw, 0.42rem);
   }
 
   .aq-mermaid-stage {
-    width: min(100%, var(--aq-mermaid-target-width, 760px));
+    width: min(100%, var(--aq-mermaid-target-width, 800px));
+    max-width: 100%;
     margin: 0 auto;
   }
 
@@ -801,12 +829,12 @@ const StyledWrapper = styled.div`
   .aq-code .token.prolog,
   .aq-code .token.doctype,
   .aq-code .token.cdata {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#7f8ea3" : "#6b7280")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#808b99" : "#6a7280")};
     font-style: italic;
   }
 
   .aq-code .token.punctuation {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#aeb7c6" : "#475569")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#a9b7c6" : "#495367")};
   }
 
   .aq-code .token.property,
@@ -814,12 +842,12 @@ const StyledWrapper = styled.div`
   .aq-code .token.constant,
   .aq-code .token.symbol,
   .aq-code .token.deleted {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#f7768e" : "#c2410c")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#b45309")};
   }
 
   .aq-code .token.boolean,
   .aq-code .token.number {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#e0af68" : "#b45309")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#6897bb" : "#1d4ed8")};
   }
 
   .aq-code .token.selector,
@@ -828,14 +856,14 @@ const StyledWrapper = styled.div`
   .aq-code .token.char,
   .aq-code .token.builtin,
   .aq-code .token.inserted {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#9ece6a" : "#047857")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#6aab73" : "#047857")};
   }
 
   .aq-code .token.operator,
   .aq-code .token.entity,
   .aq-code .token.url,
   .aq-code .token.variable {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#bb9af7" : "#7c3aed")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#9876aa" : "#7c3aed")};
   }
 
   .aq-code .token.atrule,
@@ -843,18 +871,18 @@ const StyledWrapper = styled.div`
   .aq-code .token.keyword,
   .aq-code .token.annotation,
   .aq-code .token.decorator {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#c792ea" : "#1d4ed8")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
     font-weight: 600;
   }
 
   .aq-code .token.function,
   .aq-code .token.class-name {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#7dcfff" : "#be185d")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffc66d" : "#be185d")};
   }
 
   .aq-code .token.regex,
   .aq-code .token.important {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#7aa2f7" : "#92400e")};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#bbb529" : "#92400e")};
   }
 
   @media (max-width: 768px) {
@@ -880,15 +908,20 @@ const StyledWrapper = styled.div`
     }
 
     .aq-code-copy {
-      min-width: 5.2rem;
-      height: 2.2rem;
-      padding: 0 0.58rem;
-      font-size: 0.84rem;
+      width: 2.2rem;
+      min-width: 2.2rem;
+      height: 2rem;
+      font-size: 0.74rem;
     }
 
     .aq-code-copy svg {
-      width: 1.02rem;
-      height: 1.02rem;
+      width: 0.95rem;
+      height: 0.95rem;
+    }
+
+    .aq-code-copy-bottom.is-copied {
+      min-width: 3rem;
+      padding: 0 0.52rem;
     }
   }
 

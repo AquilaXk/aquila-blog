@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ApiError, apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
+import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 
 const isClient = typeof window !== "undefined"
 
@@ -19,6 +20,8 @@ export type AuthMember = {
   profileBio?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
+  serviceLinks?: ProfileCardLinkItem[]
+  contactLinks?: ProfileCardLinkItem[]
 }
 
 const useAuthSession = () => {

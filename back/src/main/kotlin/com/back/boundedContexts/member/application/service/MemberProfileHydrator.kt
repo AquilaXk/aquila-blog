@@ -6,8 +6,10 @@ import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_DESCRIPTION
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_TITLE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_BIO
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINKS
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_ROLE
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINKS
 import org.springframework.stereotype.Component
 
 @Component
@@ -21,6 +23,8 @@ class MemberProfileHydrator(
             PROFILE_BIO,
             HOME_INTRO_TITLE,
             HOME_INTRO_DESCRIPTION,
+            PROFILE_SERVICE_LINKS,
+            PROFILE_CONTACT_LINKS,
         )
 
     fun hydrate(member: Member): Member {
@@ -43,6 +47,14 @@ class MemberProfileHydrator(
         member.getOrInitHomeIntroDescriptionAttr {
             memberAttrRepository.findBySubjectAndName(member, HOME_INTRO_DESCRIPTION)
                 ?: MemberAttr(0, member, HOME_INTRO_DESCRIPTION, "")
+        }
+        member.getOrInitServiceLinksAttr {
+            memberAttrRepository.findBySubjectAndName(member, PROFILE_SERVICE_LINKS)
+                ?: MemberAttr(0, member, PROFILE_SERVICE_LINKS, "")
+        }
+        member.getOrInitContactLinksAttr {
+            memberAttrRepository.findBySubjectAndName(member, PROFILE_CONTACT_LINKS)
+                ?: MemberAttr(0, member, PROFILE_CONTACT_LINKS, "")
         }
 
         return member
@@ -72,6 +84,12 @@ class MemberProfileHydrator(
             }
             member.getOrInitHomeIntroDescriptionAttr {
                 attrsByKey["${member.id}:$HOME_INTRO_DESCRIPTION"] ?: MemberAttr(0, member, HOME_INTRO_DESCRIPTION, "")
+            }
+            member.getOrInitServiceLinksAttr {
+                attrsByKey["${member.id}:$PROFILE_SERVICE_LINKS"] ?: MemberAttr(0, member, PROFILE_SERVICE_LINKS, "")
+            }
+            member.getOrInitContactLinksAttr {
+                attrsByKey["${member.id}:$PROFILE_CONTACT_LINKS"] ?: MemberAttr(0, member, PROFILE_CONTACT_LINKS, "")
             }
         }
 

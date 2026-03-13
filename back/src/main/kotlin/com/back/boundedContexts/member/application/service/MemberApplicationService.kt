@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.out.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.storage.app.UploadedFileRetentionService
@@ -112,16 +113,22 @@ class MemberApplicationService(
         bio: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
+        serviceLinks: List<MemberProfileLinkItem>,
+        contactLinks: List<MemberProfileLinkItem>,
     ) {
         memberProfileHydrator.hydrate(member)
         member.profileRole = role
         member.profileBio = bio
         member.homeIntroTitle = homeIntroTitle
         member.homeIntroDescription = homeIntroDescription
+        member.serviceLinks = serviceLinks
+        member.contactLinks = contactLinks
         saveProfileRoleAttr(member)
         saveProfileBioAttr(member)
         saveHomeIntroTitleAttr(member)
         saveHomeIntroDescriptionAttr(member)
+        saveServiceLinksAttr(member)
+        saveContactLinksAttr(member)
     }
 
     @Transactional
@@ -173,5 +180,13 @@ class MemberApplicationService(
 
     private fun saveHomeIntroDescriptionAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitHomeIntroDescriptionAttr())
+    }
+
+    private fun saveServiceLinksAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitServiceLinksAttr())
+    }
+
+    private fun saveContactLinksAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitContactLinksAttr())
     }
 }

@@ -106,6 +106,8 @@ type ApiRsData<T> = {
   data: T
 }
 
+type ActionCardTone = "read" | "write" | "danger" | "infra"
+
 const ACTION_LABELS: Record<string, string> = {
   commentList: "댓글 목록 조회",
   commentOne: "댓글 단건 조회",
@@ -120,6 +122,29 @@ const ACTION_LABELS: Record<string, string> = {
   taskQueueStatus: "Task Queue 진단 새로고침",
   cleanupStatus: "파일 정리 진단 새로고침",
 }
+
+const QUICK_GUIDES = [
+  {
+    icon: "💬",
+    title: "댓글 API 테스트",
+    description: "조회/작성/수정/삭제를 즉시 점검합니다. 작성·수정·삭제는 실제 데이터가 바뀝니다.",
+  },
+  {
+    icon: "📧",
+    title: "회원가입 메일 진단",
+    description: "SMTP 설정 누락, 연결 실패, 테스트 메일 발송 결과를 한 번에 확인합니다.",
+  },
+  {
+    icon: "⚙️",
+    title: "Task Queue 모니터링",
+    description: "revalidate·메일 작업의 적체, 실패, stale processing을 진단합니다.",
+  },
+  {
+    icon: "🧹",
+    title: "스토리지 정리 상태",
+    description: "purge 후보와 safety threshold를 확인해 과삭제 리스크를 빠르게 파악합니다.",
+  },
+] as const
 
 const formatInstant = (value: string | null | undefined) => {
   if (!value) return "-"
@@ -285,6 +310,146 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     : lastActionLabel
       ? `${lastActionLabel} 결과를 아래에서 확인할 수 있습니다.`
       : "도구를 실행하면 API 원본 응답이 여기에 표시됩니다."
+  const isBusy = !!loadingKey
+  const mailStatusMessage =
+    mailDiagnostics?.status === "READY"
+      ? "회원가입 메일 발송 준비가 완료된 상태입니다."
+      : mailDiagnostics?.status === "CONNECTION_FAILED"
+        ? "SMTP 접속은 설정되어 있지만 연결 단계에서 실패했습니다. 호스트, 계정, 앱 비밀번호를 확인하세요."
+        : mailDiagnostics?.status === "MISCONFIGURED"
+          ? "필수 설정이 누락되었습니다. 누락 필드를 먼저 채우세요."
+          : "메일 진단 정보를 불러오는 중입니다."
+  const queueHealthMessage =
+    taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
+      ? `stale processing ${taskQueueDiagnostics.staleProcessingCount}건 감지`
+      : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
+        ? `최근 실패 ${taskQueueDiagnostics.failedCount}건`
+        : "현재 큐는 안정 상태"
+  const cleanupHealthMessage =
+    cleanupDiagnostics?.blockedBySafetyThreshold
+      ? "safety threshold 초과로 purge가 보류됨"
+      : "safety threshold 내에서 purge 가능"
+
+  const commentActions: Array<{
+    key: string
+    title: string
+    description: string
+    tone: ActionCardTone
+    onClick: () => Promise<void>
+  }> = [
+    {
+      key: "commentList",
+      title: "댓글 목록 조회",
+      description: "게시글의 전체 댓글 트리와 정렬 상태 확인",
+      tone: "read",
+      onClick: async () => void run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`)),
+    },
+    {
+      key: "commentOne",
+      title: "댓글 단건 조회",
+      description: "특정 comment id 상세 확인",
+      tone: "read",
+      onClick: async () => void run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`)),
+    },
+    {
+      key: "commentWrite",
+      title: "댓글 작성",
+      description: "입력한 내용을 새 댓글로 생성",
+      tone: "write",
+      onClick: async () =>
+        void run("commentWrite", () =>
+          apiFetch(`/post/api/v1/posts/${postId}/comments`, {
+            method: "POST",
+            body: JSON.stringify({ content: commentContent }),
+          })
+        ),
+    },
+    {
+      key: "commentModify",
+      title: "댓글 수정",
+      description: "comment id에 해당하는 댓글 내용 변경",
+      tone: "write",
+      onClick: async () =>
+        void run("commentModify", () =>
+          apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+            method: "PUT",
+            body: JSON.stringify({ content: commentContent }),
+          })
+        ),
+    },
+    {
+      key: "commentDelete",
+      title: "댓글 삭제",
+      description: "comment id 댓글 삭제 (복구 불가 정책일 수 있음)",
+      tone: "danger",
+      onClick: async () =>
+        void run("commentDelete", () =>
+          apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+            method: "DELETE",
+          })
+        ),
+    },
+  ]
+
+  const systemActions: Array<{
+    key: string
+    title: string
+    description: string
+    tone: ActionCardTone
+    onClick: () => Promise<void>
+  }> = [
+    {
+      key: "admPostCount",
+      title: "전체 글 개수 확인",
+      description: "운영 DB 기준 총 게시글 수를 조회",
+      tone: "read",
+      onClick: async () => void run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count")),
+    },
+    {
+      key: "systemHealth",
+      title: "서버 상태 조회",
+      description: "헬스 체크 API 응답으로 기본 상태 확인",
+      tone: "infra",
+      onClick: async () => void run("systemHealth", () => apiFetch("/system/api/v1/adm/health")),
+    },
+  ]
+
+  const consoleActions: Array<{
+    key: string
+    title: string
+    description: string
+    tone: ActionCardTone
+    onClick: () => Promise<void>
+  }> = [
+    {
+      key: "mailStatus",
+      title: "메일 준비 상태 새로고침",
+      description: "설정 누락/준비 상태 재진단",
+      tone: "infra",
+      onClick: async () => void fetchSignupMailDiagnostics(false),
+    },
+    {
+      key: "mailConnectivity",
+      title: "SMTP 연결 확인",
+      description: "실제 SMTP 연결 가능 여부 점검",
+      tone: "infra",
+      onClick: async () => void fetchSignupMailDiagnostics(true),
+    },
+    {
+      key: "taskQueueStatus",
+      title: "Task Queue 진단",
+      description: "적체·실패·stale processing 새로고침",
+      tone: "infra",
+      onClick: async () => void fetchTaskQueueDiagnostics(),
+    },
+    {
+      key: "cleanupStatus",
+      title: "파일 정리 진단",
+      description: "purge 후보/threshold 상태 새로고침",
+      tone: "infra",
+      onClick: async () => void fetchCleanupDiagnostics(),
+    },
+  ]
 
   return (
     <Main>
@@ -292,7 +457,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <HeaderCopy>
           <Eyebrow>Admin Tools</Eyebrow>
           <h1>운영 도구</h1>
-          <p>댓글 CRUD 점검과 시스템 상태 확인을 글 작업실에서 분리했습니다.</p>
+          <p>운영 중 자주 쓰는 점검 기능을 목적별로 정리했습니다. 각 카드 설명을 보고 필요한 작업만 바로 실행하세요.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
@@ -304,15 +469,33 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </HeaderActions>
       </HeaderCard>
 
+      <GuideGrid>
+        {QUICK_GUIDES.map((guide) => (
+          <GuideCard key={guide.title}>
+            <GuideIcon aria-hidden="true">{guide.icon}</GuideIcon>
+            <div>
+              <h3>{guide.title}</h3>
+              <p>{guide.description}</p>
+            </div>
+          </GuideCard>
+        ))}
+      </GuideGrid>
+
       <Grid>
         <SectionCard>
           <SectionTop>
             <div>
               <SectionEyebrow>Comment Studio</SectionEyebrow>
-              <h2>댓글 테스트 도구</h2>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">💬</SectionIcon>
+                <h2>댓글 테스트 도구</h2>
+              </SectionTitleRow>
               <SectionDescription>댓글 조회, 작성, 수정, 삭제 동작을 빠르게 점검합니다.</SectionDescription>
             </div>
           </SectionTop>
+          <InlineNotice data-tone="warning">
+            이 영역의 <strong>작성/수정/삭제</strong>는 실제 데이터에 적용됩니다. 운영 점검 시 테스트용 post/comment id 사용을 권장합니다.
+          </InlineNotice>
           <FieldGrid>
             <FieldBox>
               <FieldLabel htmlFor="comment-post-id">post id</FieldLabel>
@@ -332,88 +515,58 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               />
             </FieldBox>
           </FieldGrid>
-          <ActionRow>
-            <Button type="button" disabled={!!loadingKey} onClick={() => void run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`))}>
-              댓글 목록
-            </Button>
-            <Button
-              type="button"
-              disabled={!!loadingKey}
-              onClick={() => void run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`))}
-            >
-              댓글 단건
-            </Button>
-            <Button
-              type="button"
-              disabled={!!loadingKey}
-              onClick={() =>
-                void run("commentWrite", () =>
-                  apiFetch(`/post/api/v1/posts/${postId}/comments`, {
-                    method: "POST",
-                    body: JSON.stringify({ content: commentContent }),
-                  })
-                )
-              }
-            >
-              댓글 작성
-            </Button>
-            <Button
-              type="button"
-              disabled={!!loadingKey}
-              onClick={() =>
-                void run("commentModify", () =>
-                  apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-                    method: "PUT",
-                    body: JSON.stringify({ content: commentContent }),
-                  })
-                )
-              }
-            >
-              댓글 수정
-            </Button>
-            <Button
-              type="button"
-              disabled={!!loadingKey}
-              onClick={() =>
-                void run("commentDelete", () =>
-                  apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
-                    method: "DELETE",
-                  })
-                )
-              }
-            >
-              댓글 삭제
-            </Button>
-          </ActionRow>
+          <ActionCardGrid>
+            {commentActions.map((action) => (
+              <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} onClick={() => void action.onClick()}>
+                <ActionCardHeader>
+                  <ActionCardTitle>{action.title}</ActionCardTitle>
+                  <ActionStateChip data-tone={action.tone}>
+                    {action.tone === "read" ? "조회" : action.tone === "danger" ? "주의" : "쓰기"}
+                  </ActionStateChip>
+                </ActionCardHeader>
+                <ActionCardHint>{action.description}</ActionCardHint>
+              </ActionCardButton>
+            ))}
+          </ActionCardGrid>
         </SectionCard>
 
         <SectionCard>
           <SectionTop>
             <div>
               <SectionEyebrow>System Tools</SectionEyebrow>
-              <h2>시스템 점검 도구</h2>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">🩺</SectionIcon>
+                <h2>시스템 점검 도구</h2>
+              </SectionTitleRow>
               <SectionDescription>자주 확인하는 관리자 API만 별도로 모았습니다.</SectionDescription>
             </div>
           </SectionTop>
-          <ActionRow>
-            <Button type="button" disabled={!!loadingKey} onClick={() => void run("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}>
-              전체 글 개수 확인
-            </Button>
-            <Button type="button" disabled={!!loadingKey} onClick={() => void run("systemHealth", () => apiFetch("/system/api/v1/adm/health"))}>
-              서버 상태 조회
-            </Button>
-          </ActionRow>
+          <ActionCardGrid data-columns="2">
+            {systemActions.map((action) => (
+              <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} onClick={() => void action.onClick()}>
+                <ActionCardHeader>
+                  <ActionCardTitle>{action.title}</ActionCardTitle>
+                  <ActionStateChip data-tone={action.tone}>{action.tone === "infra" ? "운영" : "조회"}</ActionStateChip>
+                </ActionCardHeader>
+                <ActionCardHint>{action.description}</ActionCardHint>
+              </ActionCardButton>
+            ))}
+          </ActionCardGrid>
         </SectionCard>
 
         <SectionCard>
           <SectionTop>
             <div>
               <SectionEyebrow>Signup Mail</SectionEyebrow>
-              <h2>회원가입 메일 진단</h2>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">📧</SectionIcon>
+                <h2>회원가입 메일 진단</h2>
+              </SectionTitleRow>
               <SectionDescription>SMTP 준비 상태를 보고, 테스트 메일을 바로 발송할 수 있습니다.</SectionDescription>
             </div>
             <StatusBadge data-status={mailDiagnostics?.status || "unknown"}>{mailDiagnostics?.status || "LOADING"}</StatusBadge>
           </SectionTop>
+          <InlineNotice data-tone={mailDiagnostics?.status === "READY" ? "success" : "warning"}>{mailStatusMessage}</InlineNotice>
 
           <MetaGrid>
             <MetaBox>
@@ -431,6 +584,22 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <MetaBox>
               <small>검증 경로</small>
               <strong>{mailDiagnostics?.verifyPath || "/signup/verify"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>SMTP 인증</small>
+              <strong>{mailDiagnostics?.smtpAuth ? "사용" : "미사용"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>STARTTLS</small>
+              <strong>{mailDiagnostics?.startTlsEnabled ? "사용" : "미사용"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>아이디 설정</small>
+              <strong>{mailDiagnostics?.usernameConfigured ? "완료" : "누락"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>비밀번호 설정</small>
+              <strong>{mailDiagnostics?.passwordConfigured ? "완료" : "누락"}</strong>
             </MetaBox>
           </MetaGrid>
 
@@ -466,10 +635,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <SectionEyebrow>Task Queue</SectionEyebrow>
-              <h2>백그라운드 작업 상태</h2>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">⚙️</SectionIcon>
+                <h2>백그라운드 작업 상태</h2>
+              </SectionTitleRow>
               <SectionDescription>revalidate, 회원가입 메일 같은 비동기 작업 적체와 stale processing 상태를 봅니다.</SectionDescription>
             </div>
           </SectionTop>
+          <InlineNotice data-tone={taskQueueDiagnostics?.staleProcessingCount ? "warning" : "success"}>
+            {queueHealthMessage}
+          </InlineNotice>
 
           <MetaGrid>
             <MetaBox>
@@ -491,13 +666,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </MetaGrid>
 
           {!!taskQueueDiagnosticsError && <InlineNotice data-tone="danger">{taskQueueDiagnosticsError}</InlineNotice>}
-          {!!taskQueueDiagnostics && (
-            <InlineNotice data-tone={taskQueueDiagnostics.staleProcessingCount > 0 ? "warning" : "success"}>
-              {taskQueueDiagnostics.staleProcessingCount > 0
-                ? `stale processing ${taskQueueDiagnostics.staleProcessingCount}건이 감지되었습니다.`
-                : "stale processing 없이 정상적으로 순환 중입니다."}
-            </InlineNotice>
-          )}
 
           {!!taskQueueDiagnostics && (
             <TaskSummaryStrip>
@@ -649,10 +817,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <SectionEyebrow>Storage Cleanup</SectionEyebrow>
-              <h2>파일 정리 상태</h2>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">🧹</SectionIcon>
+                <h2>파일 정리 상태</h2>
+              </SectionTitleRow>
               <SectionDescription>TEMP/PENDING_DELETE 파일의 purge 대상 수와 safety threshold를 확인합니다.</SectionDescription>
             </div>
           </SectionTop>
+          <InlineNotice data-tone={cleanupDiagnostics?.blockedBySafetyThreshold ? "warning" : "success"}>
+            {cleanupHealthMessage}
+          </InlineNotice>
 
           <MetaGrid>
             <MetaBox>
@@ -674,13 +848,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </MetaGrid>
 
           {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
-          {!!cleanupDiagnostics && (
-            <InlineNotice data-tone={cleanupDiagnostics.blockedBySafetyThreshold ? "warning" : "success"}>
-              {cleanupDiagnostics.blockedBySafetyThreshold
-                ? "purge 후보 수가 threshold를 넘어 실제 삭제가 보류된 상태입니다."
-                : "현재 purge 후보 수는 safety threshold 안에 있습니다."}
-            </InlineNotice>
-          )}
           {!!cleanupDiagnostics?.sampleEligibleObjectKeys.length && (
             <InlineNotice>
               샘플 object key: {cleanupDiagnostics.sampleEligibleObjectKeys.join(", ")}
@@ -698,20 +865,17 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </div>
           <ConsoleStatus>{consoleStatus}</ConsoleStatus>
         </ConsoleHeader>
-        <ConsoleActionRow>
-          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(false)}>
-            메일 준비 상태 새로고침
-          </Button>
-          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(true)}>
-            SMTP 연결 확인
-          </Button>
-          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchTaskQueueDiagnostics()}>
-            Task Queue 진단
-          </Button>
-          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchCleanupDiagnostics()}>
-            파일 정리 진단
-          </Button>
-        </ConsoleActionRow>
+        <ActionCardGrid data-columns="2">
+          {consoleActions.map((action) => (
+            <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} onClick={() => void action.onClick()}>
+              <ActionCardHeader>
+                <ActionCardTitle>{action.title}</ActionCardTitle>
+                <ActionStateChip data-tone="infra">진단</ActionStateChip>
+              </ActionCardHeader>
+              <ActionCardHint>{action.description}</ActionCardHint>
+            </ActionCardButton>
+          ))}
+        </ActionCardGrid>
         <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
       </ConsoleCard>
     </Main>
@@ -721,11 +885,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 export default AdminToolsPage
 
 const Main = styled.main`
-  max-width: 1120px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 2rem 1rem 3rem;
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 `
 
 const HeaderCard = styled.section`
@@ -755,7 +919,55 @@ const HeaderCard = styled.section`
 const HeaderCopy = styled.div`
   display: grid;
   gap: 0.7rem;
-  max-width: 38rem;
+  max-width: 42rem;
+`
+
+const GuideGrid = styled.section`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const GuideCard = styled.article`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.8rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 42%),
+    ${({ theme }) => theme.colors.gray1};
+  padding: 0.95rem 1rem;
+
+  h3 {
+    margin: 0 0 0.28rem;
+    font-size: 1.02rem;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.86rem;
+    line-height: 1.6;
+  }
+`
+
+const GuideIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  font-size: 1rem;
 `
 
 const Eyebrow = styled.span`
@@ -786,9 +998,12 @@ const BaseButton = styled.button`
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
-`
 
-const Button = styled(BaseButton)``
+  &:disabled {
+    opacity: 0.58;
+    cursor: not-allowed;
+  }
+`
 
 const PrimaryButton = styled(BaseButton)`
   border-color: ${({ theme }) => theme.colors.blue8};
@@ -859,6 +1074,24 @@ const SectionDescription = styled.p`
   line-height: 1.7;
 `
 
+const SectionTitleRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+`
+
+const SectionIcon = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.95rem;
+  height: 1.95rem;
+  border-radius: 11px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  font-size: 0.95rem;
+`
+
 const FieldGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -895,10 +1128,121 @@ const Input = styled.input`
   font-size: 0.98rem;
 `
 
-const ActionRow = styled.div`
+const ActionCardGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
+  gap: 0.72rem;
+  margin-top: 0.25rem;
+
+  &[data-columns="2"] {
+    --columns: 2;
+  }
+
+  @media (max-width: 980px) {
+    --columns: 2;
+  }
+
+  @media (max-width: 680px) {
+    --columns: 1;
+  }
+`
+
+const ActionCardButton = styled.button`
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.8rem 0.88rem;
+  text-align: left;
+  display: grid;
+  gap: 0.42rem;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  }
+
+  &:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+  }
+
+  &[data-tone="write"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+  }
+`
+
+const ActionCardHeader = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+`
+
+const ActionCardTitle = styled.span`
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+`
+
+const ActionCardHint = styled.span`
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  line-height: 1.55;
+`
+
+const ActionStateChip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.55rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.2rem 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+
+  &[data-tone="read"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    color: ${({ theme }) => theme.colors.blue11};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
+
+  &[data-tone="write"] {
+    border-color: ${({ theme }) => theme.colors.green8};
+    color: ${({ theme }) => theme.colors.green11};
+    background: ${({ theme }) => theme.colors.green3};
+  }
+
+  &[data-tone="danger"] {
+    border-color: ${({ theme }) => theme.colors.red8};
+    color: ${({ theme }) => theme.colors.red11};
+    background: ${({ theme }) => theme.colors.red3};
+  }
+
+  &[data-tone="infra"] {
+    border-color: ${({ theme }) => theme.colors.indigo8};
+    color: ${({ theme }) => theme.colors.indigo11};
+    background: ${({ theme }) => theme.colors.indigo3};
+  }
 `
 
 const MetaGrid = styled.div`
@@ -1250,13 +1594,6 @@ const ConsoleStatus = styled.span`
   @media (max-width: 760px) {
     min-height: 1.5rem;
   }
-`
-
-const ConsoleActionRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-  margin-bottom: 0.9rem;
 `
 
 const ResultPanel = styled.pre`

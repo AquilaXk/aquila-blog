@@ -116,14 +116,15 @@ const StyledWrapper = styled.div`
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 32px;
-      padding: 0 0.68rem;
+      min-height: 34px;
+      min-width: 86px;
+      padding: 0 0.84rem;
       border-radius: 999px;
       border: 1px solid ${({ theme }) => theme.colors.gray7};
       background: ${({ theme }) => theme.colors.gray3};
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.82rem;
-      font-weight: 600;
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.86rem;
+      font-weight: 700;
       line-height: 1;
     }
   }
@@ -191,8 +192,9 @@ const StyledWrapper = styled.div`
     .primaryLinks {
       a {
         min-height: 30px;
+        min-width: 68px;
         padding: 0 0.58rem;
-        font-size: 0.76rem;
+        font-size: 0.78rem;
       }
     }
 

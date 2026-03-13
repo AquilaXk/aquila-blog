@@ -1,25 +1,33 @@
-import { CONFIG } from "site.config"
 import React from "react"
 import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
+import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
+import { resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
-const ServiceCard: React.FC = () => {
-  if (!CONFIG.projects) return null
+type Props = {
+  initialAdminProfile?: AdminProfile | null
+}
+
+const ServiceCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
+  const adminProfile = useAdminProfile(initialAdminProfile)
+  const links = resolveServiceLinks(adminProfile)
+  if (links.length === 0) return null
+
   return (
     <>
       <StyledTitle>
         <AppIcon name="spark" className="titleIcon" /> Service
       </StyledTitle>
       <StyledWrapper>
-        {CONFIG.projects.map((project, idx) => (
+        {links.map((item) => (
           <a
-            key={idx}
-            href={`${project.href}`}
+            key={`${item.href}-${item.label}`}
+            href={item.href}
             rel="noreferrer"
             target="_blank"
           >
-            <AppIcon name="service" className="icon" />
-            <div className="name">{project.name}</div>
+            <AppIcon name={item.icon} className="icon" />
+            <div className="name">{item.label}</div>
           </a>
         ))}
       </StyledWrapper>

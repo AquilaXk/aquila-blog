@@ -94,15 +94,23 @@ class PostImageStorageAdapter(
             throw AppException("400-1", "이미지 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.")
         }
 
-        val contentType = file.contentType?.lowercase() ?: ""
-        if (contentType !in allowedContentTypes) {
-            throw AppException("400-1", "이미지 파일만 업로드할 수 있습니다.")
-        }
+        val declaredContentType = normalizeDeclaredContentType(file.contentType)
         val signature = file.inputStream.use { input -> input.readNBytes(16) }
         val detectedType = detectImageContentType(signature)
-        if (detectedType == null || detectedType != contentType) {
+        if (detectedType == null || detectedType !in allowedContentTypes) {
             throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
         }
+
+        // Browser/OS에 따라 image/x-png 등 별칭이 전달될 수 있어 선언 타입은 정규화 후 참고한다.
+        // 단, 정규화된 선언 타입이 명확히 존재하고 감지 결과와 다르면 위장 업로드로 보고 차단한다.
+        if (declaredContentType != null &&
+            declaredContentType in allowedContentTypes &&
+            declaredContentType != detectedType
+        ) {
+            throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
+        }
+
+        val contentType = detectedType
 
         val key = buildObjectKey(file.originalFilename)
 
@@ -294,7 +302,27 @@ class PostImageStorageAdapter(
                 "image/webp",
             )
 
+        private val contentTypeAliases =
+            mapOf(
+                "image/jpg" to "image/jpeg",
+                "image/pjpeg" to "image/jpeg",
+                "image/x-png" to "image/png",
+                "image/x-webp" to "image/webp",
+            )
+
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
+    }
+
+    private fun normalizeDeclaredContentType(raw: String?): String? {
+        val normalized =
+            raw
+                ?.substringBefore(";")
+                ?.trim()
+                ?.lowercase()
+                .orEmpty()
+
+        if (normalized.isBlank()) return null
+        return contentTypeAliases[normalized] ?: normalized
     }
 
     private fun detectImageContentType(signature: ByteArray): String? {

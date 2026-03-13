@@ -1,0 +1,108 @@
+import Link from "next/link"
+import { FormEvent } from "react"
+import AppIcon from "src/components/icons/AppIcon"
+
+type Props = {
+  username: string
+  password: string
+  showPassword: boolean
+  error: string
+  loading: boolean
+  loginHref: string
+  kakaoAuthUrl: string
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onUsernameChange: (value: string) => void
+  onPasswordChange: (value: string) => void
+  onTogglePassword: () => void
+  onSwitchToSignup: () => void
+  onKakaoAuth: () => void
+}
+
+const AuthEntryLoginPanel = ({
+  username,
+  password,
+  showPassword,
+  error,
+  loading,
+  loginHref,
+  kakaoAuthUrl,
+  onSubmit,
+  onUsernameChange,
+  onPasswordChange,
+  onTogglePassword,
+  onSwitchToSignup,
+  onKakaoAuth,
+}: Props) => {
+  return (
+    <>
+      <form className="loginForm" onSubmit={onSubmit}>
+        <label htmlFor="auth-entry-username">아이디로 로그인</label>
+        <div className="inlineField">
+          <input
+            id="auth-entry-username"
+            value={username}
+            onChange={(event) => onUsernameChange(event.target.value)}
+            placeholder="아이디를 입력하세요."
+            autoComplete="username"
+            disabled={loading}
+          />
+        </div>
+
+        <div className="inlineField passwordField">
+          <input
+            id="auth-entry-password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(event) => onPasswordChange(event.target.value)}
+            placeholder="비밀번호를 입력하세요."
+            autoComplete="current-password"
+            disabled={loading}
+          />
+          <button
+            type="button"
+            className="passwordToggle"
+            onClick={onTogglePassword}
+            disabled={loading}
+          >
+            {showPassword ? "숨기기" : "보기"}
+          </button>
+        </div>
+
+        {error && <p className="inlineError">{error}</p>}
+
+        <button type="submit" className="primaryAction" disabled={loading}>
+          {loading ? "로그인 중..." : "로그인"}
+        </button>
+      </form>
+
+      <div className="socialSection">
+        <span>소셜 계정으로 로그인</span>
+        <div className="socialButtonRow">
+          <button
+            type="button"
+            className="kakaoIconButton"
+            onClick={onKakaoAuth}
+            aria-label="카카오로 로그인"
+            title="카카오로 로그인"
+            disabled={!kakaoAuthUrl}
+          >
+            <AppIcon name="kakao" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div className="signupRow">
+        <span>아직 회원이 아니신가요?</span>
+        <button type="button" className="inlineLinkButton" onClick={onSwitchToSignup}>
+          회원가입
+        </button>
+      </div>
+
+      <Link href={loginHref} className="fullPageLink">
+        전체 로그인 페이지로 이동
+      </Link>
+    </>
+  )
+}
+
+export default AuthEntryLoginPanel

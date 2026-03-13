@@ -12,7 +12,9 @@ const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"
 })
 
 const preloadAuthEntryModal = () => {
-  void import("src/components/auth/AuthEntryModal")
+  void import("src/components/auth/AuthEntryModal").then((module) => {
+    module.preloadAuthEntryPanels?.("login")
+  })
 }
 
 const NavBar: React.FC = () => {

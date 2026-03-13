@@ -3,11 +3,11 @@ import { useRouter } from "next/router"
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
-import { FiCornerDownRight, FiEdit2, FiTrash2 } from "react-icons/fi"
 import { CONFIG } from "site.config"
 import useAuthSession from "src/hooks/useAuthSession"
 import { formatShortDateTime } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
+import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import { TPost, TPostComment } from "src/types"
 
@@ -17,7 +17,9 @@ const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"
 })
 
 const preloadAuthEntryModal = () => {
-  void import("src/components/auth/AuthEntryModal")
+  void import("src/components/auth/AuthEntryModal").then((module) => {
+    module.preloadAuthEntryPanels?.("login")
+  })
 }
 
 type Props = {
@@ -316,7 +318,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                     disabled={isLoading}
                     className="subtle"
                   >
-                    <FiEdit2 aria-hidden="true" />
+                    <AppIcon name="edit" aria-hidden="true" />
                     수정
                   </button>
                 )}
@@ -327,7 +329,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                     disabled={isLoading}
                     className="danger"
                   >
-                    <FiTrash2 aria-hidden="true" />
+                    <AppIcon name="trash" aria-hidden="true" />
                     삭제
                   </button>
                 )}
@@ -362,7 +364,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                   disabled={isLoading}
                   className="replyTrigger"
                 >
-                  <FiCornerDownRight aria-hidden="true" />
+                  <AppIcon name="reply" aria-hidden="true" />
                   답글 달기
                 </button>
               )}

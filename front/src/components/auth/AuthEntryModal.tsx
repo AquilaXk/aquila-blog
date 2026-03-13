@@ -1,9 +1,9 @@
 import styled from "@emotion/styled"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { FiCheckCircle, FiMail, FiMessageCircle, FiX } from "react-icons/fi"
-import { RiKakaoTalkFill } from "react-icons/ri"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 
 type RsData<T> = {
@@ -27,6 +27,48 @@ type Props = {
 }
 
 type AuthModalView = "login" | "signup" | "signup-sent"
+
+const loadLoginPanel = () => import("./AuthEntryLoginPanel")
+const loadSignupPanel = () => import("./AuthEntrySignupPanel")
+const loadSignupSentPanel = () => import("./AuthEntrySignupSentPanel")
+
+const AuthEntryPanelFallback = () => (
+  <div className="panelFallback" aria-hidden="true">
+    <div className="line large" />
+    <div className="line" />
+    <div className="line short" />
+    <div className="button" />
+  </div>
+)
+
+const LoginPanel = dynamic(loadLoginPanel, {
+  ssr: false,
+  loading: AuthEntryPanelFallback,
+})
+
+const SignupPanel = dynamic(loadSignupPanel, {
+  ssr: false,
+  loading: AuthEntryPanelFallback,
+})
+
+const SignupSentPanel = dynamic(loadSignupSentPanel, {
+  ssr: false,
+  loading: AuthEntryPanelFallback,
+})
+
+export const preloadAuthEntryPanels = (view: AuthModalView = "login") => {
+  if (view === "signup") {
+    void loadSignupPanel()
+    return
+  }
+
+  if (view === "signup-sent") {
+    void Promise.all([loadSignupPanel(), loadSignupSentPanel()])
+    return
+  }
+
+  void loadLoginPanel()
+}
 
 const AuthEntryModal: React.FC<Props> = ({
   open,
@@ -89,6 +131,12 @@ const AuthEntryModal: React.FC<Props> = ({
       document.body.style.overflow = previousOverflow
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+
+    preloadAuthEntryPanels(view)
+  }, [open, view])
 
   if (!open) return null
 
@@ -173,7 +221,7 @@ const AuthEntryModal: React.FC<Props> = ({
           eyebrow: "Login",
           heading: title,
           body: description,
-          visualIcon: <FiMessageCircle aria-hidden="true" />,
+          visualIcon: <AppIcon name="message" aria-hidden="true" />,
           visualTitle,
           visualDescription,
         }
@@ -182,7 +230,7 @@ const AuthEntryModal: React.FC<Props> = ({
             eyebrow: "Signup",
             heading: "회원가입",
             body: "먼저 이메일을 확인한 뒤 아이디와 비밀번호를 등록합니다.",
-            visualIcon: <FiMail aria-hidden="true" />,
+            visualIcon: <AppIcon name="mail" aria-hidden="true" />,
             visualTitle: "이메일 인증",
             visualDescription: "가입 링크를 메일로 보내드릴게요. 메일 안의 링크를 통해 마지막 가입 단계로 이어집니다.",
           }
@@ -190,7 +238,7 @@ const AuthEntryModal: React.FC<Props> = ({
             eyebrow: "Sent",
             heading: "메일을 보냈어요",
             body: "받은편지함에서 회원가입 메일을 확인한 뒤 계속 진행해주세요.",
-            visualIcon: <FiCheckCircle aria-hidden="true" />,
+            visualIcon: <AppIcon name="check-circle" aria-hidden="true" />,
             visualTitle: "거의 다 됐어요",
             visualDescription: "메일에 들어 있는 링크를 누르면 이메일이 검증되고, 마지막 가입 폼으로 바로 이어집니다.",
           }
@@ -211,7 +259,7 @@ const AuthEntryModal: React.FC<Props> = ({
 
         <div className="formPane">
           <button type="button" className="closeButton" onClick={onClose} aria-label="닫기">
-            <FiX aria-hidden="true" />
+            <AppIcon name="close" aria-hidden="true" />
           </button>
 
           <span className="eyebrow">{currentContent.eyebrow}</span>
@@ -219,154 +267,51 @@ const AuthEntryModal: React.FC<Props> = ({
           <p className="formDescription">{currentContent.body}</p>
 
           {view === "login" && (
-            <>
-              <form className="loginForm" onSubmit={handleLogin}>
-                <label htmlFor="auth-entry-username">아이디로 로그인</label>
-                <div className="inlineField">
-                  <input
-                    id="auth-entry-username"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    placeholder="아이디를 입력하세요."
-                    autoComplete="username"
-                    disabled={loading}
-                  />
-                </div>
-
-                <div className="inlineField passwordField">
-                  <input
-                    id="auth-entry-password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="비밀번호를 입력하세요."
-                    autoComplete="current-password"
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    className="passwordToggle"
-                    onClick={() => setShowPassword((value) => !value)}
-                    disabled={loading}
-                  >
-                    {showPassword ? "숨기기" : "보기"}
-                  </button>
-                </div>
-
-                {error && <p className="inlineError">{error}</p>}
-
-                <button type="submit" className="primaryAction" disabled={loading}>
-                  {loading ? "로그인 중..." : "로그인"}
-                </button>
-              </form>
-
-              <div className="socialSection">
-                <span>소셜 계정으로 로그인</span>
-                <div className="socialButtonRow">
-                  <button
-                    type="button"
-                    className="kakaoIconButton"
-                    onClick={() => {
-                      if (!kakaoAuthUrl) return
-                      window.location.href = kakaoAuthUrl
-                    }}
-                    aria-label="카카오로 로그인"
-                    title="카카오로 로그인"
-                  >
-                    <RiKakaoTalkFill aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="signupRow">
-                <span>아직 회원이 아니신가요?</span>
-                <button type="button" className="inlineLinkButton" onClick={() => setView("signup")}>
-                  회원가입
-                </button>
-              </div>
-
-              <Link href={loginHref} className="fullPageLink">
-                전체 로그인 페이지로 이동
-              </Link>
-            </>
+            <LoginPanel
+              username={username}
+              password={password}
+              showPassword={showPassword}
+              error={error}
+              loading={loading}
+              loginHref={loginHref}
+              kakaoAuthUrl={kakaoAuthUrl}
+              onSubmit={handleLogin}
+              onUsernameChange={setUsername}
+              onPasswordChange={setPassword}
+              onTogglePassword={() => setShowPassword((value) => !value)}
+              onSwitchToSignup={() => setView("signup")}
+              onKakaoAuth={() => {
+                if (!kakaoAuthUrl) return
+                window.location.href = kakaoAuthUrl
+              }}
+            />
           )}
 
           {view === "signup" && (
-            <>
-              <form className="loginForm" onSubmit={handleSignupEmailStart}>
-                <label htmlFor="auth-entry-signup-email">이메일로 회원가입</label>
-                <div className="inlineField">
-                  <input
-                    id="auth-entry-signup-email"
-                    value={signupEmail}
-                    onChange={(event) => setSignupEmail(event.target.value)}
-                    placeholder="이메일을 입력하세요."
-                    autoComplete="email"
-                    disabled={signupLoading}
-                  />
-                </div>
-
-                {signupError && <p className="inlineError">{signupError}</p>}
-
-                <button type="submit" className="primaryAction" disabled={signupLoading}>
-                  {signupLoading ? "메일 보내는 중..." : "인증 메일 보내기"}
-                </button>
-              </form>
-
-              <div className="socialSection">
-                <span>소셜 계정으로 계속하기</span>
-                <div className="socialButtonRow">
-                  <button
-                    type="button"
-                    className="kakaoIconButton"
-                    onClick={() => {
-                      if (!kakaoAuthUrl) return
-                      window.location.href = kakaoAuthUrl
-                    }}
-                    aria-label="카카오로 로그인"
-                    title="카카오로 로그인"
-                  >
-                    <RiKakaoTalkFill aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="signupRow">
-                <span>이미 계정이 있으신가요?</span>
-                <button type="button" className="inlineLinkButton" onClick={() => setView("login")}>
-                  로그인
-                </button>
-              </div>
-
-              <Link href={signupHref} className="fullPageLink">
-                전체 회원가입 페이지로 이동
-              </Link>
-            </>
+            <SignupPanel
+              signupEmail={signupEmail}
+              signupError={signupError}
+              signupLoading={signupLoading}
+              signupHref={signupHref}
+              kakaoAuthUrl={kakaoAuthUrl}
+              onSubmit={handleSignupEmailStart}
+              onSignupEmailChange={setSignupEmail}
+              onSwitchToLogin={() => setView("login")}
+              onKakaoAuth={() => {
+                if (!kakaoAuthUrl) return
+                window.location.href = kakaoAuthUrl
+              }}
+            />
           )}
 
           {view === "signup-sent" && (
-            <div className="sentState">
-              <div className="sentCard">
-                <FiCheckCircle aria-hidden="true" />
-                <div>
-                  <strong>{sentEmail || signupEmail}</strong>
-                  <p>회원가입 링크가 이메일로 전송되었습니다.</p>
-                </div>
-              </div>
-
-              <div className="sentActions">
-                <button type="button" className="primaryAction" onClick={() => setView("login")}>
-                  로그인으로 돌아가기
-                </button>
-                <button type="button" className="secondaryAction" onClick={() => setView("signup")}>
-                  다른 이메일로 다시 보내기
-                </button>
-              </div>
-
-              <Link href={signupHref} className="fullPageLink">
-                전체 회원가입 페이지에서 계속하기
-              </Link>
-            </div>
+            <SignupSentPanel
+              sentEmail={sentEmail}
+              signupEmail={signupEmail}
+              signupHref={signupHref}
+              onBackToLogin={() => setView("login")}
+              onRetryWithAnotherEmail={() => setView("signup")}
+            />
           )}
         </div>
       </Modal>
@@ -512,6 +457,35 @@ const Modal = styled.div`
       font-size: 0.82rem;
       font-weight: 700;
     }
+  }
+
+  .panelFallback {
+    display: grid;
+    gap: 0.72rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .panelFallback .line,
+  .panelFallback .button {
+    border-radius: 16px;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.16));
+  }
+
+  .panelFallback .line {
+    height: 50px;
+  }
+
+  .panelFallback .line.large {
+    height: 82px;
+  }
+
+  .panelFallback .line.short {
+    width: 56%;
+  }
+
+  .panelFallback .button {
+    height: 52px;
+    margin-top: 0.2rem;
   }
 
   .inlineField,

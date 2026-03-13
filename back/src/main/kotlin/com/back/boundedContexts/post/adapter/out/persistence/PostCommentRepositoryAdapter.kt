@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.application.port.out.PostCommentRepositoryP
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import org.springframework.stereotype.Component
+import java.util.Optional
 
 @Component
 class PostCommentRepositoryAdapter(
@@ -23,4 +24,6 @@ class PostCommentRepositoryAdapter(
         post: Post,
         id: Int,
     ): PostComment? = postCommentRepository.findByPostAndId(post, id)
+
+    override fun findById(id: Int): Optional<PostComment> = postCommentRepository.findById(id)
 }

@@ -21,6 +21,7 @@ type ApiPostDto = {
   authorUsername?: string
   authorProfileImgUrl: string
   title: string
+  thumbnail?: string
   summary?: string
   tags?: string[]
   category?: string[]
@@ -64,6 +65,7 @@ const slugify = (value: string) =>
 const stripMarkdown = (value: string) =>
   value
     .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[(.*?)\]\((.*?)\)/g, " ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
     .replace(/[#>*_~-]/g, "")
@@ -196,6 +198,7 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
     },
   ],
   title: post.title,
+  thumbnail: post.thumbnail,
   ...(normalizeStringArray(post.tags).length > 0
     ? { tags: normalizeStringArray(post.tags) }
     : {}),

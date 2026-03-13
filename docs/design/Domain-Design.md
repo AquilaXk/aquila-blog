@@ -23,6 +23,7 @@ flowchart LR
 | Context | 핵심 Aggregate | 담당 기능 | 외부 연결 |
 | --- | --- | --- | --- |
 | `member` | `Member` | 인증, 회원가입, 관리자 판별, 프로필 | Kakao OAuth, 쿠키 |
+| `member.notification` | `MemberNotification` | 댓글/답글 알림, 읽음 처리 | SSE, JPA |
 | `post` | `Post` | 글/댓글/좋아요/조회/이미지 | MinIO, optional front cache invalidation |
 | `home` | 없음 또는 최소 엔드포인트 | 홈/루트 응답 | 없음 |
 | `global.system` | 없음 | 운영 상태 조회 | DB, Redis |
@@ -38,6 +39,7 @@ flowchart LR
 - 관리자 프로필 조회
 - 사용자 프로필/추가 속성 관리
 - 사용자 행동 로그 적재
+- 댓글/답글 알림 저장 및 읽음 처리
 
 핵심 규칙:
 
@@ -46,6 +48,20 @@ flowchart LR
 - 일반 계정 비밀번호는 BCrypt 해시를 사용한다.
 - 로그인 시도 제한은 Redis 연결 시 공유 상태를 사용하고, 로컬/비상 상황에서는 메모리 fallback으로 동작한다.
 - 이메일 인증 시작은 verification row를 저장한 뒤, 메일 발송을 task queue로 넘겨 요청 응답과 분리한다.
+
+### `member.notification`
+
+- 댓글 알림 저장
+- 답글 알림 저장
+- 읽지 않은 알림 수 조회
+- 읽음 처리
+- SSE 기반 실시간 알림 push
+
+핵심 규칙:
+
+- 알림 대상은 본문 속 `@닉네임`을 파싱하지 않고 `parentCommentId`와 글 작성자 기준으로 계산한다.
+- 최상위 댓글은 글 작성자에게 `POST_COMMENT`, 답글은 부모 댓글 작성자에게 `COMMENT_REPLY`를 보낸다.
+- 자기 글/자기 댓글에 남긴 댓글은 알림을 만들지 않는다.
 
 ### `post`
 

@@ -42,6 +42,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   })
   const [profileRoleInput, setProfileRoleInput] = useState(initialMember.profileRole || "")
   const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
+  const [homeIntroTitleInput, setHomeIntroTitleInput] = useState(initialMember.homeIntroTitle || "")
+  const [homeIntroDescriptionInput, setHomeIntroDescriptionInput] = useState(initialMember.homeIntroDescription || "")
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(
     () => (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
@@ -53,6 +55,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setAdminProfileCache(queryClient, toAdminProfile(member))
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
+    setHomeIntroTitleInput(member.homeIntroTitle || "")
+    setHomeIntroDescriptionInput(member.homeIntroDescription || "")
     setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
   }, [queryClient, setMe])
 
@@ -114,16 +118,18 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("save")
-      setNotice({ tone: "loading", text: "역할과 소개 문구를 저장하고 있습니다..." })
+      setNotice({ tone: "loading", text: "프로필 카드와 메인 소개 카드 내용을 저장하고 있습니다..." })
       const updated = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${sessionMember.id}/profileCard`, {
         method: "PATCH",
         body: JSON.stringify({
           role: profileRoleInput.trim(),
           bio: profileBioInput.trim(),
+          homeIntroTitle: homeIntroTitleInput.trim(),
+          homeIntroDescription: homeIntroDescriptionInput.trim(),
         }),
       })
       syncProfileState(updated)
-      setNotice({ tone: "success", text: "역할과 소개 문구가 저장되었습니다." })
+      setNotice({ tone: "success", text: "프로필 카드와 메인 소개 카드 내용이 저장되었습니다." })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setNotice({ tone: "error", text: `프로필 저장 실패: ${message}` })
@@ -221,6 +227,24 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 onChange={(e) => setProfileBioInput(e.target.value)}
               />
             </FieldBox>
+            <FieldBox>
+              <FieldLabel htmlFor="home-intro-title">메인 소개 카드 타이틀</FieldLabel>
+              <Input
+                id="home-intro-title"
+                placeholder="예: aquilaXk's Blog"
+                value={homeIntroTitleInput}
+                onChange={(e) => setHomeIntroTitleInput(e.target.value)}
+              />
+            </FieldBox>
+            <FieldBox>
+              <FieldLabel htmlFor="home-intro-description">메인 소개 카드 설명</FieldLabel>
+              <TextArea
+                id="home-intro-description"
+                placeholder="메인 페이지 소개 카드에 노출할 설명 문구"
+                value={homeIntroDescriptionInput}
+                onChange={(e) => setHomeIntroDescriptionInput(e.target.value)}
+              />
+            </FieldBox>
           </FieldGrid>
           <ActionRow>
             <Button
@@ -243,7 +267,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               현재 저장값 다시 불러오기
             </Button>
             <PrimaryButton type="button" disabled={loadingKey === "save"} onClick={() => void handleUpdateMemberProfileCard()}>
-              {loadingKey === "save" ? "저장 중..." : "역할/소개 저장"}
+              {loadingKey === "save" ? "저장 중..." : "프로필/메인 소개 저장"}
             </PrimaryButton>
           </ActionRow>
         </FormCard>

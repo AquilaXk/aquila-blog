@@ -97,6 +97,7 @@ const StyledWrapper = styled.div`
   gap: 0.45rem;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 
   > .wrapper {
     display: flex;
@@ -107,6 +108,7 @@ const StyledWrapper = styled.div`
     max-width: 100%;
     min-height: 48px;
     padding: 0 1rem;
+    box-sizing: border-box;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray2};
@@ -163,6 +165,7 @@ const StyledWrapper = styled.div`
     overflow-x: hidden;
     scrollbar-gutter: stable;
     padding: 0.3rem;
+    box-sizing: border-box;
     border-radius: 0.75rem;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background-color: ${({ theme }) => theme.colors.gray2};
@@ -177,6 +180,7 @@ const StyledWrapper = styled.div`
       width: 100%;
       text-align: left;
       padding: 0.5rem 0.7rem;
+      box-sizing: border-box;
       border-radius: 0.75rem;
       font-size: 0.875rem;
       line-height: 1.25rem;

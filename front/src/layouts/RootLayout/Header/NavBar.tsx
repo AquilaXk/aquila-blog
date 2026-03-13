@@ -3,6 +3,7 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo, useState } from "react"
+import NotificationBell from "src/layouts/RootLayout/Header/NotificationBell"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 
@@ -65,6 +66,7 @@ const NavBar: React.FC = () => {
           </button>
         )}
         {authStatus === "unavailable" && !me && <span className="authNotice">Auth unavailable</span>}
+        {authStatus === "authenticated" && me && <NotificationBell enabled />}
         {authStatus === "authenticated" && me?.isAdmin && (
           <Link href="/admin" className="navPill">
             Admin

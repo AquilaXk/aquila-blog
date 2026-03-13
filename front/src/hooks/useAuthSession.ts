@@ -17,6 +17,8 @@ export type AuthMember = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  homeIntroTitle?: string
+  homeIntroDescription?: string
 }
 
 const useAuthSession = () => {

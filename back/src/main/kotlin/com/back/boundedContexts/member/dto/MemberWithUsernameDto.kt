@@ -15,6 +15,8 @@ data class MemberWithUsernameDto(
     val profileImageDirectUrl: String,
     val profileRole: String,
     val profileBio: String,
+    val homeIntroTitle: String,
+    val homeIntroDescription: String,
 ) {
     constructor(member: Member) : this(
         id = member.id,
@@ -28,5 +30,7 @@ data class MemberWithUsernameDto(
         profileImageDirectUrl = member.profileImgUrlVersionedOrDefault,
         profileRole = member.profileRole,
         profileBio = member.profileBio,
+        homeIntroTitle = member.homeIntroTitle,
+        homeIntroDescription = member.homeIntroDescription,
     )
 }

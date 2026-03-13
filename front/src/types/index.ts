@@ -63,6 +63,28 @@ export type TPostComment = {
   actorCanDelete: boolean
 }
 
+export type TMemberNotificationType = "COMMENT_REPLY" | "POST_COMMENT"
+
+export type TMemberNotification = {
+  id: number
+  type: TMemberNotificationType
+  createdAt: string
+  actorId: number
+  actorName: string
+  actorProfileImageUrl: string
+  postId: number
+  commentId: number
+  postTitle: string
+  commentPreview: string
+  message: string
+  isRead: boolean
+}
+
+export type TMemberNotificationStreamPayload = {
+  notification: TMemberNotification
+  unreadCount: number
+}
+
 export type TPosts = TPost[]
 
 export type TTags = {

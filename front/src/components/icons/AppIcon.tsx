@@ -3,6 +3,7 @@ import React from "react"
 type IconName =
   | "search"
   | "tag"
+  | "bell"
   | "chevron-down"
   | "moon"
   | "sun"
@@ -47,6 +48,13 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
           <path d="M20 13.6 10.4 4H4v6.4l9.6 9.6a1.8 1.8 0 0 0 2.6 0l3.8-3.8a1.8 1.8 0 0 0 0-2.6Z" strokeLinejoin="round" />
           <circle cx="7.5" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
+        </svg>
+      )
+    case "bell":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M8 17.5h8M9 17.5v-5.1a3 3 0 1 1 6 0v5.1l1.8 1.7H7.2L9 17.5Z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M10.5 20.2a1.7 1.7 0 0 0 3 0" strokeLinecap="round" />
         </svg>
       )
     case "chevron-down":

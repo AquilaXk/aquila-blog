@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.application.port.out
 
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import java.util.Optional
 
 interface PostCommentRepositoryPort {
     fun save(comment: PostComment): PostComment
@@ -17,4 +18,6 @@ interface PostCommentRepositoryPort {
         post: Post,
         id: Int,
     ): PostComment?
+
+    fun findById(id: Int): Optional<PostComment>
 }

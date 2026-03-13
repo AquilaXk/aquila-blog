@@ -46,13 +46,14 @@ const FilterRow = styled.div`
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
+  width: 100%;
   padding-top: 1rem;
   min-width: 0;
 
   @container feed-filters (max-width: 44rem) {
     grid-template-columns: 1fr;
     justify-content: start;
-    justify-items: start;
+    justify-items: stretch;
     gap: 0.8rem;
   }
 
@@ -62,31 +63,33 @@ const FilterRow = styled.div`
 `
 
 const CategorySlot = styled.div`
-  width: min(100%, 17rem);
+  width: 100%;
+  max-width: 17rem;
   min-width: 0;
+  justify-self: start;
 
   @container feed-filters (max-width: 44rem) {
-    width: min(100%, 17rem);
-  }
-
-  @container feed-filters (max-width: 28rem) {
     width: 100%;
+    max-width: 100%;
   }
 `
 
 const OrderSlot = styled.div`
   justify-self: end;
-  width: min(100%, 18rem);
+  width: 100%;
+  max-width: 18rem;
   min-width: 0;
 
   @container feed-filters (max-width: 44rem) {
     justify-self: start;
-    width: min(100%, 18rem);
+    width: 100%;
+    max-width: 18rem;
   }
 
   @container feed-filters (max-width: 28rem) {
     justify-self: stretch;
     width: 100%;
+    max-width: 100%;
   }
 `
 

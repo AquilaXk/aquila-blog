@@ -41,7 +41,9 @@ class MemberUseCaseAdapter(
         member: Member,
         role: String,
         bio: String,
-    ) = memberApplicationService.modifyProfileCard(member, role, bio)
+        homeIntroTitle: String,
+        homeIntroDescription: String,
+    ) = memberApplicationService.modifyProfileCard(member, role, bio, homeIntroTitle, homeIntroDescription)
 
     override fun modifyOrJoin(
         username: String,

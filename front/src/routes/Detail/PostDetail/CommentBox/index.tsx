@@ -1,6 +1,6 @@
 import { apiFetch } from "src/apis/backend/client"
 import { useRouter } from "next/router"
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import { CONFIG } from "site.config"
@@ -38,11 +38,6 @@ type MemberMe = {
 
 type CommentNode = TPostComment & {
   replies: CommentNode[]
-}
-
-type CommentListItem = {
-  comment: CommentNode
-  isReply: boolean
 }
 
 type RsData<T> = {
@@ -134,18 +129,6 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     return roots
   }, [comments])
 
-  const flattenedComments = useMemo(() => {
-    const rows: CommentListItem[] = []
-
-    const walk = (node: CommentNode, isReply = false) => {
-      rows.push({ comment: node, isReply })
-      node.replies.forEach((reply) => walk(reply, true))
-    }
-
-    commentTree.forEach((root) => walk(root, false))
-    return rows
-  }, [commentTree])
-
   const submitComment = async (content: string, parentCommentId?: number | null) => {
     const trimmed = content.trim()
 
@@ -236,14 +219,31 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     setEditingCommentInput("")
   }
 
-  const startReply = (commentId: number) => {
+  useEffect(() => {
+    const hashIndex = router.asPath.indexOf("#")
+    if (hashIndex < 0) return
+
+    const targetId = decodeURIComponent(router.asPath.slice(hashIndex + 1))
+    if (!targetId) return
+
+    const target = document.getElementById(targetId)
+    if (!target) return
+
+    const raf = window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "start", behavior: "smooth" })
+    })
+
+    return () => window.cancelAnimationFrame(raf)
+  }, [comments.length, router.asPath])
+
+  const startReply = (commentId: number, displayName: string, authorId: number) => {
     if (!me) {
       openAuthPrompt()
       return
     }
 
     setReplyingToCommentId(commentId)
-    setReplyInput("")
+    setReplyInput(me.id === authorId ? "" : `@${displayName} `)
     setEditingCommentId(null)
     setEditingCommentInput("")
     setError("")
@@ -308,9 +308,11 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     const canModify = comment.actorCanModify || isOwner
     const canDelete = comment.actorCanDelete || isOwner
 
+    const hasReplies = comment.replies.length > 0
+
     return (
-      <li key={comment.id}>
-        <CommentItem data-reply={isReply}>
+      <Fragment key={comment.id}>
+        <CommentItem data-reply={isReply} data-has-replies={hasReplies}>
           {renderAvatar(
             comment.authorProfileImageDirectUrl,
             comment.authorProfileImageUrl,
@@ -318,7 +320,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
             isReply ? 38 : 44,
             !isReply
           )}
-          <div className="commentBody">
+          <div className="commentBody" id={`comment-${comment.id}`}>
             <div className="head">
               <div className="meta">
                 <div className="metaPrimary">
@@ -384,7 +386,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
               {!authUnavailable && (
                 <button
                   type="button"
-                  onClick={() => startReply(comment.id)}
+                  onClick={() => startReply(comment.id, displayName, comment.authorId)}
                   disabled={isLoading}
                   className="replyTrigger"
                 >
@@ -412,9 +414,19 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                 </div>
               </form>
             )}
+
+            {hasReplies && (
+              <ReplyGroup>
+                <ReplyList>
+                  {comment.replies.map((reply) => (
+                    <li key={reply.id}>{renderComment(reply, true)}</li>
+                  ))}
+                </ReplyList>
+              </ReplyGroup>
+            )}
           </div>
         </CommentItem>
-      </li>
+      </Fragment>
     )
   }
 
@@ -458,7 +470,11 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
       {error && <p className="error">{error}</p>}
 
       {commentTree.length > 0 ? (
-        <ul className="commentList">{flattenedComments.map(({ comment, isReply }) => renderComment(comment, isReply))}</ul>
+        <ul className="commentList">
+          {commentTree.map((comment) => (
+            <li key={comment.id}>{renderComment(comment)}</li>
+          ))}
+        </ul>
       ) : (
         <EmptyState>
           <strong>첫 댓글을 남겨보세요.</strong>
@@ -593,8 +609,16 @@ const StyledWrapper = styled.section`
     gap: 0;
   }
 
+  .commentList > li {
+    min-width: 0;
+  }
+
   .commentList > li + li {
     border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  }
+
+  .commentBody[id] {
+    scroll-margin-top: 7rem;
   }
 `
 
@@ -649,12 +673,50 @@ const CommentItem = styled.div`
   padding: 1.05rem 0;
 
   &[data-reply="true"] {
-    margin-left: 2rem;
+    position: relative;
+    margin-left: 1.15rem;
+    padding: 0.95rem 1rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+      ${({ theme }) => theme.colors.gray2};
+  }
+
+  &[data-reply="true"]::before {
+    content: "";
+    position: absolute;
+    left: -0.95rem;
+    top: 1.05rem;
+    bottom: 1.05rem;
+    width: 2px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, ${({ theme }) => theme.colors.green8}, transparent);
+  }
+
+  &[data-reply="true"]::after {
+    content: "";
+    position: absolute;
+    left: -0.95rem;
+    top: 1.05rem;
+    width: 0.95rem;
+    height: 1px;
+    background: ${({ theme }) => theme.colors.green8};
   }
 
   @media (max-width: 640px) {
     &[data-reply="true"] {
-      margin-left: 1rem;
+      margin-left: 0.7rem;
+      padding: 0.85rem 0.85rem 0.9rem;
+    }
+
+    &[data-reply="true"]::before {
+      left: -0.65rem;
+    }
+
+    &[data-reply="true"]::after {
+      left: -0.65rem;
+      width: 0.65rem;
     }
   }
 
@@ -697,9 +759,11 @@ const CommentItem = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1rem;
-    height: 1rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 999px;
+    color: ${({ theme }) => theme.colors.green11};
+    background: ${({ theme }) => theme.colors.green3};
     flex-shrink: 0;
   }
 
@@ -759,6 +823,33 @@ const CommentItem = styled.div`
     .foot {
       margin-top: 0.72rem;
     }
+  }
+`
+
+const ReplyGroup = styled.div`
+  margin-top: 1rem;
+  padding-left: 1.25rem;
+  border-left: 2px solid ${({ theme }) => theme.colors.gray6};
+
+  @media (max-width: 640px) {
+    margin-top: 0.85rem;
+    padding-left: 0.8rem;
+  }
+`
+
+const ReplyList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+
+  > li {
+    min-width: 0;
+  }
+
+  @media (max-width: 640px) {
+    gap: 0.65rem;
   }
 `
 

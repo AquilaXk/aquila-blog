@@ -30,6 +30,70 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
     private lateinit var memberFacade: MemberApplicationService
 
     @Nested
+    inner class UpdateProfileCard {
+        @Test
+        @WithUserDetails("admin")
+        fun `관리자는 회원 프로필 카드와 메인 소개 카드를 함께 수정할 수 있다`() {
+            val member = memberFacade.findByUsername("admin")!!
+            val newRole = "Backend Developer"
+            val newBio = "블로그 운영자 소개 문구"
+            val newIntroTitle = "aquilaXk's Backend Log"
+            val newIntroDescription = "실전 백엔드 운영과 개발 메모를 남기는 공간입니다."
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "$newRole",
+                            "bio": "$newBio",
+                            "homeIntroTitle": "$newIntroTitle",
+                            "homeIntroDescription": "$newIntroDescription"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AdmMemberController::class.java))
+                    match(handler().methodName("updateProfileCard"))
+                    jsonPath("$.id") { value(member.id) }
+                    jsonPath("$.profileRole") { value(newRole) }
+                    jsonPath("$.profileBio") { value(newBio) }
+                    jsonPath("$.homeIntroTitle") { value(newIntroTitle) }
+                    jsonPath("$.homeIntroDescription") { value(newIntroDescription) }
+                }
+
+            val updatedMember = memberFacade.findById(member.id).orElseThrow()
+            assertThat(updatedMember.profileRole).isEqualTo(newRole)
+            assertThat(updatedMember.profileBio).isEqualTo(newBio)
+            assertThat(updatedMember.homeIntroTitle).isEqualTo(newIntroTitle)
+            assertThat(updatedMember.homeIntroDescription).isEqualTo(newIntroDescription)
+        }
+
+        @Test
+        @WithUserDetails("user1")
+        fun `프로필 카드 수정에서 일반 사용자는 403을 반환한다`() {
+            mvc
+                .patch("/member/api/v1/adm/members/1/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "role",
+                            "bio": "bio",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isForbidden() }
+                    jsonPath("$.resultCode") { value("403-1") }
+                    jsonPath("$.msg") { value("권한이 없습니다.") }
+                }
+        }
+    }
+
+    @Nested
     inner class UpdateProfileImg {
         @Test
         @WithUserDetails("admin")

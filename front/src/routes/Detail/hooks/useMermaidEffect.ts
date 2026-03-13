@@ -128,10 +128,30 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           const { svg } = await mermaid.render(id, source)
           if (disposed) return
 
+          const parser = new DOMParser()
+          const svgDocument = parser.parseFromString(svg, "image/svg+xml")
+          const renderedSvg = svgDocument.documentElement
+          const rawWidth = Number.parseFloat(renderedSvg.getAttribute("width") || "")
+          const rawHeight = Number.parseFloat(renderedSvg.getAttribute("height") || "")
+
+          if (!renderedSvg.getAttribute("viewBox") && rawWidth > 0 && rawHeight > 0) {
+            renderedSvg.setAttribute("viewBox", `0 0 ${rawWidth} ${rawHeight}`)
+          }
+
+          renderedSvg.removeAttribute("width")
+          renderedSvg.removeAttribute("height")
+
+          const targetWidth = Math.min(Math.max(rawWidth || 0, 520), 920)
+          const wrappedSvg = `
+            <div class="aq-mermaid-stage" style="--aq-mermaid-target-width:${targetWidth}px;">
+              ${renderedSvg.outerHTML}
+            </div>
+          `
+
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = theme
           block.dataset.mermaidRendered = "true"
-          block.innerHTML = svg
+          block.innerHTML = wrappedSvg
         } catch (error) {
           const escapedSource = source
             .replaceAll("&", "&amp;")

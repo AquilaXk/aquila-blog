@@ -10,6 +10,8 @@ export type AdminProfile = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  homeIntroTitle?: string
+  homeIntroDescription?: string
 }
 
 type AdminProfileLike = {
@@ -20,6 +22,8 @@ type AdminProfileLike = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  homeIntroTitle?: string
+  homeIntroDescription?: string
 }
 
 export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
@@ -30,6 +34,8 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   profileImageDirectUrl: value.profileImageDirectUrl,
   profileRole: value.profileRole,
   profileBio: value.profileBio,
+  homeIntroTitle: value.homeIntroTitle,
+  homeIntroDescription: value.homeIntroDescription,
 })
 
 export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminProfile | null) => {

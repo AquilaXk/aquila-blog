@@ -42,6 +42,10 @@ class ApiV1AdmMemberController(
         val role: String,
         @field:Size(max = 1000)
         val bio: String,
+        @field:Size(max = 120)
+        val homeIntroTitle: String,
+        @field:Size(max = 500)
+        val homeIntroDescription: String,
     )
 
     @GetMapping
@@ -133,7 +137,13 @@ class ApiV1AdmMemberController(
         @RequestBody @Valid reqBody: UpdateProfileCardRequest,
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
-        memberUseCase.modifyProfileCard(member, reqBody.role.trim(), reqBody.bio.trim())
+        memberUseCase.modifyProfileCard(
+            member = member,
+            role = reqBody.role.trim(),
+            bio = reqBody.bio.trim(),
+            homeIntroTitle = reqBody.homeIntroTitle.trim(),
+            homeIntroDescription = reqBody.homeIntroDescription.trim(),
+        )
         return MemberWithUsernameDto(member)
     }
 }

@@ -18,6 +18,7 @@ flowchart TD
     B --> R["Redis"]
     B --> M["MinIO"]
     B --> K["Kakao OAuth"]
+    B --> S["SSE notification stream"]
     B --> RV["Next revalidate API (optional hook)"]
 ```
 
@@ -30,6 +31,7 @@ flowchart TD
 | Back -> DB | JDBC | `spring.datasource.url` | PostgreSQL |
 | Back -> Redis | TCP | `spring.data.redis.*` | session/cache/lock |
 | Back -> MinIO | S3 API | `CUSTOM_STORAGE_*` | 게시글/프로필 이미지 |
+| Back -> Browser | SSE | `/member/api/v1/notifications/stream` | 댓글/답글 알림 push |
 | Back -> Front revalidate | HTTP POST | `/api/revalidate` | 선택적 cache invalidation hook |
 
 ## 읽기 흐름
@@ -91,6 +93,7 @@ sequenceDiagram
 | --- | --- | --- | --- |
 | 공개 글 탐색 | `/` | `/post/api/v1/posts` | 목록/검색/필터 |
 | 글 상세 조회 | `/posts/:id` | `/post/api/v1/posts/{id}` | Markdown 렌더 |
+| 댓글/답글 알림 | 임의 페이지 | `/member/api/v1/notifications/*`, SSE stream | 헤더 알림벨 |
 | 로그인 | `/login` | `/member/api/v1/auth/login` | 쿠키 발급 |
 | 회원가입 | `/signup`, `/signup/verify` | `/member/api/v1/members`, `/member/api/v1/signup/*` | 일반 가입 + 이메일 인증 가입, 메일 발송은 task queue |
 | 관리자 작성 | `/admin/posts/new` | `/post/api/v1/posts`, `/post/api/v1/adm/posts` | 발행/검색/수정 |
@@ -136,6 +139,7 @@ Backend:
 - 회원가입 메일 발송과 revalidate는 모두 task queue를 거쳐 write API latency와 분리된다.
 - 관리자 프로필 이미지 업로드도 MinIO(`CUSTOM_STORAGE_*`) 의존이다.
 - OAuth callback URL은 프록시 추론이 아니라 `${custom.site.backUrl}` 기준으로 고정한다.
+- 댓글/답글 알림은 현재 서비스 규모 기준으로 WebSocket 대신 SSE를 사용한다. 댓글 작성은 기존 HTTP 요청을 유지하고, 새 알림만 push 받는다.
 
 ## 현재 구조의 장점
 

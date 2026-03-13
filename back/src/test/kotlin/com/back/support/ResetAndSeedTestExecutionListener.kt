@@ -2,6 +2,7 @@ package com.back.support
 
 import com.back.boundedContexts.member.adapter.`in`.bootstrap.MemberNotProdInitData
 import com.back.boundedContexts.post.adapter.`in`.bootstrap.PostNotProdInitData
+import jakarta.persistence.EntityManager
 import org.springframework.core.Ordered
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.jdbc.core.JdbcTemplate
@@ -14,12 +15,16 @@ class ResetAndSeedTestExecutionListener : AbstractTestExecutionListener() {
     override fun beforeTestMethod(testContext: TestContext) {
         val applicationContext = testContext.applicationContext
         val jdbcTemplate = applicationContext.getBean(JdbcTemplate::class.java)
+        val entityManager = applicationContext.getBean(EntityManager::class.java)
+
+        entityManager.clear()
 
         jdbcTemplate.execute(
             """
             TRUNCATE TABLE
                 uploaded_file,
                 task,
+                member_notification,
                 member_action_log,
                 member_signup_verification,
                 post_comment,
@@ -28,9 +33,11 @@ class ResetAndSeedTestExecutionListener : AbstractTestExecutionListener() {
                 post,
                 member_attr,
                 member
-            RESTART IDENTITY CASCADE
+            CASCADE
             """.trimIndent(),
         )
+
+        entityManager.clear()
 
         applicationContext
             .getBeanProvider(RedisConnectionFactory::class.java)

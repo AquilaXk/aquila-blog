@@ -18,7 +18,7 @@ interface PostLikeRepository : JpaRepository<PostLike, Int> {
         posts: List<Post>,
     ): List<PostLike>
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Modifying(flushAutomatically = true)
     @Query("delete from PostLike pl where pl.liker = :liker and pl.post = :post")
     fun deleteByLikerAndPost(
         liker: Member,

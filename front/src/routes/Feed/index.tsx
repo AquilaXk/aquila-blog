@@ -4,7 +4,7 @@ import MobileProfileCard from "./MobileProfileCard"
 import ProfileCard from "./ProfileCard"
 import ServiceCard from "./ServiceCard"
 import ContactCard from "./ContactCard"
-import { AdminProfile } from "src/hooks/useAdminProfile"
+import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import dynamic from "next/dynamic"
 
@@ -21,6 +21,10 @@ type Props = {
 }
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
+  const adminProfile = useAdminProfile(initialAdminProfile)
+  const introTitle = adminProfile?.homeIntroTitle || CONFIG.blog.title
+  const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.description
+
   return (
     <StyledWrapper>
       <div
@@ -34,8 +38,8 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
       <div className="mid">
         <MobileProfileCard initialAdminProfile={initialAdminProfile} />
         <IntroCard>
-          <h1>{CONFIG.blog.title}</h1>
-          <p>{CONFIG.blog.description}</p>
+          <h1>{introTitle}</h1>
+          <p>{introDescription}</p>
         </IntroCard>
         <FeedExplorer />
         <div className="footer">

@@ -758,30 +758,35 @@ const StyledWrapper = styled.div`
   }
 
   .aq-mermaid {
-    display: grid;
-    gap: 0.9rem;
-    align-items: center;
-    justify-items: center;
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    padding-inline: clamp(0.15rem, 1vw, 0.5rem);
   }
 
-  .aq-mermaid svg {
+  .aq-mermaid-stage {
+    width: min(100%, var(--aq-mermaid-target-width, 760px));
+    min-width: min(100%, 32rem);
+    margin: 0 auto;
+  }
+
+  .aq-mermaid-stage > svg {
     display: block;
-    width: max-content;
-    min-width: 100%;
-    max-width: none;
+    width: 100%;
+    max-width: 100%;
     height: auto;
     margin: 0 auto;
   }
 
-  .aq-mermaid svg .nodeLabel p,
-  .aq-mermaid svg .edgeLabel p {
+  .aq-mermaid-stage > svg .nodeLabel p,
+  .aq-mermaid-stage > svg .edgeLabel p {
     margin: 0;
   }
 
-  .aq-mermaid svg .node rect,
-  .aq-mermaid svg .node polygon,
-  .aq-mermaid svg .node path,
-  .aq-mermaid svg .cluster rect {
+  .aq-mermaid-stage > svg .node rect,
+  .aq-mermaid-stage > svg .node polygon,
+  .aq-mermaid-stage > svg .node path,
+  .aq-mermaid-stage > svg .cluster rect {
     filter: drop-shadow(0 10px 24px rgba(15, 23, 42, 0.12));
   }
 

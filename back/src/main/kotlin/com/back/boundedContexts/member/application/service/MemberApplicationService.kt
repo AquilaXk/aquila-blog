@@ -110,12 +110,18 @@ class MemberApplicationService(
         member: Member,
         role: String,
         bio: String,
+        homeIntroTitle: String,
+        homeIntroDescription: String,
     ) {
         memberProfileHydrator.hydrate(member)
         member.profileRole = role
         member.profileBio = bio
+        member.homeIntroTitle = homeIntroTitle
+        member.homeIntroDescription = homeIntroDescription
         saveProfileRoleAttr(member)
         saveProfileBioAttr(member)
+        saveHomeIntroTitleAttr(member)
+        saveHomeIntroDescriptionAttr(member)
     }
 
     @Transactional
@@ -159,5 +165,13 @@ class MemberApplicationService(
 
     private fun saveProfileBioAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitProfileBioAttr())
+    }
+
+    private fun saveHomeIntroTitleAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitHomeIntroTitleAttr())
+    }
+
+    private fun saveHomeIntroDescriptionAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitHomeIntroDescriptionAttr())
     }
 }

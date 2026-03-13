@@ -36,6 +36,8 @@ interface MemberUseCase {
         member: Member,
         role: String,
         bio: String,
+        homeIntroTitle: String,
+        homeIntroDescription: String,
     )
 
     fun modifyOrJoin(

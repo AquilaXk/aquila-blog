@@ -255,6 +255,8 @@ class PostApplicationService(
         val persistenceActor = toPersistenceMember(actor)
         hydratePostAttrs(post)
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
+        val postAuthorId = post.author.id
+        val existingLikeId = existingLike?.id
         val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
         if (deletedCount > 0) {
             decrementLikesCount(post)
@@ -263,13 +265,13 @@ class PostApplicationService(
         }
         postRepository.flush()
 
-        if (deletedCount > 0 && existingLike != null) {
+        if (deletedCount > 0 && existingLikeId != null) {
             eventPublisher.publish(
-                PostUnlikedEvent(UUID.randomUUID(), post.id, post.author.id, existingLike.id, MemberDto(actor)),
+                PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
             )
         }
 
-        return PostLikeToggleResult(false, existingLike?.id ?: 0)
+        return PostLikeToggleResult(false, existingLikeId ?: 0)
     }
 
     @Transactional

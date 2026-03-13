@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
+import java.util.Optional
 
 interface PostCommentRepository :
     JpaRepository<PostComment, Int>,
@@ -19,6 +20,9 @@ interface PostCommentRepository :
         post: Post,
         id: Int,
     ): PostComment?
+
+    @EntityGraph(attributePaths = ["author"])
+    override fun findById(id: Int): Optional<PostComment>
 
     fun deleteByPost(post: Post)
 }

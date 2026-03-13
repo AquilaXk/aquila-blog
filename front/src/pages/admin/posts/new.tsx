@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
-import { ChangeEvent, ClipboardEvent, CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ChangeEvent, ClipboardEvent, CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
@@ -542,6 +542,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<string | null>(null)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
+  const deferredPostContent = useDeferredValue(postContent)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
 
   const [listPage, setListPage] = useState("1")
@@ -1004,6 +1005,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           body: JSON.stringify({
             role: profileRoleInput.trim(),
             bio: profileBioInput.trim(),
+            homeIntroTitle: (sessionMember.homeIntroTitle || "").trim(),
+            homeIntroDescription: (sessionMember.homeIntroDescription || "").trim(),
           }),
         }
       )
@@ -1695,7 +1698,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <QueryPanel>
           <QueryHeader>
             <h3>글 목록 조회 조건</h3>
-            <p>전체 글, 내 글, 임시글을 불러오는 조건입니다.</p>
+            <p>관리자 글 목록과 임시글을 불러오는 조건입니다.</p>
           </QueryHeader>
           <QueryGrid>
             <FieldBox>
@@ -1742,20 +1745,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               onClick={() => void loadAdminPosts()}
             >
               전체 글 목록 조회
-            </Button>
-            <Button
-              disabled={disabled("postMine")}
-              onClick={() =>
-                run("postMine", () =>
-                  apiFetch(
-                    `/post/api/v1/posts/mine?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-                      listKw
-                    )}&sort=${encodeURIComponent(listSort)}`
-                  )
-                )
-              }
-            >
-              내 글 목록 조회
             </Button>
             <Button
               disabled={disabled("postTemp")}
@@ -2283,7 +2272,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PaneChip>{imageCount} images</PaneChip>
               </PaneHeader>
               <PreviewCard>
-                <NotionRenderer content={postContent} />
+                <NotionRenderer content={deferredPostContent} />
               </PreviewCard>
             </PreviewPane>
           </EditorGrid>
@@ -3169,7 +3158,8 @@ const PublishNotice = styled.div`
   border-radius: 10px;
   font-size: 0.83rem;
   line-height: 1.4;
-  width: min(100%, 30rem);
+  width: 100%;
+  box-sizing: border-box;
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray11};
@@ -4110,7 +4100,7 @@ const PreviewCard = styled.div`
 
 const WriterFooterBar = styled.div`
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.8rem;
   flex-wrap: wrap;
@@ -4131,12 +4121,16 @@ const WriterFooterSummary = styled.div`
 const WriterFooterControls = styled.div`
   display: grid;
   gap: 0.6rem;
-  justify-items: end;
-  min-width: min(100%, 30rem);
+  justify-items: stretch;
+  flex: 1 1 34rem;
+  width: min(100%, 48rem);
+  min-width: min(100%, 34rem);
+  max-width: 100%;
+  margin-left: auto;
 
   @media (max-width: 720px) {
-    justify-items: stretch;
     width: 100%;
+    min-width: 100%;
   }
 `
 
@@ -4144,6 +4138,7 @@ const WriterFooterActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+  justify-content: flex-end;
 
   @media (max-width: 720px) {
     width: 100%;

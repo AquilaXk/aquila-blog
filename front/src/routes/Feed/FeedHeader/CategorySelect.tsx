@@ -1,13 +1,13 @@
 import useDropdown from "src/hooks/useDropdown"
 import { useRouter } from "next/router"
 import React, { useMemo } from "react"
-import { MdExpandMore } from "react-icons/md"
 import CategoryIcon from "src/components/CategoryIcon"
 import { DEFAULT_CATEGORY } from "src/constants"
 import styled from "@emotion/styled"
 import { useCategoriesQuery } from "src/hooks/useCategoriesQuery"
 import { compareCategoryValues, normalizeCategoryValue, splitCategoryDisplay } from "src/libs/utils"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
+import AppIcon from "src/components/icons/AppIcon"
 
 type Props = {}
 
@@ -59,7 +59,7 @@ const CategorySelect: React.FC<Props> = () => {
             {currentCategoryDisplay.label || currentCategory}
           </span>
         </span>
-        <MdExpandMore className="chevron" />
+        <AppIcon name="chevron-down" className="chevron" />
       </button>
       {opened && (
         <div className="content" role="listbox">

@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
 import React from "react"
-import { IoMoon, IoSunny } from "react-icons/io5"
+import AppIcon from "src/components/icons/AppIcon"
 import useScheme from "src/hooks/useScheme"
 
 type Props = {}
@@ -19,7 +19,7 @@ const ThemeToggle: React.FC<Props> = () => {
       aria-label={scheme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"}
       title={scheme === "light" ? "다크 모드" : "라이트 모드"}
     >
-      {scheme === "light" ? <IoSunny aria-hidden /> : <IoMoon aria-hidden />}
+      {scheme === "light" ? <AppIcon name="sun" aria-hidden /> : <AppIcon name="moon" aria-hidden />}
     </StyledWrapper>
   )
 }

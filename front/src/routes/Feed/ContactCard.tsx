@@ -1,13 +1,8 @@
 import styled from "@emotion/styled"
 import React from "react"
-import {
-  AiFillLinkedin,
-  AiOutlineGithub,
-  AiOutlineInstagram,
-  AiOutlineMail,
-} from "react-icons/ai"
 import { CONFIG } from "site.config"
 import { Emoji } from "src/components/Emoji"
+import AppIcon from "src/components/icons/AppIcon"
 
 const ContactCard: React.FC = () => {
   return (
@@ -22,7 +17,7 @@ const ContactCard: React.FC = () => {
             rel="noreferrer"
             target="_blank"
           >
-            <AiOutlineGithub className="icon" />
+            <AppIcon name="github" className="icon" />
             <div className="name">github</div>
           </a>
         )}
@@ -32,7 +27,7 @@ const ContactCard: React.FC = () => {
             rel="noreferrer"
             target="_blank"
           >
-            <AiOutlineInstagram className="icon" />
+            <AppIcon name="instagram" className="icon" />
             <div className="name">instagram</div>
           </a>
         )}
@@ -43,7 +38,7 @@ const ContactCard: React.FC = () => {
             target="_blank"
             css={{ overflow: "hidden" }}
           >
-            <AiOutlineMail className="icon" />
+            <AppIcon name="mail" className="icon" />
             <div className="name">email</div>
           </a>
         )}
@@ -53,7 +48,7 @@ const ContactCard: React.FC = () => {
             rel="noreferrer"
             target="_blank"
           >
-            <AiFillLinkedin className="icon" />
+            <AppIcon name="linkedin" className="icon" />
             <div className="name">linkedin</div>
           </a>
         )}

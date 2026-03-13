@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
 import React from "react"
-import { HiOutlineTag } from "react-icons/hi"
+import AppIcon from "src/components/icons/AppIcon"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
@@ -39,7 +39,7 @@ const TagList: React.FC<Props> = () => {
   return (
     <StyledWrapper>
       <div className="top">
-        <HiOutlineTag aria-hidden="true" /> Tags
+        <AppIcon name="tag" className="titleIcon" /> Tags
       </div>
       <div className="list">
         {Object.keys(data).map((key) => (
@@ -68,6 +68,12 @@ const StyledWrapper = styled.div`
     margin-bottom: 0.75rem;
     align-items: center;
     gap: 0.35rem;
+
+    .titleIcon {
+      width: 1rem;
+      height: 1rem;
+      flex: 0 0 auto;
+    }
 
     @media (min-width: 1024px) {
       display: inline-flex;

@@ -2,9 +2,9 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
-import { RiKakaoTalkFill } from "react-icons/ri"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
+import AppIcon from "src/components/icons/AppIcon"
 
 type RsData<T> = {
   resultCode: string
@@ -125,7 +125,7 @@ const SignupPage = () => {
               aria-label="카카오로 로그인"
               title="카카오로 로그인"
             >
-              <RiKakaoTalkFill aria-hidden="true" />
+              <AppIcon name="kakao" aria-hidden="true" />
             </SocialIconButton>
           </SocialButtonRow>
         </SocialSection>

@@ -1,9 +1,9 @@
 import styled from "@emotion/styled"
 import Image from "next/image"
 import React from "react"
-import { MdFavorite, MdFavoriteBorder } from "react-icons/md"
 import { CONFIG } from "site.config"
 import Category from "src/components/Category"
+import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
 import { formatDateTime } from "src/libs/utils"
@@ -83,7 +83,7 @@ const PostHeader: React.FC<Props> = ({
             disabled={likePending}
             onClick={onToggleLike}
           >
-            {actorHasLiked ? <MdFavorite /> : <MdFavoriteBorder />}
+            <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
             <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
           </button>
 

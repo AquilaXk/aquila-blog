@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
 import React, { InputHTMLAttributes } from "react"
-import { FiSearch } from "react-icons/fi"
+import AppIcon from "src/components/icons/AppIcon"
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -9,7 +9,7 @@ const SearchInput: React.FC<Props> = ({ ...props }) => {
     <StyledWrapper>
       <div className="field">
         <span className="searchIcon" aria-hidden="true">
-          <FiSearch />
+          <AppIcon name="search" />
         </span>
         <input
           id="feed-search-input"

@@ -9,7 +9,7 @@ import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
-import { replaceRoute, toLoginPath } from "src/libs/router"
+import { pushRoute, replaceRoute, toLoginPath } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
@@ -88,17 +88,18 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     if (likePending) return
 
     if (!me) {
-      await router.push(loginHref)
+      await pushRoute(router, loginHref)
       return
     }
 
     setLikePending(true)
 
     try {
+      const nextLiked = !engagement.actorHasLiked
       const response = await apiFetch<RsData<{ liked: boolean; likesCount: number }>>(
         `/post/api/v1/posts/${data.id}/like`,
         {
-          method: "POST",
+          method: nextLiked ? "PUT" : "DELETE",
         }
       )
 
@@ -124,7 +125,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
   const handleEditPost = async () => {
     if (!data) return
-    await router.push(`/admin/posts/new?postId=${encodeURIComponent(String(data.id))}`)
+    await pushRoute(router, `/admin/posts/new?postId=${encodeURIComponent(String(data.id))}`)
   }
 
   const handleDeletePost = async () => {

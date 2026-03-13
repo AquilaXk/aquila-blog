@@ -77,6 +77,30 @@ export const replaceRoute = async (
   }
 }
 
+export const pushRoute = async (
+  router: NextRouter,
+  target: string,
+  { preferHardNavigation = false }: { preferHardNavigation?: boolean } = {}
+) => {
+  if (preferHardNavigation && typeof window !== "undefined") {
+    window.location.assign(target)
+    return
+  }
+
+  try {
+    await router.push(target)
+  } catch (error) {
+    if (preferHardNavigation && typeof window !== "undefined") {
+      window.location.assign(target)
+      return
+    }
+
+    if (!isNavigationCancelledError(error)) {
+      throw error
+    }
+  }
+}
+
 type ShallowRouteQuery = Record<string, string | string[] | undefined>
 
 type ReplaceShallowRouteOptions = {

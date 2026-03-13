@@ -12,18 +12,51 @@ import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatShortDateTime } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
+import { pushRoute } from "src/libs/router"
 import { TMemberNotification, TMemberNotificationStreamPayload } from "src/types"
 
 type Props = {
   enabled: boolean
 }
 
+const STREAM_MAX_RECONNECT_ATTEMPTS = 4
+const POLLING_INTERVAL_MS = 20_000
+
+const toSiteKey = (url: URL) => {
+  const host = url.hostname.toLowerCase()
+
+  if (host === "localhost" || host === "127.0.0.1") {
+    return `${url.protocol}//${host}`
+  }
+
+  const labels = host.split(".")
+  if (labels.length <= 2) {
+    return `${url.protocol}//${host}`
+  }
+
+  return `${url.protocol}//${labels.slice(-2).join(".")}`
+}
+
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
+  const preferPolling = useMemo(() => {
+    if (typeof window === "undefined") return false
+
+    try {
+      const streamUrl = new URL(buildNotificationStreamUrl(), window.location.origin)
+      const currentUrl = new URL(window.location.href)
+      const isCrossSite = toSiteKey(streamUrl) !== toSiteKey(currentUrl)
+      return isCrossSite
+    } catch {
+      return false
+    }
+  }, [])
   const rootRef = useRef<HTMLDivElement | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptRef = useRef(0)
+  const lastEventIdRef = useRef<string | null>(null)
+  const [streamMode, setStreamMode] = useState<"sse" | "poll">(preferPolling ? "poll" : "sse")
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<TMemberNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -55,14 +88,17 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setUnreadCount(0)
       setOpen(false)
       setIsReady(false)
+      reconnectAttemptRef.current = 0
+      lastEventIdRef.current = null
+      setStreamMode(preferPolling ? "poll" : "sse")
       return
     }
 
     void loadSnapshot()
-  }, [enabled, loadSnapshot])
+  }, [enabled, loadSnapshot, preferPolling])
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || streamMode !== "sse") return
 
     let disposed = false
 
@@ -79,6 +115,14 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setIsReady(false)
       const nextAttempt = reconnectAttemptRef.current + 1
       reconnectAttemptRef.current = nextAttempt
+
+      if (nextAttempt > STREAM_MAX_RECONNECT_ATTEMPTS) {
+        eventSourceRef.current?.close()
+        eventSourceRef.current = null
+        setStreamMode("poll")
+        return
+      }
+
       const retryDelay = Math.min(1500 * nextAttempt, 10000)
 
       reconnectTimerRef.current = window.setTimeout(() => {
@@ -92,11 +136,20 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
       clearReconnectTimer()
       eventSourceRef.current?.close()
+      const streamUrl = new URL(buildNotificationStreamUrl(), window.location.origin)
+      if (lastEventIdRef.current) {
+        // We recreate EventSource manually (for backoff/fallback control), so we pass the last id explicitly.
+        streamUrl.searchParams.set("lastEventId", lastEventIdRef.current)
+      }
 
-      const eventSource = new EventSource(buildNotificationStreamUrl(), { withCredentials: true })
+      const eventSource = new EventSource(streamUrl.toString(), { withCredentials: true })
       eventSourceRef.current = eventSource
 
       const handleNotification = (event: MessageEvent<string>) => {
+        if (event.lastEventId) {
+          lastEventIdRef.current = event.lastEventId
+        }
+
         try {
           const payload = JSON.parse(event.data) as TMemberNotificationStreamPayload
           pushNotification(payload.notification)
@@ -107,7 +160,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         }
       }
 
-      const handleConnected = () => {
+      const handleConnected = (event: MessageEvent<string>) => {
+        if (event.lastEventId) {
+          lastEventIdRef.current = event.lastEventId
+        }
+
         const recovered = reconnectAttemptRef.current > 0
         reconnectAttemptRef.current = 0
         setIsReady(true)
@@ -117,11 +174,21 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         }
       }
 
+      const handleHeartbeat = (event: MessageEvent<string>) => {
+        if (event.lastEventId) {
+          lastEventIdRef.current = event.lastEventId
+        }
+
+        setIsReady(true)
+      }
+
       eventSource.addEventListener("connected", handleConnected)
       eventSource.addEventListener("notification", handleNotification)
+      eventSource.addEventListener("heartbeat", handleHeartbeat)
       eventSource.onerror = () => {
         eventSource.removeEventListener("connected", handleConnected)
         eventSource.removeEventListener("notification", handleNotification)
+        eventSource.removeEventListener("heartbeat", handleHeartbeat)
         eventSource.close()
         scheduleReconnect()
       }
@@ -135,7 +202,33 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       eventSourceRef.current?.close()
       eventSourceRef.current = null
     }
-  }, [enabled, loadSnapshot, pushNotification])
+  }, [enabled, loadSnapshot, pushNotification, streamMode])
+
+  useEffect(() => {
+    if (!enabled || streamMode !== "poll") return
+
+    let disposed = false
+    let timer: number | null = null
+
+    const run = async () => {
+      if (disposed) return
+      await loadSnapshot()
+      if (disposed) return
+
+      timer = window.setTimeout(() => {
+        void run()
+      }, POLLING_INTERVAL_MS)
+    }
+
+    void run()
+
+    return () => {
+      disposed = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [enabled, loadSnapshot, streamMode])
 
   useEffect(() => {
     if (!open) return
@@ -190,7 +283,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     }
 
     setOpen(false)
-    await router.push(`${toCanonicalPostPath(notification.postId)}#comment-${notification.commentId}`)
+    await pushRoute(router, `${toCanonicalPostPath(notification.postId)}#comment-${notification.commentId}`)
   }
 
   if (!enabled) {

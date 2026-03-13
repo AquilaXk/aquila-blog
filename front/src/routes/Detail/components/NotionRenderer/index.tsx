@@ -1,9 +1,9 @@
 import styled from "@emotion/styled"
-import { FC, useEffect, useMemo, useRef, useState } from "react"
+import { FC, ReactElement, ReactNode, isValidElement, useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import rehypePrettyCode from "rehype-pretty-code"
 import AppIcon from "src/components/icons/AppIcon"
-import usePrismEffect from "./usePrismEffect"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
 import useInlineColorEffect from "./useInlineColorEffect"
 
@@ -18,11 +18,6 @@ type MarkdownSegment =
   | { type: "markdown"; content: string }
   | { type: "toggle"; title: string; content: string }
   | { type: "callout"; kind: CalloutKind; title: string; content: string }
-
-type CodeBlockProps = {
-  className?: string
-  rawCode: string
-}
 
 const MARKDOWN_GUIDE = `### 작성 가이드
 - 코드블록: \`\`\`ts
@@ -170,18 +165,67 @@ const LANGUAGE_LABEL_MAP: Record<string, string> = {
   mermaid: "Mermaid",
 }
 
+const REHYPE_PRETTY_CODE_OPTIONS = {
+  theme: {
+    dark: "github-dark",
+    light: "github-light",
+  },
+  keepBackground: false,
+  defaultLang: "plaintext",
+}
+
 const toLanguageLabel = (lang: string) => {
   const normalized = lang.trim().toLowerCase()
   if (!normalized) return "Plain text"
   return LANGUAGE_LABEL_MAP[normalized] || normalized.toUpperCase()
 }
 
-const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
-  const lang = className?.replace("language-", "").trim() || ""
+const extractTextFromNode = (node: ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join("")
+  if (!isValidElement(node)) return ""
+  return extractTextFromNode((node.props as { children?: ReactNode }).children)
+}
+
+const extractCodeMetaFromPreChildren = (children: ReactNode) => {
+  const list = Array.isArray(children) ? children : [children]
+  const codeElement = list.find(
+    (child): child is ReactElement<Record<string, unknown>> =>
+      isValidElement(child) && typeof child.type === "string" && child.type.toLowerCase() === "code"
+  )
+
+  const codeClassName =
+    typeof codeElement?.props.className === "string" ? codeElement.props.className : ""
+  const classLanguage =
+    codeClassName
+      .split(" ")
+      .map((token) => token.trim())
+      .find((token) => token.startsWith("language-"))
+      ?.replace("language-", "")
+      .toLowerCase() || ""
+
+  const dataLanguage =
+    typeof codeElement?.props["data-language"] === "string"
+      ? String(codeElement.props["data-language"]).toLowerCase()
+      : ""
+
+  const codeChildren = (codeElement?.props.children as ReactNode | undefined) ?? children
+  const rawCode = extractTextFromNode(codeChildren).replace(/\n$/, "")
+
+  return {
+    language: dataLanguage || classLanguage || "text",
+    rawCode,
+  }
+}
+
+type PrettyCodeBlockProps = {
+  language: string
+  rawCode: string
+  preElement: ReactNode
+}
+
+const PrettyCodeBlock: FC<PrettyCodeBlockProps> = ({ language, rawCode, preElement }) => {
   const [copied, setCopied] = useState(false)
-  const normalizedCode = rawCode.replace(/\n$/, "")
-  const lineCount = normalizedCode ? normalizedCode.split("\n").length : 1
-  const lineNumbers = useMemo(() => Array.from({ length: lineCount }, (_, index) => index + 1), [lineCount])
 
   useEffect(() => {
     if (!copied) return
@@ -206,19 +250,10 @@ const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
           <span className="aq-code-dot aq-code-dot-yellow" />
           <span className="aq-code-dot aq-code-dot-green" />
         </div>
-        <span className="aq-code-language">{toLanguageLabel(lang)}</span>
+        <span className="aq-code-language">{toLanguageLabel(language)}</span>
       </div>
       <div className="aq-code-shell">
-        <div className="aq-code-gutter" aria-hidden="true">
-          {lineNumbers.map((lineNumber) => (
-            <span key={lineNumber} className="aq-code-line-number">
-              {lineNumber}
-            </span>
-          ))}
-        </div>
-        <pre className="aq-code">
-          <code className={className}>{rawCode}</code>
-        </pre>
+        {preElement}
         <button
           type="button"
           className={`aq-code-copy aq-code-copy-bottom${copied ? " is-copied" : ""}`}
@@ -384,7 +419,6 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
     [normalizedContent]
   )
 
-  usePrismEffect(rootRef, renderKey)
   useMermaidEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
 
@@ -396,6 +430,7 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
     <ReactMarkdown
       key={key}
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[[rehypePrettyCode, REHYPE_PRETTY_CODE_OPTIONS]]}
       components={{
         p({ children }) {
           if (!inCallout) return <p>{children}</p>
@@ -441,7 +476,36 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
             )
           }
 
-          return <CodeBlock className={className} rawCode={rawCode} />
+          return (
+            <code className={className} {...props}>
+              {children}
+            </code>
+          )
+        },
+        pre({ children, className, ...props }) {
+          const { language, rawCode } = extractCodeMetaFromPreChildren(children)
+
+          if (language === "mermaid") {
+            return (
+              <pre className="aq-mermaid">
+                <code className="language-mermaid">{rawCode}</code>
+              </pre>
+            )
+          }
+
+          const mergedClassName = ["aq-code", "aq-pretty-pre", className].filter(Boolean).join(" ")
+
+          return (
+            <PrettyCodeBlock
+              language={language}
+              rawCode={rawCode}
+              preElement={
+                <pre className={mergedClassName} {...props}>
+                  {children}
+                </pre>
+              }
+            />
+          )
         },
       }}
     >
@@ -597,8 +661,7 @@ const StyledWrapper = styled.div`
     font-weight: 700;
   }
 
-  .aq-code,
-  .aq-mermaid {
+  .aq-code {
     border-radius: 18px;
     padding: 1rem 1.1rem;
     overflow-x: auto;
@@ -734,37 +797,11 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-shell {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: stretch;
-    overflow: auto;
+    display: block;
+    overflow-x: auto;
     position: relative;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
-  }
-
-  .aq-code-gutter {
-    display: grid;
-    align-content: start;
-    gap: 0;
-    padding: 1.1rem 0.75rem 1.1rem 0.95rem;
-    min-width: 3.2rem;
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "#252734" : "#e9edf4"};
-    border-right: 1px solid
-      ${({ theme }) =>
-        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(17, 24, 39, 0.08)"};
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#6d768b" : "#90a0b7")};
-    text-align: right;
-    user-select: none;
-  }
-
-  .aq-code-line-number {
-    display: block;
-    font-size: 0.92rem;
-    line-height: 1.7;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
-      monospace;
   }
 
   .aq-code-block .aq-code {
@@ -772,7 +809,7 @@ const StyledWrapper = styled.div`
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1.1rem 1.25rem 4.25rem;
+    padding: 1.1rem 1.25rem 3.8rem;
     min-width: 0;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
@@ -788,41 +825,85 @@ const StyledWrapper = styled.div`
       monospace;
   }
 
+  .aq-pretty-pre code {
+    display: block;
+    min-width: max-content;
+    counter-reset: aq-line;
+  }
+
+  .aq-pretty-pre code > [data-line] {
+    display: block;
+    position: relative;
+    padding-left: 3rem;
+  }
+
+  .aq-pretty-pre code > [data-line]::before {
+    counter-increment: aq-line;
+    content: counter(aq-line);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 2.15rem;
+    text-align: right;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#6d768b" : "#90a0b7")};
+    user-select: none;
+  }
+
+  .aq-pretty-pre code > [data-highlighted-line] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.11)" : "rgba(59, 130, 246, 0.1)"};
+    border-radius: 6px;
+  }
+
+  .aq-pretty-pre code [data-highlighted-chars] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(250, 204, 21, 0.2)" : "rgba(250, 204, 21, 0.25)"};
+    border-radius: 4px;
+    padding: 0.04em 0.2em;
+  }
+
+  .aq-pretty-pre code,
+  .aq-pretty-pre code span {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "var(--shiki-dark)" : "var(--shiki-light)")};
+    background-color: transparent !important;
+  }
+
+  figure[data-rehype-pretty-code-figure] {
+    margin: 1rem 0;
+  }
+
   .aq-toggle {
     margin: 0.9rem 0;
   }
 
   .aq-mermaid {
-    display: grid;
-    place-items: start center;
+    margin: 1rem 0;
+    display: block;
     overflow-x: auto;
-    padding: clamp(0.45rem, 0.9vw, 0.82rem) clamp(0.12rem, 0.8vw, 0.42rem);
+    padding: 0.2rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .aq-mermaid-stage {
-    width: min(100%, var(--aq-mermaid-target-width, 800px));
-    max-width: 100%;
-    margin: 0 auto;
+    min-width: max-content;
+    width: fit-content;
   }
 
   .aq-mermaid-stage > svg {
     display: block;
-    width: 100%;
-    max-width: 100%;
+    width: auto;
+    max-width: none;
     height: auto;
-    margin: 0 auto;
+    margin: 0;
+    background: transparent;
   }
 
   .aq-mermaid-stage > svg .nodeLabel p,
   .aq-mermaid-stage > svg .edgeLabel p {
     margin: 0;
-  }
-
-  .aq-mermaid-stage > svg .node rect,
-  .aq-mermaid-stage > svg .node polygon,
-  .aq-mermaid-stage > svg .node path,
-  .aq-mermaid-stage > svg .cluster rect {
-    filter: drop-shadow(0 10px 24px rgba(15, 23, 42, 0.12));
   }
 
   .aq-code .token.comment,
@@ -890,16 +971,10 @@ const StyledWrapper = styled.div`
       grid-template-columns: auto 1fr;
     }
 
-    .aq-code-gutter {
-      min-width: 2.7rem;
-      padding-left: 0.72rem;
-      padding-right: 0.56rem;
-    }
-
     .aq-code-block .aq-code {
       padding-left: 0.92rem;
       padding-right: 0.95rem;
-      padding-bottom: 4.05rem;
+      padding-bottom: 3.85rem;
     }
 
     .aq-code-copy-bottom {

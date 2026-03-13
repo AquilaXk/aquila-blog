@@ -4,7 +4,7 @@ import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
-import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
+import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -120,7 +120,8 @@ const SignupVerifyPage = () => {
         }),
       })
 
-      await router.replace(
+      await replaceRoute(
+        router,
         `/login?signup=done&username=${encodeURIComponent(username.trim())}&next=${encodeURIComponent(next)}`
       )
     } catch (error) {

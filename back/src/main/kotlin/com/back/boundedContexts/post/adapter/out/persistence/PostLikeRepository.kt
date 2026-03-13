@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 
 interface PostLikeRepository : JpaRepository<PostLike, Int> {
-    fun findByLikerAndPost(
+    fun findFirstByLikerAndPostOrderByIdAsc(
         liker: Member,
         post: Post,
     ): PostLike?

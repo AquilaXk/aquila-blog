@@ -354,7 +354,10 @@ class PostApplicationService(
         val postAuthorId = post.author.id
         val existingLikeId = existingLike?.id
         val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
-        if (deletedCount > 0) {
+        if (deletedCount > 1) {
+            // Legacy 중복 row 정리 시에는 실제 개수 기준으로 즉시 재동기화한다.
+            syncLikesCount(post)
+        } else if (deletedCount == 1) {
             decrementLikesCount(post)
         } else {
             ensureLikesCountLoaded(post)

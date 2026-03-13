@@ -9,3 +9,4 @@
 - 댓글은 평평한 리스트형, 답글은 깊이와 무관하게 한 칸만 들여쓰기
 - 메인 피드 필터는 viewport가 아니라 중앙 컬럼 폭 기준으로 반응
 - 카테고리 드롭다운은 `portal + fixed panel`, `min >= trigger`, `viewport-safe max-width`
+- 프로그램적 라우팅은 `src/libs/router` 래퍼(`pushRoute`, `replaceRoute`)로 통일해 cancelled 네비게이션 에러 노출을 줄인다

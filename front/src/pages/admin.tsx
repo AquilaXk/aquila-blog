@@ -54,6 +54,10 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  const handleMoveMain = async () => {
+    await replaceRoute(router, "/", { preferHardNavigation: true })
+  }
+
   if (!sessionMember) return null
 
   return (
@@ -67,9 +71,9 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             필요한 작업실로 바로 이동하면 됩니다.
           </p>
           <HeroActions>
-            <Link href="/" passHref legacyBehavior>
-              <GhostLink>메인으로 이동</GhostLink>
-            </Link>
+            <GhostButton type="button" onClick={() => void handleMoveMain()}>
+              메인으로 이동
+            </GhostButton>
             <PrimaryAction type="button" onClick={() => void handleLogout()} disabled={isLoggingOut}>
               {isLoggingOut ? "로그아웃 중..." : "로그아웃"}
             </PrimaryAction>
@@ -185,7 +189,7 @@ const PrimaryAction = styled(BaseButton)`
   color: white;
 `
 
-const GhostLink = styled.a`
+const GhostButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -193,10 +197,10 @@ const GhostLink = styled.a`
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
-  text-decoration: none;
   padding: 0.72rem 1rem;
   font-size: 0.92rem;
   font-weight: 700;
+  cursor: pointer;
 `
 
 const ProfilePanel = styled.aside`

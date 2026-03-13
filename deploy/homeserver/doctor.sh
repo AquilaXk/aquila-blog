@@ -24,6 +24,42 @@ print_env_key_status() {
   fi
 }
 
+env_value() {
+  local key="$1"
+  grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2-
+}
+
+extract_host() {
+  local raw="$1"
+  echo "${raw}" | sed -E 's#^[a-zA-Z]+://##; s#/.*$##; s#:[0-9]+$##'
+}
+
+site_key() {
+  local host="$1"
+
+  if [[ -z "${host}" ]]; then
+    echo ""
+    return
+  fi
+
+  if [[ "${host}" == "localhost" || "${host}" == "127.0.0.1" ]]; then
+    echo "${host}"
+    return
+  fi
+
+  IFS='.' read -r -a labels <<< "${host}"
+  local count="${#labels[@]}"
+
+  if (( count <= 2 )); then
+    echo "${host}"
+    return
+  fi
+
+  local last=$((count - 1))
+  local prev=$((count - 2))
+  echo "${labels[prev]}.${labels[last]}"
+}
+
 print_section "Basic Info"
 echo "Host: $(hostname)"
 echo "Time: $(date -Is)"
@@ -48,6 +84,40 @@ print_env_key_status "PROD___SPRING__DATA__REDIS__PASSWORD"
 print_env_key_status "CUSTOM_PROD_BACKURL"
 print_env_key_status "CUSTOM_PROD_FRONTURL"
 print_env_key_status "CUSTOM_PROD_COOKIEDOMAIN"
+
+print_section "Env Domain Consistency"
+front_url="$(env_value "CUSTOM_PROD_FRONTURL")"
+back_url="$(env_value "CUSTOM_PROD_BACKURL")"
+cookie_domain="$(env_value "CUSTOM_PROD_COOKIEDOMAIN")"
+api_domain="$(env_value "API_DOMAIN")"
+
+front_host="$(extract_host "${front_url}")"
+back_host="$(extract_host "${back_url}")"
+cookie_site="$(site_key "${cookie_domain}")"
+front_site="$(site_key "${front_host}")"
+back_site="$(site_key "${back_host}")"
+api_site="$(site_key "${api_domain}")"
+
+echo "CUSTOM_PROD_FRONTURL host: ${front_host:-<empty>}"
+echo "CUSTOM_PROD_BACKURL host:  ${back_host:-<empty>}"
+echo "CUSTOM_PROD_COOKIEDOMAIN:  ${cookie_domain:-<empty>}"
+echo "API_DOMAIN:                ${api_domain:-<empty>}"
+
+if [[ -n "${front_site}" && -n "${back_site}" && "${front_site}" != "${back_site}" ]]; then
+  echo "WARN: FRONTURL/BACKURL are cross-site (${front_site} vs ${back_site})"
+fi
+
+if [[ -n "${cookie_site}" && -n "${front_site}" && "${cookie_site}" != "${front_site}" ]]; then
+  echo "WARN: COOKIEDOMAIN does not match FRONTURL site (${cookie_site} vs ${front_site})"
+fi
+
+if [[ -n "${cookie_site}" && -n "${back_site}" && "${cookie_site}" != "${back_site}" ]]; then
+  echo "WARN: COOKIEDOMAIN does not match BACKURL site (${cookie_site} vs ${back_site})"
+fi
+
+if [[ -n "${api_site}" && -n "${back_site}" && "${api_site}" != "${back_site}" ]]; then
+  echo "WARN: API_DOMAIN does not match BACKURL site (${api_site} vs ${back_site})"
+fi
 
 print_section "Listening Ports (80/443/22/8080)"
 ss -lntp '( sport = :80 or sport = :443 or sport = :22 or sport = :8080 )' || true

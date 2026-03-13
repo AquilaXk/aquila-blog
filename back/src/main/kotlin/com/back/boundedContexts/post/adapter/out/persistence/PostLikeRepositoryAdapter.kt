@@ -22,7 +22,7 @@ class PostLikeRepositoryAdapter(
     override fun findByLikerAndPost(
         liker: Member,
         post: Post,
-    ): PostLike? = postLikeRepository.findByLikerAndPost(liker, post)
+    ): PostLike? = postLikeRepository.findFirstByLikerAndPostOrderByIdAsc(liker, post)
 
     override fun findByLikerAndPostIn(
         liker: Member,

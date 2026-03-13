@@ -108,24 +108,6 @@ const getMeasurementBounds = (svg: SVGSVGElement, rawWidth: number, rawHeight: n
   return null
 }
 
-const getTargetWidth = (contentWidth: number, contentHeight: number) => {
-  const aspect = contentWidth / Math.max(contentHeight, 1)
-
-  if (aspect >= 2.35) {
-    return Math.min(Math.max(contentWidth * 1.08, 720), 1140)
-  }
-
-  if (aspect <= 0.78) {
-    return Math.min(Math.max(contentWidth * 0.86, 520), 700)
-  }
-
-  if (contentWidth <= 460) {
-    return Math.min(Math.max(contentWidth * 1.35, 640), 940)
-  }
-
-  return Math.min(Math.max(contentWidth * 1.02, 620), 980)
-}
-
 const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string) => {
   const [scheme] = useScheme()
 
@@ -135,40 +117,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     let disposed = false
     let running = false
-    const isDark = scheme === "dark"
-
-    const mermaidThemeVariables = isDark
-      ? {
-          fontFamily: "Pretendard, Inter, system-ui, sans-serif",
-          fontSize: "16px",
-          primaryColor: "#111827",
-          primaryBorderColor: "#334155",
-          primaryTextColor: "#E5E7EB",
-          secondaryColor: "#0F172A",
-          tertiaryColor: "#0B1220",
-          lineColor: "#94A3B8",
-          clusterBkg: "#121A27",
-          clusterBorder: "#334155",
-          edgeLabelBackground: "#0F172A",
-          mainBkg: "#111827",
-          nodeBorder: "#475569",
-        }
-      : {
-          fontFamily: "Pretendard, Inter, system-ui, sans-serif",
-          fontSize: "16px",
-          primaryColor: "#FFFFFF",
-          primaryBorderColor: "#CBD5E1",
-          primaryTextColor: "#0F172A",
-          secondaryColor: "#F8FAFC",
-          tertiaryColor: "#EEF2FF",
-          lineColor: "#64748B",
-          clusterBkg: "#F8FAFC",
-          clusterBorder: "#CBD5E1",
-          edgeLabelBackground: "#FFFFFF",
-          mainBkg: "#FFFFFF",
-          nodeBorder: "#CBD5E1",
-        }
-
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
         root.querySelectorAll<HTMLElement>(
@@ -178,58 +126,16 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       if (!codeBlocks.length) return
 
       const mermaid = (await import("mermaid")).default
-      const theme = scheme === "dark" ? "dark" : "default"
+      const theme = scheme === "dark" ? "dark" : "neutral"
 
       mermaid.initialize({
         startOnLoad: false,
-        theme: "base",
-        themeVariables: mermaidThemeVariables,
+        theme,
         flowchart: {
-          htmlLabels: false,
-          curve: "basis",
+          htmlLabels: true,
+          curve: "linear",
           useMaxWidth: true,
-          rankSpacing: 36,
-          nodeSpacing: 24,
         },
-        themeCSS: `
-          svg {
-            font-family: Pretendard, Inter, system-ui, sans-serif;
-          }
-          .node rect {
-            rx: 16px;
-            ry: 16px;
-          }
-          .edgeLabel rect {
-            fill: ${isDark ? "#0F172A" : "#FFFFFF"} !important;
-            stroke: none !important;
-            rx: 10px;
-            ry: 10px;
-          }
-          .node polygon {
-            stroke-width: 1.6px;
-          }
-          .label foreignObject div {
-            line-height: 1.45;
-            font-size: 15px;
-            font-weight: 600;
-            padding: 0.12rem 0.22rem;
-          }
-          .edgePath path {
-            stroke-width: 1.8px;
-          }
-          .node rect,
-          .node polygon,
-          .cluster rect {
-            stroke-width: 1.6px;
-          }
-          .cluster rect {
-            rx: 22px;
-            ry: 22px;
-          }
-          .label {
-            color: ${isDark ? "#E5E7EB" : "#0F172A"};
-          }
-        `,
       })
 
       for (let i = 0; i < codeBlocks.length; i += 1) {
@@ -282,15 +188,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           renderedSvg.removeAttribute("width")
           renderedSvg.removeAttribute("height")
 
-          const finalViewBox = parseViewBox(renderedSvg.getAttribute("viewBox"))
-          const contentWidth = finalViewBox?.width || fallbackWidth
-          const contentHeight = finalViewBox?.height || fallbackHeight
-          const targetWidth = getTargetWidth(contentWidth, contentHeight)
-          const wrappedSvg = `
-            <div class="aq-mermaid-stage" style="--aq-mermaid-target-width:${targetWidth}px;">
-              ${renderedSvg.outerHTML}
-            </div>
-          `
+          const wrappedSvg = `<div class="aq-mermaid-stage">${renderedSvg.outerHTML}</div>`
 
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = theme

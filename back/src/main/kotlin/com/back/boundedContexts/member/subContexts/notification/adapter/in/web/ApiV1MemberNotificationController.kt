@@ -5,11 +5,14 @@ import com.back.boundedContexts.member.subContexts.notification.application.serv
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.global.rsData.RsData
 import com.back.global.web.app.Rq
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.MediaType
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestHeader
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
@@ -34,7 +37,19 @@ class ApiV1MemberNotificationController(
     fun unreadCount(): UnreadCountResBody = UnreadCountResBody(memberNotificationApplicationService.unreadCount(rq.actor))
 
     @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
-    fun stream(): SseEmitter = memberNotificationSseService.subscribe(rq.actor.id)
+    fun stream(
+        response: HttpServletResponse,
+        @RequestHeader(name = "Last-Event-ID", required = false) lastEventIdHeader: String?,
+        @RequestParam(name = "lastEventId", required = false) lastEventIdQuery: String?,
+    ): SseEmitter {
+        response.setHeader("Cache-Control", "no-cache, no-transform")
+        response.setHeader("Connection", "keep-alive")
+        response.setHeader("X-Accel-Buffering", "no")
+        return memberNotificationSseService.subscribe(
+            memberId = rq.actor.id,
+            lastEventIdRaw = lastEventIdQuery ?: lastEventIdHeader,
+        )
+    }
 
     @PostMapping("/read-all")
     @Transactional

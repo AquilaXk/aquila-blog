@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.app.AppConfig
+import com.back.global.app.app.AppFacade
 import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
@@ -93,14 +94,23 @@ class SecurityConfig(
 
     @Bean
     fun corsConfigurationSource(): UrlBasedCorsConfigurationSource {
+        val cookieDomain = AppFacade.siteCookieDomain.trim()
+        val siteOriginPatterns =
+            buildList {
+                if (AppConfig.siteFrontUrl.isNotBlank()) {
+                    add(AppConfig.siteFrontUrl)
+                }
+                if (cookieDomain.isNotBlank()) {
+                    add("https://$cookieDomain")
+                    add("https://www.$cookieDomain")
+                }
+            }
+
         val configuration =
             CorsConfiguration().apply {
                 allowedOriginPatterns =
-                    listOf(
-                        AppConfig.siteFrontUrl,
-                        "http://localhost:*",
-                        "http://127.0.0.1:*",
-                    )
+                    (siteOriginPatterns + listOf("http://localhost:*", "http://127.0.0.1:*"))
+                        .distinct()
                 allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 allowCredentials = true
                 allowedHeaders = listOf("*")

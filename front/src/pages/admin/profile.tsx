@@ -30,6 +30,18 @@ type MemberMe = AuthMember
 type LinkSectionType = "service" | "contact"
 type OpenIconPicker = `${LinkSectionType}:${number}` | null
 
+const buildMemberRevisionKey = (member: MemberMe) =>
+  [
+    member.id,
+    member.modifiedAt || "",
+    member.profileImageDirectUrl || "",
+    member.profileImageUrl || "",
+    member.profileRole || "",
+    member.profileBio || "",
+    member.homeIntroTitle || "",
+    member.homeIntroDescription || "",
+  ].join("|")
+
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
   if (!text) return ""
@@ -105,6 +117,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   )
   const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
+  const lastSyncedRevisionRef = useRef<string>(buildMemberRevisionKey(initialMember))
 
   const syncProfileState = useCallback((member: MemberMe) => {
     setMe(member)
@@ -132,7 +145,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   useEffect(() => {
     if (!sessionMember) return
     if (authStatus === "loading") return
+    const nextRevision = buildMemberRevisionKey(sessionMember)
+    if (lastSyncedRevisionRef.current === nextRevision) return
+
     syncProfileState(sessionMember)
+    lastSyncedRevisionRef.current = nextRevision
   }, [authStatus, sessionMember, syncProfileState])
 
   useEffect(() => {
@@ -308,6 +325,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <p>관리자 1명의 프로필 카드 정보만 여기서 수정합니다.</p>
         </HeaderCopy>
         <HeaderActions>
+          <Link href="/" passHref legacyBehavior>
+            <LinkButton>메인으로 이동</LinkButton>
+          </Link>
           <Link href="/admin" passHref legacyBehavior>
             <LinkButton>허브로 돌아가기</LinkButton>
           </Link>

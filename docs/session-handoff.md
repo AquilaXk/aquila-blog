@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated: 2026-03-12
+Last updated: 2026-03-13
 
 ## 이 문서가 보여주는 것
 
@@ -24,12 +24,12 @@ flowchart LR
 
 ## 최근 반영된 큰 변화
 
-- `c4bde1e` `feat(front): redesign auth and admin experience`
-- `416428e` `fix: harden minio upload init and surface storage errors`
-- `fb0f1cc` `feat(profile): switch admin profile upload to minio and use direct url for fast render`
-- `74d28f9` `feat(profile): manage admin role/bio from admin page and reduce site.config dependency`
-- `66bb820` `fix(back): harden login throttling and task queue processing`
-- 로컬 워킹트리 기준으로 backend는 `adapter/application` 구조로 이동 중이며, 기존 `app/in/out`와 공존하는 과도기 상태다.
+- 관리자 화면을 `/admin` 허브, `/admin/profile`, `/admin/posts/new`, `/admin/tools`로 분리했다.
+- 게시글 상세 canonical URL을 `/posts/:id`로 고정했고, 기존 `/:slug` 경로는 리다이렉트만 담당한다.
+- 좋아요는 `PUT /like`, `DELETE /like` 멱등 경로를 우선 사용하고, 조회수는 dedupe + 원자 증가 방식으로 보강했다.
+- 프로필 이미지는 direct URL + version 파라미터 기준으로 렌더하고, 메인/About/상세는 SSR 초기값을 먼저 사용한다.
+- Kakao OAuth callback URL은 `${custom.site.backUrl}/login/oauth2/code/{registrationId}`로 고정했고, 프록시에서는 `X-Forwarded-Proto=https`를 명시한다.
+- 백엔드는 여전히 `adapter/application` 구조와 `app/in/out` 구조가 공존하는 과도기 상태다.
 
 ## 지금 가장 중요한 운영 메모
 
@@ -41,6 +41,7 @@ flowchart LR
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
 - 회원가입 메일 설정은 `/system/api/v1/adm/mail/signup`에서 준비 상태를 바로 볼 수 있다.
+- Kakao 로그인 점검 시에는 브라우저에서 `/oauth2/authorization/kakao` 응답의 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 먼저 본다.
 
 ## 빠른 트리아지 표
 
@@ -48,9 +49,11 @@ flowchart LR
 | --- | --- | --- |
 | 로그인 실패 | `front/src/apis/backend/client.ts` | API base URL, credentials 포함 여부 |
 | 로그인 차단이 제멋대로임 | `LoginAttemptService`, Redis 연결 | Redis TTL 키 공유 여부, fallback 여부 |
-| 관리자 401 | `ApiV1AuthController`, admin env | `me.isAdmin`, username 규칙 |
+| 관리자 401 | `front/src/libs/server/adminGuard.ts`, `ApiV1AuthController` | SSR 가드, `me.isAdmin`, username 규칙 |
 | 글 목록 비어 있음 | `front/src/apis/backend/posts.ts` | 목록 API 응답, `published/listed` |
+| 상세 링크가 이상함 | `front/src/pages/posts/[id].tsx`, `front/src/pages/[slug].tsx` | canonical `/posts/:id`, legacy redirect |
 | 이미지 오류 | `back/src/main/kotlin/com/back/boundedContexts/post/adapter/out/storage/PostImageStorageAdapter.kt` | endpoint, accessKey, secretKey |
+| Kakao OAuth 실패 | `deploy/homeserver/Caddyfile`, `application.yaml` | `X-Forwarded-Proto`, `custom.site.backUrl`, `redirect_uri` |
 | 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, alias, health |
 | 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/application` vs `app/in/out` 공존 여부 |
 
@@ -59,9 +62,10 @@ flowchart LR
 1. `https://api.<domain>/actuator/health/readiness`
 2. `/system/api/v1/adm/mail/signup`
 3. 프론트 로그인 후 `/member/api/v1/auth/me`
-4. 관리자 페이지에서 글 발행
+4. `/admin/posts/new`에서 글 발행
 5. 메인 페이지 목록 반영
 6. 이미지 업로드와 프로필 이미지 표시
+7. Kakao 로그인 시작 URL의 `redirect_uri`가 `https`인지 확인
 
 ## 점검 명령과 성공 기준
 
@@ -72,7 +76,10 @@ flowchart LR
 | `./gradlew compileKotlin` | Kotlin 컴파일 성공 |
 | `yarn build` | 프론트 프로덕션 빌드 성공 |
 | `https://api.<domain>/actuator/health/readiness` | readiness 응답 |
-| `/admin` | 관리자 도구 표시 및 API 정상 |
+| `/admin` | 허브 카드와 빠른 이동 링크 표시 |
+| `/admin/profile` | 관리자 프로필 조회/수정 정상 |
+| `/admin/posts/new` | 글 작성/임시저장/미리보기 정상 |
+| `/admin/tools` | 댓글/시스템/메일 진단 정상 |
 | task backlog 존재 시 1분 후 재조회 | `PENDING` 감소 또는 `PROCESSING/COMPLETED` 증가 |
 
 ## 자주 보는 파일
@@ -82,8 +89,15 @@ flowchart LR
 - `front/src/apis/backend/client.ts`
 - `front/src/apis/backend/posts.ts`
 - `front/src/pages/admin.tsx`
+- `front/src/pages/admin/profile.tsx`
+- `front/src/pages/admin/posts/new.tsx`
+- `front/src/pages/admin/tools.tsx`
+- `front/src/pages/posts/[id].tsx`
+- `front/src/pages/[slug].tsx`
+- `front/src/libs/server/adminGuard.ts`
 - `.github/workflows/deploy.yml`
 - `deploy/homeserver/blue_green_deploy.sh`
+- `deploy/homeserver/Caddyfile`
 - `deploy/homeserver/docker-compose.prod.yml`
 
 ## 로컬 검증 명령

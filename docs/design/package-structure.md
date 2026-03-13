@@ -1,6 +1,6 @@
 # Package Structure
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## 이 문서가 보여주는 것
 
@@ -136,13 +136,20 @@ flowchart LR
 
 | 레이어 | 예시 경로 | 책임 |
 | --- | --- | --- |
-| Page entry | `src/pages/index.tsx` | SSR, cache header, dehydrated query 전달 |
-| Admin entry | `src/pages/admin.tsx` | 관리자 운영 UI, 인증 redirect |
-| Auth entry | `src/pages/login.tsx`, `src/pages/signup.tsx` | 인증 UI |
+| Page entry | `src/pages/index.tsx`, `src/pages/about.tsx`, `src/pages/posts/[id].tsx` | SSR, cache header, dehydrated query 전달 |
+| Admin entry | `src/pages/admin.tsx`, `src/pages/admin/profile.tsx`, `src/pages/admin/posts/new.tsx`, `src/pages/admin/tools.tsx` | 관리자 허브/프로필/글 작업실/운영 도구 |
+| Auth entry | `src/pages/login.tsx`, `src/pages/signup.tsx`, `src/pages/signup/verify.tsx` | 인증 UI와 이메일 인증 가입 마무리 |
 | Route composition | `src/routes/Feed/*` | 메인 피드/상세 화면 조합 |
 | API layer | `src/apis/backend/*` | fetch 계약, DTO 매핑 |
 | Hook layer | `src/hooks/*` | 프로필, 상태, 데이터 훅 |
 | Shared UI | `src/components/*` | 범용 UI 및 공통 쉘 |
+
+추가로 기억할 페이지 엔트리:
+
+- `src/pages/[slug].tsx`
+  과거 `제목-id` 상세 링크를 `/posts/:id`로 리다이렉트하는 legacy 엔트리
+- `src/pages/api/revalidate.ts`
+  선택적 front revalidate hook
 
 ## 현재 구조에서 주의할 이름
 
@@ -167,7 +174,10 @@ flowchart LR
 | `back/boundedContexts/member/*` | 로그인, 회원가입, 관리자 판별, 프로필 |
 | `back/boundedContexts/post/*` | 글 작성, 목록, 상세, 댓글, 이미지 |
 | `front/src/apis/backend/*` | 프론트 전체 데이터 계약 |
-| `front/src/pages/admin.tsx` | 관리자 운영 UX |
+| `front/src/pages/admin.tsx` | 관리자 허브/빠른 이동 |
+| `front/src/pages/admin/profile.tsx` | 관리자 프로필 UX |
+| `front/src/pages/admin/posts/new.tsx` | 글 작성/임시저장/미리보기 |
+| `front/src/pages/admin/tools.tsx` | 댓글/시스템/메일 진단 |
 | `front/src/pages/login.tsx`, `signup.tsx` | 인증 UX |
 | `deploy/homeserver/*` | 운영 배포/라우팅 |
 

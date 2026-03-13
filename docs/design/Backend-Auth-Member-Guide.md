@@ -1,6 +1,6 @@
 # Backend Auth Member Guide
 
-Last updated: 2026-03-12
+Last updated: 2026-03-13
 
 ## 이 문서의 목적
 
@@ -35,6 +35,7 @@ sequenceDiagram
 - 카카오 OAuth 로그인
   - `/oauth2/authorization/kakao`
   - redirect-uri: `${custom.site.backUrl}/login/oauth2/code/{registrationId}`
+  - `redirectUrl` 쿼리는 callback URL이 아니라 로그인 성공 후 프론트로 되돌아갈 주소를 `state`에 실어 보내는 값이다
 
 관련 파일:
 

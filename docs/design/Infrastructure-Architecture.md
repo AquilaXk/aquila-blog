@@ -1,6 +1,6 @@
 # Infrastructure Architecture
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## 이 문서가 보여주는 것
 
@@ -58,6 +58,7 @@ flowchart LR
 - Caddy는 색상 컨테이너를 직접 바라보지 않는다.
 - 항상 `back_active:8080`만 upstream으로 사용한다.
 - 배포 스크립트가 Docker network alias를 옮겨 `back_active`의 실제 대상만 바꾼다.
+- Cloudflare Tunnel -> Caddy 구간은 HTTP origin이지만, Caddy는 backend로 `X-Forwarded-Proto=https`, `X-Forwarded-Host`, `X-Forwarded-Port=443`를 명시해서 외부 scheme 정보를 복원한다.
 
 이 구조 덕분에 Caddy 설정을 매번 color 이름으로 바꿀 필요가 없다.
 
@@ -90,6 +91,7 @@ sequenceDiagram
 - 프론트는 Vercel 도메인 또는 커스텀 도메인에서 제공
 - 백엔드는 `api.<domain>`으로 노출
 - 홈서버는 직접 포트포워딩 대신 Cloudflare Tunnel 사용이 기본 전제
+- OAuth callback URL은 프록시 추론 실패에 흔들리지 않도록 `${custom.site.backUrl}/login/oauth2/code/{registrationId}`로 고정한다.
 
 ## 장애 경계
 
@@ -112,6 +114,7 @@ sequenceDiagram
 - `HOME_SERVER_ENV`가 실제 운영 설정을 덮어쓴다.
 - MinIO 관련 env는 `${...}` placeholder를 넣지 말고 완성된 값을 넣어야 한다.
 - 배포 스크립트는 storage endpoint와 alias route를 더 엄격하게 검증하도록 강화되어 있다.
+- Kakao OAuth에서 `redirect_uri`가 `http://...`로 내려가는 현상은 대부분 프록시 forwarded header 또는 `custom.site.backUrl` 오설정에서 시작된다.
 
 ## 참고 파일
 

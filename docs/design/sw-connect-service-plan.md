@@ -1,6 +1,6 @@
 # SW Connect Service Plan
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## 이 문서가 보여주는 것
 
@@ -63,7 +63,9 @@ sequenceDiagram
 
 - provider: Kakao
 - 목적: 소셜 로그인
-- redirect URI는 Spring Security OAuth2 client 설정을 따른다
+- authorize 시작 URL: `/oauth2/authorization/kakao?redirectUrl=<front-url>`
+- callback URL: `${custom.site.backUrl}/login/oauth2/code/{registrationId}`
+- `redirectUrl`은 Kakao callback URL이 아니라, 로그인 성공 후 프론트로 되돌아갈 주소를 `state`에 실어 보내는 값이다
 
 ### Backend -> PostgreSQL / Redis / MinIO
 
@@ -125,6 +127,7 @@ sequenceDiagram
 | 증상 | 우선 확인 | 후보 원인 |
 | --- | --- | --- |
 | 로그인 불가 | `/auth/login`, `/auth/me` | CORS, cookie, API base URL |
+| Kakao `KOE006` | `/oauth2/authorization/kakao`의 `Location` 헤더 | `redirect_uri` scheme/host 불일치, 잘못된 Kakao 앱 |
 | 이미지 업로드 실패 | `/posts/images` | MinIO env, bucket init, size/type |
 | 글은 저장되지만 메인 반영 안 됨 | 목록 API, 캐시 헤더, revalidate API | SSR 캐시 구간, token/url 누락 |
 | 관리자 페이지 401 | `/system/api/v1/adm/health` | 로그인 상태, admin 판별 |

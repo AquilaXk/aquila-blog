@@ -21,6 +21,8 @@ export type AuthMember = {
 
 const useAuthSession = () => {
   const queryClient = useQueryClient()
+  const cachedSnapshot = queryClient.getQueryData<AuthMember | null | undefined>(queryKey.authMe())
+  const hasCachedSnapshot = cachedSnapshot !== undefined
   const query = useQuery({
     queryKey: queryKey.authMe(),
     queryFn: async () => {
@@ -35,10 +37,10 @@ const useAuthSession = () => {
       }
     },
     enabled: isClient,
-    staleTime: 0,
+    staleTime: hasCachedSnapshot ? 60_000 : 0,
     retry: false,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    refetchOnMount: hasCachedSnapshot ? false : "always",
+    refetchOnWindowFocus: hasCachedSnapshot ? false : true,
   })
 
   const setMe = (member: AuthMember | null) => {

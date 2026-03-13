@@ -270,6 +270,7 @@ viewer key 정책:
 
 - Redis가 있으면 `SETNX + TTL`
 - Redis가 없으면 in-memory fallback
+- Redis가 일시적으로 불안정해도 조회수 요청 자체는 fallback으로 계속 처리
 
 관련 파일:
 
@@ -292,6 +293,9 @@ sequenceDiagram
         Dedup->>Redis: SETNX hit-key + TTL
         Redis-->>Dedup: true / false
     else Redis 불가
+        Dedup->>Dedup: in-memory key check
+    end
+    opt Redis 접근 예외 발생
         Dedup->>Dedup: in-memory key check
     end
     alt 처음 보는 viewer
@@ -381,6 +385,7 @@ flowchart LR
 - 좋아요 추가 경합이 발생해도 사용자 경험상 실패로 드러나지 않음
 - 조회수는 동일 방문자의 반복 새로고침에 과도하게 반응하지 않음
 - 조회수 증가 시 카운트 유실 가능성이 이전보다 낮아짐
+- Redis 일시 장애가 나도 조회수 API가 바로 사용자 화면 에러로 번지지 않음
 
 ## 10. 남겨둔 trade-off
 

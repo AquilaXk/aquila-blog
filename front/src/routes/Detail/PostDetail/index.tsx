@@ -9,7 +9,7 @@ import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
-import { toLoginPath } from "src/libs/router"
+import { replaceRoute, toLoginPath } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
@@ -33,6 +33,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const detailId = data?.id
   const didIncrementHitRef = useRef<string | null>(null)
   const [likePending, setLikePending] = useState(false)
+  const [adminActionPending, setAdminActionPending] = useState(false)
   const [engagement, setEngagement] = useState(() => ({
     likesCount: data?.likesCount ?? 0,
     hitCount: data?.hitCount ?? 0,
@@ -44,6 +45,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     const next = router.asPath || toCanonicalPostPath(postId)
     return toLoginPath(next, toCanonicalPostPath(postId))
   }, [postId, router.asPath])
+  const showAdminActions = Boolean(me?.isAdmin && data?.actorCanModify && data?.actorCanDelete)
 
   useEffect(() => {
     if (!data) return
@@ -120,6 +122,32 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     }
   }
 
+  const handleEditPost = async () => {
+    if (!data) return
+    await router.push(`/admin/posts/new?postId=${encodeURIComponent(String(data.id))}`)
+  }
+
+  const handleDeletePost = async () => {
+    if (!data || adminActionPending) return
+
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(`정말 "${data.title}" 글을 삭제할까요?`)
+      if (!confirmed) return
+    }
+
+    setAdminActionPending(true)
+
+    try {
+      await apiFetch(`/post/api/v1/posts/${data.id}`, {
+        method: "DELETE",
+      })
+      queryClient.removeQueries({ queryKey: queryKey.post(String(data.id)) })
+      await replaceRoute(router, "/", { preferHardNavigation: true })
+    } finally {
+      setAdminActionPending(false)
+    }
+  }
+
   if (!data) return null
 
   return (
@@ -134,6 +162,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             actorHasLiked={engagement.actorHasLiked}
             likePending={likePending}
             onToggleLike={handleToggleLike}
+            showAdminActions={showAdminActions}
+            adminActionPending={adminActionPending}
+            onEditPost={handleEditPost}
+            onDeletePost={handleDeletePost}
           />
         )}
         <BodySection>

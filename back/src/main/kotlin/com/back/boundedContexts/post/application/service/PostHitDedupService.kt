@@ -2,8 +2,10 @@ package com.back.boundedContexts.post.application.service
 
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.dao.DataAccessException
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
+import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Duration
@@ -16,6 +18,7 @@ class PostHitDedupService(
     private val viewerWindowSeconds: Long,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
+    private val logger = LoggerFactory.getLogger(PostHitDedupService::class.java)
     private val memoryState = ConcurrentHashMap<String, Long>()
     private val redisKeyPrefix = "post:hit:viewed:"
 
@@ -30,9 +33,15 @@ class PostHitDedupService(
         val redisTemplate = redisTemplateProvider.getIfAvailable()
 
         if (redisTemplate != null) {
-            return redisTemplate
-                .opsForValue()
-                .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds)) == true
+            try {
+                return redisTemplate
+                    .opsForValue()
+                    .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds)) == true
+            } catch (exception: DataAccessException) {
+                logger.warn("Falling back to in-memory post hit dedupe because Redis is unavailable", exception)
+            } catch (exception: RuntimeException) {
+                logger.warn("Falling back to in-memory post hit dedupe because Redis access failed", exception)
+            }
         }
 
         val now = Instant.now().epochSecond

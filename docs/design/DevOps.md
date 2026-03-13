@@ -1,6 +1,6 @@
 # DevOps
 
-Last updated: 2026-03-12
+Last updated: 2026-03-13
 
 ## 이 문서가 보여주는 것
 
@@ -106,7 +106,10 @@ GitHub Actions 기준 필수값:
 - 배포 스크립트는 이제 `http:` 같은 깨진 endpoint나 `${...}` placeholder가 남아 있으면 즉시 실패시킨다.
 - deploy workflow의 test job은 `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD`를 Docker Compose와 Spring test env 양쪽에 동일하게 주입한다. 둘 중 한쪽만 맞추면 CI에서는 대량 `CannotGetJdbcConnectionException`가 난다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
+- `PROCESSING` 상태가 `CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS`를 넘기면 stale task로 판단하고 다음 poll에서 자동 복구한다.
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
+- 파일 정리 잡은 `TEMP`, `PENDING_DELETE` 파일을 함께 대상으로 보며, purge 후보 수가 `CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD`를 넘기면 실제 삭제를 건너뛰고 진단 로그만 남긴다.
+- 좋아요는 토글 경로에서 원자 증감으로 반영하고, reconciliation 잡이 최근 변경분을 재검산해 attr 불일치를 보정한다.
 
 ## Blue/Green 전환 원칙
 
@@ -151,6 +154,8 @@ sequenceDiagram
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
 - `GET /system/api/v1/adm/mail/signup`으로 회원가입 메일 준비 상태 확인
 - 필요 시 `POST /system/api/v1/adm/mail/signup/test`로 테스트 메일 1통 발송
+- `GET /system/api/v1/adm/tasks`로 queue backlog, stale processing, task type별 적체 확인
+- `GET /system/api/v1/adm/storage/cleanup`으로 purge 후보 수, safety threshold, 샘플 object key 확인
 - 프론트 로그인/회원가입/API 쿠키 흐름 확인
 - 연속 로그인 실패 시 차단 상태가 인스턴스 간 일관되게 유지되는지 확인
 - 관리자 페이지의 글 목록, 글 발행, 서버 상태 조회 확인
@@ -176,6 +181,10 @@ sequenceDiagram
   MinIO env 비활성화, placeholder 미치환, bucket/client init 실패
 - 업로드는 되는데 나중에 파일이 정리되지 않음:
   `uploaded_file` purge job 설정, `CUSTOM__STORAGE__RETENTION__*` 값, 본문/프로필 참조 여부 확인
+- task가 쌓이기만 하고 처리되지 않음:
+  `CUSTOM__TASK__PROCESSOR__*` 값, stale processing 자동 복구 로그, `/system/api/v1/adm/tasks` 확인
+- 좋아요 수가 일시적으로 어긋나 보임:
+  reconciliation 잡 실행 주기, 최근 `post_attr` 수정 시각, `post_like` 실제 count 확인
 
 ## 장애 대응 우선순위
 
@@ -185,6 +194,8 @@ sequenceDiagram
 | API 502 | Caddy 로그, active alias | backend 컨테이너/resolve 확인 |
 | 배포 중 restart loop | backend 로그 | env, DB, Redis, MinIO 연결 확인 |
 | 회원가입 메일이 안 감 | `/system/api/v1/adm/mail/signup` | SMTP host/from/username/password, 연결 여부 확인 |
+| task backlog가 줄지 않음 | `/system/api/v1/adm/tasks` | stale processing, retryCount, task type별 적체 확인 |
+| 이미지 cleanup가 위험해 보임 | `/system/api/v1/adm/storage/cleanup` | purge 후보 수, safety threshold 초과 여부 확인 |
 | 글 발행 후 반영 안 됨 | 목록 API 응답, 캐시 헤더, revalidate hook | `/post/api/v1/posts`, `Cache-Control`, `/api/revalidate` 확인 |
 
 ## 로컬/서버에서 자주 쓰는 명령

@@ -33,6 +33,9 @@ flowchart LR
 
 ## 지금 가장 중요한 운영 메모
 
+- 구현, 수정, 운영 점검을 시작할 때는 먼저 `docs/`에서 관련 문서를 확인한다.
+- 현재 코드와 문서가 어긋나면 같은 작업 안에서 문서도 함께 맞춘다.
+- 관련 기준 문서가 없으면 `docs/design/` 아래에 새 문서를 만들고 `docs/README.md` 인덱스에도 등록한다.
 - `HOME_SERVER_ENV`가 운영 `.env.prod`를 덮어쓴다.
 - storage 관련 env는 placeholder 없이 실값을 넣어야 한다.
   잘못 넣으면 `URISyntaxException: Expected scheme-specific part at index 5: http:` 류의 장애가 난다.
@@ -40,11 +43,19 @@ flowchart LR
 - 프론트 SSR과 브라우저 런타임 API 주소는 각각 `BACKEND_INTERNAL_URL`, `NEXT_PUBLIC_BACKEND_URL`로 분리된다.
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
+- task queue 상태는 `/system/api/v1/adm/tasks`에서 backlog, stale processing, task type별 적체를 바로 볼 수 있다.
+- `PROCESSING` 상태가 오래 머무르면 scheduler가 stale task를 자동 복구한다.
 - 회원가입 메일 설정은 `/system/api/v1/adm/mail/signup`에서 준비 상태를 바로 볼 수 있다.
+- 회원가입 메일 진단은 SMTP 연결 상태뿐 아니라 signup mail task backlog와 마지막 connection error도 같이 보여준다.
 - 회원가입 메일 발송과 홈 revalidate는 task queue를 통해 처리되므로, write API 직후 외부 I/O가 바로 보이지 않아도 정상일 수 있다.
 - 관리자 회원 목록은 프로필 이미지/role/bio를 batch hydrate 하므로, attr 조회 로직을 손볼 때는 `MemberProfileHydrator`의 단건/목록 경로를 같이 봐야 한다.
 - 로그인은 실패 시 raw member만 조회하고, 비밀번호 검증이 끝난 뒤에만 hydrated member를 다시 읽는다.
 - 댓글 삭제는 게시글 전체 댓글을 스캔하지 않고 subtree 전용 recursive 조회로 대상 댓글만 soft delete 한다.
+- 좋아요 토글은 정상 경로에서 `post_attr` 원자 증감을 사용하고, 충돌/예외 시에만 실제 count 재동기화한다.
+- 좋아요 수 불일치는 reconciliation 잡이 최근 변경분을 재검산해 보정한다.
+- secure tip은 내부 MockMvc 호출 없이 공용 `SecurityTipProvider`에서 직접 가져온다.
+- 이미지 정리 상태는 `/system/api/v1/adm/storage/cleanup`에서 purge 후보 수, safety threshold, 샘플 object key를 바로 확인할 수 있다.
+- 이미지 cleanup은 `TEMP`, `PENDING_DELETE`를 함께 대상으로 보며, purge 후보가 비정상적으로 많으면 실제 삭제를 멈추고 진단만 남긴다.
 - Kakao 로그인 점검 시에는 브라우저에서 `/oauth2/authorization/kakao` 응답의 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 먼저 본다.
 
 ## 빠른 트리아지 표
@@ -65,11 +76,13 @@ flowchart LR
 
 1. `https://api.<domain>/actuator/health/readiness`
 2. `/system/api/v1/adm/mail/signup`
-3. 프론트 로그인 후 `/member/api/v1/auth/me`
-4. `/admin/posts/new`에서 글 발행
-5. 메인 페이지 목록 반영
-6. 이미지 업로드와 프로필 이미지 표시
-7. Kakao 로그인 시작 URL의 `redirect_uri`가 `https`인지 확인
+3. `/system/api/v1/adm/tasks`
+4. `/system/api/v1/adm/storage/cleanup`
+5. 프론트 로그인 후 `/member/api/v1/auth/me`
+6. `/admin/posts/new`에서 글 발행
+7. 메인 페이지 목록 반영
+8. 이미지 업로드와 프로필 이미지 표시
+9. Kakao 로그인 시작 URL의 `redirect_uri`가 `https`인지 확인
 
 ## 점검 명령과 성공 기준
 
@@ -84,6 +97,8 @@ flowchart LR
 | `/admin/profile` | 관리자 프로필 조회/수정 정상 |
 | `/admin/posts/new` | 글 작성/임시저장/미리보기 정상 |
 | `/admin/tools` | 댓글/시스템/메일 진단 정상 |
+| `/system/api/v1/adm/tasks` | backlog, stale processing, task type별 적체 확인 가능 |
+| `/system/api/v1/adm/storage/cleanup` | purge 후보 수, threshold, 샘플 object key 확인 가능 |
 | task backlog 존재 시 1분 후 재조회 | `PENDING` 감소 또는 `PROCESSING/COMPLETED` 증가 |
 
 ## 자주 보는 파일

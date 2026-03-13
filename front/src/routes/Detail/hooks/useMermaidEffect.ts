@@ -10,6 +10,39 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     let disposed = false
     let running = false
+    const isDark = scheme === "dark"
+
+    const mermaidThemeVariables = isDark
+      ? {
+          fontFamily: "Pretendard, Inter, system-ui, sans-serif",
+          fontSize: "16px",
+          primaryColor: "#111827",
+          primaryBorderColor: "#334155",
+          primaryTextColor: "#E5E7EB",
+          secondaryColor: "#0F172A",
+          tertiaryColor: "#0B1220",
+          lineColor: "#94A3B8",
+          clusterBkg: "#121A27",
+          clusterBorder: "#334155",
+          edgeLabelBackground: "#0F172A",
+          mainBkg: "#111827",
+          nodeBorder: "#475569",
+        }
+      : {
+          fontFamily: "Pretendard, Inter, system-ui, sans-serif",
+          fontSize: "16px",
+          primaryColor: "#FFFFFF",
+          primaryBorderColor: "#CBD5E1",
+          primaryTextColor: "#0F172A",
+          secondaryColor: "#F8FAFC",
+          tertiaryColor: "#EEF2FF",
+          lineColor: "#64748B",
+          clusterBkg: "#F8FAFC",
+          clusterBorder: "#CBD5E1",
+          edgeLabelBackground: "#FFFFFF",
+          mainBkg: "#FFFFFF",
+          nodeBorder: "#CBD5E1",
+        }
 
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
@@ -24,29 +57,52 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
       mermaid.initialize({
         startOnLoad: false,
-        theme,
+        theme: "base",
+        themeVariables: mermaidThemeVariables,
+        flowchart: {
+          htmlLabels: true,
+          curve: "basis",
+          useMaxWidth: true,
+          rankSpacing: 54,
+          nodeSpacing: 36,
+        },
         themeCSS: `
+          svg {
+            font-family: Pretendard, Inter, system-ui, sans-serif;
+          }
           .node rect {
-            rx: 12px;
-            ry: 12px;
+            rx: 16px;
+            ry: 16px;
           }
           .edgeLabel rect {
-            fill: transparent !important;
+            fill: ${isDark ? "#0F172A" : "#FFFFFF"} !important;
             stroke: none !important;
+            rx: 10px;
+            ry: 10px;
           }
           .node polygon {
-            stroke-width: 1.5px;
+            stroke-width: 1.6px;
           }
           .label foreignObject div {
-            line-height: 1.35;
+            line-height: 1.45;
             font-size: 15px;
+            font-weight: 600;
+            padding: 0.12rem 0.22rem;
           }
           .edgePath path {
-            stroke-width: 1.5px;
+            stroke-width: 1.8px;
           }
           .node rect,
-          .node polygon {
-            stroke-width: 1.5px;
+          .node polygon,
+          .cluster rect {
+            stroke-width: 1.6px;
+          }
+          .cluster rect {
+            rx: 22px;
+            ry: 22px;
+          }
+          .label {
+            color: ${isDark ? "#E5E7EB" : "#0F172A"};
           }
         `,
       })

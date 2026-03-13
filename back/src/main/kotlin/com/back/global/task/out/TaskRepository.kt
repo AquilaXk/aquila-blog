@@ -56,6 +56,12 @@ interface TaskRepository : JpaRepository<Task, Int> {
         status: TaskStatus,
     ): Long
 
+    fun countByTaskTypeAndStatusAndNextRetryAtLessThanEqual(
+        taskType: String,
+        status: TaskStatus,
+        nextRetryAt: Instant,
+    ): Long
+
     fun countByTaskTypeAndStatusAndModifiedAtBefore(
         taskType: String,
         status: TaskStatus,
@@ -70,6 +76,17 @@ interface TaskRepository : JpaRepository<Task, Int> {
 
     fun findByStatusOrderByModifiedAtAsc(
         status: TaskStatus,
+        pageable: Pageable,
+    ): List<Task>
+
+    fun findByStatusOrderByModifiedAtDesc(
+        status: TaskStatus,
+        pageable: Pageable,
+    ): List<Task>
+
+    fun findByStatusAndModifiedAtBeforeOrderByModifiedAtAsc(
+        status: TaskStatus,
+        modifiedAt: Instant,
         pageable: Pageable,
     ): List<Task>
 

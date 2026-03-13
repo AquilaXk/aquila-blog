@@ -14,8 +14,8 @@ class TaskFacade(
     private val taskHandlerRegistry: TaskHandlerRegistry,
 ) {
     fun addToQueue(payload: TaskPayload) {
-        val type =
-            taskHandlerRegistry.getType(payload.javaClass)
+        val entry =
+            taskHandlerRegistry.getEntry(payload.javaClass)
                 ?: error("No @TaskHandler registered for ${payload.javaClass.simpleName}")
 
         val task =
@@ -24,8 +24,9 @@ class TaskFacade(
                     UUID.randomUUID(),
                     payload.aggregateType,
                     payload.aggregateId,
-                    type,
+                    entry.taskType,
                     Ut.JSON.toString(payload),
+                    entry.retryPolicy.maxRetries,
                 ),
             )
 

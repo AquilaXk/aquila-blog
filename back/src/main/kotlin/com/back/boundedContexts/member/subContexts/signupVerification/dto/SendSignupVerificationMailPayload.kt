@@ -5,7 +5,14 @@ import com.back.standard.dto.TaskPayload
 import java.time.Instant
 import java.util.UUID
 
-@Task("member.signupVerification.sendMail")
+@Task(
+    type = "member.signupVerification.sendMail",
+    label = "회원가입 메일 발송",
+    maxRetries = 6,
+    baseDelaySeconds = 120,
+    backoffMultiplier = 2.0,
+    maxDelaySeconds = 3600,
+)
 data class SendSignupVerificationMailPayload(
     override val uid: UUID,
     override val aggregateType: String,

@@ -12,10 +12,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      DEV_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-      DEV_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
-      SPRING__DATASOURCE__PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-      SPRING__DATA__REDIS__PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -28,24 +26,6 @@ jobs:
           java-version: "24"
           cache: gradle
 
-      - name: Start test infrastructure (Postgres/Redis)
-        run: docker compose -f back/devInfra/docker-compose.yml up -d
-
-      - name: Wait for Postgres
-        run: |
-          for i in {1..30}; do
-            if docker compose -f back/devInfra/docker-compose.yml exec -T db_1 pg_isready -U postgres; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose -f back/devInfra/docker-compose.yml logs db_1
-          exit 1
-
       - name: Run backend tests
         working-directory: back
         run: ./gradlew test --rerun-tasks
-
-      - name: Stop test infrastructure
-        if: always()
-        run: docker compose -f back/devInfra/docker-compose.yml down -v

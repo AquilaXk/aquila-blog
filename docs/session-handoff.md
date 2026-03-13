@@ -34,6 +34,7 @@ flowchart LR
 ## 지금 가장 중요한 운영 메모
 
 - 구현, 수정, 운영 점검을 시작할 때는 먼저 `docs/`에서 관련 문서를 확인한다.
+- 백엔드 테스트는 `back/testInfra/docker-compose.yml` 기반의 격리된 Postgres/Redis를 자동 bootstrap하므로, 로컬 dev DB/Redis와 테스트를 섞지 않는다.
 - 현재 코드와 문서가 어긋나면 같은 작업 안에서 문서도 함께 맞춘다.
 - 관련 기준 문서가 없으면 `docs/design/` 아래에 새 문서를 만들고 `docs/README.md` 인덱스에도 등록한다.
 - `HOME_SERVER_ENV`가 운영 `.env.prod`를 덮어쓴다.
@@ -44,6 +45,7 @@ flowchart LR
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
 - task queue 상태는 `/system/api/v1/adm/tasks`에서 backlog, stale processing, task type별 적체를 바로 볼 수 있다.
+- `/system/api/v1/adm/tasks`에서 task type별 retry 정책, 최근 실패 샘플, stale processing 샘플도 같이 확인한다.
 - `PROCESSING` 상태가 오래 머무르면 scheduler가 stale task를 자동 복구한다.
 - 회원가입 메일 설정은 `/system/api/v1/adm/mail/signup`에서 준비 상태를 바로 볼 수 있다.
 - 회원가입 메일 진단은 SMTP 연결 상태뿐 아니라 signup mail task backlog와 마지막 connection error도 같이 보여준다.
@@ -97,7 +99,7 @@ flowchart LR
 | `/admin/profile` | 관리자 프로필 조회/수정 정상 |
 | `/admin/posts/new` | 글 작성/임시저장/미리보기 정상 |
 | `/admin/tools` | 댓글/시스템/메일 진단 정상 |
-| `/system/api/v1/adm/tasks` | backlog, stale processing, task type별 적체 확인 가능 |
+| `/system/api/v1/adm/tasks` | backlog, stale processing, task type별 적체, retry 정책, 최근 실패 샘플 확인 가능 |
 | `/system/api/v1/adm/storage/cleanup` | purge 후보 수, threshold, 샘플 object key 확인 가능 |
 | task backlog 존재 시 1분 후 재조회 | `PENDING` 감소 또는 `PROCESSING/COMPLETED` 증가 |
 
@@ -128,10 +130,16 @@ cd back && ./gradlew compileKotlin
 cd front && yarn build
 ```
 
+- `cd back && ./gradlew test`는 test 시작 전에 전용 Docker infra를 자동으로 올리고, 종료 후 정리한다.
+- `cd back && ./gradlew test`는 test task가 실제로 실행될 때만 전용 Docker infra를 올린다. `UP-TO-DATE` 재실행에서는 Docker bootstrap 비용을 쓰지 않는다.
+- 기본 테스트 포트는 Postgres `15432`, Redis `16379`다.
+
 ## 백엔드 수정 규칙
 
 - 백엔드 코드를 수정한 턴에서는 `ktlintCheck`, `compileKotlin`, `test`를 전체 기준으로 확인하는 것을 기본 원칙으로 본다.
 - 단일 테스트만 먼저 돌렸더라도, 최종 반영 전에는 전체 백엔드 검증으로 다시 닫는다.
+- 단순 위임 서비스 테스트나 보정 로직 테스트는 가능하면 plain unit test로 유지한다. 현재 `ActorApplicationServiceTest`, `PostLikeReconciliationServiceTest`는 스프링 컨텍스트 없이 돈다.
+- 순수 로직 테스트는 가능하면 plain unit test로 유지하고, DB/Redis/MockMvc가 필요한 경우에만 `@SpringBootTest`를 쓴다.
 
 ## 다음에 손대기 좋은 영역
 

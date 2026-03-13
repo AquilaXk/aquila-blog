@@ -2,12 +2,12 @@ package com.back.global.task.domain
 
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
+import com.back.global.task.app.TaskRetryPolicy
 import jakarta.persistence.*
 import jakarta.persistence.GenerationType.SEQUENCE
 import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 import java.util.*
-import kotlin.math.pow
 
 enum class TaskStatus {
     PENDING,
@@ -44,22 +44,30 @@ class Task(
     @field:Column(columnDefinition = "TEXT")
     var errorMessage: String? = null,
 ) : BaseTime(id) {
-    constructor(uid: UUID, aggregateType: String, aggregateId: Int, taskType: String, payload: String) : this(
+    constructor(
+        uid: UUID,
+        aggregateType: String,
+        aggregateId: Int,
+        taskType: String,
+        payload: String,
+        maxRetries: Int,
+    ) : this(
         0,
         uid,
         aggregateType,
         aggregateId,
         taskType,
         payload,
+        maxRetries = maxRetries,
     )
 
-    fun scheduleRetry() {
+    fun scheduleRetry(retryPolicy: TaskRetryPolicy) {
         retryCount++
         if (retryCount >= maxRetries) {
             status = TaskStatus.FAILED
         } else {
             status = TaskStatus.PENDING
-            val delaySeconds = 60 * 3.0.pow(retryCount.toDouble()).toLong()
+            val delaySeconds = retryPolicy.nextDelaySeconds(retryCount)
             nextRetryAt = Instant.now().plusSeconds(delaySeconds)
         }
     }
@@ -72,7 +80,10 @@ class Task(
         status = TaskStatus.PROCESSING
     }
 
-    fun recoverFromStuckProcessing(message: String) {
+    fun recoverFromStuckProcessing(
+        message: String,
+        retryPolicy: TaskRetryPolicy,
+    ) {
         retryCount++
         errorMessage = message
 
@@ -80,7 +91,7 @@ class Task(
             status = TaskStatus.FAILED
         } else {
             status = TaskStatus.PENDING
-            nextRetryAt = Instant.now()
+            nextRetryAt = Instant.now().plusSeconds(retryPolicy.nextDelaySeconds(retryCount))
         }
     }
 }

@@ -51,11 +51,11 @@ spring:
   data:
     redis:
       host: ${custom.site.redisHost}
-      port: 6379
+      port: ${custom.site.redisPort}
       password: ${SPRING__DATA__REDIS__PASSWORD:}
       database: ${custom.site.redisDatabase}
   datasource:
-    url: jdbc:postgresql://${custom.site.dbHost}:5432/${custom.site.dbName}?reWriteBatchedInserts=true
+    url: jdbc:postgresql://${custom.site.dbHost}:${custom.site.dbPort}/${custom.site.dbName}?reWriteBatchedInserts=true
     username: postgres
     password: ${SPRING__DATASOURCE__PASSWORD:}
     driver-class-name: org.postgresql.Driver
@@ -103,32 +103,40 @@ custom:
     frontUrl: "http://${custom.dev.cookieDomain}:3000"
     backUrl: "http://${custom.dev.cookieDomain}:${server.port}"
     dbHost: localhost
+    dbPort: 5432
     dbName: "${custom.dbBaseName}_dev"
     redisHost: localhost
+    redisPort: 6379
     redisDatabase: 0
   test:
     cookieDomain: localhost
     frontUrl: "http://${custom.test.cookieDomain}:3000"
     backUrl: "http://${custom.test.cookieDomain}:${server.port}"
     dbHost: localhost
+    dbPort: ${CUSTOM__TEST__DB_PORT:15432}
     dbName: "${custom.dbBaseName}_test"
     redisHost: localhost
+    redisPort: ${CUSTOM__TEST__REDIS_PORT:16379}
     redisDatabase: 1
   prod:
     cookieDomain: blog.oa.gg
     frontUrl: "https://www.${custom.prod.cookieDomain}"
     backUrl: "https://api.${custom.prod.cookieDomain}"
     dbHost: pg_1
+    dbPort: 5432
     dbName: "${custom.dbBaseName}_prod"
     redisHost: redis_1
+    redisPort: 6379
     redisDatabase: 0
   site:
     cookieDomain: "${custom.dev.cookieDomain}"
     frontUrl: "${custom.dev.frontUrl}"
     backUrl: "${custom.dev.backUrl}"
     dbHost: "${custom.dev.dbHost}"
+    dbPort: "${custom.dev.dbPort}"
     dbName: "${custom.dev.dbName}"
     redisHost: "${custom.dev.redisHost}"
+    redisPort: "${custom.dev.redisPort}"
     redisDatabase: "${custom.dev.redisDatabase}"
   member:
     signup:

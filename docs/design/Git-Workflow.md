@@ -31,6 +31,8 @@ flowchart LR
    - 백엔드: `cd back && ./gradlew compileKotlin`
    - 백엔드: `cd back && ./gradlew test`
    - 프론트: `cd front && yarn build`
+   - 참고: `cd back && ./gradlew test`는 전용 test infra(Postgres/Redis)를 자동으로 bootstrap하고 종료 시 정리한다.
+   - 참고: test task가 실제로 실행될 때만 infra를 올리고, `UP-TO-DATE` 또는 스킵된 경우에는 Docker bootstrap 비용을 쓰지 않는다.
 4. 커밋 메시지는 현재 저장소 흐름처럼 `feat:`, `fix:`, `refactor:`, `test:` 형식을 유지
 5. 검토 후 `main`에 병합
 6. Actions 성공 여부와 홈서버 health check 확인
@@ -68,8 +70,15 @@ flowchart LR
 - `ktlintCheck`: Kotlin 스타일/포맷 규칙 위반 차단
 - `compileKotlin`: 전체 Kotlin 컴파일 및 generated code 영향 확인
 - `test`: 기능 회귀 및 아키텍처/통합 테스트 확인
+  - 실행 중 격리된 test DB/Redis가 자동으로 올라오므로, 로컬 dev infra와 별개로 취급한다.
 
 부분 테스트만 먼저 돌릴 수는 있지만, 최종 커밋 전에는 위 3개를 전체 기준으로 다시 확인한다.
+
+- 순수 로직/도메인 테스트는 가능하면 plain unit test로 유지하고, DB/Redis/MockMvc가 실제로 필요한 경우에만 `@SpringBootTest`를 사용한다.
+- 단순 위임 서비스 테스트나 보정 로직 테스트도 가능하면 plain unit test로 유지한다.
+  예: `ActorApplicationServiceTest`, `PostLikeReconciliationServiceTest`
+- 컨트롤러가 진단/응답 조합만 담당하는 얇은 케이스는 가능하면 `@WebMvcTest`로 내려서 컨텍스트 비용을 줄인다.
+  예: `ApiV1AdmSystemControllerTest`, `ApiV1AdmPostControllerTest`
 
 ## 배포 안전 규칙
 

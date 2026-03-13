@@ -20,7 +20,7 @@ flowchart LR
 ```
 
 1. `test`
-   백엔드 테스트를 Docker 기반 Postgres/Redis 위에서 수행한다.
+   백엔드 테스트를 `back/testInfra/docker-compose.yml` 기반의 격리된 Postgres/Redis 위에서 수행한다.
 2. `calculateTag`
    GHCR 이미지 태그와 릴리즈 태그를 계산한다.
 3. `buildAndPush`
@@ -47,6 +47,7 @@ flowchart LR
 - `deploy/homeserver/create_deploy_backup.sh`
 - `deploy/homeserver/Caddyfile`
 - `deploy/homeserver/.env.prod.example`
+- `back/testInfra/docker-compose.yml`
 
 ## 핵심 Secrets
 
@@ -87,7 +88,7 @@ GitHub Actions 기준 필수값:
 | Secret | 사용 위치 | 책임 |
 | --- | --- | --- |
 | `HOME_SERVER_ENV` | 홈서버 `.env.prod` 생성 | 운영 환경변수 단일 원본 |
-| `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` test job | Docker 기반 test infra와 Spring test profile 비밀번호 정합성 유지 |
+| `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` / `ci.yml` test job | Gradle이 자동으로 올리는 test infra와 Spring test profile 비밀번호 정합성 유지 |
 | `TS_AUTHKEY` | GitHub Actions | Tailscale 연결 |
 | `HOME_SSH_KEY` | GitHub Actions | 서버 SSH 접속 |
 | `HOME_APP_DIR` | GitHub Actions -> SSH 원격 실행 | 서버 Git 저장소 경로 |
@@ -104,9 +105,15 @@ GitHub Actions 기준 필수값:
   예: `MINIO_ROOT_PASSWORD="V7#qL2m@9Tz!4xRb8KpD"`
 - `CUSTOM_STORAGE_ENDPOINT`는 `http://minio_1:9000` 같은 완성된 URI여야 한다.
 - 배포 스크립트는 이제 `http:` 같은 깨진 endpoint나 `${...}` placeholder가 남아 있으면 즉시 실패시킨다.
-- deploy workflow의 test job은 `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD`를 Docker Compose와 Spring test env 양쪽에 동일하게 주입한다. 둘 중 한쪽만 맞추면 CI에서는 대량 `CannotGetJdbcConnectionException`가 난다.
+- `back/./gradlew test`는 `back/testInfra/docker-compose.yml`을 자동으로 기동하고, Postgres/Redis가 준비될 때까지 기다린 뒤 테스트를 실행한다.
+- `back/./gradlew test`는 이제 테스트 task가 실제로 실행될 때만 test infra를 올린다. `UP-TO-DATE` 또는 스킵된 경우에는 Docker bootstrap 비용을 쓰지 않는다.
+- test infra는 dev infra와 분리된 전용 포트/볼륨을 사용한다. 기본 포트는 Postgres `15432`, Redis `16379`이다.
+- test workflow는 별도 `docker compose up/down`를 직접 실행하지 않고, Gradle의 자동 bootstrap 흐름을 그대로 사용한다.
+- 순수 로직 테스트는 가능하면 `@SpringBootTest`를 피하고 plain unit test로 유지한다. 전체 컨텍스트를 띄우는 테스트는 DB/Redis/MockMvc가 실제로 필요한 경우에만 쓴다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
 - `PROCESSING` 상태가 `CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS`를 넘기면 stale task로 판단하고 다음 poll에서 자동 복구한다.
+- task retry 정책은 task type별로 다르게 가진다.
+  `global.revalidate.home`은 짧고 빠르게 재시도하고, `member.signupVerification.sendMail`은 더 긴 간격과 더 많은 재시도를 사용한다.
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
 - 파일 정리 잡은 `TEMP`, `PENDING_DELETE` 파일을 함께 대상으로 보며, purge 후보 수가 `CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD`를 넘기면 실제 삭제를 건너뛰고 진단 로그만 남긴다.
 - 좋아요는 토글 경로에서 원자 증감으로 반영하고, reconciliation 잡이 최근 변경분을 재검산해 attr 불일치를 보정한다.
@@ -151,10 +158,12 @@ sequenceDiagram
 ## 운영 체크리스트
 
 - 백엔드 코드 변경이 포함된 배포라면 배포 전에 `./gradlew ktlintCheck`, `./gradlew compileKotlin`, `./gradlew test`를 모두 통과시킨다
+- 로컬에서 `./gradlew test`를 실행하면 test infra가 자동으로 올라오고 끝나면 정리되므로, 수동으로 dev DB를 띄운 상태와 섞지 않는다
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
 - `GET /system/api/v1/adm/mail/signup`으로 회원가입 메일 준비 상태 확인
 - 필요 시 `POST /system/api/v1/adm/mail/signup/test`로 테스트 메일 1통 발송
 - `GET /system/api/v1/adm/tasks`로 queue backlog, stale processing, task type별 적체 확인
+- `/system/api/v1/adm/tasks`에서 task type별 retry 정책, 최근 실패 샘플, stale processing 샘플까지 함께 본다
 - `GET /system/api/v1/adm/storage/cleanup`으로 purge 후보 수, safety threshold, 샘플 object key 확인
 - 프론트 로그인/회원가입/API 쿠키 흐름 확인
 - 연속 로그인 실패 시 차단 상태가 인스턴스 간 일관되게 유지되는지 확인
@@ -182,7 +191,7 @@ sequenceDiagram
 - 업로드는 되는데 나중에 파일이 정리되지 않음:
   `uploaded_file` purge job 설정, `CUSTOM__STORAGE__RETENTION__*` 값, 본문/프로필 참조 여부 확인
 - task가 쌓이기만 하고 처리되지 않음:
-  `CUSTOM__TASK__PROCESSOR__*` 값, stale processing 자동 복구 로그, `/system/api/v1/adm/tasks` 확인
+  `CUSTOM__TASK__PROCESSOR__*` 값, stale processing 자동 복구 로그, `/system/api/v1/adm/tasks`의 task type별 적체/실패 샘플 확인
 - 좋아요 수가 일시적으로 어긋나 보임:
   reconciliation 잡 실행 주기, 최근 `post_attr` 수정 시각, `post_like` 실제 count 확인
 

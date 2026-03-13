@@ -34,15 +34,42 @@ type SignupMailDiagnostics = {
   taskQueue?: TaskTypeDiagnostics | null
 }
 
+type TaskRetryPolicy = {
+  label: string
+  maxRetries: number
+  baseDelaySeconds: number
+  backoffMultiplier: number
+  maxDelaySeconds: number
+}
+
 type TaskTypeDiagnostics = {
   taskType: string
   pendingCount: number
+  readyPendingCount: number
+  delayedPendingCount: number
   processingCount: number
   failedCount: number
   staleProcessingCount: number
+  label: string
   oldestReadyPendingAt: string | null
+  oldestReadyPendingAgeSeconds: number | null
   latestFailureAt: string | null
   latestFailureMessage: string | null
+  retryPolicy: TaskRetryPolicy
+}
+
+type TaskExecutionSample = {
+  taskId: number
+  taskType: string
+  label: string
+  aggregateType: string
+  aggregateId: number
+  status: string
+  retryCount: number
+  maxRetries: number
+  modifiedAt: string
+  nextRetryAt: string
+  errorMessage: string | null
 }
 
 type TaskQueueDiagnostics = {
@@ -55,7 +82,12 @@ type TaskQueueDiagnostics = {
   staleProcessingCount: number
   oldestReadyPendingAt: string | null
   oldestProcessingAt: string | null
+  oldestReadyPendingAgeSeconds: number | null
+  oldestProcessingAgeSeconds: number | null
   processingTimeoutSeconds: number
+  taskTypes: TaskTypeDiagnostics[]
+  recentFailures: TaskExecutionSample[]
+  staleProcessingSamples: TaskExecutionSample[]
 }
 
 type UploadedFileCleanupDiagnostics = {
@@ -91,6 +123,32 @@ const ACTION_LABELS: Record<string, string> = {
   cleanupStatus: "파일 정리 진단 새로고침",
   logout: "로그아웃",
 }
+
+const formatInstant = (value: string | null | undefined) => {
+  if (!value) return "-"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date)
+}
+
+const formatAge = (seconds: number | null | undefined) => {
+  if (seconds == null) return "-"
+  if (seconds < 60) return `${seconds}초`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}분`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}시간`
+  return `${Math.floor(seconds / 86400)}일`
+}
+
+const formatRetryPolicy = (policy: TaskRetryPolicy) =>
+  `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
 
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
@@ -457,6 +515,151 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 : "stale processing 없이 정상적으로 순환 중입니다."}
             </InlineNotice>
           )}
+
+          {!!taskQueueDiagnostics && (
+            <TaskSummaryStrip>
+              <TaskSummaryLine>
+                <span>가장 오래 대기 중인 ready task</span>
+                <strong>{formatAge(taskQueueDiagnostics.oldestReadyPendingAgeSeconds)}</strong>
+              </TaskSummaryLine>
+              <TaskSummaryLine>
+                <span>가장 오래 처리 중인 task</span>
+                <strong>{formatAge(taskQueueDiagnostics.oldestProcessingAgeSeconds)}</strong>
+              </TaskSummaryLine>
+              <TaskSummaryLine>
+                <span>processing timeout</span>
+                <strong>{taskQueueDiagnostics.processingTimeoutSeconds}초</strong>
+              </TaskSummaryLine>
+            </TaskSummaryStrip>
+          )}
+
+          {!!taskQueueDiagnostics?.taskTypes.length && (
+            <TaskTypeGrid>
+              {taskQueueDiagnostics.taskTypes.map((taskType) => (
+                <TaskTypeCard key={taskType.taskType}>
+                  <TaskTypeHeader>
+                    <div>
+                      <strong>{taskType.label}</strong>
+                      <small>{taskType.taskType}</small>
+                    </div>
+                    <TaskStatePill data-tone={taskType.staleProcessingCount > 0 || taskType.failedCount > 0 ? "warning" : "neutral"}>
+                      {taskType.staleProcessingCount > 0
+                        ? `stale ${taskType.staleProcessingCount}`
+                        : taskType.failedCount > 0
+                          ? `failed ${taskType.failedCount}`
+                          : "정상"}
+                    </TaskStatePill>
+                  </TaskTypeHeader>
+                  <TaskMetricGrid>
+                    <TaskMetric>
+                      <span>ready</span>
+                      <strong>{taskType.readyPendingCount}</strong>
+                    </TaskMetric>
+                    <TaskMetric>
+                      <span>delayed</span>
+                      <strong>{taskType.delayedPendingCount}</strong>
+                    </TaskMetric>
+                    <TaskMetric>
+                      <span>processing</span>
+                      <strong>{taskType.processingCount}</strong>
+                    </TaskMetric>
+                    <TaskMetric>
+                      <span>failed</span>
+                      <strong>{taskType.failedCount}</strong>
+                    </TaskMetric>
+                  </TaskMetricGrid>
+                  <TaskMetaLine>
+                    <span>retry 정책</span>
+                    <strong>{formatRetryPolicy(taskType.retryPolicy)}</strong>
+                  </TaskMetaLine>
+                  <TaskMetaLine>
+                    <span>가장 오래 대기 중</span>
+                    <strong>
+                      {formatAge(taskType.oldestReadyPendingAgeSeconds)}
+                      {taskType.oldestReadyPendingAt ? ` · ${formatInstant(taskType.oldestReadyPendingAt)}` : ""}
+                    </strong>
+                  </TaskMetaLine>
+                  <TaskMetaLine>
+                    <span>최근 실패</span>
+                    <strong>
+                      {taskType.latestFailureAt ? formatInstant(taskType.latestFailureAt) : "-"}
+                    </strong>
+                  </TaskMetaLine>
+                  {!!taskType.latestFailureMessage && (
+                    <TaskErrorSnippet>{taskType.latestFailureMessage}</TaskErrorSnippet>
+                  )}
+                </TaskTypeCard>
+              ))}
+            </TaskTypeGrid>
+          )}
+
+          {!!taskQueueDiagnostics?.recentFailures.length && (
+            <TaskSamplesSection>
+              <TaskSamplesHeader>
+                <h3>최근 실패 작업</h3>
+                <span>{taskQueueDiagnostics.recentFailures.length}건</span>
+              </TaskSamplesHeader>
+              <TaskSampleList>
+                {taskQueueDiagnostics.recentFailures.map((sample) => (
+                  <TaskSampleItem key={`failed-${sample.taskId}`}>
+                    <TaskSampleTop>
+                      <div>
+                        <strong>{sample.label}</strong>
+                        <small>
+                          #{sample.taskId} · {sample.taskType}
+                        </small>
+                      </div>
+                      <TaskStatePill data-tone="warning">{sample.status}</TaskStatePill>
+                    </TaskSampleTop>
+                    <TaskSampleMeta>
+                      <span>
+                        {sample.aggregateType}:{sample.aggregateId}
+                      </span>
+                      <span>
+                        retry {sample.retryCount}/{sample.maxRetries}
+                      </span>
+                      <span>{formatInstant(sample.modifiedAt)}</span>
+                    </TaskSampleMeta>
+                    {!!sample.errorMessage && <TaskErrorSnippet>{sample.errorMessage}</TaskErrorSnippet>}
+                  </TaskSampleItem>
+                ))}
+              </TaskSampleList>
+            </TaskSamplesSection>
+          )}
+
+          {!!taskQueueDiagnostics?.staleProcessingSamples.length && (
+            <TaskSamplesSection>
+              <TaskSamplesHeader>
+                <h3>stale processing 샘플</h3>
+                <span>{taskQueueDiagnostics.staleProcessingSamples.length}건</span>
+              </TaskSamplesHeader>
+              <TaskSampleList>
+                {taskQueueDiagnostics.staleProcessingSamples.map((sample) => (
+                  <TaskSampleItem key={`stale-${sample.taskId}`}>
+                    <TaskSampleTop>
+                      <div>
+                        <strong>{sample.label}</strong>
+                        <small>
+                          #{sample.taskId} · {sample.taskType}
+                        </small>
+                      </div>
+                      <TaskStatePill data-tone="warning">stale</TaskStatePill>
+                    </TaskSampleTop>
+                    <TaskSampleMeta>
+                      <span>
+                        {sample.aggregateType}:{sample.aggregateId}
+                      </span>
+                      <span>
+                        retry {sample.retryCount}/{sample.maxRetries}
+                      </span>
+                      <span>다음 시도 {formatInstant(sample.nextRetryAt)}</span>
+                    </TaskSampleMeta>
+                    {!!sample.errorMessage && <TaskErrorSnippet>{sample.errorMessage}</TaskErrorSnippet>}
+                  </TaskSampleItem>
+                ))}
+              </TaskSampleList>
+            </TaskSamplesSection>
+          )}
         </SectionCard>
 
         <SectionCard>
@@ -817,6 +1020,210 @@ const MailTestBox = styled.div`
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
   }
+`
+
+const TaskSummaryStrip = styled.div`
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+`
+
+const TaskSummaryLine = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.82rem 1rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+
+  strong {
+    font-size: 0.92rem;
+  }
+`
+
+const TaskTypeGrid = styled.div`
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+`
+
+const TaskTypeCard = styled.div`
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const TaskTypeHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+
+  strong {
+    display: block;
+    font-size: 1rem;
+  }
+
+  small {
+    display: block;
+    margin-top: 0.2rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    word-break: break-word;
+  }
+`
+
+const TaskStatePill = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.34rem 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+
+  &[data-tone="warning"] {
+    border-color: ${({ theme }) => theme.colors.indigo8};
+    background: ${({ theme }) => theme.colors.indigo3};
+    color: ${({ theme }) => theme.colors.indigo11};
+  }
+`
+
+const TaskMetricGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+
+  @media (max-width: 760px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+`
+
+const TaskMetric = styled.div`
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+`
+
+const TaskMetaLine = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.6rem;
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  strong {
+    font-size: 0.88rem;
+    text-align: right;
+  }
+`
+
+const TaskErrorSnippet = styled.p`
+  margin: 0;
+  padding: 0.72rem 0.82rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.55;
+  word-break: break-word;
+`
+
+const TaskSamplesSection = styled.div`
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.7rem;
+`
+
+const TaskSamplesHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: center;
+
+  h3 {
+    margin: 0;
+    font-size: 0.98rem;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+`
+
+const TaskSampleList = styled.div`
+  display: grid;
+  gap: 0.7rem;
+`
+
+const TaskSampleItem = styled.div`
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const TaskSampleTop = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: flex-start;
+
+  strong {
+    display: block;
+    font-size: 0.94rem;
+  }
+
+  small {
+    display: block;
+    margin-top: 0.2rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.78rem;
+  }
+`
+
+const TaskSampleMeta = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.8rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  font-weight: 700;
 `
 
 const ConsoleCard = styled.section`

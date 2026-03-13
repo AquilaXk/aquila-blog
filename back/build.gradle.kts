@@ -22,6 +22,139 @@ repositories {
     mavenCentral()
 }
 
+val testInfraProjectName = "aquila_blog_test"
+val testInfraComposeFile =
+    layout.projectDirectory
+        .file("testInfra/docker-compose.yml")
+        .asFile
+        .absolutePath
+val defaultTestDbPassword = "test_db_password_change_me"
+val defaultTestRedisPassword = "test_redis_password_change_me"
+val defaultTestDbPort = "15432"
+val defaultTestRedisPort = "16379"
+val testInfraMarkerFile =
+    layout.buildDirectory
+        .file("tmp/testInfra/running.marker")
+        .get()
+        .asFile
+
+val resolvedTestDbPassword =
+    providers
+        .environmentVariable("TEST_DB_PASSWORD")
+        .orElse(providers.environmentVariable("SPRING__DATASOURCE__PASSWORD"))
+        .orElse(defaultTestDbPassword)
+
+val resolvedTestRedisPassword =
+    providers
+        .environmentVariable("TEST_REDIS_PASSWORD")
+        .orElse(providers.environmentVariable("SPRING__DATA__REDIS__PASSWORD"))
+        .orElse(defaultTestRedisPassword)
+
+val resolvedTestDbPort =
+    providers
+        .environmentVariable("TEST_DB_PORT")
+        .orElse(providers.environmentVariable("CUSTOM__TEST__DB_PORT"))
+        .orElse(defaultTestDbPort)
+
+val resolvedTestRedisPort =
+    providers
+        .environmentVariable("TEST_REDIS_PORT")
+        .orElse(providers.environmentVariable("CUSTOM__TEST__REDIS_PORT"))
+        .orElse(defaultTestRedisPort)
+
+fun testInfraEnvironment(): Map<String, String> =
+    mapOf(
+        "TEST_DB_PASSWORD" to resolvedTestDbPassword.get(),
+        "TEST_REDIS_PASSWORD" to resolvedTestRedisPassword.get(),
+        "TEST_DB_PORT" to resolvedTestDbPort.get(),
+        "TEST_REDIS_PORT" to resolvedTestRedisPort.get(),
+    )
+
+fun Project.runTestInfraCommand(
+    vararg command: String,
+    ignoreExitValue: Boolean = false,
+) {
+    val process =
+        ProcessBuilder(*command)
+            .directory(projectDir)
+            .apply {
+                environment().putAll(testInfraEnvironment())
+                redirectInput(ProcessBuilder.Redirect.INHERIT)
+                redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                redirectError(ProcessBuilder.Redirect.INHERIT)
+            }.start()
+
+    val exitCode = process.waitFor()
+    if (exitCode != 0 && !ignoreExitValue) {
+        error("Command failed (${command.joinToString(" ")}), exitCode=$exitCode")
+    }
+}
+
+fun Project.startTestInfra() {
+    if (testInfraMarkerFile.exists()) return
+
+    runTestInfraCommand("docker", "compose", "-p", testInfraProjectName, "-f", testInfraComposeFile, "up", "-d")
+
+    try {
+        runTestInfraCommand(
+            "bash",
+            "-lc",
+            """
+            set -euo pipefail
+
+            for i in {1..45}; do
+              if docker compose -p $testInfraProjectName -f $testInfraComposeFile exec -T db pg_isready -U postgres -d postgres >/dev/null 2>&1 \
+                && [ "$(docker compose -p $testInfraProjectName -f $testInfraComposeFile exec -T redis redis-cli --no-auth-warning -a "${'$'}TEST_REDIS_PASSWORD" PING 2>/dev/null | tr -d '\r')" = "PONG" ]; then
+                exit 0
+              fi
+              sleep 2
+            done
+
+            docker compose -p $testInfraProjectName -f $testInfraComposeFile logs
+            exit 1
+            """.trimIndent(),
+        )
+    } catch (e: Exception) {
+        runTestInfraCommand(
+            "docker",
+            "compose",
+            "-p",
+            testInfraProjectName,
+            "-f",
+            testInfraComposeFile,
+            "down",
+            "-v",
+            "--remove-orphans",
+            ignoreExitValue = true,
+        )
+        throw e
+    }
+
+    testInfraMarkerFile.parentFile.mkdirs()
+    testInfraMarkerFile.writeText("started")
+}
+
+fun Project.stopTestInfra() {
+    if (!testInfraMarkerFile.exists()) return
+
+    try {
+        runTestInfraCommand(
+            "docker",
+            "compose",
+            "-p",
+            testInfraProjectName,
+            "-f",
+            testInfraComposeFile,
+            "down",
+            "-v",
+            "--remove-orphans",
+            ignoreExitValue = true,
+        )
+    } finally {
+        testInfraMarkerFile.delete()
+    }
+}
+
 dependencies {
     // Spring
     implementation("org.springframework:spring-test") // InternalRestClient에서 사용
@@ -103,7 +236,24 @@ ktlint {
 }
 
 tasks {
+    val testInfraDown by registering {
+        group = "verification"
+        description = "Stop isolated Postgres/Redis infrastructure used for backend tests."
+        onlyIf { testInfraMarkerFile.exists() }
+        doLast {
+            project.stopTestInfra()
+        }
+    }
+
     withType<Test> {
         useJUnitPlatform()
+        environment("SPRING__DATASOURCE__PASSWORD", resolvedTestDbPassword.get())
+        environment("SPRING__DATA__REDIS__PASSWORD", resolvedTestRedisPassword.get())
+        environment("CUSTOM__TEST__DB_PORT", resolvedTestDbPort.get())
+        environment("CUSTOM__TEST__REDIS_PORT", resolvedTestRedisPort.get())
+        doFirst {
+            project.startTestInfra()
+        }
+        finalizedBy(testInfraDown)
     }
 }

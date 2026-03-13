@@ -10,8 +10,10 @@ data class TaskHandlerMethod(
 )
 
 data class TaskHandlerEntry(
+    val taskType: String,
     val payloadClass: Class<out TaskPayload>,
     val handlerMethod: TaskHandlerMethod,
+    val retryPolicy: TaskRetryPolicy,
 )
 
 @Component
@@ -39,5 +41,14 @@ class TaskHandlerRegistry {
 
     fun getType(payloadClass: Class<out TaskPayload>): String? = typeByClass[payloadClass]
 
+    fun getEntry(payloadClass: Class<out TaskPayload>): TaskHandlerEntry? {
+        val type = typeByClass[payloadClass] ?: return null
+        return byType[type]
+    }
+
     fun getEntry(type: String): TaskHandlerEntry? = byType[type]
+
+    fun getRetryPolicy(taskType: String): TaskRetryPolicy = byType[taskType]?.retryPolicy ?: TaskRetryPolicy.fallback(taskType)
+
+    fun getRegisteredEntries(): List<TaskHandlerEntry> = byType.values.sortedBy { it.taskType }
 }

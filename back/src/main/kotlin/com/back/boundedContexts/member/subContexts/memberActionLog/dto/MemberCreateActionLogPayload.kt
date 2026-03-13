@@ -5,7 +5,14 @@ import com.back.standard.dto.EventPayload
 import com.back.standard.dto.TaskPayload
 import java.util.*
 
-@Task("member.createActionLog")
+@Task(
+    type = "member.createActionLog",
+    label = "회원 액션 로그",
+    maxRetries = 4,
+    baseDelaySeconds = 60,
+    backoffMultiplier = 2.0,
+    maxDelaySeconds = 900,
+)
 class MemberCreateActionLogPayload(
     override val uid: UUID,
     override val aggregateType: String,

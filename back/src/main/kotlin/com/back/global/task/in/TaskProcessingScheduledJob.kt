@@ -50,7 +50,10 @@ class TaskProcessingScheduledJob(
             transactionTemplate.execute {
                 val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
                 staleTasks.forEach {
-                    it.recoverFromStuckProcessing("Recovered stale processing task")
+                    it.recoverFromStuckProcessing(
+                        "Recovered stale processing task",
+                        taskHandlerRegistry.getRetryPolicy(it.taskType),
+                    )
                 }
                 staleTasks.map { it.id }
             } ?: emptyList()
@@ -74,13 +77,13 @@ class TaskProcessingScheduledJob(
                 } else {
                     logger.warn("No handler found for task type: ${task.taskType}")
                     task.errorMessage = "No handler found"
-                    task.scheduleRetry()
+                    task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(task.taskType))
                 }
             } catch (e: Exception) {
                 val rootCause = e.cause ?: e
                 logger.error("Task failed: $taskId (retry: ${task.retryCount}/${task.maxRetries})", rootCause)
                 task.errorMessage = rootCause.message ?: rootCause::class.simpleName
-                task.scheduleRetry()
+                task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(task.taskType))
             }
         }
 }

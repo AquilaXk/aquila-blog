@@ -1,26 +1,27 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.test.context.ActiveProfiles
-import org.springframework.transaction.annotation.Transactional
 
-@SpringBootTest
-@ActiveProfiles("test")
-@Transactional
 class AuthTokenServiceTest {
-    @Autowired
-    private lateinit var memberApplicationService: MemberApplicationService
-
-    @Autowired
-    private lateinit var authTokenService: AuthTokenService
+    private val authTokenService =
+        AuthTokenService(
+            jwtSecretKey = "test-secret-key-that-is-long-enough-123",
+            accessTokenExpirationSeconds = 3600,
+        )
 
     @Test
     fun `발급한 액세스 토큰은 다시 payload 로 파싱할 수 있다`() {
-        val member = memberApplicationService.findByUsername("user1")!!
+        val member =
+            Member(
+                id = 1,
+                username = "user1",
+                password = "1234",
+                nickname = "유저1",
+                email = "user1@example.com",
+            )
 
         val accessToken = authTokenService.genAccessToken(member)
 

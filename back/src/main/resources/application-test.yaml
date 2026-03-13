@@ -3,9 +3,9 @@ spring:
     import: optional:file:.env.test[.properties]
   data:
     redis:
-      password: ${SPRING__DATA__REDIS__PASSWORD:lldj123414}
+      password: ${SPRING__DATA__REDIS__PASSWORD:test_redis_password_change_me}
   datasource:
-    password: ${SPRING__DATASOURCE__PASSWORD:lldj123414}
+    password: ${SPRING__DATASOURCE__PASSWORD:test_db_password_change_me}
   jpa:
     hibernate:
       ddl-auto: create
@@ -25,6 +25,8 @@ custom:
     frontUrl: "${custom.test.frontUrl}"
     backUrl: "${custom.test.backUrl}"
     dbHost: "${custom.test.dbHost}"
+    dbPort: "${custom.test.dbPort}"
     dbName: "${custom.test.dbName}"
     redisHost: "${custom.test.redisHost}"
+    redisPort: "${custom.test.redisPort}"
     redisDatabase: "${custom.test.redisDatabase}"

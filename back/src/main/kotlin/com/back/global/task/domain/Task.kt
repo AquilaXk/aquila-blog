@@ -71,4 +71,16 @@ class Task(
     fun markAsProcessing() {
         status = TaskStatus.PROCESSING
     }
+
+    fun recoverFromStuckProcessing(message: String) {
+        retryCount++
+        errorMessage = message
+
+        if (retryCount >= maxRetries) {
+            status = TaskStatus.FAILED
+        } else {
+            status = TaskStatus.PENDING
+            nextRetryAt = Instant.now()
+        }
+    }
 }

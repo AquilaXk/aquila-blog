@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import java.time.Instant
 import java.util.concurrent.Executors
 
 @Component
@@ -19,6 +20,8 @@ class TaskProcessingScheduledJob(
     private val transactionTemplate: TransactionTemplate,
     @param:Value("\${custom.task.processor.batchSize:50}")
     private val batchSize: Int,
+    @param:Value("\${custom.task.processor.processingTimeoutSeconds:900}")
+    private val processingTimeoutSeconds: Long,
 ) {
     private val logger = LoggerFactory.getLogger(TaskProcessingScheduledJob::class.java)
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
@@ -27,6 +30,8 @@ class TaskProcessingScheduledJob(
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M")
     fun processTasks() {
         val safeBatchSize = batchSize.coerceIn(1, 500)
+        recoverStaleProcessingTasks(safeBatchSize)
+
         val taskIds =
             transactionTemplate.execute {
                 val pendingTasks = taskRepository.findPendingTasksWithLock(safeBatchSize)
@@ -36,6 +41,22 @@ class TaskProcessingScheduledJob(
 
         taskIds.orEmpty().forEach { taskId ->
             executor.submit { executeTask(taskId) }
+        }
+    }
+
+    private fun recoverStaleProcessingTasks(limit: Int) {
+        val stuckBefore = Instant.now().minusSeconds(processingTimeoutSeconds)
+        val recoveredTaskIds =
+            transactionTemplate.execute {
+                val staleTasks = taskRepository.findStaleProcessingTasksWithLock(stuckBefore, limit)
+                staleTasks.forEach {
+                    it.recoverFromStuckProcessing("Recovered stale processing task")
+                }
+                staleTasks.map { it.id }
+            } ?: emptyList()
+
+        if (recoveredTaskIds.isNotEmpty()) {
+            logger.warn("Recovered stale processing tasks: {}", recoveredTaskIds)
         }
     }
 

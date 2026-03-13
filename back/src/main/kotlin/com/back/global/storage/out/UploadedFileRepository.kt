@@ -9,8 +9,21 @@ import java.time.Instant
 interface UploadedFileRepository : JpaRepository<UploadedFile, Int> {
     fun findByObjectKey(objectKey: String): UploadedFile?
 
+    fun countByStatus(status: UploadedFileStatus): Long
+
+    fun countByStatusInAndPurgeAfterLessThanEqual(
+        statuses: Collection<UploadedFileStatus>,
+        purgeAfter: Instant,
+    ): Long
+
     fun findByStatusAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
         status: UploadedFileStatus,
+        purgeAfter: Instant,
+        pageable: Pageable,
+    ): List<UploadedFile>
+
+    fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+        statuses: Collection<UploadedFileStatus>,
         purgeAfter: Instant,
         pageable: Pageable,
     ): List<UploadedFile>

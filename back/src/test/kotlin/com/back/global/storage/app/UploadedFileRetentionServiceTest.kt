@@ -112,4 +112,26 @@ class UploadedFileRetentionServiceTest {
             Duration.ofDays(15),
         )
     }
+
+    @Test
+    fun `cleanup 진단은 purge 후보 수와 샘플 object key를 보여준다`() {
+        val objectKey = "posts/2026/03/diagnostics-temp.png"
+
+        uploadedFileRetentionService.registerTempUpload(
+            objectKey = objectKey,
+            contentType = "image/png",
+            fileSize = 512,
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+
+        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey)!!
+        uploadedFile.purgeAfter = Instant.now().minusSeconds(60)
+        uploadedFileRepository.save(uploadedFile)
+
+        val diagnostics = uploadedFileRetentionService.diagnoseCleanup()
+
+        assertThat(diagnostics.tempCount).isGreaterThanOrEqualTo(1)
+        assertThat(diagnostics.eligibleForPurgeCount).isGreaterThanOrEqualTo(1)
+        assertThat(diagnostics.sampleEligibleObjectKeys).contains(objectKey)
+    }
 }

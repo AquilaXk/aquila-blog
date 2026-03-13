@@ -29,6 +29,44 @@ type SignupMailDiagnostics = {
   canConnect: boolean | null
   checkedAt: string
   verifyPath: string
+  connectionError?: string | null
+  taskQueue?: TaskTypeDiagnostics | null
+}
+
+type TaskTypeDiagnostics = {
+  taskType: string
+  pendingCount: number
+  processingCount: number
+  failedCount: number
+  staleProcessingCount: number
+  oldestReadyPendingAt: string | null
+  latestFailureAt: string | null
+  latestFailureMessage: string | null
+}
+
+type TaskQueueDiagnostics = {
+  pendingCount: number
+  readyPendingCount: number
+  delayedPendingCount: number
+  processingCount: number
+  completedCount: number
+  failedCount: number
+  staleProcessingCount: number
+  oldestReadyPendingAt: string | null
+  oldestProcessingAt: string | null
+  processingTimeoutSeconds: number
+}
+
+type UploadedFileCleanupDiagnostics = {
+  tempCount: number
+  activeCount: number
+  pendingDeleteCount: number
+  deletedCount: number
+  eligibleForPurgeCount: number
+  cleanupSafetyThreshold: number
+  blockedBySafetyThreshold: boolean
+  oldestEligiblePurgeAfter: string | null
+  sampleEligibleObjectKeys: string[]
 }
 
 type ApiRsData<T> = {
@@ -48,6 +86,8 @@ const ACTION_LABELS: Record<string, string> = {
   mailStatus: "메일 준비 상태 새로고침",
   mailConnectivity: "SMTP 연결 확인",
   mailTest: "테스트 메일 발송",
+  taskQueueStatus: "Task Queue 진단 새로고침",
+  cleanupStatus: "파일 정리 진단 새로고침",
   logout: "로그아웃",
 }
 
@@ -63,6 +103,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [commentContent, setCommentContent] = useState("")
   const [mailDiagnostics, setMailDiagnostics] = useState<SignupMailDiagnostics | null>(null)
   const [mailDiagnosticsError, setMailDiagnosticsError] = useState("")
+  const [taskQueueDiagnostics, setTaskQueueDiagnostics] = useState<TaskQueueDiagnostics | null>(null)
+  const [taskQueueDiagnosticsError, setTaskQueueDiagnosticsError] = useState("")
+  const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(null)
+  const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState("")
 
@@ -128,8 +172,56 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   useEffect(() => {
-    void fetchSignupMailDiagnostics(false)
+    void (async () => {
+      try {
+        const [mail, tasks, cleanup] = await Promise.all([
+          apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup"),
+          apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"),
+          apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"),
+        ])
+
+        setMailDiagnostics(mail)
+        setTaskQueueDiagnostics(tasks)
+        setCleanupDiagnostics(cleanup)
+      } catch {
+        // Initial diagnostics are best-effort; dedicated actions provide exact error details.
+      }
+    })()
   }, [])
+
+  const fetchTaskQueueDiagnostics = async () => {
+    try {
+      setLoadingKey("taskQueueStatus")
+      setLastActionLabel(ACTION_LABELS.taskQueueStatus)
+      setTaskQueueDiagnosticsError("")
+      const diagnostics = await apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks")
+      setTaskQueueDiagnostics(diagnostics)
+      setResult(pretty(diagnostics))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setTaskQueueDiagnosticsError(message)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const fetchCleanupDiagnostics = async () => {
+    try {
+      setLoadingKey("cleanupStatus")
+      setLastActionLabel(ACTION_LABELS.cleanupStatus)
+      setCleanupDiagnosticsError("")
+      const diagnostics = await apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup")
+      setCleanupDiagnostics(diagnostics)
+      setResult(pretty(diagnostics))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setCleanupDiagnosticsError(message)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
 
   const handleLogout = async () => {
     try {
@@ -305,6 +397,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               누락된 설정: {mailDiagnostics.missing.join(", ")}
             </InlineNotice>
           )}
+          {!!mailDiagnostics?.connectionError && <InlineNotice data-tone="danger">{mailDiagnostics.connectionError}</InlineNotice>}
           {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
 
           <MailTestSection>
@@ -326,6 +419,87 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             {!!mailTestNotice && <InlineNotice data-tone="success">{mailTestNotice}</InlineNotice>}
           </MailTestSection>
         </SectionCard>
+
+        <SectionCard>
+          <SectionTop>
+            <div>
+              <SectionEyebrow>Task Queue</SectionEyebrow>
+              <h2>백그라운드 작업 상태</h2>
+              <SectionDescription>revalidate, 회원가입 메일 같은 비동기 작업 적체와 stale processing 상태를 봅니다.</SectionDescription>
+            </div>
+          </SectionTop>
+
+          <MetaGrid>
+            <MetaBox>
+              <small>대기 작업</small>
+              <strong>{taskQueueDiagnostics?.pendingCount ?? "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>즉시 실행 가능</small>
+              <strong>{taskQueueDiagnostics?.readyPendingCount ?? "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>처리 중</small>
+              <strong>{taskQueueDiagnostics?.processingCount ?? "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>stale processing</small>
+              <strong>{taskQueueDiagnostics?.staleProcessingCount ?? "-"}</strong>
+            </MetaBox>
+          </MetaGrid>
+
+          {!!taskQueueDiagnosticsError && <InlineNotice data-tone="danger">{taskQueueDiagnosticsError}</InlineNotice>}
+          {!!taskQueueDiagnostics && (
+            <InlineNotice data-tone={taskQueueDiagnostics.staleProcessingCount > 0 ? "warning" : "success"}>
+              {taskQueueDiagnostics.staleProcessingCount > 0
+                ? `stale processing ${taskQueueDiagnostics.staleProcessingCount}건이 감지되었습니다.`
+                : "stale processing 없이 정상적으로 순환 중입니다."}
+            </InlineNotice>
+          )}
+        </SectionCard>
+
+        <SectionCard>
+          <SectionTop>
+            <div>
+              <SectionEyebrow>Storage Cleanup</SectionEyebrow>
+              <h2>파일 정리 상태</h2>
+              <SectionDescription>TEMP/PENDING_DELETE 파일의 purge 대상 수와 safety threshold를 확인합니다.</SectionDescription>
+            </div>
+          </SectionTop>
+
+          <MetaGrid>
+            <MetaBox>
+              <small>TEMP</small>
+              <strong>{cleanupDiagnostics?.tempCount ?? "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>PENDING_DELETE</small>
+              <strong>{cleanupDiagnostics?.pendingDeleteCount ?? "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>purge 후보</small>
+              <strong>{cleanupDiagnostics?.eligibleForPurgeCount ?? "-"}</strong>
+            </MetaBox>
+            <MetaBox>
+              <small>safety threshold</small>
+              <strong>{cleanupDiagnostics?.cleanupSafetyThreshold ?? "-"}</strong>
+            </MetaBox>
+          </MetaGrid>
+
+          {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
+          {!!cleanupDiagnostics && (
+            <InlineNotice data-tone={cleanupDiagnostics.blockedBySafetyThreshold ? "warning" : "success"}>
+              {cleanupDiagnostics.blockedBySafetyThreshold
+                ? "purge 후보 수가 threshold를 넘어 실제 삭제가 보류된 상태입니다."
+                : "현재 purge 후보 수는 safety threshold 안에 있습니다."}
+            </InlineNotice>
+          )}
+          {!!cleanupDiagnostics?.sampleEligibleObjectKeys.length && (
+            <InlineNotice>
+              샘플 object key: {cleanupDiagnostics.sampleEligibleObjectKeys.join(", ")}
+            </InlineNotice>
+          )}
+        </SectionCard>
       </Grid>
 
       <ConsoleCard>
@@ -333,7 +507,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <div>
             <SectionEyebrow>Console</SectionEyebrow>
             <h2>실행 결과 콘솔</h2>
-            <ConsoleDescription>메일 진단 버튼과 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
+            <ConsoleDescription>메일, task queue, 파일 정리 진단 버튼과 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
           </div>
           <ConsoleStatus>{consoleStatus}</ConsoleStatus>
         </ConsoleHeader>
@@ -343,6 +517,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </Button>
           <Button type="button" disabled={!!loadingKey} onClick={() => void fetchSignupMailDiagnostics(true)}>
             SMTP 연결 확인
+          </Button>
+          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchTaskQueueDiagnostics()}>
+            Task Queue 진단
+          </Button>
+          <Button type="button" disabled={!!loadingKey} onClick={() => void fetchCleanupDiagnostics()}>
+            파일 정리 진단
           </Button>
         </ConsoleActionRow>
         <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>

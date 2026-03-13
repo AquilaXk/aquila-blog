@@ -226,13 +226,13 @@ class PostApplicationService(
         hydratePostAttrs(post)
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         if (existingLike != null) {
-            syncLikesCount(post)
+            ensureLikesCountLoaded(post)
             return PostLikeToggleResult(true, existingLike.id)
         }
 
         return try {
             val savedLike = postLikeRepository.save(PostLike(0, persistenceActor, post))
-            syncLikesCount(post)
+            incrementLikesCount(post)
             postRepository.flush()
 
             eventPublisher.publish(
@@ -256,7 +256,11 @@ class PostApplicationService(
         hydratePostAttrs(post)
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         val deletedCount = postLikeRepository.deleteByLikerAndPost(persistenceActor, post)
-        syncLikesCount(post)
+        if (deletedCount > 0) {
+            decrementLikesCount(post)
+        } else {
+            ensureLikesCountLoaded(post)
+        }
         postRepository.flush()
 
         if (deletedCount > 0 && existingLike != null) {
@@ -421,6 +425,31 @@ class PostApplicationService(
         val actualLikesCount = postLikeRepository.countByPost(post).toInt()
         post.likesCount = actualLikesCount
         savePostAttr(post.likesCountAttr)
+    }
+
+    private fun ensureLikesCountLoaded(post: Post) {
+        post.likesCountAttr = postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
+    }
+
+    private fun incrementLikesCount(post: Post) {
+        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT)
+        applyLikesCount(post, updatedLikesCount)
+    }
+
+    private fun decrementLikesCount(post: Post) {
+        val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1).coerceAtLeast(0)
+        applyLikesCount(post, updatedLikesCount)
+    }
+
+    private fun applyLikesCount(
+        post: Post,
+        likesCount: Int,
+    ) {
+        val refreshedAttr = post.likesCountAttr ?: postAttrRepository.findBySubjectAndName(post, LIKES_COUNT)
+        refreshedAttr?.let {
+            it.intValue = likesCount
+            post.likesCountAttr = it
+        }
     }
 
     private fun saveMemberAttr(attr: MemberAttr?) {

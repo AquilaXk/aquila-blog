@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.domain.PostAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import org.hibernate.Session
+import java.time.Instant
 
 class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
     @field:PersistenceContext
@@ -61,4 +62,24 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
                 .setParameter("delta", delta)
                 .singleResult as Number
         ).toInt()
+
+    override fun findRecentlyModifiedByName(
+        name: String,
+        modifiedAfter: Instant,
+        limit: Int,
+    ): List<PostAttr> =
+        entityManager
+            .createQuery(
+                """
+                select a
+                from PostAttr a
+                where a.name = :name
+                  and a.modifiedAt >= :modifiedAfter
+                order by a.modifiedAt desc
+                """.trimIndent(),
+                PostAttr::class.java,
+            ).setParameter("name", name)
+            .setParameter("modifiedAfter", modifiedAfter)
+            .setMaxResults(limit)
+            .resultList
 }

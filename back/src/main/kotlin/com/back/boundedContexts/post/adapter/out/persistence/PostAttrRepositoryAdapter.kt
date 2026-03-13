@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.application.port.out.PostAttrRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class PostAttrRepositoryAdapter(
@@ -24,6 +25,12 @@ class PostAttrRepositoryAdapter(
         name: String,
         delta: Int,
     ): Int = postAttrRepository.incrementIntValue(subject, name, delta)
+
+    override fun findRecentlyModifiedByName(
+        name: String,
+        modifiedAfter: Instant,
+        limit: Int,
+    ): List<PostAttr> = postAttrRepository.findRecentlyModifiedByName(name, modifiedAfter, limit)
 
     override fun save(attr: PostAttr): PostAttr = postAttrRepository.save(attr)
 }

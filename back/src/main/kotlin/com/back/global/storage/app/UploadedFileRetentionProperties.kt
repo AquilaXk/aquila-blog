@@ -9,4 +9,5 @@ data class UploadedFileRetentionProperties(
     val deletedPostAttachmentSeconds: Long = 1_209_600,
     val cleanupFixedDelayMs: Long = 3_600_000,
     val cleanupBatchSize: Int = 100,
+    val cleanupSafetyThreshold: Int = 25,
 )

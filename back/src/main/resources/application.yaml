@@ -153,6 +153,7 @@ custom:
     processor:
       fixedDelayMs: ${CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS:60000}
       batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:50}
+      processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }
@@ -175,3 +176,10 @@ custom:
       deletedPostAttachmentSeconds: ${CUSTOM__STORAGE__RETENTION__DELETED_POST_ATTACHMENT_SECONDS:1209600}
       cleanupFixedDelayMs: ${CUSTOM__STORAGE__RETENTION__CLEANUP_FIXED_DELAY_MS:3600000}
       cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
+      cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
+  post:
+    likes:
+      reconciliation:
+        fixedDelayMs: ${CUSTOM__POST__LIKES__RECONCILIATION__FIXED_DELAY_MS:900000}
+        lookbackHours: ${CUSTOM__POST__LIKES__RECONCILIATION__LOOKBACK_HOURS:24}
+        batchSize: ${CUSTOM__POST__LIKES__RECONCILIATION__BATCH_SIZE:100}

@@ -1,8 +1,10 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.application.service
 
 import com.back.boundedContexts.member.subContexts.signupVerification.application.port.out.SignupVerificationMailSenderPort
+import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
+import com.back.global.task.app.TaskQueueDiagnosticsService
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
@@ -22,14 +24,17 @@ data class SignupMailDiagnostics(
     val startTlsEnabled: Boolean,
     val missing: List<String>,
     val canConnect: Boolean?,
+    val connectionError: String?,
     val checkedAt: Instant,
     val verifyPath: String,
+    val taskQueue: com.back.global.task.app.TaskTypeDiagnostics,
 )
 
 @Service
 class SignupMailDiagnosticsService(
     private val signupVerificationMailSenderProvider: ObjectProvider<SignupVerificationMailSenderPort>,
     private val javaMailSenderProvider: ObjectProvider<JavaMailSender>,
+    private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
     @Value("\${spring.mail.host:}")
     private val host: String,
     @Value("\${spring.mail.port:587}")
@@ -47,11 +52,17 @@ class SignupMailDiagnosticsService(
     @Value("\${custom.member.signup.verifyPath:/signup/verify}")
     private val verifyPath: String,
 ) {
+    private val signupMailTaskType =
+        SendSignupVerificationMailPayload::class.java
+            .getAnnotation(com.back.global.task.annotation.Task::class.java)
+            .type
+
     fun diagnose(checkConnection: Boolean = false): SignupMailDiagnostics {
         val sender = signupVerificationMailSenderProvider.getIfAvailable()
         val adapter = sender?.javaClass?.simpleName ?: "UNAVAILABLE"
         val missing = buildMissingKeys()
         val checkedAt = Instant.now()
+        val taskQueue = taskQueueDiagnosticsService.diagnoseTaskType(signupMailTaskType)
 
         if (adapter == "TestSignupVerificationMailSenderAdapter") {
             return SignupMailDiagnostics(
@@ -66,8 +77,10 @@ class SignupMailDiagnosticsService(
                 startTlsEnabled = startTlsEnabled,
                 missing = missing,
                 canConnect = null,
+                connectionError = null,
                 checkedAt = checkedAt,
                 verifyPath = normalizeVerifyPath(),
+                taskQueue = taskQueue,
             )
         }
 
@@ -84,22 +97,24 @@ class SignupMailDiagnosticsService(
                 startTlsEnabled = startTlsEnabled,
                 missing = missing,
                 canConnect = false,
+                connectionError = "Missing required SMTP configuration",
                 checkedAt = checkedAt,
                 verifyPath = normalizeVerifyPath(),
+                taskQueue = taskQueue,
             )
         }
 
-        val canConnect =
+        val connectionTestResult =
             if (checkConnection) {
                 testConnection()
             } else {
-                null
+                ConnectionTestResult(null, null)
             }
 
         val status =
             when {
                 sender == null -> "UNAVAILABLE"
-                canConnect == false -> "CONNECTION_FAILED"
+                connectionTestResult.canConnect == false -> "CONNECTION_FAILED"
                 else -> "READY"
             }
 
@@ -114,9 +129,11 @@ class SignupMailDiagnosticsService(
             smtpAuth = smtpAuth,
             startTlsEnabled = startTlsEnabled,
             missing = emptyList(),
-            canConnect = canConnect,
+            canConnect = connectionTestResult.canConnect,
+            connectionError = connectionTestResult.errorMessage,
             checkedAt = checkedAt,
             verifyPath = normalizeVerifyPath(),
+            taskQueue = taskQueue,
         )
     }
 
@@ -160,21 +177,31 @@ class SignupMailDiagnosticsService(
                 }
             }
 
-    private fun testConnection(): Boolean {
+    private fun testConnection(): ConnectionTestResult {
         val javaMailSender = javaMailSenderProvider.getIfAvailable()
 
         return try {
             when (javaMailSender) {
                 is JavaMailSenderImpl -> {
                     javaMailSender.testConnection()
-                    true
+                    ConnectionTestResult(true, null)
                 }
 
-                null -> false
-                else -> true
+                null -> ConnectionTestResult(false, "JavaMailSender is unavailable")
+                else -> ConnectionTestResult(true, null)
             }
-        } catch (_: Exception) {
-            false
+        } catch (exception: Exception) {
+            ConnectionTestResult(false, exception.rootCauseMessage())
         }
     }
+
+    private fun Exception.rootCauseMessage(): String {
+        val rootCause = generateSequence(this as Throwable?) { it.cause }.lastOrNull() ?: this
+        return rootCause.message ?: rootCause::class.simpleName ?: "Unknown SMTP error"
+    }
+
+    private data class ConnectionTestResult(
+        val canConnect: Boolean?,
+        val errorMessage: String?,
+    )
 }

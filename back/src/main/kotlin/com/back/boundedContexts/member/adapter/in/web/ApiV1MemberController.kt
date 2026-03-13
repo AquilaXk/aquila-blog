@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AppConfig
 import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
+import com.back.global.security.app.SecurityTipProvider
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
@@ -21,9 +22,10 @@ import java.net.URI
 @RequestMapping("/member/api/v1/members")
 class ApiV1MemberController(
     private val memberUseCase: MemberUseCase,
+    private val securityTipProvider: SecurityTipProvider,
 ) {
     @GetMapping("/randomSecureTip")
-    fun randomSecureTip() = "비밀번호는 영문, 숫자, 특수문자를 조합하여 8자 이상으로 설정하세요."
+    fun randomSecureTip() = securityTipProvider.signupPasswordTip()
 
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)

@@ -16,6 +16,18 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
+data class UploadedFileCleanupDiagnostics(
+    val tempCount: Long,
+    val activeCount: Long,
+    val pendingDeleteCount: Long,
+    val deletedCount: Long,
+    val eligibleForPurgeCount: Long,
+    val cleanupSafetyThreshold: Int,
+    val blockedBySafetyThreshold: Boolean,
+    val oldestEligiblePurgeAfter: Instant?,
+    val sampleEligibleObjectKeys: List<String>,
+)
+
 @Service
 class UploadedFileRetentionService(
     private val uploadedFileRepository: UploadedFileRepository,
@@ -26,6 +38,7 @@ class UploadedFileRetentionService(
     private val retentionProperties: UploadedFileRetentionProperties,
 ) {
     private val logger = LoggerFactory.getLogger(UploadedFileRetentionService::class.java)
+    private val purgeCandidateStatuses = listOf(UploadedFileStatus.TEMP, UploadedFileStatus.PENDING_DELETE)
 
     @Transactional
     fun registerTempUpload(
@@ -110,10 +123,26 @@ class UploadedFileRetentionService(
     @Transactional
     fun purgeExpiredFiles(limit: Int) {
         val safeLimit = limit.coerceIn(1, 500)
+        val now = Instant.now()
+        val eligibleCount =
+            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
+                purgeCandidateStatuses,
+                now,
+            )
+
+        if (eligibleCount > retentionProperties.cleanupSafetyThreshold) {
+            logger.error(
+                "Skipping uploaded file purge because eligible candidate count {} exceeds safety threshold {}",
+                eligibleCount,
+                retentionProperties.cleanupSafetyThreshold,
+            )
+            return
+        }
+
         val candidates =
-            uploadedFileRepository.findByStatusAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
-                status = UploadedFileStatus.PENDING_DELETE,
-                purgeAfter = Instant.now(),
+            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+                statuses = purgeCandidateStatuses,
+                purgeAfter = now,
                 pageable = PageRequest.of(0, safeLimit),
             )
 
@@ -132,6 +161,36 @@ class UploadedFileRetentionService(
                 logger.error("Failed to purge uploaded file: {}", uploadedFile.objectKey, exception)
             }
         }
+    }
+
+    @Transactional(readOnly = true)
+    fun diagnoseCleanup(sampleSize: Int = 5): UploadedFileCleanupDiagnostics {
+        val now = Instant.now()
+        val safeSampleSize = sampleSize.coerceIn(1, 20)
+        val eligibleCandidates =
+            uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+                statuses = purgeCandidateStatuses,
+                purgeAfter = now,
+                pageable = PageRequest.of(0, safeSampleSize),
+            )
+
+        val eligibleCount =
+            uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
+                purgeCandidateStatuses,
+                now,
+            )
+
+        return UploadedFileCleanupDiagnostics(
+            tempCount = uploadedFileRepository.countByStatus(UploadedFileStatus.TEMP),
+            activeCount = uploadedFileRepository.countByStatus(UploadedFileStatus.ACTIVE),
+            pendingDeleteCount = uploadedFileRepository.countByStatus(UploadedFileStatus.PENDING_DELETE),
+            deletedCount = uploadedFileRepository.countByStatus(UploadedFileStatus.DELETED),
+            eligibleForPurgeCount = eligibleCount,
+            cleanupSafetyThreshold = retentionProperties.cleanupSafetyThreshold,
+            blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
+            oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
+            sampleEligibleObjectKeys = eligibleCandidates.map { it.objectKey },
+        )
     }
 
     private fun scheduleDeletionIfKnown(

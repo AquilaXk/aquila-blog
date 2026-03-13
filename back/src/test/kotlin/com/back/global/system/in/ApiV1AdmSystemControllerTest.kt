@@ -85,6 +85,32 @@ class ApiV1AdmSystemControllerTest {
     }
 
     @Test
+    @WithUserDetails("admin")
+    fun `관리자는 task queue 진단 상태를 조회할 수 있다`() {
+        mvc.get("/system/api/v1/adm/tasks").andExpect {
+            status { isOk() }
+            jsonPath("$.pendingCount") { isNumber() }
+            jsonPath("$.readyPendingCount") { isNumber() }
+            jsonPath("$.processingCount") { isNumber() }
+            jsonPath("$.staleProcessingCount") { isNumber() }
+            jsonPath("$.processingTimeoutSeconds") { isNumber() }
+        }
+    }
+
+    @Test
+    @WithUserDetails("admin")
+    fun `관리자는 업로드 파일 cleanup 진단 상태를 조회할 수 있다`() {
+        mvc.get("/system/api/v1/adm/storage/cleanup").andExpect {
+            status { isOk() }
+            jsonPath("$.tempCount") { isNumber() }
+            jsonPath("$.pendingDeleteCount") { isNumber() }
+            jsonPath("$.eligibleForPurgeCount") { isNumber() }
+            jsonPath("$.cleanupSafetyThreshold") { isNumber() }
+            jsonPath("$.sampleEligibleObjectKeys") { isArray() }
+        }
+    }
+
+    @Test
     @WithUserDetails("user1")
     fun `일반 사용자는 시스템 헬스 상태를 조회할 수 없다`() {
         mvc.get("/system/api/v1/adm/health").andExpect {

@@ -3,6 +3,10 @@ package com.back.global.system.`in`
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.global.rsData.RsData
+import com.back.global.storage.app.UploadedFileCleanupDiagnostics
+import com.back.global.storage.app.UploadedFileRetentionService
+import com.back.global.task.app.TaskQueueDiagnostics
+import com.back.global.task.app.TaskQueueDiagnosticsService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
@@ -27,6 +31,8 @@ class ApiV1AdmSystemController(
     private val jdbcTemplate: JdbcTemplate,
     private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
     private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
+    private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
+    private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
     data class HealthChecks(
         val db: String,
@@ -75,6 +81,14 @@ class ApiV1AdmSystemController(
     fun signupMailDiagnostics(
         @RequestParam(defaultValue = "false") checkConnection: Boolean,
     ): SignupMailDiagnostics = signupMailDiagnosticsService.diagnose(checkConnection = checkConnection)
+
+    @GetMapping("/tasks")
+    @Transactional(readOnly = true)
+    fun taskQueueDiagnostics(): TaskQueueDiagnostics = taskQueueDiagnosticsService.diagnoseQueue()
+
+    @GetMapping("/storage/cleanup")
+    @Transactional(readOnly = true)
+    fun uploadedFileCleanupDiagnostics(): UploadedFileCleanupDiagnostics = uploadedFileRetentionService.diagnoseCleanup()
 
     @PostMapping("/mail/signup/test")
     @ResponseStatus(HttpStatus.ACCEPTED)

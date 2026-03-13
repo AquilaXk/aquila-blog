@@ -29,6 +29,11 @@ class PostRepositoryAdapter(
         title: String,
     ): Post? = postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, title)
 
+    override fun existsByAuthorAndTitle(
+        author: Member,
+        title: String,
+    ): Boolean = postRepository.existsByAuthorAndTitle(author, title)
+
     override fun findQPagedByKw(
         kw: String,
         pageable: Pageable,

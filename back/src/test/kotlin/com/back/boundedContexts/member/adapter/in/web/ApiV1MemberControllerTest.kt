@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.adapter.`in`.web
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
+import com.back.support.SeededSpringBootTestSupport
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -18,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class ApiV1MemberControllerTest {
+class ApiV1MemberControllerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var mvc: MockMvc
 

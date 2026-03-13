@@ -34,6 +34,9 @@ flowchart LR
 ## 지금 가장 중요한 운영 메모
 
 - 구현, 수정, 운영 점검을 시작할 때는 먼저 `docs/`에서 관련 문서를 확인한다.
+- not-prod bootstrap seed는 더 이상 `count() > 0` 전체 스킵 방식이 아니라 fixture 단위 idempotent 방식으로 유지한다.
+- `@DataJpaTest` 계열 테스트는 전역 bootstrap seed에 기대지 말고, 필요한 fixture를 테스트 내부에서 직접 준비하는 쪽을 기본으로 본다.
+- `@SpringBootTest` 통합 테스트는 `SeededSpringBootTestSupport`를 통해 각 테스트 메서드 전에 DB truncate, Redis flush, base fixture reseed를 수행해 순서 의존을 막는다.
 - 백엔드 테스트는 `back/testInfra/docker-compose.yml` 기반의 격리된 Postgres/Redis를 자동 bootstrap하므로, 로컬 dev DB/Redis와 테스트를 섞지 않는다.
 - 현재 코드와 문서가 어긋나면 같은 작업 안에서 문서도 함께 맞춘다.
 - 관련 기준 문서가 없으면 `docs/design/` 아래에 새 문서를 만들고 `docs/README.md` 인덱스에도 등록한다.
@@ -41,6 +44,7 @@ flowchart LR
 - storage 관련 env는 placeholder 없이 실값을 넣어야 한다.
   잘못 넣으면 `URISyntaxException: Expected scheme-specific part at index 5: http:` 류의 장애가 난다.
 - `MINIO_ROOT_PASSWORD` 같은 값에 `#`가 들어가면 반드시 큰따옴표로 감싼다.
+- cookie domain이 비어 있으면 auth cookie는 host-only로 내려간다. 테스트/slice 컨텍스트에서는 이 fallback을 기대하고, 운영에서는 `custom.site.cookieDomain`을 명시하는 쪽을 기본으로 본다.
 - 프론트 SSR과 브라우저 런타임 API 주소는 각각 `BACKEND_INTERNAL_URL`, `NEXT_PUBLIC_BACKEND_URL`로 분리된다.
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
@@ -140,6 +144,7 @@ cd front && yarn build
 - 단일 테스트만 먼저 돌렸더라도, 최종 반영 전에는 전체 백엔드 검증으로 다시 닫는다.
 - 단순 위임 서비스 테스트나 보정 로직 테스트는 가능하면 plain unit test로 유지한다. 현재 `ActorApplicationServiceTest`, `PostLikeReconciliationServiceTest`는 스프링 컨텍스트 없이 돈다.
 - 순수 로직 테스트는 가능하면 plain unit test로 유지하고, DB/Redis/MockMvc가 필요한 경우에만 `@SpringBootTest`를 쓴다.
+- 읽기 전용 관리자/공개 컨트롤러는 `@WebMvcTest`로 먼저 내리고, 실제 저장/변경이 일어나는 endpoint만 통합 테스트로 남기는 쪽이 현재 프로젝트에 가장 맞다. 현재 `ApiV1AdmSystemControllerTest`, `ApiV1AdmPostControllerTest`, `ApiV1MemberControllerWebMvcTest`, `ApiV1AdmMemberControllerWebMvcTest`가 이 원칙을 따른다.
 
 ## 다음에 손대기 좋은 영역
 

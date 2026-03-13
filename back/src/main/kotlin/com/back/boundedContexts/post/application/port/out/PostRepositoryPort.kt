@@ -24,6 +24,11 @@ interface PostRepositoryPort {
         title: String,
     ): Post?
 
+    fun existsByAuthorAndTitle(
+        author: Member,
+        title: String,
+    ): Boolean
+
     fun findQPagedByKw(
         kw: String,
         pageable: Pageable,

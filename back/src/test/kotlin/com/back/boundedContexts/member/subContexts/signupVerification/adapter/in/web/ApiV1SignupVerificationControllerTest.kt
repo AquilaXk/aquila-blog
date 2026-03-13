@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.MemberApplicationServ
 import com.back.boundedContexts.member.subContexts.signupVerification.adapter.out.persistence.MemberSignupVerificationRepository
 import com.back.global.task.domain.TaskStatus
 import com.back.global.task.out.TaskRepository
+import com.back.support.SeededSpringBootTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Nested
@@ -23,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class ApiV1SignupVerificationControllerTest {
+class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var mvc: MockMvc
 

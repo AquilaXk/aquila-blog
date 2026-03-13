@@ -131,24 +131,26 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: flex-end;
     gap: 0.55rem;
-    min-width: 0;
+    min-width: 16.8rem;
   }
 
-  .navPill {
+  .navPill,
+  .logoutBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 74px;
-    height: 32px;
-    padding: 0 0.72rem;
+    min-width: 86px;
+    height: 34px;
+    padding: 0 0.84rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .authSkeleton {
@@ -169,7 +171,8 @@ const StyledWrapper = styled.div`
 
   .identity {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 600;
     max-width: 130px;
     white-space: nowrap;
     overflow: hidden;
@@ -180,22 +183,6 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.78rem;
     white-space: nowrap;
-  }
-
-  .logoutBtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    border-radius: 999px;
-    min-width: 82px;
-    height: 32px;
-    padding: 0 0.62rem;
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.78rem;
-    font-weight: 600;
-    cursor: pointer;
   }
 
   @media (max-width: 720px) {
@@ -226,7 +213,7 @@ const StyledWrapper = styled.div`
     .logoutBtn {
       min-width: 68px;
       height: 30px;
-      font-size: 0.76rem;
+      font-size: 0.78rem;
     }
   }
 `

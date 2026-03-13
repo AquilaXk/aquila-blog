@@ -1240,9 +1240,16 @@ const ConsoleDescription = styled.p`
 `
 
 const ConsoleStatus = styled.span`
+  display: block;
+  min-height: 2.7rem;
+  max-width: 30rem;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.84rem;
   line-height: 1.6;
+
+  @media (max-width: 760px) {
+    min-height: 1.5rem;
+  }
 `
 
 const ConsoleActionRow = styled.div`

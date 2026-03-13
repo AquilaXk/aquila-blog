@@ -65,8 +65,12 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       )
     case "moon":
       return (
-        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" className={className} aria-hidden="true" {...props}>
-          <path d="M20 14.2A8.3 8.3 0 0 1 9.8 4a.7.7 0 0 0-1 .8A9.5 9.5 0 1 0 19.2 15a.7.7 0 0 0 .8-1Z" />
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.9" className={className} aria-hidden="true" {...props}>
+          <path
+            d="M18.8 14.6A7.9 7.9 0 1 1 10 5.2a6.6 6.6 0 0 0 8.8 9.4Z"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       )
     case "sun":

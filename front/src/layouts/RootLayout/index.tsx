@@ -68,11 +68,13 @@ const StyledMain = styled.main`
 `
 
 const RouteProgress = styled.div`
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
   top: 3rem;
-  z-index: 60;
+  z-index: 50;
   height: 2px;
-  width: 100%;
+  width: 100vw;
   pointer-events: none;
   overflow: hidden;
   background: transparent;
@@ -80,7 +82,7 @@ const RouteProgress = styled.div`
   &::after {
     content: "";
     display: block;
-    width: 32%;
+    width: 30%;
     height: 100%;
     opacity: 0;
     background: linear-gradient(90deg, transparent, #3b82f6, transparent);

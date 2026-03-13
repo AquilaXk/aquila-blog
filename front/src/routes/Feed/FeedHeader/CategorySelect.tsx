@@ -93,6 +93,8 @@ export default CategorySelect
 
 const StyledWrapper = styled.div`
   position: relative;
+  display: grid;
+  gap: 0.45rem;
   width: 100%;
   min-width: 0;
 
@@ -149,18 +151,16 @@ const StyledWrapper = styled.div`
     }
   }
   > .content {
-    position: absolute;
-    top: calc(100% + 0.35rem);
-    left: 0;
-    z-index: 40;
-    width: max-content;
+    position: relative;
+    width: 100%;
     min-width: 100%;
-    max-width: min(20rem, calc(100vw - 2rem));
-    max-height: min(18rem, calc(100vh - 9rem));
+    max-width: 100%;
+    max-height: min(18rem, calc(100vh - 12rem));
     overflow-y: auto;
     scrollbar-gutter: stable both-edges;
     padding: 0.25rem;
     border-radius: 0.75rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     background-color: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),

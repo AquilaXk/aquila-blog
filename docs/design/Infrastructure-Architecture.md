@@ -2,6 +2,12 @@
 
 Last updated: 2026-03-13
 
+## 3줄 요약
+
+- 배포 런타임과 실제 네트워크 흐름을 볼 때 이 문서를 먼저 읽는다.
+- 운영 구조는 `Vercel + Cloudflare Tunnel + Caddy + Home Server(back/db/redis/minio)` 하이브리드 구성이다.
+- OAuth/프록시/forwarded header 이슈는 이 문서를 기준으로 보고, 배포 절차는 `DevOps.md`로 내려간다.
+
 ## 이 문서가 보여주는 것
 
 이 문서는 프론트와 백엔드를 다른 런타임에 두는 하이브리드 구조를 어떻게 운영 가능한 인프라로 묶었는지를 설명한다.

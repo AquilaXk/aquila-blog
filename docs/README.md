@@ -1,5 +1,25 @@
 # Documentation Guide
 
+## Fast Path For Implementation
+
+구현 작업을 시작할 때는 이 문서 전체보다 먼저 아래 문서를 읽는다.
+
+- [Agent Context](AGENT-CONTEXT.md)
+- 저장소 루트 `AGENTS.md`가 있으면 그 규칙도 함께 적용한다.
+
+그 다음에는 `Agent Context`의 작업 라우팅 표에 따라, 현재 작업과 직접 관련된 guide만 추가로 읽는다.
+
+즉, 구현 작업에서는 `docs/` 전체를 순회하지 않고 아래 순서를 기본으로 한다.
+
+1. `AGENT-CONTEXT.md`
+2. 현재 작업과 직접 관련된 `compact` guide 1개
+3. 필요한 경우에만 상세 설계/트러블슈팅 문서
+
+### 추천 compact 진입점
+
+- [Frontend Working Guide Compact](design/Frontend-Working-Guide.compact.md)
+- [Backend Auth Member Guide Compact](design/Backend-Auth-Member-Guide.compact.md)
+
 이 문서들은 단순 참고 자료가 아니라, 이 프로젝트를 어떻게 설계했고 어떤 운영 문제를 어떻게 풀었는지를 보여주는 포트폴리오 자료입니다.
 
 ## Reading Path
@@ -26,8 +46,10 @@ flowchart LR
 | [Infrastructure Architecture](design/Infrastructure-Architecture.md) | 실제 운영 인프라와 트래픽 흐름 | 배포/런타임 구성을 보려는 사람 |
 | [Database Design](design/Database-Design.md) | 저장소 역할 분리와 데이터 모델 | 데이터 설계를 보려는 사람 |
 | [Package Structure](design/package-structure.md) | 코드베이스 구조와 리팩터링 방향 | 코드 읽기 진입점을 찾는 사람 |
+| [Frontend Working Guide Compact](design/Frontend-Working-Guide.compact.md) | 프론트 작업용 최소 기준 | 먼저 읽고 빠르게 판단하려는 사람 |
 | [Frontend Working Guide](design/Frontend-Working-Guide.md) | 프론트 UX 수정 기준과 화면별 원칙 | 프론트 화면을 계속 다듬어야 하는 사람 |
 | [Frontend Performance Guide](design/Frontend-Performance-Guide.md) | 하이드레이션, JS 번들, islands 분리 기준 | 프론트 성능 최적화를 진행하는 사람 |
+| [Backend Auth Member Guide Compact](design/Backend-Auth-Member-Guide.compact.md) | 인증/회원 작업용 최소 기준 | 먼저 읽고 빠르게 판단하려는 사람 |
 | [Backend Auth Member Guide](design/Backend-Auth-Member-Guide.md) | 로그인/회원가입 백엔드 지원 범위와 한계 | 인증/회원 흐름을 바꾸려는 사람 |
 | [Signup Verification Working Guide](design/Signup-Verification-Working-Guide.md) | 이메일 인증 회원가입 플로우와 구현 기준 | 인증 회원가입을 이어서 다듬어야 하는 사람 |
 
@@ -62,7 +84,9 @@ flowchart LR
 아래 working guide 문서들은 일회성 메모가 아니라, 실제 구현을 진행하면서 계속 읽고 수정하는 기준 문서다.
 
 - Frontend Working Guide
+- Frontend Working Guide Compact
 - Backend Auth Member Guide
+- Backend Auth Member Guide Compact
 - Signup Verification Working Guide
 
 새 기능을 길게 다룰 필요가 생기면 `design/` 아래에 새 guide를 추가하고, 작업이 끝나면 문서 인덱스에도 함께 반영한다.

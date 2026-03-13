@@ -2,6 +2,7 @@ package com.back.perf
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.support.SeededSpringBootTestSupport
 import jakarta.persistence.EntityManagerFactory
 import org.assertj.core.api.Assertions.assertThat
 import org.hibernate.SessionFactory
@@ -28,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional
         "spring.jpa.properties.hibernate.generate_statistics=true",
     ],
 )
-class PerformanceSanityTest {
+class PerformanceSanityTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var mvc: MockMvc
 

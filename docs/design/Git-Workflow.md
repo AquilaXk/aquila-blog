@@ -78,9 +78,13 @@ flowchart LR
 - 단순 위임 서비스 테스트나 보정 로직 테스트도 가능하면 plain unit test로 유지한다.
   예: `ActorApplicationServiceTest`, `PostLikeReconciliationServiceTest`
 - 컨트롤러가 진단/응답 조합만 담당하는 얇은 케이스는 가능하면 `@WebMvcTest`로 내려서 컨텍스트 비용을 줄인다.
-  예: `ApiV1AdmSystemControllerTest`, `ApiV1AdmPostControllerTest`, `ApiV1MemberControllerWebMvcTest`
+  예: `ApiV1AdmSystemControllerTest`, `ApiV1AdmPostControllerTest`, `ApiV1MemberControllerWebMvcTest`, `ApiV1AdmMemberControllerWebMvcTest`
 - 실제 JPA 쿼리나 저장소 동작이 핵심인 테스트는 가능하면 `@DataJpaTest`로 내려서 DB 검증은 유지하고 컨텍스트 비용만 줄인다.
   예: `MemberRepositoryTest`, `UploadedFileRetentionServiceTest`
+- service 테스트가 `@DataJpaTest`로 내려간 경우, 전역 not-prod bootstrap seed에 기대기보다 테스트 내부 fixture를 직접 준비하는 쪽이 더 안정적이다.
+  예: `MemberApplicationServiceTest`
+- `@SpringBootTest + MockMvc` 통합 테스트는 요청 처리 중 DB/Redis 상태를 실제로 바꾸므로, 테스트 순서 의존을 피하기 위해 공통 reset/reseed support를 붙인다.
+  현재는 `SeededSpringBootTestSupport`가 각 테스트 메서드 전에 DB truncate, Redis flush, base fixture reseed를 수행한다.
 
 ## 배포 안전 규칙
 

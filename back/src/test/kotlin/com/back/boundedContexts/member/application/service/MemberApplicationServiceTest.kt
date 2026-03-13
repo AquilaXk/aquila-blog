@@ -1,22 +1,49 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.adapter.out.persistence.MemberAttrPersistenceAdapter
 import com.back.boundedContexts.member.adapter.out.persistence.MemberAttrRepository
+import com.back.boundedContexts.member.adapter.out.persistence.MemberRepository
+import com.back.boundedContexts.member.adapter.out.persistence.MemberRepositoryAdapter
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.app.AppConfig
+import com.back.global.jpa.config.JpaConfig
+import com.back.global.storage.app.UploadedFileRetentionService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
+import org.springframework.context.annotation.Import
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 
-@SpringBootTest
 @ActiveProfiles("test")
-@Transactional
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(
+    MemberApplicationService::class,
+    MemberRepositoryAdapter::class,
+    MemberAttrPersistenceAdapter::class,
+    MemberProfileHydrator::class,
+    JpaConfig::class,
+    AppConfig::class,
+)
 class MemberApplicationServiceTest {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
 
     @Autowired
     private lateinit var memberAttrRepository: MemberAttrRepository
+
+    @Autowired
+    private lateinit var memberRepository: MemberRepository
+
+    @Autowired
+    private lateinit var passwordEncoder: PasswordEncoder
+
+    @MockitoBean
+    private lateinit var uploadedFileRetentionService: UploadedFileRetentionService
 
     @Test
     fun `회원 생성에서 profileImgUrl 을 함께 넘기면 기본 이미지 대신 저장된 이미지가 사용된다`() {
@@ -37,7 +64,7 @@ class MemberApplicationServiceTest {
 
     @Test
     fun `회원 수정은 nickname 과 profileImgUrl 을 함께 변경한다`() {
-        val member = memberFacade.findByUsername("user1")!!
+        val member = createMember("user1", "유저1")
 
         memberFacade.modify(
             member = member,
@@ -56,6 +83,8 @@ class MemberApplicationServiceTest {
 
     @Test
     fun `modifyOrJoin 은 기존 회원이 있으면 회원 정보를 수정하고 200을 반환한다`() {
+        createMember("user1", "유저1")
+
         val rsData =
             memberFacade.modifyOrJoin(
                 username = "user1",
@@ -91,4 +120,17 @@ class MemberApplicationServiceTest {
         assertThat(member.nickname).isEqualTo("신규유저")
         assertThat(member.profileImgUrl).isEqualTo("https://example.com/join-or-modify-user.png")
     }
+
+    private fun createMember(
+        username: String,
+        nickname: String,
+    ): Member =
+        memberRepository.saveAndFlush(
+            Member(
+                id = 0,
+                username = username,
+                password = passwordEncoder.encode("1234"),
+                nickname = nickname,
+            ),
+        )
 }

@@ -29,8 +29,6 @@ class MemberNotProdInitData(
 
     @Transactional
     fun makeBaseMembers() {
-        if (memberUseCase.count() > 0) return
-
         val adminUsername = AppConfig.adminUsernameOrBlank.trim().ifBlank { "admin" }
         val seedMembers =
             linkedMapOf(
@@ -44,7 +42,9 @@ class MemberNotProdInitData(
             )
 
         seedMembers.forEach { (username, nickname) ->
-            memberUseCase.join(username, "1234", nickname, null)
+            if (memberUseCase.findByUsername(username) == null) {
+                memberUseCase.join(username, "1234", nickname, null)
+            }
         }
     }
 }

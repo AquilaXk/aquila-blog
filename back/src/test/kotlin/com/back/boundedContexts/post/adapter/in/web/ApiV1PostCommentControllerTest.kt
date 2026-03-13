@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.standard.extensions.getOrThrow
+import com.back.support.SeededSpringBootTestSupport
 import jakarta.servlet.http.Cookie
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
@@ -29,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class ApiV1PostCommentControllerTest {
+class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var mvc: MockMvc
 

@@ -70,11 +70,14 @@ class Rq(
         name: String,
         value: String?,
     ) {
+        val cookieDomain = AppFacade.siteCookieDomain.trim()
         val cookie =
             Cookie(name, value ?: "").apply {
                 path = "/"
                 isHttpOnly = true
-                domain = AppFacade.siteCookieDomain
+                if (cookieDomain.isNotBlank()) {
+                    domain = cookieDomain
+                }
                 secure = true
                 setAttribute("SameSite", "Strict")
                 maxAge = if (value.isNullOrBlank()) 0 else 60 * 60 * 24 * 365

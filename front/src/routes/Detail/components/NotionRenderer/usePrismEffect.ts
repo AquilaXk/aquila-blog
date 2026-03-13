@@ -2,6 +2,7 @@ import { RefObject, useEffect } from "react"
 
 type PrismLike = {
   highlightAllUnder: (container: Element) => void
+  highlightElement: (element: Element) => void
 }
 
 let prismLoader: Promise<PrismLike> | null = null
@@ -47,11 +48,11 @@ const prismLanguageLoaders: Record<string, (() => Promise<unknown>)[]> = {
   bash: [() => import("prismjs/components/prism-bash.js")],
   shell: [() => import("prismjs/components/prism-bash.js")],
   sh: [() => import("prismjs/components/prism-bash.js")],
-  c: [() => import("prismjs/components/prism-c.js")],
-  cpp: [() => import("prismjs/components/prism-cpp.js")],
-  "c++": [() => import("prismjs/components/prism-cpp.js")],
-  csharp: [() => import("prismjs/components/prism-csharp.js")],
-  cs: [() => import("prismjs/components/prism-csharp.js")],
+  c: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-c.js")],
+  cpp: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-cpp.js")],
+  "c++": [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-cpp.js")],
+  csharp: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-csharp.js")],
+  cs: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-csharp.js")],
   diff: [() => import("prismjs/components/prism-diff.js")],
   docker: [() => import("prismjs/components/prism-docker.js")],
   dockerfile: [() => import("prismjs/components/prism-docker.js")],
@@ -62,9 +63,9 @@ const prismLanguageLoaders: Record<string, (() => Promise<unknown>)[]> = {
     () => import("prismjs/components/prism-markup-templating.js"),
     () => import("prismjs/components/prism-handlebars.js"),
   ],
-  java: [() => import("prismjs/components/prism-java.js")],
-  kotlin: [() => import("prismjs/components/prism-kotlin.js")],
-  kt: [() => import("prismjs/components/prism-kotlin.js")],
+  java: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-java.js")],
+  kotlin: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-kotlin.js")],
+  kt: [() => import("prismjs/components/prism-clike.js"), () => import("prismjs/components/prism-kotlin.js")],
   less: [() => import("prismjs/components/prism-less.js")],
   makefile: [() => import("prismjs/components/prism-makefile.js")],
   markdown: [() => import("prismjs/components/prism-markdown.js")],
@@ -140,7 +141,7 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => 
       })
       .then((Prism) => {
         if (disposed) return
-        Prism.highlightAllUnder(root)
+        codeBlocks.forEach((block) => Prism.highlightElement(block))
       })
       .catch((error) => console.warn(error))
 

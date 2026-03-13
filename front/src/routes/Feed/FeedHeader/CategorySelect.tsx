@@ -155,9 +155,9 @@ const StyledWrapper = styled.div`
     top: calc(100% + 0.45rem);
     left: 0;
     z-index: 30;
-    width: 100%;
     min-width: 100%;
-    max-width: 100%;
+    width: fit-content;
+    max-width: min(24rem, calc(100vw - 2.5rem));
     max-height: min(18rem, calc(100vh - 12rem));
     overflow-y: auto;
     overflow-x: hidden;
@@ -204,9 +204,8 @@ const StyledWrapper = styled.div`
 
       .labelText {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
 
       .count {
@@ -227,9 +226,9 @@ const StyledWrapper = styled.div`
     }
 
     > .content {
-      width: 100%;
+      width: min(100%, calc(100vw - 2.5rem));
       min-width: 0;
-      max-width: 100%;
+      max-width: calc(100vw - 2.5rem);
     }
   }
 `

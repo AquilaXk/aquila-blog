@@ -2,6 +2,7 @@ import styled from "@emotion/styled"
 import { FC, useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import AppIcon from "src/components/icons/AppIcon"
 import usePrismEffect from "./usePrismEffect"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
 
@@ -204,9 +205,6 @@ const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
           <span className="aq-code-dot aq-code-dot-green" />
         </div>
         <span className="aq-code-language">{toLanguageLabel(lang)}</span>
-        <button type="button" className="aq-code-copy" onClick={handleCopy}>
-          {copied ? "복사됨" : "복사"}
-        </button>
       </div>
       <div className="aq-code-shell">
         <div className="aq-code-gutter" aria-hidden="true">
@@ -219,6 +217,15 @@ const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
         <pre className="aq-code">
           <code className={className}>{rawCode}</code>
         </pre>
+        <button
+          type="button"
+          className={`aq-code-copy aq-code-copy-bottom${copied ? " is-copied" : ""}`}
+          onClick={handleCopy}
+          aria-label={copied ? "코드가 복사되었습니다" : "코드 복사"}
+          title={copied ? "복사됨" : "복사"}
+        >
+          <AppIcon name={copied ? "check-circle" : "copy"} />
+        </button>
       </div>
     </div>
   )
@@ -598,7 +605,7 @@ const StyledWrapper = styled.div`
 
   .aq-code-toolbar {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr;
     align-items: center;
     gap: 0.75rem;
     padding: 0.9rem 1rem 0.82rem;
@@ -637,7 +644,7 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-language {
-    justify-self: center;
+    justify-self: end;
     font-size: 0.82rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -646,7 +653,9 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-copy {
-    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid
       ${({ theme }) =>
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.12)"};
@@ -654,9 +663,10 @@ const StyledWrapper = styled.div`
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
     border-radius: 999px;
-    padding: 0.34rem 0.78rem;
-    font-size: 0.74rem;
-    font-weight: 700;
+    width: 2.55rem;
+    height: 2.55rem;
+    padding: 0;
+    font-size: 1rem;
     cursor: pointer;
     transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
   }
@@ -668,11 +678,33 @@ const StyledWrapper = styled.div`
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.18)" : "rgba(17, 24, 39, 0.18)"};
   }
 
+  .aq-code-copy svg {
+    width: 1.02rem;
+    height: 1.02rem;
+  }
+
+  .aq-code-copy-bottom {
+    position: absolute;
+    right: 0.95rem;
+    bottom: 0.95rem;
+    z-index: 1;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+  }
+
+  .aq-code-copy-bottom.is-copied {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#98c379" : "#15803d")};
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(152, 195, 121, 0.35)" : "rgba(21, 128, 61, 0.22)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(152, 195, 121, 0.12)" : "rgba(220, 252, 231, 0.95)"};
+  }
+
   .aq-code-shell {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: stretch;
     overflow: auto;
+    position: relative;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2f3d" : "#f7f8fb"};
   }
@@ -706,7 +738,7 @@ const StyledWrapper = styled.div`
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1.1rem 1.25rem;
+    padding: 1.1rem 1.25rem 4.25rem;
     min-width: 0;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2f3d" : "#f7f8fb"};
@@ -796,7 +828,9 @@ const StyledWrapper = styled.div`
 
   .aq-code .token.atrule,
   .aq-code .token.attr-value,
-  .aq-code .token.keyword {
+  .aq-code .token.keyword,
+  .aq-code .token.annotation,
+  .aq-code .token.decorator {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
     font-weight: 600;
   }
@@ -814,16 +848,6 @@ const StyledWrapper = styled.div`
   @media (max-width: 768px) {
     .aq-code-toolbar {
       grid-template-columns: auto 1fr;
-      row-gap: 0.55rem;
-    }
-
-    .aq-code-language {
-      justify-self: end;
-    }
-
-    .aq-code-copy {
-      grid-column: 1 / -1;
-      justify-self: start;
     }
 
     .aq-code-gutter {
@@ -834,7 +858,13 @@ const StyledWrapper = styled.div`
 
     .aq-code-block .aq-code {
       padding-left: 0.92rem;
-      padding-right: 1rem;
+      padding-right: 0.95rem;
+      padding-bottom: 4.05rem;
+    }
+
+    .aq-code-copy-bottom {
+      right: 0.78rem;
+      bottom: 0.78rem;
     }
   }
 

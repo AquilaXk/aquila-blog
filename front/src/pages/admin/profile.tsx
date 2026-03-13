@@ -1,14 +1,12 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
-import { useRouter } from "next/router"
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import ProfileImage from "src/components/ProfileImage"
 import useAuthSession, { AuthMember } from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
-import { replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -34,9 +32,8 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
 }
 
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
-  const router = useRouter()
   const queryClient = useQueryClient()
-  const { me, authStatus, logout, setMe } = useAuthSession()
+  const { me, authStatus, setMe } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
   const [loadingKey, setLoadingKey] = useState("")
   const [notice, setNotice] = useState<{ tone: NoticeTone; text: string }>({
@@ -135,16 +132,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      setLoadingKey("logout")
-      await logout()
-    } finally {
-      await replaceRoute(router, toLoginPath("/admin/profile"), { preferHardNavigation: true })
-      setLoadingKey("")
-    }
-  }
-
   if (!sessionMember) return null
 
   const profileSrc = profileImgInputUrl.trim()
@@ -167,9 +154,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <Link href="/admin/posts/new" passHref legacyBehavior>
             <LinkButton>글 작업실로 이동</LinkButton>
           </Link>
-          <PrimaryButton type="button" onClick={() => void handleLogout()} disabled={loadingKey === "logout"}>
-            {loadingKey === "logout" ? "로그아웃 중..." : "로그아웃"}
-          </PrimaryButton>
         </HeaderActions>
       </HeaderCard>
 

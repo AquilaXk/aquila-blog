@@ -1,11 +1,9 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
-import { useRouter } from "next/router"
 import { useEffect, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
-import { replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -121,7 +119,6 @@ const ACTION_LABELS: Record<string, string> = {
   mailTest: "테스트 메일 발송",
   taskQueueStatus: "Task Queue 진단 새로고침",
   cleanupStatus: "파일 정리 진단 새로고침",
-  logout: "로그아웃",
 }
 
 const formatInstant = (value: string | null | undefined) => {
@@ -151,8 +148,7 @@ const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
 
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
-  const router = useRouter()
-  const { me, authStatus, logout } = useAuthSession()
+  const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
   const [loadingKey, setLoadingKey] = useState("")
   const [result, setResult] = useState("")
@@ -282,16 +278,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      setLoadingKey("logout")
-      await logout()
-    } finally {
-      await replaceRoute(router, toLoginPath("/admin/tools"), { preferHardNavigation: true })
-      setLoadingKey("")
-    }
-  }
-
   if (!sessionMember) return null
 
   const consoleStatus = loadingKey
@@ -315,9 +301,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <Link href="/admin/posts/new" passHref legacyBehavior>
             <NavLink>글 작업실</NavLink>
           </Link>
-          <PrimaryButton type="button" onClick={() => void handleLogout()} disabled={loadingKey === "logout"}>
-            {loadingKey === "logout" ? "로그아웃 중..." : "로그아웃"}
-          </PrimaryButton>
         </HeaderActions>
       </HeaderCard>
 

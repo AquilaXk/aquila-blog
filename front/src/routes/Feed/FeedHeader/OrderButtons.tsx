@@ -60,7 +60,7 @@ const StyledWrapper = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
 
-  @media (max-width: 640px) {
+  @container feed-filters (max-width: 44rem) {
     width: 100%;
     min-width: 0;
   }
@@ -91,7 +91,7 @@ const StyledWrapper = styled.div`
       box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.blue8};
     }
 
-    @media (max-width: 560px) {
+    @container feed-filters (max-width: 44rem) {
       width: 100%;
       min-width: 0;
     }

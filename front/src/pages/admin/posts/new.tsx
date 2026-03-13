@@ -428,7 +428,7 @@ const convertHtmlToMarkdown = (html: string): string => {
 const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { me, authStatus, setMe, refresh, logout } = useAuthSession()
+  const { me, authStatus, setMe, refresh } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
@@ -535,32 +535,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
-
-  const handleAdminLogout = async () => {
-    try {
-      setLoadingKey("logout")
-      await logout()
-      setResult(pretty({ ok: true, msg: "로그아웃 되었습니다." }))
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setResult(pretty({ warn: `로그아웃 API 호출 실패: ${message}` }))
-    } finally {
-      const target = toLoginPath("/admin/posts/new")
-
-      if (!redirectingRef.current && router.asPath !== target) {
-        redirectingRef.current = true
-        try {
-          await replaceRoute(router, target, { preferHardNavigation: true })
-        } catch (error) {
-          if (!isNavigationCancelledError(error)) {
-            setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))
-          }
-        }
-      }
-
-      setLoadingKey("")
-    }
-  }
 
   const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
@@ -1506,13 +1480,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               }
             >
               내 정보
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("logout")}
-              onClick={() => void handleAdminLogout()}
-            >
-              로그아웃
             </Button>
           </ActionCluster>
         </HeroAside>

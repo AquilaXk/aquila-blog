@@ -16,6 +16,7 @@ type IconName =
   | "reply"
   | "edit"
   | "trash"
+  | "copy"
   | "message"
   | "check-circle"
   | "close"
@@ -199,6 +200,13 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
           <path d="M4.5 7.5h15M9.5 3.8h5l.7 1.7H19v1.6l-.9 11a1.5 1.5 0 0 1-1.5 1.4H7.4a1.5 1.5 0 0 1-1.5-1.4L5 7.1V5.5h3.8l.7-1.7Z" strokeLinejoin="round" />
           <path d="M10 10.5v5.5M14 10.5v5.5" strokeLinecap="round" />
+        </svg>
+      )
+    case "copy":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <rect x="9" y="8" width="10" height="12" rx="2.2" />
+          <path d="M6.8 16H6A2 2 0 0 1 4 14V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     default:

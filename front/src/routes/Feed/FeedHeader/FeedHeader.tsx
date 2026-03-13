@@ -21,7 +21,9 @@ const FeedHeader: React.FC<Props> = () => {
         <CategorySlot>
           <CategorySelectIsland />
         </CategorySlot>
-        <OrderButtonsIsland />
+        <OrderSlot>
+          <OrderButtonsIsland />
+        </OrderSlot>
       </FilterRow>
     </StyledWrapper>
   )
@@ -34,31 +36,40 @@ const StyledWrapper = styled.div`
   min-width: 0;
   padding-top: 1rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  container-type: inline-size;
+  container-name: feed-filters;
 `
 
 const FilterRow = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 17rem) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 1rem;
   padding-top: 1rem;
   min-width: 0;
 
-  @media (max-width: 640px) {
-    flex-direction: column;
-    align-items: stretch;
+  @container feed-filters (max-width: 44rem) {
+    grid-template-columns: 1fr;
     gap: 0.8rem;
   }
 `
 
 const CategorySlot = styled.div`
-  flex: 0 1 clamp(12rem, 28vw, 17rem);
-  max-width: clamp(12rem, 28vw, 17rem);
+  width: 100%;
+  max-width: 17rem;
   min-width: 0;
 
-  @media (max-width: 640px) {
-    flex-basis: auto;
+  @container feed-filters (max-width: 44rem) {
     max-width: none;
+  }
+`
+
+const OrderSlot = styled.div`
+  justify-self: end;
+  min-width: 0;
+
+  @container feed-filters (max-width: 44rem) {
+    justify-self: stretch;
   }
 `
 
@@ -84,7 +95,8 @@ const ControlPlaceholder = styled.div`
 const SegmentPlaceholder = styled(ControlPlaceholder)`
   min-width: 248px;
 
-  @media (max-width: 640px) {
+  @container feed-filters (max-width: 44rem) {
     min-width: 0;
+    width: 100%;
   }
 `

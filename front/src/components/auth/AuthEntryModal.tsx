@@ -390,77 +390,82 @@ const Backdrop = styled.div`
 
 const Modal = styled.div`
   position: relative;
-  width: min(100%, 780px);
+  width: min(100%, 760px);
   display: grid;
-  grid-template-columns: minmax(220px, 0.92fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(220px, 0.84fr) minmax(0, 1.16fr);
   border-radius: 24px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   overflow: hidden;
-  background: ${({ theme }) => theme.colors.gray1};
+  background:
+    linear-gradient(180deg, rgba(18, 21, 28, 0.98), rgba(12, 14, 18, 0.98));
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
 
   .visualPane {
-    padding: 2rem 1.35rem 1.5rem;
+    padding: 2rem 1.45rem 1.7rem;
     background:
-      linear-gradient(180deg, rgba(245, 247, 250, 0.98), rgba(236, 240, 245, 0.95));
-    color: #1f2937;
+      radial-gradient(circle at top, rgba(49, 196, 141, 0.12), transparent 58%),
+      linear-gradient(180deg, rgba(26, 31, 40, 0.96), rgba(18, 22, 30, 0.96));
+    border-right: 1px solid rgba(148, 163, 184, 0.12);
+    color: ${({ theme }) => theme.colors.gray12};
     display: grid;
     align-content: center;
     justify-items: center;
     text-align: center;
-    gap: 0.9rem;
+    gap: 1rem;
   }
 
   .visualArtwork {
     display: grid;
     place-items: center;
-    width: 140px;
-    height: 140px;
-    border-radius: 30px;
+    width: 124px;
+    height: 124px;
+    border-radius: 28px;
     background:
-      radial-gradient(circle at top, rgba(16, 185, 129, 0.18), transparent 62%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.95));
-    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.22);
+      radial-gradient(circle at top, rgba(52, 211, 153, 0.16), transparent 58%),
+      linear-gradient(180deg, rgba(28, 36, 48, 0.95), rgba(20, 26, 36, 0.98));
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
 
     svg {
-      font-size: 3.4rem;
-      color: #10b981;
+      font-size: 3rem;
+      color: #34d399;
     }
   }
 
   .visualPane strong {
-    font-size: 2.2rem;
-    line-height: 1.08;
-    color: #111827;
+    font-size: 1.95rem;
+    line-height: 1.12;
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   .visualPane p {
     margin: 0;
-    color: #64748b;
+    max-width: 18rem;
+    color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.95rem;
-    line-height: 1.7;
+    line-height: 1.75;
   }
 
   .formPane {
     position: relative;
-    padding: 1.6rem 1.45rem 1.2rem;
-    background: ${({ theme }) => theme.colors.gray1};
+    padding: 1.6rem 1.45rem 1.3rem;
+    background:
+      linear-gradient(180deg, rgba(14, 17, 23, 0.98), rgba(10, 12, 16, 0.98));
   }
 
   .closeButton {
     position: absolute;
     top: 0.95rem;
     right: 0.95rem;
-    min-width: 34px;
-    width: 34px;
-    height: 34px;
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
     padding: 0;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: rgba(255, 255, 255, 0.02);
     color: ${({ theme }) => theme.colors.gray11};
   }
 
@@ -470,12 +475,12 @@ const Modal = styled.div`
 
   .eyebrow {
     display: inline-flex;
-    margin-bottom: 0.7rem;
+    margin-bottom: 0.85rem;
     border-radius: 999px;
-    padding: 0.34rem 0.68rem;
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
+    padding: 0.36rem 0.78rem;
+    border: 1px solid rgba(59, 130, 246, 0.38);
+    background: rgba(18, 63, 126, 0.22);
+    color: #60a5fa;
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -490,10 +495,11 @@ const Modal = styled.div`
   }
 
   .formDescription {
-    margin: 0.62rem 0 1rem;
+    margin: 0.68rem 0 1.15rem;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.65;
     font-size: 0.92rem;
+    max-width: 28rem;
   }
 
   .loginForm {
@@ -514,12 +520,12 @@ const Modal = styled.div`
     grid-template-columns: 1fr;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     border-radius: 14px;
-    background: ${({ theme }) => theme.colors.gray2};
+    background: rgba(255, 255, 255, 0.03);
     overflow: hidden;
   }
 
   .passwordField {
-    grid-template-columns: 1fr auto;
+    position: relative;
   }
 
   input {
@@ -527,7 +533,7 @@ const Modal = styled.div`
     border: 0;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
-    padding: 0.92rem 1rem;
+    padding: 0.96rem 1rem;
     font-size: 0.94rem;
 
     &:focus {
@@ -535,15 +541,24 @@ const Modal = styled.div`
     }
   }
 
+  .passwordField input {
+    padding-right: 4.9rem;
+  }
+
   .passwordToggle {
-    min-width: 72px;
+    position: absolute;
+    top: 50%;
+    right: 0.72rem;
+    transform: translateY(-50%);
+    min-width: auto;
     border: 0;
-    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 0;
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    border-radius: 999px;
+    padding: 0.38rem 0.68rem;
+    background: rgba(148, 163, 184, 0.1);
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
     font-weight: 700;
+    line-height: 1;
   }
 
   .inlineError {
@@ -570,8 +585,8 @@ const Modal = styled.div`
   }
 
   .primaryAction {
-    border: 1px solid ${({ theme }) => theme.colors.green8};
-    background: linear-gradient(135deg, #10b981, #34d399);
+    border: 1px solid rgba(52, 211, 153, 0.44);
+    background: linear-gradient(135deg, #149d71, #2abf8c);
     color: #fff;
   }
 
@@ -610,7 +625,7 @@ const Modal = styled.div`
     border: 1px solid rgba(230, 194, 0, 0.72);
     background: linear-gradient(180deg, #fee500, #facc15);
     color: #241b00;
-    box-shadow: 0 10px 24px rgba(250, 204, 21, 0.18);
+    box-shadow: 0 10px 22px rgba(250, 204, 21, 0.14);
 
     svg {
       font-size: 1.95rem;
@@ -682,12 +697,14 @@ const Modal = styled.div`
     grid-template-columns: 1fr;
 
     .visualPane {
-      padding: 1.2rem 1rem 1rem;
+      padding: 1.15rem 1rem 1rem;
+      border-right: 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
     }
 
     .visualArtwork {
-      width: 88px;
-      height: 88px;
+      width: 84px;
+      height: 84px;
 
       svg {
         font-size: 2.2rem;
@@ -695,7 +712,7 @@ const Modal = styled.div`
     }
 
     .visualPane strong {
-      font-size: 1.6rem;
+      font-size: 1.45rem;
     }
 
     .formPane {

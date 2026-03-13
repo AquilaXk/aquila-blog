@@ -1,5 +1,5 @@
 import styled from "@emotion/styled"
-import { FC, useMemo, useRef } from "react"
+import { FC, useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import usePrismEffect from "./usePrismEffect"
@@ -17,6 +17,11 @@ type MarkdownSegment =
   | { type: "toggle"; title: string; content: string }
   | { type: "callout"; kind: CalloutKind; title: string; content: string }
 
+type CodeBlockProps = {
+  className?: string
+  rawCode: string
+}
+
 const MARKDOWN_GUIDE = `### 작성 가이드
 - 코드블록: \`\`\`ts
 const x = 1
@@ -32,6 +37,11 @@ graph TD
 - 콜아웃:
   > [!TIP]
   > 내용
+  또는
+  <aside>
+  ℹ️
+  내용
+  </aside>
   지원 타입: TIP, INFO, WARNING, OUTLINE, EXAMPLE, SUMMARY
 - 테이블:
   | name | value |
@@ -52,11 +62,166 @@ const CALLOUT_KIND_MAP: Record<string, CalloutKind> = {
 
 const CALLOUT_TITLE_MAP: Record<CalloutKind, string> = {
   tip: "Tip",
-  info: "Info",
+  info: "Information",
   warning: "Warning",
-  outline: "모범 개요",
-  example: "예시답안",
-  summary: "핵심 개념 정리",
+  outline: "개요",
+  example: "정답",
+  summary: "정리",
+}
+
+const CALLOUT_EMOJI_MAP: Array<{ marker: string; kind: CalloutKind }> = [
+  { marker: "💡", kind: "tip" },
+  { marker: "ℹ️", kind: "info" },
+  { marker: "ℹ", kind: "info" },
+  { marker: "⚠️", kind: "warning" },
+  { marker: "⚠", kind: "warning" },
+  { marker: "📋", kind: "outline" },
+  { marker: "✅", kind: "example" },
+  { marker: "📚", kind: "summary" },
+]
+
+type ParsedCalloutHeader = {
+  kind: CalloutKind
+  title: string
+}
+
+const parseCalloutHeader = (raw: string): ParsedCalloutHeader | null => {
+  const line = raw.trim()
+  if (!line) return null
+
+  const blockquoteMatch = line.match(/^\[!([A-Za-z]+)\](?:\s*(.*))?$/)
+  const rawKind = blockquoteMatch?.[1]?.toUpperCase() || ""
+  const mappedKind = CALLOUT_KIND_MAP[rawKind]
+  if (mappedKind) {
+    const customTitle = blockquoteMatch?.[2]?.trim() || ""
+    return {
+      kind: mappedKind,
+      title: customTitle || CALLOUT_TITLE_MAP[mappedKind],
+    }
+  }
+
+  const emojiMatch = CALLOUT_EMOJI_MAP.find(({ marker }) => line === marker || line.startsWith(`${marker} `))
+  if (!emojiMatch) return null
+
+  const inlineTitle = line.slice(emojiMatch.marker.length).trim()
+  return {
+    kind: emojiMatch.kind,
+    title: inlineTitle || CALLOUT_TITLE_MAP[emojiMatch.kind],
+  }
+}
+
+const buildCalloutSegment = (
+  header: ParsedCalloutHeader,
+  bodyLines: string[]
+): MarkdownSegment => {
+  const firstBodyLineIndex = bodyLines.findIndex((row) => row.trim().length > 0)
+  const firstBodyLine = firstBodyLineIndex >= 0 ? bodyLines[firstBodyLineIndex].trim() : ""
+  const standaloneTitle =
+    firstBodyLine.match(/^\*\*(.+?)\*\*$/)?.[1]?.trim() ||
+    firstBodyLine.match(/^__(.+?)__$/)?.[1]?.trim() ||
+    firstBodyLine.match(/^#{1,6}\s+(.+)$/)?.[1]?.trim() ||
+    ""
+
+  const resolvedTitle = standaloneTitle || header.title
+  const resolvedBodyLines =
+    standaloneTitle && firstBodyLineIndex >= 0
+      ? bodyLines.filter((_, index) => index !== firstBodyLineIndex)
+      : bodyLines
+
+  return {
+    type: "callout",
+    kind: header.kind,
+    title: resolvedTitle,
+    content: resolvedBodyLines.join("\n").trim() || "내용을 입력하세요.",
+  }
+}
+
+const LANGUAGE_LABEL_MAP: Record<string, string> = {
+  js: "JavaScript",
+  javascript: "JavaScript",
+  ts: "TypeScript",
+  typescript: "TypeScript",
+  tsx: "TSX",
+  jsx: "JSX",
+  java: "Java",
+  kt: "Kotlin",
+  kotlin: "Kotlin",
+  py: "Python",
+  python: "Python",
+  sh: "Shell",
+  shell: "Shell",
+  bash: "Bash",
+  md: "Markdown",
+  markdown: "Markdown",
+  yml: "YAML",
+  yaml: "YAML",
+  sql: "SQL",
+  json: "JSON",
+  html: "HTML",
+  xml: "XML",
+  css: "CSS",
+  scss: "SCSS",
+  go: "Go",
+  rust: "Rust",
+  rs: "Rust",
+  mermaid: "Mermaid",
+}
+
+const toLanguageLabel = (lang: string) => {
+  const normalized = lang.trim().toLowerCase()
+  if (!normalized) return "Plain text"
+  return LANGUAGE_LABEL_MAP[normalized] || normalized.toUpperCase()
+}
+
+const CodeBlock: FC<CodeBlockProps> = ({ className, rawCode }) => {
+  const lang = className?.replace("language-", "").trim() || ""
+  const [copied, setCopied] = useState(false)
+  const normalizedCode = rawCode.replace(/\n$/, "")
+  const lineCount = normalizedCode ? normalizedCode.split("\n").length : 1
+  const lineNumbers = useMemo(() => Array.from({ length: lineCount }, (_, index) => index + 1), [lineCount])
+
+  useEffect(() => {
+    if (!copied) return
+    const timeout = window.setTimeout(() => setCopied(false), 1400)
+    return () => window.clearTimeout(timeout)
+  }, [copied])
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(rawCode)
+      setCopied(true)
+    } catch (error) {
+      console.warn("[code-block] copy failed", error)
+    }
+  }
+
+  return (
+    <div className="aq-code-block">
+      <div className="aq-code-toolbar">
+        <div className="aq-code-toolbar-left" aria-hidden="true">
+          <span className="aq-code-dot aq-code-dot-red" />
+          <span className="aq-code-dot aq-code-dot-yellow" />
+          <span className="aq-code-dot aq-code-dot-green" />
+        </div>
+        <span className="aq-code-language">{toLanguageLabel(lang)}</span>
+        <button type="button" className="aq-code-copy" onClick={handleCopy}>
+          {copied ? "복사됨" : "복사"}
+        </button>
+      </div>
+      <div className="aq-code-shell">
+        <div className="aq-code-gutter" aria-hidden="true">
+          {lineNumbers.map((lineNumber) => (
+            <span key={lineNumber} className="aq-code-line-number">
+              {lineNumber}
+            </span>
+          ))}
+        </div>
+        <pre className="aq-code">
+          <code className={className}>{rawCode}</code>
+        </pre>
+      </div>
+    </div>
+  )
 }
 
 const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
@@ -115,29 +280,77 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
       const firstContentIndex = quoteLines.findIndex((row) => row.trim().length > 0)
       if (firstContentIndex >= 0) {
         const firstLine = quoteLines[firstContentIndex].trim()
-        const match = firstLine.match(/^\[!([A-Za-z]+)\](?:\s*(.*))?$/)
-        const rawKind = match?.[1]?.toUpperCase() || ""
-        const mappedKind = CALLOUT_KIND_MAP[rawKind]
-
-        if (mappedKind) {
-          const customTitle = match?.[2]?.trim() || ""
-          const body = quoteLines
-            .slice(firstContentIndex + 1)
-            .join("\n")
-            .trim()
-
+        const header = parseCalloutHeader(firstLine)
+        if (header) {
           flushMarkdown()
-          segments.push({
-            type: "callout",
-            kind: mappedKind,
-            title: customTitle || CALLOUT_TITLE_MAP[mappedKind],
-            content: body || "내용을 입력하세요.",
-          })
+          segments.push(buildCalloutSegment(header, quoteLines.slice(firstContentIndex + 1)))
           continue
         }
       }
 
       markdownBuffer.push(lines.slice(blockStart, i).join("\n"))
+      continue
+    }
+
+    if (/^\s*<aside(?:\s+[^>]*)?>/i.test(line)) {
+      const originalLines = [line]
+      const openingMatch = line.match(/^\s*<aside(?:\s+[^>]*)?>(.*)$/i)
+      const bodyLines: string[] = []
+      let closed = false
+
+      const appendAsideContent = (value: string) => {
+        if (value.length === 0) return
+        bodyLines.push(value)
+      }
+
+      const openingTail = openingMatch?.[1] ?? ""
+      if (openingTail.includes("</aside>")) {
+        appendAsideContent(openingTail.replace(/<\/aside>\s*$/i, "").trimEnd())
+        closed = true
+      } else {
+        appendAsideContent(openingTail)
+      }
+
+      let j = i + 1
+      while (!closed && j < lines.length) {
+        const currentLine = lines[j]
+        originalLines.push(currentLine)
+
+        if (/<\/aside>\s*$/i.test(currentLine)) {
+          appendAsideContent(currentLine.replace(/<\/aside>\s*$/i, "").trimEnd())
+          closed = true
+          i = j
+          break
+        }
+
+        bodyLines.push(currentLine)
+        j += 1
+      }
+
+      if (closed) {
+        const normalizedBodyLines = bodyLines
+          .map((row) => row.replace(/^\s+|\s+$/g, ""))
+        const firstContentIndex = normalizedBodyLines.findIndex((row) => row.length > 0)
+        const header = firstContentIndex >= 0 ? parseCalloutHeader(normalizedBodyLines[firstContentIndex]) : null
+
+        flushMarkdown()
+        if (header) {
+          segments.push(buildCalloutSegment(header, normalizedBodyLines.slice(firstContentIndex + 1)))
+        } else {
+          segments.push({
+            type: "callout",
+            kind: "info",
+            title: CALLOUT_TITLE_MAP.info,
+            content: normalizedBodyLines.join("\n").trim() || "내용을 입력하세요.",
+          })
+        }
+
+        i += 1
+        continue
+      }
+
+      markdownBuffer.push(originalLines.join("\n"))
+      i += 1
       continue
     }
 
@@ -205,11 +418,7 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
             )
           }
 
-          return (
-            <pre className="aq-code">
-              <code className={className}>{rawCode}</code>
-            </pre>
-          )
+          return <CodeBlock className={className} rawCode={rawCode} />
         },
       }}
     >
@@ -361,28 +570,272 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code,
-  pre[class*="language-"],
   .aq-mermaid {
-    margin: 0.85rem 0;
-    border-radius: 12px;
-    padding: 0.9rem 1rem;
+    border-radius: 18px;
+    padding: 1rem 1.1rem;
     overflow-x: auto;
-    background: ${({ theme }) => (theme.scheme === "dark" ? "#1f232a" : "#f5f7fa")};
+    background: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "linear-gradient(180deg, rgba(20, 26, 34, 0.98), rgba(15, 19, 27, 0.98))"
+        : "linear-gradient(180deg, #f8fafc, #f3f5f8)"};
     border: 1px solid
       ${({ theme }) =>
         theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(17, 24, 39, 0.08)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 16px 36px rgba(2, 6, 23, 0.32)" : "0 16px 32px rgba(15, 23, 42, 0.06)"};
+  }
+
+  .aq-code-block {
+    margin: 1rem 0;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid
+      ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(17, 24, 39, 0.08)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 18px 38px rgba(2, 6, 23, 0.34)" : "0 18px 36px rgba(15, 23, 42, 0.08)"};
+  }
+
+  .aq-code-toolbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem 0.82rem;
+    background: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "linear-gradient(180deg, #3b3f52, #3a3e51)"
+        : "linear-gradient(180deg, #dfe4ee, #d6dde8)"};
+    border-bottom: 1px solid
+      ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(17, 24, 39, 0.08)"};
+  }
+
+  .aq-code-toolbar-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .aq-code-dot {
+    width: 0.92rem;
+    height: 0.92rem;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  }
+
+  .aq-code-dot-red {
+    background: #ff5f56;
+  }
+
+  .aq-code-dot-yellow {
+    background: #ffbd2e;
+  }
+
+  .aq-code-dot-green {
+    background: #27c93f;
+  }
+
+  .aq-code-language {
+    justify-self: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ff8f5a" : "#7b4b2a")};
+  }
+
+  .aq-code-copy {
+    justify-self: end;
+    border: 1px solid
+      ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(17, 24, 39, 0.12)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
+    border-radius: 999px;
+    padding: 0.34rem 0.78rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  }
+
+  .aq-code-copy:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0.9)"};
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.18)" : "rgba(17, 24, 39, 0.18)"};
+  }
+
+  .aq-code-shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: stretch;
+    overflow: auto;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "#2b2f3d" : "#f7f8fb"};
+  }
+
+  .aq-code-gutter {
+    display: grid;
+    align-content: start;
+    gap: 0;
+    padding: 1.1rem 0.75rem 1.1rem 0.95rem;
+    min-width: 3.2rem;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "#252938" : "#eef2f7"};
+    border-right: 1px solid
+      ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(17, 24, 39, 0.08)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#5f6b80" : "#94a3b8")};
+    text-align: right;
+    user-select: none;
+  }
+
+  .aq-code-line-number {
+    display: block;
+    font-size: 0.92rem;
+    line-height: 1.7;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
+      monospace;
+  }
+
+  .aq-code-block .aq-code {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 1.1rem 1.25rem;
+    min-width: 0;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "#2b2f3d" : "#f7f8fb"};
   }
 
   .aq-code code,
   pre code {
-    font-size: 0.9rem;
-    line-height: 1.6;
+    display: block;
+    font-size: 0.92rem;
+    line-height: 1.7;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
       monospace;
   }
 
   .aq-toggle {
     margin: 0.9rem 0;
+  }
+
+  .aq-mermaid {
+    display: grid;
+    gap: 0.9rem;
+    align-items: center;
+    justify-items: center;
+  }
+
+  .aq-mermaid svg {
+    display: block;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .aq-mermaid svg .nodeLabel p,
+  .aq-mermaid svg .edgeLabel p {
+    margin: 0;
+  }
+
+  .aq-mermaid svg .node rect,
+  .aq-mermaid svg .node polygon,
+  .aq-mermaid svg .node path,
+  .aq-mermaid svg .cluster rect {
+    filter: drop-shadow(0 10px 24px rgba(15, 23, 42, 0.12));
+  }
+
+  .aq-code .token.comment,
+  .aq-code .token.prolog,
+  .aq-code .token.doctype,
+  .aq-code .token.cdata {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#808ca0" : "#6b7280")};
+    font-style: italic;
+  }
+
+  .aq-code .token.punctuation {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#aeb7c6" : "#475569")};
+  }
+
+  .aq-code .token.property,
+  .aq-code .token.tag,
+  .aq-code .token.constant,
+  .aq-code .token.symbol,
+  .aq-code .token.deleted {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#f07178" : "#c2410c")};
+  }
+
+  .aq-code .token.boolean,
+  .aq-code .token.number {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#d19a66" : "#b45309")};
+  }
+
+  .aq-code .token.selector,
+  .aq-code .token.attr-name,
+  .aq-code .token.string,
+  .aq-code .token.char,
+  .aq-code .token.builtin,
+  .aq-code .token.inserted {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#98c379" : "#047857")};
+  }
+
+  .aq-code .token.operator,
+  .aq-code .token.entity,
+  .aq-code .token.url,
+  .aq-code .token.variable {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#c678dd" : "#7c3aed")};
+  }
+
+  .aq-code .token.atrule,
+  .aq-code .token.attr-value,
+  .aq-code .token.keyword {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
+    font-weight: 600;
+  }
+
+  .aq-code .token.function,
+  .aq-code .token.class-name {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffc66d" : "#be185d")};
+  }
+
+  .aq-code .token.regex,
+  .aq-code .token.important {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#56b6c2" : "#92400e")};
+  }
+
+  @media (max-width: 768px) {
+    .aq-code-toolbar {
+      grid-template-columns: auto 1fr;
+      row-gap: 0.55rem;
+    }
+
+    .aq-code-language {
+      justify-self: end;
+    }
+
+    .aq-code-copy {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
+
+    .aq-code-gutter {
+      min-width: 2.7rem;
+      padding-left: 0.72rem;
+      padding-right: 0.56rem;
+    }
+
+    .aq-code-block .aq-code {
+      padding-left: 0.92rem;
+      padding-right: 1rem;
+    }
   }
 
   .aq-toggle > summary {
@@ -494,6 +947,7 @@ const StyledWrapper = styled.div`
       left top,
       left bottom;
     z-index: 1;
+    pointer-events: none;
   }
 
   .aq-callout.notion-admonition::after {
@@ -507,6 +961,7 @@ const StyledWrapper = styled.div`
     border-left: 0;
     border-radius: 0 8px 8px 0;
     z-index: 0;
+    pointer-events: none;
   }
 
   .aq-callout.notion-admonition > * {
@@ -527,9 +982,10 @@ const StyledWrapper = styled.div`
     top: calc(var(--ad-header-h) / 2);
     transform: translateY(-50%);
     color: var(--ad-accent);
-    font-size: 1.05rem;
+    font-size: 1.2rem;
     font-weight: 600;
     line-height: 1.1;
+    letter-spacing: 0;
   }
 
   .aq-callout.notion-admonition .notion-callout-text::after {
@@ -546,10 +1002,18 @@ const StyledWrapper = styled.div`
     background-position: center;
   }
 
+  .aq-callout.notion-admonition .notion-page-icon-inline {
+    display: none;
+  }
+
   .aq-callout.notion-admonition .notion-text {
     color: var(--ad-text);
-    font-size: 0.96rem;
-    line-height: 1.65;
+    font-size: 0.98rem;
+    line-height: 1.6;
+  }
+
+  .aq-callout.notion-admonition .notion-text[data-admonition-heading="true"] {
+    display: none;
   }
 
   .aq-callout.notion-admonition-tip {

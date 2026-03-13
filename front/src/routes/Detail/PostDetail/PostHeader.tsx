@@ -17,6 +17,10 @@ type Props = {
   actorHasLiked?: boolean
   likePending?: boolean
   onToggleLike?: () => void
+  showAdminActions?: boolean
+  adminActionPending?: boolean
+  onEditPost?: () => void
+  onDeletePost?: () => void
 }
 
 const PostHeader: React.FC<Props> = ({
@@ -27,6 +31,10 @@ const PostHeader: React.FC<Props> = ({
   actorHasLiked = false,
   likePending = false,
   onToggleLike,
+  showAdminActions = false,
+  adminActionPending = false,
+  onEditPost,
+  onDeletePost,
 }) => {
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
@@ -75,6 +83,18 @@ const PostHeader: React.FC<Props> = ({
         )}
 
         <div className="actions">
+          {showAdminActions && (
+            <div className="adminActions">
+              <button type="button" className="adminButton" onClick={onEditPost} disabled={adminActionPending}>
+                <AppIcon name="edit" />
+                <span>수정</span>
+              </button>
+              <button type="button" className="adminButton dangerButton" onClick={onDeletePost} disabled={adminActionPending}>
+                <AppIcon name="trash" />
+                <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
+              </button>
+            </div>
+          )}
           <button
             type="button"
             className="likeButton"
@@ -195,6 +215,43 @@ const StyledWrapper = styled.header`
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 0.7rem;
+  }
+
+  .adminActions {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .adminButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 40px;
+    padding: 0 0.9rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      color 0.18s ease;
+
+    :disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+    }
+  }
+
+  .dangerButton {
+    border-color: ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
   }
 
   .likeButton {

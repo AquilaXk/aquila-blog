@@ -49,6 +49,8 @@ type ApiPostWithContentDto = {
   commentsCount: number
   hitCount: number
   actorHasLiked?: boolean
+  actorCanModify?: boolean
+  actorCanDelete?: boolean
 }
 
 const slugify = (value: string) =>
@@ -241,6 +243,8 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
     commentsCount: post.commentsCount,
     hitCount: post.hitCount,
     actorHasLiked: post.actorHasLiked,
+    actorCanModify: post.actorCanModify,
+    actorCanDelete: post.actorCanDelete,
   }
 }
 

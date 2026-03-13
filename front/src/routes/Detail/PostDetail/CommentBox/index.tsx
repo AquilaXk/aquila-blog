@@ -40,6 +40,11 @@ type CommentNode = TPostComment & {
   replies: CommentNode[]
 }
 
+type CommentListItem = {
+  comment: CommentNode
+  isReply: boolean
+}
+
 type RsData<T> = {
   resultCode: string
   msg: string
@@ -128,6 +133,18 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
 
     return roots
   }, [comments])
+
+  const flattenedComments = useMemo(() => {
+    const rows: CommentListItem[] = []
+
+    const walk = (node: CommentNode, isReply = false) => {
+      rows.push({ comment: node, isReply })
+      node.replies.forEach((reply) => walk(reply, true))
+    }
+
+    commentTree.forEach((root) => walk(root, false))
+    return rows
+  }, [commentTree])
 
   const submitComment = async (content: string, parentCommentId?: number | null) => {
     const trimmed = content.trim()
@@ -283,7 +300,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     )
   }
 
-  const renderComment = (comment: CommentNode, depth = 0) => {
+  const renderComment = (comment: CommentNode, isReply = false) => {
     const displayName = comment.authorName || comment.authorUsername || "익명"
     const createdLabel = formatShortDateTime(comment.createdAt, CONFIG.lang)
     const edited = comment.modifiedAt !== comment.createdAt
@@ -293,19 +310,19 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
 
     return (
       <li key={comment.id}>
-        <CommentItem data-depth={depth}>
+        <CommentItem data-reply={isReply}>
           {renderAvatar(
             comment.authorProfileImageDirectUrl,
             comment.authorProfileImageUrl,
             displayName,
-            depth > 0 ? 38 : 44,
-            depth === 0
+            isReply ? 38 : 44,
+            !isReply
           )}
           <div className="commentBody">
             <div className="head">
               <div className="meta">
                 <div className="metaPrimary">
-                  {depth > 0 && (
+                  {isReply && (
                     <span className="replyContext" aria-hidden="true">
                       <AppIcon name="reply" aria-hidden="true" />
                     </span>
@@ -395,12 +412,6 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
                 </div>
               </form>
             )}
-
-            {comment.replies.length > 0 && (
-              <ul className="replyList">
-                {comment.replies.map((reply) => renderComment(reply, depth + 1))}
-              </ul>
-            )}
           </div>
         </CommentItem>
       </li>
@@ -447,7 +458,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
       {error && <p className="error">{error}</p>}
 
       {commentTree.length > 0 ? (
-        <ul className="commentList">{commentTree.map((comment) => renderComment(comment))}</ul>
+        <ul className="commentList">{flattenedComments.map(({ comment, isReply }) => renderComment(comment, isReply))}</ul>
       ) : (
         <EmptyState>
           <strong>첫 댓글을 남겨보세요.</strong>
@@ -574,26 +585,15 @@ const StyledWrapper = styled.section`
     font-size: 0.875rem;
   }
 
-  .commentList,
-  .replyList {
+  .commentList {
     list-style: none;
     margin: 0;
     padding: 0;
-  }
-
-  .commentList {
     display: grid;
     gap: 0;
   }
 
-  .replyList {
-    display: grid;
-    gap: 0;
-    margin-top: 0.85rem;
-  }
-
-  .commentList > li + li,
-  .replyList > li + li {
+  .commentList > li + li {
     border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 `
@@ -648,22 +648,12 @@ const CommentItem = styled.div`
   gap: 0.85rem;
   padding: 1.05rem 0;
 
-  &[data-depth="1"] {
+  &[data-reply="true"] {
     margin-left: 2rem;
   }
 
-  &[data-depth="2"] {
-    margin-left: 4rem;
-  }
-
-  &[data-depth="3"] {
-    margin-left: 6rem;
-  }
-
   @media (max-width: 640px) {
-    &[data-depth="1"],
-    &[data-depth="2"],
-    &[data-depth="3"] {
+    &[data-reply="true"] {
       margin-left: 1rem;
     }
   }
@@ -746,36 +736,15 @@ const CommentItem = styled.div`
     margin-top: 0.7rem;
   }
 
-  .replyList {
-    padding-left: 0;
-  }
-
   @media (max-width: 640px) {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.75rem;
     padding: 0.95rem 0;
 
-    &[data-depth="0"] {
-      padding-top: 0;
-    }
-
-    &[data-depth="1"],
-    &[data-depth="2"],
-    &[data-depth="3"] {
-      margin-left: 0;
-      padding-left: 0.9rem;
-    }
-
     .topActions {
       width: 100%;
       margin-left: 0;
       justify-content: flex-start;
-    }
-
-    .replyList {
-      margin-top: 0.55rem;
-      padding-left: 0;
-      gap: 0;
     }
 
     .metaPrimary {

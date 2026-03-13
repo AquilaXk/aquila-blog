@@ -135,6 +135,11 @@ const dedupeStrings = (items: string[]) =>
     )
   )
 
+const isComposingKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean; keyCode?: number }
+  return nativeEvent.isComposing === true || nativeEvent.keyCode === 229
+}
+
 const normalizeMetaItems = (raw: string): string[] => {
   const normalized = raw.trim().replace(/^\[|\]$/g, "")
   if (!normalized) return []
@@ -492,6 +497,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
   const redirectingRef = useRef(false)
   const hydratedAdminIdRef = useRef<number | null>(null)
+  const autoLoadedPostIdRef = useRef<string | null>(null)
   const applyProfileState = useCallback((member: MemberMe) => {
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
@@ -556,7 +562,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const syncEditorMeta = (content: string) => {
+  const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
     const parsedCategory = splitCategoryDisplay(parsed.category)
     setPostContent(parsed.body)
@@ -567,7 +573,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setKnownCategories((prev) =>
       dedupeStrings([...prev, ...(parsed.category ? [parsed.category] : [])]).sort(compareCategoryValues)
     )
-  }
+  }, [])
 
   const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
@@ -711,7 +717,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
   }
 
-  const loadPostForEditor = async (targetPostId: string = postId) => {
+  const loadPostForEditor = useCallback(async (targetPostId: string = postId) => {
     try {
       setLoadingKey("postOne")
       const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
@@ -727,7 +733,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }
+  }, [postId, syncEditorMeta])
 
   const handleWritePost = async () => {
     if (!postTitle.trim()) {
@@ -1064,6 +1070,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
     void refreshEditorMetaCatalog()
   }, [applyProfileState, refreshEditorMetaCatalog, sessionMember])
+
+  useEffect(() => {
+    if (!router.isReady) return
+
+    const queryPostId = typeof router.query.postId === "string" ? router.query.postId.trim() : ""
+    if (!queryPostId) return
+    if (autoLoadedPostIdRef.current === queryPostId) return
+
+    autoLoadedPostIdRef.current = queryPostId
+    setPostId(queryPostId)
+    void loadPostForEditor(queryPostId)
+  }, [loadPostForEditor, router.isReady, router.query.postId])
 
   const insertSnippet = (snippet: string) => {
     const textarea = postContentRef.current
@@ -1923,6 +1941,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       value={tagDraft}
                       onChange={(e) => setTagDraft(e.target.value)}
                       onKeyDown={(e) => {
+                        if (isComposingKeyboardEvent(e)) return
                         if (e.key === "Enter") {
                           e.preventDefault()
                           addTagToPost(tagDraft)
@@ -1983,7 +2002,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </div>
           </WriterHeader>
           <EditorContextChip>{currentPostLabel}</EditorContextChip>
-          <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
           {activeMetaPanel && (
             <CompactMetaPanel>
               <CompactMetaPanelTop>
@@ -2068,6 +2086,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       value={categoryDraft}
                       onChange={(e) => setCategoryDraft(e.target.value)}
                       onKeyDown={(e) => {
+                        if (isComposingKeyboardEvent(e)) return
                         if (e.key === "Enter") {
                           e.preventDefault()
                           selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryIconId))
@@ -2235,14 +2254,17 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <span>{tagSummaryText} · {selectedCategoryText}</span>
               <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
             </WriterFooterSummary>
-            <WriterFooterActions>
-              <Button type="button" disabled={disabled("modifyPost")} onClick={() => void handleModifyPost()}>
-                선택 글 수정
-              </Button>
-              <PrimaryButton type="button" disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
-                {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
-              </PrimaryButton>
-            </WriterFooterActions>
+            <WriterFooterControls>
+              <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
+              <WriterFooterActions>
+                <Button type="button" disabled={disabled("modifyPost")} onClick={() => void handleModifyPost()}>
+                  선택 글 수정
+                </Button>
+                <PrimaryButton type="button" disabled={disabled("writePost")} onClick={() => void handleWritePost()}>
+                  {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
+                </PrimaryButton>
+              </WriterFooterActions>
+            </WriterFooterControls>
           </WriterFooterBar>
         </EditorSection>
 
@@ -3103,11 +3125,12 @@ const FieldHelp = styled.span`
 `
 
 const PublishNotice = styled.div`
-  margin: 0 0 0.7rem;
+  margin: 0;
   padding: 0.55rem 0.7rem;
   border-radius: 10px;
   font-size: 0.83rem;
   line-height: 1.4;
+  width: min(100%, 30rem);
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray11};
@@ -3131,6 +3154,10 @@ const PublishNotice = styled.div`
     color: ${({ theme }) => theme.colors.red11};
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
+  }
+
+  @media (max-width: 720px) {
+    width: 100%;
   }
 `
 
@@ -3928,10 +3955,32 @@ const WriterFooterSummary = styled.div`
   line-height: 1.5;
 `
 
+const WriterFooterControls = styled.div`
+  display: grid;
+  gap: 0.6rem;
+  justify-items: end;
+  min-width: min(100%, 30rem);
+
+  @media (max-width: 720px) {
+    justify-items: stretch;
+    width: 100%;
+  }
+`
+
 const WriterFooterActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+
+  @media (max-width: 720px) {
+    width: 100%;
+    justify-content: stretch;
+
+    > button {
+      flex: 1 1 0;
+      justify-content: center;
+    }
+  }
 `
 
 const EditorInsightGrid = styled.div`

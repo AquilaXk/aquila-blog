@@ -155,9 +155,9 @@ const StyledWrapper = styled.div`
     top: calc(100% + 0.45rem);
     left: 0;
     z-index: 30;
-    min-width: 100%;
-    width: fit-content;
-    max-width: min(24rem, calc(100vw - 2.5rem));
+    width: max-content;
+    min-width: max(100%, 16rem);
+    max-width: min(26rem, calc(100vw - 2.5rem));
     max-height: min(18rem, calc(100vh - 12rem));
     overflow-y: auto;
     overflow-x: hidden;
@@ -213,6 +213,7 @@ const StyledWrapper = styled.div`
         padding-left: 0.35rem;
         color: ${({ theme }) => theme.colors.gray10};
         text-align: right;
+        white-space: nowrap;
       }
     }
   }

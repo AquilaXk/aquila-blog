@@ -42,7 +42,8 @@ const StyledWrapper = styled.div`
 
 const FilterRow = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 17rem) auto;
+  grid-template-columns: minmax(0, 17rem) minmax(0, 18rem);
+  justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
   padding-top: 1rem;
@@ -50,26 +51,42 @@ const FilterRow = styled.div`
 
   @container feed-filters (max-width: 44rem) {
     grid-template-columns: 1fr;
+    justify-content: start;
+    justify-items: start;
     gap: 0.8rem;
+  }
+
+  @container feed-filters (max-width: 28rem) {
+    justify-items: stretch;
   }
 `
 
 const CategorySlot = styled.div`
-  width: 100%;
-  max-width: 17rem;
+  width: min(100%, 17rem);
   min-width: 0;
 
   @container feed-filters (max-width: 44rem) {
-    max-width: none;
+    width: min(100%, 17rem);
+  }
+
+  @container feed-filters (max-width: 28rem) {
+    width: 100%;
   }
 `
 
 const OrderSlot = styled.div`
   justify-self: end;
+  width: min(100%, 18rem);
   min-width: 0;
 
   @container feed-filters (max-width: 44rem) {
+    justify-self: start;
+    width: min(100%, 18rem);
+  }
+
+  @container feed-filters (max-width: 28rem) {
     justify-self: stretch;
+    width: 100%;
   }
 `
 
@@ -94,8 +111,14 @@ const ControlPlaceholder = styled.div`
 
 const SegmentPlaceholder = styled(ControlPlaceholder)`
   min-width: 248px;
+  width: min(100%, 18rem);
 
   @container feed-filters (max-width: 44rem) {
+    min-width: 248px;
+    width: min(100%, 18rem);
+  }
+
+  @container feed-filters (max-width: 28rem) {
     min-width: 0;
     width: 100%;
   }

@@ -61,6 +61,11 @@ const StyledWrapper = styled.div`
   background: ${({ theme }) => theme.colors.gray2};
 
   @container feed-filters (max-width: 44rem) {
+    width: min(100%, 18rem);
+    min-width: 248px;
+  }
+
+  @container feed-filters (max-width: 28rem) {
     width: 100%;
     min-width: 0;
   }
@@ -92,8 +97,12 @@ const StyledWrapper = styled.div`
     }
 
     @container feed-filters (max-width: 44rem) {
-      width: 100%;
+      width: min(100%, 18rem);
       min-width: 0;
+    }
+
+    @container feed-filters (max-width: 28rem) {
+      width: 100%;
     }
   }
 `

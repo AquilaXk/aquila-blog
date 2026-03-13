@@ -2,6 +2,12 @@
 
 Last updated: 2026-03-13
 
+## 3줄 요약
+
+- 하이드레이션 비용, JS 번들, lazy load 경계를 건드릴 때만 이 문서를 먼저 본다.
+- 현재 기준은 `Pages Router + SSR 정적 셸 + 작은 islands + 지연 import`이며, 전역 강제 SSR은 피한다.
+- hot path에서는 로컬 SVG, 지연 가능한 영역에서는 `next/dynamic`, heavy renderer는 effect import를 우선한다.
+
 ## 이 문서가 보여주는 것
 
 이 문서는 현재 프론트 구조에서 어디를 정적으로 두고, 어디를 늦게 로드해야 메인 JS 번들과 하이드레이션 비용을 가장 많이 줄일 수 있는지 정리한 작업 기준 문서다.

@@ -70,6 +70,10 @@ const CategorySlot = styled.div`
 
   @container feed-filters (max-width: 44rem) {
     width: 100%;
+    max-width: min(100%, 20rem);
+  }
+
+  @container feed-filters (max-width: 28rem) {
     max-width: 100%;
   }
 `

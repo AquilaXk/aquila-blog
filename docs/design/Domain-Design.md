@@ -2,6 +2,12 @@
 
 Last updated: 2026-03-12
 
+## 3줄 요약
+
+- 백엔드 책임 분리와 도메인 경계를 볼 때 이 문서를 먼저 읽는다.
+- 현재 핵심 bounded context는 `member`, `post`, `home`, `global.system`, `global.task`다.
+- 세부 패키지/포트 배치는 `package-structure.md`, 운영 흐름은 `System-Architecture.md`와 함께 본다.
+
 ## 이 문서가 보여주는 것
 
 이 문서는 기능 목록보다 도메인 경계와 규칙을 중심으로, 백엔드 설계를 어떤 기준으로 분리했는지를 설명한다.

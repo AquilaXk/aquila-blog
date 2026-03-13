@@ -1,28 +1,49 @@
 package com.back.global.storage.app
 
+import com.back.boundedContexts.member.application.port.out.MemberAttrRepositoryPort
+import com.back.boundedContexts.post.application.port.out.PostImageStoragePort
+import com.back.boundedContexts.post.application.port.out.PostRepositoryPort
+import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.app.AppConfig
+import com.back.global.jpa.config.JpaConfig
 import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
 import com.back.global.storage.out.UploadedFileRepository
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.time.Duration
 import java.time.Instant
 
 @ActiveProfiles("test")
-@SpringBootTest
-@Transactional
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(UploadedFileRetentionService::class, JpaConfig::class, UploadedFileRetentionServiceTest.TestConfig::class)
 class UploadedFileRetentionServiceTest {
     @Autowired
     private lateinit var uploadedFileRetentionService: UploadedFileRetentionService
 
     @Autowired
     private lateinit var uploadedFileRepository: UploadedFileRepository
+
+    @MockitoBean
+    private lateinit var postRepository: PostRepositoryPort
+
+    @MockitoBean
+    private lateinit var memberAttrRepository: MemberAttrRepositoryPort
+
+    @MockitoBean
+    private lateinit var postImageStoragePort: PostImageStoragePort
 
     @Test
     fun `업로드 직후 파일은 1일 보존 임시 파일로 등록된다`() {
@@ -133,5 +154,27 @@ class UploadedFileRetentionServiceTest {
         assertThat(diagnostics.tempCount).isGreaterThanOrEqualTo(1)
         assertThat(diagnostics.eligibleForPurgeCount).isGreaterThanOrEqualTo(1)
         assertThat(diagnostics.sampleEligibleObjectKeys).contains(objectKey)
+    }
+
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun setUpAppConfig() {
+            AppConfig(
+                siteBackUrl = "http://localhost:8080",
+                siteFrontUrl = "http://localhost:3000",
+                adminUsername = "admin",
+                adminPassword = "",
+            )
+        }
+    }
+
+    @TestConfiguration
+    class TestConfig {
+        @Bean
+        fun postImageStorageProperties(): PostImageStorageProperties = PostImageStorageProperties()
+
+        @Bean
+        fun uploadedFileRetentionProperties(): UploadedFileRetentionProperties = UploadedFileRetentionProperties()
     }
 }

@@ -78,7 +78,9 @@ flowchart LR
 - 단순 위임 서비스 테스트나 보정 로직 테스트도 가능하면 plain unit test로 유지한다.
   예: `ActorApplicationServiceTest`, `PostLikeReconciliationServiceTest`
 - 컨트롤러가 진단/응답 조합만 담당하는 얇은 케이스는 가능하면 `@WebMvcTest`로 내려서 컨텍스트 비용을 줄인다.
-  예: `ApiV1AdmSystemControllerTest`, `ApiV1AdmPostControllerTest`
+  예: `ApiV1AdmSystemControllerTest`, `ApiV1AdmPostControllerTest`, `ApiV1MemberControllerWebMvcTest`
+- 실제 JPA 쿼리나 저장소 동작이 핵심인 테스트는 가능하면 `@DataJpaTest`로 내려서 DB 검증은 유지하고 컨텍스트 비용만 줄인다.
+  예: `MemberRepositoryTest`, `UploadedFileRetentionServiceTest`
 
 ## 배포 안전 규칙
 

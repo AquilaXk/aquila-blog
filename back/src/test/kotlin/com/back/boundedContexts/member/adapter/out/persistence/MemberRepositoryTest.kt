@@ -1,32 +1,31 @@
 package com.back.boundedContexts.member.adapter.out.persistence
 
-import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.global.jpa.config.JpaConfig
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
+import org.springframework.context.annotation.Import
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.transaction.annotation.Transactional
 
 @ActiveProfiles("test")
-@SpringBootTest
-@Transactional
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(JpaConfig::class)
 class MemberRepositoryTest {
     @Autowired
     private lateinit var memberRepository: MemberRepository
 
-    @Autowired
-    private lateinit var memberFacade: MemberApplicationService
-
     private fun join(
         username: String,
         nickname: String,
-    ): Member = memberFacade.join(username, "1234", nickname, null)
+    ): Member = memberRepository.saveAndFlush(Member(0, username, "1234", nickname))
 
     private fun search(kw: String): Page<Member> =
         memberRepository.findQPagedByKw(

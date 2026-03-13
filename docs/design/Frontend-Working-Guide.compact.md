@@ -2,6 +2,8 @@
 
 Last updated: 2026-03-13
 
+> AI 기본 진입점이 아니다. 에이전트는 먼저 `docs/AGENT-CONTEXT.md`와 `docs/agent/frontend-ui.md`를 읽고, 막힐 때만 이 문서를 연다.
+
 ## 3줄 요약
 
 - 프론트 화면/UX 작업은 이 문서부터 읽고, 더 깊은 기준이 필요할 때만 `Frontend-Working-Guide.md` 본문으로 내려간다.

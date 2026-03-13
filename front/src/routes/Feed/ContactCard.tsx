@@ -1,14 +1,13 @@
 import styled from "@emotion/styled"
 import React from "react"
 import { CONFIG } from "site.config"
-import { Emoji } from "src/components/Emoji"
 import AppIcon from "src/components/icons/AppIcon"
 
 const ContactCard: React.FC = () => {
   return (
     <>
       <StyledTitle>
-        <Emoji>💬</Emoji> Contact
+        <AppIcon name="message" className="titleIcon" /> Contact
       </StyledTitle>
       <StyledWrapper>
         {CONFIG.profile.github && (
@@ -60,8 +59,16 @@ const ContactCard: React.FC = () => {
 export default ContactCard
 
 const StyledTitle = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.25rem;
   margin-bottom: 0.75rem;
+
+  .titleIcon {
+    font-size: 1rem;
+    flex: 0 0 auto;
+  }
 `
 const StyledWrapper = styled.div`
   display: flex;

@@ -5,6 +5,7 @@ import { useRouter } from "next/router"
 import { useMemo, useState } from "react"
 import ProfileImage from "src/components/ProfileImage"
 import useAuthSession from "src/hooks/useAuthSession"
+import { replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -13,13 +14,13 @@ export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ r
 
 const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
-  const { me, logout } = useAuthSession()
-  const sessionMember = me ?? initialMember
+  const { me, authStatus, logout } = useAuthSession()
+  const sessionMember = authStatus === "loading" ? initialMember : me
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const profileSrc = useMemo(
-    () => sessionMember.profileImageDirectUrl || sessionMember.profileImageUrl || "",
-    [sessionMember.profileImageDirectUrl, sessionMember.profileImageUrl]
+    () => sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || "",
+    [sessionMember?.profileImageDirectUrl, sessionMember?.profileImageUrl]
   )
 
   const quickLinks = [
@@ -48,10 +49,12 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setIsLoggingOut(true)
       await logout()
     } finally {
-      await router.replace(`/login?next=${encodeURIComponent("/admin")}`)
+      await replaceRoute(router, toLoginPath("/admin"), { preferHardNavigation: true })
       setIsLoggingOut(false)
     }
   }
+
+  if (!sessionMember) return null
 
   return (
     <Main>

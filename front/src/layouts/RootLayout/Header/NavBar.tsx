@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo, useState } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
-import { isNavigationCancelledError } from "src/libs/router"
+import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
   ssr: false,
@@ -24,23 +24,16 @@ const NavBar: React.FC = () => {
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
   const nextPath = useMemo(() => {
-    if (!router.asPath || !router.asPath.startsWith("/")) return "/"
-    return router.asPath
+    return normalizeNextPath(router.asPath)
   }, [router.asPath])
 
   const handleLogout = async () => {
     await logout()
 
-    if (router.pathname === "/admin") {
-      const target = "/login?next=%2Fadmin"
+    if (router.pathname.startsWith("/admin")) {
+      const target = toLoginPath(nextPath, "/admin")
       if (router.asPath !== target) {
-        try {
-          await router.replace(target)
-        } catch (error) {
-          if (!isNavigationCancelledError(error)) {
-            console.error("logout redirect failed", error)
-          }
-        }
+        await replaceRoute(router, target, { preferHardNavigation: true })
       }
     }
   }

@@ -3,7 +3,7 @@ import { GetServerSideProps } from "next"
 import { IncomingMessage } from "http"
 import { dehydrate } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
-import { Emoji } from "src/components/Emoji"
+import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
@@ -108,7 +108,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               {CONFIG.profile.email && (
                 <li>
                   <span className="icon">
-                    <Emoji>📧</Emoji>
+                    <AppIcon name="mail" aria-hidden="true" />
                   </span>
                   <a href={`mailto:${CONFIG.profile.email}`}>{CONFIG.profile.email}</a>
                 </li>
@@ -116,7 +116,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               {CONFIG.profile.github && (
                 <li>
                   <span className="icon">
-                    <Emoji>💻</Emoji>
+                    <AppIcon name="github" aria-hidden="true" />
                   </span>
                   <a href={`https://github.com/${CONFIG.profile.github}`} target="_blank" rel="noopener noreferrer">
                     github.com/{CONFIG.profile.github}
@@ -126,7 +126,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               {CONFIG.profile.linkedin && (
                 <li>
                   <span className="icon">
-                    <Emoji>💼</Emoji>
+                    <AppIcon name="briefcase" aria-hidden="true" />
                   </span>
                   <a href={CONFIG.profile.linkedin} target="_blank" rel="noopener noreferrer">
                     LinkedIn
@@ -136,7 +136,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               {CONFIG.profile.instagram && (
                 <li>
                   <span className="icon">
-                    <Emoji>📸</Emoji>
+                    <AppIcon name="camera" aria-hidden="true" />
                   </span>
                   <a
                     href={`https://instagram.com/${CONFIG.profile.instagram}`}
@@ -157,7 +157,7 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                 {CONFIG.projects.map((project, index) => (
                   <li key={index}>
                     <a href={project.href} target="_blank" rel="noopener noreferrer">
-                      <Emoji>🚀</Emoji> {project.name}
+                      <AppIcon name="rocket" aria-hidden="true" /> {project.name}
                     </a>
                   </li>
                 ))}

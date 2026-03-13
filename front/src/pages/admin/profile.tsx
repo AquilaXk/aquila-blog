@@ -2,12 +2,13 @@ import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import ProfileImage from "src/components/ProfileImage"
 import useAuthSession, { AuthMember } from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
+import { replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -35,8 +36,8 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { me, logout, setMe } = useAuthSession()
-  const sessionMember = me ?? initialMember
+  const { me, authStatus, logout, setMe } = useAuthSession()
+  const sessionMember = authStatus === "loading" ? initialMember : me
   const [loadingKey, setLoadingKey] = useState("")
   const [notice, setNotice] = useState<{ tone: NoticeTone; text: string }>({
     tone: "idle",
@@ -139,12 +140,14 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("logout")
       await logout()
     } finally {
-      await router.replace(`/login?next=${encodeURIComponent("/admin/profile")}`)
+      await replaceRoute(router, toLoginPath("/admin/profile"), { preferHardNavigation: true })
       setLoadingKey("")
     }
   }
 
-  const profileSrc = useMemo(() => profileImgInputUrl.trim(), [profileImgInputUrl])
+  if (!sessionMember) return null
+
+  const profileSrc = profileImgInputUrl.trim()
   const profileUpdatedText = sessionMember?.modifiedAt
     ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
     : "확인 전"

@@ -1,7 +1,6 @@
 import { CONFIG } from "site.config"
 import React from "react"
 import styled from "@emotion/styled"
-import { Emoji } from "src/components/Emoji"
 import AppIcon from "src/components/icons/AppIcon"
 
 const ServiceCard: React.FC = () => {
@@ -9,7 +8,7 @@ const ServiceCard: React.FC = () => {
   return (
     <>
       <StyledTitle>
-        <Emoji>🌟</Emoji> Service
+        <AppIcon name="spark" className="titleIcon" /> Service
       </StyledTitle>
       <StyledWrapper>
         {CONFIG.projects.map((project, idx) => (
@@ -31,8 +30,16 @@ const ServiceCard: React.FC = () => {
 export default ServiceCard
 
 const StyledTitle = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.25rem;
   margin-bottom: 0.75rem;
+
+  .titleIcon {
+    font-size: 1rem;
+    flex: 0 0 auto;
+  }
 `
 
 const StyledWrapper = styled.div`

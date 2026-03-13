@@ -1,5 +1,6 @@
 import { IncomingMessage } from "http"
 import type { AuthMember } from "src/hooks/useAuthSession"
+import { normalizeNextPath, toLoginPath } from "src/libs/router"
 import { serverApiFetch } from "./backend"
 
 type AdminGuardResult =
@@ -8,10 +9,10 @@ type AdminGuardResult =
 
 export const guardAdminRequest = async (req: IncomingMessage): Promise<AdminGuardResult> => {
   const response = await serverApiFetch(req, "/member/api/v1/auth/me")
-  const requestedPath = req.url?.startsWith("/") ? req.url : "/admin"
+  const requestedPath = normalizeNextPath(req.url, "/admin")
 
   if (response.status === 401) {
-    return { ok: false, destination: `/login?next=${encodeURIComponent(requestedPath || "/admin")}` }
+    return { ok: false, destination: toLoginPath(requestedPath, "/admin") }
   }
 
   if (!response.ok) {

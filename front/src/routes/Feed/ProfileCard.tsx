@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import React from "react"
 import { CONFIG } from "site.config"
-import { Emoji } from "src/components/Emoji"
+import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 
@@ -20,7 +20,7 @@ const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   return (
     <StyledWrapper>
         <div className="title">
-          <Emoji>💻</Emoji> Profile
+          <AppIcon name="laptop" className="titleIcon" /> Profile
         </div>
       <div className="content">
         <div className="top">
@@ -40,11 +40,19 @@ export default ProfileCard
 
 const StyledWrapper = styled.div`
   > .title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     padding: 0.15rem 0.1rem;
     margin-bottom: 0.7rem;
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.82rem;
     font-weight: 700;
+
+    .titleIcon {
+      font-size: 0.96rem;
+      flex: 0 0 auto;
+    }
   }
   > .content {
     margin-bottom: 1.25rem;

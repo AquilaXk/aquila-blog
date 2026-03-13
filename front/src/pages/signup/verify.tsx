@@ -4,6 +4,7 @@ import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
+import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -35,10 +36,7 @@ const SignupVerifyPage = () => {
     return Array.isArray(raw) ? raw[0] : raw
   }, [router.query.token])
   const next = useMemo(() => {
-    const raw = router.query.next
-    const value = Array.isArray(raw) ? raw[0] : raw
-    if (!value || !value.startsWith("/") || value.startsWith("//")) return "/"
-    return value
+    return normalizeNextPath(router.query.next)
   }, [router.query.next])
 
   useEffect(() => {
@@ -147,11 +145,11 @@ const SignupVerifyPage = () => {
       heroDescription="이메일은 확인 완료 상태로 잠겨 있습니다. 이제 로그인에 사용할 아이디와 비밀번호를 설정하면 됩니다."
       footer={
         <FooterText>
-          다시 시작하려면 <Link href={`/signup?next=${encodeURIComponent(next)}`}>회원가입 처음으로</Link>
+          다시 시작하려면 <Link href={toSignupPath(next)}>회원가입 처음으로</Link>
         </FooterText>
       }
-      loginHref={`/login?next=${encodeURIComponent(next)}`}
-      signupHref={`/signup?next=${encodeURIComponent(next)}`}
+      loginHref={toLoginPath(next)}
+      signupHref={toSignupPath(next)}
     >
       {loadingVerification ? (
         <InfoText>회원가입 링크를 확인하고 있습니다...</InfoText>
@@ -242,7 +240,7 @@ const SignupVerifyPage = () => {
           )}
 
           <ActionRow>
-            <CancelLink href={`/signup?next=${encodeURIComponent(next)}`}>취소</CancelLink>
+            <CancelLink href={toSignupPath(next)}>취소</CancelLink>
             <PrimaryButton type="submit" disabled={submitLoading}>
               {submitLoading ? "가입 중..." : "가입"}
             </PrimaryButton>

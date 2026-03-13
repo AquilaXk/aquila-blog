@@ -1,7 +1,7 @@
 import { CONFIG } from "site.config"
 import { useEffect, useRef, useState } from "react" // useState 추가
 import styled from "@emotion/styled"
-import { Emoji } from "src/components/Emoji"
+import AppIcon from "src/components/icons/AppIcon"
 import useScheme from "src/hooks/useScheme"
 
 type Props = {
@@ -54,7 +54,7 @@ const Utterances: React.FC<Props> = ({ issueTerm }) => {
       {/* 3. isLoaded가 false일 때만(로딩 중일 때만) 텍스트 표시 */}
       {!isLoaded && (
         <div className="loading-text">
-          <Emoji>💬</Emoji> 댓글을 불러오고 있습니다...
+          <AppIcon name="message" className="loadingIcon" /> 댓글을 불러오고 있습니다...
         </div>
       )}
 
@@ -70,6 +70,10 @@ const StyledWrapper = styled.div`
   margin-top: 2rem;
 
   .loading-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
     text-align: center;
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.875rem;
@@ -78,6 +82,11 @@ const StyledWrapper = styled.div`
     width: 100%;
     top: 0;
     z-index: 0;
+  }
+
+  .loadingIcon {
+    font-size: 0.95rem;
+    flex: 0 0 auto;
   }
 
   .utterances-frame {

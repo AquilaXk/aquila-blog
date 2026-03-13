@@ -33,6 +33,7 @@ class ResetAndSeedTestExecutionListener : AbstractTestExecutionListener() {
                 post,
                 member_attr,
                 member
+            RESTART IDENTITY
             CASCADE
             """.trimIndent(),
         )

@@ -1,5 +1,11 @@
 # Documentation Guide
 
+## Agent Fast Path
+
+- 구현 작업의 기본 진입점은 이 문서가 아니다.
+- AI 에이전트는 `../AGENTS.md` -> `AGENT-CONTEXT.md` -> `docs/agent/*.md` 브리프 1개 순서만 기본으로 따른다.
+- 이 문서는 사람용 인덱스 성격이 강하므로, 브리프로 해결되지 않을 때만 연다.
+
 ## Fast Path For Implementation
 
 구현 작업을 시작할 때는 이 문서 전체보다 먼저 아래 문서를 읽는다.

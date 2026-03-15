@@ -21,10 +21,13 @@ export default FeedHeader
 const StyledWrapper = styled.div`
   display: grid;
   min-width: 0;
-  padding-top: 1rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   container-type: inline-size;
   container-name: feed-filters;
+
+  @media (max-width: 1023px) {
+    padding-top: 1rem;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  }
 `
 
 const FilterRow = styled.div`

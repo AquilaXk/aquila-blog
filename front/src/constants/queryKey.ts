@@ -10,6 +10,7 @@ export const queryKey = {
     page: number
     pageSize: number
   }) => ["posts", "explore", params] as const,
+  postsTotalCount: () => ["posts", "totalCount"] as const,
   tags: () => ["tags"] as const,
   categories: () => ["categories"] as const,
   post: (postId: string) => ["post", postId] as const,

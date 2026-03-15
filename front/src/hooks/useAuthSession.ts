@@ -36,7 +36,8 @@ const useAuthSession = () => {
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
   const hasAuthCookieSnapshot = hasAuthCookieInBrowser()
-  const shouldRefetchOnMount = !hasCachedSnapshot || hasCachedAnonymousSnapshot
+  const shouldFetchAuthMe = hasAuthCookieSnapshot || hasCachedMemberSnapshot
+  const shouldRefetchOnMount = shouldFetchAuthMe && (!hasCachedSnapshot || hasCachedAnonymousSnapshot)
   const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 5 * 60_000 : 0
   const query = useQuery({
     queryKey: queryKey.authMe(),
@@ -51,7 +52,7 @@ const useAuthSession = () => {
         throw error
       }
     },
-    enabled: isClient && (hasCachedSnapshot || hasAuthCookieSnapshot),
+    enabled: isClient && shouldFetchAuthMe,
     // 로그인된 사용자 스냅샷만 짧게 재사용하고, anonymous(null) 스냅샷은 즉시 재검증한다.
     staleTime,
     retry: false,

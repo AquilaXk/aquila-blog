@@ -1,7 +1,7 @@
 import Feed from "src/routes/Feed"
 import { CONFIG } from "../../site.config"
 import { NextPageWithLayout } from "../types"
-import { getExplorePosts, getTagCounts } from "../apis/backend/posts"
+import { getExplorePosts, getExplorePostsTotalCount, getTagCounts } from "../apis/backend/posts"
 import MetaConfig from "src/components/MetaConfig"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
@@ -45,19 +45,33 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       tagCounts: {} as Record<string, number>,
       tagsLoaded: false,
     }))
+  const totalCountPromise = getExplorePostsTotalCount()
+    .then((totalCount) => ({
+      totalCount,
+      totalCountLoaded: true,
+    }))
+    .catch(() => ({
+      totalCount: 0,
+      totalCountLoaded: false,
+    }))
 
-  const [initialAdminProfile, authMember, postsResult, tagsResult] = await Promise.all([
+  const [initialAdminProfile, authMember, postsResult, tagsResult, totalCountResult] = await Promise.all([
     fetchServerAdminProfile(req),
     hydrateServerAuthSession(queryClient, req),
     postsPromise,
     tagsPromise,
+    totalCountPromise,
   ])
   const { posts, postsLoaded } = postsResult
   const { tagCounts, tagsLoaded } = tagsResult
+  const { totalCount, totalCountLoaded } = totalCountResult
 
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   if (tagsLoaded) {
     queryClient.setQueryData(queryKey.tags(), tagCounts)
+  }
+  if (totalCountLoaded) {
+    queryClient.setQueryData(queryKey.postsTotalCount(), totalCount)
   }
   if (postsLoaded) {
     queryClient.setQueryData(

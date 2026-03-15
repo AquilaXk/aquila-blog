@@ -33,6 +33,7 @@ const PostHeader: React.FC<Props> = ({
   onEditPost,
   onDeletePost,
 }) => {
+  const authorName = data.author?.[0]?.name || CONFIG.profile.name
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
@@ -56,7 +57,7 @@ const PostHeader: React.FC<Props> = ({
             <div className="avatar">
               <ProfileImage
                 src={authorImageSrc}
-                alt="profile_photo"
+                alt={`${authorName} profile image`}
                 priority
                 fillContainer
                 width={48}

@@ -17,6 +17,7 @@ const MetaConfig: React.FC<MetaConfigProps> = (props) => {
       <meta name="robots" content="follow, index" />
       <meta charSet="UTF-8" />
       <meta name="description" content={props.description} />
+      <link rel="canonical" href={props.url} />
       {/* og */}
       <meta property="og:type" content={props.type} />
       <meta property="og:title" content={props.title} />

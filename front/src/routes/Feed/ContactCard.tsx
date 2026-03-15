@@ -23,7 +23,7 @@ const ContactCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
           <a
             key={`${item.href}-${item.label}`}
             href={item.href}
-            rel="noreferrer"
+            rel="noopener noreferrer"
             target="_blank"
             css={{ overflow: "hidden" }}
           >

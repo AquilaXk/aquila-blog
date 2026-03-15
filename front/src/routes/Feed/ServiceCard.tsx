@@ -23,7 +23,7 @@ const ServiceCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
           <a
             key={`${item.href}-${item.label}`}
             href={item.href}
-            rel="noreferrer"
+            rel="noopener noreferrer"
             target="_blank"
           >
             <AppIcon name={item.icon} className="icon" />

@@ -36,7 +36,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
               objectFit: "cover",
               objectPosition: "center 38%",
             }}
-            alt="profile_image"
+            alt={`${displayName} profile image`}
           />
           <div className="wrapper">
             <div className="top">{displayName}</div>

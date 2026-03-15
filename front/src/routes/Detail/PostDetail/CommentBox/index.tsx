@@ -46,6 +46,22 @@ type RsData<T> = {
   data: T
 }
 
+const flattenReplies = (nodes: CommentNode[]): CommentNode[] => {
+  const flattened: CommentNode[] = []
+
+  const walk = (items: CommentNode[]) => {
+    items.forEach((item) => {
+      flattened.push(item)
+      if (item.replies.length > 0) {
+        walk(item.replies)
+      }
+    })
+  }
+
+  walk(nodes)
+  return flattened
+}
+
 const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
@@ -415,10 +431,10 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
               </form>
             )}
 
-            {hasReplies && (
+            {!isReply && hasReplies && (
               <ReplyGroup>
                 <ReplyList>
-                  {comment.replies.map((reply) => (
+                  {flattenReplies(comment.replies).map((reply) => (
                     <li key={reply.id}>{renderComment(reply, true)}</li>
                   ))}
                 </ReplyList>

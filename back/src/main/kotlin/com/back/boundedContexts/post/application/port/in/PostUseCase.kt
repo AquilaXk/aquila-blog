@@ -76,7 +76,10 @@ interface PostUseCase {
 
     fun incrementHit(post: Post)
 
-    fun getComments(post: Post): List<PostComment>
+    fun getComments(
+        post: Post,
+        limit: Int = 200,
+    ): List<PostComment>
 
     fun findCommentById(
         post: Post,

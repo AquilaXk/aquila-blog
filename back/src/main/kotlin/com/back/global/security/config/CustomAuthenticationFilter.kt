@@ -32,8 +32,7 @@ class CustomAuthenticationFilter(
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
         val uri = request.requestURI
-        if (filteredPrefixes.none { uri.startsWith(it) }) return true
-        return publicApiRequestMatcher.matches(request)
+        return filteredPrefixes.none { uri.startsWith(it) }
     }
 
     override fun doFilterInternal(
@@ -41,8 +40,16 @@ class CustomAuthenticationFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
+        val isPublicApi = publicApiRequestMatcher.matches(request)
+
         try {
-            authenticateIfPossible(request, response)
+            try {
+                authenticateIfPossible(request, response)
+            } catch (e: AppException) {
+                if (!isPublicApi) throw e
+                // 공개 API는 잘못된 인증정보가 있어도 익명으로 계속 처리한다.
+                SecurityContextHolder.clearContext()
+            }
             filterChain.doFilter(request, response)
         } catch (e: AppException) {
             val rsData: RsData<Void> = e.rsData

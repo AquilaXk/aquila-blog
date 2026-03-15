@@ -41,7 +41,7 @@ class ApiV1AuthController(
         @field:Size(min = 2, max = 30)
         val username: String,
         @field:NotBlank
-        @field:Size(min = 2, max = 30)
+        @field:Size(max = 128)
         val password: String,
     )
 
@@ -117,19 +117,8 @@ class ApiV1AuthController(
         }
 
     private fun extractClientIp(request: HttpServletRequest): String {
-        val xForwardedFor = request.getHeader("X-Forwarded-For").orEmpty()
-        if (xForwardedFor.isNotBlank()) {
-            return xForwardedFor
-                .split(",")
-                .firstOrNull()
-                .orEmpty()
-                .trim()
-                .ifBlank { request.remoteAddr.orEmpty() }
-        }
-
-        val xRealIp = request.getHeader("X-Real-IP").orEmpty().trim()
-        if (xRealIp.isNotBlank()) return xRealIp
-
+        // 애플리케이션 레이어에서 임의의 X-Forwarded-* 헤더를 직접 신뢰하지 않는다.
+        // reverse proxy가 이미 정규화한 remoteAddr를 기준으로 식별한다.
         return request.remoteAddr.orEmpty()
     }
 }

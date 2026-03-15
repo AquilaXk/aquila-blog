@@ -39,10 +39,12 @@ class ApiV1PostCommentController(
     @Transactional(readOnly = true)
     fun getItems(
         @PathVariable postId: Int,
+        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "200") limit: Int,
     ): List<PostCommentDto> {
         val post = postUseCase.findById(postId).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        return postUseCase.getComments(post).map { makePostCommentDto(it) }
+        val safeLimit = limit.coerceIn(1, 500)
+        return postUseCase.getComments(post, safeLimit).map { makePostCommentDto(it) }
     }
 
     @GetMapping("/{id}")
@@ -72,6 +74,7 @@ class ApiV1PostCommentController(
         @Valid @RequestBody reqBody: PostCommentWriteRequest,
     ): RsData<PostCommentDto> {
         val post = postUseCase.findById(postId).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         val parentComment =
             reqBody.parentCommentId?.let { parentId ->
                 postUseCase.findCommentById(post, parentId).getOrThrow()
@@ -100,6 +103,7 @@ class ApiV1PostCommentController(
         @Valid @RequestBody reqBody: PostCommentModifyRequest,
     ): RsData<Void> {
         val post = postUseCase.findById(postId).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         val postComment = postUseCase.findCommentById(post, id).getOrThrow()
         postComment.checkActorCanModify(rq.actor)
         postUseCase.modifyComment(postComment, rq.actor, reqBody.content)
@@ -113,6 +117,7 @@ class ApiV1PostCommentController(
         @PathVariable id: Int,
     ): RsData<Void> {
         val post = postUseCase.findById(postId).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         val postComment = postUseCase.findCommentById(post, id).getOrThrow()
         postComment.checkActorCanDelete(rq.actor)
         postUseCase.deleteComment(post, postComment, rq.actor)

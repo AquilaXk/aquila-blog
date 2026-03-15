@@ -1,6 +1,7 @@
 package com.back.boundedContexts.member.subContexts.notification.adapter.out.persistence
 
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
@@ -11,6 +12,13 @@ import java.time.Instant
 interface MemberNotificationRepository : JpaRepository<MemberNotification, Int> {
     @EntityGraph(attributePaths = ["actor"])
     fun findTop20ByReceiverIdOrderByCreatedAtDesc(receiverId: Int): List<MemberNotification>
+
+    @EntityGraph(attributePaths = ["actor"])
+    fun findByReceiverIdAndIdGreaterThanOrderByIdAsc(
+        receiverId: Int,
+        id: Int,
+        pageable: Pageable,
+    ): List<MemberNotification>
 
     fun countByReceiverIdAndReadAtIsNull(receiverId: Int): Long
 

@@ -154,6 +154,7 @@ class ApiV1PostController(
         @PathVariable @Positive id: Int,
     ): RsData<PostHitResBody> {
         val post = postUseCase.findById(id).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         if (postHitDedupService.shouldCountHit(id, resolveHitViewerKey())) {
             postUseCase.incrementHit(post)
         }
@@ -175,6 +176,7 @@ class ApiV1PostController(
         @PathVariable @Positive id: Int,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         val likeResult = postUseCase.toggleLike(post, rq.actor)
         val msg = if (likeResult.isLiked) "좋아요를 눌렀습니다." else "좋아요를 취소했습니다."
         return RsData(
@@ -193,6 +195,7 @@ class ApiV1PostController(
         @PathVariable @Positive id: Int,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         val likeResult = postUseCase.like(post, rq.actor)
         return RsData(
             "200-1",
@@ -210,6 +213,7 @@ class ApiV1PostController(
         @PathVariable @Positive id: Int,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
+        post.checkActorCanRead(rq.actorOrNull)
         val likeResult = postUseCase.unlike(post, rq.actor)
         return RsData(
             "200-1",

@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.out.persistence
 import com.back.boundedContexts.post.application.port.out.PostCommentRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import java.util.Optional
 
@@ -14,6 +15,11 @@ class PostCommentRepositoryAdapter(
 
     override fun findByPostOrderByCreatedAtAscIdAsc(post: Post): List<PostComment> =
         postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post)
+
+    override fun findByPostOrderByCreatedAtAscIdAsc(
+        post: Post,
+        limit: Int,
+    ): List<PostComment> = postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post, PageRequest.of(0, limit))
 
     override fun findActiveSubtreeByPostAndRootCommentId(
         post: Post,

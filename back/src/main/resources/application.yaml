@@ -145,6 +145,10 @@ custom:
       sessionExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS:3600}
       mailFrom: ${CUSTOM__MEMBER__SIGNUP__MAIL_FROM:}
       mailSubject: ${CUSTOM__MEMBER__SIGNUP__MAIL_SUBJECT:[AquilaXk] 회원가입 이메일 인증}
+      startRateLimit:
+        maxAttemptsPerEmail: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPEREMAIL:5}
+        maxAttemptsPerIp: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPERIP:20}
+        windowSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__WINDOWSECONDS:3600}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"

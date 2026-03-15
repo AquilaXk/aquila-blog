@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.out.persistence
 
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
+import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.Optional
@@ -14,6 +15,12 @@ interface PostCommentRepository :
      */
     @EntityGraph(attributePaths = ["author", "parentComment"])
     fun findByPostOrderByCreatedAtAscIdAsc(post: Post): List<PostComment>
+
+    @EntityGraph(attributePaths = ["author", "parentComment"])
+    fun findByPostOrderByCreatedAtAscIdAsc(
+        post: Post,
+        pageable: Pageable,
+    ): List<PostComment>
 
     @EntityGraph(attributePaths = ["author", "parentComment"])
     fun findByPostAndId(

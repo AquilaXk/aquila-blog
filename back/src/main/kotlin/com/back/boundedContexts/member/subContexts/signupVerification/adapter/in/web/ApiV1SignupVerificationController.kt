@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailStartResult
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupEmailVerifyResult
 import com.back.global.rsData.RsData
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
@@ -54,12 +55,14 @@ class ApiV1SignupVerificationController(
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Transactional
     fun start(
+        request: HttpServletRequest,
         @RequestBody @Valid reqBody: SignupEmailStartRequest,
     ): RsData<SignupEmailStartResult> {
         val result =
             memberSignupVerificationService.start(
                 email = reqBody.email,
                 nextPath = reqBody.nextPath,
+                clientIp = extractClientIp(request),
             )
 
         return RsData(
@@ -68,6 +71,8 @@ class ApiV1SignupVerificationController(
             result,
         )
     }
+
+    private fun extractClientIp(request: HttpServletRequest): String = request.remoteAddr.orEmpty()
 
     @GetMapping("/email/verify")
     @Transactional

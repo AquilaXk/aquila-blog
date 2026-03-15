@@ -32,6 +32,7 @@ class MemberSignupVerificationService(
     private val memberApplicationService: MemberApplicationService,
     private val memberSignupVerificationRepository: MemberSignupVerificationRepositoryPort,
     private val taskFacade: TaskFacade,
+    private val signupStartRateLimitService: SignupStartRateLimitService,
     @Value("\${custom.member.signup.verifyPath:/signup/verify}")
     private val verifyPath: String,
     @Value("\${custom.member.signup.emailExpirationSeconds:86400}")
@@ -43,8 +44,13 @@ class MemberSignupVerificationService(
     fun start(
         email: String,
         nextPath: String? = null,
+        clientIp: String = "unknown",
     ): SignupEmailStartResult {
         val normalizedEmail = normalizeEmail(email)
+        val canStart = signupStartRateLimitService.checkAndConsume(normalizedEmail, clientIp)
+        if (!canStart) {
+            throw AppException("429-2", "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+        }
         ensureEmailAvailable(normalizedEmail)
 
         val now = Instant.now()

@@ -82,7 +82,7 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.uptimeMs") { isNumber() }
             jsonPath("$.version") { isString() }
             jsonPath("$.checks.db") { value("UP") }
-            jsonPath("$.checks.redis") { value("SKIPPED") }
+            jsonPath("$.checks.redis") { value("DISABLED") }
             jsonPath("$.checks.signupMail") { value(anyOf(equalTo("TEST_MODE"), equalTo("READY"), equalTo("MISCONFIGURED"))) }
         }
     }

@@ -8,6 +8,12 @@ interface MemberNotificationRepositoryPort {
 
     fun findLatestByReceiverId(receiverId: Int): List<MemberNotification>
 
+    fun findByReceiverIdAndIdGreaterThan(
+        receiverId: Int,
+        lastNotificationId: Int,
+        limit: Int,
+    ): List<MemberNotification>
+
     fun countUnreadByReceiverId(receiverId: Int): Long
 
     fun markAllRead(

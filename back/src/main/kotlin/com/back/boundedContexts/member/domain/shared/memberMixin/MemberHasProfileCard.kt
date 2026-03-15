@@ -64,9 +64,13 @@ private fun normalizeProfileLinkItems(
     items
         .map { item ->
             MemberProfileLinkItem(
-                icon = item.icon.trim().ifBlank { defaultIcon }.let { icon ->
-                    if (icon in allowedIcons) icon else defaultIcon
-                },
+                icon =
+                    item.icon
+                        .trim()
+                        .ifBlank { defaultIcon }
+                        .let { icon ->
+                            if (icon in allowedIcons) icon else defaultIcon
+                        },
                 label = item.label.trim(),
                 href = item.href.trim(),
             )

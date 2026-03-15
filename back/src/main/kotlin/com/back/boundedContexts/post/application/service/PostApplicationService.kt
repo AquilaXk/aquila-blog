@@ -383,8 +383,11 @@ class PostApplicationService(
         }
     }
 
-    fun getComments(post: Post): List<PostComment> =
-        postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post).also { comments ->
+    fun getComments(
+        post: Post,
+        limit: Int,
+    ): List<PostComment> =
+        postCommentRepository.findByPostOrderByCreatedAtAscIdAsc(post, limit.coerceIn(1, 500)).also { comments ->
             hydrateMembersProfileImgAttrs(comments.map { it.author })
         }
 

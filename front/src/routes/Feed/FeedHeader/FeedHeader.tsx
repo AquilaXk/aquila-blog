@@ -7,11 +7,9 @@ type Props = {}
 const FeedHeader: React.FC<Props> = () => {
   return (
     <StyledWrapper>
-      <FilterRow>
-        <OrderSlot>
-          <OrderButtons />
-        </OrderSlot>
-      </FilterRow>
+      <OrderSlot>
+        <OrderButtons />
+      </OrderSlot>
     </StyledWrapper>
   )
 }
@@ -19,32 +17,16 @@ const FeedHeader: React.FC<Props> = () => {
 export default FeedHeader
 
 const StyledWrapper = styled.div`
-  display: grid;
-  min-width: 0;
-  container-type: inline-size;
-  container-name: feed-filters;
-`
-
-const FilterRow = styled.div`
   display: flex;
   justify-content: flex-end;
-  align-items: center;
-  gap: 0.8rem;
   width: 100%;
   min-width: 0;
-
-  @container feed-filters (max-width: 28rem) {
-    justify-content: stretch;
+  @media (max-width: 768px) {
+    justify-content: flex-start;
   }
 `
 
 const OrderSlot = styled.div`
-  width: min(100%, 18rem);
+  display: flex;
   min-width: 0;
-
-  @container feed-filters (max-width: 28rem) {
-    justify-self: stretch;
-    width: 100%;
-    max-width: 100%;
-  }
 `

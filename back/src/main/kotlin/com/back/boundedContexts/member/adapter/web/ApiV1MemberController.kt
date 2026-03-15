@@ -25,11 +25,15 @@ class ApiV1MemberController(
     private val memberUseCase: MemberUseCase,
     private val securityTipProvider: SecurityTipProvider,
 ) {
+    companion object {
+        const val ADMIN_PROFILE_CACHE_NAME = "member-admin-profile-v2"
+    }
+
     @GetMapping("/randomSecureTip")
     fun randomSecureTip() = securityTipProvider.signupPasswordTip()
 
     @GetMapping("/adminProfile")
-    @Cacheable(cacheNames = ["member-admin-profile"], key = "'admin'")
+    @Cacheable(cacheNames = [ADMIN_PROFILE_CACHE_NAME], key = "'admin'")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {
         // 운영에서 "관리자 1명" 규칙을 보장하기 위해 id가 아닌 고정 username으로 조회한다.

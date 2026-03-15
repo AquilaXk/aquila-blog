@@ -119,7 +119,7 @@ class ApiV1AdmMemberController(
 
     @PatchMapping("/{id}/profileImgUrl")
     @Transactional
-    @CacheEvict(cacheNames = ["member-admin-profile"], allEntries = true)
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun updateProfileImg(
         @PathVariable
         @Positive
@@ -134,7 +134,7 @@ class ApiV1AdmMemberController(
 
     @PostMapping("/{id}/profileImageFile")
     @Transactional
-    @CacheEvict(cacheNames = ["member-admin-profile"], allEntries = true)
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun uploadProfileImageFile(
         @PathVariable
         @Positive
@@ -162,7 +162,7 @@ class ApiV1AdmMemberController(
 
     @PatchMapping("/{id}/profileCard")
     @Transactional
-    @CacheEvict(cacheNames = ["member-admin-profile"], allEntries = true)
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun updateProfileCard(
         @PathVariable
         @Positive

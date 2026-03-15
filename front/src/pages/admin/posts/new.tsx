@@ -90,6 +90,7 @@ type PageDto<T> = {
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
 type EditorMode = "create" | "edit"
+type PublishActionType = "create" | "modify" | "temp"
 type ParsedEditorMeta = {
   body: string
   tags: string[]
@@ -619,6 +620,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const postContentRef = useRef<HTMLTextAreaElement>(null)
   const deferredPostContent = useDeferredValue(postContent)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
+  const thumbnailImageFileInputRef = useRef<HTMLInputElement>(null)
+  const [thumbnailImageFileName, setThumbnailImageFileName] = useState("")
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
+  const [publishActionType, setPublishActionType] = useState<PublishActionType>("create")
   const [isPreviewThumbnailError, setIsPreviewThumbnailError] = useState(false)
 
   const [listPage, setListPage] = useState("1")
@@ -705,6 +710,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const manual = postThumbnailUrl.trim()
     if (manual) return manual
     return extractFirstMarkdownImage(postContent)
+  }, [postContent, postThumbnailUrl])
+  const effectiveThumbnailUrl = useMemo(() => {
+    const manual = postThumbnailUrl.trim()
+    if (manual) return manual
+    return extractFirstMarkdownImage(postContent).trim()
   }, [postContent, postThumbnailUrl])
 
   useEffect(() => {
@@ -916,26 +926,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }, [applyLoadedPostContext, postId, syncEditorMeta])
 
-  const handleWritePost = async () => {
+  const handleWritePost = async (): Promise<boolean> => {
     if (editorMode === "edit" || postId.trim()) {
       const msg = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
       setPublishNotice({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
-      return
+      return false
     }
 
     if (!postTitle.trim()) {
       const msg = "제목을 입력해주세요."
       setPublishNotice({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
-      return
+      return false
     }
 
     if (!postContent.trim()) {
       const msg = "본문을 입력해주세요."
       setPublishNotice({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
-      return
+      return false
     }
 
     try {
@@ -944,7 +954,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const contentWithMetadata = composeEditorContent(postContent, postTags, {
         category: postCategory,
         summary: postSummary,
-        thumbnail: postThumbnailUrl,
+        thumbnail: effectiveThumbnailUrl,
       })
       const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
       if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
@@ -989,21 +999,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setKnownCategories((prev) =>
         dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
       )
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
       setPublishNotice({ tone: "error", text: `작성 실패: ${message}` })
+      return false
     } finally {
       setLoadingKey("")
     }
   }
 
-  const handleModifyPost = async () => {
+  const handleModifyPost = async (): Promise<boolean> => {
     if (editorMode !== "edit" || !postId.trim()) {
       const msg = "수정할 글 ID를 먼저 선택해주세요."
       setPublishNotice({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
-      return
+      return false
     }
 
     try {
@@ -1016,7 +1028,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           content: composeEditorContent(postContent, postTags, {
             category: postCategory,
             summary: postSummary,
-            thumbnail: postThumbnailUrl,
+            thumbnail: effectiveThumbnailUrl,
           }),
           ...toFlags(postVisibility),
           version: postVersion ?? undefined,
@@ -1031,10 +1043,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
       setPublishNotice({ tone: "success", text: `수정 완료: ${response.msg}` })
       setResult(pretty(response as unknown as JsonValue))
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setPublishNotice({ tone: "error", text: `수정 실패: ${message}` })
       setResult(pretty({ error: message }))
+      return false
     } finally {
       setLoadingKey("")
     }
@@ -1065,12 +1079,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const handlePublishTempDraft = async () => {
+  const handlePublishTempDraft = async (): Promise<boolean> => {
     if (editorMode !== "edit" || !postId.trim()) {
       const msg = "발행할 임시글을 먼저 불러와주세요."
       setPublishNotice({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
-      return
+      return false
     }
 
     try {
@@ -1083,7 +1097,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           content: composeEditorContent(postContent, postTags, {
             category: postCategory,
             summary: postSummary,
-            thumbnail: postThumbnailUrl,
+            thumbnail: effectiveThumbnailUrl,
           }),
           published: true,
           listed: true,
@@ -1095,10 +1109,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setIsTempDraftMode(false)
       setPublishNotice({ tone: "success", text: "임시글 발행이 완료되었습니다." })
       setResult(pretty(response as unknown as JsonValue))
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setPublishNotice({ tone: "error", text: `임시글 발행 실패: ${message}` })
       setResult(pretty({ error: message }))
+      return false
     } finally {
       setLoadingKey("")
     }
@@ -1630,6 +1646,64 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
   }
 
+  const handleUploadThumbnailImage = async (file: File) => {
+    try {
+      setLoadingKey("uploadThumbnail")
+      setPublishNotice({
+        tone: "loading",
+        text: `썸네일 "${file.name}" 업로드 중입니다...`,
+      })
+      const uploaded = await uploadPostImageFile(file)
+      const uploadedUrl = uploaded.data?.url?.trim()
+      if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+
+      setPostThumbnailUrl(uploadedUrl)
+      setIsPreviewThumbnailError(false)
+      setPublishNotice({
+        tone: "success",
+        text: "썸네일 파일 업로드가 완료되었습니다. 이 이미지가 목록 카드에 우선 사용됩니다.",
+      })
+    } catch (error) {
+      setPublishNotice({
+        tone: "error",
+        text: `썸네일 업로드 실패: ${error instanceof Error ? error.message : String(error)}`,
+      })
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
+  const handleThumbnailImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setThumbnailImageFileName(file.name)
+    void handleUploadThumbnailImage(file)
+  }
+
+  const openPublishModal = (actionType: PublishActionType) => {
+    setPublishActionType(actionType)
+    setIsPublishModalOpen(true)
+  }
+
+  const closePublishModal = () => {
+    if (loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost") return
+    setIsPublishModalOpen(false)
+  }
+
+  const handleConfirmPublish = async () => {
+    const success =
+      publishActionType === "create"
+        ? await handleWritePost()
+        : publishActionType === "modify"
+          ? await handleModifyPost()
+          : await handlePublishTempDraft()
+
+    if (success) {
+      setIsPublishModalOpen(false)
+    }
+  }
+
   const currentFlags = toFlags(postVisibility)
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
   const editorModeLabel = editorMode === "edit" ? "수정 모드" : "새 글 모드"
@@ -1654,6 +1728,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const profileImageHint = profileImageFileName
     ? `선택 파일: ${profileImageFileName}`
     : "아직 선택된 파일이 없습니다."
+  const publishActionTitle =
+    publishActionType === "create"
+      ? "글 발행 설정"
+      : publishActionType === "modify"
+        ? "글 수정 설정"
+        : "임시글 발행 설정"
+  const publishActionButtonText =
+    publishActionType === "create"
+      ? loadingKey === "writePost"
+        ? "작성 중..."
+        : "글 작성"
+      : publishActionType === "modify"
+        ? loadingKey === "modifyPost"
+          ? "수정 중..."
+          : "수정 저장"
+        : loadingKey === "publishTempPost"
+          ? "발행 중..."
+          : "임시글 발행"
+  const publishActionButtonDisabled =
+    publishActionType === "create"
+      ? editorMode !== "create" || disabled("writePost")
+      : publishActionType === "modify"
+        ? editorMode !== "edit" || disabled("modifyPost")
+        : editorMode !== "edit" || disabled("publishTempPost")
   const closeToolbarMenus = () => {
     setIsCalloutMenuOpen(false)
     setIsColorMenuOpen(false)
@@ -2066,7 +2164,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <Button
               type="button"
               disabled={editorMode !== "edit" || disabled("modifyPost")}
-              onClick={() => void handleModifyPost()}
+              onClick={() => openPublishModal("modify")}
             >
               글 수정
             </Button>
@@ -2202,74 +2300,25 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     >
                       태그 관리
                     </MetaToggleButton>
-                  </MetaActionRow>
-                  <VisibilityWrap>
-                    <FieldLabel htmlFor="post-visibility">공개 범위</FieldLabel>
-                    <VisibilitySelect
-                      id="post-visibility"
-                      value={postVisibility}
-                      onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
+                    <MetaToggleButton
+                      type="button"
+                      data-active={isPublishModalOpen}
+                      onClick={() =>
+                        openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                      }
                     >
-                      <option value="PRIVATE">비공개</option>
-                      <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
-                      <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
-                    </VisibilitySelect>
-                    <FieldHelp>전체 공개만 메인 페이지 목록에 노출됩니다.</FieldHelp>
-                  </VisibilityWrap>
-                  <PostPreviewSetup>
-                    <PostPreviewHeader>
-                      <strong>포스트 미리보기</strong>
-                      <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
-                    </PostPreviewHeader>
-                    <PreviewThumbFrame>
-                      {resolvedPreviewThumbnail && !isPreviewThumbnailError ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={resolvedPreviewThumbnail}
-                          alt="포스트 미리보기 썸네일"
-                          onError={() => setIsPreviewThumbnailError(true)}
-                        />
-                      ) : (
-                        <div className="placeholder">
-                          <em>썸네일 없음</em>
-                          <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
-                        </div>
-                      )}
-                    </PreviewThumbFrame>
-                    <FieldLabel htmlFor="post-thumbnail-url">썸네일 URL</FieldLabel>
-                    <Input
-                      id="post-thumbnail-url"
-                      placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
-                      value={postThumbnailUrl}
-                      onChange={(e) => setPostThumbnailUrl(e.target.value)}
-                    />
-                    <MetaActionRow>
-                      <Button
-                        type="button"
-                        onClick={() => setPostThumbnailUrl(extractFirstMarkdownImage(postContent))}
-                      >
-                        본문 첫 이미지 가져오기
-                      </Button>
-                      <Button type="button" onClick={() => setPostThumbnailUrl("")}>
-                        자동 모드로 되돌리기
-                      </Button>
-                    </MetaActionRow>
-                    <FieldLabel htmlFor="post-preview-summary">미리보기 요약</FieldLabel>
-                    <PreviewSummaryInput
-                      id="post-preview-summary"
-                      placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
-                      value={postSummary}
-                      maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
-                      onChange={(e) => setPostSummary(e.target.value)}
-                    />
-                    <SummaryCounter>
-                      {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
-                    </SummaryCounter>
-                    <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
-                    <PreviewSummaryText>
-                      {resolvedPreviewSummary || "본문을 입력하면 자동 요약이 생성됩니다."}
-                    </PreviewSummaryText>
-                  </PostPreviewSetup>
+                      출간 설정
+                    </MetaToggleButton>
+                  </MetaActionRow>
+                  <PublishSettingsSummary>
+                    <SummaryPill>공개 범위: {currentVisibilityText}</SummaryPill>
+                    <SummaryPill>
+                      썸네일: {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "수동 지정" : "본문 첫 이미지 자동") : "없음"}
+                    </SummaryPill>
+                    <SummaryPill>
+                      요약: {postSummary.trim() ? `${postSummary.trim().length}자` : "자동 생성"}
+                    </SummaryPill>
+                  </PublishSettingsSummary>
                 </WriterMetaActions>
               </WriterMetaStrip>
             </div>
@@ -2329,13 +2378,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </CompactMetaPanel>
           )}
 
-          <input
-            ref={postImageFileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handlePostImageFileChange}
-            style={{ display: "none" }}
-          />
+        <input
+          ref={postImageFileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handlePostImageFileChange}
+          style={{ display: "none" }}
+        />
+        <input
+          ref={thumbnailImageFileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleThumbnailImageFileChange}
+          style={{ display: "none" }}
+        />
           <EditorToolbar>
             <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
               <ToolbarCluster>
@@ -2525,7 +2581,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <Button
                   type="button"
                   disabled={editorMode !== "edit" || disabled("modifyPost")}
-                  onClick={() => void handleModifyPost()}
+                  onClick={() => openPublishModal("modify")}
                 >
                   선택 글 수정
                 </Button>
@@ -2533,7 +2589,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <PrimaryButton
                     type="button"
                     disabled={editorMode !== "edit" || disabled("publishTempPost")}
-                    onClick={() => void handlePublishTempDraft()}
+                    onClick={() => openPublishModal("temp")}
                   >
                     {loadingKey === "publishTempPost" ? "발행 중..." : "임시글 발행"}
                   </PrimaryButton>
@@ -2541,7 +2597,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PrimaryButton
                   type="button"
                   disabled={editorMode !== "create" || disabled("writePost")}
-                  onClick={() => void handleWritePost()}
+                  onClick={() => openPublishModal("create")}
                 >
                   {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
                 </PrimaryButton>
@@ -2549,6 +2605,117 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </WriterFooterControls>
           </WriterFooterBar>
         </EditorSection>
+
+        {isPublishModalOpen && (
+          <ModalBackdrop onClick={closePublishModal}>
+            <PublishModal onClick={(e) => e.stopPropagation()}>
+              <PublishModalHeader>
+                <div>
+                  <h4>{publishActionTitle}</h4>
+                  <p>공개 범위, 썸네일, 요약을 점검한 뒤 최종 반영합니다.</p>
+                </div>
+              </PublishModalHeader>
+              <PublishModalBody>
+                {publishActionType !== "temp" ? (
+                  <VisibilityWrap>
+                    <FieldLabel htmlFor="post-visibility-modal">공개 범위</FieldLabel>
+                    <VisibilitySelect
+                      id="post-visibility-modal"
+                      value={postVisibility}
+                      onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
+                    >
+                      <option value="PRIVATE">비공개</option>
+                      <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
+                      <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
+                    </VisibilitySelect>
+                    <FieldHelp>전체 공개만 메인 페이지 목록에 노출됩니다.</FieldHelp>
+                  </VisibilityWrap>
+                ) : (
+                  <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개(목록 노출)’로 반영됩니다.</PublishModeHint>
+                )}
+
+                <PostPreviewSetup>
+                  <PostPreviewHeader>
+                    <strong>포스트 미리보기</strong>
+                    <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
+                  </PostPreviewHeader>
+                  <PreviewThumbFrame>
+                    {resolvedPreviewThumbnail && !isPreviewThumbnailError ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={resolvedPreviewThumbnail}
+                        alt="포스트 미리보기 썸네일"
+                        onError={() => setIsPreviewThumbnailError(true)}
+                      />
+                    ) : (
+                      <div className="placeholder">
+                        <em>썸네일 없음</em>
+                        <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
+                      </div>
+                    )}
+                  </PreviewThumbFrame>
+                  <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
+                  <Input
+                    id="post-thumbnail-url-modal"
+                    placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
+                    value={postThumbnailUrl}
+                    onChange={(e) => setPostThumbnailUrl(e.target.value)}
+                  />
+                  <MetaActionRow>
+                    <Button
+                      type="button"
+                      disabled={disabled("uploadThumbnail")}
+                      onClick={() => thumbnailImageFileInputRef.current?.click()}
+                    >
+                      {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => setPostThumbnailUrl(extractFirstMarkdownImage(postContent))}
+                    >
+                      본문 첫 이미지 가져오기
+                    </Button>
+                    <Button type="button" onClick={() => setPostThumbnailUrl("")}>
+                      자동 모드로 되돌리기
+                    </Button>
+                  </MetaActionRow>
+                  {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
+                  <FieldLabel htmlFor="post-preview-summary-modal">미리보기 요약</FieldLabel>
+                  <PreviewSummaryInput
+                    id="post-preview-summary-modal"
+                    placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
+                    value={postSummary}
+                    maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+                    onChange={(e) => setPostSummary(e.target.value)}
+                  />
+                  <SummaryCounter>
+                    {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
+                  </SummaryCounter>
+                  <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
+                  <PreviewSummaryText>
+                    {resolvedPreviewSummary || "본문을 입력하면 자동 요약이 생성됩니다."}
+                  </PreviewSummaryText>
+                </PostPreviewSetup>
+              </PublishModalBody>
+              <PublishModalFooter>
+                <Button
+                  type="button"
+                  disabled={loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"}
+                  onClick={closePublishModal}
+                >
+                  취소
+                </Button>
+                <PrimaryButton
+                  type="button"
+                  disabled={publishActionButtonDisabled}
+                  onClick={() => void handleConfirmPublish()}
+                >
+                  {publishActionButtonText}
+                </PrimaryButton>
+              </PublishModalFooter>
+            </PublishModal>
+          </ModalBackdrop>
+        )}
 
           </Section>
 
@@ -3453,6 +3620,25 @@ const MetaActionRow = styled.div`
   display: flex;
   gap: 0.55rem;
   flex-wrap: wrap;
+`
+
+const PublishSettingsSummary = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+`
+
+const SummaryPill = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 0.72rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
+  font-weight: 600;
 `
 
 const MetaToggleButton = styled.button`
@@ -4487,6 +4673,55 @@ const ConfirmModal = styled.div`
     justify-content: flex-end;
     gap: 0.5rem;
   }
+`
+
+const PublishModal = styled.div`
+  width: min(760px, 100%);
+  max-height: min(86vh, 920px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+`
+
+const PublishModalHeader = styled.div`
+  h4 {
+    margin: 0;
+    font-size: 1.02rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0.3rem 0 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+`
+
+const PublishModalBody = styled.div`
+  display: grid;
+  gap: 0.8rem;
+`
+
+const PublishModeHint = styled.div`
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: ${({ theme }) => theme.colors.blue3};
+  color: ${({ theme }) => theme.colors.blue11};
+  border-radius: 12px;
+  padding: 0.62rem 0.74rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+`
+
+const PublishModalFooter = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 `
 
 const EditorPane = styled.section`

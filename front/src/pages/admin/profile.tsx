@@ -708,14 +708,44 @@ const BaseButton = styled.button`
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+
+  &:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray10};
+  }
 `
 
 const Button = styled(BaseButton)``
 
 const PrimaryButton = styled(BaseButton)`
-  border-color: ${({ theme }) => theme.colors.gray8};
-  background: ${({ theme }) => theme.colors.gray12};
-  color: white;
+  border-color: ${({ theme }) => theme.colors.blue8};
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue10};
+    color: #fff;
+  }
+
+  &:disabled {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray4};
+    color: ${({ theme }) => theme.colors.gray10};
+  }
 `
 
 const LinkButton = styled.a`

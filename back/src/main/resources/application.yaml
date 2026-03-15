@@ -200,7 +200,7 @@ custom:
   cache:
     ttl-seconds: 3600
     ttl-overrides:
-      member-admin-profile: 120
+      member-admin-profile-v2: 120
   revalidate:
     url: "${CUSTOM__REVALIDATE__URL:}"
     token: "${CUSTOM__REVALIDATE__TOKEN:}"

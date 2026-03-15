@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 @Service
 class SignupStartRateLimitService(
@@ -16,6 +17,10 @@ class SignupStartRateLimitService(
     private val maxAttemptsPerIp: Int,
     @param:Value("\${custom.member.signup.startRateLimit.windowSeconds:3600}")
     private val windowSeconds: Long,
+    @param:Value("\${custom.member.signup.startRateLimit.memoryMaxEntries:10000}")
+    private val memoryMaxEntries: Int,
+    @param:Value("\${custom.member.signup.startRateLimit.memoryCleanupIntervalSeconds:60}")
+    private val memoryCleanupIntervalSeconds: Long,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
     private data class WindowState(
@@ -24,6 +29,7 @@ class SignupStartRateLimitService(
     )
 
     private val states = ConcurrentHashMap<String, WindowState>()
+    private val lastCleanupEpochSeconds = AtomicLong(0)
 
     fun checkAndConsume(
         email: String,
@@ -37,6 +43,7 @@ class SignupStartRateLimitService(
             consumeInRedis(redisTemplate, "member:signup:start:email:$normalizedEmail", maxAttemptsPerEmail) &&
                 consumeInRedis(redisTemplate, "member:signup:start:ip:$normalizedIp", maxAttemptsPerIp)
         } else {
+            cleanupInMemoryState(Instant.now().epochSecond)
             consumeInMemory("email:$normalizedEmail", maxAttemptsPerEmail) &&
                 consumeInMemory("ip:$normalizedIp", maxAttemptsPerIp)
         }
@@ -70,5 +77,33 @@ class SignupStartRateLimitService(
             redisTemplate.expire(key, Duration.ofSeconds(windowSeconds))
         }
         return nextCount <= maxAttempts.toLong()
+    }
+
+    private fun cleanupInMemoryState(nowEpochSeconds: Long) {
+        val shouldForceCleanup = states.size > memoryMaxEntries
+        val previousCleanupAt = lastCleanupEpochSeconds.get()
+        val elapsed = nowEpochSeconds - previousCleanupAt
+
+        if (!shouldForceCleanup && elapsed < memoryCleanupIntervalSeconds) return
+        if (!lastCleanupEpochSeconds.compareAndSet(previousCleanupAt, nowEpochSeconds)) return
+
+        states.entries.forEach { (stateKey, state) ->
+            if (nowEpochSeconds - state.windowStartedAt >= windowSeconds) {
+                states.remove(stateKey, state)
+            }
+        }
+
+        val overflow = states.size - memoryMaxEntries
+        if (overflow <= 0) return
+
+        val keysToTrim =
+            states.entries
+                .asSequence()
+                .sortedBy { it.value.windowStartedAt }
+                .take(overflow)
+                .map { it.key }
+                .toList()
+
+        keysToTrim.forEach(states::remove)
     }
 }

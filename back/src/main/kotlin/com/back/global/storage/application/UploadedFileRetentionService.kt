@@ -5,11 +5,12 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.storage.adapter.persistence.UploadedFileRepository
 import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
-import com.back.global.storage.adapter.persistence.UploadedFileRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -147,7 +148,7 @@ class UploadedFileRetentionService(
             )
 
         candidates.forEach { uploadedFile ->
-            if (isStillReferenced(uploadedFile.objectKey)) {
+            if (isStillReferenced(uploadedFile)) {
                 uploadedFile.restoreActive()
                 uploadedFileRepository.save(uploadedFile)
                 return@forEach
@@ -214,11 +215,25 @@ class UploadedFileRetentionService(
                 fileSize = 0,
             )
 
-    private fun isStillReferenced(objectKey: String): Boolean {
+    private fun isStillReferenced(uploadedFile: UploadedFile): Boolean {
+        val objectKey = uploadedFile.objectKey
+        val ownerId = uploadedFile.ownerId
+
+        if (uploadedFile.ownerType == UploadedFileOwnerType.POST && ownerId != null) {
+            if (postRepository.existsByIdAndContentContaining(ownerId, objectKey)) {
+                return true
+            }
+        }
+
+        if (uploadedFile.ownerType == UploadedFileOwnerType.MEMBER_PROFILE && ownerId != null) {
+            if (memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(ownerId, PROFILE_IMG_URL, objectKey)) {
+                return true
+            }
+        }
+
         val imageUrl = UploadedFileUrlCodec.buildImageUrl(objectKey)
-        val relativeImagePath = UploadedFileUrlCodec.buildRelativeImagePath(objectKey)
-        return postRepository.existsByContentContaining(imageUrl) ||
-            postRepository.existsByContentContaining(relativeImagePath) ||
+        return postRepository.existsByContentContaining(objectKey) ||
+            memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_IMG_URL, objectKey) ||
             memberAttrRepository.existsByNameAndStrValue(PROFILE_IMG_URL, imageUrl)
     }
 }

@@ -105,6 +105,7 @@ GitHub Actions 기준 필수값:
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
 - 로그인 시도 제한은 Redis가 살아 있으면 Redis TTL 키를 사용해 인스턴스 간 상태를 공유하고, Redis가 없을 때만 인메모리 fallback을 사용한다.
+- Redis fallback 인메모리 키는 무한정 쌓이지 않도록 상한/주기 정리(`*_MEMORY_MAX_ENTRIES`, `*_MEMORY_CLEANUP_INTERVAL_SECONDS`)를 적용한다.
 - storage 관련 값은 placeholder 치환에 의존하지 말고 완성된 문자열로 넣어야 한다.
   예: `CUSTOM_STORAGE_SECRETKEY=${MINIO_ROOT_PASSWORD}` 금지, 실제 비밀번호 문자열 사용.
 - `#`가 들어가는 값은 반드시 큰따옴표로 감싼다.
@@ -117,12 +118,16 @@ GitHub Actions 기준 필수값:
 - test workflow는 별도 `docker compose up/down`를 직접 실행하지 않고, Gradle의 자동 bootstrap 흐름을 그대로 사용한다.
 - 순수 로직 테스트는 가능하면 `@SpringBootTest`를 피하고 plain unit test로 유지한다. 전체 컨텍스트를 띄우는 테스트는 DB/Redis/MockMvc가 실제로 필요한 경우에만 쓴다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
+- task processor는 동시 실행 상한(`CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT`) 내에서만 작업을 집행한다.
 - `PROCESSING` 상태가 `CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS`를 넘기면 stale task로 판단하고 다음 poll에서 자동 복구한다.
 - task retry 정책은 task type별로 다르게 가진다.
   `global.revalidate.home`은 짧고 빠르게 재시도하고, `member.signupVerification.sendMail`은 더 긴 간격과 더 많은 재시도를 사용한다.
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
 - 파일 정리 잡은 `TEMP`, `PENDING_DELETE` 파일을 함께 대상으로 보며, purge 후보 수가 `CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD`를 넘기면 실제 삭제를 건너뛰고 진단 로그만 남긴다.
+- 파일 purge 참조 판정은 ownerId 기반 확인을 먼저 수행하고, 필요할 때만 전체 fallback 조회를 수행한다.
 - 좋아요는 토글 경로에서 원자 증감으로 반영하고, reconciliation 잡이 최근 변경분을 재검산해 attr 불일치를 보정한다.
+- 로그인 성공 시 `apiKey`를 회전하고, 인증 쿠키 TTL은 `apiKey`/`accessToken`을 분리 운영한다.
+- prod는 PGroonga 필수 검증(`custom.pgroonga.required=true`) + `AfterDDL` strict 모드(`custom.jpa.after-ddl.failOnError=true`)를 사용한다.
 
 ## Blue/Green 전환 원칙
 

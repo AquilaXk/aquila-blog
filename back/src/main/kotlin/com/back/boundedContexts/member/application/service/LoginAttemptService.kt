@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 @Service
 class LoginAttemptService(
@@ -16,6 +17,10 @@ class LoginAttemptService(
     private val windowSeconds: Long,
     @param:Value("\${custom.auth.login.lockSeconds:600}")
     private val lockSeconds: Long,
+    @param:Value("\${custom.auth.login.memoryMaxEntries:10000}")
+    private val memoryMaxEntries: Int,
+    @param:Value("\${custom.auth.login.memoryCleanupIntervalSeconds:60}")
+    private val memoryCleanupIntervalSeconds: Long,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
     private data class LoginAttemptState(
@@ -25,6 +30,7 @@ class LoginAttemptService(
     )
 
     private val states = ConcurrentHashMap<String, LoginAttemptState>()
+    private val lastCleanupEpochSeconds = AtomicLong(0)
 
     fun isBlocked(
         username: String,
@@ -38,6 +44,7 @@ class LoginAttemptService(
         }
 
         val now = nowEpochSeconds()
+        cleanupInMemoryState(now)
         val state = states[key] ?: return false
 
         if (state.blockedUntil > now) return true
@@ -62,6 +69,7 @@ class LoginAttemptService(
         }
 
         val now = nowEpochSeconds()
+        cleanupInMemoryState(now)
         val nextState =
             states.compute(key) { _, current ->
                 val state =
@@ -158,6 +166,35 @@ class LoginAttemptService(
     private fun redisFailureKey(key: String): String = "auth:login:fail:$key"
 
     private fun redisBlockedKey(key: String): String = "auth:login:blocked:$key"
+
+    private fun cleanupInMemoryState(nowEpochSeconds: Long) {
+        val shouldForceCleanup = states.size > memoryMaxEntries
+        val previousCleanupAt = lastCleanupEpochSeconds.get()
+        val elapsed = nowEpochSeconds - previousCleanupAt
+
+        if (!shouldForceCleanup && elapsed < memoryCleanupIntervalSeconds) return
+        if (!lastCleanupEpochSeconds.compareAndSet(previousCleanupAt, nowEpochSeconds)) return
+
+        states.entries.forEach { (stateKey, state) ->
+            if (state.blockedUntil <= nowEpochSeconds && nowEpochSeconds - state.windowStartedAt >= windowSeconds) {
+                states.remove(stateKey, state)
+            }
+        }
+
+        val overflow = states.size - memoryMaxEntries
+        if (overflow <= 0) return
+
+        val keysToTrim =
+            states.entries
+                .asSequence()
+                .sortedBy { (_, state) ->
+                    if (state.blockedUntil > nowEpochSeconds) state.blockedUntil else state.windowStartedAt
+                }.take(overflow)
+                .map { it.key }
+                .toList()
+
+        keysToTrim.forEach(states::remove)
+    }
 
     private fun nowEpochSeconds(): Long = Instant.now().epochSecond
 }

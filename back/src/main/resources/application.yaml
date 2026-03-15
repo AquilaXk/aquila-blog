@@ -149,14 +149,20 @@ custom:
         maxAttemptsPerEmail: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPEREMAIL:5}
         maxAttemptsPerIp: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MAXATTEMPTSPERIP:20}
         windowSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__WINDOWSECONDS:3600}
+        memoryMaxEntries: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_MAX_ENTRIES:10000}
+        memoryCleanupIntervalSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"
   auth:
+    cookie:
+      apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:2592000}
     login:
       maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}
       windowSeconds: ${CUSTOM__AUTH__LOGIN__WINDOW_SECONDS:300}
       lockSeconds: ${CUSTOM__AUTH__LOGIN__LOCK_SECONDS:600}
+      memoryMaxEntries: ${CUSTOM__AUTH__LOGIN__MEMORY_MAX_ENTRIES:10000}
+      memoryCleanupIntervalSeconds: ${CUSTOM__AUTH__LOGIN__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
   jwt:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:}"
   accessToken:
@@ -166,6 +172,7 @@ custom:
       fixedDelayMs: ${CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS:60000}
       batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:50}
       processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
+      maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:8}
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }
@@ -190,8 +197,17 @@ custom:
       cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
       cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
   post:
+    hit:
+      viewerWindowSeconds: ${CUSTOM__POST__HIT__VIEWER_WINDOW_SECONDS:86400}
+      memoryMaxEntries: ${CUSTOM__POST__HIT__MEMORY_MAX_ENTRIES:50000}
+      memoryCleanupIntervalSeconds: ${CUSTOM__POST__HIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
     likes:
       reconciliation:
         fixedDelayMs: ${CUSTOM__POST__LIKES__RECONCILIATION__FIXED_DELAY_MS:900000}
         lookbackHours: ${CUSTOM__POST__LIKES__RECONCILIATION__LOOKBACK_HOURS:24}
         batchSize: ${CUSTOM__POST__LIKES__RECONCILIATION__BATCH_SIZE:100}
+  pgroonga:
+    required: ${CUSTOM__PGROONGA__REQUIRED:false}
+  jpa:
+    after-ddl:
+      failOnError: ${CUSTOM__JPA__AFTER_DDL__FAIL_ON_ERROR:false}

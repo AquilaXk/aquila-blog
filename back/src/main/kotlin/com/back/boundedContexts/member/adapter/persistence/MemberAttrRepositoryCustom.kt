@@ -18,4 +18,15 @@ interface MemberAttrRepositoryCustom {
         name: String,
         strValue: String,
     ): Boolean
+
+    fun existsByNameAndStrValueContaining(
+        name: String,
+        valueFragment: String,
+    ): Boolean
+
+    fun existsBySubjectIdAndNameAndStrValueContaining(
+        subjectId: Int,
+        name: String,
+        valueFragment: String,
+    ): Boolean
 }

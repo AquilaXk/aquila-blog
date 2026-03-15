@@ -2,8 +2,8 @@ package com.back.boundedContexts.member.subContexts.signupVerification.adapter.w
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.subContexts.signupVerification.adapter.persistence.MemberSignupVerificationRepository
-import com.back.global.task.domain.TaskStatus
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.domain.TaskStatus
 import com.back.support.SeededSpringBootTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers.startsWith

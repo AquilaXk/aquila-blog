@@ -29,6 +29,11 @@ logging:
     org.hibernate.orm.jdbc.batch: INFO
     org.springframework.transaction.interceptor: INFO
 custom:
+  pgroonga:
+    required: true
+  jpa:
+    after-ddl:
+      failOnError: true
   site:
     cookieDomain: "${custom.prod.cookieDomain}"
     frontUrl: "${custom.prod.frontUrl}"

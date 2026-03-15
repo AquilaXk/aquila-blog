@@ -53,13 +53,16 @@ flowchart LR
 - cookie domain이 비어 있으면 auth cookie는 host-only로 내려간다. 테스트/slice 컨텍스트에서는 이 fallback을 기대하고, 운영에서는 `custom.site.cookieDomain`을 명시하는 쪽을 기본으로 본다.
 - 프론트 SSR과 브라우저 런타임 API 주소는 각각 `BACKEND_INTERNAL_URL`, `NEXT_PUBLIC_BACKEND_URL`로 분리된다.
 - 로그인 시도 제한은 Redis 우선, 메모리 fallback 구조다.
+- Redis fallback 인메모리 상태는 상한/주기 정리로 메모리 폭주를 방지한다.
 - task processor 기본값은 `60초`, batch size는 `50`이다.
+- task processor 동시 실행 상한은 `CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT`로 제어한다.
 - task queue 상태는 `/system/api/v1/adm/tasks`에서 backlog, stale processing, task type별 적체를 바로 볼 수 있다.
 - `/system/api/v1/adm/tasks`에서 task type별 retry 정책, 최근 실패 샘플, stale processing 샘플도 같이 확인한다.
 - `PROCESSING` 상태가 오래 머무르면 scheduler가 stale task를 자동 복구한다.
 - 회원가입 메일 설정은 `/system/api/v1/adm/mail/signup`에서 준비 상태를 바로 볼 수 있다.
 - 회원가입 메일 진단은 SMTP 연결 상태뿐 아니라 signup mail task backlog와 마지막 connection error도 같이 보여준다.
 - 회원가입 메일 발송과 홈 revalidate는 task queue를 통해 처리되므로, write API 직후 외부 I/O가 바로 보이지 않아도 정상일 수 있다.
+- task handler 실행 자체는 트랜잭션 밖에서 수행하고, 상태 전이만 짧은 트랜잭션으로 반영한다.
 - 관리자 회원 목록은 프로필 이미지/role/bio를 batch hydrate 하므로, attr 조회 로직을 손볼 때는 `MemberProfileHydrator`의 단건/목록 경로를 같이 봐야 한다.
 - 로그인은 실패 시 raw member만 조회하고, 비밀번호 검증이 끝난 뒤에만 hydrated member를 다시 읽는다.
 - 댓글 삭제는 게시글 전체 댓글을 스캔하지 않고 subtree 전용 recursive 조회로 대상 댓글만 soft delete 한다.
@@ -68,6 +71,9 @@ flowchart LR
 - secure tip은 내부 MockMvc 호출 없이 공용 `SecurityTipProvider`에서 직접 가져온다.
 - 이미지 정리 상태는 `/system/api/v1/adm/storage/cleanup`에서 purge 후보 수, safety threshold, 샘플 object key를 바로 확인할 수 있다.
 - 이미지 cleanup은 `TEMP`, `PENDING_DELETE`를 함께 대상으로 보며, purge 후보가 비정상적으로 많으면 실제 삭제를 멈추고 진단만 남긴다.
+- 이미지 cleanup의 참조 판정은 ownerId 기반 확인을 먼저 수행해 purge 시 전체 스캔 비용을 줄인다.
+- 로그인 성공 시 `apiKey`를 회전하며, auth cookie TTL은 `apiKey`/`accessToken`을 분리해 운영한다.
+- prod 부팅 시 PGroonga/AfterDDL strict 검증이 실패하면 즉시 fail-fast 한다.
 - Kakao 로그인 점검 시에는 브라우저에서 `/oauth2/authorization/kakao` 응답의 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 먼저 본다.
 
 ## 빠른 트리아지 표

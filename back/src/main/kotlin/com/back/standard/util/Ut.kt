@@ -2,6 +2,7 @@ package com.back.standard.util
 
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
+import org.slf4j.LoggerFactory
 import tools.jackson.databind.ObjectMapper
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
@@ -15,6 +16,8 @@ import java.util.*
 import javax.imageio.ImageIO
 
 object Ut {
+    private val log = LoggerFactory.getLogger(Ut::class.java)
+
     object JWT {
         fun toString(
             secret: String,
@@ -99,9 +102,9 @@ object Ut {
                 )
             builder.redirectErrorStream(true)
             val process = builder.start()
-            process.inputStream.bufferedReader().useLines { lines -> lines.forEach { println(it) } }
+            process.inputStream.bufferedReader().useLines { lines -> lines.forEach { log.info("cmd> {}", it) } }
             val exitCode = process.waitFor()
-            println("run exit code: $exitCode")
+            log.info("run exit code: {}", exitCode)
         }
 
         fun runAsync(vararg args: String) {
@@ -187,7 +190,7 @@ object Ut {
                     reader.dispose()
                 }
             } catch (e: IOException) {
-                e.printStackTrace()
+                log.warn("Failed to read image metadata: {}", filePath, e)
             }
             return metadata
         }
@@ -224,7 +227,7 @@ object Ut {
                 ImageIO.write(resizedImage, formatName, destFile)
                 true
             } catch (e: Exception) {
-                e.printStackTrace()
+                log.warn("Failed to create thumbnail: {} -> {}", srcFilePath, destFilePath, e)
                 false
             }
         }

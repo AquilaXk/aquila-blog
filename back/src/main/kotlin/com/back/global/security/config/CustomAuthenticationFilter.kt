@@ -85,7 +85,7 @@ class CustomAuthenticationFilter(
 
         val newAccessToken = actorApplicationService.genAccessToken(member)
         authCookieService.issueAccessToken(newAccessToken)
-        rq.setHeader(HttpHeaders.AUTHORIZATION, newAccessToken)
+        rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
 
         authenticate(member)
     }

@@ -36,8 +36,7 @@ class ArchitectureGuardTest {
                 "..boundedContexts..adapter.bootstrap..",
                 "..boundedContexts..adapter.event..",
                 "..boundedContexts..adapter.scheduler..",
-            )
-            .should()
+            ).should()
             .dependOnClassesThat()
             .resideInAnyPackage(
                 "..boundedContexts..adapter.persistence..",
@@ -45,8 +44,7 @@ class ArchitectureGuardTest {
                 "..boundedContexts..adapter.storage..",
                 "..boundedContexts..adapter.security..",
                 "..boundedContexts..adapter.mail..",
-            )
-            .check(importedClasses())
+            ).check(importedClasses())
     }
 
     @Test

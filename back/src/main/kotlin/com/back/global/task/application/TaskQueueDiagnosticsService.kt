@@ -1,8 +1,8 @@
 package com.back.global.task.application
 
+import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
-import com.back.global.task.adapter.persistence.TaskRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service

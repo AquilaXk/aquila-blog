@@ -50,5 +50,10 @@ class PostRepositoryAdapter(
         pageable: Pageable,
     ): Page<Post> = postRepository.findQPagedByAuthorAndKw(author, kw, pageable)
 
+    override fun existsByIdAndContentContaining(
+        id: Int,
+        contentFragment: String,
+    ): Boolean = postRepository.existsByIdAndContentContaining(id, contentFragment)
+
     override fun existsByContentContaining(contentFragment: String): Boolean = postRepository.existsByContentContaining(contentFragment)
 }

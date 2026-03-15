@@ -24,5 +24,16 @@ class MemberAttrPersistenceAdapter(
         strValue: String,
     ): Boolean = memberAttrRepository.existsByNameAndStrValue(name, strValue)
 
+    override fun existsByNameAndStrValueContaining(
+        name: String,
+        valueFragment: String,
+    ): Boolean = memberAttrRepository.existsByNameAndStrValueContaining(name, valueFragment)
+
+    override fun existsBySubjectIdAndNameAndStrValueContaining(
+        subjectId: Int,
+        name: String,
+        valueFragment: String,
+    ): Boolean = memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(subjectId, name, valueFragment)
+
     override fun save(attr: MemberAttr): MemberAttr = memberAttrRepository.save(attr)
 }

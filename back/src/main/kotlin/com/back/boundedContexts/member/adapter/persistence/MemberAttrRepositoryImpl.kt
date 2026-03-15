@@ -57,4 +57,41 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
             ).setParameter("name", name)
             .setParameter("strValue", strValue)
             .singleResult == true
+
+    override fun existsByNameAndStrValueContaining(
+        name: String,
+        valueFragment: String,
+    ): Boolean =
+        entityManager
+            .createQuery(
+                """
+                select count(a) > 0
+                from MemberAttr a
+                where a.name = :name
+                  and a.strValue like :pattern
+                """.trimIndent(),
+                java.lang.Boolean::class.java,
+            ).setParameter("name", name)
+            .setParameter("pattern", "%$valueFragment%")
+            .singleResult == true
+
+    override fun existsBySubjectIdAndNameAndStrValueContaining(
+        subjectId: Int,
+        name: String,
+        valueFragment: String,
+    ): Boolean =
+        entityManager
+            .createQuery(
+                """
+                select count(a) > 0
+                from MemberAttr a
+                where a.subject.id = :subjectId
+                  and a.name = :name
+                  and a.strValue like :pattern
+                """.trimIndent(),
+                java.lang.Boolean::class.java,
+            ).setParameter("subjectId", subjectId)
+            .setParameter("name", name)
+            .setParameter("pattern", "%$valueFragment%")
+            .singleResult == true
 }

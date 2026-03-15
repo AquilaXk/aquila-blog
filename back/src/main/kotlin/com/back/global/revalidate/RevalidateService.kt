@@ -1,5 +1,6 @@
 package com.back.global.revalidate
 
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
@@ -16,6 +17,7 @@ class RevalidateService(
     @Value("\${custom.revalidate.token:}")
     private val revalidateToken: String,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
     private val httpClient =
         HttpClient
             .newBuilder()
@@ -44,9 +46,13 @@ class RevalidateService(
 
         runCatching {
             httpClient.send(req, HttpResponse.BodyHandlers.discarding())
-        }.onFailure {
+        }.onSuccess { response ->
+            if (response.statusCode() >= 400) {
+                log.warn("Revalidate request returned non-success status: {}", response.statusCode())
+            }
+        }.onFailure { exception ->
             // Keep post write/modify/delete path non-blocking even if revalidate fails.
-            println("[revalidate] failed: ${it.message}")
+            log.warn("Revalidate request failed", exception)
         }
     }
 }

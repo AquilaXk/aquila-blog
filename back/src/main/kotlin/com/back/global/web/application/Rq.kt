@@ -57,6 +57,7 @@ class Rq(
     fun setCookie(
         name: String,
         value: String?,
+        maxAgeSeconds: Int = 60 * 60 * 24 * 365,
     ) {
         val cookieDomain = AppFacade.siteCookieDomain.trim()
         val cookie =
@@ -68,13 +69,13 @@ class Rq(
                 }
                 secure = true
                 setAttribute("SameSite", "Strict")
-                maxAge = if (value.isNullOrBlank()) 0 else 60 * 60 * 24 * 365
+                maxAge = if (value.isNullOrBlank()) 0 else maxAgeSeconds.coerceAtLeast(1)
             }
 
         resp.addCookie(cookie)
     }
 
     fun deleteCookie(name: String) {
-        setCookie(name, null)
+        setCookie(name, null, 0)
     }
 }

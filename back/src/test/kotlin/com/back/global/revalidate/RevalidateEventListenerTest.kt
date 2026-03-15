@@ -2,8 +2,8 @@ package com.back.global.revalidate
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
-import com.back.global.task.domain.TaskStatus
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.domain.TaskStatus
 import com.back.support.SeededSpringBootTestSupport
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test

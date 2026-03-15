@@ -283,7 +283,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
             assertThat(result.response.getHeader(HttpHeaders.AUTHORIZATION))
-                .isEqualTo(accessTokenCookie.value)
+                .isEqualTo("Bearer ${accessTokenCookie.value}")
         }
 
         @Test

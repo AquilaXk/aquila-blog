@@ -6,9 +6,9 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
-import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
@@ -50,7 +50,7 @@ class ApiV1AuthController(
     )
 
     @PostMapping("/login")
-    @Transactional(readOnly = true)
+    @Transactional
     fun login(
         request: HttpServletRequest,
         @RequestBody @Valid reqBody: MemberLoginRequest,
@@ -79,6 +79,8 @@ class ApiV1AuthController(
 
         loginAttemptService.clear(username, clientIp)
 
+        // 로그인 성공 시 장기 인증 식별자(apiKey)를 회전해 탈취된 기존 키 재사용 위험을 줄인다.
+        member.modifyApiKey(MemberPolicy.genApiKey())
         val accessToken = authTokenService.genAccessToken(member)
 
         authCookieService.issueAuthCookies(member.apiKey, accessToken)
@@ -108,13 +110,9 @@ class ApiV1AuthController(
         member: Member,
         rawPassword: String,
     ): Boolean =
-        if (member.username == AppConfig.adminUsernameOrBlank && AppConfig.adminPasswordOrBlank.isNotBlank()) {
-            rawPassword == AppConfig.adminPasswordOrBlank
-        } else {
-            runCatching {
-                memberUseCase.checkPassword(member, rawPassword)
-            }.isSuccess
-        }
+        runCatching {
+            memberUseCase.checkPassword(member, rawPassword)
+        }.isSuccess
 
     private fun extractClientIp(request: HttpServletRequest): String {
         // 애플리케이션 레이어에서 임의의 X-Forwarded-* 헤더를 직접 신뢰하지 않는다.

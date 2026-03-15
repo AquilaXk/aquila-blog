@@ -19,5 +19,16 @@ interface MemberAttrRepositoryPort {
         strValue: String,
     ): Boolean
 
+    fun existsByNameAndStrValueContaining(
+        name: String,
+        valueFragment: String,
+    ): Boolean
+
+    fun existsBySubjectIdAndNameAndStrValueContaining(
+        subjectId: Int,
+        name: String,
+        valueFragment: String,
+    ): Boolean
+
     fun save(attr: MemberAttr): MemberAttr
 }

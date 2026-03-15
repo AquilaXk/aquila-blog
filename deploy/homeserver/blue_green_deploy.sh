@@ -378,7 +378,7 @@ echo "next backend: ${next_backend}"
 action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
-compose up -d db_1 redis_1 caddy cloudflared
+compose up -d db_1 redis_1 minio_1 caddy cloudflared uptime_kuma
 compose pull "${next_backend}"
 compose up -d "${next_backend}"
 

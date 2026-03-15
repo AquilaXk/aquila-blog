@@ -3,6 +3,7 @@ package com.back.global.exception.config
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import jakarta.validation.ConstraintViolationException
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 
 @RestControllerAdvice
 class ExceptionHandler {
+    private val logger = LoggerFactory.getLogger(ExceptionHandler::class.java)
+
     @ExceptionHandler(NoSuchElementException::class)
     fun handleNoSuchElementException(
         @Suppress("UNUSED_PARAMETER") ex: NoSuchElementException,
@@ -87,4 +90,12 @@ class ExceptionHandler {
         ResponseEntity
             .status(ex.rsData.statusCode)
             .body(ex.rsData)
+
+    @ExceptionHandler(Exception::class)
+    fun handleUnexpectedException(ex: Exception): ResponseEntity<RsData<Void>> {
+        logger.error("Unhandled server exception", ex)
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(RsData("500-1", "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."))
+    }
 }

@@ -124,6 +124,7 @@ class UploadedFileRetentionService(
     @Transactional
     fun purgeExpiredFiles(limit: Int) {
         val safeLimit = limit.coerceIn(1, 500)
+        val safetyThreshold = retentionProperties.cleanupSafetyThreshold.coerceAtLeast(1)
         val now = Instant.now()
         val eligibleCount =
             uploadedFileRepository.countByStatusInAndPurgeAfterLessThanEqual(
@@ -131,11 +132,23 @@ class UploadedFileRetentionService(
                 now,
             )
 
-        if (eligibleCount > retentionProperties.cleanupSafetyThreshold) {
+        val effectiveLimit =
+            if (eligibleCount > safetyThreshold) {
+                logger.warn(
+                    "Throttling uploaded file purge because eligible candidate count {} exceeds safety threshold {}",
+                    eligibleCount,
+                    safetyThreshold,
+                )
+                minOf(safeLimit, safetyThreshold)
+            } else {
+                safeLimit
+            }
+
+        if (effectiveLimit <= 0) {
             logger.error(
-                "Skipping uploaded file purge because eligible candidate count {} exceeds safety threshold {}",
-                eligibleCount,
-                retentionProperties.cleanupSafetyThreshold,
+                "Skipping uploaded file purge because effective limit is non-positive (safeLimit={}, threshold={})",
+                safeLimit,
+                safetyThreshold,
             )
             return
         }
@@ -144,8 +157,17 @@ class UploadedFileRetentionService(
             uploadedFileRepository.findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
                 statuses = purgeCandidateStatuses,
                 purgeAfter = now,
-                pageable = PageRequest.of(0, safeLimit),
+                pageable = PageRequest.of(0, effectiveLimit),
             )
+
+        if (candidates.isEmpty()) {
+            logger.debug(
+                "No uploaded files eligible for purge (eligibleCount={}, effectiveLimit={})",
+                eligibleCount,
+                effectiveLimit,
+            )
+            return
+        }
 
         candidates.forEach { uploadedFile ->
             if (isStillReferenced(uploadedFile)) {
@@ -188,6 +210,7 @@ class UploadedFileRetentionService(
             deletedCount = uploadedFileRepository.countByStatus(UploadedFileStatus.DELETED),
             eligibleForPurgeCount = eligibleCount,
             cleanupSafetyThreshold = retentionProperties.cleanupSafetyThreshold,
+            // 임계치 초과 시 전체 중단 대신 배치 제한으로 완만히 정리한다.
             blockedBySafetyThreshold = eligibleCount > retentionProperties.cleanupSafetyThreshold,
             oldestEligiblePurgeAfter = eligibleCandidates.firstOrNull()?.purgeAfter,
             sampleEligibleObjectKeys = eligibleCandidates.map { it.objectKey },

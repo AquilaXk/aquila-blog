@@ -125,7 +125,8 @@ class PostImageStorageAdapter(
                 RequestBody.fromInputStream(file.inputStream, file.size),
             )
         } catch (e: Exception) {
-            throw AppException("500-1", "이미지 업로드에 실패했습니다. ${e.message ?: ""}".trim())
+            logger.error("Post image upload failed", e)
+            throw AppException("500-1", "이미지 업로드에 실패했습니다.")
         }
 
         return key
@@ -153,7 +154,8 @@ class PostImageStorageAdapter(
             null
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
-            throw AppException("500-1", "이미지를 불러오지 못했습니다. ${e.message ?: ""}".trim())
+            logger.error("Post image download failed (objectKey={})", objectKey, e)
+            throw AppException("500-1", "이미지를 불러오지 못했습니다.")
         }
     }
 
@@ -171,7 +173,8 @@ class PostImageStorageAdapter(
             )
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return
-            throw AppException("500-1", "이미지 삭제에 실패했습니다. ${e.message ?: ""}".trim())
+            logger.error("Post image delete failed (objectKey={})", objectKey, e)
+            throw AppException("500-1", "이미지 삭제에 실패했습니다.")
         }
     }
 

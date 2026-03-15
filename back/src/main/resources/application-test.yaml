@@ -3,9 +3,9 @@ spring:
     import: optional:file:.env.test[.properties]
   data:
     redis:
-      password: ${SPRING__DATA__REDIS__PASSWORD:test_redis_password_change_me}
+      password: ${SPRING__DATA__REDIS__PASSWORD:}
   datasource:
-    password: ${SPRING__DATASOURCE__PASSWORD:test_db_password_change_me}
+    password: ${SPRING__DATASOURCE__PASSWORD:}
   sql:
     init:
       mode: always

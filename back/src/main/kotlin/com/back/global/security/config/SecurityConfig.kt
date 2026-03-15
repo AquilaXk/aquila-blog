@@ -44,7 +44,14 @@ class SecurityConfig(
 
                 authorize("/*/api/*/adm/**", hasRole("ADMIN"))
                 authorize("/*/api/*/**", authenticated)
-                authorize(anyRequest, permitAll)
+                authorize("/oauth2/**", permitAll)
+                authorize("/login/oauth2/**", permitAll)
+                authorize("/actuator/health/**", permitAll)
+                authorize("/actuator/info", permitAll)
+                authorize("/swagger-ui/**", permitAll)
+                authorize("/v3/api-docs/**", permitAll)
+                authorize("/error", permitAll)
+                authorize(anyRequest, denyAll)
             }
 
             cors { }

@@ -6,13 +6,8 @@ import ServiceCard from "./ServiceCard"
 import ContactCard from "./ContactCard"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
-import dynamic from "next/dynamic"
-
-const FeedExplorer = dynamic(() => import("./FeedExplorer"))
-const DesktopTagListIsland = dynamic(() => import("./TagList"), {
-  ssr: false,
-  loading: () => <TagSidebarPlaceholder aria-hidden="true" />,
-})
+import FeedExplorer from "./FeedExplorer"
+import TagList from "./TagList"
 
 const HEADER_HEIGHT = 73
 
@@ -33,7 +28,7 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
           height: `calc(100vh - ${HEADER_HEIGHT}px)`,
         }}
       >
-        <DesktopTagListIsland />
+        <TagList />
       </div>
       <div className="mid">
         <MobileProfileCard initialAdminProfile={initialAdminProfile} />
@@ -168,23 +163,5 @@ const IntroCard = styled.section`
     max-width: 42rem;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.7;
-  }
-`
-
-const TagSidebarPlaceholder = styled.div`
-  min-height: 220px;
-  border-radius: 18px;
-  background:
-    linear-gradient(90deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray3}, ${({ theme }) => theme.colors.gray2});
-  background-size: 200% 100%;
-  animation: shimmer 1.2s linear infinite;
-
-  @keyframes shimmer {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -200% 0;
-    }
   }
 `

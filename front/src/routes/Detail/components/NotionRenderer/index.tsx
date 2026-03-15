@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
 import { FC, ReactElement, ReactNode, isValidElement, useEffect, useMemo, useRef, useState } from "react"
-import ReactMarkdown from "react-markdown"
+import { MarkdownHooks } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypePrettyCode from "rehype-pretty-code"
 import AppIcon from "src/components/icons/AppIcon"
@@ -427,8 +427,9 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
   }, [renderKey])
 
   const renderMarkdown = (markdown: string, key: string, inCallout = false) => (
-    <ReactMarkdown
+    <MarkdownHooks
       key={key}
+      fallback={<p className={inCallout ? "notion-text" : undefined}>렌더링 중...</p>}
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[[rehypePrettyCode, REHYPE_PRETTY_CODE_OPTIONS]]}
       components={{
@@ -510,7 +511,7 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
       }}
     >
       {markdown}
-    </ReactMarkdown>
+    </MarkdownHooks>
   )
 
   if (!normalizedContent) {

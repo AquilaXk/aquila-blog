@@ -19,8 +19,9 @@ type DetailPageProps = {
 }
 
 const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({ initialComments }) => {
-  const post = usePostQuery()
-  if (!post) return <CustomError />
+  const { post, isLoading, isNotFound } = usePostQuery()
+  if (isLoading) return null
+  if (isNotFound || !post) return <CustomError />
 
   const date = post.createdTime || post.date?.start_date || ""
   const publishedDate = new Date(date)

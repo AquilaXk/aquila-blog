@@ -300,7 +300,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        fun `피드 전용 목록 조회는 tags 와 category 메타를 포함한다`() {
+        fun `탐색 목록 조회는 tags 와 category 메타를 포함한다`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             val uniqueTitle = "feed-meta-${System.currentTimeMillis()}"
             val postContent =
@@ -313,17 +313,43 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             val post = postFacade.write(actor, uniqueTitle, postContent, true, true)
 
             mvc
-                .get("/post/api/v1/posts/feed") {
+                .get("/post/api/v1/posts/explore") {
                     param("kw", uniqueTitle)
                     param("page", "1")
                     param("pageSize", "30")
                 }.andExpect {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostController::class.java))
-                    match(handler().methodName("getFeed"))
+                    match(handler().methodName("explore"))
                     jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItems("성능", "피드")) }
                     jsonPath("$.content[?(@.id == ${post.id})].category[*]") { value(Matchers.hasItem("백엔드")) }
+                }
+        }
+
+        @Test
+        fun `태그 집계 조회는 공개 목록의 태그 카운트를 반환한다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            postFacade.write(
+                actor,
+                "tags-aggregation-${System.currentTimeMillis()}",
+                """
+                tags: [운영, 운영, 성능]
+
+                본문
+                """.trimIndent(),
+                true,
+                true,
+            )
+
+            mvc
+                .get("/post/api/v1/posts/tags")
+                .andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("getTags"))
+                    jsonPath("$[*].tag") { value(Matchers.hasItems("운영", "성능")) }
+                    jsonPath("$[?(@.tag == '운영')].count") { value(Matchers.hasItem(Matchers.greaterThanOrEqualTo(1))) }
                 }
         }
     }

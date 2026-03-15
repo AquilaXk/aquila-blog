@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
@@ -55,12 +56,7 @@ const SignupPage = () => {
       })
       setSentEmail(response.data.email)
     } catch (signupError) {
-      if (signupError instanceof Error) {
-        const message = signupError.message.split(": ").slice(1).join(": ").trim()
-        setError(message || "회원가입 메일 전송에 실패했습니다.")
-      } else {
-        setError("회원가입 메일 전송에 실패했습니다.")
-      }
+      setError(toAuthErrorMessage("signupStart", signupError, "회원가입 메일 전송에 실패했습니다."))
     } finally {
       setLoading(false)
     }

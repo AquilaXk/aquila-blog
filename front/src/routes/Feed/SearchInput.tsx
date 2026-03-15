@@ -1,10 +1,17 @@
 import styled from "@emotion/styled"
-import React, { InputHTMLAttributes } from "react"
+import React, { InputHTMLAttributes, Ref, useMemo } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 
-interface Props extends InputHTMLAttributes<HTMLInputElement> {}
+interface Props extends InputHTMLAttributes<HTMLInputElement> {
+  inputRef?: Ref<HTMLInputElement>
+}
 
-const SearchInput: React.FC<Props> = ({ ...props }) => {
+const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
+  const shortcutLabel = useMemo(() => {
+    if (typeof navigator === "undefined") return "⌘K"
+    return /Mac|iPhone|iPad|iPod/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"
+  }, [])
+
   return (
     <StyledWrapper>
       <div className="field">
@@ -13,6 +20,7 @@ const SearchInput: React.FC<Props> = ({ ...props }) => {
         </span>
         <input
           id="feed-search-input"
+          ref={inputRef}
           className="mid"
           type="search"
           placeholder="제목, 요약, 태그로 검색"
@@ -20,7 +28,7 @@ const SearchInput: React.FC<Props> = ({ ...props }) => {
           {...props}
         />
         <span className="shortcut" aria-hidden="true">
-          ⌘K
+          {shortcutLabel}
         </span>
       </div>
     </StyledWrapper>

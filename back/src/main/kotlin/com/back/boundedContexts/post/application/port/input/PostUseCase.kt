@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
 
@@ -117,6 +118,16 @@ interface PostUseCase {
         page: Int,
         pageSize: Int,
     ): Page<Post>
+
+    fun findPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): Page<Post>
+
+    fun getPublicTagCounts(): List<TagCountDto>
 
     fun findTemp(author: Member): Post?
 

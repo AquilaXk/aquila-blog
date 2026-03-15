@@ -547,6 +547,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     tone: "idle",
     text: "작성 후 ‘글 작성’을 누르면 결과가 여기에 표시됩니다.",
   })
+  const [profileImageNotice, setProfileImageNotice] = useState<{
+    tone: NoticeTone
+    text: string
+  }>({
+    tone: "idle",
+    text: "프로필 이미지를 선택하면 즉시 업로드됩니다.",
+  })
   const [profileNotice, setProfileNotice] = useState<{
     tone: NoticeTone
     text: string
@@ -1081,7 +1088,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("admMemberProfileImgUpdate")
-      setProfileNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
+      setProfileImageNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
 
       const formData = new FormData()
       formData.append("file", file)
@@ -1107,7 +1114,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
 
       syncProfileState(uploadData)
-      setProfileNotice({
+      setProfileImageNotice({
         tone: "success",
         text: "프로필 이미지가 저장되었습니다. 현재 미리보기에 반영된 상태가 저장값입니다.",
       })
@@ -1119,7 +1126,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setProfileNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
+      setProfileImageNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -1756,6 +1763,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   {loadingKey === "admMemberProfileImgUpdate" ? "업로드 중..." : "프로필 이미지 선택"}
                 </PrimaryButton>
                 <InlineHint title={profileImageHint}>{profileImageHint}</InlineHint>
+                <InlineStatus data-tone={profileImageNotice.tone}>{profileImageNotice.text}</InlineStatus>
               </ProfileCardPanel>
 
               <FormPanelCard>
@@ -1777,7 +1785,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <strong>{profileUpdatedText}</strong>
                   </ProfileCurrentItem>
                 </ProfileCurrentGrid>
-                <InlineStatus data-tone={profileNotice.tone}>{profileNotice.text}</InlineStatus>
                 <FieldGrid>
                   <FieldBox>
                     <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
@@ -1826,6 +1833,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     역할/소개 저장
                   </PrimaryButton>
                 </ActionRow>
+                <InlineStatus data-tone={profileNotice.tone}>{profileNotice.text}</InlineStatus>
               </FormPanelCard>
             </ProfileStudioGrid>
           </Section>

@@ -5,7 +5,7 @@ import usePostQuery from "src/hooks/usePostQuery"
 type Props = {}
 
 const PageDetail: React.FC<Props> = () => {
-  const data = usePostQuery()
+  const { post: data } = usePostQuery()
 
   if (!data) return null
   return (

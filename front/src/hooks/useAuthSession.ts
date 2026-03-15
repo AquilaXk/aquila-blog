@@ -36,7 +36,7 @@ const useAuthSession = () => {
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
   const hasAuthCookieSnapshot = hasAuthCookieInBrowser()
-  const shouldRefetchOnMount = !hasCachedSnapshot
+  const shouldRefetchOnMount = !hasCachedSnapshot || hasCachedAnonymousSnapshot
   const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 5 * 60_000 : 0
   const query = useQuery({
     queryKey: queryKey.authMe(),

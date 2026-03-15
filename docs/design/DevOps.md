@@ -23,7 +23,8 @@ flowchart LR
     B --> C["calculateTag"]
     C --> D["buildAndPush"]
     D --> E["blueGreenDeploy"]
-    E --> F["makeTagAndRelease"]
+    E --> F["frontLiveE2E"]
+    F --> G["makeTagAndRelease"]
 ```
 
 1. `test`
@@ -34,7 +35,11 @@ flowchart LR
    `back/Dockerfile`로 백엔드 이미지를 빌드해 GHCR에 push한다.
 4. `blueGreenDeploy`
    Tailscale + SSH로 홈서버에 접속해 blue/green 배포를 수행한다.
-5. `makeTagAndRelease`
+5. `frontLiveE2E`
+   배포 직후 운영 프론트 도메인에서 Playwright live smoke를 실행한다.
+   (로그인 -> `/admin`/`/admin/profile`/`/admin/tools`/`/admin/posts/new` -> 로그아웃)
+   대상 URL은 `CUSTOM_PROD_FRONTURL`(secret/var) 우선, 없으면 `HOME_SERVER_ENV` 내부 `CUSTOM_PROD_FRONTURL`/`HOME_FRONT_BASE_URL`을 자동 파싱해 사용한다.
+6. `makeTagAndRelease`
    배포 성공 시 GitHub release/tag를 생성한다.
 
 ## 운영 런타임
@@ -112,6 +117,8 @@ GitHub Actions 기준 필수값:
 - `HOME_SERVER_ENV`
 - `CI_DB_PASSWORD`
 - `CI_REDIS_PASSWORD`
+- `E2E_ADMIN_USERNAME`
+- `E2E_ADMIN_PASSWORD`
 
 선택값:
 
@@ -140,6 +147,7 @@ GitHub Actions 기준 필수값:
 | --- | --- | --- |
 | `HOME_SERVER_ENV` | 홈서버 `.env.prod` 생성 | 운영 환경변수 단일 원본 |
 | `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` / `ci.yml` test job | Gradle이 자동으로 올리는 test infra와 Spring test profile 비밀번호 정합성 유지 |
+| `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 배포 후 운영 도메인 실연동 smoke 검증 |
 | `TS_AUTHKEY` | GitHub Actions | Tailscale 연결 |
 | `HOME_SSH_KEY` | GitHub Actions | 서버 SSH 접속 |
 | `HOME_APP_DIR` | GitHub Actions -> SSH 원격 실행 | 서버 Git 저장소 경로 |

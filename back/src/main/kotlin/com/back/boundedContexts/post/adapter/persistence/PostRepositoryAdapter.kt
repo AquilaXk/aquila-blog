@@ -50,6 +50,14 @@ class PostRepositoryAdapter(
         pageable: Pageable,
     ): Page<Post> = postRepository.findQPagedByAuthorAndKw(author, kw, pageable)
 
+    override fun findQPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        pageable: Pageable,
+    ): Page<Post> = postRepository.findQPagedByKwAndTag(kw, tag, pageable)
+
+    override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()
+
     override fun existsByIdAndContentContaining(
         id: Int,
         contentFragment: String,

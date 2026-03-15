@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -77,12 +78,7 @@ const LoginPage = () => {
         await replaceRoute(router, next)
       }
     } catch (error) {
-      if (error instanceof Error) {
-        const message = error.message.split(": ").slice(1).join(": ").trim()
-        setError(message || "로그인에 실패했습니다.")
-      } else {
-        setError("로그인에 실패했습니다.")
-      }
+      setError(toAuthErrorMessage("login", error, "로그인에 실패했습니다."))
     } finally {
       setLoading(false)
     }

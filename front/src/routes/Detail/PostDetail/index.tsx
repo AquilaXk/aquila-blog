@@ -25,7 +25,7 @@ type RsData<T> = {
 }
 
 const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
-  const data = usePostQuery()
+  const { post: data } = usePostQuery()
   const router = useRouter()
   const queryClient = useQueryClient()
   const { me } = useAuthSession()

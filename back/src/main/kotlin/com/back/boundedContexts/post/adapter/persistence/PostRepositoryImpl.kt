@@ -32,11 +32,25 @@ class PostRepositoryImpl(
         pageable: Pageable,
     ): Page<Post> = findPosts(author, kw, pageable, publicOnly = false)
 
+    override fun findQPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        pageable: Pageable,
+    ): Page<Post> = findPosts(null, kw, pageable, publicOnly = true, tag = tag)
+
+    override fun findAllPublicListedContents(): List<String> =
+        queryFactory
+            .select(post.content)
+            .from(post)
+            .where(post.published.isTrue.and(post.listed.isTrue))
+            .fetch()
+
     private fun findPosts(
         author: Member?,
         kw: String,
         pageable: Pageable,
         publicOnly: Boolean = false,
+        tag: String? = null,
     ): Page<Post> {
         val builder = BooleanBuilder()
 
@@ -46,6 +60,7 @@ class PostRepositoryImpl(
         }
         author?.let { builder.and(post.author.eq(it)) }
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
+        if (!tag.isNullOrBlank()) builder.and(buildTagPredicate(tag))
 
         val postsQuery = createPostsQuery(builder, pageable)
         // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
@@ -64,6 +79,15 @@ class PostRepositoryImpl(
             post.content,
             Expressions.constant(kw),
         )
+
+    private fun buildTagPredicate(tag: String): BooleanExpression =
+        Expressions.booleanTemplate(
+            "lower({0}) like {1}",
+            post.content,
+            Expressions.constant("%${escapeLikeToken(tag.lowercase())}%"),
+        )
+
+    private fun escapeLikeToken(token: String): String = token.replace("%", "\\%").replace("_", "\\_")
 
     private fun createPostsQuery(
         builder: BooleanBuilder,

@@ -25,6 +25,8 @@ import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.PostMetaExtractor
+import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.event.PostCommentDeletedEvent
 import com.back.boundedContexts.post.event.PostCommentModifiedEvent
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
@@ -44,6 +46,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.jvm.optionals.getOrNull
 
 @Service
@@ -58,6 +61,16 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    private data class TagCountsCache(
+        val expiresAtMillis: Long,
+        val values: List<TagCountDto>,
+    )
+
+    @Volatile
+    private var publicTagCountsCache: TagCountsCache? = null
+
+    private val tagCacheTtlMillis: Long = 60_000
+
     fun count(): Long = postRepository.count()
 
     fun randomSecureTip(): String = secureTipPort.randomSecureTip()
@@ -75,7 +88,8 @@ class PostApplicationService(
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
 
         if (normalizedIdempotencyKey == null) {
-            return writeNewPost(
+            val created =
+                writeNewPost(
                 author = author,
                 persistenceAuthor = persistenceAuthor,
                 title = title,
@@ -83,6 +97,8 @@ class PostApplicationService(
                 published = published,
                 listed = listed,
             )
+            clearExploreCaches()
+            return created
         }
 
         val existingRequest =
@@ -115,6 +131,7 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
+        clearExploreCaches()
 
         return createdPost
     }
@@ -154,6 +171,7 @@ class PostApplicationService(
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
         uploadedFileRetentionService.syncPostContent(post.id, previousContent, post.content)
+        clearExploreCaches()
 
         eventPublisher.publish(
             PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor)),
@@ -224,6 +242,7 @@ class PostApplicationService(
         post.author.decrementPostsCount()
         saveMemberAttr(post.author.postsCountAttr)
         post.softDelete()
+        clearExploreCaches()
     }
 
     @Transactional
@@ -456,6 +475,50 @@ class PostApplicationService(
             )
         }
 
+    fun findPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): Page<Post> =
+        findAndHydratePagedPosts {
+            postRepository.findQPagedByKwAndTag(
+                kw,
+                tag,
+                PageRequest.of(page - 1, pageSize, sort.sortBy),
+            )
+        }
+
+    fun getPublicTagCounts(): List<TagCountDto> {
+        val now = System.currentTimeMillis()
+        publicTagCountsCache?.takeIf { it.expiresAtMillis > now }?.let { return it.values }
+
+        synchronized(this) {
+            val refreshedNow = System.currentTimeMillis()
+            publicTagCountsCache?.takeIf { it.expiresAtMillis > refreshedNow }?.let { return it.values }
+
+            val tagCounts = ConcurrentHashMap<String, Int>()
+            postRepository.findAllPublicListedContents().forEach { content ->
+                PostMetaExtractor.extract(content).tags.forEach { tag ->
+                    val normalizedTag = tag.trim()
+                    if (normalizedTag.isNotBlank()) {
+                        tagCounts.merge(normalizedTag, 1, Int::plus)
+                    }
+                }
+            }
+
+            val result =
+                tagCounts
+                    .entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
+                    .map { TagCountDto(it.key, it.value) }
+
+            publicTagCountsCache = TagCountsCache(refreshedNow + tagCacheTtlMillis, result)
+            return result
+        }
+    }
+
     fun findTemp(author: Member): Post? =
         postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(toPersistenceMember(author), "임시글")
 
@@ -562,4 +625,8 @@ class PostApplicationService(
 
     // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
     private fun toPersistenceMember(member: Member): Member = if (member is MemberProxy) member.persistenceMember else member
+
+    private fun clearExploreCaches() {
+        publicTagCountsCache = null
+    }
 }

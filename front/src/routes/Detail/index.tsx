@@ -9,7 +9,7 @@ type Props = {
 }
 
 const Detail: React.FC<Props> = ({ initialComments = null }) => {
-  const data = usePostQuery()
+  const { post: data } = usePostQuery()
 
   if (!data) return null
   return (

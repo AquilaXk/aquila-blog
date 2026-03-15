@@ -118,6 +118,7 @@ type PageDto<T> = {
 }
 
 type ActionCardTone = "read" | "write" | "danger" | "infra"
+type InlineNoticeTone = "warning" | "danger" | "success"
 
 const ACTION_LABELS: Record<string, string> = {
   commentList: "댓글 목록 조회",
@@ -218,7 +219,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(null)
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
   const [testEmail, setTestEmail] = useState("")
-  const [mailTestNotice, setMailTestNotice] = useState("")
+  const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
+    tone: "warning",
+    text: "",
+  })
   const defaultUptimeStatusPath = process.env.NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH?.trim() || "/status/aquila"
   const monitoringEmbedUrl =
     process.env.NEXT_PUBLIC_MONITORING_EMBED_URL?.trim() ||
@@ -289,7 +293,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey(actionKey)
       setLastActionLabel(ACTION_LABELS[actionKey] || actionKey)
       setMailDiagnosticsError("")
-      setMailTestNotice("")
+      setMailTestNotice((prev) => ({ ...prev, text: "" }))
       const diagnostics = await apiFetch<SignupMailDiagnostics>(
         `/system/api/v1/adm/mail/signup${checkConnection ? "?checkConnection=true" : ""}`
       )
@@ -307,23 +311,23 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const sendSignupTestMail = async () => {
     const email = testEmail.trim()
     if (!email) {
-      setMailTestNotice("테스트 메일을 받을 이메일을 먼저 입력해주세요.")
+      setMailTestNotice({ tone: "warning", text: "테스트 메일을 받을 이메일을 먼저 입력해주세요." })
       return
     }
 
     try {
       setLoadingKey("mailTest")
       setLastActionLabel(ACTION_LABELS.mailTest)
-      setMailTestNotice("")
+      setMailTestNotice({ tone: "warning", text: "테스트 메일을 전송하고 있습니다..." })
       const response = await apiFetch<ApiRsData<{ email: string }>>("/system/api/v1/adm/mail/signup/test", {
         method: "POST",
         body: JSON.stringify({ email }),
       })
-      setMailTestNotice(`${response.data.email} 주소로 테스트 메일을 요청했습니다.`)
+      setMailTestNotice({ tone: "success", text: `${response.data.email} 주소로 테스트 메일을 요청했습니다.` })
       setResult(pretty(response))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setMailTestNotice(message)
+      setMailTestNotice({ tone: "danger", text: message })
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -822,7 +826,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 테스트 메일 발송
               </PrimaryButton>
             </MailTestBox>
-            {!!mailTestNotice && <InlineNotice data-tone="success">{mailTestNotice}</InlineNotice>}
+            {!!mailTestNotice.text && <InlineNotice data-tone={mailTestNotice.tone}>{mailTestNotice.text}</InlineNotice>}
           </MailTestSection>
         </SectionCard>
 

@@ -10,3 +10,4 @@
 - 메인 피드 필터는 viewport가 아니라 중앙 컬럼 폭 기준으로 반응
 - 카테고리 드롭다운은 `portal + fixed panel`, `min >= trigger`, `viewport-safe max-width`
 - 프로그램적 라우팅은 `src/libs/router` 래퍼(`pushRoute`, `replaceRoute`)로 통일해 cancelled 네비게이션 에러 노출을 줄인다
+- 운영 도구(`/admin/tools`) 콘솔 액션은 대형 카드형 2열 블록 대신 compact pill 버튼 행을 유지한다

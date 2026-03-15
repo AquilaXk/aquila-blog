@@ -106,6 +106,10 @@ type ApiRsData<T> = {
   data: T
 }
 
+type PageDto<T> = {
+  content?: T[]
+}
+
 type ActionCardTone = "read" | "write" | "danger" | "infra"
 
 const ACTION_LABELS: Record<string, string> = {
@@ -180,7 +184,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [lastActionLabel, setLastActionLabel] = useState("")
   const [postId, setPostId] = useState("1")
   const [commentId, setCommentId] = useState("1")
-  const [commentContent, setCommentContent] = useState("")
+  const [commentContent, setCommentContent] = useState("운영 도구 댓글 테스트")
   const [mailDiagnostics, setMailDiagnostics] = useState<SignupMailDiagnostics | null>(null)
   const [mailDiagnosticsError, setMailDiagnosticsError] = useState("")
   const [taskQueueDiagnostics, setTaskQueueDiagnostics] = useState<TaskQueueDiagnostics | null>(null)
@@ -202,6 +206,22 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
+  }
+
+  const parsePositiveInt = (value: string, label: string) => {
+    const parsed = Number(value)
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      throw new Error(`${label}는 1 이상의 정수여야 합니다.`)
+    }
+    return parsed
+  }
+
+  const requireCommentContent = () => {
+    const content = commentContent.trim()
+    if (content.length < 2) {
+      throw new Error("comment content는 2자 이상 입력해주세요.")
+    }
+    return content
   }
 
   const fetchSignupMailDiagnostics = async (checkConnection = false) => {
@@ -253,18 +273,21 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     void (async () => {
-      try {
-        const [mail, tasks, cleanup] = await Promise.all([
-          apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup"),
-          apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"),
-          apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"),
-        ])
+      const [mailResult, taskResult, cleanupResult, postsResult] = await Promise.allSettled([
+        apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup"),
+        apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"),
+        apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"),
+        apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
+      ])
 
-        setMailDiagnostics(mail)
-        setTaskQueueDiagnostics(tasks)
-        setCleanupDiagnostics(cleanup)
-      } catch {
-        // Initial diagnostics are best-effort; dedicated actions provide exact error details.
+      if (mailResult.status === "fulfilled") setMailDiagnostics(mailResult.value)
+      if (taskResult.status === "fulfilled") setTaskQueueDiagnostics(taskResult.value)
+      if (cleanupResult.status === "fulfilled") setCleanupDiagnostics(cleanupResult.value)
+      if (postsResult.status === "fulfilled") {
+        const firstPostId = postsResult.value.content?.[0]?.id
+        if (firstPostId != null) {
+          setPostId(String(firstPostId))
+        }
       }
     })()
   }, [])
@@ -342,14 +365,23 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       title: "댓글 목록 조회",
       description: "게시글의 전체 댓글 트리와 정렬 상태 확인",
       tone: "read",
-      onClick: async () => void run("commentList", () => apiFetch(`/post/api/v1/posts/${postId}/comments`)),
+      onClick: async () =>
+        void run("commentList", () => {
+          const targetPostId = parsePositiveInt(postId, "post id")
+          return apiFetch(`/post/api/v1/posts/${targetPostId}/comments`)
+        }),
     },
     {
       key: "commentOne",
       title: "댓글 단건 조회",
       description: "특정 comment id 상세 확인",
       tone: "read",
-      onClick: async () => void run("commentOne", () => apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`)),
+      onClick: async () =>
+        void run("commentOne", () => {
+          const targetPostId = parsePositiveInt(postId, "post id")
+          const targetCommentId = parsePositiveInt(commentId, "comment id")
+          return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`)
+        }),
     },
     {
       key: "commentWrite",
@@ -357,12 +389,19 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       description: "입력한 내용을 새 댓글로 생성",
       tone: "write",
       onClick: async () =>
-        void run("commentWrite", () =>
-          apiFetch(`/post/api/v1/posts/${postId}/comments`, {
+        void run("commentWrite", async () => {
+          const targetPostId = parsePositiveInt(postId, "post id")
+          const content = requireCommentContent()
+          const response = await apiFetch<ApiRsData<{ id?: number }>>(`/post/api/v1/posts/${targetPostId}/comments`, {
             method: "POST",
-            body: JSON.stringify({ content: commentContent }),
+            body: JSON.stringify({ content }),
           })
-        ),
+          const createdCommentId = response.data?.id
+          if (typeof createdCommentId === "number" && Number.isInteger(createdCommentId)) {
+            setCommentId(String(createdCommentId))
+          }
+          return response
+        }),
     },
     {
       key: "commentModify",
@@ -370,12 +409,15 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       description: "comment id에 해당하는 댓글 내용 변경",
       tone: "write",
       onClick: async () =>
-        void run("commentModify", () =>
-          apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+        void run("commentModify", () => {
+          const targetPostId = parsePositiveInt(postId, "post id")
+          const targetCommentId = parsePositiveInt(commentId, "comment id")
+          const content = requireCommentContent()
+          return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`, {
             method: "PUT",
-            body: JSON.stringify({ content: commentContent }),
+            body: JSON.stringify({ content }),
           })
-        ),
+        }),
     },
     {
       key: "commentDelete",
@@ -383,11 +425,13 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       description: "comment id 댓글 삭제 (복구 불가 정책일 수 있음)",
       tone: "danger",
       onClick: async () =>
-        void run("commentDelete", () =>
-          apiFetch(`/post/api/v1/posts/${postId}/comments/${commentId}`, {
+        void run("commentDelete", () => {
+          const targetPostId = parsePositiveInt(postId, "post id")
+          const targetCommentId = parsePositiveInt(commentId, "comment id")
+          return apiFetch(`/post/api/v1/posts/${targetPostId}/comments/${targetCommentId}`, {
             method: "DELETE",
           })
-        ),
+        }),
     },
   ]
 
@@ -865,17 +909,21 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </div>
           <ConsoleStatus>{consoleStatus}</ConsoleStatus>
         </ConsoleHeader>
-        <ActionCardGrid data-columns="2">
+        <ConsoleQuickActions>
           {consoleActions.map((action) => (
-            <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} onClick={() => void action.onClick()}>
-              <ActionCardHeader>
-                <ActionCardTitle>{action.title}</ActionCardTitle>
-                <ActionStateChip data-tone="infra">진단</ActionStateChip>
-              </ActionCardHeader>
-              <ActionCardHint>{action.description}</ActionCardHint>
-            </ActionCardButton>
+            <ConsoleQuickActionButton
+              key={action.key}
+              type="button"
+              disabled={isBusy}
+              data-tone={action.tone}
+              title={action.description}
+              onClick={() => void action.onClick()}
+            >
+              <span className="title">{action.title}</span>
+              <span className="chip">진단</span>
+            </ConsoleQuickActionButton>
           ))}
-        </ActionCardGrid>
+        </ConsoleQuickActions>
         <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
       </ConsoleCard>
     </Main>
@@ -1593,6 +1641,69 @@ const ConsoleStatus = styled.span`
 
   @media (max-width: 760px) {
     min-height: 1.5rem;
+  }
+`
+
+const ConsoleQuickActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.58rem;
+  margin: 0.28rem 0 0.88rem;
+`
+
+const ConsoleQuickActionButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.85rem;
+  flex: 1 1 16rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0 0.82rem;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.gray3};
+  }
+
+  &:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+  }
+
+  .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.indigo8};
+    background: ${({ theme }) => theme.colors.indigo3};
+    color: ${({ theme }) => theme.colors.indigo11};
+    padding: 0.2rem 0.46rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  @media (max-width: 760px) {
+    flex-basis: 100%;
   }
 `
 

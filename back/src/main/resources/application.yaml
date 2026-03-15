@@ -89,6 +89,10 @@ logging:
     org.hibernate.orm.jdbc.batch: WARN
     org.springframework.transaction.interceptor: INFO
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
   endpoint:
     health:
       probes:

@@ -298,6 +298,34 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     match(handler().methodName("getItems"))
                 }
         }
+
+        @Test
+        fun `피드 전용 목록 조회는 tags 와 category 메타를 포함한다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val uniqueTitle = "feed-meta-${System.currentTimeMillis()}"
+            val postContent =
+                """
+                tags: [성능, 피드]
+                categories: [백엔드]
+
+                피드 메타 테스트 본문
+                """.trimIndent()
+            val post = postFacade.write(actor, uniqueTitle, postContent, true, true)
+
+            mvc
+                .get("/post/api/v1/posts/feed") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("getFeed"))
+                    jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
+                    jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItems("성능", "피드")) }
+                    jsonPath("$.content[?(@.id == ${post.id})].category[*]") { value(Matchers.hasItem("백엔드")) }
+                }
+        }
     }
 
     @Nested

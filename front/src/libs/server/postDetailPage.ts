@@ -29,7 +29,7 @@ export const buildCanonicalPostDetailPage = async (
   postId: string
 ): Promise<GetServerSidePropsResult<DetailPageProps>> => {
   const queryClient = createQueryClient()
-  await hydrateServerAuthSession(queryClient, req)
+  const authMember = await hydrateServerAuthSession(queryClient, req)
 
   const postDetail = await getPostDetailById(postId)
   if (!postDetail) return { notFound: true }
@@ -37,7 +37,12 @@ export const buildCanonicalPostDetailPage = async (
   await queryClient.prefetchQuery(queryKey.post(postDetail.id), () => postDetail)
   const initialComments = postDetail.type[0] === "Post" ? await fetchInitialComments(req, postDetail.id) : []
 
-  res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120")
+  res.setHeader(
+    "Cache-Control",
+    authMember
+      ? "private, no-store"
+      : "public, s-maxage=120, stale-while-revalidate=600"
+  )
 
   return {
     props: {

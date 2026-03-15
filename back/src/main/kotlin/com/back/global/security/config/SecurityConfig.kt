@@ -48,6 +48,7 @@ class SecurityConfig(
                 authorize("/login/oauth2/**", permitAll)
                 authorize("/actuator/health/**", permitAll)
                 authorize("/actuator/info", permitAll)
+                authorize("/actuator/prometheus", permitAll)
                 authorize("/swagger-ui/**", permitAll)
                 authorize("/v3/api-docs/**", permitAll)
                 authorize("/error", permitAll)

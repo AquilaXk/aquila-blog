@@ -16,13 +16,13 @@ import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profile
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
   const initialAdminProfile = await fetchServerAdminProfile(req)
-  await hydrateServerAuthSession(queryClient, req)
+  const authMember = await hydrateServerAuthSession(queryClient, req)
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
 
   res.setHeader(
     "Cache-Control",
-    initialAdminProfile
-      ? "public, s-maxage=10, stale-while-revalidate=30"
+    !authMember && initialAdminProfile
+      ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )
 

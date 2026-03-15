@@ -24,6 +24,12 @@ import java.time.Instant
 )
 @AfterDDL(
     """
+    CREATE INDEX IF NOT EXISTS post_idx_published_listed_created_at_desc
+    ON post (published, listed, created_at DESC)
+    """,
+)
+@AfterDDL(
+    """
     CREATE INDEX IF NOT EXISTS post_idx_listed_modified_at_desc
     ON post (listed, modified_at DESC)
     """,

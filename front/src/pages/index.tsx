@@ -26,15 +26,15 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
     posts = []
   }
 
-  await hydrateServerAuthSession(queryClient, req)
+  const authMember = await hydrateServerAuthSession(queryClient, req)
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
   // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.
   res.setHeader(
     "Cache-Control",
-    initialAdminProfile && postsLoaded
-      ? "public, s-maxage=10, stale-while-revalidate=30"
+    !authMember && initialAdminProfile && postsLoaded
+      ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )
 

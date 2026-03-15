@@ -131,6 +131,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       mermaid.initialize({
         startOnLoad: false,
         theme,
+        securityLevel: "strict",
         flowchart: {
           htmlLabels: true,
           curve: "linear",
@@ -226,18 +227,18 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       }
     }
 
-    run()
-
-    const observer = new MutationObserver(() => {
-      if (disposed) return
-      run()
+    void run()
+    const rafId = window.requestAnimationFrame(() => {
+      void run()
     })
-
-    observer.observe(root, { childList: true, subtree: true })
+    const timerId = window.setTimeout(() => {
+      void run()
+    }, 120)
 
     return () => {
       disposed = true
-      observer.disconnect()
+      window.cancelAnimationFrame(rafId)
+      window.clearTimeout(timerId)
     }
   }, [contentKey, rootRef, scheme])
 

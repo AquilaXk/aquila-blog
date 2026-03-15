@@ -21,6 +21,7 @@ type Props = {
 
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 20_000
+const SSE_RECOVERY_PROBE_MS = 120_000
 
 const toSiteKey = (url: URL) => {
   const host = url.hostname.toLowerCase()
@@ -34,7 +35,23 @@ const toSiteKey = (url: URL) => {
     return `${url.protocol}//${host}`
   }
 
-  return `${url.protocol}//${labels.slice(-2).join(".")}`
+  const suffix2 = labels.slice(-2).join(".")
+  const commonMultiPartTlds = new Set([
+    "co.kr",
+    "or.kr",
+    "go.kr",
+    "co.uk",
+    "org.uk",
+    "ac.uk",
+    "com.au",
+    "co.jp",
+  ])
+  const registrable =
+    commonMultiPartTlds.has(suffix2) && labels.length >= 3
+      ? labels.slice(-3).join(".")
+      : labels.slice(-2).join(".")
+
+  return `${url.protocol}//${registrable}`
 }
 
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
@@ -229,6 +246,21 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       }
     }
   }, [enabled, loadSnapshot, streamMode])
+
+  useEffect(() => {
+    if (!enabled) return
+    if (preferPolling) return
+    if (streamMode !== "poll") return
+
+    const timer = window.setTimeout(() => {
+      reconnectAttemptRef.current = 0
+      setStreamMode("sse")
+    }, SSE_RECOVERY_PROBE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [enabled, preferPolling, streamMode])
 
   useEffect(() => {
     if (!open) return

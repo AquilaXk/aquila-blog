@@ -9,7 +9,12 @@ const usePostsQuery = () => {
     enabled: false,
   })
 
-  if (!data) throw new Error("Posts data is not found")
+  if (!data) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[usePostsQuery] posts cache is missing, fallback to empty list")
+    }
+    return [] as TPost[]
+  }
 
   return data
 }

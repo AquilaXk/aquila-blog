@@ -8,6 +8,7 @@ import com.back.global.exception.app.AppException
 import com.back.global.rsData.RsData
 import com.back.global.storage.app.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -55,7 +56,20 @@ class MemberApplicationService(
                 null
             }
 
-        val member = memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
+        val member =
+            try {
+                memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
+            } catch (exception: DataIntegrityViolationException) {
+                if (memberRepository.findByUsername(username) != null) {
+                    throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
+                }
+                normalizedEmail?.let {
+                    if (memberRepository.existsByEmail(it)) {
+                        throw AppException("409-2", "이미 사용 중인 이메일입니다.")
+                    }
+                }
+                throw AppException("409-3", "동시에 처리된 회원가입 요청입니다. 다시 시도해주세요.")
+            }
         memberProfileHydrator.hydrate(member)
         profileImgUrl?.let {
             member.profileImgUrl = it

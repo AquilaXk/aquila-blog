@@ -26,19 +26,7 @@ class Rq(
         get() = actorOrNull ?: throw AppException("401-1", "로그인 후 이용해주세요.")
 
     val clientIp: String
-        get() {
-            val xForwardedFor = req.getHeader("X-Forwarded-For").orEmpty()
-            if (xForwardedFor.isNotBlank()) {
-                return xForwardedFor
-                    .split(",")
-                    .firstOrNull()
-                    .orEmpty()
-                    .trim()
-                    .ifBlank { req.remoteAddr.orEmpty() }
-            }
-
-            return req.remoteAddr.orEmpty()
-        }
+        get() = req.remoteAddr.orEmpty()
 
     val userAgent: String
         get() = req.getHeader("User-Agent").orEmpty()

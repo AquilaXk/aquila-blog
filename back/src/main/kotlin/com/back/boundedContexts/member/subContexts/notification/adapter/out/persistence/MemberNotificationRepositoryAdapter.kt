@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.subContexts.notification.adapter.out.per
 
 import com.back.boundedContexts.member.subContexts.notification.application.port.out.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -13,6 +14,17 @@ class MemberNotificationRepositoryAdapter(
 
     override fun findLatestByReceiverId(receiverId: Int): List<MemberNotification> =
         memberNotificationRepository.findTop20ByReceiverIdOrderByCreatedAtDesc(receiverId)
+
+    override fun findByReceiverIdAndIdGreaterThan(
+        receiverId: Int,
+        lastNotificationId: Int,
+        limit: Int,
+    ): List<MemberNotification> =
+        memberNotificationRepository.findByReceiverIdAndIdGreaterThanOrderByIdAsc(
+            receiverId,
+            lastNotificationId,
+            PageRequest.of(0, limit),
+        )
 
     override fun countUnreadByReceiverId(receiverId: Int): Long = memberNotificationRepository.countByReceiverIdAndReadAtIsNull(receiverId)
 

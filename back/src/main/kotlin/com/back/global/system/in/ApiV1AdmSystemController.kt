@@ -60,7 +60,13 @@ class ApiV1AdmSystemController(
         val db = checkDb()
         val redis = checkRedis()
         val signupMail = signupMailDiagnosticsService.diagnose(checkConnection = false).status
-        val status = if (db == "UP") "UP" else "DOWN"
+        val status =
+            when {
+                db != "UP" -> "DOWN"
+                redis == "DOWN" -> "DEGRADED"
+                signupMail in setOf("MISCONFIGURED", "UNAVAILABLE", "CONNECTION_FAILED") -> "DEGRADED"
+                else -> "UP"
+            }
 
         return HealthResBody(
             status = status,
@@ -114,13 +120,13 @@ class ApiV1AdmSystemController(
         }
 
     private fun checkRedis(): String {
-        val redisTemplate = stringRedisTemplateProvider.getIfAvailable() ?: return "SKIPPED"
+        val redisTemplate = stringRedisTemplateProvider.getIfAvailable() ?: return "DISABLED"
 
         return try {
             val pong = redisTemplate.execute { connection -> connection.ping() }
-            if (pong.equals("PONG", ignoreCase = true)) "UP" else "SKIPPED"
+            if (pong.equals("PONG", ignoreCase = true)) "UP" else "DOWN"
         } catch (_: Exception) {
-            "SKIPPED"
+            "DOWN"
         }
     }
 }

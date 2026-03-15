@@ -81,7 +81,10 @@ class PostUseCaseAdapter(
 
     override fun incrementHit(post: Post) = postApplicationService.incrementHit(post)
 
-    override fun getComments(post: Post): List<PostComment> = postApplicationService.getComments(post)
+    override fun getComments(
+        post: Post,
+        limit: Int,
+    ): List<PostComment> = postApplicationService.getComments(post, limit)
 
     override fun findCommentById(
         post: Post,

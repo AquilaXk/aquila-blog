@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.subContexts.notification.application.service
 
+import com.back.boundedContexts.member.subContexts.notification.application.port.out.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationStreamPayload
 import jakarta.annotation.PreDestroy
@@ -7,31 +8,22 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.time.Instant
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
 
 @Service
-class MemberNotificationSseService {
-    private data class StreamEvent(
-        val id: Long,
-        val eventName: String,
-        val data: Any,
-        val reconnectMillis: Long,
-    )
-
+class MemberNotificationSseService(
+    private val memberNotificationRepository: MemberNotificationRepositoryPort,
+) {
     companion object {
         private const val DEFAULT_RETRY_MILLIS = 5_000L
-        private const val MAX_RECENT_NOTIFICATION_EVENTS = 100
+        private const val MAX_REPLAY_NOTIFICATIONS = 100
     }
 
     private val emittersByMemberId = ConcurrentHashMap<Int, MutableSet<SseEmitter>>()
     private val heartbeatTasks = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
-    private val recentNotificationEventsByMemberId = ConcurrentHashMap<Int, MutableList<StreamEvent>>()
-    private val eventSequence = AtomicLong(0)
     private val heartbeatScheduler =
         Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "member-notification-sse-heartbeat").apply {
@@ -51,15 +43,9 @@ class MemberNotificationSseService {
         emitter.onTimeout { remove(memberId, emitter) }
         emitter.onError { remove(memberId, emitter) }
 
-        parseLastEventId(lastEventIdRaw)?.let { replayMissedNotificationEvents(memberId, emitter, it) }
+        parseLastNotificationId(lastEventIdRaw)?.let { replayMissedNotificationEvents(memberId, emitter, it) }
 
-        send(
-            emitter = emitter,
-            memberId = memberId,
-            eventName = "connected",
-            data = mapOf("connectedAt" to Instant.now().toString()),
-            persistForReplay = false,
-        )
+        sendConnectedEvent(emitter)
         registerHeartbeat(memberId, emitter)
 
         return emitter
@@ -77,43 +63,42 @@ class MemberNotificationSseService {
                 send(
                     emitter = emitter,
                     memberId = memberId,
+                    eventId = notificationEventId(notification.id),
                     eventName = "notification",
                     data = payload,
-                    persistForReplay = true,
                 )
             }
     }
 
+    private fun sendConnectedEvent(emitter: SseEmitter) {
+        val connectedAt = Instant.now()
+        send(
+            emitter = emitter,
+            memberId = null,
+            eventId = "connected-${connectedAt.toEpochMilli()}",
+            eventName = "connected",
+            data = mapOf("connectedAt" to connectedAt.toString()),
+        )
+    }
+
     private fun send(
         emitter: SseEmitter,
-        memberId: Int,
+        memberId: Int?,
+        eventId: String,
         eventName: String,
         data: Any,
-        persistForReplay: Boolean,
     ) {
-        val event =
-            StreamEvent(
-                id = eventSequence.incrementAndGet(),
-                eventName = eventName,
-                data = data,
-                reconnectMillis = DEFAULT_RETRY_MILLIS,
-            )
-
-        if (persistForReplay) {
-            persistNotificationEvent(memberId, event)
-        }
-
         try {
             emitter.send(
                 SseEmitter
                     .event()
-                    .id(event.id.toString())
-                    .name(event.eventName)
-                    .reconnectTime(event.reconnectMillis)
-                    .data(event.data, MediaType.APPLICATION_JSON),
+                    .id(eventId)
+                    .name(eventName)
+                    .reconnectTime(DEFAULT_RETRY_MILLIS)
+                    .data(data, MediaType.APPLICATION_JSON),
             )
         } catch (_: Exception) {
-            remove(memberId, emitter)
+            memberId?.let { remove(it, emitter) }
         }
     }
 
@@ -121,12 +106,13 @@ class MemberNotificationSseService {
         memberId: Int,
         emitter: SseEmitter,
     ) {
+        val heartbeatAt = Instant.now()
         send(
             emitter = emitter,
             memberId = memberId,
+            eventId = "heartbeat-${heartbeatAt.toEpochMilli()}",
             eventName = "heartbeat",
-            data = mapOf("heartbeatAt" to Instant.now().toString()),
-            persistForReplay = false,
+            data = mapOf("heartbeatAt" to heartbeatAt.toString()),
         )
     }
 
@@ -156,44 +142,29 @@ class MemberNotificationSseService {
         }
     }
 
-    private fun persistNotificationEvent(
-        memberId: Int,
-        event: StreamEvent,
-    ) {
-        val buffer =
-            recentNotificationEventsByMemberId.computeIfAbsent(memberId) {
-                Collections.synchronizedList(mutableListOf())
-            }
-
-        synchronized(buffer) {
-            buffer.add(event)
-            val overflow = buffer.size - MAX_RECENT_NOTIFICATION_EVENTS
-            if (overflow > 0) {
-                buffer.subList(0, overflow).clear()
-            }
-        }
-    }
-
     private fun replayMissedNotificationEvents(
         memberId: Int,
         emitter: SseEmitter,
-        lastEventId: Long,
+        lastNotificationId: Int,
     ) {
-        val buffer = recentNotificationEventsByMemberId[memberId] ?: return
-        val missed =
-            synchronized(buffer) {
-                buffer.filter { it.id > lastEventId }.toList()
-            }
+        val unreadCount = memberNotificationRepository.countUnreadByReceiverId(memberId).toInt()
+        val notifications =
+            memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
+                receiverId = memberId,
+                lastNotificationId = lastNotificationId,
+                limit = MAX_REPLAY_NOTIFICATIONS,
+            )
 
-        missed.forEach { event ->
+        notifications.forEach { notification ->
+            val payload = MemberNotificationStreamPayload(MemberNotificationDto(notification), unreadCount)
             try {
                 emitter.send(
                     SseEmitter
                         .event()
-                        .id(event.id.toString())
-                        .name(event.eventName)
-                        .reconnectTime(event.reconnectMillis)
-                        .data(event.data, MediaType.APPLICATION_JSON),
+                        .id(notificationEventId(notification.id))
+                        .name("notification")
+                        .reconnectTime(DEFAULT_RETRY_MILLIS)
+                        .data(payload, MediaType.APPLICATION_JSON),
                 )
             } catch (_: Exception) {
                 remove(memberId, emitter)
@@ -202,7 +173,14 @@ class MemberNotificationSseService {
         }
     }
 
-    private fun parseLastEventId(lastEventIdRaw: String?): Long? = lastEventIdRaw?.trim()?.toLongOrNull()
+    private fun parseLastNotificationId(lastEventIdRaw: String?): Int? {
+        val raw = lastEventIdRaw?.trim().orEmpty()
+        if (raw.isBlank()) return null
+        if (raw.startsWith("notification-")) return raw.removePrefix("notification-").toIntOrNull()
+        return raw.toIntOrNull()
+    }
+
+    private fun notificationEventId(notificationId: Int): String = "notification-$notificationId"
 
     @PreDestroy
     fun shutdownHeartbeatScheduler() {

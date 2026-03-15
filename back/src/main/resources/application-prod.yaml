@@ -11,13 +11,16 @@ spring:
     password: "${PROD___SPRING__DATASOURCE__PASSWORD}"
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: false
         highlight_sql: false
         use_sql_comments: false
     show-sql: false
+  sql:
+    init:
+      mode: never
 logging:
   level:
     com.back: INFO

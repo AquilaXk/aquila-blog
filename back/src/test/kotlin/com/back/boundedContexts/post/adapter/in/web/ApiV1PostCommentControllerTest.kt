@@ -61,7 +61,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
         @Test
         fun `게시글의 댓글 목록을 조회하면 생성된 댓글 목록이 정상 반환된다`() {
             val postId = post.id
-            val comments = postFacade.getComments(postFacade.findById(postId).getOrThrow())
+            val comments = postFacade.getComments(postFacade.findById(postId).getOrThrow(), 200)
 
             val resultActions = mvc.get("/post/api/v1/posts/$postId/comments")
 
@@ -105,6 +105,26 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostCommentController::class.java))
                     match(handler().methodName("getItems"))
+                }
+        }
+
+        @Test
+        fun `관리자 인증 쿠키가 있으면 비공개 글의 댓글 목록도 조회할 수 있다`() {
+            val user1 = actorApplicationService.findByUsername("user1").getOrThrow()
+            val admin = actorApplicationService.findByUsername("admin").getOrThrow()
+            val privatePost = postFacade.write(user1, "비공개 댓글 점검용", "비공개 내용", false, false)
+            postFacade.writeComment(user1, privatePost, "비공개 댓글")
+            val accessToken = actorApplicationService.genAccessToken(admin)
+
+            mvc
+                .get("/post/api/v1/posts/${privatePost.id}/comments") {
+                    cookie(Cookie("apiKey", admin.apiKey))
+                    cookie(Cookie("accessToken", accessToken))
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostCommentController::class.java))
+                    match(handler().methodName("getItems"))
+                    jsonPath("$.length()") { value(1) }
                 }
         }
     }
@@ -153,7 +173,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
                     content = """{"content": "새 댓글 내용"}"""
                 }
 
-            val postComment = postFacade.getComments(postFacade.findById(postId).getOrThrow()).last()
+            val postComment = postFacade.getComments(postFacade.findById(postId).getOrThrow(), 200).last()
 
             resultActions.andExpect {
                 match(handler().handlerType(ApiV1PostCommentController::class.java))

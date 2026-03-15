@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.global.rsData.RsData
@@ -45,6 +46,23 @@ class ApiV1PostController(
             actorCanModify = post.getCheckActorCanModifyRs(actor).isSuccess
             actorCanDelete = post.getCheckActorCanDeleteRs(actor).isSuccess
         }
+    }
+
+    private fun makeFeedPostDtoPage(postPage: org.springframework.data.domain.Page<Post>): PageDto<FeedPostDto> =
+        PageDto(postPage.map(FeedPostDto::from))
+
+    @GetMapping("/feed")
+    @Transactional(readOnly = true)
+    fun getFeed(
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "") kw: String,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> {
+        val validPage = page.coerceAtLeast(1)
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val postPage = postUseCase.findPagedByKw(kw, sort, validPage, validPageSize)
+        return makeFeedPostDtoPage(postPage)
     }
 
     @GetMapping

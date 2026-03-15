@@ -11,6 +11,7 @@ class PostSecurityConfigurer : PublicApiRouteContributor {
     override fun publicApiRoutes() =
         listOf(
             PublicApiRouteSpec("/post/api/*/posts", HttpMethod.GET),
+            PublicApiRouteSpec("/post/api/*/posts/feed", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/images/**", HttpMethod.GET),
             PublicApiRouteSpec("/post/api/*/posts/{id:\\d+}/hit", HttpMethod.POST),

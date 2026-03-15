@@ -252,64 +252,11 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
 }
 
 const PAGE_SIZE = 30
-const PAGE_FETCH_CONCURRENCY = 3
-const DETAIL_ENRICH_BATCH_SIZE = 8
-const DETAIL_ENRICH_MAX_TARGETS = 12
-const POSTS_CACHE_TTL_MS = 10_000
+const POSTS_CACHE_TTL_MS = 90_000
 const isServerRuntime = typeof window === "undefined"
 let postsCache: TPost[] | null = null
 let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
-
-const enrichPostMetadata = async (posts: TPost[]): Promise<TPost[]> => {
-  const targets = posts.filter(
-    (post) =>
-      (!post.tags || post.tags.length === 0) &&
-      (!post.category || post.category.length === 0)
-  )
-  if (!targets.length) return posts
-  const limitedTargets = targets.slice(0, DETAIL_ENRICH_MAX_TARGETS)
-
-  const metadataById = new Map<string, { tags: string[]; category: string[] }>()
-
-  for (let i = 0; i < limitedTargets.length; i += DETAIL_ENRICH_BATCH_SIZE) {
-    const batch = limitedTargets.slice(i, i + DETAIL_ENRICH_BATCH_SIZE)
-    const settled = await Promise.allSettled(
-      batch.map(async (post) => {
-        const detail = await apiFetch<ApiPostWithContentDto>(`/post/api/v1/posts/${post.id}`)
-        const parsed = parsePostMeta(detail.content)
-        return {
-          id: post.id,
-          tags: normalizeStringArray(detail.tags).length
-            ? normalizeStringArray(detail.tags)
-            : parsed.tags,
-          category: normalizeStringArray(detail.category).length
-            ? normalizeStringArray(detail.category)
-            : parsed.category,
-        }
-      })
-    )
-
-    settled.forEach((result) => {
-      if (result.status !== "fulfilled") return
-      metadataById.set(result.value.id, {
-        tags: result.value.tags,
-        category: result.value.category,
-      })
-    })
-  }
-
-  return posts.map((post) => {
-    const metadata = metadataById.get(post.id)
-    if (!metadata) return post
-
-    return {
-      ...post,
-      ...(metadata.tags.length > 0 ? { tags: metadata.tags } : {}),
-      ...(metadata.category.length > 0 ? { category: metadata.category } : {}),
-    }
-  })
-}
 
 type GetPostsOptions = {
   throwOnError?: boolean
@@ -329,46 +276,15 @@ export const getPosts = async (
 
   try {
     pendingPostsPromise = (async () => {
-      const firstPage = await apiFetch<PageDto<ApiPostDto>>(
-        `/post/api/v1/posts?page=1&pageSize=${PAGE_SIZE}`
-      )
-
-      const mapped = firstPage.content.map(mapPostDto)
-      const totalPages = Math.max(1, firstPage.pageable.totalPages)
-
-      if (totalPages <= 1) {
-        const enriched = await enrichPostMetadata(mapped)
-        if (isServerRuntime) {
-          postsCache = enriched
-          postsCacheAt = Date.now()
-        }
-        return enriched
-      }
-
-      const restPages: PageDto<ApiPostDto>[] = []
-      const pageNumbers = Array.from({ length: totalPages - 1 }, (_, index) => index + 2)
-
-      for (let index = 0; index < pageNumbers.length; index += PAGE_FETCH_CONCURRENCY) {
-        const batch = pageNumbers.slice(index, index + PAGE_FETCH_CONCURRENCY)
-        const fetched = await Promise.all(
-          batch.map((pageNumber) =>
-            apiFetch<PageDto<ApiPostDto>>(
-              `/post/api/v1/posts?page=${pageNumber}&pageSize=${PAGE_SIZE}`
-            )
-          )
-        )
-        restPages.push(...fetched)
-      }
-
-      const allPosts = mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
-      const enriched = await enrichPostMetadata(allPosts)
+      const firstPage = await apiFetch<PageDto<ApiPostDto>>(`/post/api/v1/posts/feed?page=1&pageSize=${PAGE_SIZE}`)
+      const feedItems = firstPage.content.map(mapPostDto)
 
       if (isServerRuntime) {
-        postsCache = enriched
+        postsCache = feedItems
         postsCacheAt = Date.now()
       }
 
-      return enriched
+      return feedItems
     })()
 
     return await pendingPostsPromise

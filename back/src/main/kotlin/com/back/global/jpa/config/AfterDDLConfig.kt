@@ -12,6 +12,8 @@ import javax.sql.DataSource
 
 @Configuration
 class AfterDDLConfig(
+    @param:Value("\${custom.jpa.after-ddl.enabled:true}")
+    private val enabled: Boolean,
     @param:Value("\${custom.jpa.after-ddl.failOnError:false}")
     private val failOnError: Boolean,
 ) {
@@ -23,6 +25,11 @@ class AfterDDLConfig(
         dataSource: DataSource,
         entityManagerFactory: EntityManagerFactory,
     ) = ApplicationRunner {
+        if (!enabled) {
+            log.info("AfterDDL is disabled by configuration.")
+            return@ApplicationRunner
+        }
+
         val entityClasses =
             entityManagerFactory.metamodel.entities
                 .mapNotNull { it.javaType }

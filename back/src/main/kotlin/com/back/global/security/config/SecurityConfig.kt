@@ -105,11 +105,17 @@ class SecurityConfig(
                     add("https://www.$cookieDomain")
                 }
             }
+        val localOriginPatterns =
+            if (AppFacade.isProd) {
+                emptyList()
+            } else {
+                listOf("http://localhost:*", "http://127.0.0.1:*")
+            }
 
         val configuration =
             CorsConfiguration().apply {
                 allowedOriginPatterns =
-                    (siteOriginPatterns + listOf("http://localhost:*", "http://127.0.0.1:*"))
+                    (siteOriginPatterns + localOriginPatterns)
                         .distinct()
                 allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 allowCredentials = true

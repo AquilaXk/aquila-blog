@@ -6,6 +6,9 @@ spring:
       password: ${SPRING__DATA__REDIS__PASSWORD:test_redis_password_change_me}
   datasource:
     password: ${SPRING__DATASOURCE__PASSWORD:test_db_password_change_me}
+  sql:
+    init:
+      mode: always
   jpa:
     hibernate:
       ddl-auto: create
@@ -16,8 +19,14 @@ spring:
           batch_size: 0
           order_inserts: false
 custom:
+  member:
+    signup:
+      legacyDirectJoinEnabled: true
   admin:
     username: admin
+  task:
+    processor:
+      inlineWhenNotProd: true
   jwt:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789}"
   site:

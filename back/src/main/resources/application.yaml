@@ -5,8 +5,6 @@ server:
 spring:
   application:
     name: back
-  profiles:
-    active: dev
   config:
     import: optional:file:.env[.properties]
   output:
@@ -65,9 +63,11 @@ spring:
     multipart:
       max-file-size: ${CUSTOM_STORAGE_MULTIPART_MAX_FILE_SIZE:10MB}
       max-request-size: ${CUSTOM_STORAGE_MULTIPART_MAX_REQUEST_SIZE:10MB}
+  flyway:
+    enabled: false
   sql:
     init:
-      mode: always
+      mode: never
   jpa:
     open-in-view: false
     properties:
@@ -77,17 +77,17 @@ spring:
         jdbc:
           batch_size: 128
           order_inserts: true
-        format_sql: true
-        highlight_sql: true
-        use_sql_comments: true
-    show-sql: true
+        format_sql: false
+        highlight_sql: false
+        use_sql_comments: false
+    show-sql: false
 logging:
   level:
-    com.back: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
-    org.hibernate.orm.jdbc.extract: TRACE
-    org.hibernate.orm.jdbc.batch: TRACE
-    org.springframework.transaction.interceptor: TRACE
+    com.back: INFO
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.jdbc.extract: WARN
+    org.hibernate.orm.jdbc.batch: WARN
+    org.springframework.transaction.interceptor: INFO
 management:
   endpoint:
     health:
@@ -140,6 +140,7 @@ custom:
     redisDatabase: "${custom.dev.redisDatabase}"
   member:
     signup:
+      legacyDirectJoinEnabled: ${CUSTOM__MEMBER__SIGNUP__LEGACY_DIRECT_JOIN_ENABLED:false}
       verifyPath: ${CUSTOM__MEMBER__SIGNUP__VERIFY_PATH:/signup/verify}
       emailExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__EMAIL_EXPIRATION_SECONDS:86400}
       sessionExpirationSeconds: ${CUSTOM__MEMBER__SIGNUP__SESSION_EXPIRATION_SECONDS:3600}
@@ -151,12 +152,16 @@ custom:
         windowSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__WINDOWSECONDS:3600}
         memoryMaxEntries: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_MAX_ENTRIES:10000}
         memoryCleanupIntervalSeconds: ${CUSTOM__MEMBER__SIGNUP__STARTRATELIMIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
+    notification:
+      sse:
+        maxEmittersPerMember: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_EMITTERS_PER_MEMBER:3}
+        maxGlobalEmitters: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_GLOBAL_EMITTERS:2000}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"
   auth:
     cookie:
-      apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:2592000}
+      apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
     login:
       maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}
       windowSeconds: ${CUSTOM__AUTH__LOGIN__WINDOW_SECONDS:300}
@@ -173,6 +178,7 @@ custom:
       batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:50}
       processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
       maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:8}
+      inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }
@@ -197,10 +203,16 @@ custom:
       cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
       cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
   post:
+    idempotency:
+      retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}
+      cleanup:
+        fixedDelayMs: ${CUSTOM__POST__IDEMPOTENCY__CLEANUP__FIXED_DELAY_MS:3600000}
+        batchSize: ${CUSTOM__POST__IDEMPOTENCY__CLEANUP__BATCH_SIZE:200}
     hit:
       viewerWindowSeconds: ${CUSTOM__POST__HIT__VIEWER_WINDOW_SECONDS:86400}
       memoryMaxEntries: ${CUSTOM__POST__HIT__MEMORY_MAX_ENTRIES:50000}
       memoryCleanupIntervalSeconds: ${CUSTOM__POST__HIT__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
+      redisWarnIntervalSeconds: ${CUSTOM__POST__HIT__REDIS_WARN_INTERVAL_SECONDS:300}
     likes:
       reconciliation:
         fixedDelayMs: ${CUSTOM__POST__LIKES__RECONCILIATION__FIXED_DELAY_MS:900000}
@@ -210,4 +222,5 @@ custom:
     required: ${CUSTOM__PGROONGA__REQUIRED:false}
   jpa:
     after-ddl:
+      enabled: ${CUSTOM__JPA__AFTER_DDL__ENABLED:true}
       failOnError: ${CUSTOM__JPA__AFTER_DDL__FAIL_ON_ERROR:false}

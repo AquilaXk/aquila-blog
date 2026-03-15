@@ -21,11 +21,15 @@ class PostHitDedupService(
     private val memoryMaxEntries: Int,
     @param:Value("\${custom.post.hit.memoryCleanupIntervalSeconds:60}")
     private val memoryCleanupIntervalSeconds: Long,
+    @param:Value("\${custom.post.hit.redisWarnIntervalSeconds:300}")
+    private val redisWarnIntervalSeconds: Long,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
     private val logger = LoggerFactory.getLogger(PostHitDedupService::class.java)
     private val memoryState = ConcurrentHashMap<String, Long>()
     private val lastCleanupEpochSeconds = AtomicLong(0)
+    private val lastRedisWarnEpochSeconds = AtomicLong(0)
+    private val suppressedRedisFallbackWarnCount = AtomicLong(0)
     private val redisKeyPrefix = "post:hit:viewed:"
 
     fun shouldCountHit(
@@ -44,9 +48,9 @@ class PostHitDedupService(
                     .opsForValue()
                     .setIfAbsent(redisKey(normalizedKey), "1", Duration.ofSeconds(viewerWindowSeconds)) == true
             } catch (exception: DataAccessException) {
-                logger.warn("Falling back to in-memory post hit dedupe because Redis is unavailable", exception)
+                warnRedisFallback(exception)
             } catch (exception: RuntimeException) {
-                logger.warn("Falling back to in-memory post hit dedupe because Redis access failed", exception)
+                warnRedisFallback(exception)
             }
         }
 
@@ -102,6 +106,24 @@ class PostHitDedupService(
                 .toList()
 
         keysToTrim.forEach(memoryState::remove)
+    }
+
+    private fun warnRedisFallback(exception: Exception) {
+        val nowEpochSeconds = Instant.now().epochSecond
+        val warnInterval = redisWarnIntervalSeconds.coerceAtLeast(1)
+        val previousWarnAt = lastRedisWarnEpochSeconds.get()
+        if (nowEpochSeconds - previousWarnAt < warnInterval || !lastRedisWarnEpochSeconds.compareAndSet(previousWarnAt, nowEpochSeconds)) {
+            suppressedRedisFallbackWarnCount.incrementAndGet()
+            return
+        }
+
+        val suppressedCount = suppressedRedisFallbackWarnCount.getAndSet(0)
+        logger.warn(
+            "Falling back to in-memory post hit dedupe because Redis access failed. suppressed={} cause={}",
+            suppressedCount,
+            exception.message,
+        )
+        logger.debug("Redis fallback stacktrace", exception)
     }
 
     private fun sha256(value: String): String =

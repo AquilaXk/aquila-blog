@@ -4,6 +4,11 @@ springdoc:
   swagger-ui:
     enabled: false
 spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    locations: classpath:db/migration
   data:
     redis:
       password: "${PROD___SPRING__DATA__REDIS__PASSWORD}"
@@ -33,6 +38,7 @@ custom:
     required: true
   jpa:
     after-ddl:
+      enabled: false
       failOnError: true
   site:
     cookieDomain: "${custom.prod.cookieDomain}"

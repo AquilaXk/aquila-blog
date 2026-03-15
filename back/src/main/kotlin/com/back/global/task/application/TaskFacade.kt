@@ -4,14 +4,18 @@ import com.back.global.app.application.AppFacade
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.domain.Task
 import com.back.standard.dto.TaskPayload
-import com.back.standard.util.Ut
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import tools.jackson.databind.ObjectMapper
 import java.util.*
 
 @Service
 class TaskFacade(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
+    private val objectMapper: ObjectMapper,
+    @param:Value("\${custom.task.processor.inlineWhenNotProd:false}")
+    private val inlineWhenNotProd: Boolean,
 ) {
     fun addToQueue(payload: TaskPayload) {
         val entry =
@@ -25,12 +29,12 @@ class TaskFacade(
                     payload.aggregateType,
                     payload.aggregateId,
                     entry.taskType,
-                    Ut.JSON.toString(payload),
+                    objectMapper.writeValueAsString(payload),
                     entry.retryPolicy.maxRetries,
                 ),
             )
 
-        if (AppFacade.isNotProd) {
+        if (AppFacade.isNotProd && inlineWhenNotProd) {
             fire(payload)
             task.markAsCompleted()
             taskRepository.save(task)

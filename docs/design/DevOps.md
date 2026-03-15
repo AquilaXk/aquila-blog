@@ -126,15 +126,21 @@ GitHub Actions 기준 필수값:
 - 순수 로직 테스트는 가능하면 `@SpringBootTest`를 피하고 plain unit test로 유지한다. 전체 컨텍스트를 띄우는 테스트는 DB/Redis/MockMvc가 실제로 필요한 경우에만 쓴다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
 - task processor는 동시 실행 상한(`CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT`) 내에서만 작업을 집행한다.
+- non-prod에서도 queue worker 동작을 기본으로 유지한다. (`CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD=false`)
 - `PROCESSING` 상태가 `CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS`를 넘기면 stale task로 판단하고 다음 poll에서 자동 복구한다.
 - task retry 정책은 task type별로 다르게 가진다.
   `global.revalidate.home`은 짧고 빠르게 재시도하고, `member.signupVerification.sendMail`은 더 긴 간격과 더 많은 재시도를 사용한다.
+- 게시글 작성 idempotency 레코드는 보존기간/배치 기준으로 정리한다.
+  (`CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS`, `CUSTOM__POST__IDEMPOTENCY__CLEANUP__*`)
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
 - 파일 정리 잡은 `TEMP`, `PENDING_DELETE` 파일을 함께 대상으로 보며, purge 후보 수가 `CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD`를 넘기면 실제 삭제를 건너뛰고 진단 로그만 남긴다.
 - 파일 purge 참조 판정은 ownerId 기반 확인을 먼저 수행하고, 필요할 때만 전체 fallback 조회를 수행한다.
 - 좋아요는 토글 경로에서 원자 증감으로 반영하고, reconciliation 잡이 최근 변경분을 재검산해 attr 불일치를 보정한다.
 - 로그인 성공 시 `apiKey`를 회전하고, 인증 쿠키 TTL은 `apiKey`/`accessToken`을 분리 운영한다.
-- prod는 PGroonga 필수 검증(`custom.pgroonga.required=true`) + `AfterDDL` strict 모드(`custom.jpa.after-ddl.failOnError=true`)를 사용한다.
+- prod는 PGroonga 필수 검증(`custom.pgroonga.required=true`) + Flyway 인덱스 마이그레이션을 기본으로 사용한다.
+- `AfterDDL`은 dev/test 보조 수단이며, prod에서는 비활성화(`custom.jpa.after-ddl.enabled=false`)한다.
+- 공개 직접 회원가입 엔드포인트는 기본 비활성화다. 테스트 등에서만 `CUSTOM__MEMBER__SIGNUP__LEGACY_DIRECT_JOIN_ENABLED=true`로 명시적으로 켠다.
+- SSE 연결은 회원 단위/전체 연결 상한(`CUSTOM__MEMBER__NOTIFICATION__SSE__*`)을 둬서 비정상 재연결로 인한 리소스 폭주를 막는다.
 
 ## Blue/Green 전환 원칙
 

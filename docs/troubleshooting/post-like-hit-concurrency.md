@@ -281,7 +281,7 @@ viewer key 정책:
 관련 파일:
 
 - `back/src/main/kotlin/com/back/boundedContexts/post/application/service/PostHitDedupService.kt`
-- `back/src/main/kotlin/com/back/global/web/app/Rq.kt`
+- `back/src/main/kotlin/com/back/global/web/application/Rq.kt`
 
 ```mermaid
 sequenceDiagram

@@ -94,7 +94,7 @@ sequenceDiagram
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/mail/SmtpSignupVerificationMailSenderAdapter.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/mail/TestSignupVerificationMailSenderAdapter.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/application/service/SignupMailDiagnosticsService.kt`
-- `back/src/main/kotlin/com/back/global/system/in/ApiV1AdmSystemController.kt`
+- `back/src/main/kotlin/com/back/global/system/adapter/web/ApiV1AdmSystemController.kt`
 
 관리자 운영 점검용 API:
 

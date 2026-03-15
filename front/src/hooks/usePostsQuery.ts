@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query"
+import { getFeedPosts } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import { TPost } from "src/types"
 
 const usePostsQuery = () => {
-  const { data } = useQuery({
+  const { data } = useQuery<TPost[]>({
     queryKey: queryKey.posts(),
-    initialData: [] as TPost[],
-    enabled: false,
+    queryFn: () => getFeedPosts({ page: 1, pageSize: 30 }),
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    enabled: true,
   })
 
   if (!data) {

@@ -1,6 +1,6 @@
 import { PostDetail, TPost } from "src/types"
 import { normalizeCategoryValue } from "src/libs/utils"
-import { apiFetch } from "./client"
+import { ApiError, apiFetch } from "./client"
 
 type PageDto<T> = {
   content: T[]
@@ -52,6 +52,11 @@ type ApiPostWithContentDto = {
   actorHasLiked?: boolean
   actorCanModify?: boolean
   actorCanDelete?: boolean
+}
+
+type ApiTagCountDto = {
+  tag: string
+  count: number
 }
 
 const slugify = (value: string) =>
@@ -263,6 +268,80 @@ type GetPostsOptions = {
   throwOnError?: boolean
 }
 
+export type ExplorePostsParams = {
+  kw?: string
+  tag?: string
+  order?: "asc" | "desc"
+  page?: number
+  pageSize?: number
+}
+
+const toSortParam = (order: "asc" | "desc") => (order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT")
+
+const toValidPage = (page: number | undefined) => {
+  if (!Number.isFinite(page)) return 1
+  return Math.max(1, Math.trunc(page || 1))
+}
+
+const toValidPageSize = (pageSize: number | undefined) => {
+  if (!Number.isFinite(pageSize)) return PAGE_SIZE
+  return Math.min(30, Math.max(1, Math.trunc(pageSize || PAGE_SIZE)))
+}
+
+const buildExplorePath = ({ kw = "", tag = "", order = "desc", page = 1, pageSize = PAGE_SIZE }: ExplorePostsParams) => {
+  const params = new URLSearchParams()
+  params.set("kw", kw.trim())
+  params.set("tag", tag.trim())
+  params.set("sort", toSortParam(order))
+  params.set("page", String(toValidPage(page)))
+  params.set("pageSize", String(toValidPageSize(pageSize)))
+  return `/post/api/v1/posts/explore?${params.toString()}`
+}
+
+export const getFeedPosts = async ({
+  page = 1,
+  pageSize = PAGE_SIZE,
+}: {
+  page?: number
+  pageSize?: number
+} = {}): Promise<TPost[]> => {
+  const validPage = toValidPage(page)
+  const validPageSize = toValidPageSize(pageSize)
+  const firstPage = await apiFetch<PageDto<ApiPostDto>>(
+    `/post/api/v1/posts/feed?page=${validPage}&pageSize=${validPageSize}&sort=CREATED_AT`
+  )
+  return firstPage.content.map(mapPostDto)
+}
+
+export const getExplorePosts = async ({
+  kw = "",
+  tag = "",
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+}: ExplorePostsParams = {}): Promise<TPost[]> => {
+  const response = await apiFetch<PageDto<ApiPostDto>>(
+    buildExplorePath({
+      kw,
+      tag,
+      order,
+      page,
+      pageSize,
+    })
+  )
+  return response.content.map(mapPostDto)
+}
+
+export const getTagCounts = async (): Promise<Record<string, number>> => {
+  const rows = await apiFetch<ApiTagCountDto[]>("/post/api/v1/posts/tags")
+  return rows.reduce<Record<string, number>>((acc, row) => {
+    const normalizedTag = typeof row.tag === "string" ? row.tag.trim() : ""
+    if (!normalizedTag) return acc
+    acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
+    return acc
+  }, {})
+}
+
 export const getPosts = async (
   { throwOnError = false }: GetPostsOptions = {}
 ): Promise<TPost[]> => {
@@ -277,8 +356,7 @@ export const getPosts = async (
 
   try {
     pendingPostsPromise = (async () => {
-      const firstPage = await apiFetch<PageDto<ApiPostDto>>(`/post/api/v1/posts/feed?page=1&pageSize=${PAGE_SIZE}`)
-      const feedItems = firstPage.content.map(mapPostDto)
+      const feedItems = await getFeedPosts({ page: 1, pageSize: PAGE_SIZE })
 
       if (isServerRuntime) {
         postsCache = feedItems
@@ -322,8 +400,11 @@ export const getPostDetailBySlug = async (slug: string): Promise<PostDetail | nu
     if (mapped.slug !== slug) return null
 
     return mapped
-  } catch {
-    return null
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null
+    }
+    throw error
   }
 }
 
@@ -334,7 +415,10 @@ export const getPostDetailById = async (id: string): Promise<PostDetail | null> 
   try {
     const post = await apiFetch<ApiPostWithContentDto>(`/post/api/v1/posts/${postId}`)
     return mapPostDetail(post)
-  } catch {
-    return null
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null
+    }
+    throw error
   }
 }

@@ -45,6 +45,14 @@ interface PostRepositoryPort {
         pageable: Pageable,
     ): Page<Post>
 
+    fun findQPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        pageable: Pageable,
+    ): Page<Post>
+
+    fun findAllPublicListedContents(): List<String>
+
     fun existsByIdAndContentContaining(
         id: Int,
         contentFragment: String,

@@ -69,6 +69,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     }
   }, [])
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const lastFocusedRef = useRef<HTMLElement | null>(null)
+  const hadOpenedRef = useRef(false)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptRef = useRef(0)
@@ -292,6 +296,83 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     return () => document.removeEventListener("mousedown", handlePointerDown)
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+
+    const panel = panelRef.current
+    if (!panel) return
+
+    const focusableSelectors = [
+      "button:not([disabled])",
+      "a[href]",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ]
+
+    const getFocusableElements = () =>
+      Array.from(panel.querySelectorAll<HTMLElement>(focusableSelectors.join(","))).filter(
+        (element) => !element.hasAttribute("disabled") && element.tabIndex !== -1
+      )
+
+    const focusables = getFocusableElements()
+    ;(focusables[0] || panel).focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setOpen(false)
+        triggerRef.current?.focus()
+        return
+      }
+
+      if (event.key !== "Tab") return
+
+      const currentFocusable = getFocusableElements()
+      if (currentFocusable.length === 0) {
+        event.preventDefault()
+        panel.focus()
+        return
+      }
+
+      const first = currentFocusable[0]
+      const last = currentFocusable[currentFocusable.length - 1]
+      const active = document.activeElement as HTMLElement | null
+
+      if (event.shiftKey) {
+        if (!active || active === first || !panel.contains(active)) {
+          event.preventDefault()
+          last.focus()
+        }
+        return
+      }
+
+      if (!active || active === last || !panel.contains(active)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [open])
+
+  useEffect(() => {
+    if (open) {
+      hadOpenedRef.current = true
+      return
+    }
+    if (!hadOpenedRef.current) return
+    if (lastFocusedRef.current) {
+      lastFocusedRef.current.focus()
+      lastFocusedRef.current = null
+      return
+    }
+
+    triggerRef.current?.focus()
+  }, [open])
+
   const hasUnread = unreadCount > 0
   const unreadBadge = useMemo(() => {
     if (unreadCount <= 0) return ""
@@ -310,6 +391,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }
 
   const handleOpenChange = async () => {
+    if (!open && typeof document !== "undefined") {
+      lastFocusedRef.current = document.activeElement as HTMLElement | null
+    }
     const nextOpen = !open
     setOpen(nextOpen)
 
@@ -342,17 +426,19 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   return (
     <StyledWrapper ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="trigger"
         aria-label="알림"
         aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={() => void handleOpenChange()}
       >
         <AppIcon name="bell" />
         {hasUnread && <span className="badge">{unreadBadge}</span>}
       </button>
       {open && (
-        <div className="panel" role="dialog" aria-label="알림 목록">
+        <div ref={panelRef} className="panel" role="dialog" aria-modal="false" aria-label="알림 목록" tabIndex={-1}>
           <div className="panelHead">
             <div>
               <strong>알림</strong>

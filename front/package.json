@@ -11,6 +11,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
+    "test:e2e:live": "playwright test e2e/live.spec.ts --workers=1",
     "postbuild": "echo \"skip next-sitemap (handled by pages/sitemap.xml.tsx)\"",
     "lint": "next lint"
   },
@@ -40,6 +43,7 @@
     "shiki": "^4.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/gtag.js": "^0.0.12",
     "@types/node": "^18.11.15",
     "@types/react": "^18.0.26",

@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
 import org.springframework.stereotype.Service
@@ -122,6 +123,16 @@ class PostUseCaseAdapter(
         page: Int,
         pageSize: Int,
     ): Page<Post> = postApplicationService.findPagedByAuthor(author, kw, sort, page, pageSize)
+
+    override fun findPagedByKwAndTag(
+        kw: String,
+        tag: String,
+        sort: PostSearchSortType1,
+        page: Int,
+        pageSize: Int,
+    ): Page<Post> = postApplicationService.findPagedByKwAndTag(kw, tag, sort, page, pageSize)
+
+    override fun getPublicTagCounts(): List<TagCountDto> = postApplicationService.getPublicTagCounts()
 
     override fun findTemp(author: Member): Post? = postApplicationService.findTemp(author)
 

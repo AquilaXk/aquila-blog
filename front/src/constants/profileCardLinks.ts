@@ -45,9 +45,26 @@ export const getProfileCardIconOptions = (section: ProfileCardLinkSection): Prof
 const KNOWN_ICON_NAMES = new Set<IconName>(PROFILE_CARD_ICON_OPTIONS.map((option) => option.id))
 
 const hasBlockedProtocol = (href: string) => /^(javascript|data|vbscript|file|blob):/i.test(href.trim())
+const hasExplicitScheme = (href: string) => /^[a-z][a-z0-9+.-]*:/i.test(href.trim())
+const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+const looksLikePhone = (value: string) => /^\+?[0-9][0-9\s\-()]{6,}$/.test(value)
+
+export const normalizeProfileLinkHref = (section: ProfileCardLinkSection, href: string): string => {
+  const trimmed = href.trim()
+  if (!trimmed) return ""
+  if (hasBlockedProtocol(trimmed)) return trimmed
+  if (hasExplicitScheme(trimmed)) return trimmed
+
+  if (section === "contact") {
+    if (looksLikeEmail(trimmed)) return `mailto:${trimmed}`
+    if (looksLikePhone(trimmed)) return `tel:${trimmed.replace(/\s+/g, "")}`
+  }
+
+  return `https://${trimmed.replace(/^\/+/, "")}`
+}
 
 export const isAllowedProfileLinkHref = (section: ProfileCardLinkSection, href: string): boolean => {
-  const trimmed = href.trim()
+  const trimmed = normalizeProfileLinkHref(section, href)
   if (!trimmed || hasBlockedProtocol(trimmed)) return false
 
   if (section === "service") {
@@ -65,7 +82,8 @@ export const normalizeProfileCardLinkItem = (
   if (!item) return null
 
   const label = (item.label || "").trim()
-  const href = (item.href || "").trim()
+  const rawHref = (item.href || "").trim()
+  const href = section ? normalizeProfileLinkHref(section, rawHref) : rawHref
   if (!label || !href) return null
   if (section && !isAllowedProfileLinkHref(section, href)) return null
 

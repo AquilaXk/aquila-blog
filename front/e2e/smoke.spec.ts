@@ -1,0 +1,359 @@
+import { expect, test, type Page } from "@playwright/test"
+
+const createExplorePage = (title: string, tag = "테스트태그") => ({
+  content: [
+    {
+      id: 101,
+      createdAt: "2026-03-16T00:00:00Z",
+      modifiedAt: "2026-03-16T00:00:00Z",
+      authorId: 1,
+      authorName: "관리자",
+      authorUsername: "aquila",
+      authorProfileImgUrl: "/avatar.png",
+      title,
+      summary: "탐색 API 스모크",
+      tags: [tag],
+      category: ["백엔드"],
+      published: true,
+      listed: true,
+      likesCount: 0,
+      commentsCount: 0,
+      hitCount: 0,
+    },
+  ],
+  pageable: {
+    pageNumber: 0,
+    pageSize: 30,
+    totalElements: 1,
+    totalPages: 1,
+  },
+})
+
+const mockFeedEndpoints = async (page: Page) => {
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const kw = url.searchParams.get("kw") || ""
+    const tag = url.searchParams.get("tag") || ""
+    const sort = url.searchParams.get("sort") || "CREATED_AT"
+    const title = kw
+      ? `검색:${kw}`
+      : tag
+        ? `태그:${tag}`
+        : `정렬:${sort}`
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(title, tag || "테스트태그")),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ tag: "테스트태그", count: 1 }]),
+    })
+  })
+}
+
+test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  await page.goto("/")
+  await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
+  await expect(page.getByRole("button", { name: "최신순" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "오래된순" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
+})
+
+test("검색 입력은 explore API의 kw 파라미터를 통해 백엔드 탐색으로 동작한다", async ({ page }) => {
+  const capturedKw: string[] = []
+
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const kw = url.searchParams.get("kw") || ""
+    capturedKw.push(kw)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(kw ? `검색:${kw}` : "초기목록")),
+    })
+  })
+
+  await page.goto("/")
+  const searchInput = page.getByLabel("Search posts by keyword")
+  await searchInput.fill("alpha")
+
+  await expect.poll(() => capturedKw.some((value) => value === "alpha")).toBeTruthy()
+  await expect(page.getByText("검색:alpha")).toBeVisible()
+})
+
+test("태그 쿼리 파라미터는 explore API의 tag 파라미터로 백엔드 탐색을 요청한다", async ({ page }) => {
+  const capturedTag: string[] = []
+
+  await mockFeedEndpoints(page)
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const tag = url.searchParams.get("tag") || ""
+    capturedTag.push(tag)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(tag ? `태그:${tag}` : "기본목록", tag || "테스트태그")),
+    })
+  })
+
+  await page.goto("/?tag=%ED%85%8C%EC%8A%A4%ED%8A%B8%ED%83%9C%EA%B7%B8")
+
+  await expect.poll(() => capturedTag.some((value) => value === "테스트태그")).toBeTruthy()
+  await expect(page.getByText("태그:테스트태그")).toBeVisible()
+})
+
+test("정렬 버튼은 explore API sort 파라미터를 통해 서버 정렬을 요청한다", async ({ page }) => {
+  const capturedSort: string[] = []
+
+  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    const url = new URL(route.request().url())
+    const sort = url.searchParams.get("sort") || "CREATED_AT"
+    capturedSort.push(sort)
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(`정렬:${sort}`)),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ tag: "테스트태그", count: 1 }]),
+    })
+  })
+
+  await page.goto("/")
+  await page.getByRole("button", { name: "오래된순" }).click()
+
+  await expect.poll(() => capturedSort.some((value) => value === "CREATED_AT_ASC")).toBeTruthy()
+  await expect(page.getByText("정렬:CREATED_AT_ASC")).toBeVisible()
+})
+
+test("⌘/Ctrl+K 단축키로 검색 입력창에 포커스된다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  await page.goto("/")
+  await page.keyboard.press("Control+k")
+
+  await expect(page.getByLabel("Search posts by keyword")).toBeFocused()
+})
+
+test("상세 페이지는 클라이언트 복구 요청으로 렌더되고 조회수 hit는 1회 반영된다", async ({ page }) => {
+  let hitCountRequest = 0
+
+  await page.route("**/post/api/v1/posts/101", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 101,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "상세 E2E 글",
+        content: "본문 E2E",
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 3,
+        commentsCount: 1,
+        hitCount: 7,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/101/hit", async (route) => {
+    hitCountRequest += 1
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 8 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/101")
+  await expect(page.getByText("상세 E2E 글")).toBeVisible()
+  await expect.poll(() => hitCountRequest).toBe(1)
+  await expect(page.getByText(/조회 8/)).toBeVisible()
+})
+
+test("비로그인 상태에서 좋아요 클릭 시 로그인 페이지로 이동한다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/101", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 101,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "좋아요 이동 테스트",
+        content: "본문",
+        tags: [],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/101/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/101")
+  await page.getByRole("button", { name: /좋아요/i }).click()
+
+  await expect(page).toHaveURL(/\/login\?/)
+})
+
+test("인증 사용자 알림 패널은 ESC로 닫히고 포커스가 트리거로 복귀한다", async ({ page, context }) => {
+  await page.addInitScript(() => {
+    document.cookie = "apiKey=e2e-auth-key; path=/"
+  })
+  await context.addCookies([
+    {
+      name: "apiKey",
+      value: "e2e-auth-key",
+      url: "http://127.0.0.1:3000",
+    },
+  ])
+
+  await mockFeedEndpoints(page)
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 1,
+        username: "aquila",
+        nickname: "관리자",
+        isAdmin: true,
+      }),
+    })
+  })
+
+  await page.route("**/member/api/v1/notifications/unread-count", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ unreadCount: 1 }),
+    })
+  })
+
+  await page.route("**/member/api/v1/notifications", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: 1,
+          type: "POST_COMMENT",
+          createdAt: "2026-03-16T00:00:00Z",
+          actorId: 2,
+          actorName: "유저",
+          actorProfileImageUrl: "/avatar.png",
+          postId: 101,
+          commentId: 77,
+          postTitle: "알림 테스트 글",
+          commentPreview: "테스트 댓글",
+          message: "댓글이 등록되었습니다.",
+          isRead: false,
+        },
+      ]),
+    })
+  })
+
+  await page.route("**/member/api/v1/notifications/stream**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: "event: heartbeat\ndata: {}\n\n",
+    })
+  })
+
+  await page.goto("/")
+  const bellTrigger = page.getByRole("button", { name: "알림" })
+  await expect(bellTrigger).toBeVisible()
+  await bellTrigger.click()
+  await expect(page.getByRole("dialog", { name: "알림 목록" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog", { name: "알림 목록" })).toHaveCount(0)
+  await expect(bellTrigger).toBeFocused()
+})
+
+test("로그인 실패 메시지가 상태코드 기준으로 표준화된다", async ({ page }) => {
+  await page.route("**/member/api/v1/auth/login", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "invalid credentials" }),
+    })
+  })
+
+  await page.goto("/login")
+  await page.getByLabel("아이디").fill("wrong-user")
+  await page.locator("#password").fill("wrong-password")
+  await page.getByRole("button", { name: "로그인", exact: true }).click()
+
+  await expect(page.getByText("아이디 또는 비밀번호가 올바르지 않습니다.")).toBeVisible()
+})
+
+test("회원가입 메일 시작 실패 메시지가 표준화된다", async ({ page }) => {
+  await page.route("**/member/api/v1/signup/email/start", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "500-1", msg: "smtp down" }),
+    })
+  })
+
+  await page.goto("/signup")
+  await page.getByLabel("이메일").fill("smoke@example.com")
+  await page.getByRole("button", { name: "인증 메일 보내기" }).click()
+
+  await expect(page.getByText("회원가입 메일 발송에 실패했습니다.")).toBeVisible()
+})

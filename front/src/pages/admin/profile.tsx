@@ -110,7 +110,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const { me, authStatus, setMe } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
   const [loadingKey, setLoadingKey] = useState("")
-  const [notice, setNotice] = useState<{ tone: NoticeTone; text: string }>({
+  const [imageNotice, setImageNotice] = useState<{ tone: NoticeTone; text: string }>({
+    tone: "idle",
+    text: "",
+  })
+  const [profileNotice, setProfileNotice] = useState<{ tone: NoticeTone; text: string }>({
     tone: "idle",
     text: "",
   })
@@ -253,7 +257,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("upload")
-      setNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
+      setImageNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
 
       const formData = new FormData()
       formData.append("file", file)
@@ -274,10 +278,10 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       const uploadData = (await uploadResponse.json()) as MemberMe
       syncProfileState(uploadData)
-      setNotice({ tone: "success", text: "프로필 이미지가 저장되었습니다." })
+      setImageNotice({ tone: "success", text: "프로필 이미지가 저장되었습니다." })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
+      setImageNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
     } finally {
       setLoadingKey("")
     }
@@ -288,19 +292,19 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     const serviceValidationError = validateLinkInputs("service", "Service", serviceLinksInput)
     if (serviceValidationError) {
-      setNotice({ tone: "error", text: serviceValidationError })
+      setProfileNotice({ tone: "error", text: serviceValidationError })
       return
     }
 
     const contactValidationError = validateLinkInputs("contact", "Contact", contactLinksInput)
     if (contactValidationError) {
-      setNotice({ tone: "error", text: contactValidationError })
+      setProfileNotice({ tone: "error", text: contactValidationError })
       return
     }
 
     try {
       setLoadingKey("save")
-      setNotice({ tone: "loading", text: "프로필 카드와 메인 소개 카드 내용을 저장하고 있습니다..." })
+      setProfileNotice({ tone: "loading", text: "프로필 카드와 메인 소개 카드 내용을 저장하고 있습니다..." })
       const updated = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${sessionMember.id}/profileCard`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -313,10 +317,10 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         }),
       })
       syncProfileState(updated)
-      setNotice({ tone: "success", text: "프로필 카드와 메인 소개 카드 내용이 저장되었습니다." })
+      setProfileNotice({ tone: "success", text: "프로필 카드와 메인 소개 카드 내용이 저장되었습니다." })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setNotice({ tone: "error", text: `프로필 저장 실패: ${message}` })
+      setProfileNotice({ tone: "error", text: `프로필 저장 실패: ${message}` })
     } finally {
       setLoadingKey("")
     }
@@ -381,6 +385,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             {loadingKey === "upload" ? "업로드 중..." : "프로필 이미지 선택"}
           </PrimaryButton>
           <Hint>{profileImageFileName || "아직 선택된 파일이 없습니다."}</Hint>
+          {imageNotice.text ? <Notice data-tone={imageNotice.tone}>{imageNotice.text}</Notice> : null}
         </PreviewCard>
 
         <FormCard>
@@ -394,7 +399,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <strong>{profileUpdatedText}</strong>
             </MetaItem>
           </MetaBar>
-          {notice.text ? <Notice data-tone={notice.tone}>{notice.text}</Notice> : null}
           <FieldGrid>
             <FieldBox>
               <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
@@ -615,10 +619,10 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 if (!sessionMember?.id) return
                 try {
                   setLoadingKey("refresh")
-                  setNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
+                  setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
                   const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
                   if (refreshed) {
-                    setNotice({ tone: "success", text: "현재 저장값을 다시 불러왔습니다." })
+                    setProfileNotice({ tone: "success", text: "현재 저장값을 다시 불러왔습니다." })
                   }
                 } finally {
                   setLoadingKey("")
@@ -631,6 +635,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               {loadingKey === "save" ? "저장 중..." : "프로필/메인 소개 저장"}
             </PrimaryButton>
           </ActionRow>
+          {profileNotice.text ? <Notice data-tone={profileNotice.tone}>{profileNotice.text}</Notice> : null}
         </FormCard>
       </ProfileGrid>
     </Main>

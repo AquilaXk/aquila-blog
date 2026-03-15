@@ -1,6 +1,33 @@
 import { IncomingMessage } from "http"
 
-const SERVER_API_FETCH_TIMEOUT_MS = Number(process.env.SERVER_API_FETCH_TIMEOUT_MS || 3500)
+type ServerApiFetchInit = RequestInit & {
+  timeoutMs?: number
+}
+
+const FALLBACK_TIMEOUT_MS = 4_000
+
+const resolveServerTimeoutMs = (path: string, init: ServerApiFetchInit): number => {
+  if (typeof init.timeoutMs === "number" && Number.isFinite(init.timeoutMs) && init.timeoutMs > 0) {
+    return init.timeoutMs
+  }
+
+  const normalizedPath = path.toLowerCase()
+  const method = (init.method || "GET").toUpperCase()
+
+  if (normalizedPath.includes("/member/api/v1/auth/me") || normalizedPath.includes("/members/adminprofile")) {
+    return 3_000
+  }
+
+  if (normalizedPath.includes("/post/api/v1/posts/feed") || normalizedPath.includes("/post/api/v1/posts/explore")) {
+    return 5_000
+  }
+
+  if (method === "GET") {
+    return 4_500
+  }
+
+  return FALLBACK_TIMEOUT_MS
+}
 
 export const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
   const internal = process.env.BACKEND_INTERNAL_URL
@@ -28,13 +55,12 @@ export const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
   return `${protocol}://${apiHost}`
 }
 
-export const serverApiFetch = (req: IncomingMessage, path: string, init: RequestInit = {}) => {
+export const serverApiFetch = (req: IncomingMessage, path: string, init: ServerApiFetchInit = {}) => {
   const baseUrl = resolveServerApiBaseUrl(req)
+  const { timeoutMs: _timeoutMs, ...requestInit } = init
   const headers = new Headers(init.headers)
   const cookie = req.headers.cookie
-  const timeoutMs = Number.isFinite(SERVER_API_FETCH_TIMEOUT_MS) && SERVER_API_FETCH_TIMEOUT_MS > 0
-    ? SERVER_API_FETCH_TIMEOUT_MS
-    : 3500
+  const timeoutMs = resolveServerTimeoutMs(path, init)
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   const onAbort = () => controller.abort()
@@ -54,7 +80,7 @@ export const serverApiFetch = (req: IncomingMessage, path: string, init: Request
   }
 
   return fetch(`${baseUrl}${path}`, {
-    ...init,
+    ...requestInit,
     headers,
     signal: controller.signal,
   }).finally(() => {

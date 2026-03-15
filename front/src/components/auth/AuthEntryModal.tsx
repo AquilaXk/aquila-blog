@@ -3,6 +3,7 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
@@ -164,12 +165,7 @@ const AuthEntryModal: React.FC<Props> = ({
       setPassword("")
       onClose()
     } catch (loginError) {
-      if (loginError instanceof Error) {
-        const message = loginError.message.split(": ").slice(1).join(": ").trim()
-        setError(message || "로그인에 실패했습니다.")
-      } else {
-        setError("로그인에 실패했습니다.")
-      }
+      setError(toAuthErrorMessage("login", loginError, "로그인에 실패했습니다."))
     } finally {
       setLoading(false)
     }
@@ -198,12 +194,7 @@ const AuthEntryModal: React.FC<Props> = ({
       setSentEmail(response.data.email)
       setView("signup-sent")
     } catch (signupStartError) {
-      if (signupStartError instanceof Error) {
-        const message = signupStartError.message.split(": ").slice(1).join(": ").trim()
-        setSignupError(message || "회원가입 메일 전송에 실패했습니다.")
-      } else {
-        setSignupError("회원가입 메일 전송에 실패했습니다.")
-      }
+      setSignupError(toAuthErrorMessage("signupStart", signupStartError, "회원가입 메일 전송에 실패했습니다."))
     } finally {
       setSignupLoading(false)
     }

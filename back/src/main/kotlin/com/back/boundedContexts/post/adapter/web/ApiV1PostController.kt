@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
@@ -56,14 +57,40 @@ class ApiV1PostController(
     fun getFeed(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
-        @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): PageDto<FeedPostDto> {
         val validPage = page.coerceAtLeast(1)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage = postUseCase.findPagedByKw(kw, sort, validPage, validPageSize)
+        // feed는 메인 첫 진입용 "최근 공개 목록" 계약을 유지한다.
+        val postPage = postUseCase.findPagedByKw("", sort, validPage, validPageSize)
         return makeFeedPostDtoPage(postPage)
     }
+
+    @GetMapping("/explore")
+    @Transactional(readOnly = true)
+    fun explore(
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "") kw: String,
+        @RequestParam(defaultValue = "") tag: String,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> {
+        val validPage = page.coerceAtLeast(1)
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val normalizedTag = tag.trim()
+        val postPage =
+            if (normalizedTag.isBlank()) {
+                postUseCase.findPagedByKw(kw, sort, validPage, validPageSize)
+            } else {
+                postUseCase.findPagedByKwAndTag(kw, normalizedTag, sort, validPage, validPageSize)
+            }
+
+        return makeFeedPostDtoPage(postPage)
+    }
+
+    @GetMapping("/tags")
+    @Transactional(readOnly = true)
+    fun getTags(): List<TagCountDto> = postUseCase.getPublicTagCounts()
 
     @GetMapping
     @Transactional(readOnly = true)

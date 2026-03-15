@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  test:
+  backend-test:
     runs-on: ubuntu-latest
     env:
       TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
@@ -29,3 +29,43 @@ jobs:
       - name: Run backend tests
         working-directory: back
         run: ./gradlew test --rerun-tasks
+
+  front-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browser
+        working-directory: front
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        working-directory: front
+        run: yarn build
+
+      - name: Run smoke e2e
+        working-directory: front
+        run: yarn test:e2e:smoke
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-smoke-playwright-report
+          path: |
+            front/playwright-report
+            front/test-results
+          retention-days: 7

@@ -3,6 +3,7 @@ import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 
@@ -63,12 +64,7 @@ const SignupVerifyPage = () => {
         setVerification(response.data)
       } catch (error) {
         if (cancelled) return
-        if (error instanceof Error) {
-          const message = error.message.split(": ").slice(1).join(": ").trim()
-          setVerificationError(message || "회원가입 링크를 확인하지 못했습니다.")
-        } else {
-          setVerificationError("회원가입 링크를 확인하지 못했습니다.")
-        }
+        setVerificationError(toAuthErrorMessage("signupVerify", error, "회원가입 링크를 확인하지 못했습니다."))
       } finally {
         if (!cancelled) setLoadingVerification(false)
       }
@@ -125,12 +121,7 @@ const SignupVerifyPage = () => {
         `/login?signup=done&username=${encodeURIComponent(username.trim())}&next=${encodeURIComponent(next)}`
       )
     } catch (error) {
-      if (error instanceof Error) {
-        const message = error.message.split(": ").slice(1).join(": ").trim()
-        setSubmitError(message || "회원가입에 실패했습니다.")
-      } else {
-        setSubmitError("회원가입에 실패했습니다.")
-      }
+      setSubmitError(toAuthErrorMessage("signupComplete", error, "회원가입에 실패했습니다."))
     } finally {
       setSubmitLoading(false)
     }

@@ -31,15 +31,25 @@ export const buildCanonicalPostDetailPage = async (
   const queryClient = createQueryClient()
   const authMember = await hydrateServerAuthSession(queryClient, req)
 
-  const postDetail = await getPostDetailById(postId)
-  if (!postDetail) return { notFound: true }
+  let postDetail = null as Awaited<ReturnType<typeof getPostDetailById>>
+  let shouldClientRecover = false
+  try {
+    postDetail = await getPostDetailById(postId)
+  } catch {
+    // SSR fetch timeout/일시 장애 시에는 404 대신 클라이언트 1회 복구 fetch를 허용한다.
+    shouldClientRecover = true
+  }
+  if (!postDetail && !shouldClientRecover) return { notFound: true }
 
-  await queryClient.prefetchQuery(queryKey.post(postDetail.id), () => postDetail)
-  const initialComments = postDetail.type[0] === "Post" ? await fetchInitialComments(req, postDetail.id) : []
+  if (postDetail) {
+    await queryClient.prefetchQuery(queryKey.post(postDetail.id), () => postDetail)
+  }
+  const initialComments =
+    postDetail && postDetail.type[0] === "Post" ? await fetchInitialComments(req, postDetail.id) : []
 
   res.setHeader(
     "Cache-Control",
-    authMember
+    authMember || shouldClientRecover
       ? "private, no-store"
       : "public, s-maxage=120, stale-while-revalidate=600"
   )

@@ -1,18 +1,28 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import SearchInput from "./SearchInput"
 import { FeedHeader } from "./FeedHeader"
 import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
 import TagList from "./TagList"
-import usePostsQuery from "src/hooks/usePostsQuery"
+import useExplorePostsQuery from "src/hooks/useExplorePostsQuery"
 import { useRouter } from "next/router"
-import { createFeedPostIndex, filterPosts } from "./PostList/filterPosts"
+
+const useDebouncedValue = (value: string, delayMs = 220) => {
+  const [debounced, setDebounced] = useState(value)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs)
+    return () => window.clearTimeout(timer)
+  }, [value, delayMs])
+
+  return debounced
+}
 
 const FeedExplorer = () => {
   const [q, setQ] = useState("")
   const router = useRouter()
-  const posts = usePostsQuery()
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
@@ -20,33 +30,49 @@ const FeedExplorer = () => {
     router.query.order === "asc" || router.query.order === "desc"
       ? router.query.order
       : "desc"
+  const debouncedQ = useDebouncedValue(q)
+  const visiblePosts = useExplorePostsQuery({
+    kw: debouncedQ,
+    tag: currentTag,
+    order: currentOrder,
+    page: 1,
+    pageSize: 30,
+  })
 
-  const feedPostIndex = useMemo(() => createFeedPostIndex(posts), [posts])
-  const visiblePosts = useMemo(
-    () =>
-      filterPosts({
-        index: feedPostIndex,
-        q,
-        tag: currentTag,
-        order: currentOrder,
-      }),
-    [feedPostIndex, q, currentTag, currentOrder]
-  )
   const pinnedPosts = useMemo(
-    () =>
-      filterPosts({
-        index: feedPostIndex,
-        q,
-        order: "desc",
-      }).filter((post) => post.tags?.includes("Pinned")),
-    [feedPostIndex, q]
+    () => visiblePosts.filter((post) => post.tags?.includes("Pinned")),
+    [visiblePosts]
   )
+
+  useEffect(() => {
+    const handleGlobalShortcut = (event: KeyboardEvent) => {
+      const isSearchShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k"
+      if (!isSearchShortcut) return
+
+      const target = event.target as HTMLElement | null
+      const isTypingContext =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      if (isTypingContext) return
+
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+
+    window.addEventListener("keydown", handleGlobalShortcut)
+    return () => window.removeEventListener("keydown", handleGlobalShortcut)
+  }, [])
 
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
       <ExplorerCard>
-        <SearchInput value={q} onChange={(event) => setQ(event.target.value)} />
+        <SearchInput
+          inputRef={searchInputRef}
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
         <div className="tags">
           <TagList />
         </div>

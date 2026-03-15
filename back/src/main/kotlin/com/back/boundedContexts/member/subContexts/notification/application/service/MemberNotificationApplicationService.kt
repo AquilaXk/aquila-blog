@@ -1,12 +1,12 @@
 package com.back.boundedContexts.member.subContexts.notification.application.service
 
-import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.subContexts.notification.application.port.out.MemberNotificationRepositoryPort
+import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotification
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
-import com.back.boundedContexts.post.application.port.out.PostCommentRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation

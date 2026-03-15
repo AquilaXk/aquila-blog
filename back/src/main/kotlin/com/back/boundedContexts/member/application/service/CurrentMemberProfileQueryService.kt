@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.application.port.`in`.CurrentMemberProfileQueryUseCase
-import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

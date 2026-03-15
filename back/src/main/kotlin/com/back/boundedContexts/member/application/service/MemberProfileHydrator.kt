@@ -1,6 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.application.port.out.MemberAttrRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_DESCRIPTION

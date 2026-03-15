@@ -1,10 +1,10 @@
 package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.global.exception.app.AppException
-import com.back.global.security.config.oauth2.app.OAuth2State
+import com.back.global.exception.application.AppException
+import com.back.global.security.config.oauth2.application.OAuth2State
 import com.back.global.security.domain.SecurityUser
-import com.back.global.web.app.AuthCookieService
+import com.back.global.web.application.AuthCookieService
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.Authentication

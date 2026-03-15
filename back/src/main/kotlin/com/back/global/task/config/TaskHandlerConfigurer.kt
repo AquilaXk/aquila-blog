@@ -2,10 +2,10 @@ package com.back.global.task.config
 
 import com.back.global.task.annotation.Task
 import com.back.global.task.annotation.TaskHandler
-import com.back.global.task.app.TaskHandlerEntry
-import com.back.global.task.app.TaskHandlerMethod
-import com.back.global.task.app.TaskHandlerRegistry
-import com.back.global.task.app.TaskRetryPolicy
+import com.back.global.task.application.TaskHandlerEntry
+import com.back.global.task.application.TaskHandlerMethod
+import com.back.global.task.application.TaskHandlerRegistry
+import com.back.global.task.application.TaskRetryPolicy
 import com.back.standard.dto.TaskPayload
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
 import org.springframework.context.ApplicationContext

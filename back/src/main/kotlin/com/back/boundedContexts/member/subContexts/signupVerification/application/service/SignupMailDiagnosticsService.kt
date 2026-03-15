@@ -1,10 +1,10 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.application.service
 
-import com.back.boundedContexts.member.subContexts.signupVerification.application.port.out.SignupVerificationMailSenderPort
+import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.SignupVerificationMailSenderPort
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
-import com.back.global.exception.app.AppException
-import com.back.global.task.app.TaskQueueDiagnosticsService
+import com.back.global.exception.application.AppException
+import com.back.global.task.application.TaskQueueDiagnosticsService
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
@@ -27,7 +27,7 @@ data class SignupMailDiagnostics(
     val connectionError: String?,
     val checkedAt: Instant,
     val verifyPath: String,
-    val taskQueue: com.back.global.task.app.TaskTypeDiagnostics,
+    val taskQueue: com.back.global.task.application.TaskTypeDiagnostics,
 )
 
 @Service

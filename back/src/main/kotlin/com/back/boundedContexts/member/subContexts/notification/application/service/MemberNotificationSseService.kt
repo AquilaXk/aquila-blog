@@ -1,6 +1,6 @@
 package com.back.boundedContexts.member.subContexts.notification.application.service
 
-import com.back.boundedContexts.member.subContexts.notification.application.port.out.MemberNotificationRepositoryPort
+import com.back.boundedContexts.member.subContexts.notification.application.port.output.MemberNotificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationStreamPayload
 import jakarta.annotation.PreDestroy

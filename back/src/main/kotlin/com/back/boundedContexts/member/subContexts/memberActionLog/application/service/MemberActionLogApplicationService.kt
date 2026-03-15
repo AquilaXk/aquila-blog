@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.subContexts.memberActionLog.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.out.MemberActionLogRepositoryPort
+import com.back.boundedContexts.member.subContexts.memberActionLog.application.port.output.MemberActionLogRepositoryPort
 import com.back.boundedContexts.member.subContexts.memberActionLog.domain.MemberActionLog
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment

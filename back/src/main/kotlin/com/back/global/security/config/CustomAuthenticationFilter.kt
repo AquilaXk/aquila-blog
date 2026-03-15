@@ -2,11 +2,11 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.global.exception.app.AppException
+import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.domain.SecurityUser
-import com.back.global.web.app.AuthCookieService
-import com.back.global.web.app.Rq
+import com.back.global.web.application.AuthCookieService
+import com.back.global.web.application.Rq
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse

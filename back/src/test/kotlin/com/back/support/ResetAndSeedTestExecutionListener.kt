@@ -1,7 +1,7 @@
 package com.back.support
 
-import com.back.boundedContexts.member.adapter.`in`.bootstrap.MemberNotProdInitData
-import com.back.boundedContexts.post.adapter.`in`.bootstrap.PostNotProdInitData
+import com.back.boundedContexts.member.adapter.bootstrap.MemberNotProdInitData
+import com.back.boundedContexts.post.adapter.bootstrap.PostNotProdInitData
 import jakarta.persistence.EntityManager
 import org.springframework.core.Ordered
 import org.springframework.data.redis.connection.RedisConnectionFactory

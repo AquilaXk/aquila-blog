@@ -35,7 +35,7 @@ flowchart LR
 - 좋아요는 `PUT /like`, `DELETE /like` 멱등 경로를 우선 사용하고, 조회수는 dedupe + 원자 증가 방식으로 보강했다.
 - 프로필 이미지는 direct URL + version 파라미터 기준으로 렌더하고, 메인/About/상세는 SSR 초기값을 먼저 사용한다.
 - Kakao OAuth callback URL은 `${custom.site.backUrl}/login/oauth2/code/{registrationId}`로 고정했고, 프록시에서는 `X-Forwarded-Proto=https`를 명시한다.
-- 백엔드는 여전히 `adapter/application` 구조와 `app/in/out` 구조가 공존하는 과도기 상태다.
+- 백엔드는 `adapter/application/domain` 구조로 정리됐고, 입력 채널은 `adapter/web|event|scheduler`처럼 목적형 이름으로 구분한다.
 
 ## 지금 가장 중요한 운영 메모
 
@@ -79,10 +79,10 @@ flowchart LR
 | 관리자 401 | `front/src/libs/server/adminGuard.ts`, `ApiV1AuthController` | SSR 가드, `me.isAdmin`, username 규칙 |
 | 글 목록 비어 있음 | `front/src/apis/backend/posts.ts` | 목록 API 응답, `published/listed` |
 | 상세 링크가 이상함 | `front/src/pages/posts/[id].tsx`, `front/src/pages/[slug].tsx` | canonical `/posts/:id`, legacy redirect |
-| 이미지 오류 | `back/src/main/kotlin/com/back/boundedContexts/post/adapter/out/storage/PostImageStorageAdapter.kt` | endpoint, accessKey, secretKey |
+| 이미지 오류 | `back/src/main/kotlin/com/back/boundedContexts/post/adapter/storage/PostImageStorageAdapter.kt` | endpoint, accessKey, secretKey |
 | Kakao OAuth 실패 | `deploy/homeserver/Caddyfile`, `application.yaml` | `X-Forwarded-Proto`, `custom.site.backUrl`, `redirect_uri` |
 | 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, alias, health |
-| 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/application` vs `app/in/out` 공존 여부 |
+| 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/*`, `application/port/input|output`, `application` 경계 확인 |
 
 ## 빠른 점검 포인트
 
@@ -116,7 +116,7 @@ flowchart LR
 ## 자주 보는 파일
 
 - `back/src/main/resources/application.yaml`
-- `back/src/main/kotlin/com/back/boundedContexts/post/app/PostImageStorageService.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/storage/PostImageStorageAdapter.kt`
 - `front/src/apis/backend/client.ts`
 - `front/src/apis/backend/posts.ts`
 - `front/src/pages/admin.tsx`

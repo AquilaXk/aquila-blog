@@ -1,6 +1,6 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.domain
 
-import com.back.global.exception.app.AppException
+import com.back.global.exception.application.AppException
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column

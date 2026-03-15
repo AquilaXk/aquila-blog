@@ -28,13 +28,24 @@ class ArchitectureGuardTest {
     }
 
     @Test
-    fun `adapter in layer는 adapter out layer를 직접 참조하지 않아야 한다`() {
+    fun `입력 adapter layer는 출력 adapter layer를 직접 참조하지 않아야 한다`() {
         noClasses()
             .that()
-            .resideInAnyPackage("..boundedContexts..adapter.in..")
+            .resideInAnyPackage(
+                "..boundedContexts..adapter.web..",
+                "..boundedContexts..adapter.bootstrap..",
+                "..boundedContexts..adapter.event..",
+                "..boundedContexts..adapter.scheduler..",
+            )
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage("..boundedContexts..adapter.out..")
+            .resideInAnyPackage(
+                "..boundedContexts..adapter.persistence..",
+                "..boundedContexts..adapter.external..",
+                "..boundedContexts..adapter.storage..",
+                "..boundedContexts..adapter.security..",
+                "..boundedContexts..adapter.mail..",
+            )
             .check(importedClasses())
     }
 
@@ -58,7 +69,7 @@ class ArchitectureGuardTest {
             .resideInAnyPackage("..boundedContexts..application.service..")
             .should()
             .dependOnClassesThat()
-            .resideInAnyPackage("..boundedContexts..adapter.out.persistence..")
+            .resideInAnyPackage("..boundedContexts..adapter.persistence..")
             .check(importedClasses())
     }
 
@@ -67,21 +78,21 @@ class ArchitectureGuardTest {
         noClasses()
             .that()
             .resideInAnyPackage(
-                "..boundedContexts..adapter.in.web..",
-                "..boundedContexts..home.in..",
+                "..boundedContexts..adapter.web..",
+                "..global..adapter.web..",
             ).should()
             .dependOnClassesThat()
             .resideInAnyPackage(
-                "..boundedContexts..adapter.out.persistence..",
+                "..boundedContexts..adapter.persistence..",
                 "org.springframework.data.jpa.repository..",
             ).check(importedClasses())
     }
 
     @Test
-    fun `application port out은 interface로만 구성되어야 한다`() {
+    fun `application port output은 interface로만 구성되어야 한다`() {
         classes()
             .that()
-            .resideInAnyPackage("..boundedContexts..application.port.out..")
+            .resideInAnyPackage("..boundedContexts..application.port.output..")
             .and()
             .areTopLevelClasses()
             .should()
@@ -90,10 +101,10 @@ class ArchitectureGuardTest {
     }
 
     @Test
-    fun `application port in은 interface로만 구성되어야 한다`() {
+    fun `application port input은 interface로만 구성되어야 한다`() {
         classes()
             .that()
-            .resideInAnyPackage("..boundedContexts..application.port.in..")
+            .resideInAnyPackage("..boundedContexts..application.port.input..")
             .and()
             .areTopLevelClasses()
             .should()

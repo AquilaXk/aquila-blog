@@ -1,6 +1,6 @@
 package com.back.global.storage.config
 
-import com.back.global.storage.app.UploadedFileRetentionProperties
+import com.back.global.storage.application.UploadedFileRetentionProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration
 

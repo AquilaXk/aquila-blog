@@ -1,14 +1,14 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.application.service
 
-import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.subContexts.signupVerification.application.port.out.MemberSignupVerificationRepositoryPort
+import com.back.boundedContexts.member.subContexts.signupVerification.application.port.output.MemberSignupVerificationRepositoryPort
 import com.back.boundedContexts.member.subContexts.signupVerification.domain.MemberSignupVerification
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
-import com.back.global.exception.app.AppException
-import com.back.global.task.app.TaskFacade
+import com.back.global.exception.application.AppException
+import com.back.global.task.application.TaskFacade
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional

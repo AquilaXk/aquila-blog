@@ -56,11 +56,17 @@ const StyledWrapper = styled.span`
   padding-bottom: 0.25rem;
   padding-left: 0.5rem;
   padding-right: 0.5rem;
-  border-radius: 50px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   font-size: 0.75rem;
   line-height: 1rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.colors.gray10};
-  background-color: ${({ theme }) => theme.colors.gray5};
+  font-weight: 500;
+  color: ${({ theme }) => theme.colors.gray11};
+  background-color: ${({ theme }) => theme.colors.gray3};
   cursor: pointer;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.gray12};
+    background-color: ${({ theme }) => theme.colors.gray4};
+  }
 `

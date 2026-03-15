@@ -23,11 +23,6 @@ const StyledWrapper = styled.div`
   min-width: 0;
   container-type: inline-size;
   container-name: feed-filters;
-
-  @media (max-width: 1023px) {
-    padding-top: 1rem;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  }
 `
 
 const FilterRow = styled.div`
@@ -36,7 +31,6 @@ const FilterRow = styled.div`
   align-items: center;
   gap: 0.8rem;
   width: 100%;
-  padding-top: 1rem;
   min-width: 0;
 
   @container feed-filters (max-width: 28rem) {

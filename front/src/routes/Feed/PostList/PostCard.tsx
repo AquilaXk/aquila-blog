@@ -87,25 +87,15 @@ const StyledWrapper = styled(Link)`
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-radius: 20px;
+    border-radius: 14px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "linear-gradient(180deg, rgba(29, 32, 39, 0.98), rgba(25, 28, 34, 0.98))"
-        : "linear-gradient(180deg, #ffffff, #f8fafc)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "0 20px 42px rgba(2, 6, 23, 0.38)"
-        : "0 16px 34px rgba(15, 23, 42, 0.08)"};
-    transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+    background: ${({ theme }) => theme.colors.gray1};
+    box-shadow: none;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
 
     &:hover {
-      transform: translateY(-2px);
-      border-color: ${({ theme }) => theme.colors.blue7};
-      box-shadow: ${({ theme }) =>
-        theme.scheme === "dark"
-          ? "0 24px 46px rgba(2, 6, 23, 0.46)"
-          : "0 22px 38px rgba(30, 64, 175, 0.14)"};
+      border-color: ${({ theme }) => theme.colors.gray8};
+      background: ${({ theme }) => theme.colors.gray2};
     }
     > .thumbnail {
       position: relative;
@@ -114,9 +104,7 @@ const StyledWrapper = styled(Link)`
       background-color: ${({ theme }) => theme.colors.gray3};
 
       &.placeholder {
-        background:
-          linear-gradient(140deg, rgba(59, 130, 246, 0.18), transparent 52%),
-          ${({ theme }) => theme.colors.gray3};
+        background: ${({ theme }) => theme.colors.gray3};
       }
     }
 
@@ -132,10 +120,10 @@ const StyledWrapper = styled(Link)`
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: clamp(1.32rem, 2.15vw, 1.92rem);
-          line-height: 1.34;
-          font-weight: 800;
-          letter-spacing: -0.03em;
+          font-size: clamp(1.2rem, 1.8vw, 1.48rem);
+          line-height: 1.42;
+          font-weight: 740;
+          letter-spacing: -0.02em;
           word-break: keep-all;
           display: -webkit-box;
           -webkit-line-clamp: 2;
@@ -151,8 +139,8 @@ const StyledWrapper = styled(Link)`
         p {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray11};
-          font-size: clamp(1rem, 1.2vw, 1.12rem);
-          line-height: 1.68;
+          font-size: clamp(0.93rem, 1.05vw, 1.02rem);
+          line-height: 1.62;
           letter-spacing: -0.01em;
           word-break: keep-all;
           display: -webkit-box;
@@ -211,9 +199,7 @@ const StyledWrapper = styled(Link)`
             overflow: hidden;
             flex: 0 0 auto;
             border: 1px solid ${({ theme }) => theme.colors.gray7};
-            background:
-              linear-gradient(140deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.15)),
-              ${({ theme }) => theme.colors.gray2};
+            background: ${({ theme }) => theme.colors.gray2};
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -253,8 +239,7 @@ const StyledWrapper = styled(Link)`
           svg {
             width: 1.02rem;
             height: 1.02rem;
-            color: ${({ theme }) =>
-              theme.scheme === "dark" ? "#f43f5e" : "#dc2626"};
+            color: ${({ theme }) => theme.colors.red10};
           }
         }
       }
@@ -263,7 +248,7 @@ const StyledWrapper = styled(Link)`
 
   @media (max-width: 640px) {
     article {
-      border-radius: 18px;
+      border-radius: 12px;
 
       > .content {
         padding: 0.9rem 0.92rem 0.78rem;
@@ -284,10 +269,6 @@ const StyledWrapper = styled(Link)`
   @media (prefers-reduced-motion: reduce) {
     article {
       transition: none;
-
-      &:hover {
-        transform: none;
-      }
     }
   }
 `

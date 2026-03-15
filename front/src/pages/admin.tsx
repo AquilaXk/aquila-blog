@@ -114,21 +114,19 @@ export default AdminHubPage
 const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
 `
 
 const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) 320px;
-  gap: 1rem;
-  padding: 1.3rem;
-  border-radius: 24px;
+  gap: 0.9rem;
+  padding: 1.1rem;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 36%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
+  background: ${({ theme }) => theme.colors.gray1};
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -141,8 +139,8 @@ const HeroIntro = styled.div`
 
   h1 {
     margin: 0;
-    font-size: clamp(2rem, 4vw, 2.8rem);
-    letter-spacing: -0.05em;
+    font-size: clamp(1.82rem, 3.5vw, 2.32rem);
+    letter-spacing: -0.03em;
   }
 
   p {
@@ -156,10 +154,10 @@ const HeroIntro = styled.div`
 const Eyebrow = styled.span`
   width: fit-content;
   border-radius: 999px;
-  padding: 0.38rem 0.7rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  padding: 0.34rem 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -173,19 +171,19 @@ const HeroActions = styled.div`
 `
 
 const BaseButton = styled.button`
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.72rem 1rem;
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
 `
 
 const PrimaryAction = styled(BaseButton)`
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue9};
+  border-color: ${({ theme }) => theme.colors.gray8};
+  background: ${({ theme }) => theme.colors.gray12};
   color: white;
 `
 
@@ -193,11 +191,11 @@ const GhostButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.72rem 1rem;
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
@@ -209,7 +207,7 @@ const ProfilePanel = styled.aside`
   align-content: center;
   gap: 0.45rem;
   padding: 1rem;
-  border-radius: 20px;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   text-align: center;
@@ -252,7 +250,7 @@ const ProfileFallback = styled.div`
 const CardGrid = styled.section`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.85rem;
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
@@ -262,8 +260,8 @@ const CardGrid = styled.section`
 const QuickCard = styled.a`
   display: grid;
   gap: 0.7rem;
-  padding: 1.2rem;
-  border-radius: 22px;
+  padding: 1rem;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   text-decoration: none;
@@ -279,7 +277,7 @@ const QuickCard = styled.a`
 
   h2 {
     margin: 0;
-    font-size: 1.28rem;
+    font-size: 1.16rem;
   }
 
   p {
@@ -290,11 +288,8 @@ const QuickCard = styled.a`
 
   span {
     width: fit-content;
-    border-radius: 999px;
-    padding: 0.5rem 0.82rem;
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 700;
-    font-size: 0.86rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 650;
+    font-size: 0.84rem;
   }
 `

@@ -111,14 +111,14 @@ export default NavBar
 const StyledWrapper = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   flex-shrink: 0;
 
   .primaryLinks {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 0.28rem;
+    gap: 0.04rem;
 
     li {
       display: block;
@@ -128,16 +128,19 @@ const StyledWrapper = styled.div`
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 34px;
-      min-width: 86px;
-      padding: 0 0.84rem;
-      border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray7};
-      background: ${({ theme }) => theme.colors.gray3};
-      color: ${({ theme }) => theme.colors.gray12};
+      min-height: 32px;
+      padding: 0 0.62rem;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      color: ${({ theme }) => theme.colors.gray11};
       font-size: 0.86rem;
-      font-weight: 700;
+      font-weight: 630;
       line-height: 1;
+
+      &:hover {
+        background: ${({ theme }) => theme.colors.gray3};
+        color: ${({ theme }) => theme.colors.gray12};
+      }
     }
   }
 
@@ -154,16 +157,21 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 86px;
-    height: 34px;
-    padding: 0 0.84rem;
-    border-radius: 999px;
+    min-width: 78px;
+    height: 32px;
+    padding: 0 0.72rem;
+    border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.86rem;
-    font-weight: 700;
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.84rem;
+    font-weight: 650;
     cursor: pointer;
+
+    &:hover {
+      background: ${({ theme }) => theme.colors.gray3};
+      color: ${({ theme }) => theme.colors.gray12};
+    }
   }
 
   .authSkeleton {
@@ -184,8 +192,8 @@ const StyledWrapper = styled.div`
 
   .identity {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: 0.88rem;
+    font-weight: 620;
     max-width: 130px;
     white-space: nowrap;
     overflow: hidden;
@@ -208,9 +216,9 @@ const StyledWrapper = styled.div`
 
     .primaryLinks {
       a {
-        min-height: 30px;
-        min-width: 68px;
-        padding: 0 0.58rem;
+        min-height: 28px;
+        min-width: 58px;
+        padding: 0 0.42rem;
         font-size: 0.78rem;
       }
     }
@@ -230,8 +238,8 @@ const StyledWrapper = styled.div`
 
     .navPill,
     .logoutBtn {
-      min-width: 68px;
-      height: 30px;
+      min-width: 58px;
+      height: 28px;
       font-size: 0.78rem;
     }
   }

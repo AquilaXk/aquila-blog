@@ -8,6 +8,7 @@ import TagList from "./TagList"
 import useExplorePostsQuery from "src/hooks/useExplorePostsQuery"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { useRouter } from "next/router"
+import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 const useDebouncedValue = (value: string, delayMs = 220) => {
   const [debounced, setDebounced] = useState(value)
@@ -46,6 +47,19 @@ const FeedExplorer = () => {
     () => visiblePosts.filter((post) => post.tags?.includes("Pinned")),
     [visiblePosts]
   )
+
+  const handleClearFilters = () => {
+    setQ("")
+    if (!currentTag) return
+    const { category: _deprecatedCategory, ...restQuery } = router.query
+    replaceShallowRoutePreservingScroll(router, {
+      pathname: "/",
+      query: {
+        ...restQuery,
+        tag: undefined,
+      },
+    })
+  }
 
   useEffect(() => {
     const handleGlobalShortcut = (event: KeyboardEvent) => {
@@ -90,6 +104,7 @@ const FeedExplorer = () => {
       <PostList
         posts={visiblePosts}
         hasFilter={Boolean(debouncedQ.trim() || currentTag)}
+        onClearFilters={handleClearFilters}
       />
     </>
   )
@@ -100,10 +115,10 @@ export default FeedExplorer
 const ExplorerCard = styled.section`
   display: grid;
   gap: 0.95rem;
-  border-radius: 22px;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 1rem;
+  padding: 0.9rem;
   min-width: 0;
   overflow: visible;
 
@@ -119,7 +134,7 @@ const ExplorerCard = styled.section`
 
   .actions {
     min-width: 0;
-    padding-top: 0.45rem;
+    padding-top: 0.4rem;
   }
 
   &[data-has-tags="true"] .actions {
@@ -128,7 +143,7 @@ const ExplorerCard = styled.section`
 
   @media (max-width: 768px) {
     gap: 0.85rem;
-    padding: 0.9rem;
+    padding: 0.82rem;
   }
 
   @media (min-width: 1024px) {
@@ -148,9 +163,8 @@ const ExplorerCard = styled.section`
 
     .actions {
       border-top: 0;
-      padding-top: 0;
-      align-self: center;
-      padding-top: 0.2rem;
+      padding-top: 0.1rem;
+      align-self: start;
     }
   }
 `

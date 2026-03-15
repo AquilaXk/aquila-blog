@@ -123,7 +123,7 @@ export default AboutPage
 const StyledWrapper = styled.div`
   max-width: 56rem;
   margin: 0 auto;
-  padding: 3rem 0;
+  padding: 2rem 0 2.6rem;
 
   .about-content {
     .page-title {
@@ -140,10 +140,11 @@ const StyledWrapper = styled.div`
 
     .profile-section {
       text-align: center;
-      margin-bottom: 4rem;
-      padding: 2rem;
-      background-color: ${({ theme }) => theme.colors.gray3};
-      border-radius: 1rem;
+      margin-bottom: 3rem;
+      padding: 1.3rem;
+      background-color: ${({ theme }) => theme.colors.gray1};
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border-radius: 0.9rem;
 
       .profile-image-wrapper {
         position: relative;
@@ -206,13 +207,14 @@ const StyledWrapper = styled.div`
           display: flex;
           align-items: center;
           padding: 0.75rem 1rem;
-          background-color: ${({ theme }) => theme.colors.gray3};
+          background-color: ${({ theme }) => theme.colors.gray1};
+          border: 1px solid ${({ theme }) => theme.colors.gray6};
           border-radius: 0.5rem;
-          transition: all 0.2s ease;
+          transition: background-color 0.2s ease, border-color 0.2s ease;
 
           &:hover {
-            background-color: ${({ theme }) => theme.colors.gray4};
-            transform: translateX(4px);
+            background-color: ${({ theme }) => theme.colors.gray2};
+            border-color: ${({ theme }) => theme.colors.gray7};
           }
 
           .icon {

@@ -1090,25 +1090,23 @@ export default AdminToolsPage
 const Main = styled.main`
   max-width: 1180px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 1.1rem;
+  gap: 0.95rem;
 `
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 1.15rem;
-  padding: 1.35rem 1.25rem 1.25rem;
-  border-radius: 24px;
+  gap: 0.95rem;
+  padding: 1.1rem 1rem 1rem;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 36%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
+  background: ${({ theme }) => theme.colors.gray1};
 
   h1 {
     margin: 0;
-    font-size: clamp(1.85rem, 4vw, 2.4rem);
-    letter-spacing: -0.05em;
+    font-size: clamp(1.72rem, 3.2vw, 2.15rem);
+    letter-spacing: -0.03em;
     line-height: 1.08;
   }
 
@@ -1140,12 +1138,10 @@ const GuideCard = styled.article`
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.8rem;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 42%),
-    ${({ theme }) => theme.colors.gray1};
-  padding: 0.95rem 1rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.88rem 0.92rem;
 
   h3 {
     margin: 0 0 0.28rem;

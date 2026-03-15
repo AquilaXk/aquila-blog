@@ -66,9 +66,9 @@ export default Feed
 
 const StyledWrapper = styled.div`
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  padding: 1.4rem 0 2.2rem;
+  padding: 1.2rem 0 2rem;
   display: grid;
-  gap: 1.5rem;
+  gap: 1.25rem;
 
   @media (max-width: 768px) {
     display: block;
@@ -119,25 +119,24 @@ const StyledWrapper = styled.div`
 `
 
 const IntroCard = styled.section`
-  border-radius: 26px;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 38%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
-  padding: 1.3rem 1.35rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1.25rem 1.3rem;
 
   h1 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.9rem, 4vw, 2.7rem);
-    letter-spacing: -0.05em;
-    line-height: 1.05;
+    font-size: clamp(2.1rem, 4.2vw, 2.95rem);
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+    font-weight: 760;
   }
 
   p {
     margin: 0.8rem 0 0;
     max-width: 42rem;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
+    line-height: 1.62;
   }
 `

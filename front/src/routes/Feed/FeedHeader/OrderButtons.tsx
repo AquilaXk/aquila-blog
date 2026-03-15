@@ -49,17 +49,17 @@ export default OrderButtons
 
 const StyledWrapper = styled.div`
   display: flex;
-  gap: 0.18rem;
+  gap: 0.14rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
   flex: 0 0 auto;
-  min-width: 248px;
+  min-width: 220px;
   width: fit-content;
   max-width: min(100%, 18rem);
-  padding: 0.22rem;
-  border-radius: 999px;
+  padding: 0.18rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
 
   @container feed-filters (max-width: 44rem) {
     width: min(100%, 18rem);
@@ -78,9 +78,9 @@ const StyledWrapper = styled.div`
     min-width: 0;
     max-width: 100%;
     flex: 1 1 0;
-    min-height: 38px;
+    min-height: 34px;
     padding: 0 0.82rem;
-    border-radius: 999px;
+    border-radius: 9px;
     border: 0;
     background: transparent;
     cursor: pointer;
@@ -91,10 +91,10 @@ const StyledWrapper = styled.div`
       color 0.18s ease;
 
     &[data-active="true"] {
-      font-weight: 700;
+      font-weight: 680;
       color: ${({ theme }) => theme.colors.gray12};
-      background: ${({ theme }) => theme.colors.blue3};
-      box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.blue8};
+      background: ${({ theme }) => theme.colors.gray3};
+      box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray7};
     }
 
     @container feed-filters (max-width: 44rem) {

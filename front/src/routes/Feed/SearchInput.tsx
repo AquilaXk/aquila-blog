@@ -1,5 +1,5 @@
 import styled from "@emotion/styled"
-import React, { InputHTMLAttributes, Ref, useMemo } from "react"
+import React, { InputHTMLAttributes, Ref, useEffect, useState } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
@@ -7,9 +7,11 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
-  const shortcutLabel = useMemo(() => {
-    if (typeof navigator === "undefined") return "⌘K"
-    return /Mac|iPhone|iPad|iPod/i.test(navigator.platform) ? "⌘K" : "Ctrl+K"
+  const [shortcutLabel, setShortcutLabel] = useState("⌘K")
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return
+    setShortcutLabel(/Mac|iPhone|iPad|iPod/i.test(navigator.platform) ? "⌘K" : "Ctrl+K")
   }, [])
 
   return (

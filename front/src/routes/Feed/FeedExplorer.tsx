@@ -6,6 +6,7 @@ import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
 import TagList from "./TagList"
 import useExplorePostsQuery from "src/hooks/useExplorePostsQuery"
+import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { useRouter } from "next/router"
 
 const useDebouncedValue = (value: string, delayMs = 220) => {
@@ -31,6 +32,8 @@ const FeedExplorer = () => {
       ? router.query.order
       : "desc"
   const debouncedQ = useDebouncedValue(q)
+  const tagCounts = useTagsQuery()
+  const hasTagEntries = useMemo(() => Object.keys(tagCounts).length > 0, [tagCounts])
   const visiblePosts = useExplorePostsQuery({
     kw: debouncedQ,
     tag: currentTag,
@@ -67,18 +70,27 @@ const FeedExplorer = () => {
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard>
-        <SearchInput
-          inputRef={searchInputRef}
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-        />
-        <div className="tags">
-          <TagList />
+      <ExplorerCard data-has-tags={hasTagEntries}>
+        <div className="filters">
+          <SearchInput
+            inputRef={searchInputRef}
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+          />
+          {hasTagEntries && (
+            <div className="tags">
+              <TagList />
+            </div>
+          )}
         </div>
-        <FeedHeader />
+        <div className="actions">
+          <FeedHeader />
+        </div>
       </ExplorerCard>
-      <PostList posts={visiblePosts} />
+      <PostList
+        posts={visiblePosts}
+        hasFilter={Boolean(debouncedQ.trim() || currentTag)}
+      />
     </>
   )
 }
@@ -95,16 +107,50 @@ const ExplorerCard = styled.section`
   min-width: 0;
   overflow: visible;
 
-  .tags {
-    display: block;
+  .filters {
+    display: grid;
+    gap: 0.95rem;
+    min-width: 0;
+  }
 
-    @media (min-width: 1024px) {
-      display: none;
-    }
+  .tags {
+    min-width: 0;
+  }
+
+  .actions {
+    min-width: 0;
+    padding-top: 0.45rem;
+  }
+
+  &[data-has-tags="true"] .actions {
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 
   @media (max-width: 768px) {
     gap: 0.85rem;
     padding: 0.9rem;
+  }
+
+  @media (min-width: 1024px) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    column-gap: 1.2rem;
+    row-gap: 0;
+
+    &[data-has-tags="true"] {
+      grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+    }
+
+    &[data-has-tags="true"] .filters {
+      padding-right: 1.2rem;
+      border-right: 1px solid ${({ theme }) => theme.colors.gray6};
+    }
+
+    .actions {
+      border-top: 0;
+      padding-top: 0;
+      align-self: center;
+      padding-top: 0.2rem;
+    }
   }
 `

@@ -342,6 +342,25 @@ export const getTagCounts = async (): Promise<Record<string, number>> => {
   }, {})
 }
 
+export const getExplorePostsTotalCount = async (): Promise<number> => {
+  const response = await apiFetch<PageDto<ApiPostDto>>(
+    buildExplorePath({
+      kw: "",
+      tag: "",
+      order: "desc",
+      page: 1,
+      pageSize: 1,
+    })
+  )
+
+  const total = response?.pageable?.totalElements
+  if (typeof total === "number" && Number.isFinite(total) && total >= 0) {
+    return total
+  }
+
+  return Array.isArray(response?.content) ? response.content.length : 0
+}
+
 export const getPosts = async (
   { throwOnError = false }: GetPostsOptions = {}
 ): Promise<TPost[]> => {

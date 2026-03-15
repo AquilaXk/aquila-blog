@@ -7,7 +7,6 @@ import ContactCard from "./ContactCard"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
-import TagList from "./TagList"
 import { useEffect, useState } from "react"
 
 const HEADER_HEIGHT = 73
@@ -33,14 +32,6 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialViewport = "
 
   return (
     <StyledWrapper>
-      <div
-        className="lt"
-        css={{
-          height: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        }}
-      >
-        <TagList />
-      </div>
       <div className="mid">
         {!isDesktopViewport && <MobileProfileCard initialAdminProfile={initialAdminProfile} />}
         <IntroCard>
@@ -84,26 +75,6 @@ const StyledWrapper = styled.div`
     padding: 0.5rem 0 1.2rem;
   }
 
-  > .lt {
-    display: none;
-    overflow: auto;
-    scrollbar-gutter: stable both-edges;
-    overscroll-behavior: contain;
-    position: sticky;
-    grid-column: span 2 / span 2;
-    top: ${HEADER_HEIGHT - 10}px;
-
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    &::-webkit-scrollbar {
-      display: none;
-    }
-
-    @media (min-width: 1024px) {
-      display: block;
-    }
-  }
-
   > .mid {
     grid-column: span 12 / span 12;
     display: grid;
@@ -111,15 +82,7 @@ const StyledWrapper = styled.div`
     gap: 1rem;
 
     @media (min-width: 1024px) {
-      grid-column: span 7 / span 7;
-    }
-
-    > .tags {
-      display: block;
-
-      @media (min-width: 1024px) {
-        display: none;
-      }
+      grid-column: span 9 / span 9;
     }
 
     > .footer {

@@ -21,6 +21,12 @@ services:
     env_file:
       - ./.env.prod
 
+  uptime_kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+
   back_blue:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
@@ -99,3 +105,4 @@ volumes:
   caddy_data:
   caddy_config:
   minio_data:
+  uptime_kuma_data:

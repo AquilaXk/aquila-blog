@@ -1,5 +1,6 @@
 import { NextPage } from "next"
 import { AppProps } from "next/app"
+import { EmotionCache } from "@emotion/cache"
 import { ExtendedRecordMap } from "notion-types"
 import { ReactElement, ReactNode } from "react"
 
@@ -10,6 +11,7 @@ export type NextPageWithLayout<PageProps = {}> = NextPage<PageProps> & {
 
 export type AppPropsWithLayout = AppProps & {
   Component: NextPageWithLayout
+  emotionCache?: EmotionCache
 }
 
 export type TPostStatus = "Private" | "Public" | "PublicOnDetail"

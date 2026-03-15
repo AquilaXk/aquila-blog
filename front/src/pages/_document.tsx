@@ -1,7 +1,47 @@
-import Document, { Html, Head, Main, NextScript } from "next/document"
+import createEmotionServer from "@emotion/server/create-instance"
+import Document, {
+  DocumentContext,
+  DocumentInitialProps,
+  Head,
+  Html,
+  Main,
+  NextScript,
+} from "next/document"
+import React from "react"
 import { CONFIG } from "site.config"
+import { pretendard } from "src/assets"
+import createEmotionCache from "src/libs/emotion/createEmotionCache"
 
 class MyDocument extends Document {
+  static async getInitialProps(ctx: DocumentContext): Promise<DocumentInitialProps> {
+    const originalRenderPage = ctx.renderPage
+    const cache = createEmotionCache()
+    const { extractCriticalToChunks } = createEmotionServer(cache)
+
+    ctx.renderPage = () =>
+      originalRenderPage({
+        enhanceApp: (App: any) =>
+          function EnhanceApp(props) {
+            return <App emotionCache={cache} {...props} />
+          },
+      })
+
+    const initialProps = await Document.getInitialProps(ctx)
+    const emotionChunks = extractCriticalToChunks(initialProps.html)
+    const emotionStyleTags = emotionChunks.styles.map((style) => (
+      <style
+        data-emotion={`${style.key} ${style.ids.join(" ")}`}
+        key={style.key}
+        dangerouslySetInnerHTML={{ __html: style.css }}
+      />
+    ))
+
+    return {
+      ...initialProps,
+      styles: [...React.Children.toArray(initialProps.styles), ...emotionStyleTags],
+    }
+  }
+
   render() {
     return (
       <Html lang={CONFIG.lang}>
@@ -37,7 +77,7 @@ class MyDocument extends Document {
             </>
           )}
         </Head>
-        <body>
+        <body className={pretendard.className}>
           <Main />
           <NextScript />
         </body>

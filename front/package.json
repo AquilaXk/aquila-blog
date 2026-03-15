@@ -17,6 +17,7 @@
   "dependencies": {
     "@babel/runtime": "^7.18.3",
     "@emotion/react": "^11.11.1",
+    "@emotion/server": "^11.11.0",
     "@emotion/styled": "^11.11.0",
     "@next/env": "^13.4.9",
     "@radix-ui/colors": "^1.0.0",

@@ -1,6 +1,6 @@
 # Frontend Performance Guide
 
-Last updated: 2026-03-13
+Last updated: 2026-03-15
 
 ## 3줄 요약
 
@@ -22,6 +22,28 @@ Last updated: 2026-03-13
 2. 정적 셸은 최대한 얇게 유지한다.
 3. 댓글, 인증 모달, 운영 도구처럼 초기 상호작용이 필요 없는 요소는 `next/dynamic` + `ssr: false`로 늦게 불러온다.
 4. 본문 렌더러 안의 heavy 라이브러리는 effect 단계에서 필요한 것만 import한다.
+
+## 새로고침 시 글자/아이콘 꿈틀 방지 기준 (필수)
+
+전체 페이지에서 새로고침 때 텍스트가 흔들리는 이슈는 대부분 "초기 SSR 스타일 미주입" 또는 "웹폰트 늦은 적용"에서 시작한다.
+
+필수 기준:
+
+1. Emotion SSR 선주입
+- `_document.tsx`에서 `@emotion/server/create-instance`로 critical CSS를 추출해 `<Head>`에 넣는다.
+- `_app.tsx`는 `CacheProvider`를 루트에 고정한다.
+
+2. 폰트 SSR 즉시 적용
+- `next/font/local` 폰트는 `body className`에 직접 연결한다.
+- 테마 글로벌 CSS에서만 `font-family`를 거는 방식에 의존하지 않는다.
+
+3. Hydration 직후 레이아웃 재계산 최소화
+- 전역 헤더, 피드 필터, 메인 카드처럼 above-the-fold 영역은 mount 직후 크기 재계산/강제 재배치를 피한다.
+- 초기 상태와 hydrate 후 상태의 큰 폭 변경(폭/폰트/정렬)을 만들지 않는다.
+
+4. QA 체크 (배포 전 필수)
+- `/`, `/about`, `/posts/[id]`, `/admin*`를 강제 새로고침하며 텍스트 baseline/아이콘 위치 변동이 없는지 확인한다.
+- 라이트하우스 CLS가 튀면 하단 섹션이 아니라 "상단 first viewport"부터 추적한다.
 
 ## 페이지별 성능 경계
 

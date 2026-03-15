@@ -1,11 +1,11 @@
 # Infrastructure Architecture
 
-Last updated: 2026-03-13
+Last updated: 2026-03-15
 
 ## 3줄 요약
 
 - 배포 런타임과 실제 네트워크 흐름을 볼 때 이 문서를 먼저 읽는다.
-- 운영 구조는 `Vercel + Cloudflare Tunnel + Caddy + Home Server(back/db/redis/minio)` 하이브리드 구성이다.
+- 운영 구조는 `Vercel + Cloudflare Tunnel + Caddy + Home Server(back/db/redis/minio/uptime_kuma)` 하이브리드 구성이다.
 - OAuth/프록시/forwarded header 이슈는 이 문서를 기준으로 보고, 배포 절차는 `DevOps.md`로 내려간다.
 
 ## 이 문서가 보여주는 것
@@ -20,10 +20,13 @@ Last updated: 2026-03-13
 flowchart LR
     User["Browser"] --> Front["Vercel / Next.js"]
     User --> Api["api.<domain>"]
+    User --> Status["status.<domain>"]
     Front --> Api
     Api --> Tunnel["Cloudflare Tunnel"]
+    Status --> Tunnel
     Tunnel --> Caddy["Caddy"]
     Caddy --> Back["back_active -> back_blue/back_green"]
+    Caddy --> Kuma["uptime_kuma"]
     Back --> DB["PostgreSQL"]
     Back --> Redis["Redis"]
     Back --> MinIO["MinIO"]
@@ -47,6 +50,8 @@ flowchart LR
   Redis
 - `minio_1`
   S3 호환 object storage
+- `uptime_kuma`
+  운영 가용성 모니터링/Status Page
 
 ## 서비스 매트릭스
 
@@ -58,6 +63,7 @@ flowchart LR
 | `db_1` | 내부 `5432` | `db_data` | 정규 데이터 |
 | `redis_1` | 내부 `6379` | appendonly | 세션/캐시 |
 | `minio_1` | 내부 `9000`, `9001` | `minio_data` | 오브젝트 저장소 |
+| `uptime_kuma` | 내부 `3001` | `uptime_kuma_data` | 상태 모니터링 |
 
 ## 라우팅 원칙
 
@@ -96,6 +102,7 @@ sequenceDiagram
 
 - 프론트는 Vercel 도메인 또는 커스텀 도메인에서 제공
 - 백엔드는 `api.<domain>`으로 노출
+- 모니터링/상태 페이지는 `status.<domain>`으로 분리 노출
 - 홈서버는 직접 포트포워딩 대신 Cloudflare Tunnel 사용이 기본 전제
 - OAuth callback URL은 프록시 추론 실패에 흔들리지 않도록 `${custom.site.backUrl}/login/oauth2/code/{registrationId}`로 고정한다.
 

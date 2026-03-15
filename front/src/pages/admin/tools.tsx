@@ -204,7 +204,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const queryClient = useQueryClient()
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
-  const [grafanaOpen, setGrafanaOpen] = useState(false)
+  const [dashboardOpen, setDashboardOpen] = useState(false)
   const [loadingKey, setLoadingKey] = useState("")
   const [result, setResult] = useState("")
   const [lastActionLabel, setLastActionLabel] = useState("")
@@ -219,7 +219,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState("")
-  const grafanaEmbedUrl = process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() || ""
+  const monitoringEmbedUrl =
+    process.env.NEXT_PUBLIC_MONITORING_EMBED_URL?.trim() || process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() || ""
+  const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || ""
   const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
 
   const systemHealthQuery = useQuery(
@@ -661,7 +663,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <SectionEyebrow>Monitoring</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">📈</SectionIcon>
-                <h2>Prometheus / Grafana</h2>
+                <h2>서비스 모니터링</h2>
               </SectionTitleRow>
               <SectionDescription>관리자 페이지 진입 시 서버 상태를 1회 조회하고, 10초 캐시를 재사용합니다.</SectionDescription>
             </div>
@@ -684,24 +686,32 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <BaseButton type="button" disabled={isBusy} onClick={() => void run("systemHealth", () => fetchSystemHealthCached())}>
               서버 상태 즉시 새로고침
             </BaseButton>
+            {uptimeKumaUrl && (
+              <a href={uptimeKumaUrl} target="_blank" rel="noreferrer">
+                <BaseButton as="span">Uptime Kuma 열기</BaseButton>
+              </a>
+            )}
             {prometheusUrl && (
               <a href={prometheusUrl} target="_blank" rel="noreferrer">
                 <BaseButton as="span">Prometheus 열기</BaseButton>
               </a>
             )}
-            {grafanaEmbedUrl ? (
-              <PrimaryButton type="button" onClick={() => setGrafanaOpen((prev) => !prev)}>
-                {grafanaOpen ? "Grafana 접기" : "Grafana 열기"}
+            {monitoringEmbedUrl ? (
+              <PrimaryButton type="button" onClick={() => setDashboardOpen((prev) => !prev)}>
+                {dashboardOpen ? "대시보드 접기" : "대시보드 열기"}
               </PrimaryButton>
             ) : (
-              <InlineNotice>환경변수 `NEXT_PUBLIC_GRAFANA_EMBED_URL`을 설정하면 대시보드를 임베드할 수 있습니다.</InlineNotice>
+              <InlineNotice>
+                환경변수 `NEXT_PUBLIC_UPTIME_KUMA_URL`(링크) 또는 `NEXT_PUBLIC_MONITORING_EMBED_URL`(임베드)을 설정하면
+                대시보드를 연결할 수 있습니다.
+              </InlineNotice>
             )}
           </MonitoringActions>
-          {grafanaOpen && grafanaEmbedUrl && (
-            <GrafanaFrame
-              src={grafanaEmbedUrl}
+          {dashboardOpen && monitoringEmbedUrl && (
+            <MonitoringFrame
+              src={monitoringEmbedUrl}
               loading="lazy"
-              title="Grafana Dashboard"
+              title="Monitoring Dashboard"
               referrerPolicy="no-referrer"
             />
           )}
@@ -1721,7 +1731,7 @@ const MonitoringActions = styled.div`
   }
 `
 
-const GrafanaFrame = styled.iframe`
+const MonitoringFrame = styled.iframe`
   margin-top: 0.85rem;
   width: 100%;
   min-height: 420px;

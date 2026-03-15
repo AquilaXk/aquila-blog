@@ -52,6 +52,39 @@ flowchart LR
 - 운영 가용성 체크는 외부 모니터링 도구(Uptime Kuma, Better Stack, UptimeRobot)로 분리한다.
 - GitHub Actions 스케줄 모니터링 워크플로(`monitor-homeserver.yml`)는 알림 노이즈와 커밋 체크 오염 이슈로 제거했다.
 
+## Uptime Kuma 연결(홈서버 기본안)
+
+현재 홈서버 compose에는 `uptime_kuma` 서비스가 포함되어 있다.
+
+### 1) 홈서버 `.env.prod`에 모니터 도메인 추가
+
+```env
+MONITOR_DOMAIN=status.<your-domain>
+```
+
+### 2) Cloudflare Tunnel Public Hostname 추가
+
+- Hostname: `status.<your-domain>`
+- Service: `http://caddy:80`
+
+### 3) Uptime Kuma 초기 설정
+
+- `https://status.<your-domain>` 접속 후 관리자 계정 생성
+- Monitor 등록: `https://api.<your-domain>/actuator/health`
+- Status Page 생성(예: slug `aquila`)
+
+### 4) 프론트(예: Vercel) 환경변수 설정
+
+관리자 페이지 임베드/링크용:
+
+```env
+NEXT_PUBLIC_UPTIME_KUMA_URL=https://status.<your-domain>
+NEXT_PUBLIC_MONITORING_EMBED_URL=https://status.<your-domain>/status/<slug>
+```
+
+- `NEXT_PUBLIC_MONITORING_EMBED_URL`가 비어 있으면 임베드 iframe은 표시되지 않는다.
+- `NEXT_PUBLIC_GRAFANA_EMBED_URL`은 하위호환 fallback으로만 유지한다.
+
 ## 홈서버 배포 파일
 
 - `deploy/homeserver/docker-compose.prod.yml`

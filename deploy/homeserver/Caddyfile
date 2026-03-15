@@ -2,6 +2,22 @@
   email {$CADDY_EMAIL}
 }
 
+# Uptime Kuma dashboard/status endpoint (optional).
+# Set MONITOR_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
+http://{$MONITOR_DOMAIN:status.localhost} {
+  reverse_proxy uptime_kuma:3001 {
+    # Allow embedding public status page in admin UI.
+    header_down -X-Frame-Options
+    header_down -Content-Security-Policy
+  }
+
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+}
+
 # Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
 http://{$API_DOMAIN} {
   header {

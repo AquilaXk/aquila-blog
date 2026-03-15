@@ -1,6 +1,6 @@
 # Package Structure
 
-Last updated: 2026-03-13
+Last updated: 2026-03-15
 
 ## 3줄 요약
 
@@ -25,7 +25,7 @@ Last updated: 2026-03-13
 
 | 디렉터리 | 역할 | 진입점 |
 | --- | --- | --- |
-| `.github` | CI/CD, 모니터링 워크플로 | `.github/workflows/*` |
+| `.github` | CI/CD 워크플로 | `.github/workflows/*` |
 | `back` | Spring Boot + Kotlin 백엔드 | `BackApplication.kt` |
 | `front` | Next.js Pages Router 프론트엔드 | `src/pages/*` |
 | `deploy` | 홈서버 운영/배포 스크립트 | `homeserver/blue_green_deploy.sh` |
@@ -164,7 +164,7 @@ flowchart LR
 - `deploy/homeserver`
   운영 Compose, Caddy, blue/green 스크립트, 하드닝 문서
 - `.github/workflows`
-  배포/모니터링 워크플로
+  CI/CD 워크플로
 
 ## 수정 영향 범위 표
 

@@ -1,12 +1,13 @@
 # DevOps
 
-Last updated: 2026-03-13
+Last updated: 2026-03-15
 
 ## 3줄 요약
 
 - CI/CD 흐름과 배포 단계 확인이 필요할 때 이 문서를 먼저 읽는다.
 - 현재 `main` push는 테스트 -> 이미지 빌드 -> blue/green 배포 -> release 생성으로 이어진다.
 - 런타임 구조는 `Infrastructure-Architecture.md`, 운영 체크는 `session-handoff.md`와 같이 보는 게 빠르다.
+- 운영 가용성 모니터링은 GitHub Actions 스케줄 워크플로가 아니라 외부 Uptime 도구(Uptime Kuma/Better Stack/UptimeRobot)로 분리한다.
 
 ## 이 문서가 보여주는 것
 
@@ -44,6 +45,12 @@ flowchart LR
 - External ingress: Cloudflare Tunnel
 - Data: PostgreSQL, Redis, MinIO
 - Artifact registry: GHCR
+
+## 운영 모니터링 원칙
+
+- 배포 파이프라인(`.github/workflows/deploy.yml`)은 배포 성공/실패 판정만 담당한다.
+- 운영 가용성 체크는 외부 모니터링 도구(Uptime Kuma, Better Stack, UptimeRobot)로 분리한다.
+- GitHub Actions 스케줄 모니터링 워크플로(`monitor-homeserver.yml`)는 알림 노이즈와 커밋 체크 오염 이슈로 제거했다.
 
 ## 홈서버 배포 파일
 

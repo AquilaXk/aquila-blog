@@ -157,7 +157,6 @@ fun Project.stopTestInfra() {
 
 dependencies {
     // Spring
-    implementation("org.springframework:spring-test") // InternalRestClient에서 사용
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-mail")

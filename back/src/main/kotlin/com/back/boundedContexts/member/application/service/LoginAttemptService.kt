@@ -1,5 +1,7 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.global.app.application.AppFacade
+import com.back.global.exception.application.AppException
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -21,6 +23,8 @@ class LoginAttemptService(
     private val memoryMaxEntries: Int,
     @param:Value("\${custom.auth.login.memoryCleanupIntervalSeconds:60}")
     private val memoryCleanupIntervalSeconds: Long,
+    @param:Value("\${custom.auth.login.requireRedisInProd:true}")
+    private val requireRedisInProd: Boolean,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
     private data class LoginAttemptState(
@@ -37,7 +41,7 @@ class LoginAttemptService(
         clientIp: String,
     ): Boolean {
         val key = key(username, clientIp)
-        val redisTemplate = redisTemplateProvider.getIfAvailable()
+        val redisTemplate = resolveRedisTemplate()
 
         if (redisTemplate != null) {
             return isBlockedInRedis(redisTemplate, key)
@@ -62,7 +66,7 @@ class LoginAttemptService(
         clientIp: String,
     ): Boolean {
         val key = key(username, clientIp)
-        val redisTemplate = redisTemplateProvider.getIfAvailable()
+        val redisTemplate = resolveRedisTemplate()
 
         if (redisTemplate != null) {
             return recordFailureInRedis(redisTemplate, key)
@@ -101,7 +105,7 @@ class LoginAttemptService(
         clientIp: String,
     ) {
         val key = key(username, clientIp)
-        val redisTemplate = redisTemplateProvider.getIfAvailable()
+        val redisTemplate = resolveRedisTemplate()
 
         if (redisTemplate != null) {
             redisTemplate.delete(listOf(redisFailureKey(key), redisBlockedKey(key)))
@@ -166,6 +170,14 @@ class LoginAttemptService(
     private fun redisFailureKey(key: String): String = "auth:login:fail:$key"
 
     private fun redisBlockedKey(key: String): String = "auth:login:blocked:$key"
+
+    private fun resolveRedisTemplate(): StringRedisTemplate? {
+        val redisTemplate = redisTemplateProvider.getIfAvailable()
+        if (redisTemplate == null && AppFacade.isProd && requireRedisInProd) {
+            throw AppException("503-2", "로그인 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
+        }
+        return redisTemplate
+    }
 
     private fun cleanupInMemoryState(nowEpochSeconds: Long) {
         val shouldForceCleanup = states.size > memoryMaxEntries

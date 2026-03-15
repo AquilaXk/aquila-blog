@@ -1,6 +1,7 @@
 package com.back.global.task.adapter.scheduler
 
 import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
@@ -13,9 +14,11 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
 import tools.jackson.databind.ObjectMapper
 import java.time.Instant
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 @Component
 class TaskProcessingScheduledJob(
@@ -29,6 +32,8 @@ class TaskProcessingScheduledJob(
     private val processingTimeoutSeconds: Long,
     @param:Value("\${custom.task.processor.maxConcurrent:8}")
     private val maxConcurrent: Int,
+    @param:Value("\${custom.task.processor.handlerTimeoutSeconds:120}")
+    private val handlerTimeoutSeconds: Long,
 ) {
     private val logger = LoggerFactory.getLogger(TaskProcessingScheduledJob::class.java)
     private val workerConcurrency = maxConcurrent.coerceIn(1, 256)
@@ -109,8 +114,16 @@ class TaskProcessingScheduledJob(
 
             try {
                 val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
-                entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
+                invokeHandlerWithTimeout(context.taskId, context.taskType, entry, payload)
                 markTaskCompleted(taskId)
+            } catch (exception: TimeoutException) {
+                logger.error(
+                    "Task handler timeout: {} (type={}, timeoutSeconds={})",
+                    taskId,
+                    context.taskType,
+                    handlerTimeoutSeconds,
+                )
+                markTaskFailed(taskId, context.taskType, "Task handler timed out after ${handlerTimeoutSeconds}s")
             } catch (exception: Exception) {
                 val rootCause = exception.cause ?: exception
                 logger.error("Task failed: {} (type={})", taskId, context.taskType, rootCause)
@@ -152,6 +165,44 @@ class TaskProcessingScheduledJob(
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (task.status != TaskStatus.PROCESSING) return@execute
             task.status = TaskStatus.PENDING
+        }
+    }
+
+    private fun invokeHandlerWithTimeout(
+        taskId: Int,
+        taskType: String,
+        entry: TaskHandlerEntry,
+        payload: TaskPayload,
+    ) {
+        val timeoutSeconds = handlerTimeoutSeconds.coerceIn(5, 3600)
+        val future =
+            executor.submit<Unit> {
+                entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
+            }
+
+        try {
+            future.get(timeoutSeconds, TimeUnit.SECONDS)
+        } catch (timeout: TimeoutException) {
+            future.cancel(true)
+            throw timeout
+        } catch (executionException: ExecutionException) {
+            val cause = executionException.cause
+            if (cause is Exception) throw cause
+            logger.error(
+                "Task handler failed with non-exception throwable (taskId={}, taskType={})",
+                taskId,
+                taskType,
+                cause,
+            )
+            throw RuntimeException(cause)
+        } catch (interruptedException: InterruptedException) {
+            Thread.currentThread().interrupt()
+            logger.warn(
+                "Task worker interrupted while executing handler (taskId={}, taskType={})",
+                taskId,
+                taskType,
+            )
+            throw interruptedException
         }
     }
 

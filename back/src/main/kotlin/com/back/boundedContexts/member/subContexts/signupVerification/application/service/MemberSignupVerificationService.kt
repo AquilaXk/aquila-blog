@@ -12,6 +12,8 @@ import com.back.global.task.application.TaskFacade
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.Locale
 import java.util.UUID
@@ -175,7 +177,7 @@ class MemberSignupVerificationService(
 
             if (normalizedNextPath != null) {
                 append("&next=")
-                append(normalizedNextPath)
+                append(URLEncoder.encode(normalizedNextPath, StandardCharsets.UTF_8))
             }
         }
     }
@@ -186,6 +188,10 @@ class MemberSignupVerificationService(
         if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
             return null
         }
+
+        // Next.js 데이터 라우트나 제어문자 경로는 리다이렉트 대상으로 허용하지 않는다.
+        if (trimmed.startsWith("/_next/data/")) return null
+        if (trimmed.any { it == '\r' || it == '\n' }) return null
 
         return trimmed
     }

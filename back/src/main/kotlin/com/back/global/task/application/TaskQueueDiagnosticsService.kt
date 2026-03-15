@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 
 data class TaskTypeDiagnostics(
@@ -63,9 +64,31 @@ class TaskQueueDiagnosticsService(
     private val taskHandlerRegistry: TaskHandlerRegistry,
     @Value("\${custom.task.processor.processingTimeoutSeconds:900}")
     private val processingTimeoutSeconds: Long,
+    @Value("\${custom.task.diagnostics.cacheSeconds:3}")
+    private val diagnosticsCacheSeconds: Long,
 ) {
+    private data class DiagnosticsSnapshot(
+        val createdAt: Instant,
+        val value: TaskQueueDiagnostics,
+    )
+
+    private val diagnosticsSnapshotRef = AtomicReference<DiagnosticsSnapshot?>(null)
+
     fun diagnoseQueue(): TaskQueueDiagnostics {
         val now = Instant.now()
+        diagnosticsSnapshotRef.get()?.let { snapshot ->
+            val ageSeconds = now.epochSecond - snapshot.createdAt.epochSecond
+            if (ageSeconds in 0..diagnosticsCacheSeconds.coerceAtLeast(0)) {
+                return snapshot.value
+            }
+        }
+
+        val refreshed = buildDiagnostics(now)
+        diagnosticsSnapshotRef.set(DiagnosticsSnapshot(now, refreshed))
+        return refreshed
+    }
+
+    private fun buildDiagnostics(now: Instant): TaskQueueDiagnostics {
         val readyPendingCount = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, now)
         val pendingCount = taskRepository.countByStatus(TaskStatus.PENDING)
         val stuckBefore = now.minusSeconds(processingTimeoutSeconds)

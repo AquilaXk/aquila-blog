@@ -159,6 +159,8 @@ custom:
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"
+    bootstrap:
+      rotatePasswordOnStartup: ${CUSTOM__ADMIN__BOOTSTRAP__ROTATE_PASSWORD_ON_STARTUP:false}
   auth:
     cookie:
       apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
@@ -168,6 +170,7 @@ custom:
       lockSeconds: ${CUSTOM__AUTH__LOGIN__LOCK_SECONDS:600}
       memoryMaxEntries: ${CUSTOM__AUTH__LOGIN__MEMORY_MAX_ENTRIES:10000}
       memoryCleanupIntervalSeconds: ${CUSTOM__AUTH__LOGIN__MEMORY_CLEANUP_INTERVAL_SECONDS:60}
+      requireRedisInProd: ${CUSTOM__AUTH__LOGIN__REQUIRE_REDIS_IN_PROD:true}
   jwt:
     secretKey: "${CUSTOM__JWT__SECRET_KEY:}"
   accessToken:
@@ -178,7 +181,10 @@ custom:
       batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:50}
       processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
       maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:8}
+      handlerTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__HANDLER_TIMEOUT_SECONDS:120}
       inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
+    diagnostics:
+      cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:3}
   cache:
     ttl-seconds: 3600
     ttl-overrides: { }

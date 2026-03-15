@@ -3,7 +3,9 @@ package com.back.boundedContexts.member.adapter.bootstrap
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -18,7 +20,11 @@ import org.springframework.transaction.annotation.Transactional
 class MemberProdInitData(
     private val memberUseCase: MemberUseCase,
     private val passwordEncoder: PasswordEncoder,
+    @param:Value("\${custom.admin.bootstrap.rotatePasswordOnStartup:false}")
+    private val rotatePasswordOnStartup: Boolean,
 ) {
+    private val logger = LoggerFactory.getLogger(MemberProdInitData::class.java)
+
     @Lazy
     @Autowired
     private lateinit var self: MemberProdInitData
@@ -39,11 +45,18 @@ class MemberProdInitData(
         if (adminPassword.isBlank()) return
         val existingAdmin = memberUseCase.findByUsername(adminUsername)
         if (existingAdmin != null) {
-            val shouldRotatePassword =
-                existingAdmin.password.isNullOrBlank() ||
-                    !passwordEncoder.matches(adminPassword, existingAdmin.password)
-            if (shouldRotatePassword) {
+            val hasPassword = !existingAdmin.password.isNullOrBlank()
+            val passwordMatchesConfigured = hasPassword && passwordEncoder.matches(adminPassword, existingAdmin.password)
+
+            if (!hasPassword) {
                 existingAdmin.password = passwordEncoder.encode(adminPassword)
+            } else if (!passwordMatchesConfigured && rotatePasswordOnStartup) {
+                existingAdmin.password = passwordEncoder.encode(adminPassword)
+                logger.warn("Rotated admin password on startup because custom.admin.bootstrap.rotatePasswordOnStartup=true")
+            } else if (!passwordMatchesConfigured) {
+                logger.warn(
+                    "Admin password differs from configured value but rotation is disabled; set custom.admin.bootstrap.rotatePasswordOnStartup=true to rotate explicitly",
+                )
             }
             // 과거 배포에서 username 기반 apiKey가 남아있을 수 있어 최초 1회 회전한다.
             if (existingAdmin.apiKey.isBlank() || existingAdmin.apiKey == existingAdmin.username) {

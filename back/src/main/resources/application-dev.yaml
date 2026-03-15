@@ -1,9 +1,9 @@
 spring:
   data:
     redis:
-      password: ${SPRING__DATA__REDIS__PASSWORD:lldj123414}
+      password: ${SPRING__DATA__REDIS__PASSWORD:}
   datasource:
-    password: ${SPRING__DATASOURCE__PASSWORD:lldj123414}
+    password: ${SPRING__DATASOURCE__PASSWORD:}
   sql:
     init:
       mode: always

@@ -144,7 +144,9 @@ GitHub Actions 기준 필수값:
 
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
-- 로그인 시도 제한은 Redis가 살아 있으면 Redis TTL 키를 사용해 인스턴스 간 상태를 공유하고, Redis가 없을 때만 인메모리 fallback을 사용한다.
+- dev/test 프로파일의 DB/Redis 비밀번호 기본값은 비워 두고, 테스트 실행 시 Gradle이 주입하는 값(`CI_DB_PASSWORD`, `CI_REDIS_PASSWORD`)을 사용한다.
+- 로그인 시도 제한은 prod에서 Redis 의존을 기본으로 한다. Redis가 준비되지 않으면 로그인 시도 자체를 `503`으로 막아 보호 일관성을 유지한다.
+- dev/test에서는 Redis가 없을 때만 인메모리 fallback을 사용한다.
 - Redis fallback 인메모리 키는 무한정 쌓이지 않도록 상한/주기 정리(`*_MEMORY_MAX_ENTRIES`, `*_MEMORY_CLEANUP_INTERVAL_SECONDS`)를 적용한다.
 - storage 관련 값은 placeholder 치환에 의존하지 말고 완성된 문자열로 넣어야 한다.
   예: `CUSTOM_STORAGE_SECRETKEY=${MINIO_ROOT_PASSWORD}` 금지, 실제 비밀번호 문자열 사용.
@@ -159,6 +161,7 @@ GitHub Actions 기준 필수값:
 - 순수 로직 테스트는 가능하면 `@SpringBootTest`를 피하고 plain unit test로 유지한다. 전체 컨텍스트를 띄우는 테스트는 DB/Redis/MockMvc가 실제로 필요한 경우에만 쓴다.
 - task processor 기본값은 `60초` poll, `50건` batch이며, `CUSTOM__TASK__PROCESSOR__FIXED_DELAY_MS`, `CUSTOM__TASK__PROCESSOR__BATCH_SIZE`로 조정한다.
 - task processor는 동시 실행 상한(`CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT`) 내에서만 작업을 집행한다.
+- task handler 실행은 `CUSTOM__TASK__PROCESSOR__HANDLER_TIMEOUT_SECONDS`를 넘기면 timeout 실패로 기록하고 재시도 정책으로 넘긴다.
 - non-prod에서도 queue worker 동작을 기본으로 유지한다. (`CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD=false`)
 - `PROCESSING` 상태가 `CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS`를 넘기면 stale task로 판단하고 다음 poll에서 자동 복구한다.
 - task retry 정책은 task type별로 다르게 가진다.
@@ -166,10 +169,12 @@ GitHub Actions 기준 필수값:
 - 게시글 작성 idempotency 레코드는 보존기간/배치 기준으로 정리한다.
   (`CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS`, `CUSTOM__POST__IDEMPOTENCY__CLEANUP__*`)
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.
-- 파일 정리 잡은 `TEMP`, `PENDING_DELETE` 파일을 함께 대상으로 보며, purge 후보 수가 `CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD`를 넘기면 실제 삭제를 건너뛰고 진단 로그만 남긴다.
+- 파일 정리 잡은 `TEMP`, `PENDING_DELETE` 파일을 함께 대상으로 보며, purge 후보 수가 `CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD`를 넘기면 전체 중단 대신 배치 크기를 임계치로 제한해 점진적으로 정리한다.
 - 파일 purge 참조 판정은 ownerId 기반 확인을 먼저 수행하고, 필요할 때만 전체 fallback 조회를 수행한다.
 - 좋아요는 토글 경로에서 원자 증감으로 반영하고, reconciliation 잡이 최근 변경분을 재검산해 attr 불일치를 보정한다.
 - 로그인 성공 시 `apiKey`를 회전하고, 인증 쿠키 TTL은 `apiKey`/`accessToken`을 분리 운영한다.
+- prod 관리자 계정 자동 비밀번호 회전은 기본 비활성화다. (`CUSTOM__ADMIN__BOOTSTRAP__ROTATE_PASSWORD_ON_STARTUP=false`)
+- 운영 의도에 따라 비밀번호 회전이 필요할 때만 위 값을 `true`로 명시해 적용한다.
 - prod는 PGroonga 필수 검증(`custom.pgroonga.required=true`) + Flyway 인덱스 마이그레이션을 기본으로 사용한다.
 - `AfterDDL`은 dev/test 보조 수단이며, prod에서는 비활성화(`custom.jpa.after-ddl.enabled=false`)한다.
 - 공개 직접 회원가입 엔드포인트는 기본 비활성화다. 테스트 등에서만 `CUSTOM__MEMBER__SIGNUP__LEGACY_DIRECT_JOIN_ENABLED=true`로 명시적으로 켠다.

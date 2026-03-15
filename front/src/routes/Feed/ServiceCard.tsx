@@ -56,8 +56,8 @@ const StyledWrapper = styled.div`
   margin-bottom: 2.25rem;
   flex-direction: column;
   border-radius: 1rem;
-  background-color: ${({ theme }) =>
-    theme.scheme === "light" ? "white" : theme.colors.gray4};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background-color: ${({ theme }) => theme.colors.gray1};
   > a {
     display: flex;
     padding: 0.75rem;
@@ -67,9 +67,9 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     cursor: pointer;
 
-    :hover {
+    &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      background-color: ${({ theme }) => theme.colors.gray5};
+      background-color: ${({ theme }) => theme.colors.gray3};
     }
     .icon {
       font-size: 1.5rem;

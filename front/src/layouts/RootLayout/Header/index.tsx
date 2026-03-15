@@ -28,8 +28,8 @@ const StyledWrapper = styled.div`
   z-index: ${zIndexes.header};
   position: sticky;
   top: 0;
-  background-color: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  background-color: ${({ theme }) => theme.colors.gray1};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 
   .container {
     display: flex;
@@ -39,8 +39,8 @@ const StyledWrapper = styled.div`
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    max-width: 1120px;
-    height: 3rem;
+    max-width: 1180px;
+    height: 3.5rem;
     margin: 0 auto;
     &[data-full-width="true"] {
       @media (min-width: 768px) {
@@ -50,7 +50,7 @@ const StyledWrapper = styled.div`
     }
     .nav {
       display: flex;
-      gap: 0.75rem;
+      gap: 0.55rem;
       align-items: center;
       flex-shrink: 0;
     }

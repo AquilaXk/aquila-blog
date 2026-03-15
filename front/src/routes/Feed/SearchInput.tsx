@@ -1,5 +1,5 @@
 import styled from "@emotion/styled"
-import React, { InputHTMLAttributes, Ref, useEffect, useState } from "react"
+import React, { InputHTMLAttributes, Ref } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
@@ -7,13 +7,6 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
-  const [shortcutLabel, setShortcutLabel] = useState("⌘K")
-
-  useEffect(() => {
-    if (typeof navigator === "undefined") return
-    setShortcutLabel(/Mac|iPhone|iPad|iPod/i.test(navigator.platform) ? "⌘K" : "Ctrl+K")
-  }, [])
-
   return (
     <StyledWrapper>
       <div className="field">
@@ -30,7 +23,7 @@ const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
           {...props}
         />
         <span className="shortcut" aria-hidden="true">
-          {shortcutLabel}
+          검색
         </span>
       </div>
     </StyledWrapper>
@@ -47,11 +40,11 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: 0.65rem;
     min-width: 0;
-    min-height: 52px;
-    padding: 0 0.95rem;
-    border-radius: 18px;
+    min-height: 50px;
+    padding: 0 0.9rem;
+    border-radius: 14px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray1};
 
     .searchIcon {
       display: inline-flex;
@@ -67,16 +60,16 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      min-width: 38px;
-      height: 28px;
-      padding: 0 0.5rem;
-      border-radius: 9px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
+      min-width: 42px;
+      height: 24px;
+      padding: 0 0.42rem;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray5};
+      background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
+      font-size: 0.68rem;
+      font-weight: 650;
+      letter-spacing: 0;
 
       @media (max-width: 640px) {
         display: none;
@@ -105,6 +98,6 @@ const StyledWrapper = styled.div`
 
   > .field:focus-within {
     border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: 0 0 0 2px ${({ theme }) => theme.colors.blue4};
   }
 `

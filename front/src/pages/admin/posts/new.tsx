@@ -17,6 +17,7 @@ import {
 import { isNavigationCancelledError, replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
+import AppIcon from "src/components/icons/AppIcon"
 import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -89,22 +90,12 @@ type PageDto<T> = {
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
 type EditorMode = "create" | "edit"
-type ToolbarAction = {
-  label: string
-  onClick: () => void
-  primary?: boolean
-  calloutTrigger?: boolean
-  colorTrigger?: boolean
-}
-type ToolbarGroup = {
-  label: string
-  description: string
-  actions: ToolbarAction[]
-}
 type ParsedEditorMeta = {
   body: string
   tags: string[]
   category: string
+  summary: string
+  thumbnail: string
 }
 
 type MetaUsageMap = Record<string, number>
@@ -114,48 +105,48 @@ const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
 
 const TAG_TONES = [
   {
-    bg: "linear-gradient(135deg, rgba(37, 99, 235, 0.26), rgba(59, 130, 246, 0.14))",
-    border: "rgba(96, 165, 250, 0.7)",
-    text: "#dbeafe",
-    shadow: "0 14px 30px rgba(37, 99, 235, 0.18)",
-    divider: "rgba(147, 197, 253, 0.24)",
-    buttonBg: "rgba(15, 23, 42, 0.14)",
+    bg: "rgba(59, 130, 246, 0.12)",
+    border: "rgba(96, 165, 250, 0.36)",
+    text: "#bfdbfe",
+    shadow: "none",
+    divider: "rgba(147, 197, 253, 0.22)",
+    buttonBg: "rgba(15, 23, 42, 0.1)",
     buttonText: "#bfdbfe",
   },
   {
-    bg: "linear-gradient(135deg, rgba(8, 145, 178, 0.25), rgba(45, 212, 191, 0.14))",
-    border: "rgba(94, 234, 212, 0.62)",
-    text: "#ccfbf1",
-    shadow: "0 14px 30px rgba(13, 148, 136, 0.16)",
+    bg: "rgba(20, 184, 166, 0.12)",
+    border: "rgba(45, 212, 191, 0.34)",
+    text: "#99f6e4",
+    shadow: "none",
     divider: "rgba(153, 246, 228, 0.2)",
-    buttonBg: "rgba(15, 23, 42, 0.14)",
+    buttonBg: "rgba(15, 23, 42, 0.1)",
     buttonText: "#99f6e4",
   },
   {
-    bg: "linear-gradient(135deg, rgba(147, 51, 234, 0.24), rgba(192, 132, 252, 0.14))",
-    border: "rgba(216, 180, 254, 0.56)",
-    text: "#f3e8ff",
-    shadow: "0 14px 30px rgba(147, 51, 234, 0.15)",
-    divider: "rgba(233, 213, 255, 0.22)",
-    buttonBg: "rgba(15, 23, 42, 0.15)",
-    buttonText: "#e9d5ff",
+    bg: "rgba(139, 92, 246, 0.12)",
+    border: "rgba(167, 139, 250, 0.34)",
+    text: "#ddd6fe",
+    shadow: "none",
+    divider: "rgba(196, 181, 253, 0.2)",
+    buttonBg: "rgba(15, 23, 42, 0.1)",
+    buttonText: "#ddd6fe",
   },
   {
-    bg: "linear-gradient(135deg, rgba(234, 88, 12, 0.24), rgba(251, 146, 60, 0.15))",
-    border: "rgba(253, 186, 116, 0.58)",
-    text: "#ffedd5",
-    shadow: "0 14px 30px rgba(234, 88, 12, 0.16)",
-    divider: "rgba(254, 215, 170, 0.22)",
-    buttonBg: "rgba(15, 23, 42, 0.15)",
-    buttonText: "#fdba74",
+    bg: "rgba(249, 115, 22, 0.12)",
+    border: "rgba(251, 146, 60, 0.34)",
+    text: "#fed7aa",
+    shadow: "none",
+    divider: "rgba(253, 186, 116, 0.22)",
+    buttonBg: "rgba(15, 23, 42, 0.1)",
+    buttonText: "#fed7aa",
   },
   {
-    bg: "linear-gradient(135deg, rgba(5, 150, 105, 0.24), rgba(74, 222, 128, 0.14))",
-    border: "rgba(110, 231, 183, 0.58)",
-    text: "#d1fae5",
-    shadow: "0 14px 30px rgba(5, 150, 105, 0.16)",
-    divider: "rgba(167, 243, 208, 0.22)",
-    buttonBg: "rgba(15, 23, 42, 0.15)",
+    bg: "rgba(16, 185, 129, 0.12)",
+    border: "rgba(52, 211, 153, 0.34)",
+    text: "#a7f3d0",
+    shadow: "none",
+    divider: "rgba(110, 231, 183, 0.2)",
+    buttonBg: "rgba(15, 23, 42, 0.1)",
     buttonText: "#a7f3d0",
   },
 ] as const
@@ -240,10 +231,42 @@ const normalizeMetaItems = (raw: string): string[] => {
   )
 }
 
+const normalizeMetaScalar = (raw: string) => raw.trim().replace(/^['"]|['"]$/g, "")
+
+const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
+const markdownImageReplaceRegex = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+const markdownLinkRegex = /\[(.*?)\]\((.*?)\)/g
+const fencedCodeRegex = /```[\s\S]*?```/g
+const inlineCodeRegex = /`([^`]+)`/g
+const markdownPunctuationRegex = /[#>*_~-]/g
+const whitespaceRegex = /\s+/g
+const PREVIEW_SUMMARY_MAX_LENGTH = 150
+
+const extractFirstMarkdownImage = (content: string): string => {
+  const match = markdownImagePattern.exec(content)
+  return match?.[1]?.trim() || ""
+}
+
+const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
+  const normalized = content
+    .replace(fencedCodeRegex, " ")
+    .replace(markdownImageReplaceRegex, " ")
+    .replace(inlineCodeRegex, "$1")
+    .replace(markdownLinkRegex, "$1")
+    .replace(markdownPunctuationRegex, " ")
+    .replace(whitespaceRegex, " ")
+    .trim()
+
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength).trim()}...`
+}
+
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
   let trimmed = content.trimStart()
   const tags: string[] = []
   let category = ""
+  let summary = ""
+  let thumbnail = ""
 
   const pushTags = (items: string[]) => {
     dedupeStrings(items).forEach((item) => {
@@ -269,13 +292,17 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
 
         if (key === "tags" || key === "tag") pushTags(normalizeMetaItems(value))
         if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
+        if (key === "summary") summary = normalizeMetaScalar(value)
+        if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
+          thumbnail = normalizeMetaScalar(value)
+        }
       })
       trimmed = trimmed.slice(closingIndex + 4).trimStart()
     }
   }
 
   const lines = trimmed.split("\n")
-  const metadataLineRegex = /^\s*(tags?|categories?)\s*:\s*(.+)\s*$/i
+  const metadataLineRegex = /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
   let consumed = 0
 
   for (const line of lines) {
@@ -291,6 +318,10 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
     const value = match[2]
     if (key === "tag" || key === "tags") pushTags(normalizeMetaItems(value))
     if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
+    if (key === "summary") summary = normalizeMetaScalar(value)
+    if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
+      thumbnail = normalizeMetaScalar(value)
+    }
     consumed += 1
   }
 
@@ -302,17 +333,29 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
     body: trimmed,
     tags,
     category,
+    summary,
+    thumbnail,
   }
 }
 
 const serializeMetaItems = (items: string[]) => items.map((item) => JSON.stringify(item)).join(", ")
 
-const composeEditorContent = (body: string, tags: string[]) => {
+const composeEditorContent = (
+  body: string,
+  tags: string[],
+  options?: { category?: string; summary?: string; thumbnail?: string }
+) => {
   const normalizedBody = body.trim()
   const normalizedTags = dedupeStrings(tags)
+  const normalizedCategory = options?.category ? normalizeCategoryValue(options.category) : ""
+  const normalizedSummary = options?.summary?.trim() || ""
+  const normalizedThumbnail = options?.thumbnail?.trim() || ""
   const metadataLines: string[] = []
 
   if (normalizedTags.length > 0) metadataLines.push(`tags: [${serializeMetaItems(normalizedTags)}]`)
+  if (normalizedCategory) metadataLines.push(`category: [${serializeMetaItems([normalizedCategory])}]`)
+  if (normalizedThumbnail) metadataLines.push(`thumbnail: ${JSON.stringify(normalizedThumbnail)}`)
+  if (normalizedSummary) metadataLines.push(`summary: ${JSON.stringify(normalizedSummary)}`)
 
   if (metadataLines.length === 0) return normalizedBody
   if (!normalizedBody) return `---\n${metadataLines.join("\n")}\n---`
@@ -525,6 +568,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [commentContent, setCommentContent] = useState("")
   const [postTitle, setPostTitle] = useState("")
   const [postContent, setPostContent] = useState("")
+  const [postSummary, setPostSummary] = useState("")
+  const [postThumbnailUrl, setPostThumbnailUrl] = useState("")
   const [postTags, setPostTags] = useState<string[]>([])
   const [postCategory, setPostCategory] = useState("")
   const [tagDraft, setTagDraft] = useState("")
@@ -569,12 +614,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     text: "기존 글의 태그를 선택하거나 새 값을 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다.",
   })
   const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
-  const [activeToolbarMenu, setActiveToolbarMenu] = useState<string | null>(null)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
   const deferredPostContent = useDeferredValue(postContent)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
+  const [isPreviewThumbnailError, setIsPreviewThumbnailError] = useState(false)
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -639,6 +684,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const parsed = parseEditorMeta(content)
     const parsedCategory = splitCategoryDisplay(parsed.category)
     setPostContent(parsed.body)
+    setPostSummary(parsed.summary || makePreviewSummary(parsed.body))
+    setPostThumbnailUrl(parsed.thumbnail || extractFirstMarkdownImage(parsed.body))
     setPostTags(parsed.tags)
     setPostCategory(parsed.category)
     setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
@@ -647,6 +694,22 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       dedupeStrings([...prev, ...(parsed.category ? [parsed.category] : [])]).sort(compareCategoryValues)
     )
   }, [])
+
+  const resolvedPreviewSummary = useMemo(() => {
+    const manual = postSummary.trim()
+    if (manual) return manual
+    return makePreviewSummary(postContent)
+  }, [postContent, postSummary])
+
+  const resolvedPreviewThumbnail = useMemo(() => {
+    const manual = postThumbnailUrl.trim()
+    if (manual) return manual
+    return extractFirstMarkdownImage(postContent)
+  }, [postContent, postThumbnailUrl])
+
+  useEffect(() => {
+    setIsPreviewThumbnailError(false)
+  }, [resolvedPreviewThumbnail])
 
   const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
@@ -706,14 +769,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }, [customCategoryCatalog, customTagCatalog])
 
+  const addTagsToPost = (values: string[]) => {
+    const normalizedTags = dedupeStrings(values.map((value) => value.trim()).filter(Boolean))
+    if (normalizedTags.length === 0) return []
+
+    setPostTags((prev) => dedupeStrings([...prev, ...normalizedTags]))
+    setKnownTags((prev) => dedupeStrings([...prev, ...normalizedTags]).sort((a, b) => a.localeCompare(b)))
+    setCustomTagCatalog((prev) => dedupeStrings([...prev, ...normalizedTags]).sort((a, b) => a.localeCompare(b)))
+    setMetaNotice({
+      tone: "success",
+      text:
+        normalizedTags.length === 1
+          ? `태그 "${normalizedTags[0]}"를 추가했습니다. 현재 글에서 바로 사용할 수 있습니다.`
+          : `태그 ${normalizedTags.length}개를 추가했습니다. 현재 글에서 바로 사용할 수 있습니다.`,
+    })
+
+    return normalizedTags
+  }
+
   const addTagToPost = (value: string) => {
-    const normalized = value.trim()
-    if (!normalized) return
-    setPostTags((prev) => dedupeStrings([...prev, normalized]))
-    setKnownTags((prev) => dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b)))
-    setCustomTagCatalog((prev) => dedupeStrings([...prev, normalized]).sort((a, b) => a.localeCompare(b)))
-    setMetaNotice({ tone: "success", text: `태그 "${normalized}"를 추가했습니다. 현재 글에서 바로 사용할 수 있습니다.` })
-    setTagDraft("")
+    const added = addTagsToPost([value])
+    if (added.length > 0) setTagDraft("")
   }
 
   const removeTagFromPost = (value: string) => {
@@ -801,6 +877,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (!keepContent) {
       setPostTitle("")
       setPostContent("")
+      setPostSummary("")
+      setPostThumbnailUrl("")
       setPostTags([])
       setPostCategory("")
       setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
@@ -863,7 +941,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("writePost")
       setPublishNotice({ tone: "loading", text: "글 작성 중입니다..." })
-      const contentWithMetadata = composeEditorContent(postContent, postTags)
+      const contentWithMetadata = composeEditorContent(postContent, postTags, {
+        category: postCategory,
+        summary: postSummary,
+        thumbnail: postThumbnailUrl,
+      })
       const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
       if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
         lastWriteFingerprintRef.current = fingerprint
@@ -931,7 +1013,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         method: "PUT",
         body: JSON.stringify({
           title: postTitle,
-          content: composeEditorContent(postContent, postTags),
+          content: composeEditorContent(postContent, postTags, {
+            category: postCategory,
+            summary: postSummary,
+            thumbnail: postThumbnailUrl,
+          }),
           ...toFlags(postVisibility),
           version: postVersion ?? undefined,
         }),
@@ -994,7 +1080,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         method: "PUT",
         body: JSON.stringify({
           title: postTitle,
-          content: composeEditorContent(postContent, postTags),
+          content: composeEditorContent(postContent, postTags, {
+            category: postCategory,
+            summary: postSummary,
+            thumbnail: postThumbnailUrl,
+          }),
           published: true,
           listed: true,
           version: postVersion ?? undefined,
@@ -1474,13 +1564,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   ) => {
     insertBlockSnippet(`> [!${kind}]\n> ${body}`)
     setIsCalloutMenuOpen(false)
-    setActiveToolbarMenu(null)
   }
 
   const applyInlineTextColor = (color: string) => {
     wrapSelection(`{{color:${color}|`, "}}", "색상 텍스트")
     setIsColorMenuOpen(false)
-    setActiveToolbarMenu(null)
   }
 
   const handlePasteFromNotion = (e: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -1566,63 +1654,19 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const profileImageHint = profileImageFileName
     ? `선택 파일: ${profileImageFileName}`
     : "아직 선택된 파일이 없습니다."
-  const toolbarGroups: ToolbarGroup[] = [
-    {
-      label: "구조",
-      description: "문서 구조와 기본 블록",
-      actions: [
-        { label: "제목1", onClick: () => applyHeadingStyle(1) },
-        { label: "제목2", onClick: () => applyHeadingStyle(2) },
-        { label: "제목3", onClick: () => applyHeadingStyle(3) },
-        { label: "텍스트", onClick: () => applyHeadingStyle(0) },
-        { label: "토글", onClick: insertToggle },
-        { label: "구분선", onClick: insertDivider },
-        { label: "체크리스트", onClick: applyChecklist },
-      ],
-    },
-    {
-      label: "강조",
-      description: "문장 강조와 링크",
-      actions: [
-        { label: "굵게", onClick: () => wrapSelection("**", "**", "굵은 텍스트") },
-        { label: "기울임", onClick: () => wrapSelection("*", "*", "기울임 텍스트") },
-        { label: "취소선", onClick: () => wrapSelection("~~", "~~", "취소선 텍스트") },
-        { label: "인라인코드", onClick: () => wrapSelection("`", "`", "코드") },
-        { label: "링크", onClick: insertLink },
-        { label: "글자색", onClick: () => setIsColorMenuOpen((prev) => !prev), colorTrigger: true },
-      ],
-    },
-    {
-      label: "삽입",
-      description: "이미지, 콜아웃, 코드, 다이어그램",
-      actions: [
-        { label: "이미지 업로드", onClick: () => postImageFileInputRef.current?.click(), primary: true },
-        { label: "콜아웃", onClick: () => setIsCalloutMenuOpen((prev) => !prev), calloutTrigger: true },
-        {
-          label: "코드블럭",
-          onClick: () =>
-            insertBlockSnippet(
-              "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```"
-            ),
-        },
-        {
-          label: "머메이드",
-          onClick: () =>
-            insertBlockSnippet(
-              "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```"
-            ),
-        },
-        {
-          label: "테이블",
-          onClick: () =>
-            insertBlockSnippet(
-              "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |"
-            ),
-        },
-      ],
-    },
-  ]
-  const activeToolbarGroup = toolbarGroups.find((group) => group.label === activeToolbarMenu) || null
+  const closeToolbarMenus = () => {
+    setIsCalloutMenuOpen(false)
+    setIsColorMenuOpen(false)
+  }
+
+  const runToolbarAction = (action: () => void) => {
+    action()
+    closeToolbarMenus()
+  }
+
+  const codeBlockTemplate = "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```"
+  const mermaidTemplate = "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```"
+  const tableTemplate = "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |"
   const adminTools = [
     { href: "/admin", label: "허브" },
     { href: "/admin/profile", label: "프로필" },
@@ -2124,12 +2168,25 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <InlineMetaInput
                       placeholder={postTags.length > 0 ? "태그를 입력하고 Enter" : "태그를 입력하세요"}
                       value={tagDraft}
-                      onChange={(e) => setTagDraft(e.target.value)}
+                      onChange={(e) => {
+                        const nextValue = e.target.value
+                        const commaSeparated = /[,，]/
+                        if (!commaSeparated.test(nextValue)) {
+                          setTagDraft(nextValue)
+                          return
+                        }
+
+                        const fragments = nextValue.split(commaSeparated)
+                        const tailDraft = fragments.pop() ?? ""
+                        const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
+                        if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
+                        setTagDraft(tailDraft)
+                      }}
                       onKeyDown={(e) => {
                         if (isComposingKeyboardEvent(e)) return
                         if (e.key === "Enter" || e.key === ",") {
                           e.preventDefault()
-                          addTagToPost(tagDraft)
+                          addTagToPost(e.currentTarget.value)
                         }
                       }}
                     />
@@ -2159,6 +2216,60 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </VisibilitySelect>
                     <FieldHelp>전체 공개만 메인 페이지 목록에 노출됩니다.</FieldHelp>
                   </VisibilityWrap>
+                  <PostPreviewSetup>
+                    <PostPreviewHeader>
+                      <strong>포스트 미리보기</strong>
+                      <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
+                    </PostPreviewHeader>
+                    <PreviewThumbFrame>
+                      {resolvedPreviewThumbnail && !isPreviewThumbnailError ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={resolvedPreviewThumbnail}
+                          alt="포스트 미리보기 썸네일"
+                          onError={() => setIsPreviewThumbnailError(true)}
+                        />
+                      ) : (
+                        <div className="placeholder">
+                          <em>썸네일 없음</em>
+                          <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
+                        </div>
+                      )}
+                    </PreviewThumbFrame>
+                    <FieldLabel htmlFor="post-thumbnail-url">썸네일 URL</FieldLabel>
+                    <Input
+                      id="post-thumbnail-url"
+                      placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
+                      value={postThumbnailUrl}
+                      onChange={(e) => setPostThumbnailUrl(e.target.value)}
+                    />
+                    <MetaActionRow>
+                      <Button
+                        type="button"
+                        onClick={() => setPostThumbnailUrl(extractFirstMarkdownImage(postContent))}
+                      >
+                        본문 첫 이미지 가져오기
+                      </Button>
+                      <Button type="button" onClick={() => setPostThumbnailUrl("")}>
+                        자동 모드로 되돌리기
+                      </Button>
+                    </MetaActionRow>
+                    <FieldLabel htmlFor="post-preview-summary">미리보기 요약</FieldLabel>
+                    <PreviewSummaryInput
+                      id="post-preview-summary"
+                      placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
+                      value={postSummary}
+                      maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+                      onChange={(e) => setPostSummary(e.target.value)}
+                    />
+                    <SummaryCounter>
+                      {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
+                    </SummaryCounter>
+                    <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
+                    <PreviewSummaryText>
+                      {resolvedPreviewSummary || "본문을 입력하면 자동 요약이 생성됩니다."}
+                    </PreviewSummaryText>
+                  </PostPreviewSetup>
                 </WriterMetaActions>
               </WriterMetaStrip>
             </div>
@@ -2226,101 +2337,148 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             style={{ display: "none" }}
           />
           <EditorToolbar>
-            <ToolbarMenuBar>
-              {toolbarGroups.map((group) => (
-                <ToolbarMenuTrigger
-                  key={group.label}
-                  type="button"
-                  data-active={activeToolbarMenu === group.label}
-                  onClick={() => {
-                    setActiveToolbarMenu((prev) => (prev === group.label ? null : group.label))
-                    setIsCalloutMenuOpen(false)
-                    setIsColorMenuOpen(false)
-                  }}
-                >
-                  {group.label} ▾
-                </ToolbarMenuTrigger>
-              ))}
-            </ToolbarMenuBar>
-            {activeToolbarGroup && (
-              <ToolbarMenuPanel>
-                <ToolbarGroupHeader>
-                  <strong>{activeToolbarGroup.label}</strong>
-                  <span>{activeToolbarGroup.description}</span>
-                </ToolbarGroupHeader>
-                <ToolbarActionGrid>
-                  {activeToolbarGroup.actions.map((action) =>
-                    action.calloutTrigger ? (
-                      <CalloutDropdown key={action.label}>
-                        <ToolbarActionButton type="button" onClick={() => setIsCalloutMenuOpen((prev) => !prev)}>
-                          {action.label} ▾
-                        </ToolbarActionButton>
-                        {isCalloutMenuOpen && (
-                          <CalloutMenu>
-                            <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
-                              TIP
-                            </button>
-                            <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
-                              INFO
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
-                            >
-                              WARNING
-                            </button>
-                            <button type="button" onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}>
-                              OUTLINE
-                            </button>
-                            <button type="button" onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}>
-                              EXAMPLE
-                            </button>
-                            <button type="button" onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}>
-                              SUMMARY
-                            </button>
-                          </CalloutMenu>
-                        )}
-                      </CalloutDropdown>
-                    ) : action.colorTrigger ? (
-                      <ColorDropdown key={action.label}>
-                        <ToolbarActionButton type="button" onClick={() => setIsColorMenuOpen((prev) => !prev)}>
-                          {action.label} ▾
-                        </ToolbarActionButton>
-                        {isColorMenuOpen && (
-                          <ColorMenu>
-                            {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
-                              <button
-                                type="button"
-                                key={option.value}
-                                onClick={() => applyInlineTextColor(option.value)}
-                              >
-                                <ColorSwatch style={{ background: option.value }} aria-hidden="true" />
-                                <span>{option.label}</span>
-                              </button>
-                            ))}
-                          </ColorMenu>
-                        )}
-                      </ColorDropdown>
-                    ) : (
-                      <ToolbarActionButton
-                        key={action.label}
-                        type="button"
-                        disabled={action.primary ? disabled("uploadPostImage") : false}
-                        data-variant={action.primary ? "primary" : "default"}
-                        onClick={() => {
-                          action.onClick()
-                          setActiveToolbarMenu(null)
-                          setIsCalloutMenuOpen(false)
-                          setIsColorMenuOpen(false)
-                        }}
-                      >
-                        {action.label}
-                      </ToolbarActionButton>
-                    )
+            <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
+              <ToolbarCluster>
+                <ToolbarIconButton type="button" title="제목1" aria-label="제목1" onClick={() => runToolbarAction(() => applyHeadingStyle(1))}>
+                  <span className="textIcon">H1</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="제목2" aria-label="제목2" onClick={() => runToolbarAction(() => applyHeadingStyle(2))}>
+                  <span className="textIcon">H2</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="제목3" aria-label="제목3" onClick={() => runToolbarAction(() => applyHeadingStyle(3))}>
+                  <span className="textIcon">H3</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="일반 텍스트" aria-label="일반 텍스트" onClick={() => runToolbarAction(() => applyHeadingStyle(0))}>
+                  <span className="textIcon">T</span>
+                </ToolbarIconButton>
+              </ToolbarCluster>
+
+              <ToolbarDivider aria-hidden="true" />
+
+              <ToolbarCluster>
+                <ToolbarIconButton type="button" title="굵게" aria-label="굵게" onClick={() => runToolbarAction(() => wrapSelection("**", "**", "굵은 텍스트"))}>
+                  <span className="textIcon strong">B</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="기울임" aria-label="기울임" onClick={() => runToolbarAction(() => wrapSelection("*", "*", "기울임 텍스트"))}>
+                  <span className="textIcon italic">I</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="취소선" aria-label="취소선" onClick={() => runToolbarAction(() => wrapSelection("~~", "~~", "취소선 텍스트"))}>
+                  <span className="textIcon strike">S</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="인라인 코드" aria-label="인라인 코드" onClick={() => runToolbarAction(() => wrapSelection("`", "`", "코드"))}>
+                  <span className="textIcon code">&lt;/&gt;</span>
+                </ToolbarIconButton>
+              </ToolbarCluster>
+
+              <ToolbarDivider aria-hidden="true" />
+
+              <ToolbarCluster>
+                <ToolbarIconButton type="button" title="체크리스트" aria-label="체크리스트" onClick={() => runToolbarAction(applyChecklist)}>
+                  <AppIcon name="check-circle" />
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="구분선" aria-label="구분선" onClick={() => runToolbarAction(insertDivider)}>
+                  <span className="textIcon">—</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="토글 블록" aria-label="토글 블록" onClick={() => runToolbarAction(insertToggle)}>
+                  <AppIcon name="chevron-down" />
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="링크" aria-label="링크" onClick={() => runToolbarAction(insertLink)}>
+                  <AppIcon name="link" />
+                </ToolbarIconButton>
+                <ColorDropdown>
+                  <ToolbarIconButton
+                    type="button"
+                    title="글자색"
+                    aria-label="글자색"
+                    data-active={isColorMenuOpen}
+                    onClick={() => {
+                      setIsColorMenuOpen((prev) => !prev)
+                      setIsCalloutMenuOpen(false)
+                    }}
+                  >
+                    <span className="textIcon">A</span>
+                  </ToolbarIconButton>
+                  {isColorMenuOpen && (
+                    <ColorMenu>
+                      {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
+                        <button
+                          type="button"
+                          key={option.value}
+                          onClick={() => applyInlineTextColor(option.value)}
+                        >
+                          <ColorSwatch style={{ background: option.value }} aria-hidden="true" />
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </ColorMenu>
                   )}
-                </ToolbarActionGrid>
-              </ToolbarMenuPanel>
-            )}
+                </ColorDropdown>
+                <CalloutDropdown>
+                  <ToolbarIconButton
+                    type="button"
+                    title="콜아웃"
+                    aria-label="콜아웃"
+                    data-active={isCalloutMenuOpen}
+                    onClick={() => {
+                      setIsCalloutMenuOpen((prev) => !prev)
+                      setIsColorMenuOpen(false)
+                    }}
+                  >
+                    <span className="textIcon">❝</span>
+                  </ToolbarIconButton>
+                  {isCalloutMenuOpen && (
+                    <CalloutMenu>
+                      <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
+                        TIP
+                      </button>
+                      <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
+                        INFO
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
+                      >
+                        WARNING
+                      </button>
+                      <button type="button" onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}>
+                        OUTLINE
+                      </button>
+                      <button type="button" onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}>
+                        EXAMPLE
+                      </button>
+                      <button type="button" onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}>
+                        SUMMARY
+                      </button>
+                    </CalloutMenu>
+                  )}
+                </CalloutDropdown>
+              </ToolbarCluster>
+
+              <ToolbarDivider aria-hidden="true" />
+
+              <ToolbarCluster>
+                <ToolbarIconButton
+                  type="button"
+                  title="이미지 업로드"
+                  aria-label="이미지 업로드"
+                  data-variant="primary"
+                  disabled={disabled("uploadPostImage")}
+                  onClick={() => runToolbarAction(() => postImageFileInputRef.current?.click())}
+                >
+                  <AppIcon name="camera" />
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="코드 블록" aria-label="코드 블록" onClick={() => runToolbarAction(() => insertBlockSnippet(codeBlockTemplate))}>
+                  <span className="textIcon code">{"{ }"}</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="Mermaid" aria-label="Mermaid 다이어그램" onClick={() => runToolbarAction(() => insertBlockSnippet(mermaidTemplate))}>
+                  <span className="textIcon">◇</span>
+                </ToolbarIconButton>
+                <ToolbarIconButton type="button" title="테이블" aria-label="테이블" onClick={() => runToolbarAction(() => insertBlockSnippet(tableTemplate))}>
+                  <span className="textIcon">▦</span>
+                </ToolbarIconButton>
+              </ToolbarCluster>
+            </ToolbarQuickBar>
+            <ToolbarHint>아이콘을 눌러 서식을 바로 적용할 수 있습니다.</ToolbarHint>
           </EditorToolbar>
           <EditorGrid>
             <EditorPane>
@@ -2548,19 +2706,17 @@ export default AdminPage
 const Main = styled.main`
   max-width: 1360px;
   margin: 0 auto;
-  padding: 2rem 1rem 3.2rem;
+  padding: 1.6rem 1rem 2.8rem;
 `
 
 const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
   gap: 1rem;
-  border-radius: 24px;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 34%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
-  padding: 1.2rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1.05rem;
   margin-bottom: 1rem;
 
   @media (max-width: 980px) {
@@ -2574,8 +2730,8 @@ const HeroIntro = styled.div`
 
   h1 {
     margin: 0;
-    font-size: clamp(1.9rem, 3vw, 2.7rem);
-    letter-spacing: -0.05em;
+    font-size: clamp(1.74rem, 2.7vw, 2.3rem);
+    letter-spacing: -0.03em;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -2590,10 +2746,10 @@ const HeroIntro = styled.div`
 const HeroEyebrow = styled.span`
   width: fit-content;
   border-radius: 999px;
-  padding: 0.38rem 0.7rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  padding: 0.34rem 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -2823,8 +2979,8 @@ const ProfileFallback = styled.div`
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, ${({ theme }) => theme.colors.blue8}, ${({ theme }) => theme.colors.green8});
-  color: #fff;
+  background: ${({ theme }) => theme.colors.gray4};
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 1.6rem;
   font-weight: 800;
 `
@@ -3183,6 +3339,116 @@ const WriterMetaActions = styled.div`
   }
 `
 
+const PostPreviewSetup = styled.section`
+  display: grid;
+  gap: 0.44rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.68rem;
+`
+
+const PostPreviewHeader = styled.div`
+  display: grid;
+  gap: 0.12rem;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+`
+
+const PreviewThumbFrame = styled.div`
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .placeholder {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-content: center;
+    text-align: center;
+    gap: 0.24rem;
+    padding: 0.7rem;
+
+    em {
+      font-style: normal;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-weight: 700;
+      font-size: 0.84rem;
+    }
+
+    span {
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.74rem;
+      line-height: 1.4;
+    }
+  }
+`
+
+const PreviewSummaryInput = styled.textarea`
+  width: 100%;
+  min-height: 5.8rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 10px;
+  padding: 0.56rem 0.62rem;
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.84rem;
+  line-height: 1.55;
+  resize: vertical;
+
+  &:focus {
+    outline: 2px solid ${({ theme }) => theme.colors.blue7};
+    outline-offset: 1px;
+  }
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray10};
+  }
+`
+
+const SummaryCounter = styled.span`
+  justify-self: end;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.74rem;
+  line-height: 1;
+`
+
+const PreviewFixedTitle = styled.h4`
+  margin: 0.2rem 0 0;
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.95rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+`
+
+const PreviewSummaryText = styled.p`
+  margin: 0.05rem 0 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.82rem;
+  line-height: 1.55;
+`
+
 const MetaActionRow = styled.div`
   display: flex;
   gap: 0.55rem;
@@ -3295,11 +3561,9 @@ const MetadataSection = styled.section`
   gap: 0.85rem;
   margin: 0 0 0.85rem;
   padding: 0.9rem;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 28%),
-    ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray1};
 `
 
 const MetadataHeader = styled.div`
@@ -3639,7 +3903,7 @@ const SelectedTagChip = styled.span`
   border: 1px solid var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
   background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
   overflow: hidden;
-  box-shadow: var(--tag-chip-shadow, 0 12px 24px rgba(37, 99, 235, 0.14));
+  box-shadow: var(--tag-chip-shadow, none);
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -3647,7 +3911,7 @@ const SelectedTagChip = styled.span`
     background 0.18s ease;
 
   &:hover {
-    transform: translateY(-1px);
+    transform: none;
   }
 
   .label {
@@ -3689,9 +3953,9 @@ const SelectedTagChip = styled.span`
       color 0.18s ease;
 
     &:hover {
-      transform: translateY(-1px);
-      background: rgba(15, 23, 42, 0.28);
-      color: #ffffff;
+      transform: none;
+      background: rgba(15, 23, 42, 0.16);
+      color: currentColor;
     }
   }
 `
@@ -3715,11 +3979,11 @@ const TagCatalogChipGroup = styled.div`
   &[data-active="true"] {
     border-color: var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
     background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
-    box-shadow: var(--tag-chip-shadow, 0 12px 24px rgba(37, 99, 235, 0.14));
+    box-shadow: var(--tag-chip-shadow, none);
   }
 
   &:hover {
-    transform: translateY(-1px);
+    transform: none;
   }
 `
 
@@ -3762,7 +4026,7 @@ const TagCatalogToggle = styled.button`
 
   &:hover {
     background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.blue11};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &[data-active="true"] {
@@ -3832,86 +4096,116 @@ const EditorToolbar = styled.div`
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
-const ToolbarMenuBar = styled.div`
+const ToolbarQuickBar = styled.div`
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.42rem;
+  gap: 0.38rem;
+  row-gap: 0.48rem;
 `
 
-const ToolbarMenuTrigger = styled.button`
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  min-height: 36px;
-  padding: 0 0.78rem;
-  font-size: 0.82rem;
-  font-weight: 700;
+const ToolbarCluster = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+  padding: 0.2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const ToolbarDivider = styled.span`
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.72rem;
+  background: ${({ theme }) => theme.colors.gray7};
+  margin: 0 0.2rem;
+`
+
+const ToolbarIconButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.04rem;
+  height: 2.04rem;
+  padding: 0 0.44rem;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 650;
   transition:
     border-color 0.18s ease,
     background 0.18s ease,
-    color 0.18s ease;
+    color 0.18s ease,
+    transform 0.12s ease;
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .textIcon {
+    font-size: 0.76rem;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+
+    &.strong {
+      font-weight: 800;
+      font-size: 0.92rem;
+    }
+
+    &.italic {
+      font-style: italic;
+      font-size: 0.9rem;
+    }
+
+    &.strike {
+      text-decoration: line-through;
+      font-size: 0.88rem;
+    }
+
+    &.code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+  }
+
+  &:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray4};
+    color: ${({ theme }) => theme.colors.gray12};
+    transform: translateY(-1px);
+  }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue4};
     color: ${({ theme }) => theme.colors.blue11};
   }
-`
-
-const ToolbarMenuPanel = styled.div`
-  display: grid;
-  gap: 0.45rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.62rem 0.68rem;
-`
-
-const ToolbarGroup = styled.div`
-  display: grid;
-  gap: 0.5rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.72rem;
-`
-
-const ToolbarGroupHeader = styled.div`
-  display: grid;
-  gap: 0.14rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.82rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.74rem;
-    line-height: 1.35;
-  }
-`
-
-const ToolbarActionGrid = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.34rem;
-`
-
-const ToolbarActionButton = styled(Button)`
-  border-radius: 9px;
-  background: ${({ theme }) => theme.colors.gray2};
-  min-height: 33px;
-  padding: 0.44rem 0.72rem;
-  font-size: 0.79rem;
 
   &[data-variant="primary"] {
     border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    background: ${({ theme }) => theme.colors.blue4};
     color: ${({ theme }) => theme.colors.blue11};
   }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+  }
+`
+
+const ToolbarHint = styled.span`
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.76rem;
+  line-height: 1.45;
 `
 
 const CalloutDropdown = styled.div`

@@ -7,7 +7,10 @@ object PostMetaExtractor {
     )
 
     private val metadataLineRegex =
-        Regex("^\\s*(tag|tags|category|categories)\\s*:\\s*(.+)\\s*$", RegexOption.IGNORE_CASE)
+        Regex(
+            "^\\s*(tag|tags|category|categories|summary|thumbnail|thumb|cover|coverimage|cover_image)\\s*:\\s*(.+)\\s*$",
+            RegexOption.IGNORE_CASE,
+        )
 
     fun extract(content: String): PostMeta {
         var remaining = content.trimStart()

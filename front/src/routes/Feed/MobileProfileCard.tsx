@@ -76,11 +76,9 @@ const StyledWrapper = styled.div`
   > .mid {
     padding: 0.9rem;
     margin-bottom: 1rem;
-    border-radius: 1.3rem;
+    border-radius: 1rem;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background:
-      radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 38%),
-      ${({ theme }) => (theme.scheme === "light" ? "white" : theme.colors.gray4)};
+    background: ${({ theme }) => theme.colors.gray1};
     > .wrapper {
       display: flex;
       gap: 0.85rem;

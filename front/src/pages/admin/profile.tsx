@@ -647,25 +647,23 @@ export default AdminProfilePage
 const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
 `
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 1.15rem;
-  padding: 1.35rem 1.25rem 1.25rem;
-  border-radius: 24px;
+  gap: 0.95rem;
+  padding: 1.1rem 1rem 1rem;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 36%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
+  background: ${({ theme }) => theme.colors.gray1};
 
   h1 {
     margin: 0;
-    font-size: clamp(1.85rem, 4vw, 2.4rem);
-    letter-spacing: -0.05em;
+    font-size: clamp(1.72rem, 3.2vw, 2.15rem);
+    letter-spacing: -0.03em;
     line-height: 1.08;
   }
 
@@ -685,10 +683,10 @@ const HeaderCopy = styled.div`
 const Eyebrow = styled.span`
   width: fit-content;
   border-radius: 999px;
-  padding: 0.42rem 0.82rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  padding: 0.35rem 0.66rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -702,11 +700,11 @@ const HeaderActions = styled.div`
 `
 
 const BaseButton = styled.button`
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.72rem 1rem;
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
@@ -715,8 +713,8 @@ const BaseButton = styled.button`
 const Button = styled(BaseButton)``
 
 const PrimaryButton = styled(BaseButton)`
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue9};
+  border-color: ${({ theme }) => theme.colors.gray8};
+  background: ${({ theme }) => theme.colors.gray12};
   color: white;
 `
 
@@ -724,10 +722,10 @@ const LinkButton = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
   font-size: 0.92rem;
@@ -746,7 +744,7 @@ const ProfileGrid = styled.section`
 `
 
 const PanelCard = styled.section`
-  border-radius: 24px;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   padding: 1.15rem;
@@ -913,7 +911,7 @@ const TextArea = styled.textarea`
 const LinkSectionCard = styled.section`
   display: grid;
   gap: 0.7rem;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   padding: 0.85rem;
@@ -958,7 +956,7 @@ const LinkItemRow = styled.div`
   gap: 0.65rem;
   align-items: end;
   padding: 0.85rem;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 

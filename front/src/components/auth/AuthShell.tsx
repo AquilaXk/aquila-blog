@@ -66,42 +66,39 @@ export default AuthShell
 const Main = styled.main`
   position: relative;
   min-height: calc(100vh - 4rem);
-  overflow: hidden;
-  padding: 1.25rem;
+  padding: 2rem 1rem;
+  display: grid;
+  place-items: center;
 `
 
 const Backdrop = styled.div`
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(circle at 10% 15%, rgba(14, 165, 233, 0.15), transparent 30%),
-    radial-gradient(circle at 78% 10%, rgba(59, 130, 246, 0.14), transparent 26%),
-    linear-gradient(135deg, rgba(10, 14, 24, 0.98), rgba(15, 23, 42, 0.88));
+  background: ${({ theme }) => theme.colors.gray2};
 `
 
 const Shell = styled.section`
   position: relative;
   z-index: 1;
   width: min(520px, 100%);
-  margin: 0 auto;
-  min-height: calc(100vh - 5.5rem);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 28px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 20px;
   overflow: hidden;
-  background: rgba(7, 10, 18, 0.72);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.32);
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "0 10px 28px rgba(15, 23, 42, 0.08)"
+      : "0 8px 24px rgba(0, 0, 0, 0.28)"};
 `
 
 const FormPanel = styled.section`
-  padding: 2.1rem 1.5rem;
-  background: ${({ theme }) =>
-    theme.scheme === "light" ? "rgba(255,255,255,0.94)" : "rgba(9, 13, 24, 0.84)"};
+  padding: 1.6rem 1.35rem 1.28rem;
+  background: transparent;
   display: grid;
-  align-content: center;
+  align-content: start;
 
   @media (max-width: 720px) {
-    padding: 1.25rem 0.95rem 1.1rem;
+    padding: 1.2rem 0.9rem 1rem;
   }
 `
 
@@ -111,8 +108,8 @@ const Top = styled.div`
 
 const Title = styled.h2`
   margin: 0;
-  font-size: 1.55rem;
-  letter-spacing: -0.03em;
+  font-size: 1.48rem;
+  letter-spacing: -0.025em;
   color: ${({ theme }) => theme.colors.gray12};
 `
 
@@ -125,26 +122,26 @@ const SubTitle = styled.p`
 const Tabs = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  gap: 0.42rem;
   margin-bottom: 1rem;
 `
 
 const ActiveTab = styled.div`
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
-  padding: 0.72rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray12};
+  padding: 0.66rem 0.76rem;
   text-align: center;
   font-weight: 700;
 `
 
 const PassiveTab = styled(Link)`
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.72rem 0.8rem;
+  padding: 0.66rem 0.76rem;
   text-align: center;
   text-decoration: none;
   font-weight: 600;

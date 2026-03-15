@@ -71,7 +71,7 @@ const RouteProgress = styled.div`
   position: fixed;
   left: 0;
   right: 0;
-  top: 3rem;
+  top: 3.5rem;
   z-index: 50;
   height: 2px;
   width: 100vw;

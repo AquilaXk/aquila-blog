@@ -280,20 +280,20 @@ const StyledWrapper = styled.div`
     white-space: nowrap;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray1};
     padding: 0.33rem 0.8rem;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
     cursor: pointer;
 
     &:hover {
-      background: ${({ theme }) => theme.colors.gray4};
+      background: ${({ theme }) => theme.colors.gray3};
     }
 
     &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.green8};
+      border-color: ${({ theme }) => theme.colors.gray8};
       background: ${({ theme }) => theme.colors.gray3};
-      color: ${({ theme }) => theme.colors.green11};
+      color: ${({ theme }) => theme.colors.gray12};
     }
   }
 
@@ -308,7 +308,7 @@ const StyledWrapper = styled.div`
   }
 
   .mobileRail button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.green10};
+    color: ${({ theme }) => theme.colors.gray10};
   }
 
   @media (max-width: 768px) {

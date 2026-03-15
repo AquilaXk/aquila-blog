@@ -45,6 +45,9 @@ const StyledWrapper = styled.div`
     gap: 0.35rem;
     padding: 0.25rem;
     margin-bottom: 0.75rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.84rem;
+    font-weight: 700;
 
     .titleIcon {
       font-size: 1rem;
@@ -53,13 +56,11 @@ const StyledWrapper = styled.div`
   }
   > .content {
     margin-bottom: 1.25rem;
-    border-radius: 1.5rem;
+    border-radius: 1rem;
     width: 100%;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background:
-      radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 36%),
-      ${({ theme }) => (theme.scheme === "light" ? "white" : theme.colors.gray4)};
-    padding: 1rem;
+    background: ${({ theme }) => theme.colors.gray1};
+    padding: 0.95rem;
 
     .top {
       position: relative;
@@ -90,10 +91,10 @@ const StyledWrapper = styled.div`
       text-align: center;
 
       .name {
-        font-size: 1.32rem;
+        font-size: 1.22rem;
         line-height: 1.3;
-        font-weight: 700;
-        letter-spacing: -0.03em;
+        font-weight: 740;
+        letter-spacing: -0.02em;
       }
       .role {
         margin: 0.6rem 0 0.85rem;

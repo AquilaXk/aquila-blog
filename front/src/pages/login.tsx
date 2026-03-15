@@ -213,26 +213,25 @@ const PasswordRow = styled.div`
 
 const Input = styled.input`
   width: 100%;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 14px;
-  padding: 0.82rem 0.88rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  padding: 0.78rem 0.84rem;
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
-    transform: translateY(-1px);
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
   }
 `
 
 const PrimaryButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.blue9};
-  border-radius: 14px;
-  padding: 0.9rem 1rem;
-  background: linear-gradient(135deg, ${({ theme }) => theme.colors.blue9}, #2563eb);
+  border: 1px solid ${({ theme }) => theme.colors.gray8};
+  border-radius: 12px;
+  padding: 0.84rem 1rem;
+  background: ${({ theme }) => theme.colors.gray12};
   color: #fff;
   font-weight: 700;
   cursor: pointer;
@@ -244,9 +243,9 @@ const PrimaryButton = styled.button`
 `
 
 const GhostButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 14px;
-  padding: 0.82rem 0.9rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  padding: 0.78rem 0.84rem;
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray12};
   cursor: pointer;
@@ -255,7 +254,7 @@ const GhostButton = styled.button`
 
 const ErrorText = styled.p`
   margin: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.red7};
   background: ${({ theme }) => theme.colors.red3};
   color: ${({ theme }) => theme.colors.red11};
@@ -266,7 +265,7 @@ const ErrorText = styled.p`
 
 const InfoText = styled.p`
   margin: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
@@ -277,7 +276,7 @@ const InfoText = styled.p`
 
 const SuccessText = styled.p`
   margin: 0;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.green7};
   background: ${({ theme }) => theme.colors.green3};
   color: ${({ theme }) => theme.colors.green11};
@@ -316,17 +315,17 @@ const SocialIconButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 74px;
-  height: 74px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  border: 1px solid rgba(230, 194, 0, 0.72);
-  background: linear-gradient(180deg, #fee500, #facc15);
+  border: 1px solid rgba(230, 194, 0, 0.62);
+  background: #fee500;
   color: #241b00;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(250, 204, 21, 0.18);
+  box-shadow: none;
 
   svg {
-    font-size: 2rem;
+    font-size: 1.6rem;
   }
 
   &:disabled {

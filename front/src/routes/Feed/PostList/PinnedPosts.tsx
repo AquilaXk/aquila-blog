@@ -1,26 +1,14 @@
 import PostCard from "src/routes/Feed/PostList/PostCard"
-import React, { useMemo } from "react"
-import usePostsQuery from "src/hooks/usePostsQuery"
+import React from "react"
 import styled from "@emotion/styled"
-import { filterPosts } from "./filterPosts"
+import { TPost } from "src/types"
 
 type Props = {
-  q: string
+  posts: TPost[]
 }
 
-const PinnedPosts: React.FC<Props> = ({ q }) => {
-  const data = usePostsQuery()
-
-  const filteredPosts = useMemo(() => {
-    const baseFiltered = filterPosts({
-      posts: data,
-      q,
-      order: "desc",
-    })
-    return baseFiltered.filter((post) => post.tags?.includes("Pinned"))
-  }, [data, q])
-
-  if (filteredPosts.length === 0) return null
+const PinnedPosts: React.FC<Props> = ({ posts }) => {
+  if (posts.length === 0) return null
 
   return (
     <StyledWrapper>
@@ -28,7 +16,7 @@ const PinnedPosts: React.FC<Props> = ({ q }) => {
         <div className="header">📌 Pinned Posts</div>
       </div>
       <div className="my-2">
-        {filteredPosts.map((post) => (
+        {posts.map((post) => (
           <PostCard key={post.slug} data={post} />
         ))}
       </div>

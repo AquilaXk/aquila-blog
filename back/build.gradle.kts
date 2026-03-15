@@ -90,8 +90,33 @@ fun Project.runTestInfraCommand(
     }
 }
 
+fun Project.ensureTestInfraPrerequisites() {
+    val process =
+        ProcessBuilder("docker", "compose", "version")
+            .directory(projectDir)
+            .redirectInput(ProcessBuilder.Redirect.INHERIT)
+            .redirectOutput(ProcessBuilder.Redirect.PIPE)
+            .redirectError(ProcessBuilder.Redirect.PIPE)
+            .start()
+    val exitCode = process.waitFor()
+    if (exitCode == 0) return
+
+    val stdout = process.inputStream.bufferedReader().readText().trim()
+    val stderr = process.errorStream.bufferedReader().readText().trim()
+    error(
+        """
+        Backend test infra preflight failed.
+        - Required command: docker compose
+        - How to fix: Docker Desktop(or docker engine + compose plugin) 실행 후 다시 시도하세요.
+        - stdout: $stdout
+        - stderr: $stderr
+        """.trimIndent(),
+    )
+}
+
 fun Project.startTestInfra() {
     if (testInfraMarkerFile.exists()) return
+    ensureTestInfraPrerequisites()
 
     runTestInfraCommand("docker", "compose", "-p", testInfraProjectName, "-f", testInfraComposeFile, "up", "-d")
 

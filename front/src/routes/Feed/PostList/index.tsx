@@ -1,42 +1,19 @@
-import { useRouter } from "next/router"
-import React, { useMemo } from "react"
+import React from "react"
 import styled from "@emotion/styled"
 import PostCard from "src/routes/Feed/PostList/PostCard"
-import usePostsQuery from "src/hooks/usePostsQuery"
-import { filterPosts } from "./filterPosts"
+import { TPost } from "src/types"
 
 type Props = {
-  q: string
+  posts: TPost[]
 }
 
-const PostList: React.FC<Props> = ({ q }) => {
-  const router = useRouter()
-  const data = usePostsQuery()
-
-  const currentTag =
-    typeof router.query.tag === "string" ? router.query.tag : undefined
-  const currentOrder =
-    router.query.order === "asc" || router.query.order === "desc"
-      ? router.query.order
-      : "desc"
-
-  const filteredPosts = useMemo(
-    () =>
-      filterPosts({
-        posts: data,
-        q,
-        tag: currentTag,
-        order: currentOrder,
-      }),
-    [data, q, currentTag, currentOrder]
-  )
-
+const PostList: React.FC<Props> = ({ posts }) => {
   return (
     <StyledWrapper>
-      {!filteredPosts.length && (
+      {!posts.length && (
         <p className="empty">Nothing! 😺</p>
       )}
-      {filteredPosts.map((post) => (
+      {posts.map((post) => (
         <PostCard key={post.id} data={post} />
       ))}
     </StyledWrapper>

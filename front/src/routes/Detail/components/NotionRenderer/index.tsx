@@ -427,10 +427,15 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
   }, [renderKey])
 
   const renderMarkdown = (markdown: string, key: string, inCallout = false) => (
+    // 코드블록이 없는 세그먼트에는 무거운 syntax-highlight 플러그인을 생략한다.
     <ReactMarkdown
       key={key}
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[[rehypePrettyCode, REHYPE_PRETTY_CODE_OPTIONS]]}
+      rehypePlugins={
+        markdown.includes("```")
+          ? [[rehypePrettyCode, REHYPE_PRETTY_CODE_OPTIONS]]
+          : []
+      }
       components={{
         p({ children }) {
           if (!inCallout) return <p>{children}</p>

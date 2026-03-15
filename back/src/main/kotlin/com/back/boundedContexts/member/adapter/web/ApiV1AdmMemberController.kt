@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_ICON_ALLOWED
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE
+import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfileLinkHref
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.global.app.AppConfig
@@ -133,6 +134,7 @@ class ApiV1AdmMemberController(
 
     @PostMapping("/{id}/profileImageFile")
     @Transactional
+    @CacheEvict(cacheNames = ["member-admin-profile"], allEntries = true)
     fun uploadProfileImageFile(
         @PathVariable
         @Positive
@@ -160,6 +162,7 @@ class ApiV1AdmMemberController(
 
     @PatchMapping("/{id}/profileCard")
     @Transactional
+    @CacheEvict(cacheNames = ["member-admin-profile"], allEntries = true)
     fun updateProfileCard(
         @PathVariable
         @Positive
@@ -192,7 +195,12 @@ class ApiV1AdmMemberController(
             MemberProfileLinkItem(
                 icon = normalizedIcon,
                 label = link.label.trim(),
-                href = link.href.trim(),
+                href =
+                    normalizeProfileLinkHref(link.href)
+                        ?: throw AppException(
+                            "400-1",
+                            "${section.displayName}[$index].href 값이 유효하지 않습니다.",
+                        ),
             )
         }
 }

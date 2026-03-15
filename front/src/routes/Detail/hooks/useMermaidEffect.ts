@@ -117,6 +117,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     let disposed = false
     let running = false
+    let observer: IntersectionObserver | null = null
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
         root.querySelectorAll<HTMLElement>(
@@ -139,21 +140,22 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         },
       })
 
-      for (let i = 0; i < codeBlocks.length; i += 1) {
+      const renderSingleBlock = async (i: number) => {
         if (disposed) return
         const codeBlock = codeBlocks[i]
+        if (!codeBlock) return
         const block = codeBlock.closest<HTMLElement>("pre")
-        if (!block) continue
+        if (!block) return
         const source =
           block.dataset.mermaidSource || codeBlock.textContent?.trim() || ""
-        if (!source) continue
+        if (!source) return
 
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
             block.dataset.mermaidRendered === "error") &&
           block.dataset.mermaidSource === source &&
           block.dataset.mermaidTheme === theme
-        if (alreadyRendered) continue
+        if (alreadyRendered) return
 
         try {
           const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
@@ -213,6 +215,44 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           console.warn("[mermaid] render failed", error)
         }
       }
+
+      if (observer) {
+        observer.disconnect()
+        observer = null
+      }
+
+      if ("IntersectionObserver" in window) {
+        observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return
+              const block = entry.target as HTMLElement
+              observer?.unobserve(block)
+              const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
+              if (!Number.isFinite(index)) return
+              void renderSingleBlock(index)
+            })
+          },
+          {
+            root: null,
+            // 화면 진입 전 미리 렌더링해 스크롤 진입 시 체감 지연을 줄인다.
+            rootMargin: "320px 0px 320px 0px",
+            threshold: 0.01,
+          }
+        )
+
+        codeBlocks.forEach((codeBlock, index) => {
+          const block = codeBlock.closest<HTMLElement>("pre")
+          if (!block) return
+          block.dataset.mermaidIndex = String(index)
+          observer?.observe(block)
+        })
+        return
+      }
+
+      for (let i = 0; i < codeBlocks.length; i += 1) {
+        await renderSingleBlock(i)
+      }
     }
 
     const run = async () => {
@@ -237,6 +277,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     return () => {
       disposed = true
+      observer?.disconnect()
       window.cancelAnimationFrame(rafId)
       window.clearTimeout(timerId)
     }

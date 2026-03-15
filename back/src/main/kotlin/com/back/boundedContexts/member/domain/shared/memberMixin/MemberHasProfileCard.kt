@@ -2,6 +2,8 @@ package com.back.boundedContexts.member.domain.shared.memberMixin
 
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.standard.util.Ut
+import java.net.URI
+import java.util.Locale
 
 const val PROFILE_ROLE = "profileRole"
 const val PROFILE_BIO = "profileBio"
@@ -18,6 +20,7 @@ const val PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE = "service"
 const val PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE = "message"
 private const val PROFILE_LINK_LABEL_DEFAULT_VALUE = ""
 private const val PROFILE_LINK_HREF_DEFAULT_VALUE = ""
+private val PROFILE_LINK_ALLOWED_SCHEMES = setOf("https", "http", "mailto", "tel")
 
 val PROFILE_SERVICE_ICON_ALLOWED =
     setOf(
@@ -56,6 +59,23 @@ private data class MemberProfileLinkItemList(
     val items: List<MemberProfileLinkItem> = emptyList(),
 )
 
+fun normalizeProfileLinkHref(rawHref: String): String? {
+    val href = rawHref.trim()
+    if (href.isBlank()) return ""
+    if (href.any { it == '\r' || it == '\n' }) return null
+
+    if (href.startsWith("/")) {
+        if (href.startsWith("//")) return null
+        return href
+    }
+
+    val uri = runCatching { URI(href) }.getOrNull() ?: return null
+    val normalizedScheme = uri.scheme?.lowercase(Locale.ROOT) ?: return null
+    if (normalizedScheme !in PROFILE_LINK_ALLOWED_SCHEMES) return null
+
+    return href
+}
+
 private fun normalizeProfileLinkItems(
     items: List<MemberProfileLinkItem>,
     defaultIcon: String,
@@ -72,7 +92,7 @@ private fun normalizeProfileLinkItems(
                             if (icon in allowedIcons) icon else defaultIcon
                         },
                 label = item.label.trim(),
-                href = item.href.trim(),
+                href = normalizeProfileLinkHref(item.href) ?: "",
             )
         }.filter { item ->
             item.label.isNotBlank() && item.href.isNotBlank()

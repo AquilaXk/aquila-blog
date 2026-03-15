@@ -26,6 +26,11 @@ spring:
   sql:
     init:
       mode: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 logging:
   level:
     com.back: INFO

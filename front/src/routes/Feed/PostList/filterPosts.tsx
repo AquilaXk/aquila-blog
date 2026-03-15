@@ -1,35 +1,60 @@
 import { getCategorySearchText } from "src/libs/utils"
 import { TPost } from "src/types"
 
+export type FeedPostIndexEntry = {
+  post: TPost
+  searchableText: string
+  timestamp: number
+  tags: Set<string>
+}
+
 interface FilterPostsParams {
-  posts: TPost[]
+  posts?: TPost[]
+  index?: FeedPostIndexEntry[]
   q: string
   tag?: string
   order?: string
 }
 
+const toSafeTimestamp = (post: TPost) => {
+  const rawDate = post.date?.start_date || post.createdTime
+  const parsed = Date.parse(rawDate)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const toSearchableText = (post: TPost) => {
+  const tagContent = post.tags ? post.tags.join(" ") : ""
+  const categoryContent = post.category ? post.category.map(getCategorySearchText).join(" ") : ""
+  const summaryContent = post.summary || ""
+  return [post.title, summaryContent, tagContent, categoryContent].join(" ").toLowerCase()
+}
+
+export const createFeedPostIndex = (posts: TPost[]): FeedPostIndexEntry[] =>
+  posts.map((post) => ({
+    post,
+    searchableText: toSearchableText(post),
+    timestamp: toSafeTimestamp(post),
+    tags: new Set(post.tags || []),
+  }))
+
 export function filterPosts({
-  posts,
+  posts = [],
+  index,
   q,
   tag = undefined,
   order = "desc",
 }: FilterPostsParams): TPost[] {
   const normalizedQuery = q.trim().toLowerCase()
+  const sourceIndex = index || createFeedPostIndex(posts)
 
-  return posts
-    .filter((post) => {
-      const tagContent = post.tags ? post.tags.join(" ") : ""
-      const categoryContent = post.category ? post.category.map(getCategorySearchText).join(" ") : ""
-      const summaryContent = post.summary || ""
-      const searchContent = [post.title, summaryContent, tagContent, categoryContent].join(" ")
-      return (
-        searchContent.toLowerCase().includes(normalizedQuery) &&
-        (!tag || (post.tags && post.tags.includes(tag)))
-      )
+  return sourceIndex
+    .filter((entry) => {
+      const queryMatches = entry.searchableText.includes(normalizedQuery)
+      const tagMatches = !tag || entry.tags.has(tag)
+      return queryMatches && tagMatches
     })
     .sort((a, b) => {
-      const dateA = new Date(a.date.start_date).getTime()
-      const dateB = new Date(b.date.start_date).getTime()
-      return order === "desc" ? dateB - dateA : dateA - dateB
+      return order === "desc" ? b.timestamp - a.timestamp : a.timestamp - b.timestamp
     })
+    .map((entry) => entry.post)
 }

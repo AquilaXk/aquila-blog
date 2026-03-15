@@ -15,18 +15,25 @@ import type { TPost } from "src/types"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
-  let posts: TPost[] = []
-  let postsLoaded = false
-  const initialAdminProfile = await fetchServerAdminProfile(req)
+  const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : ""
+  const initialViewport = /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent) ? "mobile" : "desktop"
+  const postsPromise = getPosts({ throwOnError: true })
+    .then((fetchedPosts) => ({
+      posts: filterPosts(fetchedPosts),
+      postsLoaded: true,
+    }))
+    .catch(() => ({
+      posts: [] as TPost[],
+      postsLoaded: false,
+    }))
 
-  try {
-    posts = filterPosts(await getPosts({ throwOnError: true }))
-    postsLoaded = true
-  } catch {
-    posts = []
-  }
+  const [initialAdminProfile, authMember, postsResult] = await Promise.all([
+    fetchServerAdminProfile(req),
+    hydrateServerAuthSession(queryClient, req),
+    postsPromise,
+  ])
+  const { posts, postsLoaded } = postsResult
 
-  const authMember = await hydrateServerAuthSession(queryClient, req)
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
@@ -42,15 +49,17 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
     props: {
       dehydratedState: dehydrate(queryClient),
       initialAdminProfile,
+      initialViewport,
     },
   }
 }
 
 type FeedPageProps = {
   initialAdminProfile: AdminProfile | null
+  initialViewport: "mobile" | "desktop"
 }
 
-const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
+const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile, initialViewport }) => {
   const feedTitle = initialAdminProfile?.homeIntroTitle || CONFIG.blog.title
   const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.description
 
@@ -64,7 +73,7 @@ const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) =>
   return (
     <>
       <MetaConfig {...meta} />
-      <Feed initialAdminProfile={initialAdminProfile} />
+      <Feed initialAdminProfile={initialAdminProfile} initialViewport={initialViewport} />
     </>
   )
 }

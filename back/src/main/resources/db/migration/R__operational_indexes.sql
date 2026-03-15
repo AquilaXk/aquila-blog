@@ -59,5 +59,10 @@ BEGIN
         CREATE INDEX IF NOT EXISTS uploaded_file_idx_status_purge_after
             ON uploaded_file (status, purge_after ASC);
     END IF;
-END $$;
 
+    IF to_regclass('public.post_comment') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS post_comment_idx_subtree_active
+            ON post_comment (post_id, parent_comment_id, created_at ASC, id ASC)
+            WHERE deleted_at IS NULL;
+    END IF;
+END $$;

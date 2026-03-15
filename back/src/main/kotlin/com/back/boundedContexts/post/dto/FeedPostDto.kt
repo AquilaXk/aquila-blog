@@ -25,6 +25,7 @@ data class FeedPostDto(
     companion object {
         fun from(post: Post): FeedPostDto {
             val meta = PostMetaExtractor.extract(post.content)
+            val preview = PostPreviewExtractor.extract(post.content)
 
             return FeedPostDto(
                 id = post.id,
@@ -33,10 +34,10 @@ data class FeedPostDto(
                 authorId = post.author.id,
                 authorName = post.author.name,
                 authorUsername = post.author.username,
-                authorProfileImgUrl = post.author.redirectToProfileImgUrlOrDefault,
+                authorProfileImgUrl = post.author.profileImgUrlVersionedOrDefault,
                 title = post.title,
-                thumbnail = PostPreviewExtractor.extractThumbnail(post.content),
-                summary = PostPreviewExtractor.makeSummary(post.content),
+                thumbnail = preview.thumbnail,
+                summary = preview.summary,
                 tags = meta.tags,
                 category = meta.categories,
                 published = post.published,

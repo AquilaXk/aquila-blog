@@ -8,17 +8,28 @@ import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
 import TagList from "./TagList"
+import { useEffect, useState } from "react"
 
 const HEADER_HEIGHT = 73
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
+  initialViewport?: "mobile" | "desktop"
 }
 
-const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
+const Feed: React.FC<Props> = ({ initialAdminProfile = null, initialViewport = "desktop" }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
   const introTitle = adminProfile?.homeIntroTitle || CONFIG.blog.title
   const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.description
+  const [isDesktopViewport, setIsDesktopViewport] = useState(initialViewport === "desktop")
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)")
+    const syncViewport = () => setIsDesktopViewport(mediaQuery.matches)
+    syncViewport()
+    mediaQuery.addEventListener("change", syncViewport)
+    return () => mediaQuery.removeEventListener("change", syncViewport)
+  }, [])
 
   return (
     <StyledWrapper>
@@ -31,7 +42,7 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
         <TagList />
       </div>
       <div className="mid">
-        <MobileProfileCard initialAdminProfile={initialAdminProfile} />
+        {!isDesktopViewport && <MobileProfileCard initialAdminProfile={initialAdminProfile} />}
         <IntroCard>
           <h1>{introTitle}</h1>
           <p>{introDescription}</p>
@@ -41,19 +52,21 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
           <Footer />
         </div>
       </div>
-      <div
-        className="rt"
-        css={{
-          height: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        }}
-      >
-        <ProfileCard initialAdminProfile={initialAdminProfile} />
-        <ServiceCard initialAdminProfile={initialAdminProfile} />
-        <ContactCard initialAdminProfile={initialAdminProfile} />
-        <div className="footer">
-          <Footer />
+      {isDesktopViewport && (
+        <div
+          className="rt"
+          css={{
+            height: `calc(100vh - ${HEADER_HEIGHT}px)`,
+          }}
+        >
+          <ProfileCard initialAdminProfile={initialAdminProfile} />
+          <ServiceCard initialAdminProfile={initialAdminProfile} />
+          <ContactCard initialAdminProfile={initialAdminProfile} />
+          <div className="footer">
+            <Footer />
+          </div>
         </div>
-      </div>
+      )}
     </StyledWrapper>
   )
 }

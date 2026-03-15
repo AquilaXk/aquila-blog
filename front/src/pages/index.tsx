@@ -9,48 +9,31 @@ import { GetServerSideProps } from "next"
 import { dehydrate } from "@tanstack/react-query"
 import { filterPosts } from "src/libs/utils/notion"
 import { AdminProfile } from "src/hooks/useAdminProfile"
-import { IncomingMessage } from "http"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
-
-const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
-  const internal = process.env.BACKEND_INTERNAL_URL
-  if (internal) return internal.replace(/\/+$/, "")
-
-  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
-  if (publicUrl) return publicUrl.replace(/\/+$/, "")
-
-  const forwardedProto = req.headers["x-forwarded-proto"]
-  const protocol = typeof forwardedProto === "string" ? forwardedProto : "https"
-  const host = req.headers.host || ""
-  const apiHost = host.replace(/^www\./, "api.")
-  return `${protocol}://${apiHost}`
-}
-
-const fetchAdminProfile = async (req: IncomingMessage): Promise<AdminProfile | null> => {
-  try {
-    const baseUrl = resolveServerApiBaseUrl(req)
-    const response = await fetch(`${baseUrl}/member/api/v1/members/adminProfile`)
-    if (!response.ok) return null
-    return (await response.json()) as AdminProfile
-  } catch {
-    return null
-  }
-}
+import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
+import type { TPost } from "src/types"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
-  const [posts, initialAdminProfile] = await Promise.all([
-    getPosts().then(filterPosts),
-    fetchAdminProfile(req),
-  ])
+  let posts: TPost[] = []
+  let postsLoaded = false
+  const initialAdminProfile = await fetchServerAdminProfile(req)
+
+  try {
+    posts = filterPosts(await getPosts({ throwOnError: true }))
+    postsLoaded = true
+  } catch {
+    posts = []
+  }
+
   await hydrateServerAuthSession(queryClient, req)
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   await queryClient.prefetchQuery(queryKey.posts(), () => posts)
 
-  // 프로필 조회 실패 시 fallback HTML을 CDN에 캐시하지 않도록 한다.
+  // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.
   res.setHeader(
     "Cache-Control",
-    initialAdminProfile
+    initialAdminProfile && postsLoaded
       ? "public, s-maxage=10, stale-while-revalidate=30"
       : "private, no-store"
   )

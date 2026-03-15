@@ -7,9 +7,21 @@ export const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
   const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
   if (publicUrl) return publicUrl.replace(/\/+$/, "")
 
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("BACKEND_INTERNAL_URL or NEXT_PUBLIC_BACKEND_URL is required in production.")
+  }
+
   const forwardedProto = req.headers["x-forwarded-proto"]
-  const protocol = typeof forwardedProto === "string" ? forwardedProto : "https"
-  const host = req.headers.host || ""
+  const forwardedHost = req.headers["x-forwarded-host"]
+  const protocolRaw = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto
+  const protocol = typeof protocolRaw === "string" && protocolRaw ? protocolRaw.split(",")[0].trim() : "http"
+  const hostRaw = Array.isArray(forwardedHost)
+    ? forwardedHost[0]
+    : typeof forwardedHost === "string"
+      ? forwardedHost
+      : req.headers.host || ""
+  const host = typeof hostRaw === "string" ? hostRaw.split(",")[0].trim() : ""
+  if (!host) return "http://localhost:8080"
   const apiHost = host.replace(/^www\./, "api.")
   return `${protocol}://${apiHost}`
 }

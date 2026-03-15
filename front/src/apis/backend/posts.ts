@@ -253,6 +253,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
 
 const PAGE_SIZE = 30
 const DETAIL_ENRICH_BATCH_SIZE = 8
+const DETAIL_ENRICH_MAX_TARGETS = 12
 
 const enrichPostMetadata = async (posts: TPost[]): Promise<TPost[]> => {
   const targets = posts.filter(
@@ -261,11 +262,12 @@ const enrichPostMetadata = async (posts: TPost[]): Promise<TPost[]> => {
       (!post.category || post.category.length === 0)
   )
   if (!targets.length) return posts
+  const limitedTargets = targets.slice(0, DETAIL_ENRICH_MAX_TARGETS)
 
   const metadataById = new Map<string, { tags: string[]; category: string[] }>()
 
-  for (let i = 0; i < targets.length; i += DETAIL_ENRICH_BATCH_SIZE) {
-    const batch = targets.slice(i, i + DETAIL_ENRICH_BATCH_SIZE)
+  for (let i = 0; i < limitedTargets.length; i += DETAIL_ENRICH_BATCH_SIZE) {
+    const batch = limitedTargets.slice(i, i + DETAIL_ENRICH_BATCH_SIZE)
     const settled = await Promise.allSettled(
       batch.map(async (post) => {
         const detail = await apiFetch<ApiPostWithContentDto>(`/post/api/v1/posts/${post.id}`)
@@ -303,7 +305,13 @@ const enrichPostMetadata = async (posts: TPost[]): Promise<TPost[]> => {
   })
 }
 
-export const getPosts = async (): Promise<TPost[]> => {
+type GetPostsOptions = {
+  throwOnError?: boolean
+}
+
+export const getPosts = async (
+  { throwOnError = false }: GetPostsOptions = {}
+): Promise<TPost[]> => {
   try {
     const firstPage = await apiFetch<PageDto<ApiPostDto>>(
       `/post/api/v1/posts?page=1&pageSize=${PAGE_SIZE}`
@@ -325,7 +333,8 @@ export const getPosts = async (): Promise<TPost[]> => {
     const allPosts = mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
     return enrichPostMetadata(allPosts)
   } catch (error) {
-    console.error("[getPosts] backend request failed, returning empty list:", error)
+    console.error("[getPosts] backend request failed:", error)
+    if (throwOnError) throw error
     return []
   }
 }

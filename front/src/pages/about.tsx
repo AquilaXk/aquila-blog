@@ -1,6 +1,5 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps } from "next"
-import { IncomingMessage } from "http"
 import { dehydrate } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
@@ -11,35 +10,11 @@ import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import { NextPageWithLayout } from "../types"
-
-const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
-  const internal = process.env.BACKEND_INTERNAL_URL
-  if (internal) return internal.replace(/\/+$/, "")
-
-  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
-  if (publicUrl) return publicUrl.replace(/\/+$/, "")
-
-  const forwardedProto = req.headers["x-forwarded-proto"]
-  const protocol = typeof forwardedProto === "string" ? forwardedProto : "https"
-  const host = req.headers.host || ""
-  const apiHost = host.replace(/^www\./, "api.")
-  return `${protocol}://${apiHost}`
-}
-
-const fetchAdminProfile = async (req: IncomingMessage): Promise<AdminProfile | null> => {
-  try {
-    const baseUrl = resolveServerApiBaseUrl(req)
-    const response = await fetch(`${baseUrl}/member/api/v1/members/adminProfile`)
-    if (!response.ok) return null
-    return (await response.json()) as AdminProfile
-  } catch {
-    return null
-  }
-}
+import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
-  const initialAdminProfile = await fetchAdminProfile(req)
+  const initialAdminProfile = await fetchServerAdminProfile(req)
   await hydrateServerAuthSession(queryClient, req)
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
 

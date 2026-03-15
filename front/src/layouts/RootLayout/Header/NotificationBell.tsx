@@ -78,6 +78,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const [items, setItems] = useState<TMemberNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isReady, setIsReady] = useState(false)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden"
+  )
 
   const pushNotification = useCallback((incoming: TMemberNotification) => {
     setItems((prev) => {
@@ -100,6 +103,17 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }, [enabled])
 
   useEffect(() => {
+    if (typeof document === "undefined") return
+
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(document.visibilityState !== "hidden")
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [])
+
+  useEffect(() => {
     if (!enabled) {
       setItems([])
       setUnreadCount(0)
@@ -111,11 +125,13 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       return
     }
 
-    void loadSnapshot()
-  }, [enabled, loadSnapshot, preferPolling])
+    if (isDocumentVisible) {
+      void loadSnapshot()
+    }
+  }, [enabled, isDocumentVisible, loadSnapshot, preferPolling])
 
   useEffect(() => {
-    if (!enabled || streamMode !== "sse") return
+    if (!enabled || streamMode !== "sse" || !isDocumentVisible) return
 
     let disposed = false
 
@@ -219,10 +235,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       eventSourceRef.current?.close()
       eventSourceRef.current = null
     }
-  }, [enabled, loadSnapshot, pushNotification, streamMode])
+  }, [enabled, isDocumentVisible, loadSnapshot, pushNotification, streamMode])
 
   useEffect(() => {
-    if (!enabled || streamMode !== "poll") return
+    if (!enabled || streamMode !== "poll" || !isDocumentVisible) return
 
     let disposed = false
     let timer: number | null = null
@@ -245,10 +261,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         window.clearTimeout(timer)
       }
     }
-  }, [enabled, loadSnapshot, streamMode])
+  }, [enabled, isDocumentVisible, loadSnapshot, streamMode])
 
   useEffect(() => {
     if (!enabled) return
+    if (!isDocumentVisible) return
     if (preferPolling) return
     if (streamMode !== "poll") return
 
@@ -260,7 +277,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [enabled, preferPolling, streamMode])
+  }, [enabled, isDocumentVisible, preferPolling, streamMode])
 
   useEffect(() => {
     if (!open) return

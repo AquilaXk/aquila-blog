@@ -58,9 +58,14 @@ export const Global = () => {
           padding: 0;
         }
 
-        // init button
         button {
-          all: unset;
+          border: 0;
+          background: none;
+          padding: 0;
+          margin: 0;
+          font: inherit;
+          color: inherit;
+          line-height: inherit;
           cursor: pointer;
         }
 
@@ -75,9 +80,14 @@ export const Global = () => {
           border-radius: 0.5rem;
         }
 
-        // init input
         input {
-          all: unset;
+          margin: 0;
+          padding: 0;
+          border: none;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          line-height: inherit;
           box-sizing: border-box;
         }
 

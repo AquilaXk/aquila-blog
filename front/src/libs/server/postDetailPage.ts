@@ -1,10 +1,9 @@
 import { dehydrate } from "@tanstack/react-query"
 import { IncomingMessage, ServerResponse } from "http"
 import { GetServerSidePropsResult } from "next"
-import { getPostDetailById, getPosts } from "src/apis"
+import { getPostDetailById } from "src/apis"
 import { queryKey } from "src/constants/queryKey"
 import { createQueryClient } from "src/libs/react-query"
-import { filterPosts } from "src/libs/utils/notion"
 import { hydrateServerAuthSession } from "./authSession"
 import { serverApiFetch } from "./backend"
 import { TPostComment } from "src/types"
@@ -30,11 +29,7 @@ export const buildCanonicalPostDetailPage = async (
   postId: string
 ): Promise<GetServerSidePropsResult<DetailPageProps>> => {
   const queryClient = createQueryClient()
-  const posts = await getPosts()
   await hydrateServerAuthSession(queryClient, req)
-
-  const feedPosts = filterPosts(posts)
-  await queryClient.prefetchQuery(queryKey.posts(), () => feedPosts)
 
   const postDetail = await getPostDetailById(postId)
   if (!postDetail) return { notFound: true }

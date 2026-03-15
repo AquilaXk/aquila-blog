@@ -28,6 +28,8 @@ const useAuthSession = () => {
   const queryClient = useQueryClient()
   const cachedSnapshot = queryClient.getQueryData<AuthMember | null | undefined>(queryKey.authMe())
   const hasCachedSnapshot = cachedSnapshot !== undefined
+  const hasCachedMemberSnapshot = cachedSnapshot != null
+  const shouldRefetchOnMount = cachedSnapshot === null || !hasCachedSnapshot
   const query = useQuery({
     queryKey: queryKey.authMe(),
     queryFn: async () => {
@@ -42,10 +44,11 @@ const useAuthSession = () => {
       }
     },
     enabled: isClient,
-    staleTime: hasCachedSnapshot ? 60_000 : 0,
+    // 로그인된 사용자 스냅샷만 짧게 재사용하고, anonymous(null) 스냅샷은 즉시 재검증한다.
+    staleTime: hasCachedMemberSnapshot ? 60_000 : 0,
     retry: false,
-    refetchOnMount: hasCachedSnapshot ? false : "always",
-    refetchOnWindowFocus: hasCachedSnapshot ? false : true,
+    refetchOnMount: shouldRefetchOnMount ? "always" : false,
+    refetchOnWindowFocus: hasCachedMemberSnapshot ? false : true,
   })
 
   const setMe = (member: AuthMember | null) => {

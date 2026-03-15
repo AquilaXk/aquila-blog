@@ -1,0 +1,26 @@
+package com.back.boundedContexts.post.adapter.scheduler
+
+import com.back.boundedContexts.post.application.service.PostWriteRequestIdempotencyRetentionService
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.scheduling.annotation.Scheduled
+import org.springframework.stereotype.Component
+
+@Component
+class PostWriteRequestIdempotencyCleanupScheduledJob(
+    private val retentionService: PostWriteRequestIdempotencyRetentionService,
+    @param:Value("\${custom.post.idempotency.cleanup.batchSize:200}")
+    private val batchSize: Int,
+) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    @Scheduled(fixedDelayString = "\${custom.post.idempotency.cleanup.fixedDelayMs:3600000}")
+    @SchedulerLock(name = "postWriteRequestIdempotencyCleanup", lockAtLeastFor = "PT1M")
+    fun cleanup() {
+        val purgedCount = retentionService.purgeExpired(batchSize)
+        if (purgedCount > 0) {
+            log.info("Purged {} expired post write idempotency records", purgedCount)
+        }
+    }
+}

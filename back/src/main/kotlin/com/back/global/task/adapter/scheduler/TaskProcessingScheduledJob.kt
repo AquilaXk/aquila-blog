@@ -4,7 +4,6 @@ import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
-import com.back.standard.util.Ut
 import jakarta.annotation.PreDestroy
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
@@ -12,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
+import tools.jackson.databind.ObjectMapper
 import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
@@ -22,6 +22,7 @@ class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val transactionTemplate: TransactionTemplate,
+    private val objectMapper: ObjectMapper,
     @param:Value("\${custom.task.processor.batchSize:50}")
     private val batchSize: Int,
     @param:Value("\${custom.task.processor.processingTimeoutSeconds:900}")
@@ -107,7 +108,7 @@ class TaskProcessingScheduledJob(
             }
 
             try {
-                val payload = Ut.JSON.fromString(context.payload, entry.payloadClass) as TaskPayload
+                val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
                 entry.handlerMethod.method.invoke(entry.handlerMethod.bean, payload)
                 markTaskCompleted(taskId)
             } catch (exception: Exception) {

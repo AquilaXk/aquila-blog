@@ -94,16 +94,23 @@ class CustomAuthenticationFilter(
         val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "")
 
         return if (headerAuthorization.isNotBlank()) {
-            // 우리 포맷: "Bearer {apiKey} {accessToken}".
-            // accessToken만 사용하는 경우 apiKey 자리에는 빈 문자열이 들어올 수 있다.
             if (!headerAuthorization.startsWith("Bearer ")) {
                 throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
             }
 
-            val bits = headerAuthorization.split(" ", limit = 3)
+            val bits = headerAuthorization.trim().split(Regex("\\s+"))
             when (bits.size) {
-                2 -> "" to bits.getOrNull(1).orEmpty()
-                else -> bits.getOrNull(1).orEmpty() to bits.getOrNull(2).orEmpty()
+                2 -> {
+                    if (bits[1].isBlank()) throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
+                    "" to bits[1]
+                }
+                3 -> {
+                    if (bits[1].isBlank() || bits[2].isBlank()) {
+                        throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
+                    }
+                    bits[1] to bits[2]
+                }
+                else -> throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
             }
         } else {
             rq.getCookieValue("apiKey", "") to rq.getCookieValue("accessToken", "")

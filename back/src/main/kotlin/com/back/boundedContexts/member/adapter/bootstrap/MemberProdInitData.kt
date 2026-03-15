@@ -10,12 +10,14 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Lazy
 import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.transaction.annotation.Transactional
 
 @Profile("prod")
 @Configuration
 class MemberProdInitData(
     private val memberUseCase: MemberUseCase,
+    private val passwordEncoder: PasswordEncoder,
 ) {
     @Lazy
     @Autowired
@@ -37,6 +39,12 @@ class MemberProdInitData(
         if (adminPassword.isBlank()) return
         val existingAdmin = memberUseCase.findByUsername(adminUsername)
         if (existingAdmin != null) {
+            val shouldRotatePassword =
+                existingAdmin.password.isNullOrBlank() ||
+                    !passwordEncoder.matches(adminPassword, existingAdmin.password)
+            if (shouldRotatePassword) {
+                existingAdmin.password = passwordEncoder.encode(adminPassword)
+            }
             // 과거 배포에서 username 기반 apiKey가 남아있을 수 있어 최초 1회 회전한다.
             if (existingAdmin.apiKey.isBlank() || existingAdmin.apiKey == existingAdmin.username) {
                 existingAdmin.modifyApiKey(MemberPolicy.genApiKey())

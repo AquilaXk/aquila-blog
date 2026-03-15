@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.subContexts.notification.application.port
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationStreamPayload
 import jakarta.annotation.PreDestroy
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
@@ -16,6 +17,10 @@ import java.util.concurrent.TimeUnit
 @Service
 class MemberNotificationSseService(
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
+    @param:Value("\${custom.member.notification.sse.maxEmittersPerMember:3}")
+    private val maxEmittersPerMember: Int,
+    @param:Value("\${custom.member.notification.sse.maxGlobalEmitters:2000}")
+    private val maxGlobalEmitters: Int,
 ) {
     companion object {
         private const val DEFAULT_RETRY_MILLIS = 5_000L
@@ -24,6 +29,8 @@ class MemberNotificationSseService(
 
     private val emittersByMemberId = ConcurrentHashMap<Int, MutableSet<SseEmitter>>()
     private val heartbeatTasks = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
+    private val emitterOwners = ConcurrentHashMap<SseEmitter, Int>()
+    private val emitterConnectedAtEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
     private val heartbeatScheduler =
         Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "member-notification-sse-heartbeat").apply {
@@ -38,6 +45,10 @@ class MemberNotificationSseService(
         val emitter = SseEmitter(0L)
         val emitters = emittersByMemberId.computeIfAbsent(memberId) { ConcurrentHashMap.newKeySet() }
         emitters.add(emitter)
+        emitterOwners[emitter] = memberId
+        emitterConnectedAtEpochMillis[emitter] = Instant.now().toEpochMilli()
+        enforceMemberEmitterLimit(memberId, emitters)
+        enforceGlobalEmitterLimit()
 
         emitter.onCompletion { remove(memberId, emitter) }
         emitter.onTimeout { remove(memberId, emitter) }
@@ -136,9 +147,41 @@ class MemberNotificationSseService(
         emitter: SseEmitter,
     ) {
         heartbeatTasks.remove(emitter)?.cancel(true)
+        emitterOwners.remove(emitter)
+        emitterConnectedAtEpochMillis.remove(emitter)
         emittersByMemberId[memberId]?.remove(emitter)
         if (emittersByMemberId[memberId].isNullOrEmpty()) {
             emittersByMemberId.remove(memberId)
+        }
+    }
+
+    private fun enforceMemberEmitterLimit(
+        memberId: Int,
+        emitters: MutableSet<SseEmitter>,
+    ) {
+        val safeLimit = maxEmittersPerMember.coerceAtLeast(1)
+        while (emitters.size > safeLimit) {
+            val oldestEmitter = emitters.minByOrNull { emitterConnectedAtEpochMillis[it] ?: Long.MAX_VALUE } ?: return
+            remove(memberId, oldestEmitter)
+            runCatching { oldestEmitter.complete() }
+        }
+    }
+
+    private fun enforceGlobalEmitterLimit() {
+        val safeGlobalLimit = maxGlobalEmitters.coerceAtLeast(100)
+        while (emitterConnectedAtEpochMillis.size > safeGlobalLimit) {
+            val oldestEmitter =
+                emitterConnectedAtEpochMillis.entries
+                    .minByOrNull { it.value }
+                    ?.key
+                    ?: return
+            val ownerId = emitterOwners[oldestEmitter]
+            if (ownerId == null) {
+                emitterConnectedAtEpochMillis.remove(oldestEmitter)
+                continue
+            }
+            remove(ownerId, oldestEmitter)
+            runCatching { oldestEmitter.complete() }
         }
     }
 

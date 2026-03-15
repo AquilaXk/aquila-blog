@@ -73,16 +73,21 @@ MONITOR_DOMAIN=status.<your-domain>
 - Monitor 등록: `https://api.<your-domain>/actuator/health`
 - Status Page 생성(예: slug `aquila`)
 
-### 4) 프론트(예: Vercel) 환경변수 설정
+### 4) 프론트(예: Vercel) same-origin 프록시 설정(권장)
 
-관리자 페이지 임베드/링크용:
+관리자 iframe에서 cross-origin 콘솔 에러를 피하려면, 프론트 도메인 경로(`/status/*`)로 Uptime Kuma를 프록시한다.
 
 ```env
-NEXT_PUBLIC_UPTIME_KUMA_URL=https://status.<your-domain>
-NEXT_PUBLIC_MONITORING_EMBED_URL=https://status.<your-domain>/status/<slug>
+# server-side (public 노출 불필요)
+UPTIME_KUMA_PROXY_ORIGIN=https://status.<your-domain>
+
+# client-side
+NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH=/status/<slug>
+NEXT_PUBLIC_UPTIME_KUMA_URL=/status/<slug>
 ```
 
-- `NEXT_PUBLIC_MONITORING_EMBED_URL`가 비어 있으면 임베드 iframe은 표시되지 않는다.
+- `front/next.config.js` rewrites가 `/status/*`, `/assets/*`, `/api/status-page/*`를 `UPTIME_KUMA_PROXY_ORIGIN`으로 전달한다.
+- 기본 임베드 URL은 `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH`이며, 필요 시 `NEXT_PUBLIC_MONITORING_EMBED_URL`로 수동 override 가능하다.
 - `NEXT_PUBLIC_GRAFANA_EMBED_URL`은 하위호환 fallback으로만 유지한다.
 
 ## 홈서버 배포 파일

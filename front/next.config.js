@@ -5,7 +5,7 @@ const securityHeaders = [
   },
   {
     key: "X-Frame-Options",
-    value: "DENY",
+    value: "SAMEORIGIN",
   },
   {
     key: "Referrer-Policy",
@@ -39,6 +39,27 @@ module.exports = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+    ]
+  },
+  async rewrites() {
+    const uptimeProxyOrigin = process.env.UPTIME_KUMA_PROXY_ORIGIN?.trim()
+    if (!uptimeProxyOrigin) return []
+
+    const origin = uptimeProxyOrigin.replace(/\/+$/, "")
+
+    return [
+      {
+        source: "/status/:path*",
+        destination: `${origin}/status/:path*`,
+      },
+      {
+        source: "/assets/:path*",
+        destination: `${origin}/assets/:path*`,
+      },
+      {
+        source: "/api/status-page/:path*",
+        destination: `${origin}/api/status-page/:path*`,
       },
     ]
   },

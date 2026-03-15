@@ -219,10 +219,22 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState("")
+  const defaultUptimeStatusPath = process.env.NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH?.trim() || "/status/aquila"
   const monitoringEmbedUrl =
-    process.env.NEXT_PUBLIC_MONITORING_EMBED_URL?.trim() || process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() || ""
-  const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || ""
+    process.env.NEXT_PUBLIC_MONITORING_EMBED_URL?.trim() ||
+    process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() ||
+    defaultUptimeStatusPath
+  const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || defaultUptimeStatusPath
   const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
+  const monitoringEmbedIsCrossOrigin =
+    typeof window !== "undefined" &&
+    (() => {
+      try {
+        return new URL(monitoringEmbedUrl, window.location.href).origin !== window.location.origin
+      } catch {
+        return false
+      }
+    })()
 
   const systemHealthQuery = useQuery(
     SYSTEM_HEALTH_QUERY_KEY,
@@ -345,6 +357,21 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
     })()
   }, [])
+
+  useEffect(() => {
+    if (!dashboardOpen) return
+
+    const onWindowError = (event: ErrorEvent) => {
+      const message = event.message || ""
+      if (!message.includes("Failed to read a named property 'scrollY' from 'Window'")) return
+
+      // Known cross-origin iframe limitation when embedding external dashboards.
+      event.preventDefault()
+    }
+
+    window.addEventListener("error", onWindowError)
+    return () => window.removeEventListener("error", onWindowError)
+  }, [dashboardOpen])
 
   const fetchTaskQueueDiagnostics = async () => {
     try {
@@ -687,14 +714,14 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               서버 상태 즉시 새로고침
             </BaseButton>
             {uptimeKumaUrl && (
-              <a href={uptimeKumaUrl} target="_blank" rel="noreferrer">
-                <BaseButton as="span">Uptime Kuma 열기</BaseButton>
-              </a>
+              <NavLink href={uptimeKumaUrl} target="_blank" rel="noreferrer noopener">
+                Uptime Kuma 열기
+              </NavLink>
             )}
             {prometheusUrl && (
-              <a href={prometheusUrl} target="_blank" rel="noreferrer">
-                <BaseButton as="span">Prometheus 열기</BaseButton>
-              </a>
+              <NavLink href={prometheusUrl} target="_blank" rel="noreferrer noopener">
+                Prometheus 열기
+              </NavLink>
             )}
             {monitoringEmbedUrl ? (
               <PrimaryButton type="button" onClick={() => setDashboardOpen((prev) => !prev)}>
@@ -702,11 +729,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </PrimaryButton>
             ) : (
               <InlineNotice>
-                환경변수 `NEXT_PUBLIC_UPTIME_KUMA_URL`(링크) 또는 `NEXT_PUBLIC_MONITORING_EMBED_URL`(임베드)을 설정하면
-                대시보드를 연결할 수 있습니다.
+                기본값은 `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH`(예: `/status/aquila`)이며, 필요하면
+                `NEXT_PUBLIC_UPTIME_KUMA_URL`(링크) 또는 `NEXT_PUBLIC_MONITORING_EMBED_URL`(임베드)로 재정의할 수 있습니다.
               </InlineNotice>
             )}
           </MonitoringActions>
+          {dashboardOpen && monitoringEmbedIsCrossOrigin && (
+            <InlineNotice data-tone="warning">
+              임베드 주소가 관리자 페이지와 다른 도메인이라 브라우저 보안 정책상 콘솔 경고가 표시될 수 있습니다.
+            </InlineNotice>
+          )}
           {dashboardOpen && monitoringEmbedUrl && (
             <MonitoringFrame
               src={monitoringEmbedUrl}
@@ -1723,6 +1755,7 @@ const TaskSampleMeta = styled.div`
 const MonitoringActions = styled.div`
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.62rem;
   margin-top: 0.7rem;
 

@@ -44,15 +44,30 @@ export const getProfileCardIconOptions = (section: ProfileCardLinkSection): Prof
 
 const KNOWN_ICON_NAMES = new Set<IconName>(PROFILE_CARD_ICON_OPTIONS.map((option) => option.id))
 
+const hasBlockedProtocol = (href: string) => /^(javascript|data|vbscript|file|blob):/i.test(href.trim())
+
+export const isAllowedProfileLinkHref = (section: ProfileCardLinkSection, href: string): boolean => {
+  const trimmed = href.trim()
+  if (!trimmed || hasBlockedProtocol(trimmed)) return false
+
+  if (section === "service") {
+    return /^(https?:\/\/)\S+/i.test(trimmed)
+  }
+
+  return /^(https?:\/\/|mailto:|tel:)\S+/i.test(trimmed)
+}
+
 export const normalizeProfileCardLinkItem = (
   item: Partial<ProfileCardLinkItem> | null | undefined,
-  defaultIcon: IconName
+  defaultIcon: IconName,
+  section?: ProfileCardLinkSection
 ): ProfileCardLinkItem | null => {
   if (!item) return null
 
   const label = (item.label || "").trim()
   const href = (item.href || "").trim()
   if (!label || !href) return null
+  if (section && !isAllowedProfileLinkHref(section, href)) return null
 
   const icon = item.icon && KNOWN_ICON_NAMES.has(item.icon) ? item.icon : defaultIcon
 

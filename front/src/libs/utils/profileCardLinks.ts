@@ -69,20 +69,21 @@ const FALLBACK_CONTACT_LINKS = buildFallbackContactLinks()
 
 const normalizeLinkList = (
   items: ProfileCardLinkItem[] | undefined,
-  defaultIcon: IconName
+  defaultIcon: IconName,
+  section: "service" | "contact"
 ): ProfileCardLinkItem[] =>
   (items || [])
-    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon))
+    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon, section))
     .filter((item): item is ProfileCardLinkItem => item !== null)
 
 export const resolveServiceLinks = (source?: ProfileLinkSource | null): ProfileCardLinkItem[] => {
   if (!source || source.serviceLinks === undefined) return FALLBACK_SERVICE_LINKS
-  const links = normalizeLinkList(source?.serviceLinks, DEFAULT_SERVICE_ITEM_ICON)
+  const links = normalizeLinkList(source?.serviceLinks, DEFAULT_SERVICE_ITEM_ICON, "service")
   return links
 }
 
 export const resolveContactLinks = (source?: ProfileLinkSource | null): ProfileCardLinkItem[] => {
   if (!source || source.contactLinks === undefined) return FALLBACK_CONTACT_LINKS
-  const links = normalizeLinkList(source?.contactLinks, DEFAULT_CONTACT_ITEM_ICON)
+  const links = normalizeLinkList(source?.contactLinks, DEFAULT_CONTACT_ITEM_ICON, "contact")
   return links
 }

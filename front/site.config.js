@@ -1,3 +1,5 @@
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.aquilaxk.site").replace(/\/+$/, "")
+
 const CONFIG = {
   // profile setting (required)
   profile: {
@@ -24,7 +26,7 @@ const CONFIG = {
   },
 
   // CONFIG configration (required)
-  link: "https://aquilaxk.vercel.app",
+  link: SITE_URL,
   since: 2026, // If leave this empty, current year will be used.
   lang: "ko-KR", // ['en-US', 'zh-CN', 'zh-HK', 'zh-TW', 'ja-JP', 'es-ES', 'ko-KR']
   ogImageGenerateURL: "https://og-image-korean.vercel.app", // The link to generate OG image, don't end with a slash

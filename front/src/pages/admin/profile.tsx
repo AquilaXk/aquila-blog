@@ -10,6 +10,7 @@ import {
   DEFAULT_CONTACT_ITEM_ICON,
   DEFAULT_SERVICE_ITEM_ICON,
   getProfileCardIconOptions,
+  isAllowedProfileLinkHref,
   normalizeProfileCardLinkItem,
   ProfileCardIconOption,
   ProfileCardLinkItem,
@@ -57,21 +58,27 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
 }
 
 const normalizeLinkInputs = (
+  section: ProfileCardLinkSection,
   items: ProfileCardLinkItem[],
   defaultIcon: IconName
 ): ProfileCardLinkItem[] =>
   items
-    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon))
+    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon, section))
     .filter((item): item is ProfileCardLinkItem => item !== null)
 
-const toPayloadLinks = (items: ProfileCardLinkItem[], defaultIcon: IconName): ProfileCardLinkItem[] =>
-  normalizeLinkInputs(items, defaultIcon).map((item) => ({
+const toPayloadLinks = (
+  section: ProfileCardLinkSection,
+  items: ProfileCardLinkItem[],
+  defaultIcon: IconName
+): ProfileCardLinkItem[] =>
+  normalizeLinkInputs(section, items, defaultIcon).map((item) => ({
     icon: item.icon,
     label: item.label.trim(),
     href: item.href.trim(),
   }))
 
 const validateLinkInputs = (
+  section: ProfileCardLinkSection,
   sectionLabel: "Service" | "Contact",
   items: ProfileCardLinkItem[]
 ): string | null => {
@@ -86,6 +93,12 @@ const validateLinkInputs = (
     }
     if (!label || !href) {
       return `${rowLabel}은 표시 이름과 링크를 모두 입력해야 합니다.`
+    }
+    if (!isAllowedProfileLinkHref(section, href)) {
+      if (section === "service") {
+        return `${rowLabel} 링크는 https:// 또는 http:// 형식만 허용됩니다.`
+      }
+      return `${rowLabel} 링크는 https://, http://, mailto:, tel: 형식만 허용됩니다.`
     }
   }
 
@@ -273,13 +286,13 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handleUpdateMemberProfileCard = async () => {
     if (!sessionMember?.id) return
 
-    const serviceValidationError = validateLinkInputs("Service", serviceLinksInput)
+    const serviceValidationError = validateLinkInputs("service", "Service", serviceLinksInput)
     if (serviceValidationError) {
       setNotice({ tone: "error", text: serviceValidationError })
       return
     }
 
-    const contactValidationError = validateLinkInputs("Contact", contactLinksInput)
+    const contactValidationError = validateLinkInputs("contact", "Contact", contactLinksInput)
     if (contactValidationError) {
       setNotice({ tone: "error", text: contactValidationError })
       return
@@ -295,8 +308,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           bio: profileBioInput.trim(),
           homeIntroTitle: homeIntroTitleInput.trim(),
           homeIntroDescription: homeIntroDescriptionInput.trim(),
-          serviceLinks: toPayloadLinks(serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON),
-          contactLinks: toPayloadLinks(contactLinksInput, DEFAULT_CONTACT_ITEM_ICON),
+          serviceLinks: toPayloadLinks("service", serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON),
+          contactLinks: toPayloadLinks("contact", contactLinksInput, DEFAULT_CONTACT_ITEM_ICON),
         }),
       })
       syncProfileState(updated)

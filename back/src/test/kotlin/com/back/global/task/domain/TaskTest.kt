@@ -1,6 +1,6 @@
 package com.back.global.task.domain
 
-import com.back.global.task.app.TaskRetryPolicy
+import com.back.global.task.application.TaskRetryPolicy
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import java.time.Instant

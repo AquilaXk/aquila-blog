@@ -1,0 +1,30 @@
+package com.back.global.storage.adapter.persistence
+
+import com.back.global.storage.domain.UploadedFile
+import com.back.global.storage.domain.UploadedFileStatus
+import org.springframework.data.domain.Pageable
+import org.springframework.data.jpa.repository.JpaRepository
+import java.time.Instant
+
+interface UploadedFileRepository : JpaRepository<UploadedFile, Int> {
+    fun findByObjectKey(objectKey: String): UploadedFile?
+
+    fun countByStatus(status: UploadedFileStatus): Long
+
+    fun countByStatusInAndPurgeAfterLessThanEqual(
+        statuses: Collection<UploadedFileStatus>,
+        purgeAfter: Instant,
+    ): Long
+
+    fun findByStatusAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+        status: UploadedFileStatus,
+        purgeAfter: Instant,
+        pageable: Pageable,
+    ): List<UploadedFile>
+
+    fun findByStatusInAndPurgeAfterLessThanEqualOrderByPurgeAfterAsc(
+        statuses: Collection<UploadedFileStatus>,
+        purgeAfter: Instant,
+        pageable: Pageable,
+    ): List<UploadedFile>
+}

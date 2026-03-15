@@ -45,7 +45,7 @@ sequenceDiagram
 
 관련 파일:
 
-- [ApiV1AuthController.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/adapter/in/web/ApiV1AuthController.kt)
+- [ApiV1AuthController.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AuthController.kt)
 - [AuthTokenService.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/application/service/AuthTokenService.kt)
 - [SecurityConfig.kt](../../back/src/main/kotlin/com/back/global/security/config/SecurityConfig.kt)
 
@@ -57,9 +57,9 @@ sequenceDiagram
 
 관련 파일:
 
-- [ApiV1MemberController.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/adapter/in/web/ApiV1MemberController.kt)
+- [ApiV1MemberController.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1MemberController.kt)
 - [MemberApplicationService.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberApplicationService.kt)
-- [MemberUseCase.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/application/port/in/MemberUseCase.kt)
+- [MemberUseCase.kt](../../back/src/main/kotlin/com/back/boundedContexts/member/application/port/input/MemberUseCase.kt)
 
 ## 현재 추가된 기능
 
@@ -74,7 +74,7 @@ sequenceDiagram
 관련 파일:
 
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/application/service/MemberSignupVerificationService.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/in/web/ApiV1SignupVerificationController.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/web/ApiV1SignupVerificationController.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/domain/MemberSignupVerification.kt`
 
 ### 2. 메일 발송 인프라
@@ -91,8 +91,8 @@ sequenceDiagram
 
 - `back/build.gradle.kts`
 - `back/src/main/resources/application.yaml`
-- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/out/mail/SmtpSignupVerificationMailSenderAdapter.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/out/mail/TestSignupVerificationMailSenderAdapter.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/mail/SmtpSignupVerificationMailSenderAdapter.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/mail/TestSignupVerificationMailSenderAdapter.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/application/service/SignupMailDiagnosticsService.kt`
 - `back/src/main/kotlin/com/back/global/system/in/ApiV1AdmSystemController.kt`
 
@@ -149,11 +149,11 @@ sequenceDiagram
 
 ## 현재 가장 먼저 참고할 백엔드 파일
 
-- `back/src/main/kotlin/com/back/boundedContexts/member/adapter/in/web/ApiV1AuthController.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/member/adapter/in/web/ApiV1MemberController.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AuthController.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1MemberController.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/application/service/MemberApplicationService.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/application/service/MemberSignupVerificationService.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/in/web/ApiV1SignupVerificationController.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/web/ApiV1SignupVerificationController.kt`
 - `back/src/main/resources/application.yaml`
 - `back/build.gradle.kts`
 

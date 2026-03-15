@@ -4,7 +4,7 @@ import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
 import com.back.global.app.AppConfig
-import com.back.global.app.app.AppFacade
+import com.back.global.app.application.AppFacade
 import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler

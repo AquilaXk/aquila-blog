@@ -5,7 +5,7 @@ Last updated: 2026-03-13
 ## 3줄 요약
 
 - 코드 탐색 시작점이 필요할 때 이 문서를 먼저 읽는다.
-- 프론트는 `pages/routes/components/apis`, 백엔드는 `boundedContexts + adapter/application 과도기` 구조다.
+- 프론트는 `pages/routes/components/apis`, 백엔드는 `boundedContexts/global + adapter/application/domain` 구조다.
 - 화면 수정은 프론트 가이드로, 백엔드 경계 수정은 도메인/아키텍처 문서로 바로 연결하면 된다.
 
 ## 이 문서가 보여주는 것
@@ -42,75 +42,68 @@ boundedContexts/
 └── post
 ```
 
-현재는 패키지 구조 전환기다.
-
-- 신규/리팩터링 축: `adapter`, `application`, `domain`
-- 기존 축: `app`, `in`, `out`
-- 즉, 완전히 한 패턴으로 정리된 상태가 아니라 두 구조가 공존한다.
+현재 백엔드는 `adapter`, `application`, `domain` 축으로 정리되어 있다.
+입력/출력 방향은 예약어를 피해서 `adapter/{web|event|scheduler|...}`와 `application/port/{input|output}`로 명시한다.
 
 실제 member/post 컨텍스트에서는 다음 구조가 보인다.
 
 ```text
 member/
 ├── adapter
-│   ├── in
-│   └── out
+│   ├── web
+│   ├── bootstrap
+│   └── persistence
 ├── application
 │   ├── port
 │   └── service
-├── app
 ├── config
 ├── domain
 ├── dto
-├── in
-├── out
 └── subContexts
 ```
 
 ```text
 post/
 ├── adapter
-│   ├── in
-│   └── out
+│   ├── web
+│   ├── bootstrap
+│   ├── scheduler
+│   ├── persistence
+│   ├── storage
+│   └── external
 ├── application
 │   ├── port
 │   └── service
-├── app
 ├── config
 ├── domain
 ├── dto
-├── event
-├── in
-└── out
+└── event
 ```
 
 ```mermaid
 flowchart LR
-    Web["adapter/in/web"] --> Application["application/service"]
-    Bootstrap["adapter/in/bootstrap"] --> Application
+    Web["adapter/web"] --> Application["application/service"]
+    Bootstrap["adapter/bootstrap"] --> Application
+    Job["adapter/scheduler"] --> Application
     Application --> Domain["domain"]
-    Application --> Port["application/port"]
-    Port --> AdapterOut["adapter/out/*"]
-    LegacyIn["in"] --> LegacyApp["app"]
-    LegacyApp --> LegacyOut["out"]
+    Application --> Port["application/port/input|output"]
+    Port --> AdapterOut["adapter/persistence|storage|external|..."]
 ```
 
 ### 현재 해석 원칙
 
-- `adapter/in/web`
-  Controller, bootstrap, 외부 입력 진입점
+- `adapter/web`, `adapter/bootstrap`, `adapter/event`, `adapter/scheduler`
+  HTTP, 초기화, 이벤트, 스케줄러 같은 입력 채널
 - `application/service`
   유스케이스 오케스트레이션, 퍼사드 성격의 서비스
-- `application/port`
-  외부 저장소/연동 추상화
-- `adapter/out/persistence`, `adapter/out/internalApi`
+- `application/port/input`, `application/port/output`
+  입력 유스케이스 계약과 출력 포트 계약
+- `adapter/persistence`, `adapter/storage`, `adapter/external`
   port 구현체
 - `domain`
   엔티티, 정책, 믹스인, 도메인 규칙
-- `app`, `in`, `out`
-  아직 제거되지 않은 기존 계층
-
-즉, 현재 코드를 읽을 때는 "신규 구조가 어디까지 들어왔는지"를 먼저 확인해야 한다.
+- `global/*/application`
+  컨텍스트 간 공통 애플리케이션 서비스
 
 글로벌 공통 코드는 다음에 모여 있다.
 
@@ -190,6 +183,7 @@ flowchart LR
 ## 권장 유지 원칙
 
 - 새 기능은 `boundedContexts` 경계를 우선 지키고, `global`에는 진짜 공통 로직만 둔다.
-- 백엔드 리팩터링 중에는 `adapter/application`과 `app/in/out` 중 어느 축을 따르는 코드인지 문서와 커밋 메시지에 명시하는 편이 안전하다.
+- `adapter/*`는 채널 의미가 이름으로 드러나야 한다(`web`, `event`, `scheduler`, `persistence`, `external` 등).
+- `application/port/input`, `application/port/output` 네이밍을 고정해 Kotlin 예약어(`in`, `out`)를 피한다.
 - 프론트는 `pages`에 로직을 몰지 말고 `routes`, `apis`, `hooks`로 분산한다.
 - 인프라 변경은 `deploy/`와 문서를 함께 수정한다.

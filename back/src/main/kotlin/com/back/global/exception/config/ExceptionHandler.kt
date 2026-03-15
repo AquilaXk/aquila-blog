@@ -1,6 +1,6 @@
 package com.back.global.exception.config
 
-import com.back.global.exception.app.AppException
+import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import jakarta.validation.ConstraintViolationException
 import org.springframework.http.HttpStatus

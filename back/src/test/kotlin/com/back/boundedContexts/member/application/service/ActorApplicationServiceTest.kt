@@ -1,6 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberProxy
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload

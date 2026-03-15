@@ -1,6 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.global.rsData.RsData

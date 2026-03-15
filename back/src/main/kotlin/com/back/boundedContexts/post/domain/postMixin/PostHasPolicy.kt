@@ -1,7 +1,7 @@
 package com.back.boundedContexts.post.domain.postMixin
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.global.exception.app.AppException
+import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 
 interface PostHasPolicy : PostAware {

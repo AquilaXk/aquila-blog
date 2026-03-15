@@ -215,9 +215,9 @@ flowchart TD
 
 관련 파일:
 
-- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/in/web/ApiV1PostController.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/web/ApiV1PostController.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/post/application/service/PostApplicationService.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/post/application/port/in/PostUseCase.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/application/port/input/PostUseCase.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/post/application/service/PostUseCaseAdapter.kt`
 - `front/src/routes/Detail/PostDetail/index.tsx`
 
@@ -329,10 +329,10 @@ sequenceDiagram
 
 관련 파일:
 
-- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/out/persistence/PostAttrRepositoryCustom.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/out/persistence/PostAttrRepositoryImpl.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/out/persistence/PostAttrRepositoryAdapter.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/post/application/port/out/PostAttrRepositoryPort.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/persistence/PostAttrRepositoryCustom.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/persistence/PostAttrRepositoryImpl.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/adapter/persistence/PostAttrRepositoryAdapter.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/post/application/port/output/PostAttrRepositoryPort.kt`
 
 ## 7. 왜 이 설계가 현재 서비스 규모에 가장 적합했는가
 
@@ -368,8 +368,8 @@ flowchart LR
 
 관련 파일:
 
-- `back/src/test/kotlin/com/back/boundedContexts/post/adapter/in/web/ApiV1PostControllerTest.kt`
-- `back/src/test/kotlin/com/back/boundedContexts/member/adapter/in/web/ApiV1AuthControllerTest.kt`
+- `back/src/test/kotlin/com/back/boundedContexts/post/adapter/web/ApiV1PostControllerTest.kt`
+- `back/src/test/kotlin/com/back/boundedContexts/member/adapter/web/ApiV1AuthControllerTest.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/application/service/LoginAttemptService.kt`
 
 ### 실행 검증

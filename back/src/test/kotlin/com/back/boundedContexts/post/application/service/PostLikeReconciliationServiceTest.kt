@@ -1,8 +1,8 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.out.PostAttrRepositoryPort
-import com.back.boundedContexts.post.application.port.out.PostLikeRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT

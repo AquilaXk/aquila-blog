@@ -2,7 +2,7 @@ package com.back.global.task.domain
 
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
-import com.back.global.task.app.TaskRetryPolicy
+import com.back.global.task.application.TaskRetryPolicy
 import jakarta.persistence.*
 import jakarta.persistence.GenerationType.SEQUENCE
 import org.hibernate.annotations.DynamicUpdate

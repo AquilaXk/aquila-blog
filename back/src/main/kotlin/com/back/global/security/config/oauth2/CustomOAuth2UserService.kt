@@ -1,6 +1,6 @@
 package com.back.global.security.config.oauth2
 
-import com.back.boundedContexts.member.application.port.`in`.MemberUseCase
+import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.global.security.domain.SecurityUser
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest

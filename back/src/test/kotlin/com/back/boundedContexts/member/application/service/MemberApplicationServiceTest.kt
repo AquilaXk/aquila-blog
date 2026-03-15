@@ -1,13 +1,13 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.adapter.out.persistence.MemberAttrPersistenceAdapter
-import com.back.boundedContexts.member.adapter.out.persistence.MemberAttrRepository
-import com.back.boundedContexts.member.adapter.out.persistence.MemberRepository
-import com.back.boundedContexts.member.adapter.out.persistence.MemberRepositoryAdapter
+import com.back.boundedContexts.member.adapter.persistence.MemberAttrPersistenceAdapter
+import com.back.boundedContexts.member.adapter.persistence.MemberAttrRepository
+import com.back.boundedContexts.member.adapter.persistence.MemberRepository
+import com.back.boundedContexts.member.adapter.persistence.MemberRepositoryAdapter
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.app.AppConfig
 import com.back.global.jpa.config.JpaConfig
-import com.back.global.storage.app.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileRetentionService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired

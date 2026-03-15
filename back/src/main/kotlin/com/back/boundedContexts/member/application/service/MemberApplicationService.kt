@@ -1,12 +1,12 @@
 package com.back.boundedContexts.member.application.service
 
-import com.back.boundedContexts.member.application.port.out.MemberAttrRepositoryPort
-import com.back.boundedContexts.member.application.port.out.MemberRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
+import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
-import com.back.global.exception.app.AppException
+import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
-import com.back.global.storage.app.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest

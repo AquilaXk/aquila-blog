@@ -1,7 +1,7 @@
 package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.`in`.PostUseCase
+import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult

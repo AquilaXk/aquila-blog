@@ -1,7 +1,7 @@
 package com.back.global.storage.job
 
-import com.back.global.storage.app.UploadedFileRetentionProperties
-import com.back.global.storage.app.UploadedFileRetentionService
+import com.back.global.storage.application.UploadedFileRetentionProperties
+import com.back.global.storage.application.UploadedFileRetentionService
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component

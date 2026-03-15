@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.subContexts.notification.application.service
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.member.subContexts.notification.adapter.out.persistence.MemberNotificationRepository
+import com.back.boundedContexts.member.subContexts.notification.adapter.persistence.MemberNotificationRepository
 import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.standard.extensions.getOrThrow

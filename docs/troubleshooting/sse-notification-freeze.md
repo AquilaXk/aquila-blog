@@ -162,7 +162,7 @@ sequenceDiagram
 - same-site 우선 SSE 로직 개선
 - `doctor.sh` 도메인 정합성 점검 추가
 - 관련 파일:
-  - [`back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/adapter/in/web/ApiV1MemberNotificationController.kt`](/Users/aquila/Custom/GitProjects/aquila-blog/back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/adapter/in/web/ApiV1MemberNotificationController.kt)
+  - [`back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/adapter/web/ApiV1MemberNotificationController.kt`](/Users/aquila/Custom/GitProjects/aquila-blog/back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/adapter/web/ApiV1MemberNotificationController.kt)
   - [`back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/application/service/MemberNotificationSseService.kt`](/Users/aquila/Custom/GitProjects/aquila-blog/back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/application/service/MemberNotificationSseService.kt)
   - [`front/src/layouts/RootLayout/Header/NotificationBell.tsx`](/Users/aquila/Custom/GitProjects/aquila-blog/front/src/layouts/RootLayout/Header/NotificationBell.tsx)
   - [`back/src/main/kotlin/com/back/global/security/config/SecurityConfig.kt`](/Users/aquila/Custom/GitProjects/aquila-blog/back/src/main/kotlin/com/back/global/security/config/SecurityConfig.kt)

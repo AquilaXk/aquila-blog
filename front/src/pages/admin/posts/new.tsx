@@ -1224,7 +1224,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         redirectingRef.current = true
         void (async () => {
           try {
-            await router.replace("/")
+            await replaceRoute(router, "/", { preferHardNavigation: true })
           } catch (error) {
             if (!isNavigationCancelledError(error)) {
               setResult(pretty({ error: error instanceof Error ? error.message : String(error) }))

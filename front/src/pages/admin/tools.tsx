@@ -273,21 +273,28 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     void (async () => {
-      const [mailResult, taskResult, cleanupResult, postsResult] = await Promise.allSettled([
+      const [mailResult, taskResult, cleanupResult, publicPostsResult, adminPostsResult] = await Promise.allSettled([
         apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup"),
         apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"),
         apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"),
+        apiFetch<PageDto<{ id: number }>>("/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT"),
         apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
       ])
 
       if (mailResult.status === "fulfilled") setMailDiagnostics(mailResult.value)
       if (taskResult.status === "fulfilled") setTaskQueueDiagnostics(taskResult.value)
       if (cleanupResult.status === "fulfilled") setCleanupDiagnostics(cleanupResult.value)
-      if (postsResult.status === "fulfilled") {
-        const firstPostId = postsResult.value.content?.[0]?.id
-        if (firstPostId != null) {
-          setPostId(String(firstPostId))
-        }
+      const firstPublicPostId =
+        publicPostsResult.status === "fulfilled"
+          ? publicPostsResult.value.content?.[0]?.id
+          : undefined
+      const firstAdminPostId =
+        adminPostsResult.status === "fulfilled"
+          ? adminPostsResult.value.content?.[0]?.id
+          : undefined
+      const seedPostId = firstPublicPostId ?? firstAdminPostId
+      if (seedPostId != null) {
+        setPostId(String(seedPostId))
       }
     })()
   }, [])

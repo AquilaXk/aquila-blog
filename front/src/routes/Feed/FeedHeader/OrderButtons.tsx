@@ -14,6 +14,8 @@ const OrderButtons: React.FC<Props> = () => {
     router.query.order === "asc" ? "asc" : "desc"
 
   const handleClickOrderBy = (value: TOrder) => {
+    if (currentOrder === value) return
+
     const { category: _deprecatedCategory, ...restQuery } = router.query
     replaceShallowRoutePreservingScroll(router, {
       pathname: "/",
@@ -48,25 +50,20 @@ const OrderButtons: React.FC<Props> = () => {
 export default OrderButtons
 
 const StyledWrapper = styled.div`
-  display: flex;
-  gap: 0.14rem;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(6.5rem, 1fr));
+  gap: 0.16rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
-  flex: 0 0 auto;
-  min-width: 220px;
-  width: fit-content;
-  max-width: min(100%, 18rem);
+  min-width: 13.2rem;
+  width: auto;
+  max-width: 100%;
   padding: 0.18rem;
-  border-radius: 12px;
+  border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 
-  @container feed-filters (max-width: 44rem) {
-    width: min(100%, 18rem);
-    min-width: 248px;
-  }
-
-  @container feed-filters (max-width: 28rem) {
+  @media (max-width: 460px) {
     width: 100%;
     min-width: 0;
   }
@@ -75,16 +72,15 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 0;
-    max-width: 100%;
-    flex: 1 1 0;
+    min-width: 6.4rem;
     min-height: 34px;
     padding: 0 0.82rem;
-    border-radius: 9px;
+    border-radius: 999px;
     border: 0;
     background: transparent;
     cursor: pointer;
     color: ${({ theme }) => theme.colors.gray10};
+    white-space: nowrap;
     transition:
       background-color 0.18s ease,
       border-color 0.18s ease,
@@ -95,15 +91,6 @@ const StyledWrapper = styled.div`
       color: ${({ theme }) => theme.colors.gray12};
       background: ${({ theme }) => theme.colors.gray3};
       box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray7};
-    }
-
-    @container feed-filters (max-width: 44rem) {
-      width: min(100%, 18rem);
-      min-width: 0;
-    }
-
-    @container feed-filters (max-width: 28rem) {
-      width: 100%;
     }
   }
 `

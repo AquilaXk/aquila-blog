@@ -52,7 +52,14 @@ export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminPro
 export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
   const query = useQuery<AdminProfile | null>({
     queryKey: queryKey.adminProfile(),
-    queryFn: async () => await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile"),
+    queryFn: async () => {
+      try {
+        return await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
+      } catch {
+        // 운영에서 adminProfile 조회 실패 시에도 화면은 기본 프로필로 안전하게 유지한다.
+        return initialProfile ?? null
+      }
+    },
     initialData: initialProfile,
     staleTime: initialProfile ? 60 * 1000 : 0,
     retry: false,

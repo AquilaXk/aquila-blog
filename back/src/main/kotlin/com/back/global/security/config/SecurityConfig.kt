@@ -46,9 +46,16 @@ class SecurityConfig(
                 authorize("/*/api/*/**", authenticated)
                 authorize("/oauth2/**", permitAll)
                 authorize("/login/oauth2/**", permitAll)
-                authorize("/actuator/health/**", permitAll)
-                authorize("/actuator/info", permitAll)
-                authorize("/actuator/prometheus", permitAll)
+                if (AppFacade.isProd) {
+                    // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
+                    authorize("/actuator/health/liveness", permitAll)
+                    authorize("/actuator/health/readiness", permitAll)
+                    authorize("/actuator/**", hasRole("ADMIN"))
+                } else {
+                    authorize("/actuator/health/**", permitAll)
+                    authorize("/actuator/info", permitAll)
+                    authorize("/actuator/prometheus", permitAll)
+                }
                 authorize("/swagger-ui/**", permitAll)
                 authorize("/v3/api-docs/**", permitAll)
                 authorize("/error", permitAll)

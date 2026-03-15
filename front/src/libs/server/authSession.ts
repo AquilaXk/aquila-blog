@@ -4,7 +4,16 @@ import type { AuthMember } from "src/hooks/useAuthSession"
 import { QueryClient } from "@tanstack/react-query"
 import { serverApiFetch } from "./backend"
 
+const hasAuthCookie = (req: IncomingMessage) => {
+  const rawCookie = req.headers.cookie || ""
+  if (!rawCookie) return false
+
+  return rawCookie.includes("apiKey=") || rawCookie.includes("accessToken=")
+}
+
 export const fetchServerAuthSession = async (req: IncomingMessage): Promise<AuthMember | null> => {
+  if (!hasAuthCookie(req)) return null
+
   try {
     const response = await serverApiFetch(req, "/member/api/v1/auth/me")
     if (response.status === 401) return null

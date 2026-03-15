@@ -27,38 +27,7 @@ class MemberProfileHydrator(
             PROFILE_CONTACT_LINKS,
         )
 
-    fun hydrate(member: Member): Member {
-        member.getOrInitProfileImgUrlAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_IMG_URL)
-                ?: MemberAttr(0, member, PROFILE_IMG_URL, "")
-        }
-        member.getOrInitProfileRoleAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_ROLE)
-                ?: MemberAttr(0, member, PROFILE_ROLE, "")
-        }
-        member.getOrInitProfileBioAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_BIO)
-                ?: MemberAttr(0, member, PROFILE_BIO, "")
-        }
-        member.getOrInitHomeIntroTitleAttr {
-            memberAttrRepository.findBySubjectAndName(member, HOME_INTRO_TITLE)
-                ?: MemberAttr(0, member, HOME_INTRO_TITLE, "")
-        }
-        member.getOrInitHomeIntroDescriptionAttr {
-            memberAttrRepository.findBySubjectAndName(member, HOME_INTRO_DESCRIPTION)
-                ?: MemberAttr(0, member, HOME_INTRO_DESCRIPTION, "")
-        }
-        member.getOrInitServiceLinksAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_SERVICE_LINKS)
-                ?: MemberAttr(0, member, PROFILE_SERVICE_LINKS, "")
-        }
-        member.getOrInitContactLinksAttr {
-            memberAttrRepository.findBySubjectAndName(member, PROFILE_CONTACT_LINKS)
-                ?: MemberAttr(0, member, PROFILE_CONTACT_LINKS, "")
-        }
-
-        return member
-    }
+    fun hydrate(member: Member): Member = hydrateAll(listOf(member)).first()
 
     fun hydrateAll(members: List<Member>): List<Member> {
         if (members.isEmpty()) return members

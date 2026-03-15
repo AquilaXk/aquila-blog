@@ -25,17 +25,22 @@ data class PostDto
         val hitCount: Int,
         var actorHasLiked: Boolean = false,
     ) {
-        constructor(post: Post) : this(
+        constructor(post: Post) : this(post, PostPreviewExtractor.extract(post.content))
+
+        private constructor(
+            post: Post,
+            preview: PostPreviewExtractor.Preview,
+        ) : this(
             post.id,
             post.createdAt,
             post.modifiedAt,
             post.author.id,
             post.author.name,
             post.author.username,
-            post.author.redirectToProfileImgUrlOrDefault,
+            post.author.profileImgUrlVersionedOrDefault,
             post.title,
-            PostPreviewExtractor.extractThumbnail(post.content),
-            PostPreviewExtractor.makeSummary(post.content),
+            preview.thumbnail,
+            preview.summary,
             post.version ?: 0L,
             post.published,
             post.listed,

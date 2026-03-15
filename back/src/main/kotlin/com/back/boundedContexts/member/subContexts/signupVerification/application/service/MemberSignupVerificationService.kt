@@ -53,7 +53,10 @@ class MemberSignupVerificationService(
         if (!canStart) {
             throw AppException("429-2", "이메일 인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
-        ensureEmailAvailable(normalizedEmail)
+        // 계정 열거 방지를 위해 이미 가입된 이메일이어도 동일한 성공 응답을 반환한다.
+        if (memberRepository.existsByEmail(normalizedEmail)) {
+            return SignupEmailStartResult(email = normalizedEmail)
+        }
 
         val now = Instant.now()
         memberSignupVerificationRepository
@@ -98,7 +101,10 @@ class MemberSignupVerificationService(
                 ?: throw AppException("404-2", "유효하지 않은 회원가입 링크입니다.")
 
         verification.ensureVerifiable(now)
-        ensureEmailAvailable(verification.email)
+        if (memberRepository.existsByEmail(verification.email)) {
+            verification.cancel(now)
+            throw AppException("404-2", "유효하지 않은 회원가입 링크입니다.")
+        }
 
         val sessionToken = UUID.randomUUID().toString()
         val sessionExpiresAt = now.plusSeconds(sessionExpirationSeconds)
@@ -129,7 +135,10 @@ class MemberSignupVerificationService(
                 ?: throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
 
         verification.ensureCompletable(now)
-        ensureEmailAvailable(verification.email)
+        if (memberRepository.existsByEmail(verification.email)) {
+            verification.cancel(now)
+            throw AppException("404-2", "유효하지 않은 회원가입 세션입니다.")
+        }
 
         val member =
             memberApplicationService.join(
@@ -143,12 +152,6 @@ class MemberSignupVerificationService(
         verification.consume(now)
 
         return member
-    }
-
-    private fun ensureEmailAvailable(email: String) {
-        if (memberRepository.existsByEmail(email)) {
-            throw AppException("409-2", "이미 사용 중인 이메일입니다.")
-        }
     }
 
     private fun buildVerificationLink(

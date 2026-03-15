@@ -15,8 +15,10 @@ import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profile
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
-  const initialAdminProfile = await fetchServerAdminProfile(req)
-  const authMember = await hydrateServerAuthSession(queryClient, req)
+  const [initialAdminProfile, authMember] = await Promise.all([
+    fetchServerAdminProfile(req),
+    hydrateServerAuthSession(queryClient, req),
+  ])
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
 
   res.setHeader(

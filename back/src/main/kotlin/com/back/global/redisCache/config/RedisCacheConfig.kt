@@ -26,7 +26,11 @@ class RedisCacheConfig(
         val ptv =
             BasicPolymorphicTypeValidator
                 .builder()
-                .allowIfSubType(Any::class.java)
+                // Any 허용 대신 애플리케이션/표준 타입으로 범위를 제한한다.
+                .allowIfSubType("com.back.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.time.")
+                .allowIfSubType("kotlin.")
                 .build()
         val serializer =
             GenericJacksonJsonRedisSerializer

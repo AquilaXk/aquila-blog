@@ -100,6 +100,12 @@ management:
       group:
         readiness:
           include: ping,db
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.95,0.99
 custom:
   dbBaseName: blog
   dev:
@@ -160,6 +166,8 @@ custom:
       sse:
         maxEmittersPerMember: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_EMITTERS_PER_MEMBER:3}
         maxGlobalEmitters: ${CUSTOM__MEMBER__NOTIFICATION__SSE__MAX_GLOBAL_EMITTERS:2000}
+        heartbeatSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__HEARTBEAT_SECONDS:20}
+        replayBatchSize: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_BATCH_SIZE:50}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"
@@ -191,7 +199,8 @@ custom:
       cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:3}
   cache:
     ttl-seconds: 3600
-    ttl-overrides: { }
+    ttl-overrides:
+      member-admin-profile: 120
   revalidate:
     url: "${CUSTOM__REVALIDATE__URL:}"
     token: "${CUSTOM__REVALIDATE__TOKEN:}"

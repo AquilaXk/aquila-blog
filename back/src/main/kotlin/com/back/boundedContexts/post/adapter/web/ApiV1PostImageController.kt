@@ -7,7 +7,6 @@ import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.domain.UploadedFilePurpose
 import jakarta.servlet.http.HttpServletRequest
-import org.springframework.core.io.ByteArrayResource
 import org.springframework.core.io.InputStreamResource
 import org.springframework.core.io.Resource
 import org.springframework.http.CacheControl
@@ -22,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import java.io.EOFException
+import java.io.InputStream
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -99,10 +100,23 @@ class ApiV1PostImageController(
 
         val rangeHeader = request.getHeader(HttpHeaders.RANGE)
         if (!rangeHeader.isNullOrBlank()) {
-            val bytes = image.inputStream.use { it.readAllBytes() }
-            val totalLength = bytes.size.toLong()
+            val totalLength = image.contentLength ?: -1
+            if (totalLength <= 0) {
+                image.inputStream.close()
+                return ResponseEntity
+                    .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */*")
+                    .eTag(etag)
+                    .cacheControl(
+                        CacheControl
+                            .maxAge(30, TimeUnit.DAYS)
+                            .cachePublic()
+                            .immutable(),
+                    ).build()
+            }
             val range = parseSingleRange(rangeHeader, totalLength)
             if (range == null) {
+                image.inputStream.close()
                 return ResponseEntity
                     .status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
                     .header(HttpHeaders.CONTENT_RANGE, "bytes */$totalLength")
@@ -115,10 +129,7 @@ class ApiV1PostImageController(
                     ).build()
             }
 
-            val body =
-                ByteArrayResource(
-                    bytes.copyOfRange(range.first.toInt(), range.last.toInt() + 1),
-                )
+            val body = InputStreamResource(sliceStream(image.inputStream, range))
 
             return ResponseEntity
                 .status(HttpStatus.PARTIAL_CONTENT)
@@ -215,5 +226,57 @@ class ApiV1PostImageController(
             }
 
         return start..end
+    }
+
+    private fun skipFully(
+        input: InputStream,
+        count: Long,
+    ) {
+        var remaining = count
+        while (remaining > 0) {
+            val skipped = input.skip(remaining)
+            if (skipped > 0) {
+                remaining -= skipped
+                continue
+            }
+
+            if (input.read() == -1) {
+                throw EOFException("Unexpected EOF while skipping stream")
+            }
+            remaining -= 1
+        }
+    }
+
+    private fun sliceStream(
+        source: InputStream,
+        range: LongRange,
+    ): InputStream {
+        skipFully(source, range.first)
+        return object : InputStream() {
+            private var remaining = range.last - range.first + 1
+
+            override fun read(): Int {
+                if (remaining <= 0) return -1
+                val value = source.read()
+                if (value >= 0) remaining -= 1
+                return value
+            }
+
+            override fun read(
+                b: ByteArray,
+                off: Int,
+                len: Int,
+            ): Int {
+                if (remaining <= 0) return -1
+                val allowed = minOf(remaining, len.toLong()).toInt()
+                val read = source.read(b, off, allowed)
+                if (read > 0) remaining -= read.toLong()
+                return read
+            }
+
+            override fun close() {
+                source.close()
+            }
+        }
     }
 }

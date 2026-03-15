@@ -4,6 +4,11 @@ import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 
 const isClient = typeof window !== "undefined"
+const hasAuthCookieInBrowser = () => {
+  if (!isClient) return false
+  const rawCookie = document.cookie || ""
+  return rawCookie.includes("apiKey=") || rawCookie.includes("accessToken=")
+}
 
 export type AuthSessionStatus = "loading" | "authenticated" | "anonymous" | "unavailable"
 
@@ -30,8 +35,9 @@ const useAuthSession = () => {
   const hasCachedSnapshot = cachedSnapshot !== undefined
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
+  const hasAuthCookieSnapshot = hasAuthCookieInBrowser()
   const shouldRefetchOnMount = !hasCachedSnapshot
-  const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 30_000 : 0
+  const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 5 * 60_000 : 0
   const query = useQuery({
     queryKey: queryKey.authMe(),
     queryFn: async () => {
@@ -45,7 +51,7 @@ const useAuthSession = () => {
         throw error
       }
     },
-    enabled: isClient,
+    enabled: isClient && (hasCachedSnapshot || hasAuthCookieSnapshot),
     // 로그인된 사용자 스냅샷만 짧게 재사용하고, anonymous(null) 스냅샷은 즉시 재검증한다.
     staleTime,
     retry: false,
@@ -58,7 +64,8 @@ const useAuthSession = () => {
   }
 
   const me = query.data ?? null
-  const hasResolvedSnapshot = query.status === "success" || query.data !== undefined
+  const isIdleAnonymous = !query.isFetching && !hasCachedSnapshot && !hasAuthCookieSnapshot
+  const hasResolvedSnapshot = query.status === "success" || query.data !== undefined || isIdleAnonymous
   const authStatus: AuthSessionStatus =
     query.isError
       ? "unavailable"

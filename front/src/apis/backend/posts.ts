@@ -219,6 +219,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
   const tags = dtoTags.length > 0 ? dtoTags : parsed.tags
   const category = dtoCategories.length > 0 ? dtoCategories : parsed.category
   const normalizedContent = parsed.content
+  const summary = toSummary(normalizedContent)
 
   return {
     ...mapPostDto({
@@ -231,7 +232,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
       authorProfileImgUrl:
         post.authorProfileImageDirectUrl || post.authorProfileImageUrl || post.authorProfileImgUrl || "",
       title: post.title,
-      summary: toSummary(normalizedContent),
+      summary,
       tags,
       category,
       published: post.published,
@@ -239,7 +240,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
     }),
     ...(tags.length > 0 ? { tags } : {}),
     ...(category.length > 0 ? { category } : {}),
-    summary: toSummary(normalizedContent),
+    summary,
     content: normalizedContent,
     modifiedTime: post.modifiedAt,
     likesCount: post.likesCount,

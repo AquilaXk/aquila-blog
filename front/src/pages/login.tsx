@@ -6,7 +6,7 @@ import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
-import { isNavigationCancelledError, normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
+import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -73,12 +73,8 @@ const LoginPage = () => {
         // 세션 재조회 실패 시에도 이동은 계속한다.
       }
 
-      try {
-        if (router.asPath !== next) {
-          await router.replace(next)
-        }
-      } catch (error) {
-        if (!isNavigationCancelledError(error)) throw error
+      if (router.asPath !== next) {
+        await replaceRoute(router, next)
       }
     } catch (error) {
       if (error instanceof Error) {

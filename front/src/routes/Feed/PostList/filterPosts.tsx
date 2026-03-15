@@ -1,12 +1,10 @@
-import { DEFAULT_CATEGORY } from "src/constants"
-import { getCategorySearchText, normalizeCategoryValue } from "src/libs/utils"
+import { getCategorySearchText } from "src/libs/utils"
 import { TPost } from "src/types"
 
 interface FilterPostsParams {
   posts: TPost[]
   q: string
   tag?: string
-  category?: string
   order?: string
 }
 
@@ -14,11 +12,9 @@ export function filterPosts({
   posts,
   q,
   tag = undefined,
-  category = DEFAULT_CATEGORY,
   order = "desc",
 }: FilterPostsParams): TPost[] {
   const normalizedQuery = q.trim().toLowerCase()
-  const normalizedCategory = normalizeCategoryValue(category)
 
   return posts
     .filter((post) => {
@@ -28,9 +24,7 @@ export function filterPosts({
       const searchContent = [post.title, summaryContent, tagContent, categoryContent].join(" ")
       return (
         searchContent.toLowerCase().includes(normalizedQuery) &&
-        (!tag || (post.tags && post.tags.includes(tag))) &&
-        (normalizedCategory === DEFAULT_CATEGORY ||
-          (post.category && post.category.includes(normalizedCategory)))
+        (!tag || (post.tags && post.tags.includes(tag)))
       )
     })
     .sort((a, b) => {

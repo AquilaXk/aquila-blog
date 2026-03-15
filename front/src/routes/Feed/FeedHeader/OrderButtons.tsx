@@ -14,10 +14,11 @@ const OrderButtons: React.FC<Props> = () => {
     router.query.order === "asc" ? "asc" : "desc"
 
   const handleClickOrderBy = (value: TOrder) => {
+    const { category: _deprecatedCategory, ...restQuery } = router.query
     replaceShallowRoutePreservingScroll(router, {
       pathname: "/",
       query: {
-        ...router.query,
+        ...restQuery,
         order: value,
       },
     })

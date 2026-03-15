@@ -2,9 +2,7 @@ import { useRouter } from "next/router"
 import React, { useMemo } from "react"
 import styled from "@emotion/styled"
 import PostCard from "src/routes/Feed/PostList/PostCard"
-import { DEFAULT_CATEGORY } from "src/constants"
 import usePostsQuery from "src/hooks/usePostsQuery"
-import { normalizeCategoryValue } from "src/libs/utils"
 import { filterPosts } from "./filterPosts"
 
 type Props = {
@@ -17,10 +15,6 @@ const PostList: React.FC<Props> = ({ q }) => {
 
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
-  const currentCategory =
-    typeof router.query.category === "string"
-      ? normalizeCategoryValue(router.query.category)
-      : DEFAULT_CATEGORY
   const currentOrder =
     router.query.order === "asc" || router.query.order === "desc"
       ? router.query.order
@@ -32,10 +26,9 @@ const PostList: React.FC<Props> = ({ q }) => {
         posts: data,
         q,
         tag: currentTag,
-        category: currentCategory,
         order: currentOrder,
       }),
-    [data, q, currentTag, currentCategory, currentOrder]
+    [data, q, currentTag, currentOrder]
   )
 
   return (

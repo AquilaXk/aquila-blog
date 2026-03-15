@@ -304,15 +304,11 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
 
 const serializeMetaItems = (items: string[]) => items.map((item) => JSON.stringify(item)).join(", ")
 
-const composeEditorContent = (body: string, tags: string[], category: string) => {
+const composeEditorContent = (body: string, tags: string[]) => {
   const normalizedBody = body.trim()
   const normalizedTags = dedupeStrings(tags)
-  const normalizedCategory = category.trim()
-    ? normalizeCategoryValue(category)
-    : ""
   const metadataLines: string[] = []
 
-  if (normalizedCategory) metadataLines.push(`category: [${serializeMetaItems([normalizedCategory])}]`)
   if (normalizedTags.length > 0) metadataLines.push(`tags: [${serializeMetaItems(normalizedTags)}]`)
 
   if (metadataLines.length === 0) return normalizedBody
@@ -560,7 +556,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     text: string
   }>({
     tone: "idle",
-    text: "기존 글의 태그/카테고리를 선택하거나 새 값을 추가할 수 있습니다. 사용 중인 값은 삭제할 수 없습니다.",
+    text: "기존 글의 태그를 선택하거나 새 값을 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다.",
   })
   const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
   const [activeToolbarMenu, setActiveToolbarMenu] = useState<string | null>(null)
@@ -857,7 +853,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("writePost")
       setPublishNotice({ tone: "loading", text: "글 작성 중입니다..." })
-      const contentWithMetadata = composeEditorContent(postContent, postTags, postCategory)
+      const contentWithMetadata = composeEditorContent(postContent, postTags)
       const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
       if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
         lastWriteFingerprintRef.current = fingerprint
@@ -925,7 +921,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         method: "PUT",
         body: JSON.stringify({
           title: postTitle,
-          content: composeEditorContent(postContent, postTags, postCategory),
+          content: composeEditorContent(postContent, postTags),
           ...toFlags(postVisibility),
           version: postVersion ?? undefined,
         }),
@@ -988,7 +984,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         method: "PUT",
         body: JSON.stringify({
           title: postTitle,
-          content: composeEditorContent(postContent, postTags, postCategory),
+          content: composeEditorContent(postContent, postTags),
           published: true,
           listed: true,
           version: postVersion ?? undefined,
@@ -1549,8 +1545,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const lineCount = postContent ? postContent.split("\n").length : 0
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
-  const selectedCategoryParts = splitCategoryDisplay(postCategory)
-  const selectedCategoryText = postCategory ? selectedCategoryParts.label : "미선택"
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
@@ -2108,36 +2102,28 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </span>
                   </div>
                   <InlineTagList>
-                    {postTags.length > 0 ? (
-                      postTags.map((tag) => (
-                        <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
-                          <span className="label">{tag}</span>
-                          <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
-                            ×
-                          </button>
-                        </SelectedTagChip>
-                      ))
-                    ) : (
-                      <EmptyMetaText>아직 추가된 태그가 없습니다.</EmptyMetaText>
-                    )}
-                  </InlineTagList>
-                  <InlineMetaComposer>
+                    {postTags.map((tag) => (
+                      <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
+                        <span className="label">{tag}</span>
+                        <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
+                          ×
+                        </button>
+                      </SelectedTagChip>
+                    ))}
                     <InlineMetaInput
-                      placeholder="새 태그 입력 후 Enter"
+                      placeholder={postTags.length > 0 ? "태그를 입력하고 Enter" : "태그를 입력하세요"}
                       value={tagDraft}
                       onChange={(e) => setTagDraft(e.target.value)}
                       onKeyDown={(e) => {
                         if (isComposingKeyboardEvent(e)) return
-                        if (e.key === "Enter") {
+                        if (e.key === "Enter" || e.key === ",") {
                           e.preventDefault()
                           addTagToPost(tagDraft)
                         }
                       }}
                     />
-                    <Button type="button" onClick={() => addTagToPost(tagDraft)}>
-                      태그 추가
-                    </Button>
-                  </InlineMetaComposer>
+                  </InlineTagList>
+                  <FieldHelp>쉼표 또는 Enter로 태그를 추가하고, 태그를 눌러 삭제할 수 있습니다.</FieldHelp>
                 </InlineTagComposer>
                 <WriterMetaActions>
                   <MetaActionRow>
@@ -2147,27 +2133,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
                     >
                       태그 관리
-                    </MetaToggleButton>
-                    <MetaToggleButton
-                      type="button"
-                      data-active={activeMetaPanel === "category"}
-                      onClick={() =>
-                        setActiveMetaPanel((prev) => (prev === "category" ? null : "category"))
-                      }
-                    >
-                      <CategoryButtonContent>
-                        {selectedCategoryText === "미선택" ? (
-                          <>
-                            <CategoryIcon iconId={CATEGORY_ICON_OPTIONS[0].id} className="categoryIcon" />
-                            <span>카테고리 미선택</span>
-                          </>
-                        ) : (
-                          <>
-                            <CategoryIcon iconId={selectedCategoryParts.iconId} className="categoryIcon" />
-                            <span>{selectedCategoryParts.label}</span>
-                          </>
-                        )}
-                      </CategoryButtonContent>
                     </MetaToggleButton>
                   </MetaActionRow>
                   <VisibilityWrap>
@@ -2192,140 +2157,53 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <CompactMetaPanel>
               <CompactMetaPanelTop>
                 <div>
-                  <h3>{activeMetaPanel === "category" ? "카테고리 관리" : "태그 관리"}</h3>
-                  <p>
-                    {activeMetaPanel === "category"
-                      ? "카테고리는 1개만 선택됩니다. 사용 중인 카테고리는 삭제할 수 없습니다."
-                      : "기존 태그를 선택하거나 새 태그를 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다."}
-                  </p>
+                  <h3>태그 관리</h3>
+                  <p>기존 태그를 선택하거나 새 태그를 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다.</p>
                 </div>
                 <MetadataBadge>
                   {metaCatalogLoading
                     ? "메타데이터 불러오는 중"
-                    : `기존 태그 ${knownTags.length}개 · 카테고리 ${knownCategories.length}개`}
+                    : `기존 태그 ${knownTags.length}개`}
                 </MetadataBadge>
               </CompactMetaPanelTop>
               <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
-              {activeMetaPanel === "category" ? (
-                <MetadataPanel>
-                  <label>카테고리 아이콘 선택</label>
-                  <IconChoiceRow>
-                    {CATEGORY_ICON_OPTIONS.map((option) => (
-                      <IconChoiceChip
-                        key={option.id}
+              <MetadataPanel>
+                <label>태그 선택</label>
+                <SelectionRow>
+                  {knownTags.map((tag) => (
+                    <TagCatalogChipGroup
+                      key={tag}
+                      data-active={postTags.includes(tag)}
+                      style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
+                    >
+                      <TagCatalogToggle
                         type="button"
-                        data-active={categoryIconId === option.id}
-                        onClick={() => setCategoryIconId(option.id)}
-                        aria-label={`카테고리 아이콘 ${option.label}`}
-                      >
-                        <CategoryChipContent>
-                          <CategoryIcon iconId={option.id} className="categoryIcon" />
-                          <span>{option.label}</span>
-                        </CategoryChipContent>
-                      </IconChoiceChip>
-                    ))}
-                  </IconChoiceRow>
-                  <SelectionRow>
-                    <SelectionChip
-                      type="button"
-                      data-active={postCategory.length === 0}
-                      onClick={() => selectCategoryForPost("")}
-                    >
-                      없음
-                    </SelectionChip>
-                    {knownCategories.map((category) => (
-                      <CatalogChipGroup key={category}>
-                        <SelectionChip
-                          type="button"
-                          data-active={postCategory === category}
-                          onClick={() => selectCategoryForPost(category)}
-                        >
-                          <CategoryChipContent>
-                            <CategoryIcon
-                              iconId={splitCategoryDisplay(category).iconId}
-                              className="categoryIcon"
-                            />
-                            <span>{splitCategoryDisplay(category).label}</span>
-                            {(categoryUsageMap[category] || 0) > 0 ? (
-                              <span className="count">({categoryUsageMap[category]})</span>
-                            ) : null}
-                          </CategoryChipContent>
-                        </SelectionChip>
-                        <CatalogDeleteButton
-                          type="button"
-                          disabled={(categoryUsageMap[category] || 0) > 0}
-                          title={
-                            (categoryUsageMap[category] || 0) > 0
-                              ? "사용 중인 카테고리는 삭제할 수 없습니다."
-                              : "카테고리 삭제"
-                          }
-                          onClick={() => deleteCategoryFromCatalog(category)}
-                        >
-                          ×
-                        </CatalogDeleteButton>
-                      </CatalogChipGroup>
-                    ))}
-                  </SelectionRow>
-                  <CreateRow>
-                    <Input
-                      placeholder="새 카테고리 이름 입력"
-                      value={categoryDraft}
-                      onChange={(e) => setCategoryDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (isComposingKeyboardEvent(e)) return
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryIconId))
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => selectCategoryForPost(composeCategoryDisplay(categoryDraft, categoryIconId))}
-                    >
-                      카테고리 추가
-                    </Button>
-                  </CreateRow>
-                </MetadataPanel>
-              ) : (
-                <MetadataPanel>
-                  <label>태그 선택</label>
-                  <SelectionRow>
-                    {knownTags.map((tag) => (
-                      <TagCatalogChipGroup
-                        key={tag}
                         data-active={postTags.includes(tag)}
-                        style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
+                        onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
                       >
-                        <TagCatalogToggle
-                          type="button"
-                          data-active={postTags.includes(tag)}
-                          onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
-                        >
-                          <span className="label">{tag}</span>
-                          {(tagUsageMap[tag] || 0) > 0 ? (
-                            <span className="count">{tagUsageMap[tag] || 0}</span>
-                          ) : null}
-                        </TagCatalogToggle>
-                        <TagCatalogDeleteButton
-                          type="button"
-                          data-active={postTags.includes(tag)}
-                          disabled={(tagUsageMap[tag] || 0) > 0}
-                          title={
-                            (tagUsageMap[tag] || 0) > 0
-                              ? "사용 중인 태그는 삭제할 수 없습니다."
-                              : "태그 삭제"
-                          }
-                          onClick={() => deleteTagFromCatalog(tag)}
-                        >
-                          ×
-                        </TagCatalogDeleteButton>
-                      </TagCatalogChipGroup>
-                    ))}
-                    {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
-                  </SelectionRow>
-                </MetadataPanel>
-              )}
+                        <span className="label">{tag}</span>
+                        {(tagUsageMap[tag] || 0) > 0 ? (
+                          <span className="count">{tagUsageMap[tag] || 0}</span>
+                        ) : null}
+                      </TagCatalogToggle>
+                      <TagCatalogDeleteButton
+                        type="button"
+                        data-active={postTags.includes(tag)}
+                        disabled={(tagUsageMap[tag] || 0) > 0}
+                        title={
+                          (tagUsageMap[tag] || 0) > 0
+                            ? "사용 중인 태그는 삭제할 수 없습니다."
+                            : "태그 삭제"
+                        }
+                        onClick={() => deleteTagFromCatalog(tag)}
+                      >
+                        ×
+                      </TagCatalogDeleteButton>
+                    </TagCatalogChipGroup>
+                  ))}
+                  {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
+                </SelectionRow>
+              </MetadataPanel>
             </CompactMetaPanel>
           )}
 
@@ -2464,11 +2342,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </PreviewPane>
           </EditorGrid>
           <WriterFooterBar>
-            <WriterFooterSummary>
-              <span>{currentPostLabel}</span>
-              <span>{tagSummaryText} · {selectedCategoryText}</span>
-              <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
-            </WriterFooterSummary>
+              <WriterFooterSummary>
+                <span>{currentPostLabel}</span>
+                <span>{tagSummaryText}</span>
+                <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
+              </WriterFooterSummary>
             <WriterFooterControls>
               <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
               <WriterFooterActions>
@@ -3258,25 +3136,29 @@ const InlineTagComposer = styled.div`
 const InlineTagList = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  min-height: 2rem;
+  gap: 0.4rem;
+  min-height: 3rem;
   align-items: center;
-`
-
-const InlineMetaComposer = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.55rem;
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
+  border-radius: 1rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.52rem 0.55rem;
 `
 
 const InlineMetaInput = styled(Input)`
-  min-width: 0;
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray2};
+  flex: 1 1 12rem;
+  min-width: 11rem;
+  border: 0;
+  outline: none;
+  min-height: 2rem;
+  padding: 0 0.35rem;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray10};
+  }
 `
 
 const WriterMetaActions = styled.div`

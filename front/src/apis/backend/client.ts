@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_URL = "http://localhost:8080"
+const API_FETCH_TIMEOUT_MS = 12_000
 
 const isServer = typeof window === "undefined"
 
@@ -16,6 +17,42 @@ export class ApiError extends Error {
     this.url = url
     this.body = body
   }
+}
+
+export class ApiTimeoutError extends Error {
+  url: string
+
+  constructor(url: string) {
+    super(`API request timed out (${API_FETCH_TIMEOUT_MS}ms): ${url}`)
+    this.name = "ApiTimeoutError"
+    this.url = url
+  }
+}
+
+const createTimedSignal = (sourceSignal: AbortSignal | null | undefined) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), API_FETCH_TIMEOUT_MS)
+
+  const cleanup = () => {
+    clearTimeout(timeoutId)
+    if (sourceSignal) {
+      sourceSignal.removeEventListener("abort", onSourceAbort)
+    }
+  }
+
+  const onSourceAbort = () => {
+    controller.abort(sourceSignal?.reason)
+  }
+
+  if (sourceSignal) {
+    if (sourceSignal.aborted) {
+      controller.abort(sourceSignal.reason)
+    } else {
+      sourceSignal.addEventListener("abort", onSourceAbort, { once: true })
+    }
+  }
+
+  return { signal: controller.signal, cleanup }
 }
 
 export const getApiBaseUrl = () => {
@@ -48,11 +85,26 @@ export const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> 
     headers.set("Content-Type", "application/json")
   }
 
-  const response = await fetch(url, {
-    credentials: "include",
-    ...init,
-    headers,
-  })
+  const { signal, cleanup } = createTimedSignal(init?.signal)
+
+  let response: Response
+
+  try {
+    response = await fetch(url, {
+      credentials: "include",
+      ...init,
+      headers,
+      signal,
+    })
+  } catch (error) {
+    cleanup()
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new ApiTimeoutError(url)
+    }
+    throw error
+  }
+
+  cleanup()
 
   if (!response.ok) {
     const body = await response.text().catch(() => "")

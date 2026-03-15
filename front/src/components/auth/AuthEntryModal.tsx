@@ -158,7 +158,7 @@ const AuthEntryModal: React.FC<Props> = ({
         const refreshed = await refresh()
         setMe(refreshed.data ?? null)
       } catch {
-        setMe(null)
+        // 로그인 성공 직후 세션 재조회가 일시 실패해도 기존 상태를 강제로 비우지 않는다.
       }
 
       setPassword("")

@@ -40,7 +40,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     actorHasLiked: data?.actorHasLiked ?? false,
   }))
 
-  const category = data?.category?.[0] || undefined
   const loginHref = useMemo(() => {
     const next = router.asPath || toCanonicalPostPath(postId)
     return toLoginPath(next, toCanonicalPostPath(postId))
@@ -157,7 +156,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         {data.type[0] === "Post" && (
           <PostHeader
             data={data}
-            category={category}
             likesCount={engagement.likesCount}
             hitCount={engagement.hitCount}
             actorHasLiked={engagement.actorHasLiked}

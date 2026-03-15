@@ -26,10 +26,11 @@ const TagList: React.FC<Props> = () => {
   const isDenseTagList = tagEntries.length >= 30
 
   const navigateWithTag = (value?: string) => {
+    const { category: _deprecatedCategory, ...restQuery } = router.query
     replaceShallowRoutePreservingScroll(router, {
       pathname: "/",
       query: {
-        ...router.query,
+        ...restQuery,
         tag: value,
       },
     })
@@ -83,7 +84,7 @@ const TagList: React.FC<Props> = () => {
         </ul>
       </section>
 
-      <div className="mobileRail" role="tablist" aria-label="태그 선택">
+      <div className="mobileRail" role="group" aria-label="태그 선택">
         <button
           type="button"
           data-active={!currentTag}
@@ -123,11 +124,7 @@ const StyledWrapper = styled.div`
     padding: 0.42rem 0.35rem 0.62rem;
     border-radius: 18px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: linear-gradient(
-      180deg,
-      ${({ theme }) => theme.colors.gray1},
-      ${({ theme }) => theme.colors.gray2}
-    );
+    background: ${({ theme }) => theme.colors.gray1};
     container-type: inline-size;
 
     @media (min-width: 1024px) {
@@ -194,10 +191,9 @@ const StyledWrapper = styled.div`
     align-items: center;
     text-align: left;
     color: ${({ theme }) => theme.colors.gray11};
-    transition: background-color 120ms ease, color 120ms ease;
+    transition: color 120ms ease;
 
     &:hover {
-      background: ${({ theme }) => theme.colors.gray4};
       color: ${({ theme }) => theme.colors.gray12};
     }
 
@@ -208,8 +204,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] {
-    background: ${({ theme }) => theme.colors.blue3};
-    box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.blue8};
+    font-weight: 700;
   }
 
   .desktopList button .name {
@@ -223,7 +218,10 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .name {
-    color: ${({ theme }) => theme.colors.blue11};
+    color: ${({ theme }) => theme.colors.green11};
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
   }
 
   .desktopList button .count {
@@ -234,7 +232,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.green10};
   }
 
   @container (max-width: 235px) {
@@ -327,9 +325,9 @@ const StyledWrapper = styled.div`
     }
 
     &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.blue8};
-      background: ${({ theme }) => theme.colors.blue3};
-      color: ${({ theme }) => theme.colors.blue11};
+      border-color: ${({ theme }) => theme.colors.green8};
+      background: ${({ theme }) => theme.colors.gray3};
+      color: ${({ theme }) => theme.colors.green11};
     }
   }
 
@@ -344,7 +342,7 @@ const StyledWrapper = styled.div`
   }
 
   .mobileRail button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.green10};
   }
 
   @media (max-width: 768px) {

@@ -24,7 +24,7 @@ const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
         </div>
       <div className="content">
         <div className="top">
-          <ProfileImage src={imageSrc} width={132} height={132} alt="" priority fillContainer />
+          <ProfileImage src={imageSrc} width={132} height={132} alt={`${displayName} profile`} priority fillContainer />
         </div>
         <div className="mid">
           <div className="name">{displayName}</div>

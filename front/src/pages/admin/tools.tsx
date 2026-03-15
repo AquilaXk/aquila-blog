@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -106,6 +107,12 @@ type ApiRsData<T> = {
   data: T
 }
 
+type SystemHealthPayload = {
+  status?: string
+  details?: Record<string, unknown>
+  [key: string]: unknown
+}
+
 type PageDto<T> = {
   content?: T[]
 }
@@ -176,9 +183,28 @@ const formatAge = (seconds: number | null | undefined) => {
 const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
 
+const SYSTEM_HEALTH_QUERY_KEY = ["admin", "tools", "system-health"] as const
+const HEALTH_CACHE_MS = 10_000
+
+const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
+  if (!health?.details || typeof health.details !== "object") return []
+
+  return Object.entries(health.details)
+    .slice(0, 4)
+    .map(([key, value]) => {
+      if (value && typeof value === "object" && "status" in value && typeof value.status === "string") {
+        return `${key}: ${String(value.status)}`
+      }
+
+      return `${key}: ${typeof value === "string" ? value : "ok"}`
+    })
+}
+
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
+  const queryClient = useQueryClient()
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
+  const [grafanaOpen, setGrafanaOpen] = useState(false)
   const [loadingKey, setLoadingKey] = useState("")
   const [result, setResult] = useState("")
   const [lastActionLabel, setLastActionLabel] = useState("")
@@ -193,6 +219,25 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState("")
+  const grafanaEmbedUrl = process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() || ""
+  const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
+
+  const systemHealthQuery = useQuery(
+    SYSTEM_HEALTH_QUERY_KEY,
+    async (): Promise<SystemHealthPayload> => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
+    {
+      enabled: Boolean(sessionMember?.isAdmin),
+      staleTime: HEALTH_CACHE_MS,
+      cacheTime: 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    }
+  )
+
+  const fetchSystemHealthCached = async () =>
+    queryClient.fetchQuery<SystemHealthPayload>(SYSTEM_HEALTH_QUERY_KEY, () => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"), {
+      staleTime: HEALTH_CACHE_MS,
+    })
 
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
@@ -359,6 +404,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     cleanupDiagnostics?.blockedBySafetyThreshold
       ? "safety threshold 초과로 purge가 보류됨"
       : "safety threshold 내에서 purge 가능"
+  const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
+  const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
+  const systemHealthFetchedAt = systemHealthQuery.dataUpdatedAt
+    ? formatInstant(new Date(systemHealthQuery.dataUpdatedAt).toISOString())
+    : "-"
 
   const commentActions: Array<{
     key: string
@@ -461,7 +511,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       title: "서버 상태 조회",
       description: "헬스 체크 API 응답으로 기본 상태 확인",
       tone: "infra",
-      onClick: async () => void run("systemHealth", () => apiFetch("/system/api/v1/adm/health")),
+      onClick: async () => void run("systemHealth", () => fetchSystemHealthCached()),
     },
   ]
 
@@ -603,6 +653,58 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </ActionCardButton>
             ))}
           </ActionCardGrid>
+        </SectionCard>
+
+        <SectionCard>
+          <SectionTop>
+            <div>
+              <SectionEyebrow>Monitoring</SectionEyebrow>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">📈</SectionIcon>
+                <h2>Prometheus / Grafana</h2>
+              </SectionTitleRow>
+              <SectionDescription>관리자 페이지 진입 시 서버 상태를 1회 조회하고, 10초 캐시를 재사용합니다.</SectionDescription>
+            </div>
+            <StatusBadge data-status={systemHealthStatus}>{systemHealthStatus}</StatusBadge>
+          </SectionTop>
+          <InlineNotice data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
+            최근 서버 상태 조회: {systemHealthFetchedAt}
+          </InlineNotice>
+          {systemHealthSummary.length > 0 && (
+            <MetaGrid>
+              {systemHealthSummary.map((line) => (
+                <MetaBox key={line}>
+                  <small>컴포넌트</small>
+                  <strong>{line}</strong>
+                </MetaBox>
+              ))}
+            </MetaGrid>
+          )}
+          <MonitoringActions>
+            <BaseButton type="button" disabled={isBusy} onClick={() => void run("systemHealth", () => fetchSystemHealthCached())}>
+              서버 상태 즉시 새로고침
+            </BaseButton>
+            {prometheusUrl && (
+              <a href={prometheusUrl} target="_blank" rel="noreferrer">
+                <BaseButton as="span">Prometheus 열기</BaseButton>
+              </a>
+            )}
+            {grafanaEmbedUrl ? (
+              <PrimaryButton type="button" onClick={() => setGrafanaOpen((prev) => !prev)}>
+                {grafanaOpen ? "Grafana 접기" : "Grafana 열기"}
+              </PrimaryButton>
+            ) : (
+              <InlineNotice>환경변수 `NEXT_PUBLIC_GRAFANA_EMBED_URL`을 설정하면 대시보드를 임베드할 수 있습니다.</InlineNotice>
+            )}
+          </MonitoringActions>
+          {grafanaOpen && grafanaEmbedUrl && (
+            <GrafanaFrame
+              src={grafanaEmbedUrl}
+              loading="lazy"
+              title="Grafana Dashboard"
+              referrerPolicy="no-referrer"
+            />
+          )}
         </SectionCard>
 
         <SectionCard>
@@ -1606,6 +1708,26 @@ const TaskSampleMeta = styled.div`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.8rem;
   font-weight: 700;
+`
+
+const MonitoringActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.62rem;
+  margin-top: 0.7rem;
+
+  a {
+    text-decoration: none;
+  }
+`
+
+const GrafanaFrame = styled.iframe`
+  margin-top: 0.85rem;
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 16px;
+  background: ${({ theme }) => theme.colors.gray2};
 `
 
 const ConsoleCard = styled.section`

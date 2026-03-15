@@ -2,7 +2,6 @@ import styled from "@emotion/styled"
 import Image from "next/image"
 import React from "react"
 import { CONFIG } from "site.config"
-import Category from "src/components/Category"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
@@ -11,7 +10,6 @@ import { TPost } from "src/types"
 
 type Props = {
   data: TPost
-  category?: string
   likesCount?: number
   hitCount?: number
   actorHasLiked?: boolean
@@ -25,7 +23,6 @@ type Props = {
 
 const PostHeader: React.FC<Props> = ({
   data,
-  category,
   likesCount,
   hitCount,
   actorHasLiked = false,
@@ -46,7 +43,6 @@ const PostHeader: React.FC<Props> = ({
   return (
     <StyledWrapper>
       <div className="taxonomyRow">
-        {category && <Category readOnly={data.status?.[0] === "PublicOnDetail"}>{category}</Category>}
         {data.tags?.map((tag) => (
           <Tag key={tag}>{tag}</Tag>
         ))}

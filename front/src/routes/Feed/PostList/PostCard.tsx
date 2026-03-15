@@ -3,7 +3,6 @@ import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
 import Image from "next/image"
-import Category from "../../../components/Category"
 import styled from "@emotion/styled"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
@@ -13,7 +12,6 @@ type Props = {
 }
 
 const PostCard: React.FC<Props> = ({ data }) => {
-  const category = (data.category && data.category?.[0]) || undefined
   const author = data.author?.[0]
   const createdAtText = formatDate(
     data?.date?.start_date || data.createdTime,
@@ -26,11 +24,6 @@ const PostCard: React.FC<Props> = ({ data }) => {
   return (
     <StyledWrapper href={toCanonicalPostPath(data.id)}>
       <article>
-        {category && (
-          <div className="category">
-            <Category>{category}</Category>
-          </div>
-        )}
         {data.thumbnail && (
           <div className="thumbnail">
             <Image
@@ -114,14 +107,6 @@ const StyledWrapper = styled(Link)`
           ? "0 24px 46px rgba(2, 6, 23, 0.46)"
           : "0 22px 38px rgba(30, 64, 175, 0.14)"};
     }
-
-    > .category {
-      position: absolute;
-      top: 0.9rem;
-      left: 0.9rem;
-      z-index: 10;
-    }
-
     > .thumbnail {
       position: relative;
       width: 100%;

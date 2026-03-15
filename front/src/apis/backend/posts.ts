@@ -252,8 +252,14 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
 }
 
 const PAGE_SIZE = 30
+const PAGE_FETCH_CONCURRENCY = 3
 const DETAIL_ENRICH_BATCH_SIZE = 8
 const DETAIL_ENRICH_MAX_TARGETS = 12
+const POSTS_CACHE_TTL_MS = 10_000
+const isServerRuntime = typeof window === "undefined"
+let postsCache: TPost[] | null = null
+let postsCacheAt = 0
+let pendingPostsPromise: Promise<TPost[]> | null = null
 
 const enrichPostMetadata = async (posts: TPost[]): Promise<TPost[]> => {
   const targets = posts.filter(
@@ -312,30 +318,72 @@ type GetPostsOptions = {
 export const getPosts = async (
   { throwOnError = false }: GetPostsOptions = {}
 ): Promise<TPost[]> => {
-  try {
-    const firstPage = await apiFetch<PageDto<ApiPostDto>>(
-      `/post/api/v1/posts?page=1&pageSize=${PAGE_SIZE}`
-    )
+  const now = Date.now()
+  if (isServerRuntime && postsCache && now - postsCacheAt < POSTS_CACHE_TTL_MS) {
+    return postsCache
+  }
 
-    const mapped = firstPage.content.map(mapPostDto)
-    if (firstPage.pageable.totalPages <= 1) {
-      return enrichPostMetadata(mapped)
+  if (pendingPostsPromise) {
+    return pendingPostsPromise
+  }
+
+  try {
+    pendingPostsPromise = (async () => {
+      const firstPage = await apiFetch<PageDto<ApiPostDto>>(
+        `/post/api/v1/posts?page=1&pageSize=${PAGE_SIZE}`
+      )
+
+      const mapped = firstPage.content.map(mapPostDto)
+      const totalPages = Math.max(1, firstPage.pageable.totalPages)
+
+      if (totalPages <= 1) {
+        const enriched = await enrichPostMetadata(mapped)
+        if (isServerRuntime) {
+          postsCache = enriched
+          postsCacheAt = Date.now()
+        }
+        return enriched
+      }
+
+      const restPages: PageDto<ApiPostDto>[] = []
+      const pageNumbers = Array.from({ length: totalPages - 1 }, (_, index) => index + 2)
+
+      for (let index = 0; index < pageNumbers.length; index += PAGE_FETCH_CONCURRENCY) {
+        const batch = pageNumbers.slice(index, index + PAGE_FETCH_CONCURRENCY)
+        const fetched = await Promise.all(
+          batch.map((pageNumber) =>
+            apiFetch<PageDto<ApiPostDto>>(
+              `/post/api/v1/posts?page=${pageNumber}&pageSize=${PAGE_SIZE}`
+            )
+          )
+        )
+        restPages.push(...fetched)
+      }
+
+      const allPosts = mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
+      const enriched = await enrichPostMetadata(allPosts)
+
+      if (isServerRuntime) {
+        postsCache = enriched
+        postsCacheAt = Date.now()
+      }
+
+      return enriched
+    })()
+
+    return await pendingPostsPromise
+  } catch (error) {
+    if (!throwOnError && isServerRuntime && postsCache) {
+      return postsCache
     }
 
-    const restPages = await Promise.all(
-      Array.from({ length: firstPage.pageable.totalPages - 1 }, (_, index) =>
-        apiFetch<PageDto<ApiPostDto>>(
-          `/post/api/v1/posts?page=${index + 2}&pageSize=${PAGE_SIZE}`
-        )
-      )
-    )
-
-    const allPosts = mapped.concat(restPages.flatMap((page) => page.content.map(mapPostDto)))
-    return enrichPostMetadata(allPosts)
-  } catch (error) {
-    console.error("[getPosts] backend request failed:", error)
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[getPosts] backend request failed:", error)
+    }
     if (throwOnError) throw error
     return []
+  } finally {
+    pendingPostsPromise = null
   }
 }
 

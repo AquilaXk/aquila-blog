@@ -170,6 +170,9 @@ const INLINE_TEXT_COLOR_OPTIONS = [
   { label: "슬레이트", value: "#94a3b8" },
 ] as const
 
+const SHOW_LEGACY_PROFILE_STUDIO = false
+const SHOW_LEGACY_UTILITY_STUDIO = false
+
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   return await getAdminPageProps(req)
 }
@@ -1699,7 +1702,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       <WorkspaceGrid>
         <WorkspaceMain>
-          {false && (
+          {SHOW_LEGACY_PROFILE_STUDIO && (
           <Section id="profile-studio">
             <SectionTop>
               <div>
@@ -2383,7 +2386,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
           </Section>
 
-          {false && (
+          {SHOW_LEGACY_UTILITY_STUDIO && (
           <UtilityGrid>
             <Section id="comment-studio">
               <SectionTop>

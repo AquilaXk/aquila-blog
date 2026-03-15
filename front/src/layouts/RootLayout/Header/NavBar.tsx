@@ -39,6 +39,11 @@ const NavBar: React.FC = () => {
     }
   }
 
+  const handleUnavailableAuthLogin = async () => {
+    const target = toLoginPath(nextPath)
+    await replaceRoute(router, target, { preferHardNavigation: true })
+  }
+
   return (
     <StyledWrapper>
       <ul className="primaryLinks">
@@ -65,7 +70,14 @@ const NavBar: React.FC = () => {
             Login
           </button>
         )}
-        {authStatus === "unavailable" && !me && <span className="authNotice">Auth unavailable</span>}
+        {authStatus === "unavailable" && !me && (
+          <>
+            <button type="button" className="navPill navPill--warning" onClick={() => void handleUnavailableAuthLogin()}>
+              Login
+            </button>
+            <span className="authNotice">Auth check failed</span>
+          </>
+        )}
         {authStatus === "authenticated" && me && <NotificationBell enabled />}
         {authStatus === "authenticated" && me?.isAdmin && (
           <Link href="/admin" className="navPill">
@@ -184,6 +196,11 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.78rem;
     white-space: nowrap;
+  }
+
+  .navPill--warning {
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray4};
   }
 
   @media (max-width: 720px) {

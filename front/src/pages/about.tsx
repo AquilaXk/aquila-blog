@@ -11,6 +11,7 @@ import { queryKey } from "src/constants/queryKey"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import { NextPageWithLayout } from "../types"
 import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
+import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const queryClient = createQueryClient()
@@ -45,6 +46,8 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const displayName = adminProfile?.username || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
+  const contactLinks = resolveContactLinks(adminProfile)
+  const serviceLinks = resolveServiceLinks(adminProfile)
 
   const meta = {
     title: `About - ${CONFIG.blog.title}`,
@@ -80,59 +83,27 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
           <div className="section">
             <h3 className="section-title">Contact</h3>
             <ul className="contact-list">
-              {CONFIG.profile.email && (
-                <li>
+              {contactLinks.map((item) => (
+                <li key={`${item.icon}-${item.label}-${item.href}`}>
                   <span className="icon">
-                    <AppIcon name="mail" aria-hidden="true" />
+                    <AppIcon name={item.icon} aria-hidden="true" />
                   </span>
-                  <a href={`mailto:${CONFIG.profile.email}`}>{CONFIG.profile.email}</a>
-                </li>
-              )}
-              {CONFIG.profile.github && (
-                <li>
-                  <span className="icon">
-                    <AppIcon name="github" aria-hidden="true" />
-                  </span>
-                  <a href={`https://github.com/${CONFIG.profile.github}`} target="_blank" rel="noopener noreferrer">
-                    github.com/{CONFIG.profile.github}
+                  <a href={item.href} target="_blank" rel="noopener noreferrer">
+                    {item.label}
                   </a>
                 </li>
-              )}
-              {CONFIG.profile.linkedin && (
-                <li>
-                  <span className="icon">
-                    <AppIcon name="briefcase" aria-hidden="true" />
-                  </span>
-                  <a href={CONFIG.profile.linkedin} target="_blank" rel="noopener noreferrer">
-                    LinkedIn
-                  </a>
-                </li>
-              )}
-              {CONFIG.profile.instagram && (
-                <li>
-                  <span className="icon">
-                    <AppIcon name="camera" aria-hidden="true" />
-                  </span>
-                  <a
-                    href={`https://instagram.com/${CONFIG.profile.instagram}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    @{CONFIG.profile.instagram}
-                  </a>
-                </li>
-              )}
+              ))}
             </ul>
           </div>
 
-          {CONFIG.projects && CONFIG.projects.length > 0 && (
+          {serviceLinks.length > 0 && (
             <div className="section">
-              <h3 className="section-title">Projects</h3>
+              <h3 className="section-title">Service</h3>
               <ul className="projects-list">
-                {CONFIG.projects.map((project, index) => (
-                  <li key={index}>
-                    <a href={project.href} target="_blank" rel="noopener noreferrer">
-                      <AppIcon name="rocket" aria-hidden="true" /> {project.name}
+                {serviceLinks.map((item) => (
+                  <li key={`${item.icon}-${item.label}-${item.href}`}>
+                    <a href={item.href} target="_blank" rel="noopener noreferrer">
+                      <AppIcon name={item.icon} aria-hidden="true" /> {item.label}
                     </a>
                   </li>
                 ))}

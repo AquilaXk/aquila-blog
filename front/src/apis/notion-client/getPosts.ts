@@ -248,12 +248,14 @@ export const getPosts = async (
 
       postsCache = posts
       postsCacheAt = Date.now()
-      console.log(
-        `✅ [getPosts] 총 ${posts.length}개의 글을 성공적으로 가져왔습니다.`
-      )
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`✅ [getPosts] 총 ${posts.length}개의 글을 성공적으로 가져왔습니다.`)
+      }
       return posts
     } catch (error) {
-      console.error("❌ [getPosts] 데이터 로드 중 에러 발생:", error)
+      if (process.env.NODE_ENV !== "production") {
+        console.error("❌ [getPosts] 데이터 로드 중 에러 발생:", error)
+      }
       throw error
     } finally {
       pendingPostsPromise = null

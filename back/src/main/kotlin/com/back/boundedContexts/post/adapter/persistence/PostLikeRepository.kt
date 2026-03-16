@@ -7,7 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 
-interface PostLikeRepository : JpaRepository<PostLike, Int> {
+interface PostLikeRepository :
+    JpaRepository<PostLike, Int>,
+    PostLikeRepositoryCustom {
     fun findFirstByLikerAndPostOrderByIdAsc(
         liker: Member,
         post: Post,

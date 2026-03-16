@@ -7,7 +7,7 @@ import styled from "@emotion/styled"
 import NotionRenderer from "../components/NotionRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
-import { apiFetch } from "src/apis/backend/client"
+import { ApiError, apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute, toLoginPath } from "src/libs/router"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
@@ -117,6 +117,21 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             }
           : prev
       )
+    } catch (error) {
+      // 동시 요청 충돌은 최신 상태를 다시 받아 멱등하게 복구한다.
+      if (error instanceof ApiError && error.status === 409) {
+        await queryClient.invalidateQueries({ queryKey: queryKey.post(String(data.id)) })
+        const refreshed = queryClient.getQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)))
+        if (refreshed) {
+          setEngagement((prev) => ({
+            ...prev,
+            actorHasLiked: refreshed.actorHasLiked ?? false,
+            likesCount: refreshed.likesCount ?? 0,
+          }))
+        }
+      } else {
+        throw error
+      }
     } finally {
       setLikePending(false)
     }

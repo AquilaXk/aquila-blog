@@ -5,6 +5,11 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostLike
 
 interface PostLikeRepositoryPort {
+    fun insertIfAbsent(
+        liker: Member,
+        post: Post,
+    ): Int?
+
     fun save(postLike: PostLike): PostLike
 
     fun delete(postLike: PostLike)

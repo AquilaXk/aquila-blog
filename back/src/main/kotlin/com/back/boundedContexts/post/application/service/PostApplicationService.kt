@@ -17,7 +17,6 @@ import com.back.boundedContexts.post.domain.POST_COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostAttr
 import com.back.boundedContexts.post.domain.PostComment
-import com.back.boundedContexts.post.domain.PostLike
 import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
@@ -335,27 +334,41 @@ class PostApplicationService(
     ): PostLikeToggleResult {
         val persistenceActor = toPersistenceMember(actor)
         hydratePostAttrs(post)
-        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
-        if (existingLike != null) {
-            ensureLikesCountLoaded(post)
-            return PostLikeToggleResult(true, existingLike.id)
-        }
+        val insertedLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
 
-        return try {
-            val savedLike = postLikeRepository.save(PostLike(0, persistenceActor, post))
+        if (insertedLikeId == null) {
+            val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
+            if (existingLike != null) {
+                ensureLikesCountLoaded(post)
+                return PostLikeToggleResult(true, existingLike.id)
+            }
+
+            // 동시 unlike 경쟁으로 row가 사라진 경우 한 번 더 보정한다.
+            val recoveredLikeId = postLikeRepository.insertIfAbsent(persistenceActor, post)
+            if (recoveredLikeId == null) {
+                syncLikesCount(post)
+                return PostLikeToggleResult(
+                    isLiked = postLikeRepository.findByLikerAndPost(persistenceActor, post) != null,
+                    likeId = 0,
+                )
+            }
+
             incrementLikesCount(post)
             postRepository.flush()
-
             eventPublisher.publish(
-                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, savedLike.id, MemberDto(actor)),
+                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
             )
-
-            PostLikeToggleResult(true, savedLike.id)
-        } catch (exception: DataIntegrityViolationException) {
-            val resolvedLike = postLikeRepository.findByLikerAndPost(persistenceActor, post) ?: throw exception
-            syncLikesCount(post)
-            PostLikeToggleResult(true, resolvedLike.id)
+            return PostLikeToggleResult(true, recoveredLikeId)
         }
+
+        incrementLikesCount(post)
+        postRepository.flush()
+
+        eventPublisher.publish(
+            PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, insertedLikeId, MemberDto(actor)),
+        )
+
+        return PostLikeToggleResult(true, insertedLikeId)
     }
 
     @Transactional

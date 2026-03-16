@@ -10,6 +10,11 @@ import org.springframework.stereotype.Component
 class PostLikeRepositoryAdapter(
     private val postLikeRepository: PostLikeRepository,
 ) : PostLikeRepositoryPort {
+    override fun insertIfAbsent(
+        liker: Member,
+        post: Post,
+    ): Int? = postLikeRepository.insertIfAbsent(liker, post)
+
     override fun save(postLike: PostLike): PostLike = postLikeRepository.save(postLike)
 
     override fun delete(postLike: PostLike) = postLikeRepository.delete(postLike)

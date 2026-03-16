@@ -86,6 +86,11 @@ class PostLikeReconciliationServiceTest {
     private class FakePostLikeRepository(
         private val actualCount: Long,
     ) : PostLikeRepositoryPort {
+        override fun insertIfAbsent(
+            liker: Member,
+            post: Post,
+        ): Int? = error("not used in this test")
+
         override fun save(postLike: com.back.boundedContexts.post.domain.PostLike) = error("not used in this test")
 
         override fun delete(postLike: com.back.boundedContexts.post.domain.PostLike) = error("not used in this test")

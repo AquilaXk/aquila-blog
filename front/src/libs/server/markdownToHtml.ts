@@ -3,6 +3,7 @@ import rehypePrettyCode from "rehype-pretty-code"
 import remarkGfm from "remark-gfm"
 import remarkParse from "remark-parse"
 import remarkRehype from "remark-rehype"
+import { normalizeEscapedMermaidFences } from "src/libs/markdown/mermaid"
 import { unified } from "unified"
 
 const prettyCodeOptions = {
@@ -18,14 +19,15 @@ const prettyCodeOptions = {
 }
 
 export const renderMarkdownToHtml = async (markdown: string): Promise<string> => {
-  if (!markdown.trim()) return ""
+  const normalizedMarkdown = normalizeEscapedMermaidFences(markdown)
+  if (!normalizedMarkdown.trim()) return ""
 
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkRehype)
     .use(rehypePrettyCode as never, prettyCodeOptions as never)
-  const parsed = processor.parse(markdown)
+  const parsed = processor.parse(normalizedMarkdown)
   const transformed = await processor.run(parsed)
 
   return toHtml(transformed, { allowDangerousHtml: false })

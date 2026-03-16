@@ -275,8 +275,12 @@ const StyledWrapper = styled.header`
 
     &[data-active="true"] {
       border-color: ${({ theme }) => theme.colors.red7};
-      background: ${({ theme }) => theme.colors.red3};
-      color: ${({ theme }) => theme.colors.red11};
+      background: linear-gradient(180deg, ${({ theme }) => theme.colors.red2}, ${({ theme }) => theme.colors.gray2});
+      color: ${({ theme }) => theme.colors.gray12};
+
+      svg {
+        color: ${({ theme }) => theme.colors.red10};
+      }
     }
 
     :disabled {

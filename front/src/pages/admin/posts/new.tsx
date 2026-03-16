@@ -99,6 +99,10 @@ type TagUsageDto = {
 }
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
+type NoticeState = {
+  tone: NoticeTone
+  text: string
+}
 type EditorMode = "create" | "edit"
 type PublishActionType = "create" | "modify" | "temp"
 type ParsedEditorMeta = {
@@ -596,31 +600,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [categoryUsageMap, setCategoryUsageMap] = useState<MetaUsageMap>({})
   const [metaCatalogLoading, setMetaCatalogLoading] = useState(false)
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
-  const [publishNotice, setPublishNotice] = useState<{
-    tone: NoticeTone
-    text: string
-  }>({
+  const [publishNotice, setPublishNotice] = useState<NoticeState>({
     tone: "idle",
     text: "작성 후 ‘글 작성’을 누르면 결과가 여기에 표시됩니다.",
   })
-  const [profileImageNotice, setProfileImageNotice] = useState<{
-    tone: NoticeTone
-    text: string
-  }>({
+  const [publishModalNotice, setPublishModalNotice] = useState<NoticeState>({
+    tone: "idle",
+    text: "발행 전 설정을 점검한 뒤 실행하면 결과가 여기에 표시됩니다.",
+  })
+  const [profileImageNotice, setProfileImageNotice] = useState<NoticeState>({
     tone: "idle",
     text: "프로필 이미지를 선택하면 즉시 업로드됩니다.",
   })
-  const [profileNotice, setProfileNotice] = useState<{
-    tone: NoticeTone
-    text: string
-  }>({
+  const [profileNotice, setProfileNotice] = useState<NoticeState>({
     tone: "idle",
     text: "현재 저장된 관리자 프로필 값이 입력창에 자동으로 채워집니다.",
   })
-  const [metaNotice, setMetaNotice] = useState<{
-    tone: NoticeTone
-    text: string
-  }>({
+  const [metaNotice, setMetaNotice] = useState<NoticeState>({
     tone: "idle",
     text: "기존 글의 태그를 선택하거나 새 값을 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다.",
   })
@@ -652,6 +648,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
+  const [deleteConfirmNotice, setDeleteConfirmNotice] = useState<NoticeState>({
+    tone: "idle",
+    text: "",
+  })
   const redirectingRef = useRef(false)
   const hydratedAdminIdRef = useRef<number | null>(null)
   const autoLoadedPostIdRef = useRef<string | null>(null)
@@ -694,6 +694,34 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
+
+  const publishModalHintByAction = useCallback((actionType: PublishActionType): string => {
+    if (actionType === "create") return "작성 전 검증 결과와 오류가 여기에 표시됩니다."
+    if (actionType === "modify") return "수정 전 검증 결과와 오류가 여기에 표시됩니다."
+    return "임시글 발행 전 검증 결과와 오류가 여기에 표시됩니다."
+  }, [])
+
+  const setPublishStatus = useCallback(
+    (next: NoticeState, target: "auto" | "page" | "modal" = "auto") => {
+      if (target === "page") {
+        setPublishNotice(next)
+        return
+      }
+
+      if (target === "modal") {
+        setPublishModalNotice(next)
+        return
+      }
+
+      if (isPublishModalOpen) {
+        setPublishModalNotice(next)
+        return
+      }
+
+      setPublishNotice(next)
+    },
+    [isPublishModalOpen]
+  )
 
   const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
@@ -895,11 +923,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostCategory("")
       setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
     }
-    setPublishNotice({
-      tone: "idle",
-      text: "새 글 모드입니다. 글 작성 버튼은 새 글 생성에만 사용됩니다.",
-    })
-  }, [])
+    setPublishStatus(
+      {
+        tone: "idle",
+        text: "새 글 모드입니다. 글 작성 버튼은 새 글 생성에만 사용됩니다.",
+      },
+      "page"
+    )
+  }, [setPublishStatus])
 
   const applyLoadedPostContext = useCallback((post: PostForEditor) => {
     setPostId(String(post.id))
@@ -961,28 +992,28 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handleWritePost = async (): Promise<boolean> => {
     if (editorMode === "edit" || postId.trim()) {
       const msg = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
-      setPublishNotice({ tone: "error", text: msg })
+      setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
     if (!postTitle.trim()) {
       const msg = "제목을 입력해주세요."
-      setPublishNotice({ tone: "error", text: msg })
+      setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
     if (!postContent.trim()) {
       const msg = "본문을 입력해주세요."
-      setPublishNotice({ tone: "error", text: msg })
+      setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
     try {
       setLoadingKey("writePost")
-      setPublishNotice({ tone: "loading", text: "글 작성 중입니다..." })
+      setPublishStatus({ tone: "loading", text: "글 작성 중입니다..." })
       const contentWithMetadata = composeEditorContent(postContent, postTags, {
         category: postCategory,
         summary: postSummary,
@@ -1026,10 +1057,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             ? "링크 공개(목록 미노출)"
             : "비공개"
 
-      setPublishNotice({
-        tone: "success",
-        text: `작성 완료: ${response.msg} (공개 범위: ${visibilityText})`,
-      })
+      setPublishStatus(
+        {
+          tone: "success",
+          text: `작성 완료: ${response.msg} (공개 범위: ${visibilityText})`,
+        },
+        "page"
+      )
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setKnownCategories((prev) =>
         dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
@@ -1038,7 +1072,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
-      setPublishNotice({ tone: "error", text: `작성 실패: ${message}` })
+      setPublishStatus({ tone: "error", text: `작성 실패: ${message}` })
       return false
     } finally {
       setLoadingKey("")
@@ -1048,14 +1082,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handleModifyPost = async (): Promise<boolean> => {
     if (editorMode !== "edit" || !postId.trim()) {
       const msg = "수정할 글 ID를 먼저 선택해주세요."
-      setPublishNotice({ tone: "error", text: msg })
+      setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
     try {
       setLoadingKey("modifyPost")
-      setPublishNotice({ tone: "loading", text: "글 수정 중입니다..." })
+      setPublishStatus({ tone: "loading", text: "글 수정 중입니다..." })
       const contentHtml = await renderContentHtml("modify-post")
 
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
@@ -1079,12 +1113,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       )
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
-      setPublishNotice({ tone: "success", text: `수정 완료: ${response.msg}` })
+      setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
       setResult(pretty(response as unknown as JsonValue))
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setPublishNotice({ tone: "error", text: `수정 실패: ${message}` })
+      setPublishStatus({ tone: "error", text: `수정 실패: ${message}` })
       setResult(pretty({ error: message }))
       return false
     } finally {
@@ -1095,7 +1129,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handleLoadOrCreateTempPost = async () => {
     try {
       setLoadingKey("postTemp")
-      setPublishNotice({ tone: "loading", text: "임시글을 불러오는 중입니다..." })
+      setPublishStatus({ tone: "loading", text: "임시글을 불러오는 중입니다..." }, "page")
       const response = await apiFetch<RsData<PostForEditor>>("/post/api/v1/posts/temp", { method: "POST" })
       const tempPost = response.data
       setPostTitle(tempPost.title ?? "")
@@ -1103,14 +1137,17 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostVisibility(toVisibility(!!tempPost.published, !!tempPost.listed))
       applyLoadedPostContext(tempPost)
       setIsTempDraftMode(true)
-      setPublishNotice({
-        tone: "success",
-        text: "임시글 편집 모드입니다. 내용 저장은 '선택 글 수정', 공개하려면 '임시글 발행'을 사용하세요.",
-      })
+      setPublishStatus(
+        {
+          tone: "success",
+          text: "임시글 편집 모드입니다. 내용 저장은 '선택 글 수정', 공개하려면 '임시글 발행'을 사용하세요.",
+        },
+        "page"
+      )
       setResult(pretty(response as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setPublishNotice({ tone: "error", text: `임시글 불러오기 실패: ${message}` })
+      setPublishStatus({ tone: "error", text: `임시글 불러오기 실패: ${message}` }, "page")
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -1120,14 +1157,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handlePublishTempDraft = async (): Promise<boolean> => {
     if (editorMode !== "edit" || !postId.trim()) {
       const msg = "발행할 임시글을 먼저 불러와주세요."
-      setPublishNotice({ tone: "error", text: msg })
+      setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
     try {
       setLoadingKey("publishTempPost")
-      setPublishNotice({ tone: "loading", text: "임시글을 발행하는 중입니다..." })
+      setPublishStatus({ tone: "loading", text: "임시글을 발행하는 중입니다..." })
       const contentHtml = await renderContentHtml("publish-temp-post")
 
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
@@ -1148,12 +1185,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostVisibility("PUBLIC_LISTED")
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(false)
-      setPublishNotice({ tone: "success", text: "임시글 발행이 완료되었습니다." })
+      setPublishStatus({ tone: "success", text: "임시글 발행이 완료되었습니다." }, "page")
       setResult(pretty(response as unknown as JsonValue))
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setPublishNotice({ tone: "error", text: `임시글 발행 실패: ${message}` })
+      setPublishStatus({ tone: "error", text: `임시글 발행 실패: ${message}` })
       setResult(pretty({ error: message }))
       return false
     } finally {
@@ -1199,9 +1236,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  const openDeleteConfirm = useCallback((target: AdminPostListItem) => {
+    setDeleteConfirmNotice({
+      tone: "idle",
+      text: "삭제는 즉시 반영되며 되돌릴 수 없습니다.",
+    })
+    setDeleteConfirmTarget(target)
+  }, [])
+
+  const closeDeleteConfirm = useCallback(() => {
+    if (loadingKey.startsWith("deletePost-")) return
+    setDeleteConfirmTarget(null)
+    setDeleteConfirmNotice({
+      tone: "idle",
+      text: "",
+    })
+  }, [loadingKey])
+
   const deletePostFromList = async (targetId: number) => {
     try {
       setLoadingKey(`deletePost-${targetId}`)
+      setDeleteConfirmNotice({
+        tone: "loading",
+        text: `#${targetId} 글을 삭제하고 있습니다...`,
+      })
       const data = await apiFetch<JsonValue>(`/post/api/v1/posts/${targetId}`, {
         method: "DELETE",
       })
@@ -1211,10 +1269,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       if (postId === String(targetId)) {
         switchToCreateMode({ keepContent: false })
       }
+      setDeleteConfirmNotice({
+        tone: "success",
+        text: `#${targetId} 글을 삭제했습니다.`,
+      })
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
+      setDeleteConfirmNotice({
+        tone: "error",
+        text: `삭제 실패: ${message}`,
+      })
       return false
     } finally {
       setLoadingKey("")
@@ -1662,7 +1728,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (!file) return
 
     void run("uploadPostImage", async () => {
-      setPublishNotice({
+      setPublishStatus({
         tone: "loading",
         text: `이미지 "${file.name}" 업로드 중입니다. 업로드가 끝나면 본문에 자동 삽입됩니다.`,
       })
@@ -1672,13 +1738,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         const markdown = uploaded.data?.markdown
         if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
         insertBlockSnippet(markdown)
-        setPublishNotice({
+        setPublishStatus({
           tone: "success",
           text: `이미지 업로드가 완료되었습니다. 본문과 미리보기에서 반응형 크기로 확인할 수 있습니다.`,
         })
         return uploaded
       } catch (error) {
-        setPublishNotice({
+        setPublishStatus({
           tone: "error",
           text: `이미지 업로드 실패: ${error instanceof Error ? error.message : String(error)}`,
         })
@@ -1690,7 +1756,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handleUploadThumbnailImage = async (file: File) => {
     try {
       setLoadingKey("uploadThumbnail")
-      setPublishNotice({
+      setPublishStatus({
         tone: "loading",
         text: `썸네일 "${file.name}" 업로드 중입니다...`,
       })
@@ -1700,12 +1766,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       setPostThumbnailUrl(uploadedUrl)
       setIsPreviewThumbnailError(false)
-      setPublishNotice({
+      setPublishStatus({
         tone: "success",
         text: "썸네일 파일 업로드가 완료되었습니다. 이 이미지가 목록 카드에 우선 사용됩니다.",
       })
     } catch (error) {
-      setPublishNotice({
+      setPublishStatus({
         tone: "error",
         text: `썸네일 업로드 실패: ${error instanceof Error ? error.message : String(error)}`,
       })
@@ -1724,11 +1790,19 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const openPublishModal = (actionType: PublishActionType) => {
     setPublishActionType(actionType)
+    setPublishModalNotice({
+      tone: "idle",
+      text: publishModalHintByAction(actionType),
+    })
     setIsPublishModalOpen(true)
   }
 
   const closePublishModal = () => {
     if (loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost") return
+    setPublishModalNotice({
+      tone: "idle",
+      text: publishModalHintByAction(publishActionType),
+    })
     setIsPublishModalOpen(false)
   }
 
@@ -2147,7 +2221,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         <Button
                           type="button"
                           disabled={loadingKey.length > 0 && loadingKey !== `deletePost-${row.id}`}
-                          onClick={() => setDeleteConfirmTarget(row)}
+                          onClick={() => openDeleteConfirm(row)}
                         >
                           삭제
                         </Button>
@@ -2242,12 +2316,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </SelectedPostPanel>
 
         {deleteConfirmTarget && (
-          <ModalBackdrop
-            onClick={() => {
-              if (loadingKey.startsWith("deletePost-")) return
-              setDeleteConfirmTarget(null)
-            }}
-          >
+          <ModalBackdrop onClick={closeDeleteConfirm}>
             <ConfirmModal onClick={(e) => e.stopPropagation()}>
               <h4>글 삭제 확인</h4>
               <p>
@@ -2255,11 +2324,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <br />
                 <strong>#{deleteConfirmTarget.id} {deleteConfirmTarget.title}</strong>
               </p>
+              {deleteConfirmNotice.text ? (
+                <PublishNotice data-tone={deleteConfirmNotice.tone}>{deleteConfirmNotice.text}</PublishNotice>
+              ) : null}
               <div className="actions">
                 <Button
                   type="button"
                   disabled={loadingKey.startsWith("deletePost-")}
-                  onClick={() => setDeleteConfirmTarget(null)}
+                  onClick={closeDeleteConfirm}
                 >
                   취소
                 </Button>
@@ -2268,7 +2340,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   disabled={loadingKey.startsWith("deletePost-")}
                   onClick={async () => {
                     const ok = await deletePostFromList(deleteConfirmTarget.id)
-                    if (ok) setDeleteConfirmTarget(null)
+                    if (ok) closeDeleteConfirm()
                   }}
                 >
                   {loadingKey.startsWith("deletePost-") ? "삭제 중..." : "삭제 확정"}
@@ -2657,6 +2729,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </div>
               </PublishModalHeader>
               <PublishModalBody>
+                <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
                 {publishActionType !== "temp" ? (
                   <VisibilityWrap>
                     <FieldLabel htmlFor="post-visibility-modal">공개 범위</FieldLabel>

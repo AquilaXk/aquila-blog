@@ -11,7 +11,6 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
-import org.springframework.cache.annotation.Cacheable
 import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -33,7 +32,6 @@ class ApiV1MemberController(
     fun randomSecureTip() = securityTipProvider.signupPasswordTip()
 
     @GetMapping("/adminProfile")
-    @Cacheable(cacheNames = [ADMIN_PROFILE_CACHE_NAME], key = "'admin'")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {
         // 운영에서 "관리자 1명" 규칙을 보장하기 위해 id가 아닌 고정 username으로 조회한다.

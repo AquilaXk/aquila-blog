@@ -90,13 +90,13 @@ class PostApplicationService(
         if (normalizedIdempotencyKey == null) {
             val created =
                 writeNewPost(
-                author = author,
-                persistenceAuthor = persistenceAuthor,
-                title = title,
-                content = content,
-                published = published,
-                listed = listed,
-            )
+                    author = author,
+                    persistenceAuthor = persistenceAuthor,
+                    title = title,
+                    content = content,
+                    published = published,
+                    listed = listed,
+                )
             clearExploreCaches()
             return created
         }

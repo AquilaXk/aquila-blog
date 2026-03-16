@@ -70,9 +70,17 @@ object PostPreviewExtractor {
         var thumbnail: String? = null
         var summary: String? = null
 
-        fun normalizeScalar(raw: String): String = raw.trim().removeSurrounding("\"").removeSurrounding("'").trim()
+        fun normalizeScalar(raw: String): String =
+            raw
+                .trim()
+                .removeSurrounding("\"")
+                .removeSurrounding("'")
+                .trim()
 
-        fun assignScalar(rawKey: String, rawValue: String) {
+        fun assignScalar(
+            rawKey: String,
+            rawValue: String,
+        ) {
             val key = rawKey.trim().lowercase()
             val value = normalizeScalar(rawValue)
             if (value.isBlank()) return
@@ -129,5 +137,7 @@ object PostPreviewExtractor {
             "${value.take(SUMMARY_MAX_LENGTH).trim()}..."
         }
 
-    private fun contentKey(content: String): Long = (content.hashCode().toLong() shl 32) xor content.length.toLong()
+    private fun contentKey(content: String): Long =
+        (content.hashCode().toLong() shl 32) xor
+            content.length.toLong()
 }

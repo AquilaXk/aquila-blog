@@ -18,7 +18,7 @@ class MemberNotificationApplicationService(
     private val memberRepository: MemberRepositoryPort,
     private val postCommentRepository: PostCommentRepositoryPort,
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
-    private val memberNotificationSseService: MemberNotificationSseService,
+    private val memberNotificationRealtimeRelayService: MemberNotificationRealtimeRelayService,
 ) {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun createForCommentWritten(event: PostCommentWrittenEvent) {
@@ -42,7 +42,7 @@ class MemberNotificationApplicationService(
             )
 
         val unreadCount = memberNotificationRepository.countUnreadByReceiverId(receiverInfo.receiverId).toInt()
-        memberNotificationSseService.publish(
+        memberNotificationRealtimeRelayService.publish(
             memberId = receiverInfo.receiverId,
             notification = MemberNotificationDto(notification),
             unreadCount = unreadCount,

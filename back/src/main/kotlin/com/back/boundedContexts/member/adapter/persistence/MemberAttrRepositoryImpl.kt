@@ -105,9 +105,9 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
                 .createNativeQuery(
                     """
                     insert into member_attr (id, subject_id, name, int_value)
-                    values (nextval('member_attr_seq'), :subjectId, :name, :delta)
+                    values (nextval('member_attr_seq'), :subjectId, :name, greatest(:delta, 0))
                     on conflict (subject_id, name)
-                    do update set int_value = member_attr.int_value + excluded.int_value
+                    do update set int_value = greatest(0, coalesce(member_attr.int_value, 0) + :delta)
                     returning int_value
                     """.trimIndent(),
                 ).setParameter("subjectId", subject.id)

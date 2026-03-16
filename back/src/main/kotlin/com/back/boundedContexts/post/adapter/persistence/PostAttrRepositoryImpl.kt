@@ -52,9 +52,9 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
                 .createNativeQuery(
                     """
                     insert into post_attr (id, subject_id, name, int_value)
-                    values (nextval('post_attr_seq'), :subjectId, :name, :delta)
+                    values (nextval('post_attr_seq'), :subjectId, :name, greatest(:delta, 0))
                     on conflict (subject_id, name)
-                    do update set int_value = post_attr.int_value + excluded.int_value
+                    do update set int_value = greatest(0, coalesce(post_attr.int_value, 0) + :delta)
                     returning int_value
                     """.trimIndent(),
                 ).setParameter("subjectId", subject.id)

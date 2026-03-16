@@ -7,6 +7,7 @@ import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.SeededSpringBootTestSupport
 import jakarta.servlet.http.Cookie
+import jakarta.persistence.EntityManager
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers
 import org.junit.jupiter.api.AfterEach
@@ -17,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.test.context.support.WithUserDetails
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
@@ -43,6 +45,12 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
     @Autowired
     private lateinit var postHitDedupService: PostHitDedupService
+
+    @Autowired
+    private lateinit var jdbcTemplate: JdbcTemplate
+
+    @Autowired
+    private lateinit var entityManager: EntityManager
 
     @AfterEach
     fun clearHitDedupState() {
@@ -575,6 +583,37 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                 status { isOk() }
                 jsonPath("$.msg") { value("좋아요를 취소했습니다.") }
                 jsonPath("$.data.liked") { value(false) }
+            }
+        }
+
+        @Test
+        @WithUserDetails("user1")
+        fun `좋아요 카운터 attr 누락 상태에서도 토글 취소가 409 없이 동작한다`() {
+            val author = actorApplicationService.findByUsername("admin").getOrThrow()
+            val post = postFacade.write(author, "like-attr-missing-${System.currentTimeMillis()}", "내용", true, true)
+
+            mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.data.liked") { value(true) }
+            }
+
+            jdbcTemplate.update(
+                "update post set likes_count_attr_id = null where id = ?",
+                post.id,
+            )
+
+            jdbcTemplate.update(
+                "delete from post_attr where subject_id = ? and name = ?",
+                post.id,
+                "likesCount",
+            )
+            entityManager.clear()
+
+            mvc.post("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.msg") { value("좋아요를 취소했습니다.") }
+                jsonPath("$.data.liked") { value(false) }
+                jsonPath("$.data.likesCount") { value(0) }
             }
         }
 

@@ -18,4 +18,5 @@
 - 네비 인증 상태가 `unavailable`이어도 정적 경고문만 두지 말고, 즉시 이동 가능한 로그인 액션을 항상 제공한다
 - 운영 도구(`/admin/tools`) 콘솔 액션은 대형 카드형 2열 블록 대신 compact pill 버튼 행을 유지한다
 - 운영 도구 모니터링은 `Grafana iframe`을 버튼으로 열 때만 로드하고, 서버 상태 조회는 10초 캐시를 사용한다.
+- 모달/패널에서 상태 메시지(Notice)와 액션 버튼은 최소 8px 이상 간격을 두고, 같은 줄에 붙여 보이지 않게 분리한다.
 - `/api/revalidate`는 query secret 허용 금지, `x-revalidate-token` 헤더로만 인증한다.

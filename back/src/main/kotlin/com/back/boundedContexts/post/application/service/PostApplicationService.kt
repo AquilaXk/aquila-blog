@@ -40,6 +40,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -62,6 +63,8 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
+
     private data class TagCountsCache(
         val expiresAtMillis: Long,
         val values: List<TagCountDto>,
@@ -182,12 +185,20 @@ class PostApplicationService(
         } catch (exception: ObjectOptimisticLockingFailureException) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
-        uploadedFileRetentionService.syncPostContent(post.id, previousContent, post.content)
+        runCatching {
+            uploadedFileRetentionService.syncPostContent(post.id, previousContent, post.content)
+        }.onFailure { exception ->
+            logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
+        }
         clearExploreCaches()
 
-        eventPublisher.publish(
-            PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor)),
-        )
+        runCatching {
+            eventPublisher.publish(
+                PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor)),
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to publish PostModifiedEvent: postId={}", post.id, exception)
+        }
     }
 
     private fun writeNewPost(
@@ -212,12 +223,20 @@ class PostApplicationService(
             )
         val savedPost = postRepository.saveAndFlush(post)
         syncMetaTagIndexAttr(savedPost)
-        uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
+        runCatching {
+            uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
+        }.onFailure { exception ->
+            logger.warn("Failed to sync post attachments on write: postId={}", savedPost.id, exception)
+        }
         incrementMemberPostsCount(persistenceAuthor)
 
-        eventPublisher.publish(
-            PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author)),
-        )
+        runCatching {
+            eventPublisher.publish(
+                PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author)),
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to publish PostWrittenEvent: postId={}", savedPost.id, exception)
+        }
 
         return savedPost
     }
@@ -254,15 +273,26 @@ class PostApplicationService(
     ) {
         hydratePostAttrs(post)
         val postDto = PostDto(post)
-        uploadedFileRetentionService.scheduleDeletedPostAttachments(post.content)
-
-        eventPublisher.publish(
-            PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor)),
-        )
+        val deletedPostContent = post.content
 
         decrementMemberPostsCount(post.author)
         post.softDelete()
         clearExploreCaches()
+
+        // 삭제 자체는 완료시키고, 보조 처리(파일 정리/이벤트)는 실패해도 트랜잭션을 깨지 않도록 분리한다.
+        runCatching {
+            uploadedFileRetentionService.scheduleDeletedPostAttachments(deletedPostContent)
+        }.onFailure { exception ->
+            logger.warn("Failed to schedule cleanup for deleted post id={}", post.id, exception)
+        }
+
+        runCatching {
+            eventPublisher.publish(
+                PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor)),
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to publish PostDeletedEvent for post id={}", post.id, exception)
+        }
     }
 
     @Transactional
@@ -285,9 +315,13 @@ class PostApplicationService(
         incrementCommentsCount(post)
         incrementMemberPostCommentsCount(persistenceAuthor)
 
-        eventPublisher.publish(
-            PostCommentWrittenEvent(UUID.randomUUID(), PostCommentDto(comment), PostDto(post), MemberDto(author)),
-        )
+        runCatching {
+            eventPublisher.publish(
+                PostCommentWrittenEvent(UUID.randomUUID(), PostCommentDto(comment), PostDto(post), MemberDto(author)),
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to publish PostCommentWrittenEvent: postId={}, commentId={}", post.id, comment.id, exception)
+        }
 
         return comment
     }
@@ -300,14 +334,23 @@ class PostApplicationService(
     ) {
         postComment.modify(content)
 
-        eventPublisher.publish(
-            PostCommentModifiedEvent(
-                UUID.randomUUID(),
-                PostCommentDto(postComment),
-                PostDto(postComment.post),
-                MemberDto(actor),
-            ),
-        )
+        runCatching {
+            eventPublisher.publish(
+                PostCommentModifiedEvent(
+                    UUID.randomUUID(),
+                    PostCommentDto(postComment),
+                    PostDto(postComment.post),
+                    MemberDto(actor),
+                ),
+            )
+        }.onFailure { exception ->
+            logger.warn(
+                "Failed to publish PostCommentModifiedEvent: postId={}, commentId={}",
+                postComment.post.id,
+                postComment.id,
+                exception,
+            )
+        }
     }
 
     @Transactional
@@ -332,9 +375,18 @@ class PostApplicationService(
             post.onCommentDeleted()
             comment.softDelete()
 
-            eventPublisher.publish(
-                PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
-            )
+            runCatching {
+                eventPublisher.publish(
+                    PostCommentDeletedEvent(UUID.randomUUID(), postCommentDto, postDto, MemberDto(actor)),
+                )
+            }.onFailure { exception ->
+                logger.warn(
+                    "Failed to publish PostCommentDeletedEvent: postId={}, commentId={}",
+                    comment.post.id,
+                    comment.id,
+                    exception,
+                )
+            }
         }
 
         savePostAttr(post.commentsCountAttr)
@@ -375,18 +427,26 @@ class PostApplicationService(
 
             incrementLikesCount(post)
             postRepository.flush()
-            eventPublisher.publish(
-                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
-            )
+            runCatching {
+                eventPublisher.publish(
+                    PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
+                )
+            }.onFailure { exception ->
+                logger.warn("Failed to publish recovered PostLikedEvent: postId={}, likeId={}", post.id, recoveredLikeId, exception)
+            }
             return PostLikeToggleResult(true, recoveredLikeId)
         }
 
         incrementLikesCount(post)
         postRepository.flush()
 
-        eventPublisher.publish(
-            PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, insertedLikeId, MemberDto(actor)),
-        )
+        runCatching {
+            eventPublisher.publish(
+                PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, insertedLikeId, MemberDto(actor)),
+            )
+        }.onFailure { exception ->
+            logger.warn("Failed to publish PostLikedEvent: postId={}, likeId={}", post.id, insertedLikeId, exception)
+        }
 
         return PostLikeToggleResult(true, insertedLikeId)
     }
@@ -413,9 +473,13 @@ class PostApplicationService(
         postRepository.flush()
 
         if (deletedCount > 0 && existingLikeId != null) {
-            eventPublisher.publish(
-                PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
-            )
+            runCatching {
+                eventPublisher.publish(
+                    PostUnlikedEvent(UUID.randomUUID(), post.id, postAuthorId, existingLikeId, MemberDto(actor)),
+                )
+            }.onFailure { exception ->
+                logger.warn("Failed to publish PostUnlikedEvent: postId={}, likeId={}", post.id, existingLikeId, exception)
+            }
         }
 
         return PostLikeToggleResult(false, existingLikeId ?: 0)
@@ -429,6 +493,20 @@ class PostApplicationService(
         val persistenceActor = toPersistenceMember(actor)
         hydratePostAttrs(post)
         syncLikesCount(post)
+        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
+        return PostLikeToggleResult(
+            isLiked = existingLike != null,
+            likeId = existingLike?.id ?: 0,
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun readLikeSnapshot(
+        post: Post,
+        actor: Member,
+    ): PostLikeToggleResult {
+        val persistenceActor = toPersistenceMember(actor)
+        post.likesCount = postLikeRepository.countByPost(post).toInt()
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         return PostLikeToggleResult(
             isLiked = existingLike != null,

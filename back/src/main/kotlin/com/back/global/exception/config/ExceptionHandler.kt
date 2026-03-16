@@ -1,10 +1,14 @@
 package com.back.global.exception.config
 
 import com.back.global.exception.application.AppException
+import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.rsData.RsData
+import jakarta.persistence.OptimisticLockException
 import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -15,7 +19,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 
 @RestControllerAdvice
-class ExceptionHandler {
+class ExceptionHandler(
+    @Autowired(required = false)
+    private val prodSequenceGuardService: ProdSequenceGuardService? = null,
+) {
     private val logger = LoggerFactory.getLogger(ExceptionHandler::class.java)
 
     @ExceptionHandler(NoSuchElementException::class)
@@ -94,10 +101,31 @@ class ExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException::class)
     fun handleDataIntegrityViolationException(ex: DataIntegrityViolationException): ResponseEntity<RsData<Void>> {
+        val repaired = prodSequenceGuardService?.repairIfSequenceDrift(ex) == true
         logger.warn("Data integrity violation", ex)
         return ResponseEntity
             .status(HttpStatus.CONFLICT)
-            .body(RsData("409-1", "동시에 처리된 요청 충돌이 발생했습니다. 잠시 후 다시 시도해주세요."))
+            .body(
+                RsData(
+                    "409-1",
+                    if (repaired) {
+                        "요청 충돌을 감지해 서버를 자동 보정했습니다. 잠시 후 다시 시도해주세요."
+                    } else {
+                        "동시에 처리된 요청 충돌이 발생했습니다. 잠시 후 다시 시도해주세요."
+                    },
+                ),
+            )
+    }
+
+    @ExceptionHandler(
+        OptimisticLockingFailureException::class,
+        OptimisticLockException::class,
+    )
+    fun handleOptimisticLockException(ex: Exception): ResponseEntity<RsData<Void>> {
+        logger.warn("Optimistic lock conflict", ex)
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
+            .body(RsData("409-1", "다른 요청이 먼저 반영되어 충돌이 발생했습니다. 최신 상태를 확인 후 다시 시도해주세요."))
     }
 
     @ExceptionHandler(Exception::class)

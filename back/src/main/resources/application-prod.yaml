@@ -14,6 +14,12 @@ spring:
       password: "${PROD___SPRING__DATA__REDIS__PASSWORD}"
   datasource:
     password: "${PROD___SPRING__DATASOURCE__PASSWORD}"
+    hikari:
+      # 홈서버 환경에서 worker + API 동시 부하 시 커넥션 대기(수초~수십초)를 줄인다.
+      maximum-pool-size: ${PROD___SPRING__DATASOURCE__HIKARI__MAXIMUM_POOL_SIZE:20}
+      minimum-idle: ${PROD___SPRING__DATASOURCE__HIKARI__MINIMUM_IDLE:4}
+      connection-timeout: ${PROD___SPRING__DATASOURCE__HIKARI__CONNECTION_TIMEOUT_MS:5000}
+      validation-timeout: ${PROD___SPRING__DATASOURCE__HIKARI__VALIDATION_TIMEOUT_MS:2000}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -22,10 +28,13 @@ spring:
         format_sql: false
         highlight_sql: false
         use_sql_comments: false
+      jakarta.persistence.query.timeout: ${PROD___SPRING__JPA__QUERY_TIMEOUT_MS:5000}
     show-sql: false
   sql:
     init:
-      mode: never
+      mode: always
+      schema-locations: classpath:db/guard/prod-schema-guard.sql,classpath:db/guard/prod-sequence-guard.sql
+      continue-on-error: false
 management:
   endpoints:
     web:
@@ -44,6 +53,13 @@ logging:
     org.hibernate.orm.jdbc.batch: INFO
     org.springframework.transaction.interceptor: INFO
 custom:
+  db:
+    sequence-guard-on-startup: ${CUSTOM__DB__SEQUENCE_GUARD_ON_STARTUP:true}
+  task:
+    processor:
+      # API/worker 단일 프로세스 기본 운영에서 DB 경쟁을 완화한다.
+      batchSize: ${CUSTOM__TASK__PROCESSOR__BATCH_SIZE:20}
+      maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:2}
   pgroonga:
     required: true
   jpa:

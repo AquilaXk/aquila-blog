@@ -3,23 +3,30 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
+import jakarta.persistence.OptimisticLockException
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
+import java.sql.SQLException
 
 @RestController
 @RequestMapping("/post/api/v1/posts")
@@ -28,6 +35,8 @@ class ApiV1PostController(
     private val postHitDedupService: PostHitDedupService,
     private val rq: Rq,
 ) {
+    private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
+
     private fun makePostDtoPage(postPage: org.springframework.data.domain.Page<Post>): PageDto<PostDto> {
         val actor = rq.actorOrNull
         val likedPostIds = postUseCase.findLikedPostIds(actor, postPage.content)
@@ -227,12 +236,7 @@ class ApiV1PostController(
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        val likeResult =
-            try {
-                postUseCase.toggleLike(post, rq.actor)
-            } catch (_: DataIntegrityViolationException) {
-                postUseCase.reconcileLikeState(post, rq.actor)
-            }
+        val likeResult = resolveLikeResult(post) { postUseCase.toggleLike(post, rq.actor) }
         val msg = if (likeResult.isLiked) "좋아요를 눌렀습니다." else "좋아요를 취소했습니다."
         return RsData(
             "200-1",
@@ -251,12 +255,7 @@ class ApiV1PostController(
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        val likeResult =
-            try {
-                postUseCase.like(post, rq.actor)
-            } catch (_: DataIntegrityViolationException) {
-                postUseCase.reconcileLikeState(post, rq.actor)
-            }
+        val likeResult = resolveLikeResult(post) { postUseCase.like(post, rq.actor) }
         return RsData(
             "200-1",
             "좋아요를 반영했습니다.",
@@ -274,12 +273,7 @@ class ApiV1PostController(
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        val likeResult =
-            try {
-                postUseCase.unlike(post, rq.actor)
-            } catch (_: DataIntegrityViolationException) {
-                postUseCase.reconcileLikeState(post, rq.actor)
-            }
+        val likeResult = resolveLikeResult(post) { postUseCase.unlike(post, rq.actor) }
         return RsData(
             "200-1",
             "좋아요 취소를 반영했습니다.",
@@ -320,4 +314,47 @@ class ApiV1PostController(
         rq.actorOrNull
             ?.let { "member:${it.id}" }
             ?: "anon:${rq.clientIp}|${rq.userAgent}"
+
+    private fun resolveLikeResult(
+        post: Post,
+        action: () -> PostLikeToggleResult,
+    ): PostLikeToggleResult =
+        try {
+            action()
+        } catch (exception: Exception) {
+            if (!isRecoverableLikeConflict(exception)) throw exception
+            recoverLikeResult(post, exception)
+        }
+
+    private fun recoverLikeResult(
+        post: Post,
+        exception: Exception,
+    ): PostLikeToggleResult {
+        logger.warn("Like conflict recovered with reconcile/snapshot. postId={} actorId={}", post.id, rq.actor.id, exception)
+        return try {
+            postUseCase.reconcileLikeState(post, rq.actor)
+        } catch (reconcileException: Exception) {
+            logger.warn(
+                "Like reconcile failed, fallback to snapshot. postId={} actorId={}",
+                post.id,
+                rq.actor.id,
+                reconcileException,
+            )
+            postUseCase.readLikeSnapshot(post, rq.actor)
+        }
+    }
+
+    private fun isRecoverableLikeConflict(exception: Exception): Boolean {
+        if (exception is DataIntegrityViolationException) return true
+        if (exception is ObjectOptimisticLockingFailureException) return true
+        if (exception is OptimisticLockingFailureException) return true
+        if (exception is OptimisticLockException) return true
+        if (exception is AppException && exception.rsData.statusCode == 409) return true
+
+        val sqlException =
+            generateSequence<Throwable>(exception) { it.cause }
+                .filterIsInstance<SQLException>()
+                .firstOrNull()
+        return sqlException?.sqlState in setOf("23505", "40001", "40P01")
+    }
 }

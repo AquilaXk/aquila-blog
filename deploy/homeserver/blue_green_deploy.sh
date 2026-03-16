@@ -148,9 +148,24 @@ check_backend_dns_from_caddy() {
   echo "caddy dns ok: ${host} -> ${ip:-unknown}"
 }
 
-check_all_backend_dns_from_caddy() {
-  check_backend_dns_from_caddy "back_blue"
-  check_backend_dns_from_caddy "back_green"
+is_backend_running() {
+  local backend="$1"
+  compose ps --status running --services 2>/dev/null | grep -qx "${backend}"
+}
+
+check_required_backend_dns_from_caddy() {
+  local next_backend="$1"
+  local active_backend="$2"
+
+  # Cutover 대상 backend는 반드시 DNS 해석이 가능해야 한다.
+  check_backend_dns_from_caddy "${next_backend}"
+
+  # 현재 active backend는 실행 중일 때만 DNS를 점검한다.
+  if [[ "${active_backend}" != "${next_backend}" ]] && is_backend_running "${active_backend}"; then
+    check_backend_dns_from_caddy "${active_backend}"
+  else
+    echo "skip dns check for inactive backend: ${active_backend}"
+  fi
 }
 
 probe_caddy_http_code() {
@@ -384,8 +399,8 @@ compose up -d "${next_backend}"
 
 ensure_caddyfile_back_active
 
-# Required by request: verify DNS for both color backends before cutover.
-check_all_backend_dns_from_caddy
+# Verify cutover target DNS and currently running active backend DNS (if running).
+check_required_backend_dns_from_caddy "${next_backend}" "${active_backend}"
 check_backend_health "${next_backend}"
 
 switch_active_alias "${next_backend}"

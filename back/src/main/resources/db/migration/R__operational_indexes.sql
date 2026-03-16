@@ -18,6 +18,9 @@ END $$;
 DO $$
 BEGIN
     IF to_regclass('public.post') IS NOT NULL THEN
+        ALTER TABLE IF EXISTS public.post
+            ADD COLUMN IF NOT EXISTS content_html TEXT;
+
         CREATE INDEX IF NOT EXISTS post_idx_listed_created_at_desc
             ON post (listed, created_at DESC);
         CREATE INDEX IF NOT EXISTS post_idx_listed_modified_at_desc

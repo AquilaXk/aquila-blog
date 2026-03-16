@@ -39,6 +39,7 @@ type PostForEditor = {
   id: number
   title: string
   content: string
+  contentHtml?: string
   version?: number
   published: boolean
   listed: boolean
@@ -68,6 +69,10 @@ type PostWriteResult = {
   listed: boolean
 }
 
+type MarkdownRenderResponse = {
+  html?: string
+}
+
 type AdminPostListItem = {
   id: number
   title: string
@@ -86,6 +91,11 @@ type PageDto<T> = {
     totalElements?: number
     totalPages?: number
   }
+}
+
+type TagUsageDto = {
+  tag: string
+  count: number
 }
 
 type NoticeTone = "idle" | "loading" | "success" | "error"
@@ -558,7 +568,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { me, authStatus, setMe, refresh } = useAuthSession()
-  const sessionMember = authStatus === "loading" ? initialMember : me
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("")
@@ -725,40 +735,32 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setMetaCatalogLoading(true)
 
     try {
-      const firstPage = await apiFetch<PageDto<{ id: number }>>(
-        "/post/api/v1/adm/posts?page=1&pageSize=30&sort=CREATED_AT"
-      )
-      const totalPages = Math.max(1, firstPage.pageable?.totalPages ?? 1)
-      const pageRequests: Promise<PageDto<{ id: number }>>[] = []
+      const nextTagUsageMap: MetaUsageMap = {}
+      const nextCategoryUsageMap: MetaUsageMap = {}
 
-      for (let page = 2; page <= totalPages; page += 1) {
-        pageRequests.push(
-          apiFetch<PageDto<{ id: number }>>(
-            `/post/api/v1/adm/posts?page=${page}&pageSize=30&sort=CREATED_AT`
-          )
-        )
-      }
+      // 운영 환경에서 관리자 진입 시 전 게시글 상세를 모두 조회하면 O(N) API 호출이 발생한다.
+      // 태그는 집계 API를 사용하고, 카테고리는 최신 N개(첫 페이지)만 샘플링해 부하를 제한한다.
+      const [tagRows, firstPage] = await Promise.all([
+        apiFetch<TagUsageDto[]>("/post/api/v1/posts/tags").catch(() => [] as TagUsageDto[]),
+        apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=30&sort=CREATED_AT").catch(
+          () => ({ content: [] as { id: number }[] })
+        ),
+      ])
 
-      const restPages = pageRequests.length > 0 ? await Promise.all(pageRequests) : []
-      const ids = dedupeStrings(
-        [firstPage, ...restPages]
-          .flatMap((page) => page.content || [])
-          .map((row) => String(row.id))
-      ).map(Number)
+      tagRows.forEach((row) => {
+        const key = typeof row.tag === "string" ? row.tag.trim() : ""
+        if (!key) return
+        nextTagUsageMap[key] = Number.isFinite(row.count) ? row.count : 0
+      })
 
+      const ids = dedupeStrings((firstPage.content || []).map((row) => String(row.id))).map(Number)
       const details = await Promise.allSettled(
         ids.map((id) => apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${id}`))
       )
 
-      const nextTagUsageMap: MetaUsageMap = {}
-      const nextCategoryUsageMap: MetaUsageMap = {}
-
       details.forEach((result) => {
         if (result.status !== "fulfilled") return
         const parsed = parseEditorMeta(result.value.content || "")
-        parsed.tags.forEach((tag) => {
-          nextTagUsageMap[tag] = (nextTagUsageMap[tag] || 0) + 1
-        })
         if (parsed.category) {
           nextCategoryUsageMap[parsed.category] = (nextCategoryUsageMap[parsed.category] || 0) + 1
         }
@@ -926,6 +928,36 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }, [applyLoadedPostContext, postId, syncEditorMeta])
 
+  const renderContentHtml = useCallback(
+    async (source: "new-post" | "modify-post" | "publish-temp-post"): Promise<string | undefined> => {
+      try {
+        const rendered = await fetch("/api/markdown/render", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            markdown: postContent,
+          }),
+        })
+
+        if (!rendered.ok) {
+          throw new Error(`status=${rendered.status}`)
+        }
+
+        const payload = (await rendered.json()) as MarkdownRenderResponse
+        if (typeof payload.html === "string" && payload.html.trim()) {
+          return payload.html
+        }
+      } catch (error) {
+        console.warn(`[admin/${source}] markdown render failed, fallback to markdown content`, error)
+      }
+
+      return undefined
+    },
+    [postContent]
+  )
+
   const handleWritePost = async (): Promise<boolean> => {
     if (editorMode === "edit" || postId.trim()) {
       const msg = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
@@ -956,6 +988,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         summary: postSummary,
         thumbnail: effectiveThumbnailUrl,
       })
+      const contentHtml = await renderContentHtml("new-post")
+
       const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
       if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
         lastWriteFingerprintRef.current = fingerprint
@@ -970,6 +1004,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         body: JSON.stringify({
           title: postTitle,
           content: contentWithMetadata,
+          ...(contentHtml ? { contentHtml } : {}),
           ...toFlags(postVisibility),
         }),
       })
@@ -1021,6 +1056,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("modifyPost")
       setPublishNotice({ tone: "loading", text: "글 수정 중입니다..." })
+      const contentHtml = await renderContentHtml("modify-post")
+
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
         method: "PUT",
         body: JSON.stringify({
@@ -1030,6 +1067,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
           }),
+          ...(contentHtml ? { contentHtml } : {}),
           ...toFlags(postVisibility),
           version: postVersion ?? undefined,
         }),
@@ -1090,6 +1128,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("publishTempPost")
       setPublishNotice({ tone: "loading", text: "임시글을 발행하는 중입니다..." })
+      const contentHtml = await renderContentHtml("publish-temp-post")
+
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
         method: "PUT",
         body: JSON.stringify({
@@ -1099,6 +1139,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
           }),
+          ...(contentHtml ? { contentHtml } : {}),
           published: true,
           listed: true,
           version: postVersion ?? undefined,

@@ -83,6 +83,7 @@ class PostApplicationService(
         published: Boolean = false,
         listed: Boolean = false,
         idempotencyKey: String? = null,
+        contentHtml: String? = null,
     ): Post {
         val persistenceAuthor = toPersistenceMember(author)
         val normalizedIdempotencyKey = idempotencyKey?.trim()?.takeIf { it.isNotBlank() }
@@ -96,6 +97,7 @@ class PostApplicationService(
                     content = content,
                     published = published,
                     listed = listed,
+                    contentHtml = contentHtml,
                 )
             clearExploreCaches()
             return created
@@ -127,6 +129,7 @@ class PostApplicationService(
                 content = content,
                 published = published,
                 listed = listed,
+                contentHtml = contentHtml,
             )
 
         requestSlot.postId = createdPost.id
@@ -156,6 +159,7 @@ class PostApplicationService(
         published: Boolean? = null,
         listed: Boolean? = null,
         expectedVersion: Long? = null,
+        contentHtml: String? = null,
     ) {
         hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
@@ -165,7 +169,7 @@ class PostApplicationService(
 
         val previousContent = post.content
         try {
-            post.modify(title, content, published, listed)
+            post.modify(title, content, published, listed, contentHtml ?: post.contentHtml)
             postRepository.flush()
         } catch (exception: ObjectOptimisticLockingFailureException) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
@@ -185,8 +189,9 @@ class PostApplicationService(
         content: String,
         published: Boolean,
         listed: Boolean,
+        contentHtml: String?,
     ): Post {
-        val post = Post(0, persistenceAuthor, title, content, null, published, listed)
+        val post = Post(0, persistenceAuthor, title, content, null, published, listed, contentHtml)
         val savedPost = postRepository.saveAndFlush(post)
         uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
         hydrateMemberCounterAttrs(persistenceAuthor)

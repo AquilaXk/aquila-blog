@@ -126,8 +126,10 @@ const ensurePrismLanguages = async (languages: string[]) => {
   }
 }
 
-const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => {
+const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, enabled = true) => {
   useEffect(() => {
+    if (!enabled) return
+
     let disposed = false
     let running = false
     const root = rootRef.current
@@ -200,7 +202,7 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => 
       disposed = true
       observer.disconnect()
     }
-  }, [contentKey, rootRef])
+  }, [contentKey, enabled, rootRef])
 }
 
 export default usePrismEffect

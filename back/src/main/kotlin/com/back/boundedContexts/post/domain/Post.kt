@@ -72,6 +72,9 @@ class Post(
     var published: Boolean = false,
     @field:Column(nullable = false)
     var listed: Boolean = false,
+    @field:Basic(fetch = FetchType.LAZY)
+    @field:Column(name = "content_html", columnDefinition = "TEXT")
+    var contentHtml: String? = null,
 ) : BaseTime(id),
     PostHasHit,
     PostHasLikes,
@@ -100,9 +103,11 @@ class Post(
         content: String,
         published: Boolean? = null,
         listed: Boolean? = null,
+        contentHtml: String? = this.contentHtml,
     ) {
         this.title = title
         this.content = content
+        this.contentHtml = contentHtml
         published?.let { this.published = it }
         listed?.let { this.listed = it }
         if (!this.published) this.listed = false

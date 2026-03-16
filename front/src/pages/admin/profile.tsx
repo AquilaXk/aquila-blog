@@ -108,7 +108,7 @@ const validateLinkInputs = (
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const queryClient = useQueryClient()
   const { me, authStatus, setMe } = useAuthSession()
-  const sessionMember = authStatus === "loading" ? initialMember : me
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
   const [loadingKey, setLoadingKey] = useState("")
   const [imageNotice, setImageNotice] = useState<{ tone: NoticeTone; text: string }>({
     tone: "idle",

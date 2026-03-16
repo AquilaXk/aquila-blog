@@ -1,0 +1,2 @@
+ALTER TABLE post
+    ADD COLUMN IF NOT EXISTS content_html TEXT;

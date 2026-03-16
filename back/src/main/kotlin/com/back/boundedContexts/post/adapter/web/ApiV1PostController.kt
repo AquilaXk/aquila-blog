@@ -123,6 +123,7 @@ class ApiV1PostController(
         @field:NotBlank
         @field:Size(min = 2)
         val content: String,
+        val contentHtml: String? = null,
         val published: Boolean?,
         val listed: Boolean?,
     )
@@ -142,6 +143,7 @@ class ApiV1PostController(
                 reqBody.published ?: false,
                 reqBody.listed ?: false,
                 idempotencyKey,
+                reqBody.contentHtml,
             )
         return RsData("201-1", "${post.id}번 글이 작성되었습니다.", PostDto(post))
     }
@@ -153,6 +155,7 @@ class ApiV1PostController(
         @field:NotBlank
         @field:Size(min = 2)
         val content: String,
+        val contentHtml: String? = null,
         val published: Boolean? = null,
         val listed: Boolean? = null,
         val version: Long? = null,
@@ -174,6 +177,7 @@ class ApiV1PostController(
             reqBody.published,
             reqBody.listed,
             reqBody.version,
+            reqBody.contentHtml,
         )
         return RsData("200-1", "${post.id}번 글이 수정되었습니다.", PostDto(post))
     }

@@ -46,6 +46,7 @@ export type TPost = {
 
 export type PostDetail = TPost & {
   content: string
+  contentHtml?: string
   recordMap?: ExtendedRecordMap
 }
 

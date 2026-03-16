@@ -14,8 +14,6 @@ import type { TPost } from "src/types"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
   const queryClient = createQueryClient()
-  const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : ""
-  const initialViewport = /Mobi|Android|iPhone|iPad|iPod/i.test(userAgent) ? "mobile" : "desktop"
   const postsQueryTagRaw = typeof query.tag === "string" ? query.tag : ""
   const postsQueryOrderRaw = typeof query.order === "string" ? query.order : ""
   const currentTag = postsQueryTagRaw.trim()
@@ -99,17 +97,15 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     props: {
       dehydratedState: dehydrate(queryClient),
       initialAdminProfile,
-      initialViewport,
     },
   }
 }
 
 type FeedPageProps = {
   initialAdminProfile: AdminProfile | null
-  initialViewport: "mobile" | "desktop"
 }
 
-const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile, initialViewport }) => {
+const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
   const feedTitle = initialAdminProfile?.homeIntroTitle || CONFIG.blog.title
   const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.description
 
@@ -123,7 +119,7 @@ const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile, init
   return (
     <>
       <MetaConfig {...meta} />
-      <Feed initialAdminProfile={initialAdminProfile} initialViewport={initialViewport} />
+      <Feed initialAdminProfile={initialAdminProfile} />
     </>
   )
 }

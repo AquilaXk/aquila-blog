@@ -15,7 +15,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
     queryKey: queryKey.scheme(),
     enabled: false,
     initialData: followsSystemTheme
-      ? "dark"
+      ? "light"
       : (CONFIG.blog.scheme as SchemeType),
   })
 
@@ -29,7 +29,7 @@ const useScheme = (): [SchemeType, SetScheme] => {
 
     const cachedScheme = getCookie("scheme") as SchemeType
     const defaultScheme = followsSystemTheme
-      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
         ? "dark"
         : "light"
       : data

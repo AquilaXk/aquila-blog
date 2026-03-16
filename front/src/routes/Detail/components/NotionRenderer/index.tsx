@@ -9,6 +9,7 @@ import usePrismEffect from "./usePrismEffect"
 
 type Props = {
   content?: string
+  contentHtml?: string
   recordMap?: unknown
 }
 
@@ -397,22 +398,26 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   return segments
 }
 
-const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
+const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const imageRenderOrderRef = useRef(0)
   const normalizedContent = useMemo(() => content?.trim() || "", [content])
+  const normalizedContentHtml = useMemo(() => contentHtml?.trim() || "", [contentHtml])
   const segments = useMemo(
-    () => parseMarkdownSegments(normalizedContent),
-    [normalizedContent]
+    () => (normalizedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
+    [normalizedContent, normalizedContentHtml]
   )
   const renderKey = useMemo(
-    () => `${normalizedContent.length}:${normalizedContent.slice(0, 64)}`,
-    [normalizedContent]
+    () =>
+      normalizedContentHtml
+        ? `html:${normalizedContentHtml.length}:${normalizedContentHtml.slice(0, 64)}`
+        : `md:${normalizedContent.length}:${normalizedContent.slice(0, 64)}`,
+    [normalizedContent, normalizedContentHtml]
   )
 
   useMermaidEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
-  usePrismEffect(rootRef, renderKey)
+  usePrismEffect(rootRef, renderKey, !normalizedContentHtml)
 
   useEffect(() => {
     imageRenderOrderRef.current = 0
@@ -504,6 +509,16 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
       {markdown}
     </ReactMarkdown>
   )
+
+  if (normalizedContentHtml) {
+    return (
+      <StyledWrapper
+        ref={rootRef}
+        className="aq-markdown"
+        dangerouslySetInnerHTML={{ __html: normalizedContentHtml }}
+      />
+    )
+  }
 
   if (!normalizedContent) {
     if (recordMap) {
@@ -862,6 +877,42 @@ const StyledWrapper = styled.div`
 
   figure[data-rehype-pretty-code-figure] {
     margin: 1rem 0;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(15, 23, 42, 0.62)" : "rgba(248, 250, 252, 0.92)"};
+  }
+
+  figure[data-rehype-pretty-code-figure] pre {
+    margin: 0;
+    overflow-x: auto;
+    padding: 1rem 1.05rem;
+    background: transparent;
+  }
+
+  figure[data-rehype-pretty-code-figure] pre code {
+    display: block;
+    min-width: max-content;
+  }
+
+  figure[data-rehype-pretty-code-figure] [data-line] {
+    display: block;
+    border-left: 2px solid transparent;
+    padding: 0 0.36rem;
+  }
+
+  figure[data-rehype-pretty-code-figure] [data-highlighted-line] {
+    border-left-color: ${({ theme }) => (theme.scheme === "dark" ? "#60a5fa" : "#3b82f6")};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.11)" : "rgba(59, 130, 246, 0.12)"};
+  }
+
+  figure[data-rehype-pretty-code-figure] [data-highlighted-chars] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(250, 204, 21, 0.2)" : "rgba(250, 204, 21, 0.24)"};
+    border-radius: 4px;
+    padding: 0.06em 0.22em;
   }
 
   .aq-toggle {

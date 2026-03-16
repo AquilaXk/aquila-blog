@@ -4,6 +4,7 @@ import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
+import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
@@ -204,7 +205,7 @@ const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
 const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const queryClient = useQueryClient()
   const { me, authStatus } = useAuthSession()
-  const sessionMember = authStatus === "loading" ? initialMember : me
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [loadingKey, setLoadingKey] = useState("")
   const [result, setResult] = useState("")
@@ -264,7 +265,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const data = await fn()
       setResult(pretty(data))
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = toFriendlyApiMessage(error, "요청 처리 중 오류가 발생했습니다.")
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -300,7 +301,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setMailDiagnostics(diagnostics)
       setResult(pretty(diagnostics))
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = toFriendlyApiMessage(error, "메일 진단 조회에 실패했습니다.")
       setMailDiagnosticsError(message)
       setResult(pretty({ error: message }))
     } finally {
@@ -326,7 +327,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setMailTestNotice({ tone: "success", text: `${response.data.email} 주소로 테스트 메일을 요청했습니다.` })
       setResult(pretty(response))
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = toFriendlyApiMessage(error, "테스트 메일 전송에 실패했습니다.")
       setMailTestNotice({ tone: "danger", text: message })
       setResult(pretty({ error: message }))
     } finally {
@@ -386,7 +387,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setTaskQueueDiagnostics(diagnostics)
       setResult(pretty(diagnostics))
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = toFriendlyApiMessage(error, "Task Queue 진단 조회에 실패했습니다.")
       setTaskQueueDiagnosticsError(message)
       setResult(pretty({ error: message }))
     } finally {
@@ -403,7 +404,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setCleanupDiagnostics(diagnostics)
       setResult(pretty(diagnostics))
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = toFriendlyApiMessage(error, "파일 정리 진단 조회에 실패했습니다.")
       setCleanupDiagnosticsError(message)
       setResult(pretty({ error: message }))
     } finally {

@@ -20,6 +20,7 @@ interface PostUseCase {
         published: Boolean = false,
         listed: Boolean = false,
         idempotencyKey: String? = null,
+        contentHtml: String? = null,
     ): Post
 
     fun findById(id: Int): Post?
@@ -34,6 +35,7 @@ interface PostUseCase {
         published: Boolean? = null,
         listed: Boolean? = null,
         expectedVersion: Long? = null,
+        contentHtml: String? = null,
     )
 
     fun delete(

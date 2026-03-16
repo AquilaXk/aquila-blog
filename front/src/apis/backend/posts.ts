@@ -42,6 +42,7 @@ type ApiPostWithContentDto = {
   authorProfileImgUrl?: string
   title: string
   content: string
+  contentHtml?: string
   tags?: string[]
   category?: string[]
   published: boolean
@@ -247,6 +248,7 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
     ...(category.length > 0 ? { category } : {}),
     summary,
     content: normalizedContent,
+    ...(post.contentHtml ? { contentHtml: post.contentHtml } : {}),
     modifiedTime: post.modifiedAt,
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,

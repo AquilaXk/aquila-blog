@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next"
 import { getPosts } from "../../apis"
 
 // Revalidate endpoint (POST only)
-// - token: x-revalidate-token header (or ?secret=... fallback)
+// - token: x-revalidate-token header only
 // - path: JSON body { path: "/target" } (or ?path=... fallback)
 export default async function handler(
   req: NextApiRequest,
@@ -18,14 +18,12 @@ export default async function handler(
     return res.status(500).json({ message: "Missing revalidate token on server" })
   }
 
-  const querySecret = typeof req.query.secret === "string" ? req.query.secret : ""
   const headerSecret =
     typeof req.headers["x-revalidate-token"] === "string"
       ? req.headers["x-revalidate-token"]
       : ""
-  const providedSecret = headerSecret || querySecret
 
-  if (providedSecret !== expectedSecret) {
+  if (headerSecret !== expectedSecret) {
     return res.status(401).json({ message: "Invalid token" })
   }
 

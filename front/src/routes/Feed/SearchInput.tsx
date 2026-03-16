@@ -7,6 +7,19 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
+  const inputId = props.id || "feed-search-input"
+
+  const focusInput = () => {
+    if (typeof inputRef !== "function" && inputRef?.current) {
+      inputRef.current.focus()
+      return
+    }
+
+    if (typeof document === "undefined") return
+    const input = document.getElementById(inputId)
+    if (input instanceof HTMLInputElement) input.focus()
+  }
+
   return (
     <StyledWrapper>
       <div className="field">
@@ -14,7 +27,7 @@ const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
           <AppIcon name="search" />
         </span>
         <input
-          id="feed-search-input"
+          id={inputId}
           ref={inputRef}
           className="mid"
           type="search"
@@ -22,9 +35,9 @@ const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
           aria-label="Search posts by keyword"
           {...props}
         />
-        <span className="shortcut" aria-hidden="true">
+        <button type="button" className="shortcut" onClick={focusInput} aria-label="검색창으로 이동">
           검색
-        </span>
+        </button>
       </div>
     </StyledWrapper>
   )
@@ -70,6 +83,14 @@ const StyledWrapper = styled.div`
       font-size: 0.68rem;
       font-weight: 650;
       letter-spacing: 0;
+      line-height: 1;
+      cursor: pointer;
+
+      &:hover {
+        color: ${({ theme }) => theme.colors.gray12};
+        border-color: ${({ theme }) => theme.colors.gray6};
+        background: ${({ theme }) => theme.colors.gray3};
+      }
 
       @media (max-width: 640px) {
         display: none;

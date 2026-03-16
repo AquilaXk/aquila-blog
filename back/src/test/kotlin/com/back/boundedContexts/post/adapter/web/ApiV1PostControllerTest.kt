@@ -173,19 +173,20 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         @Test
         @WithUserDetails("admin")
         fun `contentHtml 저장 시 위험한 스크립트와 이벤트 속성은 제거된다`() {
-            mvc.post("/post/api/v1/posts") {
-                contentType = MediaType.APPLICATION_JSON
-                content =
-                    """
-                    {
-                      "title": "보안 테스트",
-                      "content": "본문",
-                      "contentHtml": "<p onclick=\"alert('x')\">safe</p><script>alert('x')</script>"
-                    }
-                    """.trimIndent()
-            }.andExpect {
-                status { isCreated() }
-            }
+            mvc
+                .post("/post/api/v1/posts") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "보안 테스트",
+                          "content": "본문",
+                          "contentHtml": "<p onclick=\"alert('x')\">safe</p><script>alert('x')</script>"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isCreated() }
+                }
 
             val post = postFacade.findLatest().getOrThrow()
             assertThat(post.contentHtml).contains("<p>safe</p>")

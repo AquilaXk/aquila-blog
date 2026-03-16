@@ -3,6 +3,7 @@ import { FC, ReactElement, ReactNode, isValidElement, useEffect, useMemo, useRef
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import AppIcon from "src/components/icons/AppIcon"
+import { normalizeEscapedMermaidFences } from "src/libs/markdown/mermaid"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
 import useInlineColorEffect from "./useInlineColorEffect"
 import usePrismEffect from "./usePrismEffect"
@@ -171,6 +172,80 @@ const toLanguageLabel = (lang: string) => {
   if (!normalized) return "Plain text"
   return LANGUAGE_LABEL_MAP[normalized] || normalized.toUpperCase()
 }
+
+const MERMAID_SOURCE_PATTERN =
+  /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
+
+const decodeBasicHtmlEntities = (raw: string) =>
+  raw
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&quot;", "\"")
+    .replaceAll("&#39;", "'")
+
+const escapeHtml = (raw: string) =>
+  raw
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;")
+
+const extractPlainTextFromHtml = (rawHtml: string) =>
+  decodeBasicHtmlEntities(
+    rawHtml
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|li|tr|h[1-6])>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+  )
+
+const extractMermaidSource = (rawCode: string) => {
+  const normalized = normalizeEscapedMermaidFences(extractPlainTextFromHtml(rawCode)).trim()
+  if (!normalized) return ""
+
+  const fencedMatch = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
+  return (fencedMatch?.[1] || normalized).trim()
+}
+
+const isMermaidSource = (rawCode: string) => {
+  const normalized = extractMermaidSource(rawCode).trimStart()
+  if (!normalized) return false
+  return MERMAID_SOURCE_PATTERN.test(normalized)
+}
+
+const normalizeMermaidCodeBlocksInHtml = (html: string) =>
+  html.replace(/<pre\b[^>]*>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/gi, (full, rawCodeAttrs, rawCodeBody) => {
+    const attrs = String(rawCodeAttrs || "")
+    const lowerAttrs = attrs.toLowerCase()
+    const hasMermaidClass =
+      lowerAttrs.includes("language-mermaid") || lowerAttrs.includes("data-language=\"mermaid\"")
+    const source = extractMermaidSource(String(rawCodeBody || ""))
+    const looksLikeMermaid = MERMAID_SOURCE_PATTERN.test(source)
+    if (!hasMermaidClass && !looksLikeMermaid) return full
+    if (!source) return full
+
+    return `<pre class="aq-mermaid"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+  })
+
+const normalizeMermaidParagraphsInHtml = (html: string) =>
+  html.replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, (full, rawBody) => {
+    const body = String(rawBody || "")
+    const normalizedText = normalizeEscapedMermaidFences(extractPlainTextFromHtml(body)).trim()
+    if (!normalizedText) return full
+
+    const hasMermaidFence =
+      /^`{3,}\s*mermaid\b/i.test(normalizedText) || /^\\`{3,}\s*mermaid\b/i.test(body.trim())
+    const source = extractMermaidSource(body)
+    const looksLikeMermaid =
+      MERMAID_SOURCE_PATTERN.test(source) &&
+      /\b(subgraph|end)\b|-->|==>|-.->|:::/.test(source)
+
+    if (!hasMermaidFence && !looksLikeMermaid) return full
+    if (!source) return full
+
+    return `<pre class="aq-mermaid"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+  })
 
 const extractTextFromNode = (node: ReactNode): string => {
   if (typeof node === "string" || typeof node === "number") return String(node)
@@ -401,23 +476,30 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
 const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const imageRenderOrderRef = useRef(0)
-  const normalizedContent = useMemo(() => content?.trim() || "", [content])
-  const normalizedContentHtml = useMemo(() => contentHtml?.trim() || "", [contentHtml])
-  const segments = useMemo(
-    () => (normalizedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
-    [normalizedContent, normalizedContentHtml]
+  const normalizedContent = useMemo(
+    () => normalizeEscapedMermaidFences(content?.trim() || ""),
+    [content]
   )
-  const renderKey = useMemo(
+  const normalizedContentHtml = useMemo(() => contentHtml?.trim() || "", [contentHtml])
+  const sanitizedContentHtml = useMemo(
     () =>
       normalizedContentHtml
-        ? `html:${normalizedContentHtml.length}:${normalizedContentHtml.slice(0, 64)}`
-        : `md:${normalizedContent.length}:${normalizedContent.slice(0, 64)}`,
-    [normalizedContent, normalizedContentHtml]
+        ? normalizeMermaidParagraphsInHtml(normalizeMermaidCodeBlocksInHtml(normalizedContentHtml))
+        : "",
+    [normalizedContentHtml]
+  )
+  const segments = useMemo(
+    () => (sanitizedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
+    [normalizedContent, sanitizedContentHtml]
+  )
+  const renderKey = useMemo(
+    () => (sanitizedContentHtml ? `html:${sanitizedContentHtml.length}:${sanitizedContentHtml.slice(0, 64)}` : `md:${normalizedContent.length}:${normalizedContent.slice(0, 64)}`),
+    [normalizedContent, sanitizedContentHtml]
   )
 
   useMermaidEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
-  usePrismEffect(rootRef, renderKey, !normalizedContentHtml)
+  usePrismEffect(rootRef, renderKey, true)
 
   useEffect(() => {
     imageRenderOrderRef.current = 0
@@ -465,7 +547,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
             )
           }
 
-          if (lang === "mermaid") {
+          if (lang === "mermaid" || (!lang && isMermaidSource(rawCode))) {
             return (
               <pre className="aq-mermaid">
                 <code className="language-mermaid">{rawCode}</code>
@@ -482,7 +564,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
         pre({ children, className, ...props }) {
           const { language, rawCode } = extractCodeMetaFromPreChildren(children)
 
-          if (language === "mermaid") {
+          if (language === "mermaid" || isMermaidSource(rawCode)) {
             return (
               <pre className="aq-mermaid">
                 <code className="language-mermaid">{rawCode}</code>
@@ -510,12 +592,12 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
     </ReactMarkdown>
   )
 
-  if (normalizedContentHtml) {
+  if (sanitizedContentHtml) {
     return (
       <StyledWrapper
         ref={rootRef}
         className="aq-markdown"
-        dangerouslySetInnerHTML={{ __html: normalizedContentHtml }}
+        dangerouslySetInnerHTML={{ __html: sanitizedContentHtml }}
       />
     )
   }
@@ -607,6 +689,34 @@ const StyledWrapper = styled.div`
     line-height: 1.72;
   }
 
+  a {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#7ab6ff" : "#0969da")};
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+    text-decoration-thickness: 0.08em;
+    word-break: break-word;
+  }
+
+  a:hover {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#a8ceff" : "#0a58ca")};
+  }
+
+  blockquote {
+    margin: 0.95rem 0;
+    padding: 0.12rem 0 0.12rem 1rem;
+    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
+    color: ${({ theme }) => theme.colors.gray11};
+    background: transparent;
+  }
+
+  blockquote > :first-of-type {
+    margin-top: 0;
+  }
+
+  blockquote > :last-child {
+    margin-bottom: 0;
+  }
+
   figure {
     margin: 1rem 0;
   }
@@ -648,6 +758,26 @@ const StyledWrapper = styled.div`
 
   li {
     line-height: 1.72;
+  }
+
+  ul.contains-task-list,
+  ol.contains-task-list {
+    list-style: none;
+    padding-left: 0.2rem;
+  }
+
+  li.task-list-item {
+    list-style: none;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.52rem;
+  }
+
+  li.task-list-item input[type="checkbox"] {
+    margin: 0.34rem 0 0;
+    width: 0.95rem;
+    height: 0.95rem;
+    accent-color: ${({ theme }) => (theme.scheme === "dark" ? "#4493f8" : "#0969da")};
   }
 
   hr {
@@ -949,63 +1079,63 @@ const StyledWrapper = styled.div`
     margin: 0;
   }
 
-  .aq-code .token.comment,
-  .aq-code .token.prolog,
-  .aq-code .token.doctype,
-  .aq-code .token.cdata {
+  pre code .token.comment,
+  pre code .token.prolog,
+  pre code .token.doctype,
+  pre code .token.cdata {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#808b99" : "#6a7280")};
     font-style: italic;
   }
 
-  .aq-code .token.punctuation {
+  pre code .token.punctuation {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#a9b7c6" : "#495367")};
   }
 
-  .aq-code .token.property,
-  .aq-code .token.tag,
-  .aq-code .token.constant,
-  .aq-code .token.symbol,
-  .aq-code .token.deleted {
+  pre code .token.property,
+  pre code .token.tag,
+  pre code .token.constant,
+  pre code .token.symbol,
+  pre code .token.deleted {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#b45309")};
   }
 
-  .aq-code .token.boolean,
-  .aq-code .token.number {
+  pre code .token.boolean,
+  pre code .token.number {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#6897bb" : "#1d4ed8")};
   }
 
-  .aq-code .token.selector,
-  .aq-code .token.attr-name,
-  .aq-code .token.string,
-  .aq-code .token.char,
-  .aq-code .token.builtin,
-  .aq-code .token.inserted {
+  pre code .token.selector,
+  pre code .token.attr-name,
+  pre code .token.string,
+  pre code .token.char,
+  pre code .token.builtin,
+  pre code .token.inserted {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#6aab73" : "#047857")};
   }
 
-  .aq-code .token.operator,
-  .aq-code .token.entity,
-  .aq-code .token.url,
-  .aq-code .token.variable {
+  pre code .token.operator,
+  pre code .token.entity,
+  pre code .token.url,
+  pre code .token.variable {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#9876aa" : "#7c3aed")};
   }
 
-  .aq-code .token.atrule,
-  .aq-code .token.attr-value,
-  .aq-code .token.keyword,
-  .aq-code .token.annotation,
-  .aq-code .token.decorator {
+  pre code .token.atrule,
+  pre code .token.attr-value,
+  pre code .token.keyword,
+  pre code .token.annotation,
+  pre code .token.decorator {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
     font-weight: 600;
   }
 
-  .aq-code .token.function,
-  .aq-code .token.class-name {
+  pre code .token.function,
+  pre code .token.class-name {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#ffc66d" : "#be185d")};
   }
 
-  .aq-code .token.regex,
-  .aq-code .token.important {
+  pre code .token.regex,
+  pre code .token.important {
     color: ${({ theme }) => (theme.scheme === "dark" ? "#bbb529" : "#92400e")};
   }
 

@@ -99,6 +99,40 @@ const extractLanguageFromClassList = (block: HTMLElement) =>
     .trim()
     .toLowerCase() || ""
 
+const inferLanguageFromSource = (source: string): string => {
+  const sample = source.trim()
+  if (!sample) return "text"
+
+  if (/^\s*[{[][\s\S]*[}\]]\s*$/.test(sample) && /"\s*:/.test(sample)) return "json"
+  if (/(^|\n)\s*(fun|val|var|data class|object|companion object)\b/.test(sample)) return "kotlin"
+  if (/(^|\n)\s*(public|private|protected)\s+(class|interface|enum)\b/.test(sample)) return "java"
+  if (/(^|\n)\s*(interface|type)\s+\w+/.test(sample) || /:\s*(string|number|boolean|unknown|any)\b/.test(sample)) return "typescript"
+  if (/(^|\n)\s*(const|let|var)\s+\w+\s*=/.test(sample) || /=>/.test(sample)) return "javascript"
+  if (/(^|\n)\s*def\s+\w+\(/.test(sample) || /(^|\n)\s*class\s+\w+\s*:\s*$/.test(sample)) return "python"
+  if (/(^|\n)\s*(SELECT|INSERT|UPDATE|DELETE|WITH)\b/i.test(sample)) return "sql"
+  if (/^#!/.test(sample) || /(^|\n)\s*(echo|grep|awk|sed|curl|export)\b/.test(sample)) return "bash"
+  if (/(^|\n)\s*<([A-Za-z][\w:-]*)(\s|>)/.test(sample) && /<\/[A-Za-z][\w:-]*>/.test(sample)) return "markup"
+  if (/(^|\n)\s*[-\w]+\s*:\s*.+/.test(sample) && !/[;{}()]/.test(sample)) return "yaml"
+
+  return "text"
+}
+
+const extractLanguage = (block: HTMLElement): string => {
+  const classLanguage = extractLanguageFromClassList(block)
+  if (classLanguage) return classLanguage
+
+  const dataLanguage =
+    block.getAttribute("data-language")?.trim().toLowerCase() ||
+    block.closest("pre")?.getAttribute("data-language")?.trim().toLowerCase() ||
+    ""
+  if (dataLanguage) return dataLanguage
+
+  return ""
+}
+
+const isGenericLanguage = (language: string) =>
+  ["", "text", "plain", "plaintext", "txt"].includes(language)
+
 const loadPrismCore = async () => {
   if (!prismLoader) {
     prismLoader = import("prismjs").then((prismModule) => {
@@ -139,20 +173,34 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, ena
       if (disposed || running) return
       running = true
       try {
-        const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code[class*='language-']"))
+        const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code"))
         if (!codeBlocks.length) return
 
         const languageByBlock = codeBlocks
           .map((block) => ({
             block,
-            language: extractLanguageFromClassList(block),
+            rawLanguage: extractLanguage(block),
             source: block.textContent || "",
           }))
-          .filter((entry) => entry.language.length > 0)
+          .map((entry) => {
+            const inferred = isGenericLanguage(entry.rawLanguage)
+              ? inferLanguageFromSource(entry.source)
+              : entry.rawLanguage
+
+            return {
+              ...entry,
+              language: inferred,
+              shouldHighlight:
+                inferred.length > 0 &&
+                inferred !== "mermaid" &&
+                (!blockHasShikiTheme(entry.block) || isGenericLanguage(entry.rawLanguage)),
+            }
+          })
+          .filter((entry) => entry.shouldHighlight)
 
         const languages = languageByBlock
           .map((entry) => entry.language)
-          .filter((language) => language !== "mermaid")
+          .filter((language) => language !== "mermaid" && language !== "text")
 
         if (!languages.length) return
 
@@ -161,7 +209,7 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, ena
         if (disposed) return
 
         languageByBlock.forEach(({ block, language, source }) => {
-          if (language === "mermaid") return
+          if (language === "mermaid" || language === "text") return
 
           const alreadyHighlighted =
             block.dataset.prismLanguage === language &&
@@ -177,6 +225,7 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, ena
           Prism.highlightElement(block)
           block.dataset.prismLanguage = language
           block.dataset.prismSource = source
+          block.setAttribute("data-language", language)
         })
       } catch (error) {
         console.warn(error)
@@ -204,5 +253,8 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, ena
     }
   }, [contentKey, enabled, rootRef])
 }
+
+const blockHasShikiTheme = (block: HTMLElement) =>
+  Boolean(block.getAttribute("data-theme") || block.closest("pre")?.getAttribute("data-theme"))
 
 export default usePrismEffect

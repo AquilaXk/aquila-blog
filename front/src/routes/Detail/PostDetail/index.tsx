@@ -95,12 +95,31 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     likePendingRef.current = true
     setLikePending(true)
 
+    const currentLiked = engagement.actorHasLiked
+    const currentLikesCount = engagement.likesCount
+    const optimisticLiked = !currentLiked
+    const optimisticLikesCount = Math.max(0, currentLikesCount + (optimisticLiked ? 1 : -1))
+
+    setEngagement((prev) => ({
+      ...prev,
+      actorHasLiked: optimisticLiked,
+      likesCount: optimisticLikesCount,
+    }))
+    queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)), (prev) =>
+      prev
+        ? {
+            ...prev,
+            actorHasLiked: optimisticLiked,
+            likesCount: optimisticLikesCount,
+          }
+        : prev
+    )
+
     try {
-      const nextLiked = !engagement.actorHasLiked
       const response = await apiFetch<RsData<{ liked: boolean; likesCount: number }>>(
         `/post/api/v1/posts/${data.id}/like`,
         {
-          method: nextLiked ? "PUT" : "DELETE",
+          method: optimisticLiked ? "PUT" : "DELETE",
         }
       )
 
@@ -127,8 +146,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           : typeof error === "object" && error !== null && "status" in error
             ? Number((error as { status?: unknown }).status)
             : undefined
+      let recovered = false
 
-      if (status === 409) {
+      if (status === 409 || (typeof status === "number" && status >= 500)) {
         try {
           await queryClient.invalidateQueries({ queryKey: queryKey.post(String(data.id)) })
           const refreshed = queryClient.getQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)))
@@ -138,12 +158,28 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               actorHasLiked: refreshed.actorHasLiked ?? false,
               likesCount: refreshed.likesCount ?? 0,
             }))
+            recovered = true
           }
         } catch {
-          // 충돌 복구용 재조회 실패는 사용자 액션을 막지 않고 다음 클릭에서 재시도한다.
+          // 복구 조회 실패 시 아래 롤백으로 되돌린다.
         }
-      } else {
-        throw error
+      }
+
+      if (!recovered) {
+        setEngagement((prev) => ({
+          ...prev,
+          actorHasLiked: currentLiked,
+          likesCount: currentLikesCount,
+        }))
+        queryClient.setQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)), (prev) =>
+          prev
+            ? {
+                ...prev,
+                actorHasLiked: currentLiked,
+                likesCount: currentLikesCount,
+              }
+            : prev
+        )
       }
     } finally {
       likePendingRef.current = false

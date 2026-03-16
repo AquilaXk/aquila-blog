@@ -1,5 +1,7 @@
 package com.back.boundedContexts.member.subContexts.signupVerification.application.service
 
+import com.back.global.app.application.AppFacade
+import com.back.global.exception.application.AppException
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -21,6 +23,8 @@ class SignupStartRateLimitService(
     private val memoryMaxEntries: Int,
     @param:Value("\${custom.member.signup.startRateLimit.memoryCleanupIntervalSeconds:60}")
     private val memoryCleanupIntervalSeconds: Long,
+    @param:Value("\${custom.member.signup.startRateLimit.requireRedisInProd:true}")
+    private val requireRedisInProd: Boolean,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
 ) {
     private data class WindowState(
@@ -37,7 +41,7 @@ class SignupStartRateLimitService(
     ): Boolean {
         val normalizedEmail = email.trim().lowercase()
         val normalizedIp = clientIp.trim().ifBlank { "unknown" }
-        val redisTemplate = redisTemplateProvider.getIfAvailable()
+        val redisTemplate = resolveRedisTemplate()
 
         return if (redisTemplate != null) {
             consumeInRedis(redisTemplate, "member:signup:start:email:$normalizedEmail", maxAttemptsPerEmail) &&
@@ -47,6 +51,14 @@ class SignupStartRateLimitService(
             consumeInMemory("email:$normalizedEmail", maxAttemptsPerEmail) &&
                 consumeInMemory("ip:$normalizedIp", maxAttemptsPerIp)
         }
+    }
+
+    private fun resolveRedisTemplate(): StringRedisTemplate? {
+        val redisTemplate = redisTemplateProvider.getIfAvailable()
+        if (redisTemplate == null && AppFacade.isProd && requireRedisInProd) {
+            throw AppException("503-3", "회원가입 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
+        }
+        return redisTemplate
     }
 
     private fun consumeInMemory(

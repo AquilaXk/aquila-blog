@@ -2,10 +2,10 @@ import styled from "@emotion/styled"
 import { FC, ReactElement, ReactNode, isValidElement, useEffect, useMemo, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import rehypePrettyCode from "rehype-pretty-code"
 import AppIcon from "src/components/icons/AppIcon"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
 import useInlineColorEffect from "./useInlineColorEffect"
+import usePrismEffect from "./usePrismEffect"
 
 type Props = {
   content?: string
@@ -163,15 +163,6 @@ const LANGUAGE_LABEL_MAP: Record<string, string> = {
   rust: "Rust",
   rs: "Rust",
   mermaid: "Mermaid",
-}
-
-const REHYPE_PRETTY_CODE_OPTIONS = {
-  theme: {
-    dark: "github-dark",
-    light: "github-light",
-  },
-  keepBackground: false,
-  defaultLang: "plaintext",
 }
 
 const toLanguageLabel = (lang: string) => {
@@ -421,6 +412,7 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
 
   useMermaidEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
+  usePrismEffect(rootRef, renderKey)
 
   useEffect(() => {
     imageRenderOrderRef.current = 0
@@ -431,11 +423,6 @@ const NotionRenderer: FC<Props> = ({ content, recordMap }) => {
     <ReactMarkdown
       key={key}
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={
-        markdown.includes("```")
-          ? [[rehypePrettyCode, REHYPE_PRETTY_CODE_OPTIONS]]
-          : []
-      }
       components={{
         p({ children }) {
           if (!inCallout) return <p>{children}</p>

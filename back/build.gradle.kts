@@ -101,8 +101,16 @@ fun Project.ensureTestInfraPrerequisites() {
     val exitCode = process.waitFor()
     if (exitCode == 0) return
 
-    val stdout = process.inputStream.bufferedReader().readText().trim()
-    val stderr = process.errorStream.bufferedReader().readText().trim()
+    val stdout =
+        process.inputStream
+            .bufferedReader()
+            .readText()
+            .trim()
+    val stderr =
+        process.errorStream
+            .bufferedReader()
+            .readText()
+            .trim()
     error(
         """
         Backend test infra preflight failed.

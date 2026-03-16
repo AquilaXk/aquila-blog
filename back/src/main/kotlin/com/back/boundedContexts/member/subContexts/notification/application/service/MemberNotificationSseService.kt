@@ -215,13 +215,14 @@ class MemberNotificationSseService(
         lastNotificationId: Int,
     ): Int {
         val safeLimit = replayBatchSize.coerceIn(1, MAX_REPLAY_NOTIFICATIONS)
-        val unreadCount = memberNotificationRepository.countUnreadByReceiverId(memberId).toInt()
         val notifications =
             memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
                 receiverId = memberId,
                 lastNotificationId = lastNotificationId,
                 limit = safeLimit,
             )
+        if (notifications.isEmpty()) return lastNotificationId
+        val unreadCount = memberNotificationRepository.countUnreadByReceiverId(memberId).toInt()
 
         var latestId = lastNotificationId
         notifications.forEach { notification ->

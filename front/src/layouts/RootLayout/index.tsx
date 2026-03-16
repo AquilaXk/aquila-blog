@@ -74,7 +74,6 @@ const RouteProgress = styled.div`
   top: 3.5rem;
   z-index: 50;
   height: 2px;
-  width: 100vw;
   pointer-events: none;
   overflow: hidden;
   background: transparent;

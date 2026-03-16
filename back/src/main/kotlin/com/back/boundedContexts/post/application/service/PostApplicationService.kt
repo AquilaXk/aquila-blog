@@ -275,9 +275,20 @@ class PostApplicationService(
         val postDto = PostDto(post)
         val deletedPostContent = post.content
 
-        decrementMemberPostsCount(post.author)
         post.softDelete()
         clearExploreCaches()
+
+        // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
+        runCatching {
+            decrementMemberPostsCount(post.author)
+        }.onFailure { exception ->
+            logger.warn("Failed to decrement member posts counter for member id={}", post.author.id, exception)
+            runCatching {
+                reconcileMemberPostsCount(post.author)
+            }.onFailure { reconcileException ->
+                logger.warn("Failed to reconcile member posts counter for member id={}", post.author.id, reconcileException)
+            }
+        }
 
         // 삭제 자체는 완료시키고, 보조 처리(파일 정리/이벤트)는 실패해도 트랜잭션을 깨지 않도록 분리한다.
         runCatching {
@@ -796,6 +807,15 @@ class PostApplicationService(
             it.intValue = updatedCount
             member.postsCountAttr = it
         }
+    }
+
+    private fun reconcileMemberPostsCount(member: Member) {
+        val actualCount = postRepository.countByAuthor(member).coerceAtLeast(0).toInt()
+        val refreshedAttr = member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)
+        val counterAttr = refreshedAttr ?: MemberAttr(0, member, POSTS_COUNT, actualCount)
+        counterAttr.intValue = actualCount
+        member.postsCountAttr = counterAttr
+        saveMemberAttr(counterAttr)
     }
 
     private fun saveMemberAttr(attr: MemberAttr?) {

@@ -34,12 +34,7 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
           <Footer />
         </div>
       </div>
-      <div
-        className="rt"
-        css={{
-          height: `calc(100vh - ${HEADER_HEIGHT}px)`,
-        }}
-      >
+      <div className="rt">
         <ProfileCard initialAdminProfile={initialAdminProfile} />
         <ServiceCard initialAdminProfile={initialAdminProfile} />
         <ContactCard initialAdminProfile={initialAdminProfile} />
@@ -101,6 +96,8 @@ const StyledWrapper = styled.div`
     overscroll-behavior: contain;
     position: sticky;
     top: ${HEADER_HEIGHT - 10}px;
+    height: calc(100vh - ${HEADER_HEIGHT}px);
+    height: calc(100dvh - ${HEADER_HEIGHT}px);
 
     @media (min-width: 1024px) {
       display: block;

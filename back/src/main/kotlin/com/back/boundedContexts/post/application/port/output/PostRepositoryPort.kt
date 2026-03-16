@@ -9,6 +9,8 @@ import java.util.Optional
 interface PostRepositoryPort {
     fun count(): Long
 
+    fun countByAuthor(author: Member): Long
+
     fun save(post: Post): Post
 
     fun saveAndFlush(post: Post): Post

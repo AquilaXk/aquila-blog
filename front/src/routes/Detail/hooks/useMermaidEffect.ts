@@ -118,6 +118,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let disposed = false
     let running = false
     let observer: IntersectionObserver | null = null
+
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
         root.querySelectorAll<HTMLElement>(
@@ -129,16 +130,21 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       const mermaid = (await import("mermaid")).default
       const theme = scheme === "dark" ? "dark" : "neutral"
 
-      mermaid.initialize({
-        startOnLoad: false,
-        theme,
-        securityLevel: "strict",
-        flowchart: {
-          htmlLabels: true,
-          curve: "linear",
-          useMaxWidth: true,
-        },
-      })
+      const initializeMermaid = (htmlLabels: boolean) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme,
+          securityLevel: "strict",
+          flowchart: {
+            htmlLabels,
+            curve: "linear",
+            // 레이아웃 폭은 CSS에서 제어하므로 내부 width 강제 계산(useMaxWidth)을 끄고 고정 렌더 후 스케일링한다.
+            useMaxWidth: false,
+          },
+        })
+      }
+
+      initializeMermaid(true)
 
       const renderSingleBlock = async (i: number) => {
         if (disposed) return
@@ -159,7 +165,29 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
         try {
           const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
-          const { svg } = await mermaid.render(id, source)
+          let svg: string
+          try {
+            svg = (await mermaid.render(id, source)).svg
+          } catch (error) {
+            const message = String(error)
+            const isNegativeRectWidthError =
+              message.includes("attribute width") &&
+              message.includes("negative value")
+
+            if (!isNegativeRectWidthError) {
+              throw error
+            }
+
+            // 일부 다이어그램에서 html label 측정 시 음수 rect 폭 버그가 발생해 text 라벨 모드로 한 번 재시도한다.
+            initializeMermaid(false)
+            svg = (
+              await mermaid.render(
+                `${id}-fallback`,
+                source
+              )
+            ).svg
+            initializeMermaid(true)
+          }
           if (disposed) return
 
           const parser = new DOMParser()
@@ -215,6 +243,23 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           console.warn("[mermaid] render failed", error)
         }
       }
+      let renderQueue = Promise.resolve()
+      const renderingIndices = new Set<number>()
+      const enqueueRender = (index: number) => {
+        if (!Number.isFinite(index)) return
+        if (renderingIndices.has(index)) return
+        renderingIndices.add(index)
+        renderQueue = renderQueue
+          .then(async () => {
+            await renderSingleBlock(index)
+          })
+          .catch((error) => {
+            console.warn("[mermaid] queued render failed", error)
+          })
+          .finally(() => {
+            renderingIndices.delete(index)
+          })
+      }
 
       if (observer) {
         observer.disconnect()
@@ -230,7 +275,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
               observer?.unobserve(block)
               const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
               if (!Number.isFinite(index)) return
-              void renderSingleBlock(index)
+              enqueueRender(index)
             })
           },
           {
@@ -251,8 +296,9 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       }
 
       for (let i = 0; i < codeBlocks.length; i += 1) {
-        await renderSingleBlock(i)
+        enqueueRender(i)
       }
+      await renderQueue
     }
 
     const run = async () => {

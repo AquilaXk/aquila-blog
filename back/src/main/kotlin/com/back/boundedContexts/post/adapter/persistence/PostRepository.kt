@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository
 interface PostRepository :
     JpaRepository<Post, Int>,
     PostRepositoryCustom {
+    fun countByAuthor(author: Member): Long
+
     fun existsByAuthorAndTitle(
         author: Member,
         title: String,

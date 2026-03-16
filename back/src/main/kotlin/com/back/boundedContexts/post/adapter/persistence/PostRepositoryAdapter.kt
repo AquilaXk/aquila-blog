@@ -14,6 +14,8 @@ class PostRepositoryAdapter(
 ) : PostRepositoryPort {
     override fun count(): Long = postRepository.count()
 
+    override fun countByAuthor(author: Member): Long = postRepository.countByAuthor(author)
+
     override fun save(post: Post): Post = postRepository.save(post)
 
     override fun saveAndFlush(post: Post): Post = postRepository.saveAndFlush(post)

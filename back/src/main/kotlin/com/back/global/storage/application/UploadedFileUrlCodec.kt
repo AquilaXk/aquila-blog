@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets
 
 object UploadedFileUrlCodec {
     private const val IMAGE_PATH_PREFIX = "/post/api/v1/images/"
+
     private fun decodeOrNull(encoded: String): String? =
         runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }
             .getOrNull()

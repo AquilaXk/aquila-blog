@@ -80,11 +80,12 @@ object HtmlContentSanitizer {
 
             if (element.tagName().equals("a", ignoreCase = true) && element.attr("target") == "_blank") {
                 val mergedRel =
-                    (element
+                    element
                         .attr("rel")
                         .split(' ')
                         .map(String::trim)
-                        .filter(String::isNotBlank) + listOf("noopener", "noreferrer"))
+                        .filter(String::isNotBlank)
+                        .plus(listOf("noopener", "noreferrer"))
                         .distinct()
                         .joinToString(" ")
                 element.attr("rel", mergedRel)

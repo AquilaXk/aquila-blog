@@ -1,0 +1,29 @@
+groups:
+  - name: aquila-task-queue
+    rules:
+      - alert: AquilaTaskQueueBacklogHigh
+        expr: task_queue_ready_pending > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task ready backlog is high"
+          description: "ready_pending={{ $value }} for 10m. Consider API/worker split or worker scale-up."
+
+      - alert: AquilaTaskQueueStaleProcessing
+        expr: task_queue_stale_processing >= 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stale processing tasks detected"
+          description: "stale_processing={{ $value }} for 5m. Check worker health and stuck handlers."
+
+      - alert: AquilaApiLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*\"}[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency is high"
+          description: "p95 > 1s for 10m. Check DB/Redis/task queue pressure."

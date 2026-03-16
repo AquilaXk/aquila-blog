@@ -67,6 +67,13 @@ export const Global = () => {
           color: inherit;
           line-height: inherit;
           cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+        }
+
+        button:disabled {
+          cursor: not-allowed;
+          opacity: 0.58;
         }
 
         a:focus-visible,

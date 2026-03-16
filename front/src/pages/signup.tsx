@@ -175,16 +175,21 @@ const Input = styled.input`
 `
 
 const PrimaryButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray8};
+  border: 1px solid ${({ theme }) => theme.colors.blue8};
   border-radius: 12px;
   padding: 0.84rem 1rem;
-  background: ${({ theme }) => theme.colors.gray12};
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  transition: filter 0.16s ease;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
 
   &:disabled {
-    opacity: 0.6;
+    filter: saturate(0.6) brightness(0.92);
     cursor: not-allowed;
   }
 `

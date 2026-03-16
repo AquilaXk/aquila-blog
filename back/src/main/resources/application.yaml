@@ -201,6 +201,8 @@ custom:
       inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:
       cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:3}
+  runtime:
+    workerEnabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
   cache:
     ttl-seconds: 3600
     ttl-overrides:

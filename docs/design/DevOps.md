@@ -1,11 +1,13 @@
 # DevOps
 
-Last updated: 2026-03-15
+Last updated: 2026-03-16
 
 ## 3줄 요약
 
 - CI/CD 흐름과 배포 단계 확인이 필요할 때 이 문서를 먼저 읽는다.
 - 현재 `main` push는 테스트 -> 이미지 빌드 -> blue/green 배포 -> release 생성으로 이어진다.
+- PR/feature CI에서 Flyway migration 파일명 규칙, 백엔드 ktlint, 프론트 lint를 필수 게이트로 검사한다.
+- `security.yml` 워크플로에서 Dependency Review + CodeQL을 상시 실행해 공급망/정적보안 점검을 자동화한다.
 - 런타임 구조는 `Infrastructure-Architecture.md`, 운영 체크는 `session-handoff.md`와 같이 보는 게 빠르다.
 - 운영 가용성 모니터링은 GitHub Actions 스케줄 워크플로가 아니라 외부 Uptime 도구(Uptime Kuma/Better Stack/UptimeRobot)로 분리한다.
 
@@ -220,6 +222,11 @@ sequenceDiagram
 
 | 단계 | 검증 내용 | 실패 시 |
 | --- | --- | --- |
+| CI migration naming | `db/migration`이 `VYYYYMMDD_NN__*.sql` 또는 `R__*.sql` 규칙을 지키는지 확인 | merge 차단 |
+| CI backend lint | `./gradlew ktlintCheck` | merge 차단 |
+| CI frontend lint | `yarn lint` | merge 차단 |
+| Security dependency review | PR dependency diff에서 취약/위험 변경 감지 | merge 차단 |
+| Security CodeQL | Java/Kotlin + JS/TS 정적 보안 분석 | 보안 경고/차단 |
 | storage env 검사 | endpoint, secret placeholder 확인 | 배포 중단 |
 | auth throttle 확인 | Redis 연결 및 TTL 키 동작 | brute-force 완화 불능 |
 | 신규 backend 기동 | `/actuator/health/readiness` 가 `200` 응답 | cutover 전 중단 |
@@ -234,6 +241,8 @@ sequenceDiagram
 
 - 백엔드 코드 변경이 포함된 배포라면 배포 전에 `./gradlew ktlintCheck`, `./gradlew compileKotlin`, `./gradlew test`를 모두 통과시킨다
 - 로컬에서 `./gradlew test`를 실행하면 test infra가 자동으로 올라오고 끝나면 정리되므로, 수동으로 dev DB를 띄운 상태와 섞지 않는다
+- Flyway migration 추가 시 파일명을 `VYYYYMMDD_NN__description.sql` 또는 `R__description.sql` 규칙으로 맞춘다
+- API/worker 분리가 필요하면 `CUSTOM__RUNTIME__WORKER_ENABLED=false`로 API 전용 모드로 실행하고, 별도 worker 런타임에서 `true`로 실행한다
 - 배포 후 `https://api.<domain>/actuator/health` 응답 확인
 - `GET /system/api/v1/adm/mail/signup`으로 회원가입 메일 준비 상태 확인
 - 필요 시 `POST /system/api/v1/adm/mail/signup/test`로 테스트 메일 1통 발송
@@ -244,10 +253,50 @@ sequenceDiagram
 - 연속 로그인 실패 시 차단 상태가 인스턴스 간 일관되게 유지되는지 확인
 - 관리자 페이지의 글 목록, 글 발행, 서버 상태 조회 확인
 - task backlog가 있으면 1분 내 `PENDING -> PROCESSING/COMPLETED`로 이동하는지 확인
+- Prometheus에서 아래 지표를 확인한다:
+  - `task.queue.pending`
+  - `task.queue.ready_pending`
+  - `task.queue.delayed_pending`
+  - `task.queue.processing`
+  - `task.queue.failed`
+  - `task.queue.stale_processing`
+  - `task.queue.oldest_ready_pending_age_seconds`
+  - `task.queue.oldest_processing_age_seconds`
 - 관리자 프로필 이미지/글 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
 - 이미지 정리 정책을 바꿨다면 `uploaded_file` 상태(`TEMP`, `PENDING_DELETE`)와 MinIO 사용량 추이를 같이 본다
 - Cloudflare Tunnel이 `caddy:80`으로 정상 연결되는지 확인
 - Kakao 로그인 점검 시 `/oauth2/authorization/kakao` 응답 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 확인
+
+## API/Worker 분리 타이밍 기준
+
+개인 블로그 기본값은 **단일 런타임(API + worker 통합)** 이다.
+다만 아래 조건이 반복되면 분리한다.
+
+| 신호 | 경고 기준 | 분리 권고 기준 | 확인 지표/화면 |
+| --- | --- | --- | --- |
+| queue 적체 | `task.queue.ready_pending > 200`가 10분 지속 | `> 500`가 10분 지속 | `/actuator/prometheus`, `/system/api/v1/adm/tasks` |
+| stale processing | `task.queue.stale_processing >= 1`가 5분 지속 | `>= 3`가 5분 지속 | `/actuator/prometheus`, `/system/api/v1/adm/tasks` |
+| API 응답 지연 | `http.server.requests` p95 700ms 초과 | p95 1s 초과 + queue 동시 증가 | Prometheus/Grafana |
+| CPU/메모리 스파이크 | CPU 70%+/메모리 75%+가 10분 지속 | CPU 85%+/메모리 85%+가 10분 지속 | 서버 모니터링 |
+| 배포 영향도 | worker 변경 시 API 영향 체감 | worker 이슈가 API 장애로 연결 | 장애 회고/운영 로그 |
+
+### 분리 실행 절차 (최소 변경)
+
+1. API 런타임: `CUSTOM__RUNTIME__WORKER_ENABLED=false`
+2. Worker 런타임: `CUSTOM__RUNTIME__WORKER_ENABLED=true`
+3. 두 런타임이 같은 DB/Redis를 보도록 유지
+4. 분리 후 24시간은 queue/p95/stale 지표를 집중 관찰
+
+Prometheus Alertmanager를 쓰는 경우 샘플 룰은 아래 파일을 참고한다.
+
+- `deploy/homeserver/monitoring/prometheus-task-alerts.example.yml`
+
+### 다시 통합해도 되는 조건
+
+- `task.queue.ready_pending`가 지속적으로 낮고(예: 평균 < 50),  
+- p95가 안정적이며(예: < 500ms),  
+- worker 관련 장애가 한 달 이상 없다면  
+운영 복잡도 절감을 위해 통합 운영으로 되돌릴 수 있다.
 
 ## 자주 보는 장애 유형
 

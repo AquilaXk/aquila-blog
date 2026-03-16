@@ -397,6 +397,11 @@ const Modal = styled.div`
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: rgba(255, 255, 255, 0.02);
     color: ${({ theme }) => theme.colors.gray11};
+    transition: filter 0.16s ease, opacity 0.16s ease;
+
+    &:hover {
+      filter: brightness(1.08);
+    }
   }
 
   .closeButton svg {
@@ -518,6 +523,16 @@ const Modal = styled.div`
     font-size: 0.76rem;
     font-weight: 700;
     line-height: 1;
+    transition: filter 0.16s ease;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+
+    &:disabled {
+      opacity: 0.62;
+      cursor: not-allowed;
+    }
   }
 
   .inlineError {
@@ -547,12 +562,23 @@ const Modal = styled.div`
     border: 1px solid rgba(52, 211, 153, 0.44);
     background: linear-gradient(135deg, #149d71, #2abf8c);
     color: #fff;
+    transition: filter 0.16s ease;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.06);
+    }
   }
 
   .secondaryAction {
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  .primaryAction:disabled,
+  .secondaryAction:disabled {
+    filter: saturate(0.62) brightness(0.94);
+    cursor: not-allowed;
   }
 
   .socialSection {
@@ -585,9 +611,19 @@ const Modal = styled.div`
     background: linear-gradient(180deg, #fee500, #facc15);
     color: #241b00;
     box-shadow: 0 10px 22px rgba(250, 204, 21, 0.14);
+    transition: filter 0.16s ease;
 
     svg {
       font-size: 1.95rem;
+    }
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.05);
+    }
+
+    &:disabled {
+      filter: grayscale(0.22) brightness(0.92);
+      cursor: not-allowed;
     }
   }
 

@@ -33,6 +33,36 @@ jobs:
           java-version: "24"
           cache: gradle
 
+      - name: Validate Flyway migration naming
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(back/src/main/resources/db/migration/*.sql)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No migration files found."
+            exit 1
+          fi
+
+          invalid=0
+          for file in "${files[@]}"; do
+            base="$(basename "$file")"
+            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]]; then
+              continue
+            fi
+            echo "Invalid migration file name: $base"
+            invalid=1
+          done
+
+          if [ $invalid -ne 0 ]; then
+            echo "Migration naming rule violation detected."
+            exit 1
+          fi
+
+      - name: Run backend ktlint
+        working-directory: back
+        run: ./gradlew ktlintCheck
+
       - name: Run backend tests
         working-directory: back
         run: ./gradlew test --rerun-tasks

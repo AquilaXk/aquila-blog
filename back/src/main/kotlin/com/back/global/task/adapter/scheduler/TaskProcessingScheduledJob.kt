@@ -9,6 +9,7 @@ import jakarta.annotation.PreDestroy
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.transaction.support.TransactionTemplate
@@ -21,6 +22,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 @Component
+@ConditionalOnProperty(
+    prefix = "custom.runtime",
+    name = ["worker-enabled"],
+    havingValue = "true",
+    matchIfMissing = true,
+)
 class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,

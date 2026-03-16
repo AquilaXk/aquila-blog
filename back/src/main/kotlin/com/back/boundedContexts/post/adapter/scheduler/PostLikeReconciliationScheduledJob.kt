@@ -4,10 +4,17 @@ import com.back.boundedContexts.post.application.service.PostLikeReconciliationS
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
 @Component
+@ConditionalOnProperty(
+    prefix = "custom.runtime",
+    name = ["worker-enabled"],
+    havingValue = "true",
+    matchIfMissing = true,
+)
 class PostLikeReconciliationScheduledJob(
     private val postLikeReconciliationService: PostLikeReconciliationService,
     @param:Value("\${custom.post.likes.reconciliation.lookbackHours:24}")

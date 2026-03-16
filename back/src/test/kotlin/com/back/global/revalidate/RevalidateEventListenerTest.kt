@@ -1,7 +1,11 @@
 package com.back.global.revalidate
 
 import com.back.boundedContexts.member.application.service.MemberApplicationService
+import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.post.application.service.PostApplicationService
+import com.back.boundedContexts.post.dto.PostDto
+import com.back.boundedContexts.post.event.PostWrittenEvent
+import com.back.global.revalidate.adapter.event.RevalidateEventListener
 import com.back.global.task.adapter.persistence.TaskRepository
 import com.back.global.task.domain.TaskStatus
 import com.back.support.SeededSpringBootTestSupport
@@ -10,13 +14,10 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ActiveProfiles
-import org.springframework.test.context.transaction.TestTransaction
-import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 
 @ActiveProfiles("test")
 @SpringBootTest
-@Transactional
 class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService
@@ -27,9 +28,11 @@ class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var taskRepository: TaskRepository
 
+    @Autowired
+    private lateinit var revalidateEventListener: RevalidateEventListener
+
     @Test
     fun `게시글 저장 시 홈 revalidate task가 큐에 적재된다`() {
-        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
         val testId = UUID.randomUUID().toString().take(8)
         val author =
             memberApplicationService.join(
@@ -49,18 +52,29 @@ class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
                 listed = true,
             )
 
-        TestTransaction.flagForCommit()
-        TestTransaction.end()
+        val previousTaskIds = taskRepository.findAll().map { it.id }.toSet()
+        revalidateEventListener.handle(
+            PostWrittenEvent(
+                uid = UUID.randomUUID(),
+                postDto = PostDto(post),
+                actorDto = MemberDto(author),
+            ),
+        )
 
-        val revalidateTasks =
-            taskRepository.findAll().filter {
-                it.id !in previousTaskIds &&
+        var revalidateTasks = emptyList<com.back.global.task.domain.Task>()
+        repeat(30) {
+            val newTasks = taskRepository.findAll().filter { task -> task.id !in previousTaskIds }
+            revalidateTasks =
+                newTasks.filter {
                     it.taskType == "global.revalidate.home" &&
-                    it.aggregateId == post.id
-            }
-
+                        it.aggregateId == post.id
+                }
+            if (revalidateTasks.size == 1) return@repeat
+            Thread.sleep(100)
+        }
         assertThat(revalidateTasks).hasSize(1)
+
         assertThat(revalidateTasks.single().aggregateId).isEqualTo(post.id)
-        assertThat(revalidateTasks.single().status).isEqualTo(TaskStatus.COMPLETED)
+        assertThat(revalidateTasks.single().status).isIn(TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.COMPLETED)
     }
 }

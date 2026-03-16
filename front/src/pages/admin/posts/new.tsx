@@ -83,6 +83,11 @@ type AdminPostListItem = {
   modifiedAt: string
 }
 
+type DeleteConfirmState = {
+  ids: number[]
+  headline: string
+}
+
 type PageDto<T> = {
   content: T[]
   pageable?: {
@@ -647,7 +652,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [adminPostRows, setAdminPostRows] = useState<AdminPostListItem[]>([])
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
-  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<AdminPostListItem | null>(null)
+  const [selectedPostIds, setSelectedPostIds] = useState<number[]>([])
+  const [deleteConfirmState, setDeleteConfirmState] = useState<DeleteConfirmState | null>(null)
   const [deleteConfirmNotice, setDeleteConfirmNotice] = useState<NoticeState>({
     tone: "idle",
     text: "",
@@ -1215,6 +1221,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     return copy
   }, [adminPostRows, modifiedSortOrder])
 
+  const selectedPostIdSet = useMemo(() => new Set(selectedPostIds), [selectedPostIds])
+  const isAllVisiblePostsSelected = useMemo(
+    () => adminPostViewRows.length > 0 && adminPostViewRows.every((row) => selectedPostIdSet.has(row.id)),
+    [adminPostViewRows, selectedPostIdSet]
+  )
+
   const loadAdminPosts = async () => {
     try {
       setLoadingKey("postList")
@@ -1236,44 +1248,105 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const openDeleteConfirm = useCallback((target: AdminPostListItem) => {
+  const togglePostSelection = useCallback((id: number) => {
+    setSelectedPostIds((prev) => {
+      if (prev.includes(id)) return prev.filter((item) => item !== id)
+      return [...prev, id]
+    })
+  }, [])
+
+  const toggleSelectAllVisiblePosts = useCallback(() => {
+    if (adminPostViewRows.length === 0) return
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev)
+      const allSelected = adminPostViewRows.every((row) => next.has(row.id))
+      if (allSelected) {
+        adminPostViewRows.forEach((row) => next.delete(row.id))
+      } else {
+        adminPostViewRows.forEach((row) => next.add(row.id))
+      }
+      return Array.from(next)
+    })
+  }, [adminPostViewRows])
+
+  const openDeleteConfirm = useCallback((ids: number[], titleHint?: string) => {
+    const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isFinite(id))
+    if (uniqueIds.length === 0) return
     setDeleteConfirmNotice({
       tone: "idle",
       text: "삭제는 즉시 반영되며 되돌릴 수 없습니다.",
     })
-    setDeleteConfirmTarget(target)
+    const headline =
+      uniqueIds.length === 1
+        ? `#${uniqueIds[0]} ${titleHint?.trim() || "선택한 글"}`
+        : `${uniqueIds.length}개의 글`
+    setDeleteConfirmState({
+      ids: uniqueIds,
+      headline,
+    })
   }, [])
 
   const closeDeleteConfirm = useCallback(() => {
-    if (loadingKey.startsWith("deletePost-")) return
-    setDeleteConfirmTarget(null)
+    if (loadingKey === "deletePost") return
+    setDeleteConfirmState(null)
     setDeleteConfirmNotice({
       tone: "idle",
       text: "",
     })
   }, [loadingKey])
 
-  const deletePostFromList = async (targetId: number) => {
+  const deletePostsFromList = async (targetIds: number[]) => {
+    const uniqueIds = Array.from(new Set(targetIds)).filter((id) => Number.isFinite(id))
+    if (uniqueIds.length === 0) return true
+
     try {
-      setLoadingKey(`deletePost-${targetId}`)
+      setLoadingKey("deletePost")
       setDeleteConfirmNotice({
         tone: "loading",
-        text: `#${targetId} 글을 삭제하고 있습니다...`,
+        text: `${uniqueIds.length}개 글을 삭제하고 있습니다...`,
       })
-      const data = await apiFetch<JsonValue>(`/post/api/v1/posts/${targetId}`, {
-        method: "DELETE",
-      })
-      setResult(pretty(data))
-      setAdminPostRows((prev) => prev.filter((row) => row.id !== targetId))
-      setAdminPostTotal((prev) => Math.max(0, prev - 1))
-      if (postId === String(targetId)) {
+      const successIds: number[] = []
+      const failedIds: string[] = []
+
+      for (const id of uniqueIds) {
+        try {
+          await apiFetch<JsonValue>(`/post/api/v1/posts/${id}`, { method: "DELETE" })
+          successIds.push(id)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          failedIds.push(`#${id}(${message})`)
+        }
+      }
+
+      setResult(
+        pretty(
+          {
+            deletedIds: successIds,
+            failed: failedIds,
+          }
+        )
+      )
+      setAdminPostRows((prev) => prev.filter((row) => !successIds.includes(row.id)))
+      setAdminPostTotal((prev) => Math.max(0, prev - successIds.length))
+      setSelectedPostIds((prev) => prev.filter((id) => !successIds.includes(id)))
+      const selectedPostId = Number.parseInt(postId, 10)
+      if (Number.isFinite(selectedPostId) && successIds.includes(selectedPostId)) {
         switchToCreateMode({ keepContent: false })
       }
+
+      if (failedIds.length === 0) {
+        setDeleteConfirmNotice({
+          tone: "success",
+          text: `${successIds.length}개 글을 삭제했습니다.`,
+        })
+        return true
+      }
+
       setDeleteConfirmNotice({
-        tone: "success",
-        text: `#${targetId} 글을 삭제했습니다.`,
+        tone: "error",
+        text: `${failedIds.length}개 글 삭제에 실패했습니다. 다시 시도해주세요.`,
       })
-      return true
+      return false
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
@@ -1286,6 +1359,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("")
     }
   }
+
+  useEffect(() => {
+    if (adminPostRows.length === 0) {
+      setSelectedPostIds([])
+      return
+    }
+
+    const rowIdSet = new Set(adminPostRows.map((row) => row.id))
+    setSelectedPostIds((prev) => prev.filter((id) => rowIdSet.has(id)))
+  }, [adminPostRows])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
     const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
@@ -2169,7 +2252,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ListPanel>
           <ListHeader>
             <h3>관리자 글 리스트</h3>
-            <span>총 {adminPostTotal}건</span>
+            <ListHeaderActions>
+              <span>{selectedPostIds.length > 0 ? `${selectedPostIds.length}개 선택` : `총 ${adminPostTotal}건`}</span>
+              <Button
+                type="button"
+                disabled={adminPostViewRows.length === 0 || loadingKey.length > 0}
+                onClick={toggleSelectAllVisiblePosts}
+              >
+                {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
+              </Button>
+              <Button
+                type="button"
+                disabled={selectedPostIds.length === 0 || loadingKey.length > 0}
+                onClick={() => openDeleteConfirm(selectedPostIds)}
+              >
+                선택 삭제
+              </Button>
+            </ListHeaderActions>
           </ListHeader>
           {adminPostRows.length === 0 ? (
             <ListEmpty>목록이 없습니다. 상단의 `전체 글 목록 조회`를 눌러 불러오세요.</ListEmpty>
@@ -2177,6 +2276,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <ListTable>
               <thead>
                 <tr>
+                  <th className="checkboxCell">
+                    <input
+                      type="checkbox"
+                      aria-label="현재 목록 전체 선택"
+                      checked={isAllVisiblePostsSelected}
+                      onChange={toggleSelectAllVisiblePosts}
+                    />
+                  </th>
                   <th>ID</th>
                   <th>제목</th>
                   <th>공개상태</th>
@@ -2197,6 +2304,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <tbody>
                 {adminPostViewRows.map((row) => (
                   <tr key={row.id}>
+                    <td className="checkboxCell">
+                      <input
+                        type="checkbox"
+                        aria-label={`${row.id}번 글 선택`}
+                        checked={selectedPostIdSet.has(row.id)}
+                        onChange={() => togglePostSelection(row.id)}
+                      />
+                    </td>
                     <td>{row.id}</td>
                     <td className="title">{row.title}</td>
                     <td>
@@ -2220,8 +2335,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         </Button>
                         <Button
                           type="button"
-                          disabled={loadingKey.length > 0 && loadingKey !== `deletePost-${row.id}`}
-                          onClick={() => openDeleteConfirm(row)}
+                          disabled={loadingKey.length > 0}
+                          onClick={() => openDeleteConfirm([row.id], row.title)}
                         >
                           삭제
                         </Button>
@@ -2315,35 +2430,37 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </SubActionRow>
         </SelectedPostPanel>
 
-        {deleteConfirmTarget && (
+        {deleteConfirmState && (
           <ModalBackdrop onClick={closeDeleteConfirm}>
             <ConfirmModal onClick={(e) => e.stopPropagation()}>
-              <h4>글 삭제 확인</h4>
-              <p>
-                정말 삭제할까요?
-                <br />
-                <strong>#{deleteConfirmTarget.id} {deleteConfirmTarget.title}</strong>
-              </p>
+              <div className="header">
+                <h4>글 삭제 확인</h4>
+                <p>
+                  정말 삭제할까요?
+                  <br />
+                  <strong>{deleteConfirmState.headline}</strong>
+                </p>
+              </div>
               {deleteConfirmNotice.text ? (
                 <PublishNotice data-tone={deleteConfirmNotice.tone}>{deleteConfirmNotice.text}</PublishNotice>
               ) : null}
               <div className="actions">
                 <Button
                   type="button"
-                  disabled={loadingKey.startsWith("deletePost-")}
+                  disabled={loadingKey === "deletePost"}
                   onClick={closeDeleteConfirm}
                 >
                   취소
                 </Button>
                 <PrimaryButton
                   type="button"
-                  disabled={loadingKey.startsWith("deletePost-")}
+                  disabled={loadingKey === "deletePost"}
                   onClick={async () => {
-                    const ok = await deletePostFromList(deleteConfirmTarget.id)
+                    const ok = await deletePostsFromList(deleteConfirmState.ids)
                     if (ok) closeDeleteConfirm()
                   }}
                 >
-                  {loadingKey.startsWith("deletePost-") ? "삭제 중..." : "삭제 확정"}
+                  {loadingKey === "deletePost" ? "삭제 중..." : "삭제 확정"}
                 </PrimaryButton>
               </div>
             </ConfirmModal>
@@ -4588,7 +4705,7 @@ const ListPanel = styled.div`
 
 const ListHeader = styled.div`
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.55rem;
@@ -4602,6 +4719,23 @@ const ListHeader = styled.div`
   span {
     font-size: 0.78rem;
     color: ${({ theme }) => theme.colors.gray11};
+  }
+
+  @media (max-width: 920px) {
+    flex-direction: column;
+  }
+`
+
+const ListHeaderActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  align-items: center;
+
+  span {
+    margin-right: 0.1rem;
+    white-space: nowrap;
   }
 `
 
@@ -4702,6 +4836,20 @@ const ListTable = styled.table`
     border-bottom: 0;
   }
 
+  .checkboxCell {
+    width: 2rem;
+    text-align: center;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+  }
+
+  input[type="checkbox"] {
+    width: 0.92rem;
+    height: 0.92rem;
+    cursor: pointer;
+    accent-color: ${({ theme }) => theme.colors.blue9};
+  }
+
   td.title {
     max-width: 320px;
     white-space: nowrap;
@@ -4768,16 +4916,23 @@ const ConfirmModal = styled.div`
   border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+
+  .header {
+    display: grid;
+    gap: 0.5rem;
+  }
 
   h4 {
-    margin: 0 0 0.5rem;
+    margin: 0;
     font-size: 1rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
-    margin: 0 0 0.85rem;
+    margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.45;
   }
@@ -4786,6 +4941,7 @@ const ConfirmModal = styled.div`
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
+    flex-wrap: wrap;
   }
 `
 

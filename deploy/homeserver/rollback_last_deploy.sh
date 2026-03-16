@@ -13,6 +13,32 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+compose_up_with_retry() {
+  local max_attempts=4
+  local attempt=1
+  local output=""
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    if output="$(compose up -d "$@" 2>&1)"; then
+      echo "${output}"
+      return 0
+    fi
+
+    if grep -Eqi "network sandbox .* not found|context deadline exceeded|is not running|No such container" <<< "${output}"; then
+      echo "compose up retry (${attempt}/${max_attempts}) for services [$*]: ${output}" >&2
+      sleep 2
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "${output}" >&2
+    return 1
+  done
+
+  echo "compose up failed after ${max_attempts} retries for services [$*]" >&2
+  echo "${output}" >&2
+  return 1
+}
+
 env_value() {
   local key="$1"
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
@@ -50,19 +76,40 @@ resolve_prod_db_name() {
   echo "${db_base_name}_prod"
 }
 
-ensure_post_content_html_column() {
+ensure_db_runtime_guards() {
   local db_name
   db_name="$(resolve_prod_db_name)"
 
   local guard_sql
-  guard_sql=$'ALTER TABLE IF EXISTS public.post\n    ADD COLUMN IF NOT EXISTS content_html TEXT;'
+  guard_sql=$'
+ALTER TABLE IF EXISTS public.post ADD COLUMN IF NOT EXISTS content_html TEXT;
+
+DO $$
+BEGIN
+  IF to_regclass('"'"'public.post_like'"'"') IS NOT NULL AND to_regclass('"'"'public.post_like_seq'"'"') IS NOT NULL THEN
+    PERFORM setval('"'"'public.post_like_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.post_like), 1), false);
+  END IF;
+  IF to_regclass('"'"'public.post_attr'"'"') IS NOT NULL AND to_regclass('"'"'public.post_attr_seq'"'"') IS NOT NULL THEN
+    PERFORM setval('"'"'public.post_attr_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.post_attr), 1), false);
+  END IF;
+  IF to_regclass('"'"'public.post_comment'"'"') IS NOT NULL AND to_regclass('"'"'public.post_comment_seq'"'"') IS NOT NULL THEN
+    PERFORM setval('"'"'public.post_comment_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.post_comment), 1), false);
+  END IF;
+  IF to_regclass('"'"'public.member_attr'"'"') IS NOT NULL AND to_regclass('"'"'public.member_attr_seq'"'"') IS NOT NULL THEN
+    PERFORM setval('"'"'public.member_attr_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.member_attr), 1), false);
+  END IF;
+  IF to_regclass('"'"'public.task'"'"') IS NOT NULL AND to_regclass('"'"'public.task_seq'"'"') IS NOT NULL THEN
+    PERFORM setval('"'"'public.task_seq'"'"', COALESCE((SELECT MAX(id) + 1 FROM public.task), 1), false);
+  END IF;
+END $$;
+'
 
   if compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 -c "${guard_sql}" >/dev/null 2>&1; then
-    echo "schema guard ok: post.content_html ensured in ${db_name}"
+    echo "schema/sequence guard ok in ${db_name}"
     return 0
   fi
 
-  echo "schema guard warning: failed to ensure post.content_html in ${db_name}; continuing rollback" >&2
+  echo "schema/sequence guard warning: failed in ${db_name}; continuing rollback" >&2
   return 1
 }
 
@@ -145,14 +192,14 @@ if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
   mv "${tmp_file}" "${SCRIPT_DIR}/Caddyfile"
 fi
 
-compose up -d db_1 redis_1 caddy cloudflared back_blue back_green
-ensure_post_content_html_column || true
+compose_up_with_retry db_1 redis_1 caddy cloudflared back_blue back_green
+ensure_db_runtime_guards || true
 reload_caddy
 
 if [[ -f "${STATE_FILE}" ]]; then
   target_backend="$(cat "${STATE_FILE}" || true)"
   if [[ "${target_backend}" == "back_blue" || "${target_backend}" == "back_green" ]]; then
-    compose up -d "${target_backend}"
+    compose_up_with_retry "${target_backend}"
 
     other_backend="back_blue"
     [[ "${target_backend}" == "back_blue" ]] || other_backend="back_green"

@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
+import jakarta.persistence.PersistenceException
 import org.hibernate.Session
 
 class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
@@ -99,20 +100,54 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
         subject: Member,
         name: String,
         delta: Int,
-    ): Int =
-        (
-            entityManager
-                .createNativeQuery(
-                    """
-                    insert into member_attr (id, subject_id, name, int_value)
-                    values (nextval('member_attr_seq'), :subjectId, :name, greatest(:delta, 0))
-                    on conflict (subject_id, name)
-                    do update set int_value = greatest(0, coalesce(member_attr.int_value, 0) + :delta)
-                    returning int_value
-                    """.trimIndent(),
-                ).setParameter("subjectId", subject.id)
-                .setParameter("name", name)
-                .setParameter("delta", delta)
-                .singleResult as Number
-        ).toInt()
+    ): Int {
+        val updatedValues = updateIntValue(subject.id, name, delta)
+        if (updatedValues.isNotEmpty()) return updatedValues.max()
+
+        try {
+            return (
+                entityManager
+                    .createNativeQuery(
+                        """
+                        insert into member_attr (id, subject_id, name, int_value)
+                        values (
+                          (select coalesce(max(id), 0) + 1 from member_attr),
+                          :subjectId,
+                          :name,
+                          greatest(:delta, 0)
+                        )
+                        returning int_value
+                        """.trimIndent(),
+                    ).setParameter("subjectId", subject.id)
+                    .setParameter("name", name)
+                    .setParameter("delta", delta)
+                    .singleResult as Number
+            ).toInt()
+        } catch (exception: PersistenceException) {
+            // 동시 insert 경쟁으로 이미 생성된 경우 update 경로로 재시도한다.
+            val retriedValues = updateIntValue(subject.id, name, delta)
+            if (retriedValues.isNotEmpty()) return retriedValues.max()
+            throw exception
+        }
+    }
+
+    private fun updateIntValue(
+        subjectId: Int,
+        name: String,
+        delta: Int,
+    ): List<Int> =
+        entityManager
+            .createNativeQuery(
+                """
+                update member_attr
+                set int_value = greatest(0, coalesce(int_value, 0) + :delta)
+                where subject_id = :subjectId
+                  and name = :name
+                returning int_value
+                """.trimIndent(),
+            ).setParameter("subjectId", subjectId)
+            .setParameter("name", name)
+            .setParameter("delta", delta)
+            .resultList
+            .map { (it as Number).toInt() }
 }

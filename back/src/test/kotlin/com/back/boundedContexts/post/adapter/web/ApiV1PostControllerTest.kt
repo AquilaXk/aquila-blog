@@ -6,8 +6,8 @@ import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.SeededSpringBootTestSupport
-import jakarta.servlet.http.Cookie
 import jakarta.persistence.EntityManager
+import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
 import org.hamcrest.Matchers
 import org.junit.jupiter.api.AfterEach

@@ -33,6 +33,45 @@ trim_quotes() {
   echo "${value}"
 }
 
+resolve_prod_db_name() {
+  local db_name
+
+  db_name="$(trim_quotes "$(env_value "custom.prod.dbName")")"
+  if [[ -n "${db_name}" ]]; then
+    echo "${db_name}"
+    return
+  fi
+
+  db_name="$(trim_quotes "$(env_value "CUSTOM_PROD_DBNAME")")"
+  if [[ -n "${db_name}" ]]; then
+    echo "${db_name}"
+    return
+  fi
+
+  local db_base_name
+  db_base_name="$(trim_quotes "$(env_value "DB_BASE_NAME")")"
+  if [[ -z "${db_base_name}" ]]; then
+    db_base_name="blog"
+  fi
+  echo "${db_base_name}_prod"
+}
+
+ensure_post_content_html_column() {
+  local db_name
+  db_name="$(resolve_prod_db_name)"
+
+  local guard_sql
+  guard_sql=$'ALTER TABLE IF EXISTS public.post\n    ADD COLUMN IF NOT EXISTS content_html TEXT;'
+
+  if compose exec -T db_1 psql -U postgres -d "${db_name}" -v ON_ERROR_STOP=1 -c "${guard_sql}" >/dev/null 2>&1; then
+    echo "schema guard ok: post.content_html ensured in ${db_name}"
+    return 0
+  fi
+
+  echo "schema guard warning: failed to ensure post.content_html in ${db_name}; continue with Flyway" >&2
+  return 1
+}
+
 validate_storage_env() {
   local enabled_raw endpoint access_key secret_key
   enabled_raw="$(trim_quotes "$(env_value "CUSTOM_STORAGE_ENABLED")")"
@@ -219,22 +258,45 @@ check_backend_health() {
 connect_backend_network() {
   local backend="$1"
   local with_active_alias="$2"
-  local cid
-  cid="$(backend_container_id "${backend}")"
-  if [[ -z "${cid}" ]]; then
-    echo "container id not found: ${backend}" >&2
+  local max_attempts=5
+  local attempt=1
+
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    local cid
+    cid="$(backend_container_id "${backend}")"
+    if [[ -z "${cid}" ]]; then
+      echo "container id not found: ${backend} (try ${attempt}/${max_attempts})" >&2
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    docker network disconnect "${NETWORK_NAME}" "${cid}" >/dev/null 2>&1 || true
+
+    local args=(network connect --alias "${backend}" --alias "${backend//_/-}")
+    if [[ "${with_active_alias}" == "true" ]]; then
+      args+=(--alias "back_active")
+    fi
+    args+=("${NETWORK_NAME}" "${cid}")
+
+    local output
+    if output="$(docker "${args[@]}" 2>&1)"; then
+      return 0
+    fi
+
+    if grep -Eqi "network sandbox .* not found|No such container|is not running|already exists in network" <<< "${output}"; then
+      echo "network attach retry (${backend}, try ${attempt}/${max_attempts}): ${output}" >&2
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "${output}" >&2
     return 1
-  fi
+  done
 
-  docker network disconnect "${NETWORK_NAME}" "${cid}" >/dev/null 2>&1 || true
-
-  local args=(network connect --alias "${backend}" --alias "${backend//_/-}")
-  if [[ "${with_active_alias}" == "true" ]]; then
-    args+=(--alias "back_active")
-  fi
-  args+=("${NETWORK_NAME}" "${cid}")
-
-  docker "${args[@]}"
+  echo "failed to attach ${backend} to ${NETWORK_NAME} after ${max_attempts} retries" >&2
+  return 1
 }
 
 switch_active_alias() {
@@ -243,7 +305,10 @@ switch_active_alias() {
   other="$(other_backend "${target}")"
 
   connect_backend_network "${target}" "true"
-  connect_backend_network "${other}" "false"
+
+  if ! connect_backend_network "${other}" "false"; then
+    echo "warning: failed to refresh aliases for ${other}; continuing with target=${target}" >&2
+  fi
 
   if ! resolve_in_caddy "back_active"; then
     echo "caddy dns resolve failed: back_active" >&2
@@ -394,6 +459,7 @@ action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
 compose up -d db_1 redis_1 minio_1 caddy cloudflared uptime_kuma
+ensure_post_content_html_column || true
 compose pull "${next_backend}"
 compose up -d "${next_backend}"
 

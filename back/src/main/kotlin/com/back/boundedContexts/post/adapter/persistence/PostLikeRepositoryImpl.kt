@@ -23,7 +23,12 @@ class PostLikeRepositoryImpl : PostLikeRepositoryCustom {
                         """
                         insert into post_like (id, liker_id, post_id)
                         values (
-                          (select coalesce(max(id), 0) + 1 from post_like),
+                          nextval(
+                            coalesce(
+                              pg_get_serial_sequence('post_like', 'id'),
+                              'public.post_like_seq'
+                            )::regclass
+                          ),
                           :likerId,
                           :postId
                         )

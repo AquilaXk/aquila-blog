@@ -58,7 +58,12 @@ class PostAttrRepositoryImpl : PostAttrRepositoryCustom {
                         """
                         insert into post_attr (id, subject_id, name, int_value)
                         values (
-                          (select coalesce(max(id), 0) + 1 from post_attr),
+                          nextval(
+                            coalesce(
+                              pg_get_serial_sequence('post_attr', 'id'),
+                              'public.post_attr_seq'
+                            )::regclass
+                          ),
                           :subjectId,
                           :name,
                           greatest(:delta, 0)

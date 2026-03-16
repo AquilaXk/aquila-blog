@@ -82,6 +82,11 @@ class PostUseCaseAdapter(
         actor: Member,
     ): PostLikeToggleResult = postApplicationService.unlike(post, actor)
 
+    override fun reconcileLikeState(
+        post: Post,
+        actor: Member,
+    ): PostLikeToggleResult = postApplicationService.reconcileLikeState(post, actor)
+
     override fun incrementHit(post: Post) = postApplicationService.incrementHit(post)
 
     override fun getComments(

@@ -4,7 +4,7 @@ type ServerApiFetchInit = RequestInit & {
   timeoutMs?: number
 }
 
-const FALLBACK_TIMEOUT_MS = 4_000
+const FALLBACK_TIMEOUT_MS = 6_000
 
 const resolveServerTimeoutMs = (path: string, init: ServerApiFetchInit): number => {
   if (typeof init.timeoutMs === "number" && Number.isFinite(init.timeoutMs) && init.timeoutMs > 0) {
@@ -15,15 +15,15 @@ const resolveServerTimeoutMs = (path: string, init: ServerApiFetchInit): number 
   const method = (init.method || "GET").toUpperCase()
 
   if (normalizedPath.includes("/member/api/v1/auth/me") || normalizedPath.includes("/members/adminprofile")) {
-    return 3_000
-  }
-
-  if (normalizedPath.includes("/post/api/v1/posts/feed") || normalizedPath.includes("/post/api/v1/posts/explore")) {
     return 5_000
   }
 
+  if (normalizedPath.includes("/post/api/v1/posts/feed") || normalizedPath.includes("/post/api/v1/posts/explore")) {
+    return 6_500
+  }
+
   if (method === "GET") {
-    return 4_500
+    return 6_000
   }
 
   return FALLBACK_TIMEOUT_MS

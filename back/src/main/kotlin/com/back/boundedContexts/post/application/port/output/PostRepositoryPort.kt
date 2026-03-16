@@ -53,6 +53,8 @@ interface PostRepositoryPort {
 
     fun findAllPublicListedContents(): List<String>
 
+    fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String>
+
     fun existsByIdAndContentContaining(
         id: Int,
         contentFragment: String,

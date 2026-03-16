@@ -21,6 +21,7 @@ import com.back.boundedContexts.post.domain.PostWriteRequestIdempotency
 import com.back.boundedContexts.post.domain.postMixin.COMMENTS_COUNT
 import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
+import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -36,6 +37,7 @@ import com.back.boundedContexts.post.event.PostUnlikedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.event.application.EventPublisher
 import com.back.global.exception.application.AppException
+import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.dao.DataIntegrityViolationException
@@ -168,8 +170,15 @@ class PostApplicationService(
 
         val previousContent = post.content
         try {
-            post.modify(title, content, published, listed, contentHtml ?: post.contentHtml)
+            val sanitizedContentHtml =
+                if (contentHtml == null) {
+                    post.contentHtml
+                } else {
+                    HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml)
+                }
+            post.modify(title, content, published, listed, sanitizedContentHtml)
             postRepository.flush()
+            syncMetaTagIndexAttr(post)
         } catch (exception: ObjectOptimisticLockingFailureException) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
@@ -190,8 +199,19 @@ class PostApplicationService(
         listed: Boolean,
         contentHtml: String?,
     ): Post {
-        val post = Post(0, persistenceAuthor, title, content, null, published, listed, contentHtml)
+        val post =
+            Post(
+                0,
+                persistenceAuthor,
+                title,
+                content,
+                null,
+                published,
+                listed,
+                HtmlContentSanitizer.sanitizeRichHtmlOrNull(contentHtml),
+            )
         val savedPost = postRepository.saveAndFlush(post)
+        syncMetaTagIndexAttr(savedPost)
         uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
         incrementMemberPostsCount(persistenceAuthor)
 
@@ -402,6 +422,21 @@ class PostApplicationService(
     }
 
     @Transactional
+    fun reconcileLikeState(
+        post: Post,
+        actor: Member,
+    ): PostLikeToggleResult {
+        val persistenceActor = toPersistenceMember(actor)
+        hydratePostAttrs(post)
+        syncLikesCount(post)
+        val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
+        return PostLikeToggleResult(
+            isLiked = existingLike != null,
+            likeId = existingLike?.id ?: 0,
+        )
+    }
+
+    @Transactional
     fun incrementHit(post: Post) {
         val updatedHitCount = postAttrRepository.incrementIntValue(post, HIT_COUNT)
         val refreshedAttr = post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)
@@ -508,11 +543,22 @@ class PostApplicationService(
             publicTagCountsCache?.takeIf { it.expiresAtMillis > refreshedNow }?.let { return it.values }
 
             val tagCounts = ConcurrentHashMap<String, Int>()
-            postRepository.findAllPublicListedContents().forEach { content ->
-                PostMetaExtractor.extract(content).tags.forEach { tag ->
-                    val normalizedTag = tag.trim()
-                    if (normalizedTag.isNotBlank()) {
+            val indexedTagRows = postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)
+
+            if (indexedTagRows.isNotEmpty()) {
+                indexedTagRows.forEach { tagIndex ->
+                    parseTagIndex(tagIndex).forEach { normalizedTag ->
                         tagCounts.merge(normalizedTag, 1, Int::plus)
+                    }
+                }
+            } else {
+                // 태그 인덱스 미구축 레코드가 대부분인 초기 단계에서는 본문 파싱으로 호환한다.
+                postRepository.findAllPublicListedContents().forEach { content ->
+                    PostMetaExtractor.extract(content).tags.forEach { tag ->
+                        val normalizedTag = normalizeTag(tag)
+                        if (normalizedTag.isNotBlank()) {
+                            tagCounts.merge(normalizedTag, 1, Int::plus)
+                        }
                     }
                 }
             }
@@ -684,4 +730,36 @@ class PostApplicationService(
     private fun clearExploreCaches() {
         publicTagCountsCache = null
     }
+
+    private fun syncMetaTagIndexAttr(post: Post) {
+        val normalizedTags =
+            PostMetaExtractor
+                .extract(post.content)
+                .tags
+                .map(::normalizeTag)
+                .filter(String::isNotBlank)
+                .distinct()
+
+        val indexValue =
+            if (normalizedTags.isEmpty()) {
+                ""
+            } else {
+                normalizedTags.joinToString(separator = "|", prefix = "|", postfix = "|")
+            }
+
+        val tagIndexAttr = postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX) ?: PostAttr(0, post, META_TAGS_INDEX, "")
+        if ((tagIndexAttr.strValue ?: "") == indexValue) return
+
+        tagIndexAttr.strValue = indexValue
+        postAttrRepository.save(tagIndexAttr)
+    }
+
+    private fun normalizeTag(tag: String): String = tag.trim()
+
+    private fun parseTagIndex(tagIndex: String): List<String> =
+        tagIndex
+            .split('|')
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
 }

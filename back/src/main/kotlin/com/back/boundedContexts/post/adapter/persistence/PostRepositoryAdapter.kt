@@ -58,6 +58,9 @@ class PostRepositoryAdapter(
 
     override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()
 
+    override fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String> =
+        postRepository.findAllPublicListedTagIndexes(tagIndexAttrName)
+
     override fun existsByIdAndContentContaining(
         id: Int,
         contentFragment: String,

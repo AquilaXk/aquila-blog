@@ -169,6 +169,29 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             val afterCount = postFacade.count()
             assertThat(afterCount).isEqualTo(beforeCount + 1)
         }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `contentHtml 저장 시 위험한 스크립트와 이벤트 속성은 제거된다`() {
+            mvc.post("/post/api/v1/posts") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "보안 테스트",
+                      "content": "본문",
+                      "contentHtml": "<p onclick=\"alert('x')\">safe</p><script>alert('x')</script>"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isCreated() }
+            }
+
+            val post = postFacade.findLatest().getOrThrow()
+            assertThat(post.contentHtml).contains("<p>safe</p>")
+            assertThat(post.contentHtml).doesNotContain("onclick")
+            assertThat(post.contentHtml).doesNotContain("<script")
+        }
     }
 
     @Nested
@@ -445,6 +468,34 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     status { isConflict() }
                     jsonPath("$.resultCode") { value("409-1") }
                 }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `글 수정 시 contentHtml 은 sanitize 후 저장된다`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val post = postFacade.write(actor, "원본", "원본 본문", true, true)
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "수정 제목",
+                          "content": "수정 본문",
+                          "contentHtml": "<a href=\"javascript:alert(1)\">link</a><img src=\"https://example.com/a.png\" onerror=\"alert(1)\" />"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                }
+
+            val modified = postFacade.findById(post.id).getOrThrow()
+            assertThat(modified.contentHtml).doesNotContain("javascript:")
+            assertThat(modified.contentHtml).doesNotContain("onerror")
+            assertThat(modified.contentHtml).contains("<a>link</a>")
+            assertThat(modified.contentHtml).contains("""<img src="https://example.com/a.png">""")
         }
     }
 

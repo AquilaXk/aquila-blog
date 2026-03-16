@@ -10,6 +10,28 @@ const hasAuthCookieInBrowser = () => {
   return rawCookie.includes("apiKey=") || rawCookie.includes("accessToken=")
 }
 
+const clearCookie = (name: string, domain?: string) => {
+  if (!isClient) return
+  const domainPart = domain ? `; domain=${domain}` : ""
+  document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax${domainPart}`
+}
+
+const clearStaleAuthCookies = () => {
+  if (!isClient) return
+
+  clearCookie("apiKey")
+  clearCookie("accessToken")
+
+  const host = window.location.hostname.toLowerCase()
+  if (host === "localhost" || host === "127.0.0.1") return
+
+  const apexDomain = host.replace(/^www\./, "")
+  clearCookie("apiKey", apexDomain)
+  clearCookie("accessToken", apexDomain)
+  clearCookie("apiKey", `.${apexDomain}`)
+  clearCookie("accessToken", `.${apexDomain}`)
+}
+
 export type AuthSessionStatus = "loading" | "authenticated" | "anonymous" | "unavailable"
 
 export type AuthMember = {
@@ -46,6 +68,7 @@ const useAuthSession = () => {
         return await apiFetch<AuthMember>("/member/api/v1/auth/me")
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
+          clearStaleAuthCookies()
           return null
         }
 

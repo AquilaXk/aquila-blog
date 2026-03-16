@@ -29,4 +29,6 @@ interface PostRepositoryCustom {
     ): Page<Post>
 
     fun findAllPublicListedContents(): List<String>
+
+    fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String>
 }

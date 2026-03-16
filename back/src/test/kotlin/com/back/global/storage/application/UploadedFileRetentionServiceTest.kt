@@ -135,6 +135,30 @@ class UploadedFileRetentionServiceTest {
     }
 
     @Test
+    fun `본문에 잘못 인코딩된 이미지 URL이 포함되어도 동기화가 실패하지 않는다`() {
+        val validKey = "posts/2026/03/valid-image.png"
+        val malformedEncodedKey = "%E0%A4%A"
+        val currentContent =
+            """
+            ![](${UploadedFileUrlCodec.buildImageUrl(validKey)})
+            ![](${AppConfig.siteBackUrl}/post/api/v1/images/$malformedEncodedKey)
+            """.trimIndent()
+
+        uploadedFileRetentionService.registerTempUpload(validKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+
+        uploadedFileRetentionService.syncPostContent(
+            postId = 21,
+            previousContent = null,
+            currentContent = currentContent,
+        )
+
+        val activeFile = uploadedFileRepository.findByObjectKey(validKey)!!
+        assertThat(activeFile.status).isEqualTo(UploadedFileStatus.ACTIVE)
+        assertThat(activeFile.ownerType).isEqualTo(UploadedFileOwnerType.POST)
+        assertThat(activeFile.ownerId).isEqualTo(21)
+    }
+
+    @Test
     fun `cleanup 진단은 purge 후보 수와 샘플 object key를 보여준다`() {
         val objectKey = "posts/2026/03/diagnostics-temp.png"
 

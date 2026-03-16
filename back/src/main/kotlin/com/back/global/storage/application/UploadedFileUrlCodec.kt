@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets
 
 object UploadedFileUrlCodec {
     private const val IMAGE_PATH_PREFIX = "/post/api/v1/images/"
+    private fun decodeOrNull(encoded: String): String? =
+        runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }
+            .getOrNull()
 
     fun buildImageUrl(objectKey: String): String = "${AppConfig.siteBackUrl}${buildRelativeImagePath(objectKey)}"
 
@@ -39,7 +42,7 @@ object UploadedFileUrlCodec {
             }
 
         if (encodedKey.isBlank()) return null
-        return URLDecoder.decode(encodedKey, StandardCharsets.UTF_8)
+        return decodeOrNull(encodedKey)
     }
 
     fun extractObjectKeysFromContent(content: String): Set<String> {
@@ -50,8 +53,12 @@ object UploadedFileUrlCodec {
         val relativeRegex = Regex("${Regex.escape(IMAGE_PATH_PREFIX)}([^\\s)\"'>]+)")
 
         return buildSet {
-            absoluteRegex.findAll(content).forEach { add(URLDecoder.decode(it.groupValues[1], StandardCharsets.UTF_8)) }
-            relativeRegex.findAll(content).forEach { add(URLDecoder.decode(it.groupValues[1], StandardCharsets.UTF_8)) }
+            absoluteRegex.findAll(content).forEach { match ->
+                decodeOrNull(match.groupValues[1])?.let(::add)
+            }
+            relativeRegex.findAll(content).forEach { match ->
+                decodeOrNull(match.groupValues[1])?.let(::add)
+            }
         }
     }
 }

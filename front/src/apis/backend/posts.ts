@@ -284,6 +284,11 @@ export type ExplorePostsParams = {
   pageSize?: number
 }
 
+export type ExplorePostsPage = {
+  posts: TPost[]
+  totalCount: number
+}
+
 const toSortParam = (order: "asc" | "desc") => (order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT")
 
 const toValidPage = (page: number | undefined) => {
@@ -328,6 +333,17 @@ export const getExplorePosts = async ({
   page = 1,
   pageSize = PAGE_SIZE,
 }: ExplorePostsParams = {}): Promise<TPost[]> => {
+  const { posts } = await getExplorePostsPage({ kw, tag, order, page, pageSize })
+  return posts
+}
+
+export const getExplorePostsPage = async ({
+  kw = "",
+  tag = "",
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+}: ExplorePostsParams = {}): Promise<ExplorePostsPage> => {
   const response = await apiFetch<PageDto<ApiPostDto>>(
     buildExplorePath({
       kw,
@@ -337,7 +353,13 @@ export const getExplorePosts = async ({
       pageSize,
     })
   )
-  return response.content.map(mapPostDto)
+  return {
+    posts: response.content.map(mapPostDto),
+    totalCount:
+      typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
+        ? response.pageable.totalElements
+        : response.content.length,
+  }
 }
 
 export const getTagCounts = async (): Promise<Record<string, number>> => {
@@ -348,25 +370,6 @@ export const getTagCounts = async (): Promise<Record<string, number>> => {
     acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
     return acc
   }, {})
-}
-
-export const getExplorePostsTotalCount = async (): Promise<number> => {
-  const response = await apiFetch<PageDto<ApiPostDto>>(
-    buildExplorePath({
-      kw: "",
-      tag: "",
-      order: "desc",
-      page: 1,
-      pageSize: 1,
-    })
-  )
-
-  const total = response?.pageable?.totalElements
-  if (typeof total === "number" && Number.isFinite(total) && total >= 0) {
-    return total
-  }
-
-  return Array.isArray(response?.content) ? response.content.length : 0
 }
 
 export const getPosts = async (

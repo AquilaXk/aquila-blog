@@ -48,9 +48,27 @@ http://{$API_DOMAIN} {
     method GET
     not header Cookie *
   }
+  @publicExplore {
+    path /post/api/v1/posts/explore
+    method GET
+    not header Cookie *
+  }
   handle @publicFeed {
     header {
       Cache-Control "public, max-age=60, stale-while-revalidate=300"
+    }
+
+    reverse_proxy back_active:8080 {
+      header_up Host {host}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+    }
+  }
+
+  handle @publicExplore {
+    header {
+      Cache-Control "public, max-age=30, stale-while-revalidate=120"
     }
 
     reverse_proxy back_active:8080 {

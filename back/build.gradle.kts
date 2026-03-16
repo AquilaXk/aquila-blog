@@ -231,6 +231,7 @@ dependencies {
     // Database
     runtimeOnly("org.postgresql:postgresql")
     implementation("software.amazon.awssdk:s3:2.33.13")
+    implementation("org.jsoup:jsoup:1.21.2")
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")

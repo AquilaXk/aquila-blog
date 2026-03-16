@@ -1,7 +1,7 @@
 import Feed from "src/routes/Feed"
 import { CONFIG } from "../../site.config"
 import { NextPageWithLayout } from "../types"
-import { getExplorePosts, getExplorePostsTotalCount, getTagCounts } from "../apis/backend/posts"
+import { getExplorePostsPage, getTagCounts } from "../apis/backend/posts"
 import MetaConfig from "src/components/MetaConfig"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
@@ -19,19 +19,21 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   const currentTag = postsQueryTagRaw.trim()
   const currentOrder = postsQueryOrderRaw === "asc" ? "asc" : "desc"
 
-  const postsPromise = getExplorePosts({
+  const postsPromise = getExplorePostsPage({
     kw: "",
     tag: currentTag,
     order: currentOrder,
     page: 1,
     pageSize: 30,
   })
-    .then((fetchedPosts) => ({
-      posts: fetchedPosts,
+    .then(({ posts, totalCount }) => ({
+      posts,
+      totalCount,
       postsLoaded: true,
     }))
     .catch(() => ({
       posts: [] as TPost[],
+      totalCount: 0,
       postsLoaded: false,
     }))
   const tagsPromise = getTagCounts()
@@ -43,32 +45,20 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       tagCounts: {} as Record<string, number>,
       tagsLoaded: false,
     }))
-  const totalCountPromise = getExplorePostsTotalCount()
-    .then((totalCount) => ({
-      totalCount,
-      totalCountLoaded: true,
-    }))
-    .catch(() => ({
-      totalCount: 0,
-      totalCountLoaded: false,
-    }))
-
-  const [initialAdminProfile, authMember, postsResult, tagsResult, totalCountResult] = await Promise.all([
+  const [initialAdminProfile, authMember, postsResult, tagsResult] = await Promise.all([
     fetchServerAdminProfile(req),
     hydrateServerAuthSession(queryClient, req),
     postsPromise,
     tagsPromise,
-    totalCountPromise,
   ])
-  const { posts, postsLoaded } = postsResult
+  const { posts, totalCount, postsLoaded } = postsResult
   const { tagCounts, tagsLoaded } = tagsResult
-  const { totalCount, totalCountLoaded } = totalCountResult
 
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   if (tagsLoaded) {
     queryClient.setQueryData(queryKey.tags(), tagCounts)
   }
-  if (totalCountLoaded) {
+  if (postsLoaded) {
     queryClient.setQueryData(queryKey.postsTotalCount(), totalCount)
   }
   if (postsLoaded) {

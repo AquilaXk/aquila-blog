@@ -5,4 +5,6 @@
 - 글 수정은 `version`(낙관적 락) 기반으로 충돌 시 `409` 처리
 - 조회수는 dedupe 적용, Redis 실패 시 fallback 필요
 - 동일 사용자 중복 like row는 unique constraint 기준으로 보호
+- `contentHtml`은 저장 전 sanitize(스크립트/이벤트 속성 제거) 후 반영
+- 태그 탐색은 본문 LIKE보다 `metaTagsIndex`(post_attr) 기반 매칭 우선
 - 테스트는 동시성/멱등성 시나리오를 우선 확인

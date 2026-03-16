@@ -32,6 +32,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const postId = data?.id ?? ""
   const detailId = data?.id
   const didIncrementHitRef = useRef<string | null>(null)
+  const likePendingRef = useRef(false)
   const [likePending, setLikePending] = useState(false)
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [engagement, setEngagement] = useState(() => ({
@@ -84,13 +85,14 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
   const handleToggleLike = async () => {
     if (!data) return
-    if (likePending) return
+    if (likePendingRef.current) return
 
     if (!me) {
       await pushRoute(router, loginHref)
       return
     }
 
+    likePendingRef.current = true
     setLikePending(true)
 
     try {
@@ -119,20 +121,32 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       )
     } catch (error) {
       // 동시 요청 충돌은 최신 상태를 다시 받아 멱등하게 복구한다.
-      if (error instanceof ApiError && error.status === 409) {
-        await queryClient.invalidateQueries({ queryKey: queryKey.post(String(data.id)) })
-        const refreshed = queryClient.getQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)))
-        if (refreshed) {
-          setEngagement((prev) => ({
-            ...prev,
-            actorHasLiked: refreshed.actorHasLiked ?? false,
-            likesCount: refreshed.likesCount ?? 0,
-          }))
+      const status =
+        error instanceof ApiError
+          ? error.status
+          : typeof error === "object" && error !== null && "status" in error
+            ? Number((error as { status?: unknown }).status)
+            : undefined
+
+      if (status === 409) {
+        try {
+          await queryClient.invalidateQueries({ queryKey: queryKey.post(String(data.id)) })
+          const refreshed = queryClient.getQueryData<PostDetailType | undefined>(queryKey.post(String(data.id)))
+          if (refreshed) {
+            setEngagement((prev) => ({
+              ...prev,
+              actorHasLiked: refreshed.actorHasLiked ?? false,
+              likesCount: refreshed.likesCount ?? 0,
+            }))
+          }
+        } catch {
+          // 충돌 복구용 재조회 실패는 사용자 액션을 막지 않고 다음 클릭에서 재시도한다.
         }
       } else {
         throw error
       }
     } finally {
+      likePendingRef.current = false
       setLikePending(false)
     }
   }

@@ -16,6 +16,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
@@ -226,7 +227,12 @@ class ApiV1PostController(
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        val likeResult = postUseCase.toggleLike(post, rq.actor)
+        val likeResult =
+            try {
+                postUseCase.toggleLike(post, rq.actor)
+            } catch (_: DataIntegrityViolationException) {
+                postUseCase.reconcileLikeState(post, rq.actor)
+            }
         val msg = if (likeResult.isLiked) "좋아요를 눌렀습니다." else "좋아요를 취소했습니다."
         return RsData(
             "200-1",
@@ -245,7 +251,12 @@ class ApiV1PostController(
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        val likeResult = postUseCase.like(post, rq.actor)
+        val likeResult =
+            try {
+                postUseCase.like(post, rq.actor)
+            } catch (_: DataIntegrityViolationException) {
+                postUseCase.reconcileLikeState(post, rq.actor)
+            }
         return RsData(
             "200-1",
             "좋아요를 반영했습니다.",
@@ -263,7 +274,12 @@ class ApiV1PostController(
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        val likeResult = postUseCase.unlike(post, rq.actor)
+        val likeResult =
+            try {
+                postUseCase.unlike(post, rq.actor)
+            } catch (_: DataIntegrityViolationException) {
+                postUseCase.reconcileLikeState(post, rq.actor)
+            }
         return RsData(
             "200-1",
             "좋아요 취소를 반영했습니다.",

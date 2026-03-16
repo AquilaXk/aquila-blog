@@ -15,7 +15,8 @@ type Props = {
   actorHasLiked?: boolean
   likePending?: boolean
   onToggleLike?: () => void
-  showAdminActions?: boolean
+  showModifyAction?: boolean
+  showDeleteAction?: boolean
   adminActionPending?: boolean
   onEditPost?: () => void
   onDeletePost?: () => void
@@ -28,7 +29,8 @@ const PostHeader: React.FC<Props> = ({
   actorHasLiked = false,
   likePending = false,
   onToggleLike,
-  showAdminActions = false,
+  showModifyAction = false,
+  showDeleteAction = false,
   adminActionPending = false,
   onEditPost,
   onDeletePost,
@@ -80,16 +82,20 @@ const PostHeader: React.FC<Props> = ({
         )}
 
         <div className="actions">
-          {showAdminActions && (
+          {(showModifyAction || showDeleteAction) && (
             <div className="adminActions">
-              <button type="button" className="adminButton" onClick={onEditPost} disabled={adminActionPending}>
-                <AppIcon name="edit" />
-                <span>수정</span>
-              </button>
-              <button type="button" className="adminButton dangerButton" onClick={onDeletePost} disabled={adminActionPending}>
-                <AppIcon name="trash" />
-                <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
-              </button>
+              {showModifyAction && (
+                <button type="button" className="adminButton" onClick={onEditPost} disabled={adminActionPending}>
+                  <AppIcon name="edit" />
+                  <span>수정</span>
+                </button>
+              )}
+              {showDeleteAction && (
+                <button type="button" className="adminButton dangerButton" onClick={onDeletePost} disabled={adminActionPending}>
+                  <AppIcon name="trash" />
+                  <span>{adminActionPending ? "삭제 중..." : "삭제"}</span>
+                </button>
+              )}
             </div>
           )}
           <button

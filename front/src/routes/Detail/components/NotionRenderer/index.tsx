@@ -556,19 +556,19 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
           const rawCode = String(children).replace(/\n$/, "")
           const lang = className?.replace("language-", "").trim() || ""
 
+          if (lang === "mermaid" || isMermaidSource(rawCode)) {
+            return (
+              <pre className="aq-mermaid">
+                <code className="language-mermaid">{rawCode}</code>
+              </pre>
+            )
+          }
+
           if (!lang) {
             return (
               <code className="aq-inline-code" {...props}>
                 {children}
               </code>
-            )
-          }
-
-          if (lang === "mermaid" || (!lang && isMermaidSource(rawCode))) {
-            return (
-              <pre className="aq-mermaid">
-                <code className="language-mermaid">{rawCode}</code>
-              </pre>
             )
           }
 

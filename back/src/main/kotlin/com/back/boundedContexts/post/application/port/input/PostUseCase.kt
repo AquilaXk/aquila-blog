@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
@@ -122,6 +123,16 @@ interface PostUseCase {
         page: Int,
         pageSize: Int,
     ): Page<Post>
+
+    fun findDeletedPagedByKwForAdmin(
+        kw: String,
+        page: Int,
+        pageSize: Int,
+    ): Page<AdmDeletedPostDto>
+
+    fun restoreDeletedByIdForAdmin(id: Int): Post
+
+    fun hardDeleteDeletedByIdForAdmin(id: Int)
 
     fun findPagedByAuthor(
         author: Member,

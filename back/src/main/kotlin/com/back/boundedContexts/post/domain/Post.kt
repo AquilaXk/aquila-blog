@@ -48,6 +48,13 @@ import java.time.Instant
 )
 @AfterDDL(
     """
+    CREATE INDEX IF NOT EXISTS post_idx_deleted_at_desc
+    ON post (deleted_at DESC, id DESC)
+    WHERE deleted_at IS NOT NULL
+    """,
+)
+@AfterDDL(
+    """
     CREATE INDEX IF NOT EXISTS idx_post_title_content_pgroonga
     ON post USING pgroonga ((ARRAY["title"::text, "content"::text])
     pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')

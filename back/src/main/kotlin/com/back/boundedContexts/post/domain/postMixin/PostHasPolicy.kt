@@ -16,7 +16,7 @@ interface PostHasPolicy : PostAware {
 
     fun getCheckActorCanModifyRs(actor: Member?): RsData<Void> {
         if (actor == null) return RsData.fail("401-1", "로그인 후 이용해주세요.")
-        if (actor == post.author) return RsData.OK
+        if (actor.id == post.author.id) return RsData.OK
         return RsData.fail("403-1", "작성자만 글을 수정할 수 있습니다.")
     }
 
@@ -28,7 +28,7 @@ interface PostHasPolicy : PostAware {
     fun getCheckActorCanDeleteRs(actor: Member?): RsData<Void> {
         if (actor == null) return RsData.fail("401-1", "로그인 후 이용해주세요.")
         if (actor.isAdmin) return RsData.OK
-        if (actor == post.author) return RsData.OK
+        if (actor.id == post.author.id) return RsData.OK
         return RsData.fail("403-2", "작성자만 글을 삭제할 수 있습니다.")
     }
 

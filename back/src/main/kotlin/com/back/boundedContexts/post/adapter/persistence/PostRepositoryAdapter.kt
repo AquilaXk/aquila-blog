@@ -3,6 +3,8 @@ package com.back.boundedContexts.post.adapter.persistence
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Component
@@ -11,6 +13,7 @@ import java.util.Optional
 @Component
 class PostRepositoryAdapter(
     private val postRepository: PostRepository,
+    private val postDeletedQueryRepository: PostDeletedQueryRepository,
 ) : PostRepositoryPort {
     override fun count(): Long = postRepository.count()
 
@@ -45,6 +48,17 @@ class PostRepositoryAdapter(
         kw: String,
         pageable: Pageable,
     ): Page<Post> = postRepository.findQPagedByKwForAdmin(kw, pageable)
+
+    override fun findDeletedPagedByKw(
+        kw: String,
+        pageable: Pageable,
+    ): Page<AdmDeletedPostDto> = postDeletedQueryRepository.findDeletedPagedByKw(kw, pageable)
+
+    override fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto? = postDeletedQueryRepository.findDeletedSnapshotById(id)
+
+    override fun restoreDeletedById(id: Int): Boolean = postDeletedQueryRepository.restoreDeletedById(id)
+
+    override fun hardDeleteDeletedById(id: Int): Boolean = postDeletedQueryRepository.hardDeleteDeletedById(id)
 
     override fun findQPagedByAuthorAndKw(
         author: Member,

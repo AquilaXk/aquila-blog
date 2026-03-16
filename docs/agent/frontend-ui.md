@@ -4,6 +4,7 @@
 - 상세 canonical: `/posts/[id]`, legacy `/:slug`는 redirect only
 - canonical 기준 도메인은 `NEXT_PUBLIC_SITE_URL`(없으면 `https://www.aquilaxk.site`)을 사용한다
 - 관리자 경로: `/admin`, `/admin/profile`, `/admin/posts/new`, `/admin/tools`
+- `/admin/posts/new`의 목록 조회는 `활성 글`/`삭제 글` 탭으로 분리하고, `삭제 글` 탭에서 `복구`/`영구삭제`를 제공한다.
 - 관리자 서브페이지에 페이지 내부 로그아웃 버튼 금지
 - 관리자 프로필의 Service/Contact 항목 편집은 `아이콘 선택`과 `표시 이름 입력`을 분리하고, 아이콘 패널은 짧은 고정폭 스크롤형으로 유지
 - Service 링크는 `https://`/`http://`만, Contact 링크는 `https://`/`http://`/`mailto:`/`tel:`만 허용한다(`javascript:`/`data:` 금지)

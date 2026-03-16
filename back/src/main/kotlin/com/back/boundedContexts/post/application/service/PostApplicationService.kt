@@ -23,6 +23,7 @@ import com.back.boundedContexts.post.domain.postMixin.HIT_COUNT
 import com.back.boundedContexts.post.domain.postMixin.LIKES_COUNT
 import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostMetaExtractor
@@ -272,7 +273,6 @@ class PostApplicationService(
         actor: Member,
     ) {
         hydratePostAttrs(post)
-        val postDto = PostDto(post)
         val deletedPostContent = post.content
 
         post.softDelete()
@@ -298,6 +298,7 @@ class PostApplicationService(
         }
 
         runCatching {
+            val postDto = PostDto(post)
             eventPublisher.publish(
                 PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor)),
             )
@@ -592,6 +593,72 @@ class PostApplicationService(
                 PageRequest.of(page - 1, pageSize, sort.sortBy),
             )
         }
+
+    fun findDeletedPagedByKwForAdmin(
+        kw: String,
+        page: Int,
+        pageSize: Int,
+    ): Page<AdmDeletedPostDto> =
+        postRepository.findDeletedPagedByKw(
+            kw,
+            PageRequest.of(page - 1, pageSize),
+        )
+
+    @Transactional
+    fun restoreDeletedByIdForAdmin(id: Int): Post {
+        val snapshot =
+            postRepository.findDeletedSnapshotById(id)
+                ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
+
+        val restored = postRepository.restoreDeletedById(id)
+        if (!restored) {
+            throw AppException("404-1", "이미 복구되었거나 존재하지 않는 글입니다.")
+        }
+
+        val authorRef = Member(snapshot.authorId)
+
+        runCatching {
+            incrementMemberPostsCount(authorRef)
+        }.onFailure { exception ->
+            logger.warn("Failed to increment member posts counter for member id={}", snapshot.authorId, exception)
+            runCatching {
+                reconcileMemberPostsCount(authorRef)
+            }.onFailure { reconcileException ->
+                logger.warn("Failed to reconcile member posts counter for member id={}", snapshot.authorId, reconcileException)
+            }
+        }
+
+        runCatching {
+            uploadedFileRetentionService.restoreDeletedPostAttachments(snapshot.content)
+        }.onFailure { exception ->
+            logger.warn("Failed to restore attachments for restored post id={}", id, exception)
+        }
+
+        clearExploreCaches()
+
+        return postRepository.findById(id).getOrNull()
+            ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
+    }
+
+    @Transactional
+    fun hardDeleteDeletedByIdForAdmin(id: Int) {
+        val snapshot =
+            postRepository.findDeletedSnapshotById(id)
+                ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
+
+        runCatching {
+            uploadedFileRetentionService.scheduleDeletedPostAttachments(snapshot.content)
+        }.onFailure { exception ->
+            logger.warn("Failed to schedule cleanup for hard-deleted post id={}", id, exception)
+        }
+
+        val hardDeleted = postRepository.hardDeleteDeletedById(id)
+        if (!hardDeleted) {
+            throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
+        }
+
+        clearExploreCaches()
+    }
 
     fun findPagedByAuthor(
         author: Member,

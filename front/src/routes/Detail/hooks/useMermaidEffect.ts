@@ -118,6 +118,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let disposed = false
     let running = false
     let observer: IntersectionObserver | null = null
+    const retryTimers = new Set<number>()
 
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
@@ -129,22 +130,32 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
       const mermaid = (await import("mermaid")).default
       const theme = scheme === "dark" ? "dark" : "neutral"
+      mermaid.initialize({
+        startOnLoad: false,
+        theme,
+        securityLevel: "strict",
+        flowchart: {
+          // htmlLabels=true 에서 일부 다이어그램이 음수 rect width 오류를 내는 케이스가 있어 안정성 우선으로 고정한다.
+          htmlLabels: false,
+          curve: "linear",
+          useMaxWidth: false,
+        },
+      })
 
-      const initializeMermaid = (htmlLabels: boolean) => {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme,
-          securityLevel: "strict",
-          flowchart: {
-            htmlLabels,
-            curve: "linear",
-            // 레이아웃 폭은 CSS에서 제어하므로 내부 width 강제 계산(useMaxWidth)을 끄고 고정 렌더 후 스케일링한다.
-            useMaxWidth: false,
-          },
-        })
+      let renderQueue = Promise.resolve()
+      const renderingIndices = new Set<number>()
+      let enqueueRender: (index: number) => void = () => {}
+
+      const scheduleRetry = (index: number, block: HTMLElement) => {
+        const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
+        if (retryCount >= 4) return
+        block.dataset.mermaidRetryCount = String(retryCount + 1)
+        const timerId = window.setTimeout(() => {
+          retryTimers.delete(timerId)
+          enqueueRender(index)
+        }, 120 * (retryCount + 1))
+        retryTimers.add(timerId)
       }
-
-      initializeMermaid(true)
 
       const renderSingleBlock = async (i: number) => {
         if (disposed) return
@@ -163,31 +174,15 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidTheme === theme
         if (alreadyRendered) return
 
+        const rect = block.getBoundingClientRect()
+        if (rect.width <= 16 || rect.height <= 8) {
+          scheduleRetry(i, block)
+          return
+        }
+
         try {
           const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
-          let svg: string
-          try {
-            svg = (await mermaid.render(id, source)).svg
-          } catch (error) {
-            const message = String(error)
-            const isNegativeRectWidthError =
-              message.includes("attribute width") &&
-              message.includes("negative value")
-
-            if (!isNegativeRectWidthError) {
-              throw error
-            }
-
-            // 일부 다이어그램에서 html label 측정 시 음수 rect 폭 버그가 발생해 text 라벨 모드로 한 번 재시도한다.
-            initializeMermaid(false)
-            svg = (
-              await mermaid.render(
-                `${id}-fallback`,
-                source
-              )
-            ).svg
-            initializeMermaid(true)
-          }
+          const svg = (await mermaid.render(id, source)).svg
           if (disposed) return
 
           const parser = new DOMParser()
@@ -224,8 +219,18 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = theme
           block.dataset.mermaidRendered = "true"
+          block.dataset.mermaidRetryCount = "0"
           block.innerHTML = wrappedSvg
         } catch (error) {
+          const message = String(error)
+          const isNegativeRectWidthError =
+            message.includes("attribute width") &&
+            message.includes("negative value")
+          if (isNegativeRectWidthError) {
+            scheduleRetry(i, block)
+            return
+          }
+
           const escapedSource = source
             .replaceAll("&", "&amp;")
             .replaceAll("<", "&lt;")
@@ -236,16 +241,15 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidRendered = "error"
           block.innerHTML = `
             <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
-              Mermaid 문법 오류: 다이어그램 코드를 확인하세요.
+              Mermaid 렌더링 실패: 문법 또는 다이어그램 코드를 확인하세요.
             </div>
             <code style="white-space:pre-wrap;display:block;">${escapedSource}</code>
           `
           console.warn("[mermaid] render failed", error)
         }
       }
-      let renderQueue = Promise.resolve()
-      const renderingIndices = new Set<number>()
-      const enqueueRender = (index: number) => {
+
+      enqueueRender = (index: number) => {
         if (!Number.isFinite(index)) return
         if (renderingIndices.has(index)) return
         renderingIndices.add(index)
@@ -272,6 +276,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             entries.forEach((entry) => {
               if (!entry.isIntersecting) return
               const block = entry.target as HTMLElement
+              const rect = block.getBoundingClientRect()
+              if (rect.width <= 16 || rect.height <= 8) return
               observer?.unobserve(block)
               const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
               if (!Number.isFinite(index)) return
@@ -324,6 +330,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     return () => {
       disposed = true
       observer?.disconnect()
+      retryTimers.forEach((timerId) => window.clearTimeout(timerId))
+      retryTimers.clear()
       window.cancelAnimationFrame(rafId)
       window.clearTimeout(timerId)
     }

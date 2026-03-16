@@ -97,6 +97,16 @@ class UploadedFileRetentionService(
     }
 
     @Transactional
+    fun restoreDeletedPostAttachments(content: String) {
+        UploadedFileUrlCodec.extractObjectKeysFromContent(content).forEach { objectKey ->
+            val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return@forEach
+            if (uploadedFile.status == UploadedFileStatus.DELETED) return@forEach
+            uploadedFile.restoreActive()
+            uploadedFileRepository.save(uploadedFile)
+        }
+    }
+
+    @Transactional
     fun syncProfileImage(
         memberId: Int,
         previousProfileImgUrl: String?,

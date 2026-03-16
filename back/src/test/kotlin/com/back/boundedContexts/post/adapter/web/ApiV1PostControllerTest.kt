@@ -797,4 +797,153 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             }
         }
     }
+
+    @Nested
+    inner class AdmDeletedList {
+        @Test
+        @WithUserDetails("admin")
+        fun `soft delete 글은 관리자 기본 목록에서 제외되고 deleted 목록에서 조회된다`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val uniqueTitle = "삭제 목록 대상-${System.currentTimeMillis()}"
+            val post = postFacade.write(actor, uniqueTitle, "삭제 목록 테스트 본문", true, true)
+            postFacade.delete(post, actor)
+
+            mvc
+                .get("/post/api/v1/adm/posts") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(0) }
+                }
+
+            mvc
+                .get("/post/api/v1/adm/posts/deleted") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(1) }
+                    jsonPath("$.content[0].id") { value(post.id) }
+                    jsonPath("$.content[0].title") { value(uniqueTitle) }
+                    jsonPath("$.content[0].deletedAt") { Matchers.not(Matchers.blankString()) }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `deleted 목록은 페이지네이션과 검색어가 적용된다`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val prefix = "삭제탭-페이지"
+
+            repeat(3) { idx ->
+                val post = postFacade.write(actor, "$prefix-$idx", "페이지네이션", true, true)
+                postFacade.delete(post, actor)
+            }
+
+            mvc
+                .get("/post/api/v1/adm/posts/deleted") {
+                    param("kw", prefix)
+                    param("page", "1")
+                    param("pageSize", "2")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(2) }
+                    jsonPath("$.pageable.totalElements") { value(3) }
+                    jsonPath("$.content[*].title") { value(Matchers.everyItem(Matchers.containsString(prefix))) }
+                }
+        }
+
+        @Test
+        @WithUserDetails("user1")
+        fun `일반 사용자는 deleted 목록을 조회할 수 없다`() {
+            mvc.get("/post/api/v1/adm/posts/deleted").andExpect {
+                status { isForbidden() }
+                jsonPath("$.resultCode") { value("403-1") }
+            }
+        }
+
+        @Test
+        fun `비로그인 사용자는 deleted 목록을 조회할 수 없다`() {
+            mvc.get("/post/api/v1/adm/posts/deleted").andExpect {
+                status { isUnauthorized() }
+                jsonPath("$.resultCode") { value("401-1") }
+            }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `관리자는 deleted 글을 복구할 수 있다`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val uniqueTitle = "복구 대상-${System.currentTimeMillis()}"
+            val post = postFacade.write(actor, uniqueTitle, "복구 테스트 본문", true, true)
+            postFacade.delete(post, actor)
+
+            mvc
+                .post("/post/api/v1/adm/posts/${post.id}/restore")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.id") { value(post.id) }
+                }
+
+            mvc
+                .get("/post/api/v1/adm/posts") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
+                }
+
+            mvc
+                .get("/post/api/v1/adm/posts/deleted") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(0) }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin")
+        fun `관리자는 deleted 글을 영구삭제할 수 있다`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val uniqueTitle = "영구삭제 대상-${System.currentTimeMillis()}"
+            val post = postFacade.write(actor, uniqueTitle, "영구삭제 테스트 본문", true, true)
+            postFacade.delete(post, actor)
+
+            mvc
+                .delete("/post/api/v1/adm/posts/${post.id}/hard")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                }
+
+            mvc
+                .get("/post/api/v1/adm/posts/deleted") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(0) }
+                }
+
+            // 테스트 메서드 트랜잭션의 1차 캐시를 비워 native hard delete 결과를 반영한다.
+            entityManager.clear()
+
+            mvc
+                .get("/post/api/v1/posts/${post.id}")
+                .andExpect {
+                    status { isNotFound() }
+                    jsonPath("$.resultCode") { value("404-1") }
+                }
+        }
+    }
 }

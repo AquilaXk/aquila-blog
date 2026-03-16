@@ -46,6 +46,7 @@ type PostForEditor = {
 }
 
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
+type PostListScope = "active" | "deleted"
 
 type UploadPostImageResponse = {
   data: {
@@ -81,6 +82,7 @@ type AdminPostListItem = {
   listed: boolean
   createdAt: string
   modifiedAt: string
+  deletedAt?: string
 }
 
 type DeleteConfirmState = {
@@ -641,6 +643,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [listPageSize, setListPageSize] = useState("30")
   const [listKw, setListKw] = useState("")
   const [listSort, setListSort] = useState("CREATED_AT")
+  const [listScope, setListScope] = useState<PostListScope>("active")
 
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(() =>
     (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
@@ -655,6 +658,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [selectedPostIds, setSelectedPostIds] = useState<number[]>([])
   const [deleteConfirmState, setDeleteConfirmState] = useState<DeleteConfirmState | null>(null)
   const [deleteConfirmNotice, setDeleteConfirmNotice] = useState<NoticeState>({
+    tone: "idle",
+    text: "",
+  })
+  const [deletedListNotice, setDeletedListNotice] = useState<NoticeState>({
     tone: "idle",
     text: "",
   })
@@ -1213,13 +1220,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const adminPostViewRows = useMemo(() => {
     const copy = [...adminPostRows]
     copy.sort((a, b) => {
-      const aMs = new Date(a.modifiedAt).getTime()
-      const bMs = new Date(b.modifiedAt).getTime()
+      const aBaseTime = listScope === "deleted" ? a.deletedAt || a.modifiedAt : a.modifiedAt
+      const bBaseTime = listScope === "deleted" ? b.deletedAt || b.modifiedAt : b.modifiedAt
+      const aMs = new Date(aBaseTime).getTime()
+      const bMs = new Date(bBaseTime).getTime()
       if (Number.isNaN(aMs) || Number.isNaN(bMs)) return 0
       return modifiedSortOrder === "desc" ? bMs - aMs : aMs - bMs
     })
     return copy
-  }, [adminPostRows, modifiedSortOrder])
+  }, [adminPostRows, listScope, modifiedSortOrder])
 
   const selectedPostIdSet = useMemo(() => new Set(selectedPostIds), [selectedPostIds])
   const isAllVisiblePostsSelected = useMemo(
@@ -1230,13 +1239,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const loadAdminPosts = async () => {
     try {
       setLoadingKey("postList")
+      const query = new URLSearchParams({
+        page: listPage,
+        pageSize: listPageSize,
+        kw: listKw,
+      })
+      const endpoint =
+        listScope === "deleted"
+          ? "/post/api/v1/adm/posts/deleted"
+          : "/post/api/v1/adm/posts"
+      if (listScope === "active") {
+        query.set("sort", listSort)
+      }
       const data = await apiFetch<PageDto<AdminPostListItem>>(
-        `/post/api/v1/adm/posts?page=${listPage}&pageSize=${listPageSize}&kw=${encodeURIComponent(
-          listKw
-        )}&sort=${encodeURIComponent(listSort)}`
+        `${endpoint}?${query.toString()}`
       )
       setAdminPostRows(data.content || [])
       setAdminPostTotal(data.pageable?.totalElements ?? data.content?.length ?? 0)
+      if (listScope === "deleted") {
+        setSelectedPostIds([])
+      }
       setResult(pretty(data as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1249,13 +1271,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const togglePostSelection = useCallback((id: number) => {
+    if (listScope === "deleted") return
     setSelectedPostIds((prev) => {
       if (prev.includes(id)) return prev.filter((item) => item !== id)
       return [...prev, id]
     })
-  }, [])
+  }, [listScope])
 
   const toggleSelectAllVisiblePosts = useCallback(() => {
+    if (listScope === "deleted") return
     if (adminPostViewRows.length === 0) return
     setSelectedPostIds((prev) => {
       const next = new Set(prev)
@@ -1267,7 +1291,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
       return Array.from(next)
     })
-  }, [adminPostViewRows])
+  }, [adminPostViewRows, listScope])
 
   const openDeleteConfirm = useCallback((ids: number[], titleHint?: string) => {
     const uniqueIds = Array.from(new Set(ids)).filter((id) => Number.isFinite(id))
@@ -1360,6 +1384,75 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  const restoreDeletedPostFromList = useCallback(async (row: AdminPostListItem) => {
+    try {
+      setLoadingKey("restoreDeletedPost")
+      setDeletedListNotice({
+        tone: "loading",
+        text: `#${row.id} 글을 복구하고 있습니다...`,
+      })
+
+      const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/adm/posts/${row.id}/restore`, {
+        method: "POST",
+      })
+
+      setResult(pretty(response as unknown as JsonValue))
+      setAdminPostRows((prev) => prev.filter((item) => item.id !== row.id))
+      setAdminPostTotal((prev) => Math.max(0, prev - 1))
+      setDeletedListNotice({
+        tone: "success",
+        text: `#${row.id} 글을 복구했습니다.`,
+      })
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setDeletedListNotice({
+        tone: "error",
+        text: `복구 실패: ${message}`,
+      })
+      setResult(pretty({ error: message }))
+      return false
+    } finally {
+      setLoadingKey("")
+    }
+  }, [])
+
+  const hardDeleteDeletedPostFromList = useCallback(async (row: AdminPostListItem) => {
+    const confirmed = window.confirm(`#${row.id} 글을 영구삭제할까요?\n영구삭제 후에는 복구할 수 없습니다.`)
+    if (!confirmed) return false
+
+    try {
+      setLoadingKey("hardDeleteDeletedPost")
+      setDeletedListNotice({
+        tone: "loading",
+        text: `#${row.id} 글을 영구삭제하고 있습니다...`,
+      })
+
+      const response = await apiFetch<JsonValue>(`/post/api/v1/adm/posts/${row.id}/hard`, {
+        method: "DELETE",
+      })
+
+      setResult(pretty(response))
+      setAdminPostRows((prev) => prev.filter((item) => item.id !== row.id))
+      setAdminPostTotal((prev) => Math.max(0, prev - 1))
+      setDeletedListNotice({
+        tone: "success",
+        text: `#${row.id} 글을 영구삭제했습니다.`,
+      })
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setDeletedListNotice({
+        tone: "error",
+        text: `영구삭제 실패: ${message}`,
+      })
+      setResult(pretty({ error: message }))
+      return false
+    } finally {
+      setLoadingKey("")
+    }
+  }, [])
+
   useEffect(() => {
     if (adminPostRows.length === 0) {
       setSelectedPostIds([])
@@ -1369,6 +1462,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const rowIdSet = new Set(adminPostRows.map((row) => row.id))
     setSelectedPostIds((prev) => prev.filter((id) => rowIdSet.has(id)))
   }, [adminPostRows])
+
+  useEffect(() => {
+    setSelectedPostIds([])
+    setAdminPostRows([])
+    setAdminPostTotal(0)
+    setDeletedListNotice({
+      tone: "idle",
+      text: "",
+    })
+  }, [listScope])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
     const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
@@ -2193,7 +2296,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <QueryPanel>
           <QueryHeader>
             <h3>글 목록 조회 조건</h3>
-            <p>관리자 글 목록과 임시글을 불러오는 조건입니다.</p>
+            <p>
+              {listScope === "active"
+                ? "관리자 활성 글 목록과 임시글을 불러오는 조건입니다."
+                : "soft delete된 글을 조회하고 복구/영구삭제를 수행하는 조건입니다."}
+            </p>
+            <ListScopeTabs>
+              <ListScopeButton
+                type="button"
+                data-active={listScope === "active"}
+                onClick={() => setListScope("active")}
+              >
+                활성 글
+              </ListScopeButton>
+              <ListScopeButton
+                type="button"
+                data-active={listScope === "deleted"}
+                onClick={() => setListScope("deleted")}
+              >
+                삭제 글
+              </ListScopeButton>
+            </ListScopeTabs>
           </QueryHeader>
           <QueryGrid>
             <FieldBox>
@@ -2223,15 +2346,17 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 onChange={(e) => setListKw(e.target.value)}
               />
             </FieldBox>
-            <FieldBox>
-              <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
-              <Input
-                id="list-sort"
-                placeholder="예: CREATED_AT"
-                value={listSort}
-                onChange={(e) => setListSort(e.target.value)}
-              />
-            </FieldBox>
+            {listScope === "active" && (
+              <FieldBox>
+                <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
+                <Input
+                  id="list-sort"
+                  placeholder="예: CREATED_AT"
+                  value={listSort}
+                  onChange={(e) => setListSort(e.target.value)}
+                />
+              </FieldBox>
+            )}
           </QueryGrid>
 
           <QueryActions>
@@ -2239,64 +2364,82 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               disabled={disabled("postList")}
               onClick={() => void loadAdminPosts()}
             >
-              전체 글 목록 조회
+              {listScope === "active" ? "전체 글 목록 조회" : "삭제 글 목록 조회"}
             </Button>
-            <Button
-              disabled={disabled("postTemp")}
-              onClick={() => void handleLoadOrCreateTempPost()}
-            >
-              임시글 불러오기/없으면 생성
-            </Button>
+            {listScope === "active" && (
+              <Button
+                disabled={disabled("postTemp")}
+                onClick={() => void handleLoadOrCreateTempPost()}
+              >
+                임시글 불러오기/없으면 생성
+              </Button>
+            )}
           </QueryActions>
         </QueryPanel>
         <ListPanel>
           <ListHeader>
-            <h3>관리자 글 리스트</h3>
+            <h3>{listScope === "active" ? "관리자 글 리스트" : "삭제 글 리스트"}</h3>
             <ListHeaderActions>
               <span>{selectedPostIds.length > 0 ? `${selectedPostIds.length}개 선택` : `총 ${adminPostTotal}건`}</span>
-              <Button
-                type="button"
-                disabled={adminPostViewRows.length === 0 || loadingKey.length > 0}
-                onClick={toggleSelectAllVisiblePosts}
-              >
-                {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
-              </Button>
-              <Button
-                type="button"
-                disabled={selectedPostIds.length === 0 || loadingKey.length > 0}
-                onClick={() => openDeleteConfirm(selectedPostIds)}
-              >
-                선택 삭제
-              </Button>
+              {listScope === "active" ? (
+                <>
+                  <Button
+                    type="button"
+                    disabled={adminPostViewRows.length === 0 || loadingKey.length > 0}
+                    onClick={toggleSelectAllVisiblePosts}
+                  >
+                    {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={selectedPostIds.length === 0 || loadingKey.length > 0}
+                    onClick={() => openDeleteConfirm(selectedPostIds)}
+                  >
+                    선택 삭제
+                  </Button>
+                </>
+              ) : (
+                <ReadOnlyHint>삭제 글은 복구 또는 영구삭제로 정리할 수 있습니다.</ReadOnlyHint>
+              )}
             </ListHeaderActions>
           </ListHeader>
           {adminPostRows.length === 0 ? (
-            <ListEmpty>목록이 없습니다. 상단의 `전체 글 목록 조회`를 눌러 불러오세요.</ListEmpty>
+            <ListEmpty>
+              {listScope === "active"
+                ? "목록이 없습니다. 상단의 `전체 글 목록 조회`를 눌러 불러오세요."
+                : "삭제된 글이 없습니다. 상단의 `삭제 글 목록 조회`를 눌러 최신 상태를 확인하세요."}
+            </ListEmpty>
           ) : (
             <ListTable>
               <thead>
                 <tr>
-                  <th className="checkboxCell">
-                    <input
-                      type="checkbox"
-                      aria-label="현재 목록 전체 선택"
-                      checked={isAllVisiblePostsSelected}
-                      onChange={toggleSelectAllVisiblePosts}
-                    />
-                  </th>
+                  {listScope === "active" && (
+                    <th className="checkboxCell">
+                      <input
+                        type="checkbox"
+                        aria-label="현재 목록 전체 선택"
+                        checked={isAllVisiblePostsSelected}
+                        onChange={toggleSelectAllVisiblePosts}
+                      />
+                    </th>
+                  )}
                   <th>ID</th>
                   <th>제목</th>
                   <th>공개상태</th>
                   <th>작성자</th>
                   <th>
-                    <SortHeaderButton
-                      type="button"
-                      onClick={() =>
-                        setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
-                      }
-                    >
-                      수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
-                    </SortHeaderButton>
+                    {listScope === "active" ? (
+                      <SortHeaderButton
+                        type="button"
+                        onClick={() =>
+                          setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
+                        }
+                      >
+                        수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
+                      </SortHeaderButton>
+                    ) : (
+                      "삭제일"
+                    )}
                   </th>
                   <th>작업</th>
                 </tr>
@@ -2304,48 +2447,78 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <tbody>
                 {adminPostViewRows.map((row) => (
                   <tr key={row.id}>
-                    <td className="checkboxCell">
-                      <input
-                        type="checkbox"
-                        aria-label={`${row.id}번 글 선택`}
-                        checked={selectedPostIdSet.has(row.id)}
-                        onChange={() => togglePostSelection(row.id)}
-                      />
-                    </td>
+                    {listScope === "active" && (
+                      <td className="checkboxCell">
+                        <input
+                          type="checkbox"
+                          aria-label={`${row.id}번 글 선택`}
+                          checked={selectedPostIdSet.has(row.id)}
+                          onChange={() => togglePostSelection(row.id)}
+                        />
+                      </td>
+                    )}
                     <td>{row.id}</td>
-                    <td className="title">{row.title}</td>
+                    <td className="title">
+                      <TitleCell>
+                        <span className="text">{row.title}</span>
+                        {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                      </TitleCell>
+                    </td>
                     <td>
                       <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                         {visibilityLabel(row.published, row.listed)}
                       </VisibilityBadge>
                     </td>
                     <td>{row.authorName}</td>
-                    <td>{row.modifiedAt.slice(0, 10)}</td>
+                    <td>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
                     <td>
-                      <InlineActions>
-                        <Button
-                          type="button"
-                          disabled={loadingKey.length > 0}
-                          onClick={() => {
-                            setPostId(String(row.id))
-                            void loadPostForEditor(String(row.id))
-                          }}
-                        >
-                          불러오기
-                        </Button>
-                        <Button
-                          type="button"
-                          disabled={loadingKey.length > 0}
-                          onClick={() => openDeleteConfirm([row.id], row.title)}
-                        >
-                          삭제
-                        </Button>
-                      </InlineActions>
+                      {listScope === "active" ? (
+                        <InlineActions>
+                          <Button
+                            type="button"
+                            disabled={loadingKey.length > 0}
+                            onClick={() => {
+                              setPostId(String(row.id))
+                              void loadPostForEditor(String(row.id))
+                            }}
+                          >
+                            불러오기
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={loadingKey.length > 0}
+                            onClick={() => openDeleteConfirm([row.id], row.title)}
+                          >
+                            삭제
+                          </Button>
+                        </InlineActions>
+                      ) : (
+                        <InlineActions>
+                          <Button
+                            type="button"
+                            disabled={loadingKey.length > 0}
+                            onClick={() => void restoreDeletedPostFromList(row)}
+                          >
+                            복구
+                          </Button>
+                          <Button
+                            type="button"
+                            disabled={loadingKey.length > 0}
+                            data-variant="danger"
+                            onClick={() => void hardDeleteDeletedPostFromList(row)}
+                          >
+                            영구삭제
+                          </Button>
+                        </InlineActions>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </ListTable>
+          )}
+          {listScope === "deleted" && deletedListNotice.text && (
+            <InlineStatus data-tone={deletedListNotice.tone}>{deletedListNotice.text}</InlineStatus>
           )}
         </ListPanel>
 
@@ -3283,6 +3456,37 @@ const QueryHeader = styled.div`
   }
 `
 
+const ListScopeTabs = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  margin-top: 0.55rem;
+  padding: 0.24rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
+`
+
+const ListScopeButton = styled.button`
+  border: 0;
+  border-radius: 999px;
+  min-height: 30px;
+  padding: 0 0.72rem;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+
+  &[data-active="true"] {
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+`
+
 const QueryGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3581,6 +3785,12 @@ const Button = styled.button`
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 600;
+
+  &[data-variant="danger"] {
+    border-color: ${({ theme }) => theme.colors.red8};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
+  }
 
   &:disabled {
     opacity: 0.45;
@@ -4739,6 +4949,19 @@ const ListHeaderActions = styled.div`
   }
 `
 
+const ReadOnlyHint = styled.span`
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  min-height: 32px;
+  padding: 0 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+`
+
 const ListEmpty = styled.p`
   margin: 0.2rem 0 0.1rem;
   font-size: 0.82rem;
@@ -4852,10 +5075,35 @@ const ListTable = styled.table`
 
   td.title {
     max-width: 320px;
-    white-space: nowrap;
+  }
+`
+
+const TitleCell = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  min-width: 0;
+
+  .text {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
+`
+
+const DeletedBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.red7};
+  background: ${({ theme }) => theme.colors.red3};
+  color: ${({ theme }) => theme.colors.red11};
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.12rem 0.42rem;
+  flex: 0 0 auto;
 `
 
 const SortHeaderButton = styled.button`

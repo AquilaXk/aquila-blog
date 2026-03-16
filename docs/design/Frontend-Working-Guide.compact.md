@@ -40,6 +40,7 @@ Last updated: 2026-03-13
 - `/admin`은 허브
 - `/admin/profile`은 프로필 수정
 - `/admin/posts/new`는 글 작업실
+- `/admin/posts/new` 목록은 `활성 글`/`삭제 글` 탭 분리, 삭제 글 탭에서 복구/영구삭제 제공
 - `/admin/tools`는 운영 도구
 
 ## UI 원칙 체크리스트

@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.data.domain.Page
@@ -127,6 +128,16 @@ class PostUseCaseAdapter(
         page: Int,
         pageSize: Int,
     ): Page<Post> = postApplicationService.findPagedByKwForAdmin(kw, sort, page, pageSize)
+
+    override fun findDeletedPagedByKwForAdmin(
+        kw: String,
+        page: Int,
+        pageSize: Int,
+    ): Page<AdmDeletedPostDto> = postApplicationService.findDeletedPagedByKwForAdmin(kw, page, pageSize)
+
+    override fun restoreDeletedByIdForAdmin(id: Int): Post = postApplicationService.restoreDeletedByIdForAdmin(id)
+
+    override fun hardDeleteDeletedByIdForAdmin(id: Int) = postApplicationService.hardDeleteDeletedByIdForAdmin(id)
 
     override fun findPagedByAuthor(
         author: Member,

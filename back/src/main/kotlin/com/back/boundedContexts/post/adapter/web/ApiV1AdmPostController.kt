@@ -1,17 +1,22 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.global.rsData.RsData
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.constraints.Positive
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -50,6 +55,40 @@ class ApiV1AdmPostController(
         val validPageSize = pageSize.coerceIn(1, 30)
         val postPage = postUseCase.findPagedByKwForAdmin(kw, sort, validPage, validPageSize)
         return PageDto(postPage.map(::PostDto))
+    }
+
+    @GetMapping("/deleted")
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자용 soft delete 글 목록")
+    fun getDeletedItems(
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "") kw: String,
+    ): PageDto<AdmDeletedPostDto> {
+        val validPage = page.coerceAtLeast(1)
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val postPage = postUseCase.findDeletedPagedByKwForAdmin(kw, validPage, validPageSize)
+        return PageDto(postPage)
+    }
+
+    @PostMapping("/{id}/restore")
+    @Transactional
+    @Operation(summary = "관리자용 soft delete 글 복구")
+    fun restoreDeletedItem(
+        @PathVariable @Positive id: Int,
+    ): RsData<PostDto> {
+        val restoredPost = postUseCase.restoreDeletedByIdForAdmin(id)
+        return RsData("200-1", "${id}번 삭제 글을 복구했습니다.", PostDto(restoredPost))
+    }
+
+    @DeleteMapping("/{id}/hard")
+    @Transactional
+    @Operation(summary = "관리자용 soft delete 글 영구삭제")
+    fun hardDeleteDeletedItem(
+        @PathVariable @Positive id: Int,
+    ): RsData<Void> {
+        postUseCase.hardDeleteDeletedByIdForAdmin(id)
+        return RsData("200-1", "${id}번 삭제 글을 영구삭제했습니다.")
     }
 
     @GetMapping("/{id}")

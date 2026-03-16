@@ -2,6 +2,8 @@ package com.back.boundedContexts.post.application.port.output
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import java.util.Optional
@@ -40,6 +42,17 @@ interface PostRepositoryPort {
         kw: String,
         pageable: Pageable,
     ): Page<Post>
+
+    fun findDeletedPagedByKw(
+        kw: String,
+        pageable: Pageable,
+    ): Page<AdmDeletedPostDto>
+
+    fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto?
+
+    fun restoreDeletedById(id: Int): Boolean
+
+    fun hardDeleteDeletedById(id: Int): Boolean
 
     fun findQPagedByAuthorAndKw(
         author: Member,

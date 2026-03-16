@@ -171,12 +171,29 @@ class ApiV1PostController(
         val version: Long? = null,
     )
 
+    data class PostWriteResultDto(
+        val id: Int,
+        val title: String,
+        val version: Long,
+        val published: Boolean,
+        val listed: Boolean,
+    )
+
+    private fun makePostWriteResultDto(post: Post): PostWriteResultDto =
+        PostWriteResultDto(
+            id = post.id,
+            title = post.title,
+            version = post.version ?: 0L,
+            published = post.published,
+            listed = post.listed,
+        )
+
     @PutMapping("/{id}")
     @Transactional
     fun modify(
         @PathVariable @Positive id: Int,
         @Valid @RequestBody reqBody: PostModifyRequest,
-    ): RsData<PostDto> {
+    ): RsData<PostWriteResultDto> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanModify(rq.actor)
         postUseCase.modify(
@@ -189,7 +206,7 @@ class ApiV1PostController(
             reqBody.version,
             reqBody.contentHtml,
         )
-        return RsData("200-1", "${post.id}번 글이 수정되었습니다.", PostDto(post))
+        return RsData("200-1", "${post.id}번 글이 수정되었습니다.", makePostWriteResultDto(post))
     }
 
     @DeleteMapping("/{id}")

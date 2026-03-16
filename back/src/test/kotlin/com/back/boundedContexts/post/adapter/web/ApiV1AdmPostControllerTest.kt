@@ -3,11 +3,13 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
+import org.mockito.BDDMockito.then
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -28,7 +30,9 @@ import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import java.time.Instant
 
 @ActiveProfiles("test")
@@ -134,6 +138,116 @@ class ApiV1AdmPostControllerTest {
             status { isUnauthorized() }
             jsonPath("$.resultCode") { value("401-1") }
             jsonPath("$.msg") { value("로그인 후 이용해주세요.") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 soft delete 글 목록을 조회할 수 있다`() {
+        val deletedPost =
+            AdmDeletedPostDto(
+                id = 808,
+                title = "삭제된 글",
+                authorId = 7,
+                authorName = "user1",
+                published = true,
+                listed = true,
+                createdAt = Instant.parse("2026-03-12T00:00:00Z"),
+                modifiedAt = Instant.parse("2026-03-13T00:00:00Z"),
+                deletedAt = Instant.parse("2026-03-14T00:00:00Z"),
+            )
+        given(postUseCase.findDeletedPagedByKwForAdmin("삭제된", 1, 30))
+            .willReturn(PageImpl(listOf(deletedPost), PageRequest.of(0, 30), 1))
+
+        mvc
+            .get("/post/api/v1/adm/posts/deleted") {
+                param("kw", "삭제된")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.content.length()") { value(1) }
+                jsonPath("$.content[0].id") { value(808) }
+                jsonPath("$.content[0].title") { value("삭제된 글") }
+                jsonPath("$.content[0].deletedAt") { value("2026-03-14T00:00:00Z") }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `일반 사용자는 soft delete 글 목록을 조회할 수 없다`() {
+        mvc.get("/post/api/v1/adm/posts/deleted").andExpect {
+            status { isForbidden() }
+            jsonPath("$.resultCode") { value("403-1") }
+            jsonPath("$.msg") { value("권한이 없습니다.") }
+        }
+    }
+
+    @Test
+    fun `비로그인 사용자는 soft delete 글 목록을 조회할 수 없다`() {
+        mvc.get("/post/api/v1/adm/posts/deleted").andExpect {
+            status { isUnauthorized() }
+            jsonPath("$.resultCode") { value("401-1") }
+            jsonPath("$.msg") { value("로그인 후 이용해주세요.") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 soft delete 글을 복구할 수 있다`() {
+        val restoredPost = samplePost(id = 808, title = "복구된 글", content = "복구 내용", published = true, listed = true)
+        given(postUseCase.restoreDeletedByIdForAdmin(808)).willReturn(restoredPost)
+
+        mvc.post("/post/api/v1/adm/posts/808/restore").andExpect {
+            status { isOk() }
+            jsonPath("$.resultCode") { value("200-1") }
+            jsonPath("$.msg") { value("808번 삭제 글을 복구했습니다.") }
+            jsonPath("$.data.id") { value(808) }
+            jsonPath("$.data.title") { value("복구된 글") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 soft delete 글을 영구삭제할 수 있다`() {
+        mvc.delete("/post/api/v1/adm/posts/808/hard").andExpect {
+            status { isOk() }
+            jsonPath("$.resultCode") { value("200-1") }
+            jsonPath("$.msg") { value("808번 삭제 글을 영구삭제했습니다.") }
+        }
+
+        then(postUseCase).should().hardDeleteDeletedByIdForAdmin(808)
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `일반 사용자는 soft delete 글 복구를 수행할 수 없다`() {
+        mvc.post("/post/api/v1/adm/posts/808/restore").andExpect {
+            status { isForbidden() }
+            jsonPath("$.resultCode") { value("403-1") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["USER"])
+    fun `일반 사용자는 soft delete 글 영구삭제를 수행할 수 없다`() {
+        mvc.delete("/post/api/v1/adm/posts/808/hard").andExpect {
+            status { isForbidden() }
+            jsonPath("$.resultCode") { value("403-1") }
+        }
+    }
+
+    @Test
+    fun `비로그인 사용자는 soft delete 글 복구를 수행할 수 없다`() {
+        mvc.post("/post/api/v1/adm/posts/808/restore").andExpect {
+            status { isUnauthorized() }
+            jsonPath("$.resultCode") { value("401-1") }
+        }
+    }
+
+    @Test
+    fun `비로그인 사용자는 soft delete 글 영구삭제를 수행할 수 없다`() {
+        mvc.delete("/post/api/v1/adm/posts/808/hard").andExpect {
+            status { isUnauthorized() }
+            jsonPath("$.resultCode") { value("401-1") }
         }
     }
 

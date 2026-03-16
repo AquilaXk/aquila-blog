@@ -33,7 +33,7 @@ spring:
   sql:
     init:
       mode: always
-      schema-locations: classpath:db/guard/prod-schema-guard.sql,classpath:db/guard/prod-sequence-guard.sql
+      schema-locations: classpath:db/guard/prod-schema-guard.sql
       continue-on-error: false
 management:
   endpoints:

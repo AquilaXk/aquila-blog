@@ -149,7 +149,9 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: flex-end;
     gap: 0.55rem;
-    min-width: 0;
+    min-width: 232px;
+    min-height: 32px;
+    contain: layout;
   }
 
   .navPill,
@@ -183,7 +185,7 @@ const StyledWrapper = styled.div`
   }
 
   .authSkeleton.short {
-    width: 76px;
+    width: 232px;
   }
 
   .authSkeleton.medium {
@@ -224,7 +226,7 @@ const StyledWrapper = styled.div`
     }
 
     .authArea {
-      min-width: 0;
+      min-width: 118px;
       gap: 0.4rem;
     }
 
@@ -241,6 +243,11 @@ const StyledWrapper = styled.div`
       min-width: 58px;
       height: 28px;
       font-size: 0.78rem;
+    }
+
+    .authSkeleton.short {
+      width: 118px;
+      height: 28px;
     }
   }
 `

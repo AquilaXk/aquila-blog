@@ -247,6 +247,15 @@ const normalizeMermaidParagraphsInHtml = (html: string) =>
     return `<pre class="aq-mermaid"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
+const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*`{3,}[\w-]*[\t ]*\n[\s\S]*?\n`{3,}(?=\n|$)/
+const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*`{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n`{3,}(?=\n|$)/i
+
+const shouldPreferMarkdownPipeline = (markdown: string) => {
+  if (!markdown.trim()) return false
+  if (HAS_MERMAID_BLOCK_REGEX.test(markdown)) return true
+  return HAS_FENCED_CODE_BLOCK_REGEX.test(markdown)
+}
+
 const extractTextFromNode = (node: ReactNode): string => {
   if (typeof node === "string" || typeof node === "number") return String(node)
   if (Array.isArray(node)) return node.map(extractTextFromNode).join("")
@@ -488,13 +497,21 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
         : "",
     [normalizedContentHtml]
   )
+  const preferMarkdownPipeline = useMemo(
+    () => shouldPreferMarkdownPipeline(normalizedContent),
+    [normalizedContent]
+  )
+  const resolvedContentHtml = preferMarkdownPipeline ? "" : sanitizedContentHtml
   const segments = useMemo(
-    () => (sanitizedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
-    [normalizedContent, sanitizedContentHtml]
+    () => (resolvedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
+    [normalizedContent, resolvedContentHtml]
   )
   const renderKey = useMemo(
-    () => (sanitizedContentHtml ? `html:${sanitizedContentHtml.length}:${sanitizedContentHtml.slice(0, 64)}` : `md:${normalizedContent.length}:${normalizedContent.slice(0, 64)}`),
-    [normalizedContent, sanitizedContentHtml]
+    () =>
+      resolvedContentHtml
+        ? `html:${resolvedContentHtml.length}:${resolvedContentHtml.slice(0, 64)}`
+        : `md:${normalizedContent.length}:${normalizedContent.slice(0, 64)}`,
+    [normalizedContent, resolvedContentHtml]
   )
 
   useMermaidEffect(rootRef, renderKey)
@@ -592,12 +609,12 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
     </ReactMarkdown>
   )
 
-  if (sanitizedContentHtml) {
+  if (resolvedContentHtml) {
     return (
       <StyledWrapper
         ref={rootRef}
         className="aq-markdown"
-        dangerouslySetInnerHTML={{ __html: sanitizedContentHtml }}
+        dangerouslySetInnerHTML={{ __html: resolvedContentHtml }}
       />
     )
   }

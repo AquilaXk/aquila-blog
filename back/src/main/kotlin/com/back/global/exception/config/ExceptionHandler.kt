@@ -4,6 +4,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
@@ -90,6 +91,14 @@ class ExceptionHandler {
         ResponseEntity
             .status(ex.rsData.statusCode)
             .body(ex.rsData)
+
+    @ExceptionHandler(DataIntegrityViolationException::class)
+    fun handleDataIntegrityViolationException(ex: DataIntegrityViolationException): ResponseEntity<RsData<Void>> {
+        logger.warn("Data integrity violation", ex)
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
+            .body(RsData("409-1", "동시에 처리된 요청 충돌이 발생했습니다. 잠시 후 다시 시도해주세요."))
+    }
 
     @ExceptionHandler(Exception::class)
     fun handleUnexpectedException(ex: Exception): ResponseEntity<RsData<Void>> {

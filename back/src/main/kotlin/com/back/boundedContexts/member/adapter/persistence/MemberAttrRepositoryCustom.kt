@@ -29,4 +29,10 @@ interface MemberAttrRepositoryCustom {
         name: String,
         valueFragment: String,
     ): Boolean
+
+    fun incrementIntValue(
+        subject: Member,
+        name: String,
+        delta: Int = 1,
+    ): Int
 }

@@ -194,9 +194,7 @@ class PostApplicationService(
         val post = Post(0, persistenceAuthor, title, content, null, published, listed, contentHtml)
         val savedPost = postRepository.saveAndFlush(post)
         uploadedFileRetentionService.syncPostContent(savedPost.id, null, savedPost.content)
-        hydrateMemberCounterAttrs(persistenceAuthor)
-        persistenceAuthor.incrementPostsCount()
-        saveMemberAttr(persistenceAuthor.postsCountAttr)
+        incrementMemberPostsCount(persistenceAuthor)
 
         eventPublisher.publish(
             PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author)),
@@ -236,7 +234,6 @@ class PostApplicationService(
         actor: Member,
     ) {
         hydratePostAttrs(post)
-        hydrateMemberCounterAttrs(post.author)
         val postDto = PostDto(post)
         uploadedFileRetentionService.scheduleDeletedPostAttachments(post.content)
 
@@ -244,8 +241,7 @@ class PostApplicationService(
             PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor)),
         )
 
-        post.author.decrementPostsCount()
-        saveMemberAttr(post.author.postsCountAttr)
+        decrementMemberPostsCount(post.author)
         post.softDelete()
         clearExploreCaches()
     }
@@ -258,8 +254,6 @@ class PostApplicationService(
         parentComment: PostComment? = null,
     ): PostComment {
         val persistenceAuthor = toPersistenceMember(author)
-        hydratePostAttrs(post)
-        hydrateMemberCounterAttrs(persistenceAuthor)
         val persistedParentComment = parentComment?.let { findCommentById(post, it.id) ?: it }
         val comment =
             postCommentRepository.save(
@@ -269,11 +263,8 @@ class PostApplicationService(
                     parentComment = persistedParentComment,
                 ),
             )
-        post.onCommentAdded()
-        savePostAttr(post.commentsCountAttr)
-        persistenceAuthor.incrementPostCommentsCount()
-        saveMemberAttr(persistenceAuthor.postCommentsCountAttr)
-        postRepository.flush()
+        incrementCommentsCount(post)
+        incrementMemberPostCommentsCount(persistenceAuthor)
 
         eventPublisher.publish(
             PostCommentWrittenEvent(UUID.randomUUID(), PostCommentDto(comment), PostDto(post), MemberDto(author)),
@@ -608,6 +599,11 @@ class PostApplicationService(
         applyLikesCount(post, updatedLikesCount)
     }
 
+    private fun incrementCommentsCount(post: Post) {
+        val updatedCommentsCount = postAttrRepository.incrementIntValue(post, COMMENTS_COUNT)
+        applyCommentsCount(post, updatedCommentsCount)
+    }
+
     private fun decrementLikesCount(post: Post) {
         val updatedLikesCount = postAttrRepository.incrementIntValue(post, LIKES_COUNT, -1).coerceAtLeast(0)
         applyLikesCount(post, updatedLikesCount)
@@ -621,6 +617,47 @@ class PostApplicationService(
         refreshedAttr?.let {
             it.intValue = likesCount
             post.likesCountAttr = it
+        }
+    }
+
+    private fun applyCommentsCount(
+        post: Post,
+        commentsCount: Int,
+    ) {
+        val refreshedAttr = post.commentsCountAttr ?: postAttrRepository.findBySubjectAndName(post, COMMENTS_COUNT)
+        refreshedAttr?.let {
+            it.intValue = commentsCount
+            post.commentsCountAttr = it
+        }
+    }
+
+    private fun incrementMemberPostCommentsCount(member: Member) {
+        val updatedCount = memberAttrRepository.incrementIntValue(member, POST_COMMENTS_COUNT)
+        val refreshedAttr = member.postCommentsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POST_COMMENTS_COUNT)
+        refreshedAttr?.let {
+            it.intValue = updatedCount
+            member.postCommentsCountAttr = it
+        }
+    }
+
+    private fun incrementMemberPostsCount(member: Member) {
+        val updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT)
+        val refreshedAttr = member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)
+        refreshedAttr?.let {
+            it.intValue = updatedCount
+            member.postsCountAttr = it
+        }
+    }
+
+    private fun decrementMemberPostsCount(member: Member) {
+        var updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -1)
+        if (updatedCount < 0) {
+            updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -updatedCount)
+        }
+        val refreshedAttr = member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)
+        refreshedAttr?.let {
+            it.intValue = updatedCount
+            member.postsCountAttr = it
         }
     }
 

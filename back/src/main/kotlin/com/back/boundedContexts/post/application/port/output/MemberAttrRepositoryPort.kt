@@ -14,5 +14,11 @@ interface MemberAttrRepositoryPort {
         names: List<String>,
     ): List<MemberAttr>
 
+    fun incrementIntValue(
+        subject: Member,
+        name: String,
+        delta: Int = 1,
+    ): Int
+
     fun save(attr: MemberAttr): MemberAttr
 }

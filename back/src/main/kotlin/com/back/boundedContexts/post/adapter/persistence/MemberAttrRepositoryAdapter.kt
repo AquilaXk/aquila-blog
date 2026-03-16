@@ -20,5 +20,11 @@ class MemberAttrRepositoryAdapter(
         names: List<String>,
     ): List<MemberAttr> = memberAttrRepository.findBySubjectInAndNameIn(subjects, names)
 
+    override fun incrementIntValue(
+        subject: Member,
+        name: String,
+        delta: Int,
+    ): Int = memberAttrRepository.incrementIntValue(subject, name, delta)
+
     override fun save(attr: MemberAttr): MemberAttr = memberAttrRepository.save(attr)
 }

@@ -27,6 +27,9 @@ type ApiPostDto = {
   category?: string[]
   published: boolean
   listed: boolean
+  likesCount?: number
+  commentsCount?: number
+  hitCount?: number
   actorHasLiked?: boolean
 }
 
@@ -215,6 +218,9 @@ const mapPostDto = (post: ApiPostDto): TPost => ({
   createdTime: post.createdAt,
   modifiedTime: post.modifiedAt,
   fullWidth: false,
+  likesCount: post.likesCount ?? 0,
+  commentsCount: post.commentsCount ?? 0,
+  hitCount: post.hitCount ?? 0,
   actorHasLiked: post.actorHasLiked,
 })
 

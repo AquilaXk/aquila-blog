@@ -2117,14 +2117,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </MetricCard>
           </MetricGrid>
           <ActionCluster>
-            <PrimaryButton
+            <HeroPrimaryActionButton
               type="button"
               disabled={disabled("postList")}
               onClick={() => void loadAdminPosts()}
             >
               글 목록 새로고침
-            </PrimaryButton>
-            <Button
+            </HeroPrimaryActionButton>
+            <HeroActionButton
               type="button"
               disabled={disabled("me")}
               onClick={() =>
@@ -2145,7 +2145,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               }
             >
               내 정보
-            </Button>
+            </HeroActionButton>
           </ActionCluster>
         </HeroAside>
       </HeroCard>
@@ -3284,11 +3284,11 @@ const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
   gap: 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 16px;
+  background: ${({ theme }) => theme.colors.gray2};
   padding: 1.05rem;
   margin-bottom: 1rem;
+  box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray4};
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -3320,12 +3320,14 @@ const HeroIntro = styled.div`
 
 const HeroEyebrow = styled.span`
   width: fit-content;
-  border-radius: 999px;
-  padding: 0.34rem 0.62rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.74rem;
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.06em;
@@ -3335,18 +3337,28 @@ const HeroEyebrow = styled.span`
 const HeroNav = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.7rem;
 `
 
 const AnchorButton = styled.a`
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1;
   text-decoration: none;
-  padding: 0.52rem 0.8rem;
   font-size: 0.82rem;
   font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
 `
 
 const HeroAside = styled.aside`
@@ -3365,9 +3377,9 @@ const MetricGrid = styled.div`
 `
 
 const MetricCard = styled.div`
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 12px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   padding: 0.85rem 0.9rem;
 
   span {
@@ -3389,6 +3401,30 @@ const ActionCluster = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+`
+
+const HeroActionButton = styled(Button)`
+  border: 0;
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-weight: 650;
+  padding: 0.6rem 0.92rem;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.gray4};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+`
+
+const HeroPrimaryActionButton = styled(HeroActionButton)`
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #ffffff;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.blue10};
+    color: #ffffff;
+  }
 `
 
 const WorkspaceGrid = styled.div`
@@ -4901,16 +4937,18 @@ const ColorSwatch = styled.span`
 `
 
 const EditorGrid = styled.div`
+  --pane-body-height: clamp(28rem, calc(100vh - 20rem), 46rem);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
-  min-height: 42rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 22px;
   background: ${({ theme }) => theme.colors.gray2};
   overflow: hidden;
+  align-items: stretch;
 
   @media (max-width: 980px) {
+    --pane-body-height: clamp(18rem, 52vh, 34rem);
     grid-template-columns: 1fr;
   }
 `
@@ -5253,7 +5291,10 @@ const PublishModalFooter = styled.div`
 `
 
 const EditorPane = styled.section`
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   padding: 1.4rem 1.4rem 1.2rem;
 `
 
@@ -5305,7 +5346,9 @@ const PaneChip = styled.span`
 
 const ContentInput = styled.textarea`
   width: 100%;
-  min-height: 32rem;
+  height: var(--pane-body-height);
+  min-height: var(--pane-body-height);
+  max-height: var(--pane-body-height);
   border: 0;
   border-radius: 0;
   padding: 0;
@@ -5328,8 +5371,9 @@ const ContentInput = styled.textarea`
 `
 
 const PreviewCard = styled.div`
-  min-height: 32rem;
-  max-height: 48rem;
+  height: var(--pane-body-height);
+  min-height: var(--pane-body-height);
+  max-height: var(--pane-body-height);
   overflow: auto;
   scrollbar-gutter: stable both-edges;
   padding: 0 0 0.25rem;

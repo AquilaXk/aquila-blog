@@ -270,8 +270,8 @@ const normalizeStandaloneMermaidPreBlocksInHtml = (html: string) =>
     return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
-const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*`{3,}[\w-]*[\t ]*\n[\s\S]*?\n`{3,}(?=\n|$)/
-const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*`{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n`{3,}(?=\n|$)/i
+const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}[\w-]*[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/
+const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/i
 
 const shouldPreferMarkdownPipeline = (markdown: string) => {
   if (!markdown.trim()) return false
@@ -315,6 +315,16 @@ const extractCodeMetaFromPreChildren = (children: ReactNode) => {
     language: dataLanguage || classLanguage || "text",
     rawCode,
   }
+}
+
+const parseFenceMarker = (line: string): "`" | "~" | null => {
+  const match = line.trim().match(/^([`~]{3,})(.*)$/)
+  if (!match) return null
+
+  const fence = match[1]
+  const marker = fence[0] as "`" | "~"
+  if (!fence.split("").every((char) => char === marker)) return null
+  return marker
 }
 
 type PrettyCodeBlockProps = {
@@ -371,6 +381,7 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   const lines = content.split("\n")
   const segments: MarkdownSegment[] = []
   let markdownBuffer: string[] = []
+  let activeFenceMarker: "`" | "~" | null = null
 
   const flushMarkdown = () => {
     const text = markdownBuffer.join("\n").trim()
@@ -381,6 +392,23 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   let i = 0
   while (i < lines.length) {
     const line = lines[i]
+    const fenceMarker = parseFenceMarker(line)
+
+    if (activeFenceMarker) {
+      markdownBuffer.push(line)
+      if (fenceMarker === activeFenceMarker) {
+        activeFenceMarker = null
+      }
+      i += 1
+      continue
+    }
+
+    if (fenceMarker) {
+      markdownBuffer.push(line)
+      activeFenceMarker = fenceMarker
+      i += 1
+      continue
+    }
 
     if (line.startsWith(":::toggle")) {
       const title = line.replace(/^:::toggle\s*/, "").trim() || "토글"
@@ -526,7 +554,12 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
     () => shouldPreferMarkdownPipeline(normalizedContent),
     [normalizedContent]
   )
-  const resolvedContentHtml = preferMarkdownPipeline ? "" : sanitizedContentHtml
+  const resolvedContentHtml = useMemo(() => {
+    // 상세/미리보기 일관성을 위해 markdown 원문이 있으면 항상 markdown 파이프라인을 우선한다.
+    // contentHtml 경로에서 간헐적으로 mermaid fence가 plain code로 남는 케이스를 차단한다.
+    if (normalizedContent.trim()) return ""
+    return preferMarkdownPipeline ? "" : sanitizedContentHtml
+  }, [normalizedContent, preferMarkdownPipeline, sanitizedContentHtml])
   const segments = useMemo(
     () => (resolvedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
     [normalizedContent, resolvedContentHtml]
@@ -577,19 +610,8 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
             </figure>
           )
         },
-        code({ className, children, ...props }) {
-          const rawCode = String(children).replace(/\n$/, "")
-          const lang = className?.replace("language-", "").trim() || ""
-
-          if (lang === "mermaid" || isMermaidSource(rawCode)) {
-            return (
-              <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={rawCode}>
-                <code className="language-mermaid">{rawCode}</code>
-              </pre>
-            )
-          }
-
-          if (!lang) {
+        code({ className, children, inline, ...props }) {
+          if (inline) {
             return (
               <code className="aq-inline-code" {...props}>
                 {children}

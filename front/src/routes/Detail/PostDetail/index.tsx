@@ -235,7 +235,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           />
         )}
         <BodySection>
-          <NotionRenderer content={data.content} contentHtml={data.contentHtml} />
+          <NotionRenderer content={data.content} />
         </BodySection>
         {data.type[0] === "Post" && (
           <>

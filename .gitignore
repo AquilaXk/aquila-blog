@@ -4,3 +4,8 @@ front/tsconfig.tsbuildinfo
 infra/terraform.tfvars
 infra/*.auto.tfvars
 deploy/homeserver/.env.prod
+
+# Agent-only docs (machine-facing)
+AGENTS.md
+docs/AGENT-CONTEXT.md
+docs/agent/

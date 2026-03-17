@@ -1146,6 +1146,8 @@ export default AdminToolsPage
 
 const Main = styled.main`
   max-width: 1180px;
+  width: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: 1.6rem 1rem 2.6rem;
   display: grid;
@@ -1250,6 +1252,7 @@ const BaseButton = styled.button`
   background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.72rem 1rem;
+  min-height: 40px;
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
@@ -1287,6 +1290,7 @@ const NavLink = styled.a`
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
+  min-height: 40px;
   font-size: 0.92rem;
   font-weight: 700;
 `
@@ -1297,6 +1301,7 @@ const Grid = styled.section`
 `
 
 const SectionCard = styled.section`
+  min-width: 0;
   border-radius: 12px;
   border: 0;
   background: ${({ theme }) => theme.colors.gray2};
@@ -1309,6 +1314,10 @@ const SectionTop = styled.div`
   justify-content: space-between;
   gap: 0.9rem;
   align-items: flex-start;
+
+  > div {
+    min-width: 0;
+  }
 
   h2 {
     margin: 0;
@@ -1386,6 +1395,7 @@ const FieldLabel = styled.label`
 
 const Input = styled.input`
   width: 100%;
+  min-height: 44px;
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray1};
@@ -1457,13 +1467,20 @@ const ActionCardHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  min-width: 0;
+
+  @media (max-width: 760px) {
+    align-items: flex-start;
+  }
 `
 
 const ActionCardTitle = styled.span`
   display: block;
+  min-width: 0;
   font-size: 0.92rem;
   font-weight: 800;
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 `
 
 const ActionCardHint = styled.span`
@@ -1641,6 +1658,9 @@ const TaskSummaryLine = styled.div`
 
   strong {
     font-size: 0.92rem;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 `
 
@@ -1698,6 +1718,12 @@ const TaskStatePill = styled.span`
     background: ${({ theme }) => theme.colors.indigo3};
     color: ${({ theme }) => theme.colors.indigo11};
   }
+
+  @media (max-width: 760px) {
+    white-space: normal;
+    line-height: 1.25;
+    text-align: center;
+  }
 `
 
 const TaskMetricGrid = styled.div`
@@ -1743,6 +1769,14 @@ const TaskMetaLine = styled.div`
   strong {
     font-size: 0.88rem;
     text-align: right;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 760px) {
+    strong {
+      text-align: left;
+    }
   }
 `
 
@@ -1823,6 +1857,10 @@ const TaskSampleMeta = styled.div`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.8rem;
   font-weight: 700;
+
+  span {
+    overflow-wrap: anywhere;
+  }
 `
 
 const MonitoringActions = styled.div`
@@ -1847,6 +1885,7 @@ const MonitoringFrame = styled.iframe`
 `
 
 const ConsoleCard = styled.section`
+  min-width: 0;
   border-radius: 12px;
   border: 0;
   background: ${({ theme }) => theme.colors.gray2};
@@ -1901,7 +1940,7 @@ const ConsoleQuickActionButton = styled.button`
   align-items: center;
   justify-content: space-between;
   gap: 0.42rem;
-  min-height: 2.1rem;
+  min-height: 2.3rem;
   flex: 0 1 auto;
   border-radius: 999px;
   border: 0;
@@ -1945,7 +1984,9 @@ const ConsoleQuickActionButton = styled.button`
   }
 
   @media (max-width: 760px) {
-    flex-basis: auto;
+    flex-basis: 100%;
+    width: 100%;
+    min-height: 2.5rem;
   }
 `
 
@@ -1963,6 +2004,7 @@ const ResultPanel = styled.pre`
 `
 
 const OverviewCard = styled.section`
+  min-width: 0;
   border-radius: 12px;
   border: 0;
   background: ${({ theme }) => theme.colors.gray2};

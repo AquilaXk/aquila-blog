@@ -267,4 +267,10 @@ const SocialIconButton = styled.button`
 
 const FooterText = styled.div`
   font-size: 0.9rem;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+  }
 `

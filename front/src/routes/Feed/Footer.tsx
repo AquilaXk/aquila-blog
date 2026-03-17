@@ -28,6 +28,9 @@ export default Footer
 
 const StyledWrapper = styled.div`
   a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
     margin-top: 0.75rem;
     font-size: 0.875rem;
     line-height: 1.25rem;

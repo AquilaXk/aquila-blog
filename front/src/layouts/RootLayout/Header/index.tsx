@@ -40,7 +40,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     width: 100%;
     max-width: 1180px;
-    height: 3.5rem;
+    min-height: 3.5rem;
     margin: 0 auto;
     &[data-full-width="true"] {
       @media (min-width: 768px) {
@@ -53,14 +53,15 @@ const StyledWrapper = styled.div`
       gap: 0.36rem;
       align-items: center;
       flex-shrink: 0;
+      min-width: 0;
     }
   }
 
   @media (max-width: 720px) {
     .container {
-      padding-left: 0.8rem;
-      padding-right: 0.8rem;
-      gap: 0.55rem;
+      padding-left: 0.62rem;
+      padding-right: 0.62rem;
+      gap: 0.45rem;
 
       > a {
         min-width: 0;
@@ -71,7 +72,15 @@ const StyledWrapper = styled.div`
       }
 
       .nav {
-        gap: 0.3rem;
+        gap: 0.18rem;
+        max-width: calc(100vw - 8.8rem);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+
+      .nav::-webkit-scrollbar {
+        display: none;
       }
     }
   }

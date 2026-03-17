@@ -206,6 +206,7 @@ const StyledWrapper = styled.div`
           font-size: 1rem;
           display: flex;
           align-items: center;
+          min-height: 44px;
           padding: 0.58rem 0.65rem;
           border-radius: 8px;
           border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -222,9 +223,13 @@ const StyledWrapper = styled.div`
           }
 
           a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
             color: ${({ theme }) => theme.colors.gray12};
             text-decoration: none;
             flex: 1;
+            overflow-wrap: anywhere;
 
             &:hover {
               color: ${({ theme }) => theme.colors.gray11};

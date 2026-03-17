@@ -121,9 +121,20 @@ type ParsedEditorMeta = {
 }
 
 type MetaUsageMap = Record<string, number>
+type LocalDraftPayload = {
+  title: string
+  content: string
+  summary: string
+  thumbnailUrl: string
+  tags: string[]
+  category: string
+  visibility: PostVisibility
+  savedAt: string
+}
 
 const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
+const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
 
 const TAG_TONES = [
   {
@@ -429,6 +440,46 @@ const persistCatalog = (storageKey: string, values: string[]) => {
   window.localStorage.setItem(storageKey, JSON.stringify(dedupeStrings(values)))
 }
 
+const readLocalDraft = (): LocalDraftPayload | null => {
+  if (typeof window === "undefined") return null
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<LocalDraftPayload>
+    if (!parsed || typeof parsed !== "object") return null
+
+    const visibility = parsed.visibility
+    const isValidVisibility =
+      visibility === "PRIVATE" || visibility === "PUBLIC_UNLISTED" || visibility === "PUBLIC_LISTED"
+
+    return {
+      title: typeof parsed.title === "string" ? parsed.title : "",
+      content: typeof parsed.content === "string" ? parsed.content : "",
+      summary: typeof parsed.summary === "string" ? parsed.summary : "",
+      thumbnailUrl: typeof parsed.thumbnailUrl === "string" ? parsed.thumbnailUrl : "",
+      tags: Array.isArray(parsed.tags)
+        ? dedupeStrings(parsed.tags.filter((item): item is string => typeof item === "string"))
+        : [],
+      category: typeof parsed.category === "string" ? normalizeCategoryValue(parsed.category) : "",
+      visibility: isValidVisibility ? visibility : "PUBLIC_LISTED",
+      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
+    }
+  } catch {
+    return null
+  }
+}
+
+const persistLocalDraft = (payload: LocalDraftPayload) => {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(LOCAL_DRAFT_STORAGE_KEY, JSON.stringify(payload))
+}
+
+const removeLocalDraft = () => {
+  if (typeof window === "undefined") return
+  window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
+}
+
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
   if (!text) return ""
@@ -665,6 +716,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [publishActionType, setPublishActionType] = useState<PublishActionType>("create")
   const [isPreviewThumbnailError, setIsPreviewThumbnailError] = useState(false)
+  const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -762,6 +814,88 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
     [isPublishModalOpen]
   )
+
+  const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
+    const payload: LocalDraftPayload = {
+      title: postTitle,
+      content: postContent,
+      summary: postSummary,
+      thumbnailUrl: postThumbnailUrl,
+      tags: dedupeStrings(postTags),
+      category: postCategory ? normalizeCategoryValue(postCategory) : "",
+      visibility: postVisibility,
+      savedAt: new Date().toISOString(),
+    }
+
+    persistLocalDraft(payload)
+    setLocalDraftSavedAt(payload.savedAt)
+
+    if (!options?.silent) {
+      setPublishStatus(
+        {
+          tone: "success",
+          text: `브라우저 임시저장 완료 (${payload.savedAt.slice(11, 16)})`,
+        },
+        "page"
+      )
+    }
+  }, [postCategory, postContent, postSummary, postTags, postThumbnailUrl, postTitle, postVisibility, setPublishStatus])
+
+  const restoreLocalDraft = useCallback(() => {
+    const draft = readLocalDraft()
+    if (!draft) {
+      setPublishStatus(
+        {
+          tone: "error",
+          text: "저장된 브라우저 임시글이 없습니다.",
+        },
+        "page"
+      )
+      return
+    }
+
+    setEditorMode("create")
+    setIsTempDraftMode(false)
+    setPostId("")
+    setPostVersion(null)
+    lastWriteFingerprintRef.current = ""
+    lastWriteIdempotencyKeyRef.current = ""
+
+    setPostTitle(draft.title)
+    setPostContent(draft.content)
+    setPostSummary(draft.summary)
+    setPostThumbnailUrl(draft.thumbnailUrl)
+    setPostTags(draft.tags)
+    setPostCategory(draft.category)
+    setPostVisibility(draft.visibility)
+
+    const parsedCategory = splitCategoryDisplay(draft.category)
+    setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
+    setKnownTags((prev) => dedupeStrings([...prev, ...draft.tags]).sort((a, b) => a.localeCompare(b)))
+    setKnownCategories((prev) =>
+      dedupeStrings([...prev, ...(draft.category ? [draft.category] : [])]).sort(compareCategoryValues)
+    )
+    setLocalDraftSavedAt(draft.savedAt || "")
+    setPublishStatus(
+      {
+        tone: "success",
+        text: `브라우저 임시글을 불러왔습니다${draft.savedAt ? ` (${draft.savedAt.slice(11, 16)})` : ""}.`,
+      },
+      "page"
+    )
+  }, [setPublishStatus])
+
+  const clearLocalDraft = useCallback(() => {
+    removeLocalDraft()
+    setLocalDraftSavedAt("")
+    setPublishStatus(
+      {
+        tone: "success",
+        text: "브라우저 임시저장을 삭제했습니다.",
+      },
+      "page"
+    )
+  }, [setPublishStatus])
 
   const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
@@ -1097,6 +1231,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           : postVisibility === "PUBLIC_UNLISTED"
             ? "링크 공개(목록 미노출)"
             : "비공개"
+
+      removeLocalDraft()
+      setLocalDraftSavedAt("")
 
       setPublishStatus(
         {
@@ -1603,6 +1740,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         compareCategoryValues
       )
     )
+    const localDraft = readLocalDraft()
+    if (localDraft?.savedAt) {
+      setLocalDraftSavedAt(localDraft.savedAt)
+    }
   }, [])
 
   useEffect(() => {
@@ -1612,6 +1753,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   useEffect(() => {
     persistCatalog(CATEGORY_CATALOG_STORAGE_KEY, customCategoryCatalog)
   }, [customCategoryCatalog])
+
+  useEffect(() => {
+    const hasDraftContent =
+      postTitle.trim().length > 0 ||
+      postContent.trim().length > 0 ||
+      postSummary.trim().length > 0 ||
+      postThumbnailUrl.trim().length > 0 ||
+      postTags.length > 0 ||
+      postCategory.trim().length > 0
+
+    if (!hasDraftContent) return
+
+    const timerId = window.setTimeout(() => {
+      saveLocalDraft({ silent: true })
+    }, 1200)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [postCategory, postContent, postSummary, postTags, postThumbnailUrl, postTitle, saveLocalDraft])
 
   useEffect(() => {
     setKnownTags((prev) =>
@@ -2011,6 +2172,21 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setIsPublishModalOpen(true)
   }
 
+  const handleClickCreatePost = () => {
+    if (editorMode !== "create") {
+      switchToCreateMode({ keepContent: true })
+      setPublishStatus(
+        {
+          tone: "success",
+          text: "새 글 모드로 전환했습니다. 이어서 '글 작성'을 한 번 더 누르면 발행 설정이 열립니다.",
+        },
+        "page"
+      )
+      return
+    }
+    openPublishModal("create")
+  }
+
   const closePublishModal = () => {
     if (loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost") return
     setPublishModalNotice({
@@ -2047,6 +2223,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
+  const localDraftStatusText = localDraftSavedAt
+    ? `브라우저 임시저장: ${localDraftSavedAt.slice(5, 16).replace("T", " ")}`
+    : "브라우저 임시저장 없음"
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
@@ -3034,10 +3213,24 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <span>{currentPostLabel}</span>
                 <span>{tagSummaryText}</span>
                 <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
+                <span>{localDraftStatusText}</span>
               </WriterFooterSummary>
             <WriterFooterControls>
               <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
               <WriterFooterActions>
+                <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
+                  브라우저 임시저장
+                </Button>
+                <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
+                  임시저장 불러오기
+                </Button>
+                <Button
+                  type="button"
+                  disabled={loadingKey.length > 0 || !localDraftSavedAt}
+                  onClick={clearLocalDraft}
+                >
+                  임시저장 삭제
+                </Button>
                 <Button type="button" disabled={loadingKey.length > 0} onClick={() => switchToCreateMode({ keepContent: true })}>
                   새 글 모드
                 </Button>
@@ -3059,8 +3252,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 )}
                 <PrimaryButton
                   type="button"
-                  disabled={editorMode !== "create" || disabled("writePost")}
-                  onClick={() => openPublishModal("create")}
+                  disabled={disabled("writePost")}
+                  onClick={handleClickCreatePost}
                 >
                   {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
                 </PrimaryButton>
@@ -3398,25 +3591,33 @@ const HeroNav = styled.div`
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.55rem;
 `
 
 const AnchorButton = styled.a`
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 36px;
+  padding: 0 0.86rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
+  font-weight: 650;
   line-height: 1;
+  letter-spacing: -0.01em;
   text-decoration: none;
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: 0.84rem;
   cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
 
   &:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    text-decoration-thickness: 1px;
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 `
@@ -3566,11 +3767,11 @@ const ListScopeTabs = styled.div`
 const ListScopeButton = styled.button`
   border: 0;
   border-radius: 999px;
-  min-height: 30px;
-  padding: 0 0.72rem;
+  min-height: 36px;
+  padding: 0 0.82rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -3878,12 +4079,12 @@ const TitleInput = styled(Input)`
 const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 8px;
-  padding: 0.58rem 0.88rem;
-  min-height: 38px;
+  padding: 0.62rem 0.92rem;
+  min-height: 40px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   font-weight: 600;
   transition:
     border-color 0.18s ease,
@@ -4902,7 +5103,7 @@ const ToolbarCluster = styled.div`
 const ToolbarDivider = styled.span`
   width: 1px;
   align-self: stretch;
-  min-height: 1.72rem;
+  min-height: 1.9rem;
   background: ${({ theme }) => theme.colors.gray7};
   margin: 0 0.2rem;
 `
@@ -4911,9 +5112,9 @@ const ToolbarIconButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.04rem;
-  height: 2.04rem;
-  padding: 0 0.44rem;
+  min-width: 2.28rem;
+  min-height: 2.28rem;
+  padding: 0 0.48rem;
   border-radius: 6px;
   border: 0;
   background: transparent;
@@ -4980,6 +5181,11 @@ const ToolbarIconButton = styled.button`
     cursor: not-allowed;
     transform: none;
   }
+
+  @media (max-width: 720px) {
+    min-width: 2.38rem;
+    min-height: 2.38rem;
+  }
 `
 
 const ToolbarHint = styled.span`
@@ -5011,12 +5217,13 @@ const CalloutMenu = styled.div`
   button {
     border: 1px solid transparent;
     border-radius: 8px;
-    padding: 0.4rem 0.55rem;
+    min-height: 36px;
+    padding: 0.48rem 0.6rem;
     text-align: left;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     cursor: pointer;
-    font-size: 0.82rem;
+    font-size: 0.84rem;
 
     &:hover {
       background: ${({ theme }) => theme.colors.gray3};

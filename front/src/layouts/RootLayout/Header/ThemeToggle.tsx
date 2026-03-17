@@ -31,11 +31,11 @@ const StyledWrapper = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  min-width: 0;
-  height: 32px;
+  min-width: 36px;
+  min-height: 36px;
   border: none;
   border-radius: 8px;
-  padding: 0 0.36rem;
+  padding: 0 0.42rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
@@ -55,11 +55,13 @@ const StyledWrapper = styled.button`
   }
 
   @media (max-width: 720px) {
-    height: 28px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0 0.34rem;
 
     svg {
-      width: 16px;
-      height: 16px;
+      width: 17px;
+      height: 17px;
     }
   }
 `

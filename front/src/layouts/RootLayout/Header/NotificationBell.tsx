@@ -504,9 +504,9 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 0;
-    height: 32px;
-    padding: 0 0.36rem;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0 0.42rem;
     border-radius: 8px;
     border: none;
     background: transparent;
@@ -582,7 +582,7 @@ const StyledWrapper = styled.div`
   }
 
   .readAllBtn {
-    min-height: 32px;
+    min-height: 34px;
     padding: 0 0.72rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
@@ -707,12 +707,13 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 720px) {
     .trigger {
-      height: 28px;
-      padding: 0 0.3rem;
+      min-width: 34px;
+      min-height: 34px;
+      padding: 0 0.34rem;
 
       svg {
-        width: 16px;
-        height: 16px;
+        width: 17px;
+        height: 17px;
       }
     }
 

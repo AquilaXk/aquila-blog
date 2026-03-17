@@ -69,14 +69,15 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 5.7rem;
-    min-height: 32px;
-    padding: 0 0.38rem;
+    min-width: 5.9rem;
+    min-height: 36px;
+    padding: 0 0.44rem;
     border-radius: 0;
     border: 0;
     background: transparent;
     cursor: pointer;
     color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
     white-space: nowrap;
     transition:
       background-color 0.18s ease,

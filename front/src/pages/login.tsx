@@ -296,6 +296,12 @@ const SuccessText = styled.p`
 
 const FooterText = styled.p`
   margin: 0;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+  }
 `
 
 const SocialSection = styled.div`

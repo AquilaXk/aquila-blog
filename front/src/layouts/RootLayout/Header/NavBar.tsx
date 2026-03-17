@@ -22,6 +22,7 @@ const NavBar: React.FC = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const authState = authStatus === "authenticated" && me ? "authenticated" : authStatus
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
   const nextPath = useMemo(() => {
@@ -53,7 +54,7 @@ const NavBar: React.FC = () => {
           </li>
         ))}
       </ul>
-      <div className="authArea">
+      <div className="authArea" data-auth-state={authState}>
         {authStatus === "loading" && (
           <div className="authLoadingShell" aria-hidden="true">
             <span className="authSkeleton icon" />
@@ -113,7 +114,7 @@ export default NavBar
 const StyledWrapper = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.42rem;
+  gap: 0.46rem;
   flex-shrink: 0;
 
   .primaryLinks {
@@ -133,13 +134,13 @@ const StyledWrapper = styled.div`
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 32px;
-      padding: 0 0.42rem;
+      min-height: 36px;
+      padding: 0 0.46rem;
       border-radius: 8px;
       border: none;
       background: transparent;
       color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.86rem;
+      font-size: 0.87rem;
       font-weight: 620;
       line-height: 1;
 
@@ -153,14 +154,17 @@ const StyledWrapper = styled.div`
   }
 
   .authArea {
+    --auth-area-width: 19rem;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.36rem;
-    min-width: 0;
-    min-height: 32px;
+    gap: 0.42rem;
+    width: var(--auth-area-width);
+    min-width: var(--auth-area-width);
+    max-width: var(--auth-area-width);
+    min-height: 36px;
     flex: none;
-    width: auto;
+    overflow: hidden;
 
     > * {
       flex-shrink: 0;
@@ -172,7 +176,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: flex-end;
     gap: 0.45rem;
-    width: auto;
+    width: 100%;
   }
 
   .navPill,
@@ -181,15 +185,16 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: center;
     min-width: 0;
-    height: 32px;
-    padding: 0 0.42rem;
+    min-height: 36px;
+    padding: 0 0.46rem;
     border-radius: 8px;
     border: none;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
+    font-size: 0.87rem;
     font-weight: 630;
     cursor: pointer;
+    line-height: 1;
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
@@ -225,7 +230,7 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.88rem;
     font-weight: 620;
-    max-width: 130px;
+    max-width: 104px;
     margin: 0 0.1rem;
     white-space: nowrap;
     overflow: hidden;
@@ -239,7 +244,24 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 980px) {
+    .authArea {
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      overflow: visible;
+    }
+
     .authNotice {
+      display: none;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .authArea {
+      gap: 0.32rem;
+    }
+
+    .identity {
       display: none;
     }
   }
@@ -249,25 +271,23 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 720px) {
-    gap: 0.38rem;
+    gap: 0.22rem;
 
     .primaryLinks {
+      gap: 0;
+
       a {
-        min-height: 28px;
-        min-width: 58px;
-        padding: 0 0.42rem;
-        font-size: 0.78rem;
+        min-height: 34px;
+        min-width: 52px;
+        padding: 0 0.34rem;
+        font-size: 0.82rem;
       }
     }
 
     .authArea {
       min-width: 0;
-      gap: 0.34rem;
+      gap: 0.26rem;
       width: auto;
-    }
-
-    .identity {
-      display: none;
     }
 
     .authNotice {
@@ -277,9 +297,9 @@ const StyledWrapper = styled.div`
     .navPill,
     .logoutBtn {
       min-width: 0;
-      height: 28px;
-      font-size: 0.78rem;
-      padding: 0 0.3rem;
+      min-height: 34px;
+      font-size: 0.82rem;
+      padding: 0 0.34rem;
     }
 
     .authSkeleton.short {

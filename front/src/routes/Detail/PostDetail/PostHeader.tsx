@@ -155,6 +155,8 @@ const StyledWrapper = styled.header`
     font-weight: 780;
     color: ${({ theme }) => theme.colors.gray12};
     max-width: 18ch;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .metaRow {
@@ -196,6 +198,7 @@ const StyledWrapper = styled.header`
       color: ${({ theme }) => theme.colors.gray12};
       font-size: 1rem;
       font-weight: 700;
+      overflow-wrap: anywhere;
     }
   }
 
@@ -208,6 +211,7 @@ const StyledWrapper = styled.header`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.9rem;
     font-weight: 500;
+    min-width: 0;
   }
 
   .actions {

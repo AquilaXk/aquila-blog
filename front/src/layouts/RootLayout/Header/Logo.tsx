@@ -13,8 +13,10 @@ const Logo = () => {
 export default Logo
 
 const StyledWrapper = styled(Link)`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   min-width: 0;
+  min-height: 34px;
   color: ${({ theme }) => theme.colors.gray12};
   font-weight: 760;
   font-size: clamp(1.28rem, 1.04rem + 0.72vw, 1.72rem);

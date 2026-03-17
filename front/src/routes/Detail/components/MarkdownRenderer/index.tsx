@@ -819,6 +819,9 @@ export default MarkdownRenderer
 
 const StyledWrapper = styled.div`
   margin-top: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   word-break: break-word;
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.75;
@@ -983,6 +986,8 @@ const StyledWrapper = styled.div`
 
   .aq-code-block {
     margin: 1rem 0;
+    max-width: 100%;
+    min-width: 0;
     border-radius: 18px;
     overflow: hidden;
     border: 1px solid
@@ -1102,20 +1107,24 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-shell {
+    width: 100%;
+    max-width: 100%;
     display: block;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     position: relative;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
   }
 
   .aq-code-block .aq-code {
+    width: max-content;
     margin: 0;
     border: 0;
     border-radius: 0;
     box-shadow: none;
     padding: 1.1rem 1.25rem 3.8rem;
-    min-width: 0;
+    min-width: 100%;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#a9b7c6" : "#2f3747")};
@@ -1175,6 +1184,8 @@ const StyledWrapper = styled.div`
 
   figure[data-rehype-pretty-code-figure] {
     margin: 1rem 0;
+    max-width: 100%;
+    min-width: 0;
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -1184,7 +1195,9 @@ const StyledWrapper = styled.div`
 
   figure[data-rehype-pretty-code-figure] pre {
     margin: 0;
+    max-width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     padding: 1rem 1.05rem;
     background: transparent;
   }
@@ -1220,7 +1233,12 @@ const StyledWrapper = styled.div`
   .aq-mermaid {
     margin: 1rem 0;
     display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: normal;
     padding: 0.2rem 0;
     border: 0;
     border-radius: 0;
@@ -1229,14 +1247,14 @@ const StyledWrapper = styled.div`
   }
 
   .aq-mermaid-stage {
-    min-width: max-content;
-    width: fit-content;
+    width: max-content;
+    min-width: 100%;
   }
 
   .aq-mermaid-stage > svg {
     display: block;
-    width: auto;
-    max-width: none;
+    width: 100%;
+    max-width: 100%;
     height: auto;
     margin: 0;
     background: transparent;
@@ -1308,6 +1326,47 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 768px) {
+    font-size: 1.03rem;
+    line-height: 1.8;
+
+    h1 {
+      font-size: clamp(1.58rem, 7.2vw, 1.92rem);
+    }
+
+    h2 {
+      font-size: clamp(1.3rem, 5.9vw, 1.56rem);
+    }
+
+    h3 {
+      font-size: clamp(1.12rem, 4.9vw, 1.3rem);
+    }
+
+    p,
+    li {
+      font-size: 1.03rem;
+      line-height: 1.8;
+    }
+
+    .aq-code code,
+    pre code {
+      font-size: 0.96rem;
+      line-height: 1.74;
+    }
+
+    table {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    th,
+    td {
+      white-space: nowrap;
+      font-size: 0.95rem;
+    }
+
     .aq-code-toolbar {
       grid-template-columns: auto 1fr;
     }

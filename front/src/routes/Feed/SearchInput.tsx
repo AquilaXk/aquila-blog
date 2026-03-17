@@ -101,6 +101,7 @@ const StyledWrapper = styled.div`
   > .field > .mid {
     width: 100%;
     min-width: 0;
+    min-height: 34px;
     font-size: 0.95rem;
     line-height: 1.5;
     color: ${({ theme }) => theme.colors.gray12};

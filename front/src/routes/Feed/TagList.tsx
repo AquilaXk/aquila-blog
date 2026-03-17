@@ -179,6 +179,7 @@ const StyledWrapper = styled.div`
 
   .desktopList button {
     width: 100%;
+    min-height: 34px;
     min-width: 0;
     border: 0;
     background: transparent;
@@ -282,10 +283,11 @@ const StyledWrapper = styled.div`
     gap: 0.28rem;
     text-align: left;
     white-space: nowrap;
+    min-height: 34px;
     border-radius: 999px;
     border: none;
     background: ${({ theme }) => theme.colors.gray1};
-    padding: 0.33rem 0.8rem;
+    padding: 0.42rem 0.84rem;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
     cursor: pointer;

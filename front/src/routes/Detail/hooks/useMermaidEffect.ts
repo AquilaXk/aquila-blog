@@ -173,9 +173,19 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         }
 
         const renderSourceIntoBlock = async (sourceToRender: string) => {
+          const viewportWidth = Math.max(280, Math.floor(window.innerWidth - 24))
+          const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
+          const desktopTargetWidth = Math.max(360, Math.floor(rect.width))
+          const mobileTargetWidth = Math.max(
+            320,
+            Math.min(desktopTargetWidth, Math.floor(viewportWidth * 1.6))
+          )
+          const stageMinWidth = isMobileViewport ? mobileTargetWidth : desktopTargetWidth
+
           const stage = document.createElement("div")
           stage.className = "aq-mermaid-stage mermaid"
-          stage.style.minWidth = `${Math.max(320, Math.floor(rect.width))}px`
+          stage.style.minWidth = `${stageMinWidth}px`
+          stage.style.width = "100%"
           block.innerHTML = ""
           block.appendChild(stage)
 

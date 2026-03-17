@@ -1,0 +1,20 @@
+name: "🎨 Style"
+description: "코드 포맷팅, 세미콜론 누락 등 스타일 관련 이슈"
+labels: ["cleanup"]
+body:
+  - type: textarea
+    attributes:
+      label: 🔍 상세 설명 (Detail)
+      description: 포맷팅, 코드 스타일, 세미콜론 누락 등의 문제를 설명해주세요.
+      placeholder: 예) 코드 정렬이 안 맞음, 들여쓰기 문제 등
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: ✅ 작업 항목 (Todo)
+      description: 수행해야 할 작업을 체크박스로 작성해주세요.
+      placeholder: |
+        - [ ] 코드 포맷팅 적용
+        - [ ] 세미콜론 추가
+        - [ ] 린트 오류 수정

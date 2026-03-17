@@ -519,6 +519,22 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         @WithUserDetails("admin")
+        fun `legacy version null 글도 삭제 요청이 성공한다`() {
+            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val post = postFacade.write(actor, "legacy-version-null-${System.currentTimeMillis()}", "내용", true, true)
+
+            jdbcTemplate.update("update post set version = null where id = ?", post.id)
+            entityManager.clear()
+
+            mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.msg") { value("${post.id}번 글이 삭제되었습니다.") }
+            }
+        }
+
+        @Test
+        @WithUserDetails("admin")
         fun `성공 - 관리자가 다른 사람 글 삭제`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             val post = postFacade.write(actor, "삭제될 글", "내용", true, true)

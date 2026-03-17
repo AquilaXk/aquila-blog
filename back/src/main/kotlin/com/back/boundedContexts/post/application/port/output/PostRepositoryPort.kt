@@ -50,6 +50,8 @@ interface PostRepositoryPort {
 
     fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto?
 
+    fun softDeleteById(id: Int): Boolean
+
     fun restoreDeletedById(id: Int): Boolean
 
     fun hardDeleteDeletedById(id: Int): Boolean

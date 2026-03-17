@@ -274,8 +274,10 @@ class PostApplicationService(
     ) {
         val deletedPostContent = post.content
 
-        post.softDelete()
-        postRepository.flush()
+        val softDeleted = postRepository.softDeleteById(post.id)
+        if (!softDeleted) {
+            throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
+        }
         clearExploreCaches()
 
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.

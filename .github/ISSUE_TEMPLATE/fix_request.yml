@@ -1,0 +1,29 @@
+name: "🐞 Fix"
+description: "버그 수정 이슈 발행 템플릿"
+labels: ["bug"]
+body:
+  - type: input
+    attributes:
+      label: 📂 이슈 분류 (Group)
+      description: 이슈가 속하는 그룹이나 기능 영역을 입력해주세요.
+      placeholder: 예) 로그인, 결제, 알림 등
+
+  - type: textarea
+    attributes:
+      label: 🐛 상세 설명 (Detail)
+      description: 버그에 대한 구체적인 설명을 작성해주세요.
+      placeholder: 재현 방법, 기대 동작 등을 포함해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: ✅ 작업할 항목 (Todo)
+      description: 수행해야 할 작업을 체크박스로 작성해주세요.
+      placeholder: |
+        - [ ] 버그 재현
+        - [ ] 원인 분석
+        - [ ] 수정
+        - [ ] 테스트
+    validations:
+      required: false

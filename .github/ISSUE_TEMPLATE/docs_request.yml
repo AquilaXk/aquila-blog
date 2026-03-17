@@ -1,0 +1,21 @@
+name: "📄 Docs"
+description: "문서 작업 이슈"
+labels: ["documentation"]
+body:
+- type: textarea
+  attributes:
+  label: 📝 문서 작업 설명
+  description: 어떤 문서를 수정하거나 추가할지 상세히 작성해 주세요.
+  placeholder: 예) README 업데이트, API 문서 추가 등
+  validations:
+  required: true
+
+- type: textarea
+  attributes:
+  label: ✅ 작업할 항목 (Todo)
+  description: 해야 할 일을 체크리스트 형태로 작성해 주세요.
+  placeholder: |
+    - [ ] A 문서 수정
+    - [ ] B 문서 추가
+  validations:
+  required: true

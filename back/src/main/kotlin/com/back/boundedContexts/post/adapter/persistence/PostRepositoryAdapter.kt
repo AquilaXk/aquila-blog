@@ -56,6 +56,8 @@ class PostRepositoryAdapter(
 
     override fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto? = postDeletedQueryRepository.findDeletedSnapshotById(id)
 
+    override fun softDeleteById(id: Int): Boolean = postDeletedQueryRepository.softDeleteById(id)
+
     override fun restoreDeletedById(id: Int): Boolean = postDeletedQueryRepository.restoreDeletedById(id)
 
     override fun hardDeleteDeletedById(id: Int): Boolean = postDeletedQueryRepository.hardDeleteDeletedById(id)

@@ -1,0 +1,27 @@
+name: "♻️ Refactor"
+description: "리팩터링 이슈 발행 템플릿"
+labels: ["refactor"]
+body:
+  - type: input
+    attributes:
+      label: 📂 이슈 분류 (Group)
+      description: 리팩터링이 필요한 코드 영역이나 모듈을 입력해주세요.
+      placeholder: 예) 유저 서비스, 리뷰 도메인 등
+
+  - type: textarea
+    attributes:
+      label: 🔍 상세 설명 (Detail)
+      description: 리팩터링이 필요한 이유나 현재 문제점 등을 작성해주세요.
+      placeholder: 예) 코드 중복 제거, 가독성 향상, 책임 분리 등
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: ✅ 작업 항목 (Todo)
+      description: 수행해야 할 작업들을 체크박스로 작성해주세요.
+      placeholder: |
+        - [ ] 리팩터링 대상 파악
+        - [ ] 구조 변경
+        - [ ] 테스트 코드 수정
+        - [ ] 기능 영향도 검토

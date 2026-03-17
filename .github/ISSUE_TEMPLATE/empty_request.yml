@@ -1,0 +1,26 @@
+name: "🌀 Empty"
+description: "bug, feature 이외 이슈에 사용하는 템플릿"
+body:
+  - type: input
+    attributes:
+      label: 📂 이슈 분류 (Group)
+      description: 이슈가 속하는 그룹이나 분류를 작성해주세요.
+      placeholder: 예) Refactor, Infra 등
+
+  - type: textarea
+    attributes:
+      label: 🧾 상세 설명 (Detail)
+      description: 이슈에 대한 상세한 설명을 작성해주세요.
+      placeholder: 자세히 작성해 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: ✅ 작업할 항목 (Todo)
+      description: 작업해야 할 내용을 체크리스트로 작성해 주세요.
+      placeholder: |
+        - [ ] 항목 1
+        - [ ] 항목 2
+    validations:
+      required: false

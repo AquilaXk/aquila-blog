@@ -12,7 +12,6 @@ import com.back.boundedContexts.post.domain.POSTS_COUNT
 import com.back.boundedContexts.post.domain.Post
 import com.back.global.event.application.EventPublisher
 import com.back.global.storage.application.UploadedFileRetentionService
-import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
@@ -86,12 +85,13 @@ class PostApplicationServiceDeleteResilienceTest {
             .willThrow(RuntimeException("counter update failure"))
         given(postRepository.countByAuthor(author)).willThrow(RuntimeException("counter reconcile failure"))
         given(memberAttrRepository.findBySubjectAndName(author, POSTS_COUNT)).willReturn(null)
+        given(postRepository.softDeleteById(post.id)).willReturn(true)
 
         assertDoesNotThrow {
             service.delete(post, actor)
         }
 
-        assertThat(post.deletedAt).isNotNull()
+        then(postRepository).should().softDeleteById(post.id)
         then(memberAttrRepository).should().incrementIntValue(author, POSTS_COUNT, -1)
         then(postRepository).should().countByAuthor(author)
     }

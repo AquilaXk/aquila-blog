@@ -1,0 +1,21 @@
+name: "🔧 Chore"
+description: "빌드 업무 수정 등 기타 작업 요청"
+labels: ["chore"]
+body:
+  - type: textarea
+    attributes:
+      label: 📄 이슈 설명
+      description: 어떤 작업이 필요한지 상세히 작성해 주세요.
+      placeholder: 예) 빌드 설정 변경, 린트 규칙 수정 등
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 🛠 작업할 항목 (Todo)
+      description: 해야 할 일을 체크리스트 형태로 작성해 주세요.
+      placeholder: |
+        - [ ] A 작업
+        - [ ] B 작업
+    validations:
+      required: true

@@ -202,6 +202,33 @@ get_caddy_ip() {
   compose exec -T caddy sh -lc "getent hosts ${host} | awk 'NR==1{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
 }
 
+get_caddy_ips() {
+  local host="$1"
+  compose exec -T caddy sh -lc "getent hosts ${host} | awk '{print \$1}' | sort -u" 2>/dev/null | tr -d '\r'
+}
+
+has_single_caddy_ip() {
+  local host="$1"
+  local ips
+  ips="$(get_caddy_ips "${host}")"
+  local count
+  count="$(echo "${ips}" | sed '/^$/d' | wc -l | tr -d ' ')"
+  [[ "${count}" == "1" ]]
+}
+
+backend_has_back_active_alias() {
+  local backend="$1"
+  local cid
+  cid="$(backend_container_id "${backend}")"
+  if [[ -z "${cid}" ]]; then
+    return 1
+  fi
+
+  docker inspect \
+    --format '{{range $k,$v := .NetworkSettings.Networks}}{{if eq $k "'"${NETWORK_NAME}"'"}}{{range $v.Aliases}}{{println .}}{{end}}{{end}}{{end}}' \
+    "${cid}" 2>/dev/null | grep -qx "back_active"
+}
+
 ensure_caddyfile_back_active() {
   local tmp_file
   tmp_file="$(mktemp)"
@@ -356,10 +383,20 @@ switch_active_alias() {
   connect_backend_network "${target}" "true"
 
   if ! connect_backend_network "${other}" "false"; then
-    echo "warning: failed to refresh aliases for ${other}; continuing with target=${target}" >&2
+    echo "failed to refresh aliases for ${other}" >&2
+    return 1
   fi
 
-  if ! resolve_in_caddy "back_active"; then
+  if ! backend_has_back_active_alias "${target}"; then
+    echo "back_active alias missing on target backend: ${target}" >&2
+    return 1
+  fi
+  if backend_has_back_active_alias "${other}"; then
+    echo "back_active alias still attached to non-target backend: ${other}" >&2
+    return 1
+  fi
+
+  if ! resolve_in_caddy "back_active" || ! has_single_caddy_ip "back_active"; then
     echo "caddy dns resolve failed: back_active" >&2
     return 1
   fi
@@ -391,16 +428,34 @@ verify_caddy_route() {
 
   local attempt=1
   while [[ "${attempt}" -le 20 ]]; do
+    if ! has_single_caddy_ip "back_active"; then
+      local active_ips
+      active_ips="$(get_caddy_ips "back_active" | tr '\n' ',' | sed 's/,$//')"
+      echo "caddy alias pending: back_active resolves to multiple ips [${active_ips:-none}] (try ${attempt}/20)"
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
     local active_ip
     active_ip="$(get_caddy_ip "back_active")"
     if [[ -n "${active_ip}" && "${active_ip}" == "${expected_ip}" ]]; then
-      local code
-      code="$(probe_caddy_http_code "${api_domain}")"
-      if is_healthy_http_code "${code}"; then
-        echo "caddy route verify ok: ${expected_backend} (status=${code})"
+      local codes=()
+      local all_healthy="true"
+      for _ in 1 2 3; do
+        local code
+        code="$(probe_caddy_http_code "${api_domain}")"
+        codes+=("${code:-none}")
+        if ! is_healthy_http_code "${code}"; then
+          all_healthy="false"
+        fi
+      done
+
+      if [[ "${all_healthy}" == "true" ]]; then
+        echo "caddy route verify ok: ${expected_backend} (status=${codes[*]})"
         return 0
       fi
-      echo "caddy route pending: status=${code:-none} (try ${attempt}/20)"
+      echo "caddy route pending: status=${codes[*]} (try ${attempt}/20)"
     else
       echo "caddy alias pending: active=${active_ip:-none}, expected=${expected_ip} (try ${attempt}/20)"
     fi

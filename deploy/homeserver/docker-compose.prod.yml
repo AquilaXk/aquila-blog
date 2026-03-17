@@ -37,6 +37,9 @@ services:
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       DEPLOY_COLOR: blue
+      # 운영에서 .env 오버라이드가 있더라도 schema guard는 고정 경로만 사용한다.
+      SPRING_SQL_INIT_MODE: always
+      SPRING_SQL_INIT_SCHEMA_LOCATIONS: classpath:db/guard/prod-schema-guard.sql
     depends_on:
       - db_1
       - redis_1
@@ -56,6 +59,9 @@ services:
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       DEPLOY_COLOR: green
+      # 운영에서 .env 오버라이드가 있더라도 schema guard는 고정 경로만 사용한다.
+      SPRING_SQL_INIT_MODE: always
+      SPRING_SQL_INIT_SCHEMA_LOCATIONS: classpath:db/guard/prod-schema-guard.sql
     depends_on:
       - db_1
       - redis_1

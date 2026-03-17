@@ -3403,30 +3403,6 @@ const ActionCluster = styled.div`
   gap: 0.55rem;
 `
 
-const HeroActionButton = styled(Button)`
-  border: 0;
-  border-radius: 10px;
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-weight: 650;
-  padding: 0.6rem 0.92rem;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.gray4};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-`
-
-const HeroPrimaryActionButton = styled(HeroActionButton)`
-  background: ${({ theme }) => theme.colors.blue9};
-  color: #ffffff;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.blue10};
-    color: #ffffff;
-  }
-`
-
 const WorkspaceGrid = styled.div`
   display: block;
 `
@@ -3846,6 +3822,30 @@ const PrimaryButton = styled(Button)`
   background: ${({ theme }) => theme.colors.blue9};
   color: #fff;
   font-weight: 700;
+`
+
+const HeroActionButton = styled(Button)`
+  border: 0;
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-weight: 650;
+  padding: 0.6rem 0.92rem;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.gray4};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+`
+
+const HeroPrimaryActionButton = styled(HeroActionButton)`
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #ffffff;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.blue10};
+    color: #ffffff;
+  }
 `
 
 const VisibilityWrap = styled.div`

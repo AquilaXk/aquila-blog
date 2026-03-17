@@ -48,6 +48,11 @@ test.describe("live production e2e", () => {
     await page.goto("/admin/posts/new")
     await expect(page.getByRole("heading", { name: "글 작업실" })).toBeVisible()
     await expect(page.getByPlaceholder("제목을 입력하세요")).toBeVisible()
+    const contentEditor = page.getByPlaceholder("당신의 이야기를 적어보세요...")
+    await contentEditor.fill("```mermaid\ngraph TD\n  A[요청] --> B[완료]\n```")
+    await expect
+      .poll(async () => await page.locator(".aq-mermaid-stage svg").count(), { timeout: 20_000 })
+      .toBeGreaterThan(0)
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)

@@ -7,7 +7,6 @@ jobs:
   front-verify:
     runs-on: ubuntu-latest
     env:
-      PLAYWRIGHT_USE_WEBSERVER: "false"
       BUNDLE_BUDGET_KB: "480"
       CLS_BUDGET: "0.1"
     steps:

@@ -272,19 +272,19 @@ class PostApplicationService(
         post: Post,
         actor: Member,
     ) {
-        hydratePostAttrs(post)
         val deletedPostContent = post.content
 
         post.softDelete()
+        postRepository.flush()
         clearExploreCaches()
 
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
-            decrementMemberPostsCount(post.author)
+            decrementMemberPostsCount(Member(post.author.id))
         }.onFailure { exception ->
             logger.warn("Failed to decrement member posts counter for member id={}", post.author.id, exception)
             runCatching {
-                reconcileMemberPostsCount(post.author)
+                reconcileMemberPostsCount(Member(post.author.id))
             }.onFailure { reconcileException ->
                 logger.warn("Failed to reconcile member posts counter for member id={}", post.author.id, reconcileException)
             }
@@ -857,11 +857,7 @@ class PostApplicationService(
 
     private fun incrementMemberPostsCount(member: Member) {
         val updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT)
-        val refreshedAttr = member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)
-        refreshedAttr?.let {
-            it.intValue = updatedCount
-            member.postsCountAttr = it
-        }
+        member.postsCountAttr?.intValue = updatedCount
     }
 
     private fun decrementMemberPostsCount(member: Member) {
@@ -869,11 +865,7 @@ class PostApplicationService(
         if (updatedCount < 0) {
             updatedCount = memberAttrRepository.incrementIntValue(member, POSTS_COUNT, -updatedCount)
         }
-        val refreshedAttr = member.postsCountAttr ?: memberAttrRepository.findBySubjectAndName(member, POSTS_COUNT)
-        refreshedAttr?.let {
-            it.intValue = updatedCount
-            member.postsCountAttr = it
-        }
+        member.postsCountAttr?.intValue = updatedCount
     }
 
     private fun reconcileMemberPostsCount(member: Member) {

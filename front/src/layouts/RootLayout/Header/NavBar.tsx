@@ -147,11 +147,10 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.55rem;
-    min-width: 232px;
+    min-width: 0;
     min-height: 32px;
-    contain: layout;
   }
 
   .navPill,
@@ -185,7 +184,7 @@ const StyledWrapper = styled.div`
   }
 
   .authSkeleton.short {
-    width: 232px;
+    width: 80px;
   }
 
   .authSkeleton.medium {
@@ -226,7 +225,7 @@ const StyledWrapper = styled.div`
     }
 
     .authArea {
-      min-width: 118px;
+      min-width: 0;
       gap: 0.4rem;
     }
 
@@ -246,7 +245,7 @@ const StyledWrapper = styled.div`
     }
 
     .authSkeleton.short {
-      width: 118px;
+      width: 64px;
       height: 28px;
     }
   }

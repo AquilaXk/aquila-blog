@@ -120,10 +120,26 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let observer: IntersectionObserver | null = null
     const retryTimers = new Set<number>()
 
+    const stripRiskyFlowchartDirectives = (source: string) =>
+      source
+        .split("\n")
+        .filter((line) => !/^\s*(style|linkStyle|classDef)\b/i.test(line))
+        .join("\n")
+
+    const isNegativeRectWidthError = (error: unknown) => {
+      const message = String(error)
+      return message.includes("attribute width") && message.includes("negative value")
+    }
+
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
         root.querySelectorAll<HTMLElement>(
-          "pre > code.language-mermaid, pre.aq-mermaid > code.language-mermaid"
+          [
+            "pre > code.language-mermaid",
+            "pre.aq-mermaid > code.language-mermaid",
+            "pre > code[data-language='mermaid']",
+            "pre[data-language='mermaid'] > code",
+          ].join(", ")
         )
       )
       if (!codeBlocks.length) return
@@ -182,7 +198,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
         try {
           const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
-          const svg = (await mermaid.render(id, source)).svg
+          let svg = (await mermaid.render(id, source)).svg
+          let usedSource = source
           if (disposed) return
 
           const parser = new DOMParser()
@@ -216,19 +233,45 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
           const wrappedSvg = `<div class="aq-mermaid-stage">${renderedSvg.outerHTML}</div>`
 
-          block.dataset.mermaidSource = source
+          block.dataset.mermaidSource = usedSource
           block.dataset.mermaidTheme = theme
           block.dataset.mermaidRendered = "true"
           block.dataset.mermaidRetryCount = "0"
           block.innerHTML = wrappedSvg
         } catch (error) {
-          const message = String(error)
-          const isNegativeRectWidthError =
-            message.includes("attribute width") &&
-            message.includes("negative value")
-          if (isNegativeRectWidthError) {
-            scheduleRetry(i, block)
-            return
+          if (isNegativeRectWidthError(error)) {
+            const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
+
+            if (retryCount >= 4) {
+              const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
+              if (fallbackSource && fallbackSource !== source) {
+                try {
+                  const fallbackId = `mermaid-fallback-${i}-${Math.random().toString(36).slice(2)}`
+                  const fallbackSvg = (await mermaid.render(fallbackId, fallbackSource)).svg
+                  if (disposed) return
+
+                  const parser = new DOMParser()
+                  const fallbackDocument = parser.parseFromString(fallbackSvg, "text/html")
+                  const fallbackRenderedSvg = fallbackDocument.querySelector("svg")
+                  if (fallbackRenderedSvg) {
+                    fallbackRenderedSvg.setAttribute("preserveAspectRatio", "xMidYMin meet")
+                    fallbackRenderedSvg.removeAttribute("width")
+                    fallbackRenderedSvg.removeAttribute("height")
+                    block.innerHTML = `<div class="aq-mermaid-stage">${fallbackRenderedSvg.outerHTML}</div>`
+                    block.dataset.mermaidSource = fallbackSource
+                    block.dataset.mermaidTheme = theme
+                    block.dataset.mermaidRendered = "true"
+                    block.dataset.mermaidRetryCount = "0"
+                    return
+                  }
+                } catch (fallbackError) {
+                  console.warn("[mermaid] fallback render failed", fallbackError)
+                }
+              }
+            } else {
+              scheduleRetry(i, block)
+              return
+            }
           }
 
           const escapedSource = source
@@ -271,6 +314,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       }
 
       if ("IntersectionObserver" in window) {
+        const viewportHeight = window.innerHeight || 0
         observer = new IntersectionObserver(
           (entries) => {
             entries.forEach((entry) => {
@@ -297,6 +341,14 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           if (!block) return
           block.dataset.mermaidIndex = String(index)
           observer?.observe(block)
+
+          // 일부 브라우저/레이아웃 조합에서 초기 Intersection callback 이 누락되는 경우가 있어,
+          // 최초 1회는 viewport 인접 블록을 즉시 렌더 큐에 올린다.
+          const rect = block.getBoundingClientRect()
+          const isNearViewport = rect.bottom >= -320 && rect.top <= viewportHeight + 320
+          if (isNearViewport) {
+            enqueueRender(index)
+          }
         })
         return
       }

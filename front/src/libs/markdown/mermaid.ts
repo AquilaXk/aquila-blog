@@ -1,7 +1,22 @@
 const normalizeLineEndings = (raw: string) => raw.replace(/\r\n?/g, "\n")
 
-const ESCAPED_MERMAID_FENCE_START_REGEX = /^\s*\\`{3,}\s*mermaid\s*$/i
-const ESCAPED_FENCE_END_REGEX = /^\s*\\`{3,}\s*$/
+const normalizeFenceChars = (raw: string) => raw.replace(/[｀´ˋ]/g, "`")
+
+const parseFenceLine = (rawLine: string) => {
+  const normalized = normalizeFenceChars(rawLine).trim()
+  const unescaped = normalized.startsWith("\\") ? normalized.slice(1).trimStart() : normalized
+  const match = unescaped.match(/^([`~]{3,})(.*)$/)
+  if (!match) return null
+
+  const fence = match[1]
+  const marker = fence[0]
+  if (!fence.split("").every((char) => char === marker)) return null
+
+  return {
+    marker,
+    tail: (match[2] || "").trim(),
+  }
+}
 
 export const normalizeEscapedMermaidFences = (raw: string): string => {
   if (!raw) return raw
@@ -12,8 +27,13 @@ export const normalizeEscapedMermaidFences = (raw: string): string => {
   let index = 0
   while (index < lines.length) {
     const line = lines[index]
+    const parsedStartFence = parseFenceLine(line)
+    const isMermaidFenceStart =
+      parsedStartFence &&
+      parsedStartFence.tail.length > 0 &&
+      parsedStartFence.tail.toLowerCase() === "mermaid"
 
-    if (!ESCAPED_MERMAID_FENCE_START_REGEX.test(line.trim())) {
+    if (!isMermaidFenceStart) {
       normalized.push(line)
       index += 1
       continue
@@ -24,7 +44,8 @@ export const normalizeEscapedMermaidFences = (raw: string): string => {
 
     while (index < lines.length) {
       const current = lines[index]
-      if (ESCAPED_FENCE_END_REGEX.test(current.trim())) {
+      const parsedEndFence = parseFenceLine(current)
+      if (parsedEndFence && parsedEndFence.tail.length === 0) {
         normalized.push("```")
         index += 1
         break

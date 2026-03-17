@@ -3302,7 +3302,11 @@ const HeroIntro = styled.div`
   h1 {
     margin: 0;
     font-size: clamp(1.74rem, 2.7vw, 2.3rem);
-    letter-spacing: -0.03em;
+    line-height: 1.14;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    word-break: keep-all;
+    text-wrap: balance;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -3323,7 +3327,8 @@ const HeroEyebrow = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  line-height: 1;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 `
 

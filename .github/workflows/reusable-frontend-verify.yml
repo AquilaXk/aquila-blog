@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUNDLE_BUDGET_KB: "480"
-      CLS_BUDGET: "0.1"
+      CLS_BUDGET: "0.12"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

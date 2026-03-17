@@ -123,7 +123,6 @@ const PostHeader: React.FC<Props> = ({
         </div>
       )}
 
-      <div className="divider" />
     </StyledWrapper>
   )
 }
@@ -326,11 +325,6 @@ const StyledWrapper = styled.header`
     padding-bottom: 52%;
   }
 
-  .divider {
-    margin-top: 2rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  }
-
   @media (max-width: 768px) {
     .taxonomyRow {
       margin-bottom: 0.8rem;
@@ -361,8 +355,5 @@ const StyledWrapper = styled.header`
       font-size: 0.86rem;
     }
 
-    .divider {
-      margin-top: 1.5rem;
-    }
   }
 `

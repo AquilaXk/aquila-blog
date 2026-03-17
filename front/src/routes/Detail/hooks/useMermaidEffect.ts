@@ -5,8 +5,6 @@ import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 const MERMAID_SOURCE_PATTERN =
   /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
 
-const MERMAID_EDGE_PATTERN = /-->|==>|-.->|:::|subgraph\b|classDef\b|style\b/i
-
 const isMermaidSource = (rawCode: string) => {
   const normalized = rawCode.trim()
   if (!normalized) return false
@@ -19,9 +17,7 @@ const isMermaidSource = (rawCode: string) => {
   if (!lines.length) return false
 
   const firstLine = lines[0].replace(/^\d+\s+/, "")
-  if (MERMAID_SOURCE_PATTERN.test(firstLine)) return true
-
-  return MERMAID_EDGE_PATTERN.test(body)
+  return MERMAID_SOURCE_PATTERN.test(firstLine)
 }
 
 const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string) => {
@@ -90,6 +86,16 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
       const mermaid = (await import("mermaid")).default
       const theme = scheme === "dark" ? "dark" : "neutral"
+
+      // Mermaid 기본 parseError 핸들러가 브라우저 알림을 띄우는 환경이 있어
+      // 렌더 에러를 훅 내부 catch 경로로 모아 조용히 처리한다.
+      ;(
+        mermaid as unknown as {
+          parseError?: (error: unknown, hash: unknown) => void
+        }
+      ).parseError = (error) => {
+        throw new Error(String(error))
+      }
 
       mermaid.initialize({
         startOnLoad: false,

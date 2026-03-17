@@ -62,14 +62,14 @@ class Rq(
         val cookieDomain = AppFacade.siteCookieDomain.trim()
         val cookie =
             Cookie(name, value ?: "").apply {
-                path = "/"
-                isHttpOnly = true
+                setPath("/")
+                setHttpOnly(true)
                 if (cookieDomain.isNotBlank()) {
-                    domain = cookieDomain
+                    setDomain(cookieDomain)
                 }
-                secure = true
+                setSecure(true)
                 setAttribute("SameSite", "Strict")
-                maxAge = if (value.isNullOrBlank()) 0 else maxAgeSeconds.coerceAtLeast(1)
+                setMaxAge(if (value.isNullOrBlank()) 0 else maxAgeSeconds.coerceAtLeast(1))
             }
 
         resp.addCookie(cookie)

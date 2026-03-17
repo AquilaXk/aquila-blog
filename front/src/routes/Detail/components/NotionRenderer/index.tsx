@@ -3,7 +3,11 @@ import { FC, ReactElement, ReactNode, isValidElement, useEffect, useMemo, useRef
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import AppIcon from "src/components/icons/AppIcon"
-import { normalizeEscapedMarkdownFences, normalizeEscapedMermaidFences } from "src/libs/markdown/mermaid"
+import {
+  extractNormalizedMermaidSource,
+  normalizeEscapedMarkdownFences,
+  normalizeEscapedMermaidFences,
+} from "src/libs/markdown/mermaid"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
 import useInlineColorEffect from "./useInlineColorEffect"
 import usePrismEffect from "./usePrismEffect"
@@ -203,11 +207,7 @@ const extractPlainTextFromHtml = (rawHtml: string) =>
   )
 
 const extractMermaidSource = (rawCode: string) => {
-  const normalized = normalizeEscapedMarkdownFences(extractPlainTextFromHtml(rawCode)).trim()
-  if (!normalized) return ""
-
-  const fencedMatch = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
-  return (fencedMatch?.[1] || normalized).trim()
+  return extractNormalizedMermaidSource(extractPlainTextFromHtml(rawCode))
 }
 
 const isMermaidSource = (rawCode: string) => {
@@ -627,11 +627,12 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
         },
         pre({ children, className, ...props }) {
           const { language, rawCode } = extractCodeMetaFromPreChildren(children)
+          const mermaidSource = extractNormalizedMermaidSource(rawCode)
 
           if (language === "mermaid" || isMermaidSource(rawCode)) {
             return (
-              <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={rawCode}>
-                <code className="language-mermaid">{rawCode}</code>
+              <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={mermaidSource || rawCode}>
+                <code className="language-mermaid">{mermaidSource || rawCode}</code>
               </pre>
             )
           }

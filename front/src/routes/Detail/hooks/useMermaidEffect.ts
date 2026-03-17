@@ -1,6 +1,6 @@
 import { RefObject, useEffect } from "react"
 import useScheme from "src/hooks/useScheme"
-import { normalizeEscapedMarkdownFences } from "src/libs/markdown/mermaid"
+import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 
 const MERMAID_SOURCE_PATTERN =
   /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
@@ -50,7 +50,7 @@ const isMermaidSource = (rawCode: string) => {
   const normalized = rawCode.trim()
   if (!normalized) return false
 
-  const fenced = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
+  const fenced = normalized.match(/^[`~]{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n[`~]{3,}\s*$/i)
   const body = (fenced?.[1] || normalized).trim()
   if (!body) return false
 
@@ -224,11 +224,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       }
 
       const normalizeMermaidSource = (raw: string) => {
-        const normalized = normalizeEscapedMarkdownFences(raw).trim()
-        if (!normalized) return ""
-
-        const fenced = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
-        return (fenced?.[1] || normalized).trim()
+        return extractNormalizedMermaidSource(raw)
       }
 
       const renderSingleBlock = async (i: number) => {
@@ -386,44 +382,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         observer = null
       }
 
-      if ("IntersectionObserver" in window) {
-        const viewportHeight = window.innerHeight || 0
-        observer = new IntersectionObserver(
-          (entries) => {
-            entries.forEach((entry) => {
-              if (!entry.isIntersecting) return
-              const block = entry.target as HTMLElement
-              const rect = block.getBoundingClientRect()
-              if (rect.width <= 16 || rect.height <= 8) return
-              observer?.unobserve(block)
-              const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
-              if (!Number.isFinite(index)) return
-              enqueueRender(index)
-            })
-          },
-          {
-            root: null,
-            // 화면 진입 전 미리 렌더링해 스크롤 진입 시 체감 지연을 줄인다.
-            rootMargin: "320px 0px 320px 0px",
-            threshold: 0.01,
-          }
-        )
-
-        blocks.forEach((block, index) => {
-          block.dataset.mermaidIndex = String(index)
-          observer?.observe(block)
-
-          // 일부 브라우저/레이아웃 조합에서 초기 Intersection callback 이 누락되는 경우가 있어,
-          // 최초 1회는 viewport 인접 블록을 즉시 렌더 큐에 올린다.
-          const rect = block.getBoundingClientRect()
-          const isNearViewport = rect.bottom >= -320 && rect.top <= viewportHeight + 320
-          if (isNearViewport) {
-            enqueueRender(index)
-          }
-        })
-        return
-      }
-
+      // 미리보기/상세에서 "가끔 안 나옴"을 제거하기 위해 viewport 관찰 의존을 없애고 즉시 렌더한다.
+      // 다이어그램 수가 많은 글에서도 renderQueue(직렬)로 스파이크를 제어한다.
       for (let i = 0; i < blocks.length; i += 1) {
         enqueueRender(i)
       }

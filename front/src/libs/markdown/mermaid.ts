@@ -23,6 +23,36 @@ const parseFenceLine = (rawLine: string) => {
   }
 }
 
+const extractFirstFencedMermaidSource = (normalized: string) => {
+  const lines = normalized.split("\n")
+  let startIndex = -1
+  let fenceMarker: string | null = null
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const parsed = parseFenceLine(lines[index])
+    if (!parsed) continue
+    if (parsed.tail.toLowerCase() !== "mermaid") continue
+
+    startIndex = index
+    fenceMarker = parsed.marker
+    break
+  }
+
+  if (startIndex < 0 || !fenceMarker) return ""
+
+  const body: string[] = []
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const parsed = parseFenceLine(lines[index])
+    if (parsed && parsed.marker === fenceMarker) {
+      return body.join("\n").trim()
+    }
+    body.push(lines[index])
+  }
+
+  // 닫힘 fence 누락 시에도 가능한 범위까지 본문을 반환해 렌더 경로를 유지한다.
+  return body.join("\n").trim()
+}
+
 export const normalizeEscapedMermaidFences = (raw: string): string => {
   if (!raw) return raw
 
@@ -63,8 +93,6 @@ export const normalizeEscapedMermaidFences = (raw: string): string => {
   return normalized.join("\n")
 }
 
-const CLOSE_FENCE_SUFFIX_PATTERN = /^[0-9]+[.)]?$|^[-*+]$/
-
 // IME/키보드 오타로 깨진 일반 fenced code block까지 렌더 단계에서 복구한다.
 // 예: "```4" -> "```" + "4"
 export const normalizeEscapedMarkdownFences = (raw: string): string => {
@@ -102,14 +130,12 @@ export const normalizeEscapedMarkdownFences = (raw: string): string => {
       continue
     }
 
-    if (CLOSE_FENCE_SUFFIX_PATTERN.test(parsed.tail)) {
-      normalized.push(activeFenceMarker.repeat(3))
-      normalized.push(parsed.tail)
-      activeFenceMarker = null
-      continue
-    }
-
-    normalized.push(line)
+    // fenced block 내부에서 같은 마커(```/~~~)로 시작한 라인은 닫힘 fence로 취급한다.
+    // 실사용에서 "```4", "``` )" 같은 IME 오입력이 자주 발생해 미리보기/상세 렌더가 깨진다.
+    // 닫힘 뒤 꼬리 텍스트는 다음 줄로 보존해 사용자 입력 손실을 막는다.
+    normalized.push(activeFenceMarker.repeat(3))
+    normalized.push(parsed.tail)
+    activeFenceMarker = null
   }
 
   // 닫힘 fence 누락으로 이후 문단 전체가 code block 되는 현상을 미리보기/상세에서 차단한다.
@@ -118,4 +144,14 @@ export const normalizeEscapedMarkdownFences = (raw: string): string => {
   }
 
   return normalizeEscapedMermaidFences(normalized.join("\n"))
+}
+
+export const extractNormalizedMermaidSource = (raw: string): string => {
+  const normalized = normalizeEscapedMarkdownFences(raw).trim()
+  if (!normalized) return ""
+
+  const fencedSource = extractFirstFencedMermaidSource(normalized)
+  if (fencedSource) return fencedSource
+
+  return normalized
 }

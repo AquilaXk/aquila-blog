@@ -443,6 +443,27 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const systemHealthFetchedAt = systemHealthQuery.dataUpdatedAt
     ? formatInstant(new Date(systemHealthQuery.dataUpdatedAt).toISOString())
     : "-"
+  const queueStatusLabel =
+    taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
+      ? "주의 필요"
+      : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
+        ? "실패 확인 필요"
+        : taskQueueDiagnostics
+          ? "정상"
+          : "미확인"
+  const cleanupStatusLabel = cleanupDiagnostics?.blockedBySafetyThreshold
+    ? "보류 상태"
+    : cleanupDiagnostics
+      ? "정상"
+      : "미확인"
+  const mailStatusLabel =
+    mailDiagnostics?.status === "READY"
+      ? "준비 완료"
+      : mailDiagnostics?.status === "CONNECTION_FAILED"
+        ? "연결 실패"
+        : mailDiagnostics?.status === "MISCONFIGURED"
+          ? "설정 누락"
+          : "미확인"
 
   const commentActions: Array<{
     key: string
@@ -615,6 +636,41 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </GuideCard>
         ))}
       </GuideGrid>
+
+      <OverviewCard>
+        <SectionTop>
+          <div>
+            <SectionEyebrow>Overview</SectionEyebrow>
+            <SectionTitleRow>
+              <SectionIcon aria-hidden="true">🧭</SectionIcon>
+              <h2>운영 상태 요약</h2>
+            </SectionTitleRow>
+            <SectionDescription>현재 상태를 먼저 확인하고, 필요한 진단만 바로 실행할 수 있도록 구성했습니다.</SectionDescription>
+          </div>
+        </SectionTop>
+        <OverviewGrid>
+          <OverviewItem>
+            <small>서버 상태</small>
+            <strong>{systemHealthStatus}</strong>
+            <span>{systemHealthFetchedAt}</span>
+          </OverviewItem>
+          <OverviewItem>
+            <small>메일 진단</small>
+            <strong>{mailStatusLabel}</strong>
+            <span>{mailDiagnostics?.checkedAt ? formatInstant(mailDiagnostics.checkedAt) : "-"}</span>
+          </OverviewItem>
+          <OverviewItem>
+            <small>Task Queue</small>
+            <strong>{queueStatusLabel}</strong>
+            <span>{queueHealthMessage}</span>
+          </OverviewItem>
+          <OverviewItem>
+            <small>파일 정리</small>
+            <strong>{cleanupStatusLabel}</strong>
+            <span>{cleanupHealthMessage}</span>
+          </OverviewItem>
+        </OverviewGrid>
+      </OverviewCard>
 
       <Grid>
         <SectionCard>
@@ -1093,7 +1149,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
 `
 
 const HeaderCard = styled.section`
@@ -1139,8 +1195,8 @@ const GuideCard = styled.article`
   align-items: start;
   gap: 0.8rem;
   border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   padding: 0.72rem 0.82rem;
 
   h3 {
@@ -1190,8 +1246,8 @@ const HeaderActions = styled.div`
 
 const BaseButton = styled.button`
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.72rem 1rem;
   font-size: 0.92rem;
@@ -1199,7 +1255,6 @@ const BaseButton = styled.button`
   cursor: pointer;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
     color: ${({ theme }) => theme.colors.gray12};
     background: ${({ theme }) => theme.colors.gray3};
   }
@@ -1207,16 +1262,19 @@ const BaseButton = styled.button`
   &:disabled {
     opacity: 1;
     cursor: not-allowed;
-    border-color: ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray10};
   }
 `
 
 const PrimaryButton = styled(BaseButton)`
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue11};
+  background: ${({ theme }) => theme.colors.blue9};
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.blue10};
+    color: #fff;
+  }
 `
 
 const NavLink = styled.a`
@@ -1224,8 +1282,8 @@ const NavLink = styled.a`
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
@@ -1240,9 +1298,9 @@ const Grid = styled.section`
 
 const SectionCard = styled.section`
   border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 0;
   background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.95rem;
+  padding: 1rem;
 `
 
 const SectionTop = styled.div`
@@ -1329,7 +1387,7 @@ const FieldLabel = styled.label`
 const Input = styled.input`
   width: 100%;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
@@ -1357,8 +1415,8 @@ const ActionCardGrid = styled.div`
 
 const ActionCardButton = styled.button`
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.8rem 0.88rem;
   text-align: left;
@@ -1372,7 +1430,6 @@ const ActionCardButton = styled.button`
 
   &:hover {
     transform: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
     box-shadow: none;
     background: ${({ theme }) => theme.colors.gray3};
   }
@@ -1385,13 +1442,11 @@ const ActionCardButton = styled.button`
   }
 
   &[data-tone="danger"] {
-    border-color: ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red2};
     color: ${({ theme }) => theme.colors.red11};
   }
 
   &[data-tone="write"] {
-    border-color: ${({ theme }) => theme.colors.green7};
     background: ${({ theme }) => theme.colors.green2};
     color: ${({ theme }) => theme.colors.green11};
   }
@@ -1472,8 +1527,8 @@ const MetaBox = styled.div`
   gap: 0.25rem;
   padding: 0.58rem 0.68rem;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
 
   small {
     color: ${({ theme }) => theme.colors.gray11};
@@ -1519,25 +1574,26 @@ const InlineNotice = styled.p`
   margin: 0 0 0.9rem;
   padding: 0.78rem 0.82rem;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  border: 0;
+  border-left: 3px solid ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.6;
 
   &[data-tone="warning"] {
-    border-color: ${({ theme }) => theme.colors.indigo8};
+    border-left-color: ${({ theme }) => theme.colors.indigo8};
     background: ${({ theme }) => theme.colors.indigo3};
     color: ${({ theme }) => theme.colors.indigo11};
   }
 
   &[data-tone="danger"] {
-    border-color: ${({ theme }) => theme.colors.red8};
+    border-left-color: ${({ theme }) => theme.colors.red8};
     background: ${({ theme }) => theme.colors.red3};
     color: ${({ theme }) => theme.colors.red11};
   }
 
   &[data-tone="success"] {
-    border-color: ${({ theme }) => theme.colors.green8};
+    border-left-color: ${({ theme }) => theme.colors.green8};
     background: ${({ theme }) => theme.colors.green3};
     color: ${({ theme }) => theme.colors.green11};
   }
@@ -1791,11 +1847,10 @@ const MonitoringFrame = styled.iframe`
 `
 
 const ConsoleCard = styled.section`
-  border-radius: 0;
+  border-radius: 12px;
   border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: transparent;
-  padding: 0.95rem 0;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 1rem;
 `
 
 const ConsoleHeader = styled.div`
@@ -1837,7 +1892,7 @@ const ConsoleStatus = styled.span`
 const ConsoleQuickActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.58rem;
+  gap: 0.5rem;
   margin: 0.28rem 0 0.88rem;
 `
 
@@ -1845,21 +1900,18 @@ const ConsoleQuickActionButton = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  min-height: 2.85rem;
-  flex: 1 1 16rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  gap: 0.42rem;
+  min-height: 2.1rem;
+  flex: 0 1 auto;
+  border-radius: 999px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0 0.82rem;
+  padding: 0 0.72rem;
   cursor: pointer;
-  transition:
-    border-color 0.16s ease,
-    background-color 0.16s ease;
+  transition: background-color 0.16s ease;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.gray3};
   }
 
@@ -1874,7 +1926,7 @@ const ConsoleQuickActionButton = styled.button`
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: left;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     font-weight: 700;
   }
 
@@ -1893,7 +1945,7 @@ const ConsoleQuickActionButton = styled.button`
   }
 
   @media (max-width: 760px) {
-    flex-basis: 100%;
+    flex-basis: auto;
   }
 `
 
@@ -1901,11 +1953,59 @@ const ResultPanel = styled.pre`
   margin: 0;
   min-height: 220px;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   padding: 0.95rem;
   overflow: auto;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.84rem;
   line-height: 1.65;
+`
+
+const OverviewCard = styled.section`
+  border-radius: 12px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 1rem;
+`
+
+const OverviewGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.72rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 620px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const OverviewItem = styled.article`
+  display: grid;
+  gap: 0.2rem;
+  border-radius: 10px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
+  padding: 0.68rem 0.76rem;
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  strong {
+    font-size: 1.02rem;
+    letter-spacing: -0.01em;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
 `

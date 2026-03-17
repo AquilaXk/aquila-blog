@@ -2321,315 +2321,347 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </SectionDescription>
               </div>
             </SectionTop>
-        <QueryPanel>
-          <QueryHeader>
-            <h3>글 목록 조회 조건</h3>
-            <p>
-              {listScope === "active"
-                ? "관리자 활성 글 목록과 임시글을 불러오는 조건입니다."
-                : "soft delete된 글을 조회하고 복구/영구삭제를 수행하는 조건입니다."}
-            </p>
-            <ListScopeTabs>
-              <ListScopeButton
-                type="button"
-                data-active={listScope === "active"}
-                onClick={() => setListScope("active")}
-              >
-                활성 글
-              </ListScopeButton>
-              <ListScopeButton
-                type="button"
-                data-active={listScope === "deleted"}
-                onClick={() => setListScope("deleted")}
-              >
-                삭제 글
-              </ListScopeButton>
-            </ListScopeTabs>
-          </QueryHeader>
-          <QueryGrid>
-            <FieldBox>
-              <FieldLabel htmlFor="list-page">페이지</FieldLabel>
-              <Input
-                id="list-page"
-                placeholder="예: 1"
-                value={listPage}
-                onChange={(e) => setListPage(e.target.value)}
-              />
-            </FieldBox>
-            <FieldBox>
-              <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
-              <Input
-                id="list-page-size"
-                placeholder="1~30"
-                value={listPageSize}
-                onChange={(e) => setListPageSize(e.target.value)}
-              />
-            </FieldBox>
-            <FieldBox>
-              <FieldLabel htmlFor="list-kw">검색어</FieldLabel>
-              <Input
-                id="list-kw"
-                placeholder="제목/본문 키워드"
-                value={listKw}
-                onChange={(e) => setListKw(e.target.value)}
-              />
-            </FieldBox>
-            {listScope === "active" && (
-              <FieldBox>
-                <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
-                <Input
-                  id="list-sort"
-                  placeholder="예: CREATED_AT"
-                  value={listSort}
-                  onChange={(e) => setListSort(e.target.value)}
-                />
-              </FieldBox>
-            )}
-          </QueryGrid>
-
-          <QueryActions>
-            <Button
-              disabled={disabled("postList")}
-              onClick={() => void loadAdminPosts()}
-            >
-              {listScope === "active" ? "전체 글 목록 조회" : "삭제 글 목록 조회"}
-            </Button>
-            {listScope === "active" && (
-              <Button
-                disabled={disabled("postTemp")}
-                onClick={() => void handleLoadOrCreateTempPost()}
-              >
-                임시글 불러오기/없으면 생성
-              </Button>
-            )}
-          </QueryActions>
-        </QueryPanel>
-        <ListPanel>
-          <ListHeader>
-            <h3>{listScope === "active" ? "관리자 글 리스트" : "삭제 글 리스트"}</h3>
-            <ListHeaderActions>
-              <span>{selectedPostIds.length > 0 ? `${selectedPostIds.length}개 선택` : `총 ${adminPostTotal}건`}</span>
-              {listScope === "active" ? (
-                <>
-                  <Button
-                    type="button"
-                    disabled={adminPostViewRows.length === 0 || loadingKey.length > 0}
-                    onClick={toggleSelectAllVisiblePosts}
-                  >
-                    {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={selectedPostIds.length === 0 || loadingKey.length > 0}
-                    onClick={() => openDeleteConfirm(selectedPostIds)}
-                  >
-                    선택 삭제
-                  </Button>
-                </>
-              ) : (
-                <ReadOnlyHint>삭제 글은 복구 또는 영구삭제로 정리할 수 있습니다.</ReadOnlyHint>
-              )}
-            </ListHeaderActions>
-          </ListHeader>
-          {adminPostRows.length === 0 ? (
-            <ListEmpty>
-              {listScope === "active"
-                ? "목록이 없습니다. 상단의 `전체 글 목록 조회`를 눌러 불러오세요."
-                : "삭제된 글이 없습니다. 상단의 `삭제 글 목록 조회`를 눌러 최신 상태를 확인하세요."}
-            </ListEmpty>
-          ) : (
-            <ListTable>
-              <thead>
-                <tr>
-                  {listScope === "active" && (
-                    <th className="checkboxCell">
-                      <input
-                        type="checkbox"
-                        aria-label="현재 목록 전체 선택"
-                        checked={isAllVisiblePostsSelected}
-                        onChange={toggleSelectAllVisiblePosts}
-                      />
-                    </th>
-                  )}
-                  <th>ID</th>
-                  <th>제목</th>
-                  <th>공개상태</th>
-                  <th>작성자</th>
-                  <th>
-                    {listScope === "active" ? (
-                      <SortHeaderButton
+            <ContentStudioGrid>
+              <ContentStudioLeft>
+                <QueryPanel>
+                  <QueryHeader>
+                    <h3>글 목록 조회 조건</h3>
+                    <p>
+                      {listScope === "active"
+                        ? "관리자 활성 글 목록과 임시글을 불러오는 조건입니다."
+                        : "soft delete된 글을 조회하고 복구/영구삭제를 수행하는 조건입니다."}
+                    </p>
+                    <ListScopeTabs>
+                      <ListScopeButton
                         type="button"
-                        onClick={() =>
-                          setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
-                        }
+                        data-active={listScope === "active"}
+                        onClick={() => setListScope("active")}
                       >
-                        수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
-                      </SortHeaderButton>
-                    ) : (
-                      "삭제일"
-                    )}
-                  </th>
-                  <th>작업</th>
-                </tr>
-              </thead>
-              <tbody>
-                {adminPostViewRows.map((row) => (
-                  <tr key={row.id}>
+                        활성 글
+                      </ListScopeButton>
+                      <ListScopeButton
+                        type="button"
+                        data-active={listScope === "deleted"}
+                        onClick={() => setListScope("deleted")}
+                      >
+                        삭제 글
+                      </ListScopeButton>
+                    </ListScopeTabs>
+                  </QueryHeader>
+                  <QueryGrid>
+                    <FieldBox>
+                      <FieldLabel htmlFor="list-page">페이지</FieldLabel>
+                      <Input
+                        id="list-page"
+                        placeholder="예: 1"
+                        value={listPage}
+                        onChange={(e) => setListPage(e.target.value)}
+                      />
+                    </FieldBox>
+                    <FieldBox>
+                      <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
+                      <Input
+                        id="list-page-size"
+                        placeholder="1~30"
+                        value={listPageSize}
+                        onChange={(e) => setListPageSize(e.target.value)}
+                      />
+                    </FieldBox>
+                    <FieldBox>
+                      <FieldLabel htmlFor="list-kw">검색어</FieldLabel>
+                      <Input
+                        id="list-kw"
+                        placeholder="제목/본문 키워드"
+                        value={listKw}
+                        onChange={(e) => setListKw(e.target.value)}
+                      />
+                    </FieldBox>
                     {listScope === "active" && (
-                      <td className="checkboxCell">
-                        <input
-                          type="checkbox"
-                          aria-label={`${row.id}번 글 선택`}
-                          checked={selectedPostIdSet.has(row.id)}
-                          onChange={() => togglePostSelection(row.id)}
+                      <FieldBox>
+                        <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
+                        <Input
+                          id="list-sort"
+                          placeholder="예: CREATED_AT"
+                          value={listSort}
+                          onChange={(e) => setListSort(e.target.value)}
                         />
-                      </td>
+                      </FieldBox>
                     )}
-                    <td>{row.id}</td>
-                    <td className="title">
-                      <TitleCell>
-                        <span className="text">{row.title}</span>
-                        {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
-                      </TitleCell>
-                    </td>
-                    <td>
-                      <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                        {visibilityLabel(row.published, row.listed)}
-                      </VisibilityBadge>
-                    </td>
-                    <td>{row.authorName}</td>
-                    <td>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
-                    <td>
-                      {listScope === "active" ? (
-                        <InlineActions>
-                          <Button
-                            type="button"
-                            disabled={loadingKey.length > 0}
-                            onClick={() => {
-                              setPostId(String(row.id))
-                              void loadPostForEditor(String(row.id))
-                            }}
-                          >
-                            불러오기
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={loadingKey.length > 0}
-                            onClick={() => openDeleteConfirm([row.id], row.title)}
-                          >
-                            삭제
-                          </Button>
-                        </InlineActions>
-                      ) : (
-                        <InlineActions>
-                          <Button
-                            type="button"
-                            disabled={loadingKey.length > 0}
-                            onClick={() => void restoreDeletedPostFromList(row)}
-                          >
-                            복구
-                          </Button>
-                          <Button
-                            type="button"
-                            disabled={loadingKey.length > 0}
-                            data-variant="danger"
-                            onClick={() => void hardDeleteDeletedPostFromList(row)}
-                          >
-                            영구삭제
-                          </Button>
-                        </InlineActions>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </ListTable>
-          )}
-          {listScope === "deleted" && deletedListNotice.text && (
-            <InlineStatus data-tone={deletedListNotice.tone}>{deletedListNotice.text}</InlineStatus>
-          )}
-        </ListPanel>
+                  </QueryGrid>
 
-        <SelectedPostPanel>
-          <SelectedPostHeader>
-            <div>
-              <h3>선택한 글 작업</h3>
-              <p>목록에서 불러온 글이나 직접 입력한 `post id` 기준으로 수정, 삭제, 동작 점검을 수행합니다.</p>
-            </div>
-            <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
-          </SelectedPostHeader>
-          <SelectedPostGrid>
-            <FieldBox>
-              <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
-              <Input
-                id="selected-post-id"
-                placeholder="예: 1"
-                value={postId}
-                onChange={(e) => {
-                  const nextId = e.target.value.trim()
-                  setPostId(nextId)
-                  if (!nextId) {
-                    setEditorMode("create")
-                    setPostVersion(null)
-                    setIsTempDraftMode(false)
-                  }
-                }}
-              />
-            </FieldBox>
-          </SelectedPostGrid>
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={loadingKey.length > 0}
-              onClick={() => switchToCreateMode({ keepContent: true })}
-            >
-              새 글 모드 전환
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("postOne")}
-              onClick={() => void loadPostForEditor()}
-            >
-              글 불러오기
-            </Button>
-            <Button
-              type="button"
-              disabled={editorMode !== "edit" || disabled("modifyPost")}
-              onClick={() => openPublishModal("modify")}
-            >
-              글 수정
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("deletePost")}
-              onClick={() =>
-                run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
-              }
-            >
-              글 삭제
-            </Button>
-          </ActionRow>
-          <SubActionRow>
-            <Button
-              type="button"
-              disabled={disabled("hitPost")}
-              onClick={() =>
-                run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-              }
-            >
-              조회수 테스트
-            </Button>
-            <Button
-              type="button"
-              disabled={disabled("likePost")}
-              onClick={() =>
-                run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
-              }
-            >
-              좋아요 테스트
-            </Button>
-          </SubActionRow>
-        </SelectedPostPanel>
+                  <QueryActions>
+                    <PrimaryButton
+                      disabled={disabled("postList")}
+                      onClick={() => void loadAdminPosts()}
+                    >
+                      {listScope === "active" ? "전체 글 목록 조회" : "삭제 글 목록 조회"}
+                    </PrimaryButton>
+                    {listScope === "active" && (
+                      <Button
+                        disabled={disabled("postTemp")}
+                        onClick={() => void handleLoadOrCreateTempPost()}
+                      >
+                        임시글 불러오기/없으면 생성
+                      </Button>
+                    )}
+                  </QueryActions>
+                </QueryPanel>
+
+                <SelectedPostPanel>
+                  <SelectedPostHeader>
+                    <div>
+                      <h3>선택한 글 작업</h3>
+                      <p>
+                        목록에서 불러온 글이나 직접 입력한 `post id` 기준으로 수정, 삭제, 동작 점검을 수행합니다.
+                      </p>
+                    </div>
+                    <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
+                  </SelectedPostHeader>
+                  <SelectedPostGrid>
+                    <FieldBox>
+                      <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
+                      <Input
+                        id="selected-post-id"
+                        placeholder="예: 1"
+                        value={postId}
+                        onChange={(e) => {
+                          const nextId = e.target.value.trim()
+                          setPostId(nextId)
+                          if (!nextId) {
+                            setEditorMode("create")
+                            setPostVersion(null)
+                            setIsTempDraftMode(false)
+                          }
+                        }}
+                      />
+                    </FieldBox>
+                  </SelectedPostGrid>
+                  <SelectedPostHint>목록의 ‘불러오기’를 누르거나 ID 입력 후 ‘글 불러오기’를 실행하세요.</SelectedPostHint>
+                  <ActionRow>
+                    <Button
+                      type="button"
+                      disabled={loadingKey.length > 0}
+                      onClick={() => switchToCreateMode({ keepContent: true })}
+                    >
+                      새 글 모드 전환
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={disabled("postOne")}
+                      onClick={() => void loadPostForEditor()}
+                    >
+                      글 불러오기
+                    </Button>
+                    <PrimaryButton
+                      type="button"
+                      disabled={editorMode !== "edit" || disabled("modifyPost")}
+                      onClick={() => openPublishModal("modify")}
+                    >
+                      글 수정
+                    </PrimaryButton>
+                    <Button
+                      type="button"
+                      data-variant="danger"
+                      disabled={disabled("deletePost")}
+                      onClick={() =>
+                        run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
+                      }
+                    >
+                      글 삭제
+                    </Button>
+                  </ActionRow>
+                  <SubActionRow>
+                    <Button
+                      type="button"
+                      disabled={disabled("hitPost")}
+                      onClick={() =>
+                        run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+                      }
+                    >
+                      조회수 테스트
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={disabled("likePost")}
+                      onClick={() =>
+                        run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
+                      }
+                    >
+                      좋아요 테스트
+                    </Button>
+                  </SubActionRow>
+                </SelectedPostPanel>
+              </ContentStudioLeft>
+
+              <ListPanel>
+                <ListHeader>
+                  <h3>{listScope === "active" ? "관리자 글 리스트" : "삭제 글 리스트"}</h3>
+                  <ListHeaderActions>
+                    <span>{selectedPostIds.length > 0 ? `${selectedPostIds.length}개 선택` : `총 ${adminPostTotal}건`}</span>
+                    {listScope === "active" ? (
+                      <>
+                        <Button
+                          type="button"
+                          disabled={adminPostViewRows.length === 0 || loadingKey.length > 0}
+                          onClick={toggleSelectAllVisiblePosts}
+                        >
+                          {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={selectedPostIds.length === 0 || loadingKey.length > 0}
+                          onClick={() => openDeleteConfirm(selectedPostIds)}
+                        >
+                          선택 삭제
+                        </Button>
+                      </>
+                    ) : (
+                      <ReadOnlyHint>삭제 글은 복구 또는 영구삭제로 정리할 수 있습니다.</ReadOnlyHint>
+                    )}
+                  </ListHeaderActions>
+                </ListHeader>
+                {adminPostRows.length === 0 ? (
+                  <ListEmpty>
+                    <p>
+                      {listScope === "active"
+                        ? "목록이 없습니다. 바로 불러오기를 실행해 시작하세요."
+                        : "삭제된 글이 없습니다. 삭제 글 목록을 조회해 최신 상태를 확인하세요."}
+                    </p>
+                    <div className="actions">
+                      <PrimaryButton
+                        type="button"
+                        disabled={disabled("postList")}
+                        onClick={() => void loadAdminPosts()}
+                      >
+                        {listScope === "active" ? "전체 글 목록 조회" : "삭제 글 목록 조회"}
+                      </PrimaryButton>
+                      {listScope === "active" && (
+                        <Button
+                          type="button"
+                          disabled={disabled("postTemp")}
+                          onClick={() => void handleLoadOrCreateTempPost()}
+                        >
+                          임시글 불러오기/없으면 생성
+                        </Button>
+                      )}
+                    </div>
+                  </ListEmpty>
+                ) : (
+                  <ListTableWrap>
+                    <ListTable>
+                    <thead>
+                      <tr>
+                        {listScope === "active" && (
+                          <th className="checkboxCell">
+                            <input
+                              type="checkbox"
+                              aria-label="현재 목록 전체 선택"
+                              checked={isAllVisiblePostsSelected}
+                              onChange={toggleSelectAllVisiblePosts}
+                            />
+                          </th>
+                        )}
+                        <th>ID</th>
+                        <th>제목</th>
+                        <th>공개상태</th>
+                        <th>작성자</th>
+                        <th>
+                          {listScope === "active" ? (
+                            <SortHeaderButton
+                              type="button"
+                              onClick={() =>
+                                setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
+                              }
+                            >
+                              수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
+                            </SortHeaderButton>
+                          ) : (
+                            "삭제일"
+                          )}
+                        </th>
+                        <th>작업</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminPostViewRows.map((row) => (
+                        <tr key={row.id}>
+                          {listScope === "active" && (
+                            <td className="checkboxCell">
+                              <input
+                                type="checkbox"
+                                aria-label={`${row.id}번 글 선택`}
+                                checked={selectedPostIdSet.has(row.id)}
+                                onChange={() => togglePostSelection(row.id)}
+                              />
+                            </td>
+                          )}
+                          <td>{row.id}</td>
+                          <td className="title">
+                            <TitleCell>
+                              <span className="text">{row.title}</span>
+                              {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                            </TitleCell>
+                          </td>
+                          <td>
+                            <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                              {visibilityLabel(row.published, row.listed)}
+                            </VisibilityBadge>
+                          </td>
+                          <td>{row.authorName}</td>
+                          <td>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
+                          <td>
+                            {listScope === "active" ? (
+                              <InlineActions>
+                                <Button
+                                  type="button"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => {
+                                    setPostId(String(row.id))
+                                    void loadPostForEditor(String(row.id))
+                                  }}
+                                >
+                                  불러오기
+                                </Button>
+                                <Button
+                                  type="button"
+                                  data-variant="danger"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => openDeleteConfirm([row.id], row.title)}
+                                >
+                                  삭제
+                                </Button>
+                              </InlineActions>
+                            ) : (
+                              <InlineActions>
+                                <Button
+                                  type="button"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => void restoreDeletedPostFromList(row)}
+                                >
+                                  복구
+                                </Button>
+                                <Button
+                                  type="button"
+                                  disabled={loadingKey.length > 0}
+                                  data-variant="danger"
+                                  onClick={() => void hardDeleteDeletedPostFromList(row)}
+                                >
+                                  영구삭제
+                                </Button>
+                              </InlineActions>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    </ListTable>
+                  </ListTableWrap>
+                )}
+                {listScope === "deleted" && deletedListNotice.text && (
+                  <InlineStatus data-tone={deletedListNotice.tone}>{deletedListNotice.text}</InlineStatus>
+                )}
+              </ListPanel>
+            </ContentStudioGrid>
 
         {deleteConfirmState && (
           <ModalBackdrop onClick={closeDeleteConfirm}>
@@ -3477,26 +3509,45 @@ const SectionDescription = styled.p`
   line-height: 1.65;
 `
 
+const ContentStudioGrid = styled.div`
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.5fr);
+  gap: 0.9rem;
+  align-items: start;
+
+  @media (max-width: 1180px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ContentStudioLeft = styled.div`
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+`
+
 const QueryPanel = styled.div`
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0.25rem 0 0;
-  margin-bottom: 0.7rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.82rem;
+  margin: 0;
 `
 
 const QueryHeader = styled.div`
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.72rem;
 
   h3 {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 1rem;
+    font-weight: 720;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
-    margin: 0.2rem 0 0;
-    font-size: 0.82rem;
+    margin: 0.24rem 0 0;
+    font-size: 0.84rem;
+    line-height: 1.56;
     color: ${({ theme }) => theme.colors.gray11};
   }
 `
@@ -3536,14 +3587,10 @@ const ListScopeButton = styled.button`
 
 const QueryGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
 
-  @media (max-width: 980px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 640px) {
+  @media (max-width: 720px) {
     grid-template-columns: 1fr;
   }
 `
@@ -3562,15 +3609,16 @@ const FieldBox = styled.div`
 `
 
 const FieldLabel = styled.label`
-  font-size: 0.78rem;
+  font-size: 0.8rem;
+  font-weight: 650;
   color: ${({ theme }) => theme.colors.gray11};
 `
 
 const QueryActions = styled.div`
-  margin-top: 0.65rem;
+  margin-top: 0.72rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.5rem;
 `
 
 const ProfileStudioGrid = styled.div`
@@ -3772,6 +3820,7 @@ const ActionRow = styled.div`
   flex-wrap: wrap;
   gap: 0.55rem;
   margin-top: 0.85rem;
+  align-items: center;
 `
 
 const UtilityGrid = styled.div`
@@ -3830,16 +3879,34 @@ const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 8px;
   padding: 0.58rem 0.88rem;
+  min-height: 38px;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 600;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 
   &[data-variant="danger"] {
     border-color: ${({ theme }) => theme.colors.red8};
     background: ${({ theme }) => theme.colors.red3};
     color: ${({ theme }) => theme.colors.red11};
+  }
+
+  &:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
   }
 
   &:disabled {
@@ -3852,9 +3919,15 @@ const PrimaryButton = styled(Button)`
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
   border-color: ${({ theme }) => theme.colors.blue9};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue11};
+  background: ${({ theme }) => theme.colors.blue9};
+  color: ${({ theme }) => theme.colors.gray1};
   font-weight: 700;
+
+  &:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.gray1};
+  }
 `
 
 const HeroActionButton = styled(Button)`
@@ -4989,28 +5062,32 @@ const EditorGrid = styled.div`
 `
 
 const ListPanel = styled.div`
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0.7rem 0 0.2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.82rem;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 0.62rem;
 `
 
 const ListHeader = styled.div`
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.55rem;
+  gap: 0.64rem;
+  margin-bottom: 0.75rem;
 
   h3 {
     margin: 0;
-    font-size: 0.92rem;
+    font-size: 1rem;
+    font-weight: 720;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   span {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     color: ${({ theme }) => theme.colors.gray11};
   }
 
@@ -5022,7 +5099,7 @@ const ListHeader = styled.div`
 const ListHeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.45rem;
   justify-content: flex-end;
   align-items: center;
 
@@ -5045,18 +5122,46 @@ const ReadOnlyHint = styled.span`
   font-weight: 600;
 `
 
-const ListEmpty = styled.p`
-  margin: 0.2rem 0 0.1rem;
-  font-size: 0.82rem;
+const ListEmpty = styled.div`
+  margin: 0;
+  min-height: 13.5rem;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  border: 1px dashed ${({ theme }) => theme.colors.gray6};
   color: ${({ theme }) => theme.colors.gray11};
+  gap: 0.72rem;
+
+  p {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.65;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+`
+
+const ListTableWrap = styled.div`
+  width: 100%;
+  overflow: auto;
+  max-height: 52vh;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
 `
 
 const SelectedPostPanel = styled.div`
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0.7rem 0 0.2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.82rem;
+  margin: 0;
 `
 
 const SelectedPostHeader = styled.div`
@@ -5064,17 +5169,18 @@ const SelectedPostHeader = styled.div`
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.72rem;
 
   h3 {
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 1rem;
+    font-weight: 720;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
-    margin: 0.22rem 0 0;
-    font-size: 0.82rem;
+    margin: 0.24rem 0 0;
+    font-size: 0.84rem;
     line-height: 1.55;
     color: ${({ theme }) => theme.colors.gray11};
   }
@@ -5088,30 +5194,35 @@ const SelectedPostBadge = styled.span`
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 0.34rem 0.68rem;
+  padding: 0.36rem 0.7rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
 `
 
 const SelectedPostGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 320px);
+  grid-template-columns: 1fr;
   gap: 0.7rem;
+`
 
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
+const SelectedPostHint = styled.p`
+  margin: 0.1rem 0 0;
+  font-size: 0.78rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  line-height: 1.5;
 `
 
 const SubActionRow = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-top: 0.55rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed ${({ theme }) => theme.colors.gray6};
 
   ${Button} {
     border-style: dashed;
@@ -5125,15 +5236,19 @@ const ListTable = styled.table`
   th,
   td {
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-    padding: 0.45rem 0.4rem;
+    padding: 0.5rem 0.45rem;
     text-align: left;
-    font-size: 0.79rem;
+    font-size: 0.8rem;
     color: ${({ theme }) => theme.colors.gray12};
     vertical-align: middle;
   }
 
   th {
-    font-size: 0.74rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: ${({ theme }) => theme.colors.gray2};
+    font-size: 0.75rem;
     color: ${({ theme }) => theme.colors.gray11};
     font-weight: 700;
   }

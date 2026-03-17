@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
-import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react"
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AppIcon, { IconName } from "src/components/icons/AppIcon"
@@ -104,6 +104,14 @@ const validateLinkInputs = (
 
   return null
 }
+
+const normalizeComparableText = (value: string | null | undefined) => (value || "").trim()
+
+const serializeComparableLinks = (
+  section: ProfileCardLinkSection,
+  items: ProfileCardLinkItem[],
+  defaultIcon: IconName
+) => JSON.stringify(toPayloadLinks(section, items, defaultIcon))
 
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const queryClient = useQueryClient()
@@ -326,12 +334,67 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  const hasUnsavedChanges = useMemo(() => {
+    if (!sessionMember) return false
+
+    const currentProfileImage = normalizeComparableText(profileImgInputUrl)
+    const savedProfileImage = normalizeComparableText(sessionMember.profileImageDirectUrl || sessionMember.profileImageUrl)
+    if (currentProfileImage !== savedProfileImage) return true
+
+    if (normalizeComparableText(profileRoleInput) !== normalizeComparableText(sessionMember.profileRole)) return true
+    if (normalizeComparableText(profileBioInput) !== normalizeComparableText(sessionMember.profileBio)) return true
+    if (normalizeComparableText(homeIntroTitleInput) !== normalizeComparableText(sessionMember.homeIntroTitle)) return true
+    if (normalizeComparableText(homeIntroDescriptionInput) !== normalizeComparableText(sessionMember.homeIntroDescription)) {
+      return true
+    }
+
+    const currentService = serializeComparableLinks("service", serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON)
+    const savedService = serializeComparableLinks(
+      "service",
+      resolveServiceLinks(sessionMember),
+      DEFAULT_SERVICE_ITEM_ICON
+    )
+    if (currentService !== savedService) return true
+
+    const currentContact = serializeComparableLinks("contact", contactLinksInput, DEFAULT_CONTACT_ITEM_ICON)
+    const savedContact = serializeComparableLinks(
+      "contact",
+      resolveContactLinks(sessionMember),
+      DEFAULT_CONTACT_ITEM_ICON
+    )
+
+    return currentContact !== savedContact
+  }, [
+    contactLinksInput,
+    homeIntroDescriptionInput,
+    homeIntroTitleInput,
+    profileBioInput,
+    profileImgInputUrl,
+    profileRoleInput,
+    serviceLinksInput,
+    sessionMember,
+  ])
+
   if (!sessionMember) return null
 
   const profileSrc = profileImgInputUrl.trim()
-  const profileUpdatedText = sessionMember?.modifiedAt
+  const profileUpdatedText = sessionMember.modifiedAt
     ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
     : "확인 전"
+
+  const handleRefreshStoredProfile = async () => {
+    if (!sessionMember?.id) return
+    try {
+      setLoadingKey("refresh")
+      setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
+      const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
+      if (refreshed) {
+        setProfileNotice({ tone: "success", text: "현재 저장값을 다시 불러왔습니다." })
+      }
+    } finally {
+      setLoadingKey("")
+    }
+  }
 
   return (
     <Main>
@@ -611,33 +674,32 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </LinkItemsWrap>
             </LinkSectionCard>
           </FieldGrid>
-          <ActionRow>
-            <Button
-              type="button"
-              disabled={loadingKey === "refresh"}
-              onClick={async () => {
-                if (!sessionMember?.id) return
-                try {
-                  setLoadingKey("refresh")
-                  setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
-                  const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
-                  if (refreshed) {
-                    setProfileNotice({ tone: "success", text: "현재 저장값을 다시 불러왔습니다." })
-                  }
-                } finally {
-                  setLoadingKey("")
-                }
-              }}
-            >
-              현재 저장값 다시 불러오기
-            </Button>
-            <PrimaryButton type="button" disabled={loadingKey === "save"} onClick={() => void handleUpdateMemberProfileCard()}>
-              {loadingKey === "save" ? "저장 중..." : "프로필/메인 소개 저장"}
-            </PrimaryButton>
-          </ActionRow>
           {profileNotice.text ? <Notice data-tone={profileNotice.tone}>{profileNotice.text}</Notice> : null}
         </FormCard>
       </ProfileGrid>
+
+      <StickySaveBar data-dirty={hasUnsavedChanges ? "true" : "false"}>
+        <StickySaveCopy>
+          <strong>{hasUnsavedChanges ? "미저장 변경 사항이 있습니다." : "모든 변경 사항이 저장되어 있습니다."}</strong>
+          <span>
+            {hasUnsavedChanges
+              ? "스크롤 위치와 상관없이 하단에서 바로 저장할 수 있습니다."
+              : "항목을 수정하면 저장 버튼이 활성화됩니다."}
+          </span>
+        </StickySaveCopy>
+        <StickySaveActions>
+          <Button type="button" disabled={loadingKey === "refresh"} onClick={() => void handleRefreshStoredProfile()}>
+            {loadingKey === "refresh" ? "불러오는 중..." : "저장값 다시 불러오기"}
+          </Button>
+          <PrimaryButton
+            type="button"
+            disabled={loadingKey === "save" || !hasUnsavedChanges}
+            onClick={() => void handleUpdateMemberProfileCard()}
+          >
+            {loadingKey === "save" ? "저장 중..." : "변경 사항 저장"}
+          </PrimaryButton>
+        </StickySaveActions>
+      </StickySaveBar>
     </Main>
   )
 }
@@ -785,6 +847,12 @@ const PreviewCard = styled(PanelCard)`
   text-align: center;
   align-self: start;
   height: fit-content;
+  position: sticky;
+  top: 1rem;
+
+  @media (max-width: 900px) {
+    position: static;
+  }
 
   strong {
     font-size: 1.15rem;
@@ -1153,8 +1221,46 @@ const InlineEmpty = styled.p`
   font-size: 0.88rem;
 `
 
-const ActionRow = styled.div`
+const StickySaveBar = styled.section`
+  position: sticky;
+  bottom: 0.45rem;
+  z-index: 15;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.78rem 0.92rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  &[data-dirty="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue2};
+  }
+`
+
+const StickySaveCopy = styled.div`
+  min-width: 0;
+  display: grid;
+  gap: 0.16rem;
+
+  strong {
+    font-size: 0.92rem;
+    color: ${({ theme }) => theme.colors.gray12};
+    line-height: 1.35;
+  }
+
+  span {
+    font-size: 0.8rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    line-height: 1.45;
+  }
+`
+
+const StickySaveActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
 `

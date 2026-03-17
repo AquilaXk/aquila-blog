@@ -1,11 +1,9 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
-import { useRouter } from "next/router"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import ProfileImage from "src/components/ProfileImage"
 import useAuthSession from "src/hooks/useAuthSession"
-import { replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -13,15 +11,17 @@ export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ r
 }
 
 const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
-  const router = useRouter()
-  const { me, authStatus, logout } = useAuthSession()
+  const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const profileSrc = useMemo(
     () => sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || "",
     [sessionMember?.profileImageDirectUrl, sessionMember?.profileImageUrl]
   )
+
+  const profileUpdatedText = sessionMember?.modifiedAt
+    ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
+    : "확인 전"
 
   const quickLinks = [
     {
@@ -44,20 +44,6 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
   ]
 
-  const handleLogout = async () => {
-    try {
-      setIsLoggingOut(true)
-      await logout()
-    } finally {
-      await replaceRoute(router, toLoginPath("/admin"), { preferHardNavigation: true })
-      setIsLoggingOut(false)
-    }
-  }
-
-  const handleMoveMain = async () => {
-    await replaceRoute(router, "/", { preferHardNavigation: true })
-  }
-
   if (!sessionMember) return null
 
   return (
@@ -70,13 +56,27 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             자주 쓰는 관리자 기능을 역할별로 분리했습니다. 허브에서는 현재 계정 상태를 확인하고,
             필요한 작업실로 바로 이동하면 됩니다.
           </p>
+          <StatusRow>
+            <StatusItem>
+              <span>현재 계정</span>
+              <strong>{sessionMember.username}</strong>
+            </StatusItem>
+            <StatusItem>
+              <span>역할</span>
+              <strong>{sessionMember.profileRole || "미설정"}</strong>
+            </StatusItem>
+            <StatusItem>
+              <span>최근 수정</span>
+              <strong>{profileUpdatedText}</strong>
+            </StatusItem>
+          </StatusRow>
           <HeroActions>
-            <GhostButton type="button" onClick={() => void handleMoveMain()}>
-              메인으로 이동
-            </GhostButton>
-            <PrimaryAction type="button" onClick={() => void handleLogout()} disabled={isLoggingOut}>
-              {isLoggingOut ? "로그아웃 중..." : "로그아웃"}
-            </PrimaryAction>
+            <Link href="/" passHref legacyBehavior>
+              <ActionLink data-tone="ghost">메인으로 이동</ActionLink>
+            </Link>
+            <Link href="/admin/posts/new" passHref legacyBehavior>
+              <ActionLink data-tone="primary">글 작업실 바로가기</ActionLink>
+            </Link>
           </HeroActions>
         </HeroIntro>
         <ProfilePanel>
@@ -94,13 +94,13 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       </HeroCard>
 
       <CardGrid>
-        {quickLinks.map((item) => (
+        {quickLinks.map((item, index) => (
           <Link key={item.href} href={item.href} passHref legacyBehavior>
             <QuickCard>
               <small>{item.eyebrow}</small>
               <h2>{item.title}</h2>
               <p>{item.description}</p>
-              <span>바로 이동</span>
+              <span>{`${index + 1}. 바로 이동`}</span>
             </QuickCard>
           </Link>
         ))}
@@ -168,48 +168,42 @@ const HeroActions = styled.div`
   gap: 0.6rem;
 `
 
-const BaseButton = styled.button`
+const ActionLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 10px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color 0.18s ease,
+    border-color 0.18s ease,
     color 0.18s ease;
 
-  &:hover:not(:disabled) {
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray8};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
-  &:disabled {
-    opacity: 1;
-    cursor: not-allowed;
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-`
-
-const PrimaryAction = styled(BaseButton)`
-  background: ${({ theme }) => theme.colors.blue9};
-  color: #fff;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.blue10};
+  &[data-tone="primary"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue9};
     color: #fff;
   }
 
-  &:disabled {
-    background: ${({ theme }) => theme.colors.gray4};
-    color: ${({ theme }) => theme.colors.gray10};
+  &[data-tone="primary"]:hover {
+    border-color: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue10};
+    color: #fff;
   }
 `
-
-const GhostButton = styled(BaseButton)``
 
 const ProfilePanel = styled.aside`
   display: grid;
@@ -235,6 +229,44 @@ const ProfilePanel = styled.aside`
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.6;
+  }
+`
+
+const StatusRow = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  max-width: 44rem;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const StatusItem = styled.div`
+  min-width: 0;
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.56rem 0.64rem;
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray2};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `
 

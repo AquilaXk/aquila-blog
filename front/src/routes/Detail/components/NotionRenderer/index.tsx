@@ -192,6 +192,8 @@ const escapeHtml = (raw: string) =>
     .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;")
 
+const escapeHtmlAttribute = (raw: string) => escapeHtml(raw).replaceAll("\n", "&#10;")
+
 const extractPlainTextFromHtml = (rawHtml: string) =>
   decodeBasicHtmlEntities(
     rawHtml
@@ -225,7 +227,7 @@ const normalizeMermaidCodeBlocksInHtml = (html: string) =>
     if (!hasMermaidClass && !looksLikeMermaid) return full
     if (!source) return full
 
-    return `<pre class="aq-mermaid"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
 const normalizeMermaidParagraphsInHtml = (html: string) =>
@@ -244,7 +246,28 @@ const normalizeMermaidParagraphsInHtml = (html: string) =>
     if (!hasMermaidFence && !looksLikeMermaid) return full
     if (!source) return full
 
-    return `<pre class="aq-mermaid"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+  })
+
+const normalizeStandaloneMermaidPreBlocksInHtml = (html: string) =>
+  html.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/gi, (full, rawPreAttrs, rawBody) => {
+    if (/<code\b/i.test(rawBody)) return full
+
+    const attrs = String(rawPreAttrs || "")
+    const lowerAttrs = attrs.toLowerCase()
+    const hasMermaidHint =
+      lowerAttrs.includes("aq-mermaid") ||
+      lowerAttrs.includes("language-mermaid") ||
+      lowerAttrs.includes("data-language=\"mermaid\"") ||
+      lowerAttrs.includes("data-language='mermaid'")
+
+    const source = extractMermaidSource(String(rawBody || ""))
+    const looksLikeMermaid = MERMAID_SOURCE_PATTERN.test(source)
+
+    if (!hasMermaidHint && !looksLikeMermaid) return full
+    if (!source) return full
+
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
 const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*`{3,}[\w-]*[\t ]*\n[\s\S]*?\n`{3,}(?=\n|$)/
@@ -493,7 +516,9 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
   const sanitizedContentHtml = useMemo(
     () =>
       normalizedContentHtml
-        ? normalizeMermaidParagraphsInHtml(normalizeMermaidCodeBlocksInHtml(normalizedContentHtml))
+        ? normalizeStandaloneMermaidPreBlocksInHtml(
+            normalizeMermaidParagraphsInHtml(normalizeMermaidCodeBlocksInHtml(normalizedContentHtml))
+          )
         : "",
     [normalizedContentHtml]
   )
@@ -558,7 +583,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
 
           if (lang === "mermaid" || isMermaidSource(rawCode)) {
             return (
-              <pre className="aq-mermaid">
+              <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={rawCode}>
                 <code className="language-mermaid">{rawCode}</code>
               </pre>
             )
@@ -583,7 +608,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
 
           if (language === "mermaid" || isMermaidSource(rawCode)) {
             return (
-              <pre className="aq-mermaid">
+              <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={rawCode}>
                 <code className="language-mermaid">{rawCode}</code>
               </pre>
             )

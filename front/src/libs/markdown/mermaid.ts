@@ -1,6 +1,7 @@
 const normalizeLineEndings = (raw: string) => raw.replace(/\r\n?/g, "\n")
 
-const normalizeFenceChars = (raw: string) => raw.replace(/[｀´ˋ]/g, "`")
+// 에디터/IME 환경에 따라 mermaid fence가 백틱이 아닌 유사 문자(' 포함)로 입력되는 경우를 교정한다.
+const normalizeFenceChars = (raw: string) => raw.replace(/[｀´ˋ'‘’]/g, "`")
 
 const parseFenceLine = (rawLine: string) => {
   const normalized = normalizeFenceChars(rawLine).trim()

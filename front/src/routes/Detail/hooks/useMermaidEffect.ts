@@ -142,7 +142,28 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           ].join(", ")
         )
       )
-      if (!codeBlocks.length) return
+
+      const preBlocks = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          [
+            "pre.aq-mermaid",
+            "pre[data-aq-mermaid='true']",
+            "pre[data-language='mermaid']",
+          ].join(", ")
+        )
+      )
+
+      const mergedBlocks = new Map<HTMLElement, HTMLElement>()
+      codeBlocks.forEach((codeBlock) => {
+        const block = codeBlock.closest<HTMLElement>("pre")
+        if (block) mergedBlocks.set(block, block)
+      })
+      preBlocks.forEach((block) => {
+        mergedBlocks.set(block, block)
+      })
+
+      const blocks = Array.from(mergedBlocks.values())
+      if (!blocks.length) return
 
       const mermaid = (await import("mermaid")).default
       const theme = scheme === "dark" ? "dark" : "neutral"
@@ -173,14 +194,27 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         retryTimers.add(timerId)
       }
 
+      const normalizeMermaidSource = (raw: string) => {
+        const normalized = raw.trim()
+        if (!normalized) return ""
+
+        const fenced = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
+        return (fenced?.[1] || normalized).trim()
+      }
+
       const renderSingleBlock = async (i: number) => {
         if (disposed) return
-        const codeBlock = codeBlocks[i]
-        if (!codeBlock) return
-        const block = codeBlock.closest<HTMLElement>("pre")
+        const block = blocks[i]
         if (!block) return
-        const source =
-          block.dataset.mermaidSource || codeBlock.textContent?.trim() || ""
+        const codeBlock =
+          block.querySelector<HTMLElement>("code.language-mermaid, code[data-language='mermaid'], code") || null
+        const source = normalizeMermaidSource(
+          block.getAttribute("data-mermaid-source") ||
+            block.dataset.mermaidSource ||
+            codeBlock?.textContent ||
+            block.textContent ||
+            ""
+        )
         if (!source) return
 
         const alreadyRendered =
@@ -323,10 +357,10 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
               const rect = block.getBoundingClientRect()
               if (rect.width <= 16 || rect.height <= 8) return
               observer?.unobserve(block)
-              const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
-              if (!Number.isFinite(index)) return
-              enqueueRender(index)
-            })
+          const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
+          if (!Number.isFinite(index)) return
+          enqueueRender(index)
+        })
           },
           {
             root: null,
@@ -336,9 +370,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           }
         )
 
-        codeBlocks.forEach((codeBlock, index) => {
-          const block = codeBlock.closest<HTMLElement>("pre")
-          if (!block) return
+        blocks.forEach((block, index) => {
           block.dataset.mermaidIndex = String(index)
           observer?.observe(block)
 
@@ -353,7 +385,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         return
       }
 
-      for (let i = 0; i < codeBlocks.length; i += 1) {
+      for (let i = 0; i < blocks.length; i += 1) {
         enqueueRender(i)
       }
       await renderQueue

@@ -14,6 +14,7 @@ import com.back.global.storage.domain.UploadedFileStatus
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertDoesNotThrow
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
@@ -178,6 +179,28 @@ class UploadedFileRetentionServiceTest {
         assertThat(diagnostics.tempCount).isGreaterThanOrEqualTo(1)
         assertThat(diagnostics.eligibleForPurgeCount).isGreaterThanOrEqualTo(1)
         assertThat(diagnostics.sampleEligibleObjectKeys).contains(objectKey)
+    }
+
+    @Test
+    fun `삭제 예약은 추적 중인 첨부파일에만 적용되고 미등록 키는 무시한다`() {
+        val knownKey = "posts/2026/03/known-image.png"
+        val unknownLegacyKey = "legacy-" + "x".repeat(1500)
+        val content =
+            """
+            ![](${UploadedFileUrlCodec.buildImageUrl(knownKey)})
+            ![](${AppConfig.siteBackUrl}/post/api/v1/images/$unknownLegacyKey)
+            """.trimIndent()
+
+        uploadedFileRetentionService.registerTempUpload(knownKey, "image/png", 100, UploadedFilePurpose.POST_IMAGE)
+
+        assertDoesNotThrow {
+            uploadedFileRetentionService.scheduleDeletedPostAttachments(content)
+        }
+
+        val knownFile = uploadedFileRepository.findByObjectKey(knownKey)!!
+        assertThat(knownFile.status).isEqualTo(UploadedFileStatus.PENDING_DELETE)
+        assertThat(knownFile.retentionReason).isEqualTo(UploadedFileRetentionReason.DELETED_POST_ATTACHMENT)
+        assertThat(uploadedFileRepository.findByObjectKey(unknownLegacyKey)).isNull()
     }
 
     companion object {

@@ -233,7 +233,11 @@ class UploadedFileRetentionService(
         reason: UploadedFileRetentionReason,
         purgeAfter: Instant,
     ) {
-        val uploadedFile = findOrCreate(objectKey)
+        if (objectKey.isBlank()) return
+
+        // legacy 본문에는 업로드 추적 테이블에 없는 이미지 URL이 섞여 있을 수 있다.
+        // 삭제 예약 단계에서는 미등록 키를 새로 생성하지 않고, 추적 중인 파일만 상태 전환한다.
+        val uploadedFile = uploadedFileRepository.findByObjectKey(objectKey) ?: return
         uploadedFile.purpose = purpose
         uploadedFile.scheduleDeletion(reason, purgeAfter)
         uploadedFileRepository.save(uploadedFile)

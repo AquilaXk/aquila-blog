@@ -74,11 +74,10 @@ const StyledWrapper = styled.div`
     }
   }
   > .mid {
-    padding: 0.9rem;
+    padding: 0.2rem 0 0.95rem;
     margin-bottom: 1rem;
-    border-radius: 1rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     > .wrapper {
       display: flex;
       gap: 0.85rem;

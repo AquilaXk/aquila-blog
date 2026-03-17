@@ -50,7 +50,7 @@ const StyledWrapper = styled.div`
     }
     .nav {
       display: flex;
-      gap: 0.55rem;
+      gap: 0.36rem;
       align-items: center;
       flex-shrink: 0;
     }
@@ -71,7 +71,7 @@ const StyledWrapper = styled.div`
       }
 
       .nav {
-        gap: 0.4rem;
+        gap: 0.3rem;
       }
     }
   }

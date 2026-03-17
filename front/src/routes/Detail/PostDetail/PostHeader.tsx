@@ -233,9 +233,9 @@ const StyledWrapper = styled.header`
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.9rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.9rem;
     font-weight: 700;
@@ -253,7 +253,7 @@ const StyledWrapper = styled.header`
 
   .dangerButton {
     border-color: ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
+    background: transparent;
     color: ${({ theme }) => theme.colors.red11};
   }
 
@@ -263,9 +263,9 @@ const StyledWrapper = styled.header`
     gap: 0.42rem;
     min-height: 40px;
     padding: 0 0.9rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.9rem;
     font-weight: 700;
@@ -281,7 +281,7 @@ const StyledWrapper = styled.header`
 
     &[data-active="true"] {
       border-color: ${({ theme }) => theme.colors.red7};
-      background: linear-gradient(180deg, ${({ theme }) => theme.colors.red2}, ${({ theme }) => theme.colors.gray2});
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray12};
 
       svg {
@@ -306,7 +306,7 @@ const StyledWrapper = styled.header`
     overflow: hidden;
     position: relative;
     margin-top: 2rem;
-    border-radius: 1.3rem;
+    border-radius: 10px;
     width: 100%;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background-color: ${({ theme }) => theme.colors.gray3};

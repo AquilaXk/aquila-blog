@@ -1,5 +1,6 @@
 import { RefObject, useEffect } from "react"
 import useScheme from "src/hooks/useScheme"
+import { normalizeEscapedMarkdownFences } from "src/libs/markdown/mermaid"
 
 const MERMAID_SOURCE_PATTERN =
   /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
@@ -223,7 +224,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       }
 
       const normalizeMermaidSource = (raw: string) => {
-        const normalized = raw.trim()
+        const normalized = normalizeEscapedMarkdownFences(raw).trim()
         if (!normalized) return ""
 
         const fenced = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)

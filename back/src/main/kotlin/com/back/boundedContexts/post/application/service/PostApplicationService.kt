@@ -42,6 +42,7 @@ import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
+import org.springframework.cache.CacheManager
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -63,6 +64,7 @@ class PostApplicationService(
     private val secureTipPort: SecureTipPort,
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val cacheManager: CacheManager,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -104,7 +106,7 @@ class PostApplicationService(
                     listed = listed,
                     contentHtml = contentHtml,
                 )
-            clearExploreCaches()
+            clearReadCaches()
             return created
         }
 
@@ -139,7 +141,7 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        clearExploreCaches()
+        clearReadCaches()
 
         return createdPost
     }
@@ -191,7 +193,7 @@ class PostApplicationService(
         }.onFailure { exception ->
             logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
         }
-        clearExploreCaches()
+        clearReadCaches()
 
         runCatching {
             eventPublisher.publish(
@@ -278,7 +280,7 @@ class PostApplicationService(
         if (!softDeleted) {
             throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
         }
-        clearExploreCaches()
+        clearReadCaches()
 
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
@@ -636,7 +638,7 @@ class PostApplicationService(
             logger.warn("Failed to restore attachments for restored post id={}", id, exception)
         }
 
-        clearExploreCaches()
+        clearReadCaches()
 
         return postRepository.findById(id).getOrNull()
             ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
@@ -659,7 +661,7 @@ class PostApplicationService(
             throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
-        clearExploreCaches()
+        clearReadCaches()
     }
 
     fun findPagedByAuthor(
@@ -886,8 +888,12 @@ class PostApplicationService(
     // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
     private fun toPersistenceMember(member: Member): Member = if (member is MemberProxy) member.persistenceMember else member
 
-    private fun clearExploreCaches() {
+    private fun clearReadCaches() {
         publicTagCountsCache = null
+        cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
+        cacheManager.getCache(PostQueryCacheNames.EXPLORE)?.clear()
+        cacheManager.getCache(PostQueryCacheNames.TAGS)?.clear()
+        cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)?.clear()
     }
 
     private fun syncMetaTagIndexAttr(post: Post) {

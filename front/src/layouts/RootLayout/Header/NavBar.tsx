@@ -113,7 +113,7 @@ export default NavBar
 const StyledWrapper = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.42rem;
   flex-shrink: 0;
 
   .primaryLinks {
@@ -121,6 +121,9 @@ const StyledWrapper = styled.div`
     flex-direction: row;
     align-items: center;
     gap: 0.04rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 
     li {
       display: block;
@@ -152,12 +155,12 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 0.55rem;
+    justify-content: flex-start;
+    gap: 0.36rem;
     min-width: 0;
     min-height: 32px;
-    flex: 0 0 auto;
-    width: clamp(180px, 28vw, 320px);
+    flex: none;
+    width: fit-content;
   }
 
   .authLoadingShell {
@@ -219,6 +222,7 @@ const StyledWrapper = styled.div`
     font-size: 0.88rem;
     font-weight: 620;
     max-width: 130px;
+    margin: 0 0.1rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -235,7 +239,7 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 720px) {
-    gap: 0.55rem;
+    gap: 0.38rem;
 
     .primaryLinks {
       a {
@@ -248,8 +252,8 @@ const StyledWrapper = styled.div`
 
     .authArea {
       min-width: 0;
-      gap: 0.4rem;
-      width: clamp(124px, 38vw, 190px);
+      gap: 0.34rem;
+      width: auto;
     }
 
     .identity {

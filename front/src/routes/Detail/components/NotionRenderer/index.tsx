@@ -3,7 +3,7 @@ import { FC, ReactElement, ReactNode, isValidElement, useEffect, useMemo, useRef
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import AppIcon from "src/components/icons/AppIcon"
-import { normalizeEscapedMermaidFences } from "src/libs/markdown/mermaid"
+import { normalizeEscapedMarkdownFences, normalizeEscapedMermaidFences } from "src/libs/markdown/mermaid"
 import useMermaidEffect from "../../hooks/useMermaidEffect"
 import useInlineColorEffect from "./useInlineColorEffect"
 import usePrismEffect from "./usePrismEffect"
@@ -203,7 +203,7 @@ const extractPlainTextFromHtml = (rawHtml: string) =>
   )
 
 const extractMermaidSource = (rawCode: string) => {
-  const normalized = normalizeEscapedMermaidFences(extractPlainTextFromHtml(rawCode)).trim()
+  const normalized = normalizeEscapedMarkdownFences(extractPlainTextFromHtml(rawCode)).trim()
   if (!normalized) return ""
 
   const fencedMatch = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
@@ -537,7 +537,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const imageRenderOrderRef = useRef(0)
   const normalizedContent = useMemo(
-    () => normalizeEscapedMermaidFences(content?.trim() || ""),
+    () => normalizeEscapedMarkdownFences(content?.trim() || ""),
     [content]
   )
   const normalizedContentHtml = useMemo(() => contentHtml?.trim() || "", [contentHtml])

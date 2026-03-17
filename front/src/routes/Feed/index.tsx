@@ -111,10 +111,8 @@ const StyledWrapper = styled.div`
 `
 
 const IntroCard = styled.section`
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 1.25rem 1.3rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  padding: 0.35rem 0 1.05rem;
 
   h1 {
     margin: 0;

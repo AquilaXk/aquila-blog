@@ -87,14 +87,15 @@ const StyledWrapper = styled(Link)`
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     box-shadow: none;
     transition: border-color 0.2s ease, background-color 0.2s ease;
 
     &:hover {
-      border-color: ${({ theme }) => theme.colors.gray8};
       background: ${({ theme }) => theme.colors.gray2};
     }
     > .thumbnail {
@@ -198,7 +199,7 @@ const StyledWrapper = styled(Link)`
             border-radius: 999px;
             overflow: hidden;
             flex: 0 0 auto;
-            border: 1px solid ${({ theme }) => theme.colors.gray7};
+            border: none;
             background: ${({ theme }) => theme.colors.gray2};
             display: inline-flex;
             align-items: center;
@@ -228,7 +229,7 @@ const StyledWrapper = styled(Link)`
           }
         }
 
-        .like {
+      .like {
           display: inline-flex;
           align-items: center;
           gap: 0.38rem;
@@ -248,8 +249,6 @@ const StyledWrapper = styled(Link)`
 
   @media (max-width: 640px) {
     article {
-      border-radius: 12px;
-
       > .content {
         padding: 0.9rem 0.92rem 0.78rem;
 

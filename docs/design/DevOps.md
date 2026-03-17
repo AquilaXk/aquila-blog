@@ -262,10 +262,22 @@ sequenceDiagram
   - `task.queue.stale_processing`
   - `task.queue.oldest_ready_pending_age_seconds`
   - `task.queue.oldest_processing_age_seconds`
+- 공개 글 조회 성능 점검이 필요하면 `k6 run perf/k6/post-read-load.js`를 실행해 feed/explore/detail p95와 에러율을 같이 본다
 - 관리자 프로필 이미지/글 이미지 업로드가 필요한 경우 MinIO 환경변수와 업로드 API 확인
 - 이미지 정리 정책을 바꿨다면 `uploaded_file` 상태(`TEMP`, `PENDING_DELETE`)와 MinIO 사용량 추이를 같이 본다
 - Cloudflare Tunnel이 `caddy:80`으로 정상 연결되는지 확인
 - Kakao 로그인 점검 시 `/oauth2/authorization/kakao` 응답 `Location` 헤더 안 `redirect_uri`가 `https://api.<domain>/login/oauth2/code/kakao`인지 확인
+
+## k6 + Prometheus 성능 점검
+
+- 스크립트: `perf/k6/post-read-load.js`
+- 실행: `k6 run perf/k6/post-read-load.js`
+- 기본 목표:
+  - `post_feed_duration_ms` p95 < 2s
+  - `post_explore_duration_ms` p95 < 2s
+  - `post_detail_duration_ms` p95 < 1.5s
+- `http_req_failed`/`post_business_error_rate` < 1%
+- Grafana 패널은 `http_server_requests_seconds_*`와 k6 결과를 함께 보고, 배포 전/후를 동일 시나리오로 비교한다.
 
 ## API/Worker 분리 타이밍 기준
 

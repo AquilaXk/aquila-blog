@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
+import org.springframework.cache.CacheManager
 import java.time.Instant
 
 class PostApplicationServiceDeleteResilienceTest {
@@ -30,6 +31,7 @@ class PostApplicationServiceDeleteResilienceTest {
     private val secureTipPort: SecureTipPort = mock(SecureTipPort::class.java)
     private val eventPublisher: EventPublisher = mock(EventPublisher::class.java)
     private val uploadedFileRetentionService: UploadedFileRetentionService = mock(UploadedFileRetentionService::class.java)
+    private val cacheManager: CacheManager = mock(CacheManager::class.java)
 
     private val service =
         PostApplicationService(
@@ -42,6 +44,7 @@ class PostApplicationServiceDeleteResilienceTest {
             secureTipPort = secureTipPort,
             eventPublisher = eventPublisher,
             uploadedFileRetentionService = uploadedFileRetentionService,
+            cacheManager = cacheManager,
         )
 
     @Test

@@ -514,18 +514,15 @@ export default CommentBox
 
 const StyledWrapper = styled.section`
   margin-top: 1.5rem;
-  padding: 1.15rem 1.2rem;
-  border-radius: 28px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.08), transparent 36%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
+  padding: 1rem 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   textarea {
     width: 100%;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 16px;
-    background-color: ${({ theme }) => theme.colors.gray1};
+    border-radius: 8px;
+    background-color: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     padding: 0.8rem 0.95rem;
     min-height: 104px;
@@ -541,9 +538,9 @@ const StyledWrapper = styled.section`
     gap: 0.35rem;
     min-height: 38px;
     padding: 0 0.82rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background-color: ${({ theme }) => theme.colors.gray1};
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background-color: transparent;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.8rem;
     font-weight: 700;
@@ -610,9 +607,9 @@ const StyledWrapper = styled.section`
   .error {
     margin: 0 0 0.9rem;
     padding: 0.72rem 0.82rem;
-    border-radius: 14px;
+    border-radius: 8px;
     border: 1px solid ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
+    background: transparent;
     color: ${({ theme }) => theme.colors.red11};
     font-size: 0.875rem;
   }
@@ -657,9 +654,9 @@ const SectionHeader = styled.div`
     align-items: center;
     min-height: 38px;
     padding: 0 0.85rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray1};
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.82rem;
     font-weight: 700;
@@ -673,7 +670,7 @@ const Avatar = styled.div<{ size: number }>`
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 50%;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: none;
   background: ${({ theme }) => theme.colors.gray2};
 
   img {
@@ -691,12 +688,10 @@ const CommentItem = styled.div`
   &[data-reply="true"] {
     position: relative;
     margin-left: 1.15rem;
-    padding: 0.95rem 1rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 22px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
-      ${({ theme }) => theme.colors.gray2};
+    padding: 0.95rem 0 0.95rem 0.85rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   &[data-reply="true"]::before {
@@ -705,9 +700,9 @@ const CommentItem = styled.div`
     left: -0.95rem;
     top: 1.05rem;
     bottom: 1.05rem;
-    width: 2px;
+    width: 1px;
     border-radius: 999px;
-    background: linear-gradient(180deg, ${({ theme }) => theme.colors.green8}, transparent);
+    background: ${({ theme }) => theme.colors.gray7};
   }
 
   &[data-reply="true"]::after {
@@ -717,7 +712,7 @@ const CommentItem = styled.div`
     top: 1.05rem;
     width: 0.95rem;
     height: 1px;
-    background: ${({ theme }) => theme.colors.green8};
+    background: ${({ theme }) => theme.colors.gray7};
   }
 
   @media (max-width: 640px) {
@@ -844,8 +839,8 @@ const CommentItem = styled.div`
 
 const ReplyGroup = styled.div`
   margin-top: 1rem;
-  padding-left: 1.25rem;
-  border-left: 2px solid ${({ theme }) => theme.colors.gray6};
+  padding-left: 0.95rem;
+  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
 
   @media (max-width: 640px) {
     margin-top: 0.85rem;
@@ -872,10 +867,10 @@ const ReplyList = styled.ul`
 const EmptyState = styled.div`
   display: grid;
   gap: 0.18rem;
-  padding: 1rem 1.05rem;
-  border-radius: 18px;
-  border: 1px dashed ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1rem 0;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};

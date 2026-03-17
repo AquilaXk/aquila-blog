@@ -57,12 +57,10 @@ export default DeferredCommentBox
 
 const PlaceholderCard = styled.section`
   margin-top: 1.5rem;
-  padding: 1.1rem 1.2rem;
-  border-radius: 28px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    radial-gradient(circle at top left, rgba(16, 185, 129, 0.06), transparent 36%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray1}, ${({ theme }) => theme.colors.gray2});
+  padding: 1rem 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   .titleRow {
     display: flex;
@@ -84,9 +82,9 @@ const PlaceholderCard = styled.section`
     justify-content: center;
     min-height: 34px;
     padding: 0 0.85rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray1};
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.8rem;
     font-weight: 700;

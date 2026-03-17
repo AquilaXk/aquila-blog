@@ -56,11 +56,10 @@ const StyledWrapper = styled.div`
   }
   > .content {
     margin-bottom: 1.25rem;
-    border-radius: 1rem;
     width: 100%;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    padding: 0.95rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    padding: 0 0 1rem;
 
     .top {
       position: relative;
@@ -69,7 +68,7 @@ const StyledWrapper = styled.div`
       border-radius: 50%;
       overflow: hidden;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
+      background: transparent;
 
       &:after {
         content: "";

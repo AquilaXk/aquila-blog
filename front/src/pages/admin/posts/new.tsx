@@ -3284,11 +3284,11 @@ const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
   gap: 1rem;
-  border-radius: 16px;
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 1.05rem;
-  margin-bottom: 1rem;
-  box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray4};
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 1rem;
+  margin-bottom: 1.1rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -3377,10 +3377,10 @@ const MetricGrid = styled.div`
 `
 
 const MetricCard = styled.div`
-  border-radius: 12px;
+  border-radius: 0;
   border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
-  padding: 0.85rem 0.9rem;
+  background: transparent;
+  padding: 0.2rem 0;
 
   span {
     display: block;
@@ -3412,11 +3412,11 @@ const WorkspaceMain = styled.div`
 `
 
 const Section = styled.section`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 20px;
-  padding: 1.1rem;
-  margin-bottom: 1rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 1.2rem;
+  background: transparent;
 
   h2 {
     margin: 0;
@@ -3450,10 +3450,10 @@ const SectionDescription = styled.p`
 `
 
 const QueryPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.8rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.25rem 0 0;
   margin-bottom: 0.7rem;
 `
 
@@ -3478,10 +3478,10 @@ const ListScopeTabs = styled.div`
   align-items: center;
   gap: 0.38rem;
   margin-top: 0.55rem;
-  padding: 0.24rem;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: none;
+  background: transparent;
 `
 
 const ListScopeButton = styled.button`
@@ -3499,8 +3499,10 @@ const ListScopeButton = styled.button`
     color 0.18s ease;
 
   &[data-active="true"] {
-    background: ${({ theme }) => theme.colors.blue3};
+    background: transparent;
     color: ${({ theme }) => theme.colors.blue11};
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
 `
 
@@ -3555,10 +3557,11 @@ const ProfileStudioGrid = styled.div`
 `
 
 const ProfileCardPanel = styled.div`
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0 0 0.9rem;
   display: grid;
   gap: 0.85rem;
   width: 100%;
@@ -3577,7 +3580,7 @@ const ProfilePreview = styled.div`
   height: 124px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
   overflow: hidden;
   flex-shrink: 0;
 
@@ -3588,7 +3591,7 @@ const ProfilePreview = styled.div`
     object-position: center 38%;
     border-radius: 999px;
     display: block;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    border: none;
   }
 `
 
@@ -3644,10 +3647,11 @@ const InlineHint = styled.p`
 `
 
 const FormPanelCard = styled.div`
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0 0 0.9rem;
 `
 
 const ProfileCurrentGrid = styled.div`
@@ -3664,10 +3668,11 @@ const ProfileCurrentGrid = styled.div`
 const ProfileCurrentItem = styled.div`
   display: grid;
   gap: 0.2rem;
-  padding: 0.72rem 0.78rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.56rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   min-width: 0;
 
   &.wide {
@@ -3695,14 +3700,14 @@ const ProfileCurrentItem = styled.div`
 const InlineStatus = styled.div`
   margin-bottom: 0.85rem;
   padding: 0.62rem 0.72rem;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 0.82rem;
   line-height: 1.5;
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray11};
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    background: transparent;
   }
 
   &[data-tone="loading"] {
@@ -3752,11 +3757,11 @@ const UtilityGrid = styled.div`
 `
 
 const Input = styled.input`
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
   padding: 0.72rem 0.8rem;
   min-width: 120px;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
 
   &:focus {
@@ -3794,11 +3799,11 @@ const TitleInput = styled(Input)`
 `
 
 const Button = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray8};
-  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
   padding: 0.58rem 0.88rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
   font-size: 0.82rem;
   font-weight: 600;
@@ -3816,18 +3821,17 @@ const Button = styled.button`
 `
 
 const PrimaryButton = styled(Button)`
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 0.6rem 0.88rem;
   border-color: ${({ theme }) => theme.colors.blue9};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: #fff;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue11};
   font-weight: 700;
 `
 
 const HeroActionButton = styled(Button)`
-  border: 0;
-  border-radius: 10px;
-  background: ${({ theme }) => theme.colors.gray3};
+  border-radius: 8px;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-weight: 650;
   padding: 0.6rem 0.92rem;
@@ -3839,12 +3843,13 @@ const HeroActionButton = styled(Button)`
 `
 
 const HeroPrimaryActionButton = styled(HeroActionButton)`
-  background: ${({ theme }) => theme.colors.blue9};
-  color: #ffffff;
+  border-color: ${({ theme }) => theme.colors.blue8};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue11};
 
   &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.blue10};
-    color: #ffffff;
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
   }
 `
 
@@ -3855,23 +3860,23 @@ const VisibilityWrap = styled.div`
 `
 
 const VisibilitySelect = styled.select`
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
   padding: 0.52rem 0.62rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.86rem;
 `
 
 const EditorSection = styled.div`
-  margin: 0.85rem 0 0.25rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 24px;
-  padding: 1.5rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  margin: 0.5rem 0 0.25rem;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
 
   @media (max-width: 720px) {
-    padding: 1rem;
+    padding: 0;
   }
 `
 
@@ -3953,22 +3958,23 @@ const InlineTagList = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  min-height: 3rem;
+  min-height: auto;
   align-items: center;
-  border-radius: 1rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.52rem 0.55rem;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
 `
 
 const InlineMetaInput = styled(Input)`
   flex: 1 1 12rem;
   min-width: 11rem;
   border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   outline: none;
   min-height: 2rem;
-  padding: 0 0.35rem;
-  border-radius: 0.55rem;
+  padding: 0 0.12rem;
+  border-radius: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
 
@@ -3991,10 +3997,10 @@ const WriterMetaActions = styled.div`
 const PostPreviewSetup = styled.section`
   display: grid;
   gap: 0.44rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.68rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 `
 
 const PostPreviewHeader = styled.div`
@@ -4016,12 +4022,12 @@ const PostPreviewHeader = styled.div`
 `
 
 const PreviewThumbFrame = styled.div`
-  width: min(100%, 420px);
+  width: min(100%, 320px);
   justify-self: start;
   aspect-ratio: 16 / 9;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray2};
   overflow: hidden;
 
   @media (max-width: 780px) {
@@ -4062,10 +4068,10 @@ const PreviewThumbFrame = styled.div`
 const PreviewSummaryInput = styled.textarea`
   width: 100%;
   min-height: 5.8rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
   padding: 0.56rem 0.62rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.84rem;
   line-height: 1.55;
@@ -4119,10 +4125,10 @@ const SummaryPill = styled.span`
   display: inline-flex;
   align-items: center;
   min-height: 34px;
-  border-radius: 999px;
-  padding: 0 0.72rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 6px;
+  padding: 0 0.55rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.78rem;
   font-weight: 600;
@@ -4133,11 +4139,11 @@ const MetaToggleButton = styled.button`
   align-items: center;
   justify-content: center;
   min-height: 42px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0 0.95rem;
+  padding: 0 0.72rem;
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
@@ -4175,10 +4181,10 @@ const CategoryButtonContent = styled.span`
 const EditorContextChip = styled.span`
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
-  padding: 0.3rem 0.62rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.76rem;
   font-weight: 600;
@@ -4203,7 +4209,7 @@ const PublishNotice = styled.div`
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray11};
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: transparent;
   }
 
   &[data-tone="loading"] {
@@ -4233,10 +4239,12 @@ const MetadataSection = styled.section`
   display: grid;
   gap: 0.85rem;
   margin: 0 0 0.85rem;
-  padding: 0.9rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.75rem 0;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 `
 
 const MetadataHeader = styled.div`
@@ -4262,14 +4270,14 @@ const MetadataHeader = styled.div`
 
 const MetadataStatus = styled.div`
   padding: 0.62rem 0.74rem;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 0.8rem;
   line-height: 1.5;
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray11};
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: transparent;
   }
 
   &[data-tone="loading"] {
@@ -4297,8 +4305,8 @@ const MetadataBadge = styled.span`
   min-height: 32px;
   border-radius: 999px;
   padding: 0 0.72rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.blue11};
   font-size: 0.76rem;
   font-weight: 700;
@@ -4309,10 +4317,10 @@ const CompactMetaPanel = styled.section`
   display: grid;
   gap: 0.85rem;
   margin: 0 0 1rem;
-  padding: 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.7rem 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
 `
 
 const CompactMetaPanelTop = styled.div`
@@ -4350,10 +4358,10 @@ const MetadataPanel = styled.div`
   display: grid;
   gap: 0.65rem;
   min-width: 0;
-  padding: 0.82rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.55rem 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
 
   label {
     color: ${({ theme }) => theme.colors.gray12};
@@ -4386,14 +4394,14 @@ const IconChoiceChip = styled.button`
   justify-content: center;
   min-height: 2.1rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.46rem 0.88rem;
   font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+  box-shadow: none;
   transition:
     border-color 0.18s ease,
     background 0.18s ease,
@@ -4406,7 +4414,7 @@ const IconChoiceChip = styled.button`
   }
 
   &:hover {
-    transform: translateY(-1px);
+    transform: none;
     border-color: ${({ theme }) => theme.colors.blue7};
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
@@ -4416,7 +4424,7 @@ const IconChoiceChip = styled.button`
     border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
-    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.16);
+    box-shadow: none;
   }
 `
 
@@ -4427,8 +4435,8 @@ const CatalogChipGroup = styled.div`
   min-width: 0;
   max-width: 100%;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   overflow: hidden;
 `
 
@@ -4535,10 +4543,11 @@ const MetaSummaryCard = styled.div`
   display: grid;
   gap: 0.38rem;
   min-width: 0;
-  padding: 0.78rem 0.84rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.55rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
@@ -4640,8 +4649,8 @@ const TagCatalogChipGroup = styled.div`
   min-width: 0;
   max-width: 100%;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   overflow: hidden;
   transition:
     border-color 0.18s ease,
@@ -4743,7 +4752,7 @@ const TagCatalogDeleteButton = styled.button`
   }
 
   &:hover:not(:disabled) {
-    transform: translateY(-1px);
+    transform: none;
     background: ${({ theme }) => theme.colors.red3};
     color: ${({ theme }) => theme.colors.red11};
   }
@@ -4764,9 +4773,9 @@ const EditorToolbar = styled.div`
   display: grid;
   gap: 0.52rem;
   margin: 0 0 0.72rem;
-  padding: 0.54rem 0 0.46rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  padding: 0.24rem 0;
+  border-top: 0;
+  border-bottom: 0;
 `
 
 const ToolbarQuickBar = styled.div`
@@ -4782,10 +4791,10 @@ const ToolbarCluster = styled.div`
   align-items: center;
   gap: 0.28rem;
   flex-wrap: wrap;
-  padding: 0.2rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 `
 
 const ToolbarDivider = styled.span`
@@ -4803,15 +4812,14 @@ const ToolbarIconButton = styled.button`
   min-width: 2.04rem;
   height: 2.04rem;
   padding: 0 0.44rem;
-  border-radius: 9px;
-  border: 1px solid transparent;
+  border-radius: 6px;
+  border: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
   font-size: 0.92rem;
   font-weight: 650;
   transition:
-    border-color 0.18s ease,
     background 0.18s ease,
     color 0.18s ease,
     transform 0.12s ease;
@@ -4850,20 +4858,17 @@ const ToolbarIconButton = styled.button`
   }
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray4};
     color: ${({ theme }) => theme.colors.gray12};
-    transform: translateY(-1px);
+    transform: none;
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue7};
     background: ${({ theme }) => theme.colors.blue4};
     color: ${({ theme }) => theme.colors.blue11};
   }
 
   &[data-variant="primary"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.blue4};
     color: ${({ theme }) => theme.colors.blue11};
   }
@@ -4893,10 +4898,10 @@ const CalloutMenu = styled.div`
   top: calc(100% + 0.35rem);
   left: 0;
   min-width: 10rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 10px;
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: none;
   padding: 0.3rem;
   display: grid;
   gap: 0.25rem;
@@ -4940,11 +4945,11 @@ const EditorGrid = styled.div`
   --pane-body-height: clamp(28rem, calc(100vh - 20rem), 46rem);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 22px;
-  background: ${({ theme }) => theme.colors.gray2};
-  overflow: hidden;
+  gap: 1.1rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
   align-items: stretch;
 
   @media (max-width: 980px) {
@@ -4954,10 +4959,10 @@ const EditorGrid = styled.div`
 `
 
 const ListPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.7rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   margin: 0.7rem 0 0.2rem;
 `
 
@@ -5001,8 +5006,8 @@ const ReadOnlyHint = styled.span`
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   min-height: 32px;
   padding: 0 0.7rem;
@@ -5017,10 +5022,10 @@ const ListEmpty = styled.p`
 `
 
 const SelectedPostPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.8rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   margin: 0.7rem 0 0.2rem;
 `
 
@@ -5054,8 +5059,8 @@ const SelectedPostBadge = styled.span`
   align-items: center;
   border-radius: 999px;
   padding: 0.34rem 0.68rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.76rem;
   font-weight: 700;
@@ -5170,7 +5175,7 @@ const VisibilityBadge = styled.span`
   border-radius: 999px;
   padding: 0.16rem 0.46rem;
   font-size: 0.72rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border: none;
 
   &[data-tone="PRIVATE"] {
     color: ${({ theme }) => theme.colors.gray11};
@@ -5209,9 +5214,9 @@ const ModalBackdrop = styled.div`
 
 const ConfirmModal = styled.div`
   width: min(440px, 100%);
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
   display: grid;
   gap: 0.75rem;
@@ -5245,9 +5250,9 @@ const PublishModal = styled.div`
   width: min(760px, 100%);
   max-height: min(86vh, 920px);
   overflow: auto;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
   display: grid;
   gap: 0.9rem;
@@ -5299,12 +5304,12 @@ const EditorPane = styled.section`
 `
 
 const PreviewPane = styled(EditorPane)`
-  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-left: 0;
+  background: transparent;
 
   @media (max-width: 980px) {
     border-left: 0;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-top: 0;
   }
 `
 
@@ -5334,14 +5339,14 @@ const PaneChip = styled.span`
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 0;
+  border: none;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   font-weight: 700;
-  min-height: 30px;
-  padding: 0 0.62rem;
+  min-height: auto;
+  padding: 0;
 `
 
 const ContentInput = styled.textarea`
@@ -5389,9 +5394,9 @@ const WriterFooterBar = styled.div`
   justify-content: space-between;
   gap: 0.8rem;
   flex-wrap: wrap;
-  margin-top: 1rem;
-  padding-top: 0.95rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+  margin-top: 0.85rem;
+  padding-top: 0.55rem;
+  border-top: 0;
 `
 
 const WriterFooterSummary = styled.div`
@@ -5455,10 +5460,10 @@ const EditorInsightCard = styled.div`
   display: grid;
   gap: 0.2rem;
   min-width: 0;
-  padding: 0.72rem 0.78rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.2rem 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
@@ -5476,10 +5481,10 @@ const EditorInsightCard = styled.div`
 
 const EditorSupportNote = styled.p`
   margin: 0 0 0.85rem;
-  padding: 0.72rem 0.82rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.8rem;
   line-height: 1.6;
@@ -5488,9 +5493,9 @@ const EditorSupportNote = styled.p`
 const ResultPanel = styled.pre`
   margin: 0;
   padding: 1rem;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.82rem;
   line-height: 1.5;
@@ -5501,9 +5506,11 @@ const ResultPanel = styled.pre`
 
 const DevConsoleSection = styled.section`
   margin-top: 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   overflow: hidden;
 
   details {

@@ -74,10 +74,12 @@ const StyledWrapper = styled.div`
 
   .emptyState {
     grid-column: 1 / -1;
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    padding: 1.2rem;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    padding: 1rem 0;
     min-height: 10rem;
     display: grid;
     align-content: center;
@@ -88,9 +90,9 @@ const StyledWrapper = styled.div`
     .emptyIcon {
       width: 2.1rem;
       height: 2.1rem;
-      border-radius: 999px;
+      border-radius: 8px;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 1.08rem;
       display: inline-flex;
@@ -128,9 +130,9 @@ const StyledWrapper = styled.div`
       gap: 0.35rem;
       min-height: 36px;
       padding: 0 0.82rem;
-      border-radius: 999px;
+      border-radius: 8px;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray1};
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray11};
       font-size: 0.84rem;
       font-weight: 700;
@@ -139,9 +141,8 @@ const StyledWrapper = styled.div`
     }
 
     .actionBtn--primary {
-      border-color: ${({ theme }) => theme.colors.blue8};
-      background: ${({ theme }) => theme.colors.blue3};
-      color: ${({ theme }) => theme.colors.gray12};
+      border-color: ${({ theme }) => theme.colors.blue7};
+      color: ${({ theme }) => theme.colors.blue11};
     }
   }
 `

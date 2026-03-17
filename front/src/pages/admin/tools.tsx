@@ -1099,10 +1099,9 @@ const Main = styled.main`
 const HeaderCard = styled.section`
   display: grid;
   gap: 0.95rem;
-  padding: 1.1rem 1rem 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.3rem 0 0.95rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
 
   h1 {
     margin: 0;
@@ -1139,10 +1138,11 @@ const GuideCard = styled.article`
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.8rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.88rem 0.92rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0.72rem 0;
 
   h3 {
     margin: 0 0 0.28rem;
@@ -1162,21 +1162,21 @@ const GuideIcon = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0;
+  border: none;
+  background: transparent;
   font-size: 1rem;
 `
 
 const Eyebrow = styled.span`
   width: fit-content;
-  border-radius: 999px;
-  padding: 0.42rem 0.82rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  border-radius: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1190,35 +1190,44 @@ const HeaderActions = styled.div`
 `
 
 const BaseButton = styled.button`
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   padding: 0.72rem 1rem;
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
 
+  &:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.gray8};
+    color: ${({ theme }) => theme.colors.gray12};
+    background: ${({ theme }) => theme.colors.gray3};
+  }
+
   &:disabled {
-    opacity: 0.58;
+    opacity: 1;
     cursor: not-allowed;
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray10};
   }
 `
 
 const PrimaryButton = styled(BaseButton)`
   border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: white;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue11};
 `
 
 const NavLink = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
   font-size: 0.92rem;
@@ -1231,10 +1240,11 @@ const Grid = styled.section`
 `
 
 const SectionCard = styled.section`
-  border-radius: 22px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 1.1rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
+  padding: 0.95rem 0;
 `
 
 const SectionTop = styled.div`
@@ -1257,10 +1267,10 @@ const SectionTop = styled.div`
 const SectionEyebrow = styled.span`
   width: fit-content;
   display: inline-flex;
-  border-radius: 999px;
-  padding: 0.32rem 0.62rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  color: ${({ theme }) => theme.colors.gray11};
+  border-radius: 0;
+  padding: 0;
+  border: 0;
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1284,11 +1294,11 @@ const SectionIcon = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.95rem;
-  height: 1.95rem;
-  border-radius: 11px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 0;
+  border: none;
+  background: transparent;
   font-size: 0.95rem;
 `
 
@@ -1320,9 +1330,9 @@ const FieldLabel = styled.label`
 
 const Input = styled.input`
   width: 100%;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
   font-size: 0.98rem;
@@ -1348,9 +1358,9 @@ const ActionCardGrid = styled.div`
 `
 
 const ActionCardButton = styled.button`
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.8rem 0.88rem;
   text-align: left;
@@ -1363,9 +1373,10 @@ const ActionCardButton = styled.button`
     box-shadow 0.16s ease;
 
   &:hover {
-    transform: translateY(-1px);
+    transform: none;
     border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+    box-shadow: none;
+    background: ${({ theme }) => theme.colors.gray3};
   }
 
   &:disabled {
@@ -1377,12 +1388,14 @@ const ActionCardButton = styled.button`
 
   &[data-tone="danger"] {
     border-color: ${({ theme }) => theme.colors.red7};
-    background: ${({ theme }) => theme.colors.red3};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.red11};
   }
 
   &[data-tone="write"] {
     border-color: ${({ theme }) => theme.colors.green7};
-    background: ${({ theme }) => theme.colors.green3};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.green11};
   }
 `
 
@@ -1412,8 +1425,8 @@ const ActionStateChip = styled.span`
   justify-content: center;
   min-width: 2.55rem;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.2rem 0.5rem;
   font-size: 0.74rem;
@@ -1459,10 +1472,11 @@ const MetaGrid = styled.div`
 const MetaBox = styled.div`
   display: grid;
   gap: 0.25rem;
-  padding: 0.9rem 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.58rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   small {
     color: ${({ theme }) => theme.colors.gray11};
@@ -1486,7 +1500,7 @@ const StatusBadge = styled.span`
   font-size: 0.8rem;
   font-weight: 800;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
 
   &[data-status="READY"],
@@ -1506,10 +1520,10 @@ const StatusBadge = styled.span`
 
 const InlineNotice = styled.p`
   margin: 0 0 0.9rem;
-  padding: 0.85rem 1rem;
-  border-radius: 16px;
+  padding: 0.78rem 0.82rem;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.6;
 
@@ -1560,10 +1574,11 @@ const TaskSummaryLine = styled.div`
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 0.82rem 1rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.62rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
@@ -1585,10 +1600,11 @@ const TaskTypeGrid = styled.div`
 const TaskTypeCard = styled.div`
   display: grid;
   gap: 0.75rem;
-  padding: 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.75rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 `
 
 const TaskTypeHeader = styled.div`
@@ -1618,7 +1634,7 @@ const TaskStatePill = styled.span`
   border-radius: 999px;
   padding: 0.34rem 0.62rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   font-size: 0.76rem;
   font-weight: 800;
@@ -1644,10 +1660,11 @@ const TaskMetricGrid = styled.div`
 const TaskMetric = styled.div`
   display: grid;
   gap: 0.2rem;
-  padding: 0.75rem 0.8rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.45rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
@@ -1678,10 +1695,11 @@ const TaskMetaLine = styled.div`
 
 const TaskErrorSnippet = styled.p`
   margin: 0;
-  padding: 0.72rem 0.82rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.58rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   line-height: 1.55;
   word-break: break-word;
@@ -1719,10 +1737,11 @@ const TaskSampleList = styled.div`
 const TaskSampleItem = styled.div`
   display: grid;
   gap: 0.55rem;
-  padding: 0.9rem 1rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.7rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 `
 
 const TaskSampleTop = styled.div`
@@ -1770,15 +1789,16 @@ const MonitoringFrame = styled.iframe`
   width: 100%;
   min-height: 420px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 16px;
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  background: transparent;
 `
 
 const ConsoleCard = styled.section`
-  border-radius: 22px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 1.1rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
+  padding: 0.95rem 0;
 `
 
 const ConsoleHeader = styled.div`
@@ -1831,9 +1851,9 @@ const ConsoleQuickActionButton = styled.button`
   gap: 0.5rem;
   min-height: 2.85rem;
   flex: 1 1 16rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0 0.82rem;
   cursor: pointer;
@@ -1883,9 +1903,9 @@ const ConsoleQuickActionButton = styled.button`
 const ResultPanel = styled.pre`
   margin: 0;
   min-height: 220px;
-  border-radius: 18px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   padding: 0.95rem;
   overflow: auto;
   color: ${({ theme }) => theme.colors.gray12};

@@ -58,26 +58,6 @@ const FeedExplorer = () => {
     })
   }
 
-  useEffect(() => {
-    const handleGlobalShortcut = (event: KeyboardEvent) => {
-      const isSearchShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k"
-      if (!isSearchShortcut) return
-
-      const target = event.target as HTMLElement | null
-      const isTypingContext =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable
-      if (isTypingContext) return
-
-      event.preventDefault()
-      searchInputRef.current?.focus()
-    }
-
-    window.addEventListener("keydown", handleGlobalShortcut)
-    return () => window.removeEventListener("keydown", handleGlobalShortcut)
-  }, [])
-
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
@@ -122,7 +102,7 @@ const ExplorerCard = styled.section`
     display: grid;
     gap: 0.95rem;
     min-width: 0;
-    padding-bottom: 0.85rem;
+    padding-bottom: 0.72rem;
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 
@@ -132,7 +112,10 @@ const ExplorerCard = styled.section`
 
   .actions {
     min-width: 0;
-    padding-top: 0.1rem;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding-top: 0;
   }
 
   @media (max-width: 768px) {
@@ -141,21 +124,12 @@ const ExplorerCard = styled.section`
   }
 
   @media (min-width: 1024px) {
-    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
-    align-items: start;
-    column-gap: 1.2rem;
-    row-gap: 0;
     .filters {
-      padding-right: 1.2rem;
-      padding-bottom: 0;
-      border-bottom: 0;
-      border-right: 1px solid ${({ theme }) => theme.colors.gray6};
+      gap: 0.82rem;
     }
 
     .actions {
-      border-top: 0;
-      padding-top: 0.1rem;
-      align-self: start;
+      justify-content: flex-end;
     }
   }
 `

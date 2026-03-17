@@ -32,9 +32,9 @@ spring:
     show-sql: false
   sql:
     init:
-      mode: always
-      schema-locations: classpath:db/guard/prod-schema-guard.sql
-      continue-on-error: false
+      # 운영 스키마 변경은 Flyway(classpath:db/migration)로만 수행한다.
+      # 런타임 SQL init(DDL) 강제 실행은 권한/잠금 이슈로 부팅 실패를 유발할 수 있어 비활성화한다.
+      mode: never
 management:
   endpoints:
     web:

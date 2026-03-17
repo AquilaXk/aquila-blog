@@ -8,6 +8,17 @@ const mockFeedEndpoints = async (page: Page) => {
     "base64"
   )
 
+  await page.route("**/_next/image**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: pixelPng,
+      headers: {
+        "cache-control": "public, max-age=31536000, immutable",
+      },
+    })
+  })
+
   await page.route("**/avatar.png", async (route) => {
     await route.fulfill({
       status: 200,
@@ -108,7 +119,7 @@ test("홈 페이지 CLS(web-vitals) 예산을 통과한다", async ({ page }) =>
   await mockFeedEndpoints(page)
   await page.goto("/")
   await page.waitForLoadState("networkidle")
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(1500)
 
   const cls = await page.evaluate(() => (window as unknown as { __aqCls?: number }).__aqCls ?? 0)
   console.log(`[web-vitals] CLS=${cls.toFixed(4)} budget=${clsBudget}`)

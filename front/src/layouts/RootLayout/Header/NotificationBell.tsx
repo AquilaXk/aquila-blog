@@ -504,19 +504,27 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 31px;
-    height: 31px;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
+    min-width: 0;
+    height: 32px;
+    padding: 0 0.36rem;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
 
+    &:hover {
+      color: ${({ theme }) => theme.colors.gray12};
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
+    }
+
     svg {
-      width: 17px;
-      height: 17px;
+      width: 18px;
+      height: 18px;
       display: block;
-      transform: translateY(-0.5px);
+      transform: translateY(-0.3px);
     }
   }
 
@@ -699,8 +707,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 720px) {
     .trigger {
-      width: 29px;
-      height: 29px;
+      height: 28px;
+      padding: 0 0.3rem;
 
       svg {
         width: 16px;

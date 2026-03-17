@@ -16,6 +16,13 @@ export const Global = () => {
           text-size-adjust: 100%;
         }
 
+        html[data-ui-ready="false"] *,
+        html[data-ui-ready="false"] *::before,
+        html[data-ui-ready="false"] *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+
         body {
           min-height: 100%;
           margin: 0;

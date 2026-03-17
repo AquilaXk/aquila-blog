@@ -18,6 +18,20 @@ const RootLayout = ({ children }: Props) => {
   useGtagEffect()
 
   useEffect(() => {
+    if (typeof document === "undefined") return
+
+    const root = document.documentElement
+    root.setAttribute("data-ui-ready", "false")
+    const rafId = window.requestAnimationFrame(() => {
+      root.setAttribute("data-ui-ready", "true")
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [])
+
+  useEffect(() => {
     let mounted = true
 
     const handleStart = (_url: string, options?: { shallow: boolean }) => {

@@ -55,9 +55,11 @@ const NavBar: React.FC = () => {
       </ul>
       <div className="authArea">
         {authStatus === "loading" && (
-          <>
+          <div className="authLoadingShell" aria-hidden="true">
+            <span className="authSkeleton icon" />
             <span className="authSkeleton short" />
-          </>
+            <span className="authSkeleton medium" />
+          </div>
         )}
         {authStatus === "anonymous" && (
           <button
@@ -129,17 +131,20 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       min-height: 32px;
-      padding: 0 0.62rem;
-      border-radius: 10px;
-      border: 1px solid transparent;
+      padding: 0 0.42rem;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray11};
       font-size: 0.86rem;
-      font-weight: 630;
+      font-weight: 620;
       line-height: 1;
 
       &:hover {
-        background: ${({ theme }) => theme.colors.gray3};
         color: ${({ theme }) => theme.colors.gray12};
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        text-decoration-thickness: 1px;
       }
     }
   }
@@ -147,10 +152,20 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: flex-end;
     gap: 0.55rem;
     min-width: 0;
     min-height: 32px;
+    flex: 0 0 auto;
+    width: clamp(180px, 28vw, 320px);
+  }
+
+  .authLoadingShell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    width: 100%;
   }
 
   .navPill,
@@ -158,33 +173,41 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 78px;
+    min-width: 0;
     height: 32px;
-    padding: 0 0.72rem;
-    border-radius: 10px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
+    padding: 0 0.42rem;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.84rem;
-    font-weight: 650;
+    font-size: 0.86rem;
+    font-weight: 630;
     cursor: pointer;
 
     &:hover {
-      background: ${({ theme }) => theme.colors.gray3};
       color: ${({ theme }) => theme.colors.gray12};
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
     }
   }
 
   .authSkeleton {
     display: inline-flex;
-    height: 32px;
-    border-radius: 999px;
+    height: 14px;
+    border-radius: 6px;
     background: ${({ theme }) => theme.colors.gray4};
-    opacity: 0.9;
+    opacity: 0.75;
+  }
+
+  .authSkeleton.icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
   }
 
   .authSkeleton.short {
-    width: 80px;
+    width: 52px;
   }
 
   .authSkeleton.medium {
@@ -203,13 +226,12 @@ const StyledWrapper = styled.div`
 
   .authNotice {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     white-space: nowrap;
   }
 
   .navPill--warning {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray4};
+    color: ${({ theme }) => theme.colors.blue10};
   }
 
   @media (max-width: 720px) {
@@ -227,6 +249,7 @@ const StyledWrapper = styled.div`
     .authArea {
       min-width: 0;
       gap: 0.4rem;
+      width: clamp(124px, 38vw, 190px);
     }
 
     .identity {
@@ -239,14 +262,25 @@ const StyledWrapper = styled.div`
 
     .navPill,
     .logoutBtn {
-      min-width: 58px;
+      min-width: 0;
       height: 28px;
       font-size: 0.78rem;
+      padding: 0 0.3rem;
     }
 
     .authSkeleton.short {
-      width: 64px;
-      height: 28px;
+      width: 44px;
+      height: 12px;
+    }
+
+    .authSkeleton.icon {
+      width: 15px;
+      height: 15px;
+    }
+
+    .authSkeleton.medium {
+      width: 62px;
+      height: 12px;
     }
   }
 `

@@ -31,29 +31,35 @@ const StyledWrapper = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  border-radius: 999px;
-  padding: 0;
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray12};
+  min-width: 0;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  padding: 0 0.36rem;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
 
+  &:hover {
+    color: ${({ theme }) => theme.colors.gray12};
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+
   svg {
-    width: 15px;
-    height: 15px;
+    width: 18px;
+    height: 18px;
     display: block;
-    transform: translate(-0.2px, -0.45px);
+    transform: translateY(-0.3px);
   }
 
   @media (max-width: 720px) {
-    width: 28px;
     height: 28px;
 
     svg {
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
     }
   }
 `

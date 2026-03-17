@@ -7,24 +7,6 @@ import { SchemeType } from "src/types"
 
 type SetScheme = (scheme: SchemeType) => void
 
-const resolveInitialScheme = (
-  followsSystemTheme: boolean,
-  fallbackScheme: SchemeType
-): SchemeType => {
-  if (typeof window === "undefined") {
-    return followsSystemTheme ? fallbackScheme : fallbackScheme
-  }
-
-  const cookieScheme = getCookie("scheme")
-  if (cookieScheme === "dark" || cookieScheme === "light") {
-    return cookieScheme
-  }
-
-  if (!followsSystemTheme) return fallbackScheme
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light"
-}
-
 const useScheme = (): [SchemeType, SetScheme] => {
   const queryClient = useQueryClient()
   const followsSystemTheme = CONFIG.blog.scheme === "system"
@@ -33,7 +15,8 @@ const useScheme = (): [SchemeType, SetScheme] => {
   const { data } = useQuery<SchemeType>({
     queryKey: queryKey.scheme(),
     enabled: false,
-    initialData: resolveInitialScheme(followsSystemTheme, fallbackScheme),
+    // SSR/CSR 첫 렌더를 동일하게 맞춰 새로고침 시 하이드레이션 흔들림을 줄인다.
+    initialData: fallbackScheme,
   })
 
   const setScheme = useCallback((scheme: SchemeType) => {

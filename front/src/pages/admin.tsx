@@ -125,8 +125,9 @@ const HeroCard = styled.section`
   gap: 0.9rem;
   padding: 1.1rem;
   border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 1px 0 ${({ theme }) => theme.colors.gray4};
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -153,12 +154,9 @@ const HeroIntro = styled.div`
 
 const Eyebrow = styled.span`
   width: fit-content;
-  border-radius: 999px;
-  padding: 0.34rem 0.62rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.74rem;
+  padding: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -172,8 +170,8 @@ const HeroActions = styled.div`
 
 const BaseButton = styled.button`
   border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
@@ -181,11 +179,9 @@ const BaseButton = styled.button`
   cursor: pointer;
   transition:
     background-color 0.18s ease,
-    border-color 0.18s ease,
     color 0.18s ease;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
@@ -193,43 +189,27 @@ const BaseButton = styled.button`
   &:disabled {
     opacity: 1;
     cursor: not-allowed;
-    border-color: ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray10};
   }
 `
 
 const PrimaryAction = styled(BaseButton)`
-  border-color: ${({ theme }) => theme.colors.blue8};
   background: ${({ theme }) => theme.colors.blue9};
   color: #fff;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
     background: ${({ theme }) => theme.colors.blue10};
     color: #fff;
   }
 
   &:disabled {
-    border-color: ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray4};
     color: ${({ theme }) => theme.colors.gray10};
   }
 `
 
-const GhostButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.66rem 0.92rem;
-  font-size: 0.92rem;
-  font-weight: 700;
-  cursor: pointer;
-`
+const GhostButton = styled(BaseButton)``
 
 const ProfilePanel = styled.aside`
   display: grid;
@@ -237,9 +217,9 @@ const ProfilePanel = styled.aside`
   align-content: center;
   gap: 0.45rem;
   padding: 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 12px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray3};
   text-align: center;
 
   strong {
@@ -263,7 +243,6 @@ const ProfileFrame = styled.div`
   height: 96px;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
 `
 
 const ProfileFallback = styled.div`
@@ -291,11 +270,12 @@ const QuickCard = styled.a`
   display: grid;
   gap: 0.7rem;
   padding: 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  border-radius: 12px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray2};
   text-decoration: none;
   color: inherit;
+  box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray4};
 
   small {
     color: ${({ theme }) => theme.colors.gray11};

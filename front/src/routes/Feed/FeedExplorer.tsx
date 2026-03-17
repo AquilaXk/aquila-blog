@@ -6,7 +6,6 @@ import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
 import TagList from "./TagList"
 import useExplorePostsQuery from "src/hooks/useExplorePostsQuery"
-import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { useRouter } from "next/router"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
@@ -33,8 +32,6 @@ const FeedExplorer = () => {
       ? router.query.order
       : "desc"
   const debouncedQ = useDebouncedValue(q)
-  const tagCounts = useTagsQuery()
-  const hasTagEntries = useMemo(() => Object.keys(tagCounts).length > 0, [tagCounts])
   const visiblePosts = useExplorePostsQuery({
     kw: debouncedQ,
     tag: currentTag,
@@ -84,18 +81,16 @@ const FeedExplorer = () => {
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard data-has-tags={hasTagEntries}>
+      <ExplorerCard>
         <div className="filters">
           <SearchInput
             inputRef={searchInputRef}
             value={q}
             onChange={(event) => setQ(event.target.value)}
           />
-          {hasTagEntries && (
-            <div className="tags">
-              <TagList />
-            </div>
-          )}
+          <div className="tags">
+            <TagList />
+          </div>
         </div>
         <div className="actions">
           <FeedHeader />
@@ -113,10 +108,13 @@ const FeedExplorer = () => {
 export default FeedExplorer
 
 const ExplorerCard = styled.section`
+  container-type: inline-size;
   display: grid;
   gap: 0.95rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  padding: 0.3rem 0 0.85rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.78rem 0.85rem 0.82rem;
   min-width: 0;
   overflow: visible;
 
@@ -124,6 +122,8 @@ const ExplorerCard = styled.section`
     display: grid;
     gap: 0.95rem;
     min-width: 0;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 
   .tags {
@@ -132,30 +132,23 @@ const ExplorerCard = styled.section`
 
   .actions {
     min-width: 0;
-    padding-top: 0.28rem;
-  }
-
-  &[data-has-tags="true"] .actions {
-    border-top: 0;
+    padding-top: 0.1rem;
   }
 
   @media (max-width: 768px) {
     gap: 0.85rem;
-    padding: 0.2rem 0 0.75rem;
+    padding: 0.72rem 0.72rem 0.74rem;
   }
 
   @media (min-width: 1024px) {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
     align-items: start;
     column-gap: 1.2rem;
     row-gap: 0;
-
-    &[data-has-tags="true"] {
-      grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
-    }
-
-    &[data-has-tags="true"] .filters {
+    .filters {
       padding-right: 1.2rem;
+      padding-bottom: 0;
+      border-bottom: 0;
       border-right: 1px solid ${({ theme }) => theme.colors.gray6};
     }
 

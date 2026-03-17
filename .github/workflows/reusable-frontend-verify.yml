@@ -1,0 +1,60 @@
+name: Reusable Frontend Verify
+
+on:
+  workflow_call:
+
+jobs:
+  front-verify:
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_USE_WEBSERVER: "false"
+      BUNDLE_BUDGET_KB: "480"
+      CLS_BUDGET: "0.1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Lint frontend
+        working-directory: front
+        run: yarn lint
+
+      - name: Build frontend
+        working-directory: front
+        run: yarn build
+
+      - name: Check frontend bundle size budget
+        working-directory: front
+        run: yarn check:bundle-size
+
+      - name: Install Playwright browser
+        working-directory: front
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke e2e
+        working-directory: front
+        run: yarn test:e2e:smoke
+
+      - name: Run CLS perf e2e
+        working-directory: front
+        run: yarn test:e2e:perf
+
+      - name: Upload frontend reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: front-verify-playwright-report
+          path: |
+            front/playwright-report
+            front/test-results
+          retention-days: 7

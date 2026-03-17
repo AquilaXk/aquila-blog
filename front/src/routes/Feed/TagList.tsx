@@ -156,6 +156,7 @@ const StyledWrapper = styled.div`
     max-height: clamp(360px, calc(100vh - 190px), 76vh);
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-gutter: stable both-edges;
     scrollbar-width: thin;
 
     &::-webkit-scrollbar {
@@ -181,8 +182,8 @@ const StyledWrapper = styled.div`
     min-width: 0;
     border: 0;
     background: transparent;
-    border-radius: 0;
-    padding: 0.1rem 0;
+    border-radius: 8px;
+    padding: 0.18rem 0.42rem;
     cursor: pointer;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -194,7 +195,8 @@ const StyledWrapper = styled.div`
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      opacity: 0.88;
+      opacity: 1;
+      background: ${({ theme }) => theme.colors.gray2};
     }
 
     &:focus-visible {
@@ -205,6 +207,7 @@ const StyledWrapper = styled.div`
 
   .desktopList button[data-active="true"] {
     font-weight: 760;
+    background: ${({ theme }) => theme.colors.gray2};
   }
 
   .desktopList button .name {
@@ -218,7 +221,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .name {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.blue11};
   }
 
   .desktopList button .count {
@@ -229,7 +232,7 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.gray10};
+    color: ${({ theme }) => theme.colors.blue10};
   }
 
   @container (max-width: 235px) {
@@ -264,6 +267,7 @@ const StyledWrapper = styled.div`
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
+    min-height: 2.2rem;
     padding-bottom: 0.3rem;
     min-width: 0;
 

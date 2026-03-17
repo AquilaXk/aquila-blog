@@ -1093,7 +1093,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 0.95rem;
+  gap: 1rem;
 `
 
 const HeaderCard = styled.section`
@@ -1138,11 +1138,10 @@ const GuideCard = styled.article`
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.8rem;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  padding: 0.72rem 0;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.72rem 0.82rem;
 
   h3 {
     margin: 0 0 0.28rem;
@@ -1240,11 +1239,10 @@ const Grid = styled.section`
 `
 
 const SectionCard = styled.section`
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: transparent;
-  padding: 0.95rem 0;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.95rem;
 `
 
 const SectionTop = styled.div`
@@ -1332,7 +1330,7 @@ const Input = styled.input`
   width: 100%;
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
   font-size: 0.98rem;
@@ -1360,7 +1358,7 @@ const ActionCardGrid = styled.div`
 const ActionCardButton = styled.button`
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.8rem 0.88rem;
   text-align: left;
@@ -1388,13 +1386,13 @@ const ActionCardButton = styled.button`
 
   &[data-tone="danger"] {
     border-color: ${({ theme }) => theme.colors.red7};
-    background: transparent;
+    background: ${({ theme }) => theme.colors.red2};
     color: ${({ theme }) => theme.colors.red11};
   }
 
   &[data-tone="write"] {
     border-color: ${({ theme }) => theme.colors.green7};
-    background: transparent;
+    background: ${({ theme }) => theme.colors.green2};
     color: ${({ theme }) => theme.colors.green11};
   }
 `
@@ -1472,11 +1470,10 @@ const MetaGrid = styled.div`
 const MetaBox = styled.div`
   display: grid;
   gap: 0.25rem;
-  padding: 0.58rem 0;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  padding: 0.58rem 0.68rem;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
 
   small {
     color: ${({ theme }) => theme.colors.gray11};

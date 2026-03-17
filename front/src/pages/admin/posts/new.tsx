@@ -18,7 +18,7 @@ import { isNavigationCancelledError, replaceRoute, toLoginPath } from "src/libs/
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
-import NotionRenderer from "src/routes/Detail/components/NotionRenderer"
+import MarkdownRenderer from "src/routes/Detail/components/MarkdownRenderer"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -543,9 +543,12 @@ const blockToMarkdown = (el: HTMLElement): string => {
   if (tag === "details") return detailsToMarkdown(el)
 
   const classNames = el.className || ""
-  if (classNames.includes("notion-toggle")) {
-    const title = el.querySelector(".notion-toggle-summary")?.textContent?.trim() || "토글 제목"
-    const body = el.querySelector(".notion-toggle-content")?.textContent?.trim() || "내용을 입력하세요."
+  const hasToggleClass = /(^|\s)[a-z0-9_-]*toggle[a-z0-9_-]*(\s|$)/i.test(classNames)
+  if (hasToggleClass) {
+    const title =
+      el.querySelector("summary, [class*='toggle-summary'], [class*='summary']")?.textContent?.trim() || "토글 제목"
+    const body =
+      el.querySelector("[class*='toggle-content'], [class*='content']")?.textContent?.trim() || "내용을 입력하세요."
     return `:::toggle ${title}\n${body}\n:::`
   }
 
@@ -1880,7 +1883,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setIsColorMenuOpen(false)
   }
 
-  const handlePasteFromNotion = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePasteFromHtml = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const html = e.clipboardData.getData("text/html")
     if (!html) return
 
@@ -2953,7 +2956,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 placeholder="당신의 이야기를 적어보세요..."
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
-                onPaste={handlePasteFromNotion}
+                onPaste={handlePasteFromHtml}
               />
             </EditorPane>
             <PreviewPane>
@@ -2965,7 +2968,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PaneChip>{imageCount} images</PaneChip>
               </PaneHeader>
               <PreviewCard>
-                <NotionRenderer content={deferredPostContent} />
+                <MarkdownRenderer content={deferredPostContent} />
               </PreviewCard>
             </PreviewPane>
           </EditorGrid>
@@ -4773,9 +4776,10 @@ const EditorToolbar = styled.div`
   display: grid;
   gap: 0.52rem;
   margin: 0 0 0.72rem;
-  padding: 0.24rem 0;
-  border-top: 0;
-  border-bottom: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray2};
 `
 
 const ToolbarQuickBar = styled.div`
@@ -4945,8 +4949,8 @@ const EditorGrid = styled.div`
   --pane-body-height: clamp(28rem, calc(100vh - 20rem), 46rem);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.1rem;
-  border: none;
+  gap: 0.85rem;
+  border: 0;
   border-radius: 0;
   background: transparent;
   overflow: visible;
@@ -4955,6 +4959,7 @@ const EditorGrid = styled.div`
   @media (max-width: 980px) {
     --pane-body-height: clamp(18rem, 52vh, 34rem);
     grid-template-columns: 1fr;
+    gap: 0.78rem;
   }
 `
 
@@ -5300,16 +5305,24 @@ const EditorPane = styled.section`
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 1.4rem 1.4rem 1.2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.gray2};
+  overflow: hidden;
+  transition: border-color 0.16s ease;
+
+  &:focus-within {
+    border-color: ${({ theme }) => theme.colors.blue8};
+  }
 `
 
 const PreviewPane = styled(EditorPane)`
-  border-left: 0;
-  background: transparent;
+  border-color: ${({ theme }) => theme.colors.gray7};
+  background: ${({ theme }) => theme.colors.gray1};
 
   @media (max-width: 980px) {
-    border-left: 0;
-    border-top: 0;
+    border-left: 1px solid ${({ theme }) => theme.colors.gray7};
+    border-top: 1px solid ${({ theme }) => theme.colors.gray7};
   }
 `
 
@@ -5318,18 +5331,20 @@ const PaneHeader = styled.div`
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin: 0;
+  padding: 0.9rem 1rem 0.78rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
 `
 
 const PaneTitle = styled.h3`
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.04rem;
   color: ${({ theme }) => theme.colors.gray12};
 `
 
 const PaneDescription = styled.p`
   margin: 0.18rem 0 0;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: ${({ theme }) => theme.colors.gray11};
   line-height: 1.5;
 `
@@ -5339,14 +5354,14 @@ const PaneChip = styled.span`
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.74rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray3};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.72rem;
   font-weight: 700;
-  min-height: auto;
-  padding: 0;
+  min-height: 26px;
+  padding: 0 0.62rem;
 `
 
 const ContentInput = styled.textarea`
@@ -5356,7 +5371,7 @@ const ContentInput = styled.textarea`
   max-height: var(--pane-body-height);
   border: 0;
   border-radius: 0;
-  padding: 0;
+  padding: 1rem 1rem 1.15rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.82;
@@ -5381,7 +5396,8 @@ const PreviewCard = styled.div`
   max-height: var(--pane-body-height);
   overflow: auto;
   scrollbar-gutter: stable both-edges;
-  padding: 0 0 0.25rem;
+  padding: 1rem 1rem 1.15rem;
+  background: transparent;
 
   > .aq-markdown {
     margin-top: 0;
@@ -5394,9 +5410,9 @@ const WriterFooterBar = styled.div`
   justify-content: space-between;
   gap: 0.8rem;
   flex-wrap: wrap;
-  margin-top: 0.85rem;
-  padding-top: 0.55rem;
-  border-top: 0;
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
 `
 
 const WriterFooterSummary = styled.div`

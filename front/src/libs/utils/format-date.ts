@@ -1,6 +1,7 @@
 export const formatDate = (
   input: string | number | Date,
-  lang: string = "en-US"
+  lang: string = "en-US",
+  timeZone: string = "Asia/Seoul"
 ): string => {
   if (!input) return ""
 
@@ -15,6 +16,7 @@ export const formatDate = (
       year: "numeric",
       month: "short",
       day: "numeric",
+      timeZone,
     }
 
     return date.toLocaleDateString(lang, options)

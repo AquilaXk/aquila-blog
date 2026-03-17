@@ -15,7 +15,6 @@ import usePrismEffect from "./usePrismEffect"
 type Props = {
   content?: string
   contentHtml?: string
-  recordMap?: unknown
 }
 
 type CalloutKind = "tip" | "info" | "warning" | "outline" | "example" | "summary"
@@ -317,6 +316,15 @@ const extractCodeMetaFromPreChildren = (children: ReactNode) => {
   }
 }
 
+const hashString = (value: string) => {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 const parseFenceMarker = (line: string): "`" | "~" | null => {
   const match = line.trim().match(/^([`~]{3,})(.*)$/)
   if (!match) return null
@@ -533,7 +541,7 @@ const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   return segments
 }
 
-const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
+const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const imageRenderOrderRef = useRef(0)
   const normalizedContent = useMemo(
@@ -564,12 +572,13 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
     () => (resolvedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
     [normalizedContent, resolvedContentHtml]
   )
-  const renderKey = useMemo(
-    () =>
-      resolvedContentHtml
-        ? `html:${resolvedContentHtml.length}:${resolvedContentHtml.slice(0, 64)}`
-        : `md:${normalizedContent.length}:${normalizedContent.slice(0, 64)}`,
+  const renderKeySeed = useMemo(
+    () => (resolvedContentHtml ? `html:${resolvedContentHtml}` : `md:${normalizedContent}`),
     [normalizedContent, resolvedContentHtml]
+  )
+  const renderKey = useMemo(
+    () => `${renderKeySeed.length}:${hashString(renderKeySeed)}`,
+    [renderKeySeed]
   )
 
   useMermaidEffect(rootRef, renderKey)
@@ -588,7 +597,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
       components={{
         p({ children }) {
           if (!inCallout) return <p>{children}</p>
-          return <p className="notion-text">{children}</p>
+          return <p className="aq-markdown-text">{children}</p>
         },
         img({ src, alt }) {
           const imageSrc = typeof src === "string" ? src : ""
@@ -629,7 +638,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
           const { language, rawCode } = extractCodeMetaFromPreChildren(children)
           const mermaidSource = extractNormalizedMermaidSource(rawCode)
 
-          if (language === "mermaid" || isMermaidSource(rawCode)) {
+          if (language === "mermaid") {
             return (
               <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={mermaidSource || rawCode}>
                 <code className="language-mermaid">{mermaidSource || rawCode}</code>
@@ -667,19 +676,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
     )
   }
 
-  if (!normalizedContent) {
-    if (recordMap) {
-      return (
-        <StyledWrapper>
-          <EmptyNotice>
-            기존 Notion 페이지 콘텐츠는 현재 백엔드 본문(`content`) 기반 렌더링으로 전환되었습니다.
-          </EmptyNotice>
-        </StyledWrapper>
-      )
-    }
-
-    return <StyledWrapper>본문이 없습니다.</StyledWrapper>
-  }
+  if (!normalizedContent) return <StyledWrapper>본문이 없습니다.</StyledWrapper>
 
   return (
     <StyledWrapper ref={rootRef} className="aq-markdown">
@@ -697,9 +694,9 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
           return (
             <div
               key={`callout-${index}`}
-              className={`aq-callout notion-callout notion-admonition notion-admonition-${segment.kind}`}
+              className={`aq-callout aq-callout-box aq-admonition aq-admonition-${segment.kind}`}
             >
-              <div className="notion-callout-text" data-admonition-title={segment.title}>
+              <div className="aq-callout-box-text" data-admonition-title={segment.title}>
                 {renderMarkdown(segment.content, `callout-body-${index}`, true)}
               </div>
             </div>
@@ -712,7 +709,7 @@ const NotionRenderer: FC<Props> = ({ content, contentHtml, recordMap }) => {
   )
 }
 
-export default NotionRenderer
+export default MarkdownRenderer
 
 const StyledWrapper = styled.div`
   margin-top: 1.5rem;
@@ -1296,7 +1293,7 @@ const StyledWrapper = styled.div`
     border-bottom: 0;
   }
 
-  .aq-callout.notion-admonition {
+  .aq-callout.aq-admonition {
     --ad-header-h: 52px;
     --ad-accent: #10acc6;
     --ad-header-bg: #d8e8ee;
@@ -1321,7 +1318,7 @@ const StyledWrapper = styled.div`
     color: var(--ad-text);
   }
 
-  .aq-callout.notion-admonition::before {
+  .aq-callout.aq-admonition::before {
     content: "";
     position: absolute;
     left: 0;
@@ -1350,7 +1347,7 @@ const StyledWrapper = styled.div`
     pointer-events: none;
   }
 
-  .aq-callout.notion-admonition::after {
+  .aq-callout.aq-admonition::after {
     content: "";
     position: absolute;
     left: var(--ad-strip-w);
@@ -1364,18 +1361,18 @@ const StyledWrapper = styled.div`
     pointer-events: none;
   }
 
-  .aq-callout.notion-admonition > * {
+  .aq-callout.aq-admonition > * {
     position: relative;
     z-index: 2;
   }
 
-  .aq-callout.notion-admonition .notion-callout-text {
+  .aq-callout.aq-admonition .aq-callout-box-text {
     margin-left: 0;
     padding: 64px 32px 18px 32px;
     color: var(--ad-text);
   }
 
-  .aq-callout.notion-admonition .notion-callout-text::before {
+  .aq-callout.aq-admonition .aq-callout-box-text::before {
     content: attr(data-admonition-title);
     position: absolute;
     left: 58px;
@@ -1388,7 +1385,7 @@ const StyledWrapper = styled.div`
     letter-spacing: 0;
   }
 
-  .aq-callout.notion-admonition .notion-callout-text::after {
+  .aq-callout.aq-admonition .aq-callout-box-text::after {
     content: "";
     position: absolute;
     left: 24px;
@@ -1402,71 +1399,61 @@ const StyledWrapper = styled.div`
     background-position: center;
   }
 
-  .aq-callout.notion-admonition .notion-page-icon-inline {
+  .aq-callout.aq-admonition .aq-page-icon-inline {
     display: none;
   }
 
-  .aq-callout.notion-admonition .notion-text {
+  .aq-callout.aq-admonition .aq-markdown-text {
     color: var(--ad-text);
     font-size: 0.98rem;
     line-height: 1.6;
   }
 
-  .aq-callout.notion-admonition .notion-text[data-admonition-heading="true"] {
+  .aq-callout.aq-admonition .aq-markdown-text[data-admonition-heading="true"] {
     display: none;
   }
 
-  .aq-callout.notion-admonition-tip {
+  .aq-callout.aq-admonition-tip {
     --ad-accent: #e08600;
     --ad-header-bg: #ebe2d4;
     --ad-body-bg: #ececec;
     --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='21' fill='%23f39200'/%3E%3Cpath d='M24 10c-6 0-10 4.6-10 10.2 0 3.3 1.5 5.4 3.5 7.3 1.4 1.3 2.5 2.8 2.5 4.8h8c0-2 1.1-3.5 2.5-4.8 2-1.9 3.5-4 3.5-7.3C34 14.6 30 10 24 10z' fill='white'/%3E%3Crect x='20' y='33' width='8' height='3' rx='1.5' fill='white'/%3E%3Crect x='21' y='37' width='6' height='2.5' rx='1.25' fill='white'/%3E%3C/svg%3E");
   }
 
-  .aq-callout.notion-admonition-info {
+  .aq-callout.aq-admonition-info {
     --ad-accent: #1098b0;
     --ad-header-bg: #d8e8ee;
     --ad-body-bg: #eceff1;
     --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='21' fill='%2310acc6'/%3E%3Crect x='22' y='19' width='4' height='14' rx='2' fill='white'/%3E%3Ccircle cx='24' cy='13' r='3' fill='white'/%3E%3C/svg%3E");
   }
 
-  .aq-callout.notion-admonition-warning {
+  .aq-callout.aq-admonition-warning {
     --ad-accent: #c86a73;
     --ad-header-bg: #f0dee2;
     --ad-body-bg: #f1eaec;
     --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpolygon points='24,4 45,41 3,41' fill='%23d96c77'/%3E%3Crect x='22' y='16' width='4' height='14' rx='2' fill='white'/%3E%3Ccircle cx='24' cy='34' r='2.5' fill='white'/%3E%3C/svg%3E");
   }
 
-  .aq-callout.notion-admonition-outline {
+  .aq-callout.aq-admonition-outline {
     --ad-accent: #6e94ad;
     --ad-header-bg: #dfe8ef;
     --ad-body-bg: #e8eef3;
     --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='7' y='5' width='34' height='38' rx='4' fill='%236e94ad'/%3E%3Crect x='13' y='14' width='22' height='2.8' rx='1.4' fill='white'/%3E%3Crect x='13' y='21' width='22' height='2.8' rx='1.4' fill='white'/%3E%3Crect x='13' y='28' width='16' height='2.8' rx='1.4' fill='white'/%3E%3Crect x='17' y='2.5' width='14' height='6' rx='3' fill='%235b7f96'/%3E%3C/svg%3E");
   }
 
-  .aq-callout.notion-admonition-example {
+  .aq-callout.aq-admonition-example {
     --ad-accent: #2d9b56;
     --ad-header-bg: #deefdf;
     --ad-body-bg: #eaf4eb;
     --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='5' y='5' width='38' height='38' rx='8' fill='%232d9b56'/%3E%3Cpath d='M14 25.5l6.2 6.3L34.5 17.5' fill='none' stroke='white' stroke-width='4.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
 
-  .aq-callout.notion-admonition-summary {
+  .aq-callout.aq-admonition-summary {
     --ad-accent: #7a6fb2;
     --ad-header-bg: #e5e2f0;
     --ad-body-bg: #edebf5;
     --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M8 11h22v28H8z' fill='%237a6fb2'/%3E%3Cpath d='M18 8h22v28H18z' fill='%238a80c2'/%3E%3Cpath d='M23 16h12M23 22h12M23 28h8' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
   }
-`
-
-const EmptyNotice = styled.p`
-  margin: 0;
-  border-radius: 10px;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.55;
 `
 
 export const markdownGuide = MARKDOWN_GUIDE

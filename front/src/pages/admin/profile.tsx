@@ -649,7 +649,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
 `
 
 const HeaderCard = styled.section`
@@ -771,11 +771,10 @@ const ProfileGrid = styled.section`
 `
 
 const PanelCard = styled.section`
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  padding: 0 0 1rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 1rem;
 `
 
 const PreviewCard = styled(PanelCard)`
@@ -847,11 +846,10 @@ const MetaItem = styled.div`
   display: grid;
   gap: 0.32rem;
   min-width: 0;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  padding: 0.55rem 0;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.62rem 0.72rem;
 
   span {
     font-size: 0.76rem;
@@ -918,7 +916,7 @@ const Input = styled.input`
   width: 100%;
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
   font-size: 0.98rem;
@@ -929,7 +927,7 @@ const TextArea = styled.textarea`
   min-height: 140px;
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
   font-size: 0.98rem;
@@ -940,11 +938,10 @@ const TextArea = styled.textarea`
 const LinkSectionCard = styled.section`
   display: grid;
   gap: 0.7rem;
-  border-radius: 0;
-  border: 0;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  padding: 0.85rem 0 0;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.85rem;
 `
 
 const LinkSectionHeader = styled.div`

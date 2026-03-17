@@ -7,45 +7,6 @@ const MERMAID_SOURCE_PATTERN =
 
 const MERMAID_EDGE_PATTERN = /-->|==>|-.->|:::|subgraph\b|classDef\b|style\b/i
 
-const parseDimension = (value: string | null) => {
-  if (!value) return 0
-  const parsed = Number.parseFloat(value.replace(/[^\d.\-]/g, ""))
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-const parseViewBox = (value: string | null) => {
-  if (!value) return null
-  const parts = value
-    .trim()
-    .split(/[\s,]+/)
-    .map((entry) => Number.parseFloat(entry))
-    .filter((entry) => Number.isFinite(entry))
-  if (parts.length !== 4) return null
-  const [x, y, width, height] = parts
-  if (width <= 0 || height <= 0) return null
-  return { x, y, width, height }
-}
-
-const hasValidBounds = (bounds: { x: number; y: number; width: number; height: number }) =>
-  Number.isFinite(bounds.x) &&
-  Number.isFinite(bounds.y) &&
-  Number.isFinite(bounds.width) &&
-  Number.isFinite(bounds.height) &&
-  bounds.width > 0 &&
-  bounds.height > 0
-
-const mergeBounds = (
-  current: { x: number; y: number; width: number; height: number } | null,
-  next: { x: number; y: number; width: number; height: number }
-) => {
-  if (!current) return next
-  const minX = Math.min(current.x, next.x)
-  const minY = Math.min(current.y, next.y)
-  const maxX = Math.max(current.x + current.width, next.x + next.width)
-  const maxY = Math.max(current.y + current.height, next.y + next.height)
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-}
-
 const isMermaidSource = (rawCode: string) => {
   const normalized = rawCode.trim()
   if (!normalized) return false
@@ -63,74 +24,6 @@ const isMermaidSource = (rawCode: string) => {
   return MERMAID_EDGE_PATTERN.test(body)
 }
 
-const getMeasurementBounds = (svg: SVGSVGElement, rawWidth: number, rawHeight: number) => {
-  if (typeof document === "undefined") return null
-
-  const host = document.createElement("div")
-  host.style.position = "fixed"
-  host.style.left = "-100000px"
-  host.style.top = "-100000px"
-  host.style.width = "0"
-  host.style.height = "0"
-  host.style.opacity = "0"
-  host.style.pointerEvents = "none"
-  host.style.overflow = "hidden"
-
-  const sample = svg.cloneNode(true) as SVGSVGElement
-  const fallbackWidth = rawWidth > 0 ? rawWidth : 1200
-  const fallbackHeight = rawHeight > 0 ? rawHeight : 900
-  sample.setAttribute("width", String(fallbackWidth))
-  sample.setAttribute("height", String(fallbackHeight))
-  sample.style.width = `${fallbackWidth}px`
-  sample.style.height = `${fallbackHeight}px`
-
-  host.appendChild(sample)
-  document.body.appendChild(host)
-
-  try {
-    const measurableParts = [
-      ...Array.from(sample.querySelectorAll<SVGGraphicsElement>(".clusters > *")),
-      ...Array.from(sample.querySelectorAll<SVGGraphicsElement>(".edgePaths > *")),
-      ...Array.from(sample.querySelectorAll<SVGGraphicsElement>(".nodes > *")),
-      ...Array.from(sample.querySelectorAll<SVGGraphicsElement>(".edgeLabels > *")),
-      ...Array.from(sample.querySelectorAll<SVGGraphicsElement>(".nodeLabel")),
-      ...Array.from(sample.querySelectorAll<SVGGraphicsElement>(".edgeLabel")),
-    ]
-
-    let mergedBounds: { x: number; y: number; width: number; height: number } | null = null
-    for (const part of measurableParts) {
-      const bounds = part.getBBox()
-      if (!hasValidBounds(bounds)) continue
-      mergedBounds = mergeBounds(mergedBounds, bounds)
-    }
-
-    if (mergedBounds && hasValidBounds(mergedBounds)) {
-      return mergedBounds
-    }
-
-    const candidates = [
-      sample.querySelector<SVGGraphicsElement>("g.output"),
-      sample.querySelector<SVGGraphicsElement>("g.graph"),
-      sample.querySelector<SVGGraphicsElement>(".root"),
-      sample.querySelector<SVGGraphicsElement>(":scope > g:last-of-type"),
-      sample.querySelector<SVGGraphicsElement>(":scope > g"),
-    ].filter((node): node is SVGGraphicsElement => !!node)
-
-    for (const candidate of candidates) {
-      const bounds = candidate.getBBox()
-      if (hasValidBounds(bounds)) {
-        return bounds
-      }
-    }
-  } catch {
-    return null
-  } finally {
-    host.remove()
-  }
-
-  return null
-}
-
 const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string) => {
   const [scheme] = useScheme()
 
@@ -142,6 +35,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let running = false
     let observer: IntersectionObserver | null = null
     const retryTimers = new Set<number>()
+    const loggedErrorSignatures = new Set<string>()
 
     const stripRiskyFlowchartDirectives = (source: string) =>
       source
@@ -196,15 +90,16 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
       const mermaid = (await import("mermaid")).default
       const theme = scheme === "dark" ? "dark" : "neutral"
+
       mermaid.initialize({
         startOnLoad: false,
         theme,
         securityLevel: "strict",
         flowchart: {
-          // htmlLabels=true 에서 일부 다이어그램이 음수 rect width 오류를 내는 케이스가 있어 안정성 우선으로 고정한다.
+          // GitHub 스타일과 동일하게 SVG label 기반으로 고정한다.
           htmlLabels: false,
           curve: "linear",
-          useMaxWidth: false,
+          useMaxWidth: true,
         },
       })
 
@@ -250,98 +145,86 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             ""
         )
         if (!source) return
-        if (!hasMermaidHint && !isMermaidSource(source)) return
+        // GitHub와 동일하게 명시적 mermaid fence(힌트)에서만 렌더한다.
+        if (!hasMermaidHint) return
 
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
             block.dataset.mermaidRendered === "error") &&
           block.dataset.mermaidSource === source &&
           block.dataset.mermaidTheme === theme
-        if (alreadyRendered) return
+          if (alreadyRendered) return
 
-        const rect = block.getBoundingClientRect()
-        if (rect.width <= 16 || rect.height <= 8) {
-          scheduleRetry(i, block)
-          return
-        }
-
-        try {
-          const id = `mermaid-${i}-${Math.random().toString(36).slice(2)}`
-          let svg = (await mermaid.render(id, source)).svg
-          let usedSource = source
-          if (disposed) return
-
-          const parser = new DOMParser()
-          const svgDocument = parser.parseFromString(svg, "text/html")
-          const renderedSvg = svgDocument.querySelector("svg")
-          if (!renderedSvg) {
-            throw new Error("Mermaid SVG 파싱 실패")
-          }
-          const rawWidth = parseDimension(renderedSvg.getAttribute("width"))
-          const rawHeight = parseDimension(renderedSvg.getAttribute("height"))
-          const viewBox = parseViewBox(renderedSvg.getAttribute("viewBox"))
-          const fallbackWidth = rawWidth > 0 ? rawWidth : viewBox?.width || 1200
-          const fallbackHeight = rawHeight > 0 ? rawHeight : viewBox?.height || 900
-
-          const measuredBounds = getMeasurementBounds(renderedSvg, fallbackWidth, fallbackHeight)
-          if (measuredBounds) {
-            const padX = Math.max(10, measuredBounds.width * 0.022)
-            const padY = Math.max(10, measuredBounds.height * 0.03)
-            const viewX = measuredBounds.x - padX
-            const viewY = measuredBounds.y - padY
-            const viewWidth = measuredBounds.width + padX * 2
-            const viewHeight = measuredBounds.height + padY * 2
-            renderedSvg.setAttribute("viewBox", `${viewX} ${viewY} ${viewWidth} ${viewHeight}`)
-          } else if (!renderedSvg.getAttribute("viewBox") && fallbackWidth > 0 && fallbackHeight > 0) {
-            renderedSvg.setAttribute("viewBox", `0 0 ${fallbackWidth} ${fallbackHeight}`)
+          const rect = block.getBoundingClientRect()
+          if (rect.width <= 16 || rect.height <= 8) {
+            scheduleRetry(i, block)
+            return
           }
 
-          renderedSvg.setAttribute("preserveAspectRatio", "xMidYMin meet")
-          renderedSvg.removeAttribute("width")
-          renderedSvg.removeAttribute("height")
+          try {
+            const stage = document.createElement("div")
+            stage.className = "aq-mermaid-stage mermaid"
+            stage.textContent = source
+            block.innerHTML = ""
+            block.appendChild(stage)
 
-          const wrappedSvg = `<div class="aq-mermaid-stage">${renderedSvg.outerHTML}</div>`
+            // Mermaid 공식 렌더 경로(run)를 사용해 GitHub 동작과 최대한 동일하게 맞춘다.
+            await mermaid.run({
+              nodes: [stage],
+              suppressErrors: false,
+            })
+            if (disposed) return
 
-          block.dataset.mermaidSource = usedSource
-          block.dataset.mermaidTheme = theme
-          block.dataset.mermaidRendered = "true"
-          block.dataset.mermaidRetryCount = "0"
-          block.innerHTML = wrappedSvg
-        } catch (error) {
-          if (isNegativeRectWidthError(error)) {
-            const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
+            if (!stage.querySelector("svg")) {
+              throw new Error("Mermaid SVG 생성 실패")
+            }
 
-            if (retryCount >= 4) {
-              const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
-              if (fallbackSource && fallbackSource !== source) {
-                try {
-                  const fallbackId = `mermaid-fallback-${i}-${Math.random().toString(36).slice(2)}`
-                  const fallbackSvg = (await mermaid.render(fallbackId, fallbackSource)).svg
-                  if (disposed) return
+            block.dataset.mermaidSource = source
+            block.dataset.mermaidTheme = theme
+            block.dataset.mermaidRendered = "true"
+            block.dataset.mermaidRetryCount = "0"
+            block.classList.remove("aq-mermaid-error")
+          } catch (error) {
+            if (isNegativeRectWidthError(error)) {
+              const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
 
-                  const parser = new DOMParser()
-                  const fallbackDocument = parser.parseFromString(fallbackSvg, "text/html")
-                  const fallbackRenderedSvg = fallbackDocument.querySelector("svg")
-                  if (fallbackRenderedSvg) {
-                    fallbackRenderedSvg.setAttribute("preserveAspectRatio", "xMidYMin meet")
-                    fallbackRenderedSvg.removeAttribute("width")
-                    fallbackRenderedSvg.removeAttribute("height")
-                    block.innerHTML = `<div class="aq-mermaid-stage">${fallbackRenderedSvg.outerHTML}</div>`
+              if (retryCount >= 2) {
+                const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
+                if (fallbackSource && fallbackSource !== source) {
+                  try {
+                    const fallbackStage = document.createElement("div")
+                    fallbackStage.className = "aq-mermaid-stage mermaid"
+                    fallbackStage.textContent = fallbackSource
+                    block.innerHTML = ""
+                    block.appendChild(fallbackStage)
+
+                    await mermaid.run({
+                      nodes: [fallbackStage],
+                      suppressErrors: false,
+                    })
+                    if (disposed) return
+
+                    if (fallbackStage.querySelector("svg")) {
                     block.dataset.mermaidSource = fallbackSource
                     block.dataset.mermaidTheme = theme
                     block.dataset.mermaidRendered = "true"
                     block.dataset.mermaidRetryCount = "0"
-                    return
+                      block.classList.remove("aq-mermaid-error")
+                      return
+                    }
+                  } catch (fallbackError) {
+                    const signature = `fallback:${fallbackSource}:${String(fallbackError)}`
+                    if (!loggedErrorSignatures.has(signature)) {
+                      loggedErrorSignatures.add(signature)
+                      console.warn("[mermaid] fallback render failed", fallbackError)
+                    }
                   }
-                } catch (fallbackError) {
-                  console.warn("[mermaid] fallback render failed", fallbackError)
                 }
+              } else {
+                scheduleRetry(i, block)
+                return
               }
-            } else {
-              scheduleRetry(i, block)
-              return
             }
-          }
 
           const escapedSource = source
             .replaceAll("&", "&amp;")
@@ -351,13 +234,18 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = theme
           block.dataset.mermaidRendered = "error"
+          block.classList.add("aq-mermaid-error")
           block.innerHTML = `
             <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
               Mermaid 렌더링 실패: 문법 또는 다이어그램 코드를 확인하세요.
             </div>
             <code style="white-space:pre-wrap;display:block;">${escapedSource}</code>
           `
-          console.warn("[mermaid] render failed", error)
+          const signature = `${source}:${String(error)}`
+          if (!loggedErrorSignatures.has(signature)) {
+            loggedErrorSignatures.add(signature)
+            console.warn("[mermaid] render failed", error)
+          }
         }
       }
 
@@ -409,10 +297,13 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     const timerId = window.setTimeout(() => {
       void run()
     }, 120)
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => void run()) : null
+    resizeObserver?.observe(root)
 
     return () => {
       disposed = true
       observer?.disconnect()
+      resizeObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
       window.cancelAnimationFrame(rafId)

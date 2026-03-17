@@ -9,3 +9,7 @@ deploy/homeserver/.env.prod
 AGENTS.md
 docs/AGENT-CONTEXT.md
 docs/agent/
+
+# k6 output artifacts
+perf/k6/results/*.json
+perf/k6/results/*.txt

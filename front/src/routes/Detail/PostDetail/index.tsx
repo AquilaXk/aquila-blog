@@ -4,7 +4,7 @@ import { useRouter } from "next/router"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import styled from "@emotion/styled"
-import NotionRenderer from "../components/NotionRenderer"
+import MarkdownRenderer from "../components/MarkdownRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { ApiError, apiFetch } from "src/apis/backend/client"
@@ -235,7 +235,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           />
         )}
         <BodySection>
-          <NotionRenderer content={data.content} />
+          <MarkdownRenderer content={data.content} />
         </BodySection>
         {data.type[0] === "Post" && (
           <>
@@ -257,13 +257,18 @@ const StyledWrapper = styled.div`
   > article {
     margin: 0 auto;
     max-width: 52rem;
+    display: grid;
+    gap: 1.1rem;
   }
 `
 
 const BodySection = styled.div`
-  margin-top: 2rem;
+  margin-top: 0.8rem;
+  padding-top: 1.05rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
 
   @media (max-width: 768px) {
-    margin-top: 1.6rem;
+    margin-top: 0.55rem;
+    padding-top: 0.85rem;
   }
 `

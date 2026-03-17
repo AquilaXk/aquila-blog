@@ -152,10 +152,8 @@ flowchart LR
 
 ## 현재 구조에서 주의할 이름
 
-- `src/routes/Detail/components/NotionRenderer`
-  이름은 NotionRenderer지만 실제 역할은 Markdown/콜아웃/머메이드 렌더러다.
-- `src/libs/utils/notion/*`
-  과거 템플릿 유산이 일부 남아 있지만, 실제 글 데이터 원본은 자체 백엔드 API다.
+- `src/routes/Detail/components/MarkdownRenderer`
+  Markdown/콜아웃/머메이드 렌더링을 담당하는 상세 본문 핵심 컴포넌트다.
 - `src/components/auth/AuthShell.tsx`
   로그인/회원가입 공통 쉘이며, 인증 UX 변경 시 먼저 봐야 하는 파일이다.
 

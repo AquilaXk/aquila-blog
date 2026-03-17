@@ -116,7 +116,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.6rem 1rem 2.6rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
 `
 
 const HeroCard = styled.section`
@@ -125,9 +125,9 @@ const HeroCard = styled.section`
   gap: 0.9rem;
   padding: 1.1rem;
   border-radius: 18px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 1px 0 ${({ theme }) => theme.colors.gray4};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: none;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -218,7 +218,7 @@ const ProfilePanel = styled.aside`
   gap: 0.45rem;
   padding: 1rem;
   border-radius: 12px;
-  border: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray3};
   text-align: center;
 
@@ -271,11 +271,17 @@ const QuickCard = styled.a`
   gap: 0.7rem;
   padding: 1rem;
   border-radius: 12px;
-  border: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   text-decoration: none;
   color: inherit;
-  box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray4};
+  box-shadow: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray3};
+  }
 
   small {
     color: ${({ theme }) => theme.colors.gray11};

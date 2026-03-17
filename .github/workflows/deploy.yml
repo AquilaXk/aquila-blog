@@ -1,7 +1,11 @@
 name: Deploy to Home Server
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
@@ -15,70 +19,21 @@ permissions:
   packages: write
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
-      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 24
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "24"
-          cache: gradle
-
-      - name: Validate Flyway migration naming
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(back/src/main/resources/db/migration/*.sql)
-
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No migration files found."
-            exit 1
-          fi
-
-          invalid=0
-          for file in "${files[@]}"; do
-            base="$(basename "$file")"
-            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]]; then
-              continue
-            fi
-            echo "Invalid migration file name: $base"
-            invalid=1
-          done
-
-          if [ $invalid -ne 0 ]; then
-            echo "Migration naming rule violation detected."
-            exit 1
-          fi
-
-      - name: Run backend ktlint
-        working-directory: back
-        run: ./gradlew ktlintCheck
-
-      - name: Run backend tests
-        working-directory: back
-        run: ./gradlew test --rerun-tasks
-
   calculateTag:
     runs-on: ubuntu-latest
-    needs: test
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
       image_latest_ref: ${{ steps.meta.outputs.image_latest_ref }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
+      deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Calculate image/release tags
         id: meta
@@ -88,7 +43,8 @@ jobs:
 
           OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           REPO_NAME="$(basename "${GITHUB_REPOSITORY}")"
-          SHORT_SHA="${GITHUB_SHA::7}"
+          DEPLOY_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          SHORT_SHA="${DEPLOY_SHA::7}"
 
           IMAGE_NAME="ghcr.io/${OWNER_LC}/${REPO_NAME}-back"
           IMAGE_TAG="sha-${SHORT_SHA}"
@@ -100,6 +56,7 @@ jobs:
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
           echo "image_latest_ref=${IMAGE_LATEST_REF}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
 
   buildAndPush:
     runs-on: ubuntu-latest
@@ -109,6 +66,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -134,12 +93,16 @@ jobs:
 
   blueGreenDeploy:
     runs-on: ubuntu-latest
-    needs: buildAndPush
+    needs:
+      - calculateTag
+      - buildAndPush
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
       - name: Verify required secrets
         shell: bash
@@ -334,7 +297,9 @@ jobs:
 
   frontLiveE2E:
     runs-on: ubuntu-latest
-    needs: blueGreenDeploy
+    needs:
+      - calculateTag
+      - blueGreenDeploy
     timeout-minutes: 20
     env:
       PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
@@ -346,6 +311,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.calculateTag.outputs.deploy_sha }}
 
       - name: Resolve live e2e base URL
         shell: bash
@@ -454,14 +421,14 @@ jobs:
               owner,
               repo,
               ref: `refs/tags/${tag}`,
-              sha: context.sha
+              sha: "${{ needs.calculateTag.outputs.deploy_sha }}"
             });
 
             await github.rest.repos.createRelease({
               owner,
               repo,
               tag_name: tag,
-              target_commitish: context.sha,
+              target_commitish: "${{ needs.calculateTag.outputs.deploy_sha }}",
               name: `Deploy ${tag}`,
               body: `Backend image: ${imageRef}\nWorkflow run: ${context.runId}`,
               generate_release_notes: true

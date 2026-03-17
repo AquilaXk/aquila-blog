@@ -164,7 +164,7 @@ Last updated: 2026-03-15
   검색 상태가 정적 카드까지 리렌더시키는지
 - `src/routes/Detail/PostDetail/CommentBox/index.tsx`
   댓글 섹션을 즉시 하이드레이션하는지
-- `src/routes/Detail/components/NotionRenderer/usePrismEffect.ts`
+- `src/routes/Detail/components/MarkdownRenderer/usePrismEffect.ts`
   코드블록이 없는데도 Prism을 전부 올리는지
 
 ## 운영 기준 체크리스트

@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "@emotion/styled"
-import NotionRenderer from "../components/NotionRenderer"
+import MarkdownRenderer from "../components/MarkdownRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 type Props = {}
 
@@ -10,7 +10,7 @@ const PageDetail: React.FC<Props> = () => {
   if (!data) return null
   return (
     <StyledWrapper>
-      <NotionRenderer content={data.content} recordMap={data.recordMap} />
+      <MarkdownRenderer content={data.content} />
     </StyledWrapper>
   )
 }

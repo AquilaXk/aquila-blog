@@ -1,0 +1,71 @@
+name: Reusable Backend Quality
+
+on:
+  workflow_call:
+    secrets:
+      CI_DB_PASSWORD:
+        required: true
+      CI_REDIS_PASSWORD:
+        required: true
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+    env:
+      TEST_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      TEST_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "24"
+          cache: gradle
+
+      - name: Validate Flyway migration naming
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(back/src/main/resources/db/migration/*.sql)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No migration files found."
+            exit 1
+          fi
+
+          invalid=0
+          for file in "${files[@]}"; do
+            base="$(basename "$file")"
+            if [[ "$base" =~ ^V[0-9]{8}_[0-9]{2}__[a-z0-9_]+\.sql$ ]] || [[ "$base" =~ ^R__[a-z0-9_]+\.sql$ ]]; then
+              continue
+            fi
+            echo "Invalid migration file name: $base"
+            invalid=1
+          done
+
+          if [ $invalid -ne 0 ]; then
+            echo "Migration naming rule violation detected."
+            exit 1
+          fi
+
+      - name: Run backend ktlint
+        working-directory: back
+        run: ./gradlew ktlintCheck
+
+      - name: Run backend tests
+        working-directory: back
+        run: ./gradlew test --rerun-tasks
+
+      - name: Upload backend reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-quality-reports
+          path: |
+            back/build/reports/tests/test
+            back/build/test-results/test
+            back/build/reports/ktlint
+          retention-days: 7

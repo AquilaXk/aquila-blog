@@ -15,7 +15,7 @@ Last updated: 2026-03-13
 ## 현재 상태 요약
 
 - 운영 구조는 `Vercel(front) + Home Server(back/db/redis/minio/caddy/cloudflared)`이다.
-- 글 데이터 소스는 더 이상 Notion이 아니라 자체 백엔드 API다.
+- 글 데이터 소스는 외부 CMS가 아니라 자체 백엔드 API다.
 - 프론트는 Next.js Pages Router 기반이고, 백엔드는 Spring Boot 4 + Kotlin 기반이다.
 - blue/green 배포는 `back_active` alias를 중심으로 동작한다.
 

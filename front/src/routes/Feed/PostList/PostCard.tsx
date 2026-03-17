@@ -87,11 +87,9 @@ const StyledWrapper = styled(Link)`
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-radius: 0;
-    border: 0;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
+    border-radius: 10px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
     box-shadow: none;
     transition: border-color 0.2s ease, background-color 0.2s ease;
 

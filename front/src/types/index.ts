@@ -1,7 +1,6 @@
 import { NextPage } from "next"
 import { AppProps } from "next/app"
 import { EmotionCache } from "@emotion/cache"
-import { ExtendedRecordMap } from "notion-types"
 import { ReactElement, ReactNode } from "react"
 
 // TODO: refactor types
@@ -47,7 +46,6 @@ export type TPost = {
 export type PostDetail = TPost & {
   content: string
   contentHtml?: string
-  recordMap?: ExtendedRecordMap
 }
 
 export type TPostComment = {

@@ -155,12 +155,16 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: flex-end;
     gap: 0.36rem;
-    min-width: 0;
+    min-width: 11rem;
     min-height: 32px;
     flex: none;
-    width: fit-content;
+    width: clamp(11rem, 28vw, 19rem);
+
+    > * {
+      flex-shrink: 0;
+    }
   }
 
   .authLoadingShell {
@@ -232,6 +236,12 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.76rem;
     white-space: nowrap;
+  }
+
+  @media (max-width: 980px) {
+    .authNotice {
+      display: none;
+    }
   }
 
   .navPill--warning {

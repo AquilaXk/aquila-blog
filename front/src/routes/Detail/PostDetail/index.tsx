@@ -45,8 +45,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     const next = router.asPath || toCanonicalPostPath(postId)
     return toLoginPath(next, toCanonicalPostPath(postId))
   }, [postId, router.asPath])
-  const canModifyPost = Boolean(me?.isAdmin && data?.actorCanModify)
-  const canDeletePost = Boolean(me?.isAdmin && data?.actorCanDelete)
+  const canModifyPost = Boolean(me?.isAdmin || data?.actorCanModify)
+  const canDeletePost = Boolean(me?.isAdmin || data?.actorCanDelete)
 
   useEffect(() => {
     if (!data) return

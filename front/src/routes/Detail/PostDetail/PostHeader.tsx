@@ -111,9 +111,8 @@ const PostHeader: React.FC<Props> = ({
           </button>
 
           <div className="stats" aria-label="post stats">
-            <span>댓글 {data.commentsCount ?? 0}</span>
-            <span className="dot" />
-            <span>조회 {hitCount ?? data.hitCount ?? 0}</span>
+            <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
+            <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
           </div>
         </div>
       </div>
@@ -206,9 +205,9 @@ const StyledWrapper = styled.header`
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 0.42rem;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 500;
   }
 
@@ -217,7 +216,7 @@ const StyledWrapper = styled.header`
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 0.7rem;
+    gap: 0.52rem;
   }
 
   .adminActions {
@@ -300,6 +299,20 @@ const StyledWrapper = styled.header`
     height: 0.22rem;
     border-radius: 50%;
     background: ${({ theme }) => theme.colors.gray8};
+  }
+
+  .statChip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 0.82rem;
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1;
   }
 
   .thumbnail {

@@ -145,86 +145,78 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             ""
         )
         if (!source) return
-        // GitHub와 동일하게 명시적 mermaid fence(힌트)에서만 렌더한다.
-        if (!hasMermaidHint) return
+        const looksLikeMermaid = isMermaidSource(source)
+        if (!hasMermaidHint && !looksLikeMermaid) return
 
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
             block.dataset.mermaidRendered === "error") &&
           block.dataset.mermaidSource === source &&
           block.dataset.mermaidTheme === theme
-          if (alreadyRendered) return
+        if (alreadyRendered) return
 
-          const rect = block.getBoundingClientRect()
-          if (rect.width <= 16 || rect.height <= 8) {
-            scheduleRetry(i, block)
-            return
+        const rect = block.getBoundingClientRect()
+        if (rect.width <= 120 || rect.height <= 8) {
+          scheduleRetry(i, block)
+          return
+        }
+
+        const renderSourceIntoBlock = async (sourceToRender: string) => {
+          const stage = document.createElement("div")
+          stage.className = "aq-mermaid-stage mermaid"
+          stage.style.minWidth = `${Math.max(320, Math.floor(rect.width))}px`
+          block.innerHTML = ""
+          block.appendChild(stage)
+
+          const renderId = `aq-mermaid-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          const { svg, bindFunctions } = await mermaid.render(renderId, sourceToRender)
+          if (disposed) return
+
+          stage.innerHTML = svg
+          bindFunctions?.(stage)
+
+          const svgElement = stage.querySelector("svg")
+          if (!svgElement) throw new Error("Mermaid SVG 생성 실패")
+          svgElement.style.maxWidth = "100%"
+          svgElement.style.height = "auto"
+          svgElement.removeAttribute("height")
+        }
+
+        try {
+          await renderSourceIntoBlock(source)
+
+          block.dataset.mermaidSource = source
+          block.dataset.mermaidTheme = theme
+          block.dataset.mermaidRendered = "true"
+          block.dataset.mermaidRetryCount = "0"
+          block.classList.remove("aq-mermaid-error")
+        } catch (error) {
+          if (isNegativeRectWidthError(error)) {
+            const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
+            if (retryCount < 4) {
+              scheduleRetry(i, block)
+              return
+            }
           }
 
-          try {
-            const stage = document.createElement("div")
-            stage.className = "aq-mermaid-stage mermaid"
-            stage.textContent = source
-            block.innerHTML = ""
-            block.appendChild(stage)
-
-            // Mermaid 공식 렌더 경로(run)를 사용해 GitHub 동작과 최대한 동일하게 맞춘다.
-            await mermaid.run({
-              nodes: [stage],
-              suppressErrors: false,
-            })
-            if (disposed) return
-
-            if (!stage.querySelector("svg")) {
-              throw new Error("Mermaid SVG 생성 실패")
-            }
-
-            block.dataset.mermaidSource = source
-            block.dataset.mermaidTheme = theme
-            block.dataset.mermaidRendered = "true"
-            block.dataset.mermaidRetryCount = "0"
-            block.classList.remove("aq-mermaid-error")
-          } catch (error) {
-            if (isNegativeRectWidthError(error)) {
-              const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
-
-              if (retryCount >= 2) {
-                const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
-                if (fallbackSource && fallbackSource !== source) {
-                  try {
-                    const fallbackStage = document.createElement("div")
-                    fallbackStage.className = "aq-mermaid-stage mermaid"
-                    fallbackStage.textContent = fallbackSource
-                    block.innerHTML = ""
-                    block.appendChild(fallbackStage)
-
-                    await mermaid.run({
-                      nodes: [fallbackStage],
-                      suppressErrors: false,
-                    })
-                    if (disposed) return
-
-                    if (fallbackStage.querySelector("svg")) {
-                    block.dataset.mermaidSource = fallbackSource
-                    block.dataset.mermaidTheme = theme
-                    block.dataset.mermaidRendered = "true"
-                    block.dataset.mermaidRetryCount = "0"
-                      block.classList.remove("aq-mermaid-error")
-                      return
-                    }
-                  } catch (fallbackError) {
-                    const signature = `fallback:${fallbackSource}:${String(fallbackError)}`
-                    if (!loggedErrorSignatures.has(signature)) {
-                      loggedErrorSignatures.add(signature)
-                      console.warn("[mermaid] fallback render failed", fallbackError)
-                    }
-                  }
-                }
-              } else {
-                scheduleRetry(i, block)
-                return
+          const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
+          if (fallbackSource && fallbackSource !== source) {
+            try {
+              await renderSourceIntoBlock(fallbackSource)
+              block.dataset.mermaidSource = fallbackSource
+              block.dataset.mermaidTheme = theme
+              block.dataset.mermaidRendered = "true"
+              block.dataset.mermaidRetryCount = "0"
+              block.classList.remove("aq-mermaid-error")
+              return
+            } catch (fallbackError) {
+              const signature = `fallback:${fallbackSource}:${String(fallbackError)}`
+              if (!loggedErrorSignatures.has(signature)) {
+                loggedErrorSignatures.add(signature)
+                console.warn("[mermaid] fallback render failed", fallbackError)
               }
             }
+          }
 
           const escapedSource = source
             .replaceAll("&", "&amp;")

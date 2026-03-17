@@ -157,10 +157,10 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: flex-end;
     gap: 0.36rem;
-    min-width: 11rem;
+    min-width: 0;
     min-height: 32px;
     flex: none;
-    width: clamp(11rem, 28vw, 19rem);
+    width: auto;
 
     > * {
       flex-shrink: 0;
@@ -172,7 +172,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: flex-end;
     gap: 0.45rem;
-    width: 100%;
+    width: auto;
   }
 
   .navPill,

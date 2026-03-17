@@ -637,8 +637,9 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
         pre({ children, className, ...props }) {
           const { language, rawCode } = extractCodeMetaFromPreChildren(children)
           const mermaidSource = extractNormalizedMermaidSource(rawCode)
+          const shouldRenderMermaid = language === "mermaid" || isMermaidSource(rawCode)
 
-          if (language === "mermaid") {
+          if (shouldRenderMermaid) {
             return (
               <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={mermaidSource || rawCode}>
                 <code className="language-mermaid">{mermaidSource || rawCode}</code>

@@ -4997,7 +4997,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 CREATE EXTENSION IF NOT EXISTS pgroonga;
 ```
 
-Spring Boot 는 `spring.sql.init.mode: always` 설정 시 애플리케이션 시작 시점에 `schema.sql` 을 실행한다. PGroonga PostgreSQL 확장을 여기서 활성화한다.
+`schema.sql` 은 SQL init 경로를 켰을 때만 실행된다. 현재 운영(prod)은 `spring.sql.init.mode: never` 로 두고, 스키마 변경은 Flyway(`db/migration`)로 일원화한다.
 
 ---
 

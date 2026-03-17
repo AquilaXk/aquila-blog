@@ -32,6 +32,10 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let observer: IntersectionObserver | null = null
     const retryTimers = new Set<number>()
     const loggedErrorSignatures = new Set<string>()
+    let runRetryCount = 0
+    const maxRetryCount = 6
+    const retryBaseDelayMs = 150
+    const maxRunRetryCount = 3
 
     const stripRiskyFlowchartDirectives = (source: string) =>
       source
@@ -115,13 +119,14 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
       const scheduleRetry = (index: number, block: HTMLElement) => {
         const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
-        if (retryCount >= 4) return
+        if (retryCount >= maxRetryCount) return false
         block.dataset.mermaidRetryCount = String(retryCount + 1)
         const timerId = window.setTimeout(() => {
           retryTimers.delete(timerId)
           enqueueRender(index)
-        }, 120 * (retryCount + 1))
+        }, retryBaseDelayMs * (retryCount + 1))
         retryTimers.add(timerId)
+        return true
       }
 
       const normalizeMermaidSource = (raw: string) => {
@@ -197,12 +202,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidRetryCount = "0"
           block.classList.remove("aq-mermaid-error")
         } catch (error) {
-          if (isNegativeRectWidthError(error)) {
-            const retryCount = Number.parseInt(block.dataset.mermaidRetryCount || "0", 10)
-            if (retryCount < 4) {
-              scheduleRetry(i, block)
-              return
-            }
+          if (isNegativeRectWidthError(error) && scheduleRetry(i, block)) {
+            return
           }
 
           const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
@@ -221,8 +222,11 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
                 loggedErrorSignatures.add(signature)
                 console.warn("[mermaid] fallback render failed", fallbackError)
               }
+              if (scheduleRetry(i, block)) return
             }
           }
+
+          if (scheduleRetry(i, block)) return
 
           const escapedSource = source
             .replaceAll("&", "&amp;")
@@ -281,8 +285,18 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       running = true
       try {
         await renderMermaidBlocks()
+        runRetryCount = 0
       } catch (error) {
         console.warn(error)
+        if (!disposed && runRetryCount < maxRunRetryCount) {
+          runRetryCount += 1
+          const delay = 220 * runRetryCount
+          const timerId = window.setTimeout(() => {
+            retryTimers.delete(timerId)
+            void run()
+          }, delay)
+          retryTimers.add(timerId)
+        }
       } finally {
         running = false
       }
@@ -292,9 +306,11 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     const rafId = window.requestAnimationFrame(() => {
       void run()
     })
-    const timerId = window.setTimeout(() => {
-      void run()
-    }, 120)
+    const initialTimerIds = [120, 360, 900].map((delay) =>
+      window.setTimeout(() => {
+        void run()
+      }, delay)
+    )
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => void run()) : null
     resizeObserver?.observe(root)
 
@@ -305,7 +321,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
       window.cancelAnimationFrame(rafId)
-      window.clearTimeout(timerId)
+      initialTimerIds.forEach((timerId) => window.clearTimeout(timerId))
     }
   }, [contentKey, rootRef, scheme])
 

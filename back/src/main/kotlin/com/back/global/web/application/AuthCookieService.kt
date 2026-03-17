@@ -50,9 +50,11 @@ class AuthCookieService(
     private fun expireHostOnlyCookie(name: String) {
         response.addCookie(
             Cookie(name, "").apply {
-                path = "/"
-                isHttpOnly = true
-                maxAge = 0
+                setPath("/")
+                setHttpOnly(true)
+                setSecure(true)
+                setAttribute("SameSite", "Strict")
+                setMaxAge(0)
             },
         )
     }

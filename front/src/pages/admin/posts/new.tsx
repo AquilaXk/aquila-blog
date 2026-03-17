@@ -269,6 +269,30 @@ const extractFirstMarkdownImage = (content: string): string => {
   return match?.[1]?.trim() || ""
 }
 
+const normalizeSafeImageUrl = (raw: string): string => {
+  const value = raw.trim()
+  if (!value) return ""
+
+  if (value.startsWith("/")) {
+    return value.startsWith("//") ? "" : value
+  }
+
+  if (value.startsWith("./") || value.startsWith("../")) {
+    return value
+  }
+
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString()
+    }
+  } catch {
+    return ""
+  }
+
+  return ""
+}
+
 const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
   const normalized = content
     .replace(fencedCodeRegex, " ")
@@ -419,7 +443,7 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
   }
 }
 
-const escapePipes = (value: string) => value.replace(/\|/g, "\\|")
+const escapePipes = (value: string) => value.replace(/[\\|]/g, "\\$&")
 
 const nodeText = (node: Node): string => {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
@@ -744,7 +768,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const parsedCategory = splitCategoryDisplay(parsed.category)
     setPostContent(parsed.body)
     setPostSummary(parsed.summary || makePreviewSummary(parsed.body))
-    setPostThumbnailUrl(parsed.thumbnail || extractFirstMarkdownImage(parsed.body))
+    setPostThumbnailUrl(
+      normalizeSafeImageUrl(parsed.thumbnail) || normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
+    )
     setPostTags(parsed.tags)
     setPostCategory(parsed.category)
     setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
@@ -761,15 +787,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [postContent, postSummary])
 
   const resolvedPreviewThumbnail = useMemo(() => {
-    const manual = postThumbnailUrl.trim()
+    const manual = normalizeSafeImageUrl(postThumbnailUrl)
     if (manual) return manual
-    return extractFirstMarkdownImage(postContent)
+    return normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
   }, [postContent, postThumbnailUrl])
-  const effectiveThumbnailUrl = useMemo(() => {
-    const manual = postThumbnailUrl.trim()
-    if (manual) return manual
-    return extractFirstMarkdownImage(postContent).trim()
-  }, [postContent, postThumbnailUrl])
+  const effectiveThumbnailUrl = useMemo(
+    () => resolvedPreviewThumbnail.trim(),
+    [resolvedPreviewThumbnail]
+  )
 
   useEffect(() => {
     setIsPreviewThumbnailError(false)
@@ -1953,7 +1978,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const uploadedUrl = uploaded.data?.url?.trim()
       if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
 
-      setPostThumbnailUrl(uploadedUrl)
+      setPostThumbnailUrl(normalizeSafeImageUrl(uploadedUrl))
       setIsPreviewThumbnailError(false)
       setPublishStatus({
         tone: "success",
@@ -3078,7 +3103,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </Button>
                     <Button
                       type="button"
-                      onClick={() => setPostThumbnailUrl(extractFirstMarkdownImage(postContent))}
+                      onClick={() => setPostThumbnailUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(postContent)))}
                     >
                       본문 첫 이미지 가져오기
                     </Button>

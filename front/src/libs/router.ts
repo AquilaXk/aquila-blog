@@ -53,21 +53,39 @@ export const toLoginPath = (nextPath: NextPathInput, fallback = "/") =>
 export const toSignupPath = (nextPath: NextPathInput, fallback = "/") =>
   `/signup?next=${encodeURIComponent(normalizeNextPath(nextPath, fallback))}`
 
+const toSafeClientRedirectTarget = (target: string, fallback = "/"): string => {
+  if (typeof window === "undefined") return normalizeNextPath(target, fallback)
+
+  const value = target.trim()
+  if (!value) return fallback
+
+  try {
+    const parsed = new URL(value, window.location.origin)
+    if (parsed.origin !== window.location.origin) return fallback
+
+    return normalizeNextPath(`${parsed.pathname}${parsed.search}${parsed.hash}`, fallback)
+  } catch {
+    return fallback
+  }
+}
+
 export const replaceRoute = async (
   router: NextRouter,
   target: string,
   { preferHardNavigation = false }: { preferHardNavigation?: boolean } = {}
 ) => {
+  const safeTarget = toSafeClientRedirectTarget(target, "/")
+
   if (preferHardNavigation && typeof window !== "undefined") {
-    window.location.replace(target)
+    window.location.replace(safeTarget)
     return
   }
 
   try {
-    await router.replace(target)
+    await router.replace(safeTarget)
   } catch (error) {
     if (preferHardNavigation && typeof window !== "undefined") {
-      window.location.replace(target)
+      window.location.replace(safeTarget)
       return
     }
 
@@ -82,16 +100,18 @@ export const pushRoute = async (
   target: string,
   { preferHardNavigation = false }: { preferHardNavigation?: boolean } = {}
 ) => {
+  const safeTarget = toSafeClientRedirectTarget(target, "/")
+
   if (preferHardNavigation && typeof window !== "undefined") {
-    window.location.assign(target)
+    window.location.assign(safeTarget)
     return
   }
 
   try {
-    await router.push(target)
+    await router.push(safeTarget)
   } catch (error) {
     if (preferHardNavigation && typeof window !== "undefined") {
-      window.location.assign(target)
+      window.location.assign(safeTarget)
       return
     }
 

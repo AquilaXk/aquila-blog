@@ -1,10 +1,17 @@
 package com.back.boundedContexts.post.dto
 
 object PostMetaExtractor {
+    private const val CACHE_MAX_ENTRIES = 1024
+
     data class PostMeta(
         val tags: List<String>,
         val categories: List<String>,
     )
+
+    private val metaCache =
+        object : LinkedHashMap<Long, PostMeta>(CACHE_MAX_ENTRIES, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, PostMeta>): Boolean = size > CACHE_MAX_ENTRIES
+        }
 
     private val metadataLineRegex =
         Regex(
@@ -12,7 +19,13 @@ object PostMetaExtractor {
             RegexOption.IGNORE_CASE,
         )
 
-    fun extract(content: String): PostMeta {
+    fun extract(content: String): PostMeta =
+        synchronized(metaCache) {
+            val key = contentKey(content)
+            metaCache[key] ?: buildMeta(content).also { metaCache[key] = it }
+        }
+
+    private fun buildMeta(content: String): PostMeta {
         var remaining = content.trimStart()
         val tags = linkedSetOf<String>()
         val categories = linkedSetOf<String>()
@@ -76,6 +89,10 @@ object PostMetaExtractor {
             categories = categories.toList(),
         )
     }
+
+    private fun contentKey(content: String): Long =
+        (content.hashCode().toLong() shl 32) xor
+            content.length.toLong()
 
     private fun parseMetaItems(rawValue: String): List<String> {
         val normalized = rawValue.trim().removePrefix("[").removeSuffix("]")

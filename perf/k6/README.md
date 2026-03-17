@@ -1,0 +1,61 @@
+# k6 Load Test Guide
+
+## 1) Post read mix (상용 블로그 가정 시나리오)
+
+```bash
+k6 run perf/k6/post-read-load.js
+```
+
+- 기본 대상: `https://api.aquilaxk.site`
+- 시나리오 구성:
+  - `home_feed`: 메인 피드/태그 조회
+  - `detail_reader`: 글 상세 조회
+  - `explore_search`: 검색/태그 탐색
+- 기본 부하(총합): 피크 약 **27 req/s** (6분)
+- 데이터 건수:
+  - 목록: `pageSize 12/18/24` 랜덤
+  - 상세: setup에서 수집한 최신 글 id 풀(최대 30개) 랜덤 접근
+  - 탐색: keyword + tag 랜덤 조합
+- 다른 환경 대상:
+
+```bash
+BASE_URL="https://staging-api.example.com" k6 run perf/k6/post-read-load.js
+```
+
+현재 스크립트는 scenario별 stage를 코드에 고정한 형태라, 부하 강도 조정 시 stage 값을 직접 수정하는 방식을 권장합니다.
+
+## 2) 확인할 핵심 지표
+
+- `post_feed_duration_ms` p95
+- `post_explore_duration_ms` p95
+- `post_detail_duration_ms` p95
+- `post_tags_duration_ms` p95
+- `http_req_failed` rate
+- `post_business_error_rate` rate
+- `post_server_error_rate` rate
+
+## 3) Prometheus/Grafana에서 보는 쿼리 예시
+
+```promql
+histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri="/post/api/v1/posts/feed",method="GET"}[5m])) by (le))
+```
+
+```promql
+histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri="/post/api/v1/posts/explore",method="GET"}[5m])) by (le))
+```
+
+```promql
+histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri="/post/api/v1/posts/{id}",method="GET"}[5m])) by (le))
+```
+
+```promql
+sum(rate(http_server_requests_seconds_count{uri=~"/post/api/v1/posts/(feed|explore|\\{id\\})",status=~"5.."}[5m]))
+/
+sum(rate(http_server_requests_seconds_count{uri=~"/post/api/v1/posts/(feed|explore|\\{id\\})"}[5m]))
+```
+
+## 4) 운영 기준(권장)
+
+- read API p95: feed/explore 2.5s 이하, detail 1.8s 이하
+- read API 5xx rate 1% 미만
+- 급격한 p95 상승 시 최근 배포/DB 부하/캐시 적중률을 함께 확인

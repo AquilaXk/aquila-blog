@@ -115,10 +115,8 @@ export default FeedExplorer
 const ExplorerCard = styled.section`
   display: grid;
   gap: 0.95rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  padding: 0.3rem 0 0.85rem;
   min-width: 0;
   overflow: visible;
 
@@ -134,16 +132,16 @@ const ExplorerCard = styled.section`
 
   .actions {
     min-width: 0;
-    padding-top: 0.4rem;
+    padding-top: 0.28rem;
   }
 
   &[data-has-tags="true"] .actions {
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-top: 0;
   }
 
   @media (max-width: 768px) {
     gap: 0.85rem;
-    padding: 0.82rem;
+    padding: 0.2rem 0 0.75rem;
   }
 
   @media (min-width: 1024px) {

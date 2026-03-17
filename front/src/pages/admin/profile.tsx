@@ -655,10 +655,9 @@ const Main = styled.main`
 const HeaderCard = styled.section`
   display: grid;
   gap: 0.95rem;
-  padding: 1.1rem 1rem 1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.3rem 0 0.95rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: transparent;
 
   h1 {
     margin: 0;
@@ -682,10 +681,9 @@ const HeaderCopy = styled.div`
 
 const Eyebrow = styled.span`
   width: fit-content;
-  border-radius: 999px;
-  padding: 0.35rem 0.66rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.76rem;
   font-weight: 700;
@@ -700,9 +698,9 @@ const HeaderActions = styled.div`
 `
 
 const BaseButton = styled.button`
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
@@ -732,13 +730,12 @@ const Button = styled(BaseButton)``
 
 const PrimaryButton = styled(BaseButton)`
   border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: #fff;
+  color: ${({ theme }) => theme.colors.blue11};
 
   &:hover:not(:disabled) {
     border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
-    color: #fff;
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
   }
 
   &:disabled {
@@ -752,9 +749,9 @@ const LinkButton = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
@@ -774,10 +771,11 @@ const ProfileGrid = styled.section`
 `
 
 const PanelCard = styled.section`
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 1.15rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0 0 1rem;
 `
 
 const PreviewCard = styled(PanelCard)`
@@ -810,7 +808,7 @@ const AvatarFrame = styled.div`
   height: 128px;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: none;
 `
 
 const AvatarFallback = styled.div`
@@ -849,10 +847,11 @@ const MetaItem = styled.div`
   display: grid;
   gap: 0.32rem;
   min-width: 0;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.72rem 0.9rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0.55rem 0;
 
   span {
     font-size: 0.76rem;
@@ -873,10 +872,10 @@ const MetaItem = styled.div`
 `
 
 const Notice = styled.div`
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 0.8rem 0.95rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.6;
 
@@ -917,9 +916,9 @@ const FieldLabel = styled.label`
 
 const Input = styled.input`
   width: 100%;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
   font-size: 0.98rem;
@@ -928,9 +927,9 @@ const Input = styled.input`
 const TextArea = styled.textarea`
   width: 100%;
   min-height: 140px;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.9rem 1rem;
   font-size: 0.98rem;
@@ -941,10 +940,11 @@ const TextArea = styled.textarea`
 const LinkSectionCard = styled.section`
   display: grid;
   gap: 0.7rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.85rem;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0.85rem 0 0;
 `
 
 const LinkSectionHeader = styled.div`
@@ -985,10 +985,11 @@ const LinkItemRow = styled.div`
   grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 0.65rem;
   align-items: end;
-  padding: 0.85rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.85rem 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
@@ -1011,9 +1012,9 @@ const IconPickerButton = styled.button`
   width: 100%;
   min-height: 3.45rem;
   padding: 0.5rem 0.72rem;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   min-width: 0;
   cursor: pointer;
@@ -1042,9 +1043,9 @@ const IconPreview = styled.span`
   justify-content: center;
   color: ${({ theme }) => theme.colors.gray11};
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
 
   svg {
     font-size: 1.08rem;
@@ -1087,12 +1088,10 @@ const IconPickerPanel = styled.div`
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0.45rem;
-  border-radius: 18px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow:
-    0 18px 48px rgba(15, 23, 42, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: none;
   scrollbar-gutter: stable;
 `
 
@@ -1142,17 +1141,18 @@ const IconOptionText = styled.span`
 const RemoveButton = styled(Button)`
   color: ${({ theme }) => theme.colors.red11};
   border-color: ${({ theme }) => theme.colors.red7};
-  background: ${({ theme }) => theme.colors.red3};
+  background: transparent;
   white-space: nowrap;
   min-height: 3.45rem;
 `
 
 const InlineEmpty = styled.p`
   margin: 0;
-  border-radius: 12px;
-  border: 1px dashed ${({ theme }) => theme.colors.gray7};
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.72rem 0.8rem;
+  padding: 0.72rem 0;
   font-size: 0.88rem;
 `
 

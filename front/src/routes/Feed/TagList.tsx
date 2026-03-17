@@ -279,7 +279,7 @@ const StyledWrapper = styled.div`
     text-align: left;
     white-space: nowrap;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border: none;
     background: ${({ theme }) => theme.colors.gray1};
     padding: 0.33rem 0.8rem;
     color: ${({ theme }) => theme.colors.gray11};

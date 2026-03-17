@@ -2,6 +2,8 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.application.service.PostHitDedupService
+import com.back.boundedContexts.post.application.service.PostPublicReadQueryService
+import com.back.boundedContexts.post.application.service.PostQueryCacheNames
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.FeedPostDto
@@ -20,6 +22,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import org.slf4j.LoggerFactory
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
 import org.springframework.http.HttpStatus
@@ -33,6 +36,7 @@ import java.sql.SQLException
 class ApiV1PostController(
     private val postUseCase: PostUseCase,
     private val postHitDedupService: PostHitDedupService,
+    private val postPublicReadQueryService: PostPublicReadQueryService,
     private val rq: Rq,
 ) {
     private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
@@ -64,6 +68,10 @@ class ApiV1PostController(
 
     @GetMapping("/feed")
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.FEED],
+        key = "'p=' + #page + ':s=' + #pageSize + ':sort=' + #sort.name()",
+    )
     fun getFeed(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
@@ -78,6 +86,11 @@ class ApiV1PostController(
 
     @GetMapping("/explore")
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.EXPLORE],
+        key =
+            "'p=' + #page + ':s=' + #pageSize + ':sort=' + #sort.name() + ':kw=' + #kw.trim() + ':tag=' + #tag.trim()",
+    )
     fun explore(
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
@@ -100,7 +113,7 @@ class ApiV1PostController(
 
     @GetMapping("/tags")
     @Transactional(readOnly = true)
-    fun getTags(): List<TagCountDto> = postUseCase.getPublicTagCounts()
+    fun getTags(): List<TagCountDto> = postPublicReadQueryService.getPublicTagCounts()
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -121,8 +134,11 @@ class ApiV1PostController(
     fun getItem(
         @PathVariable @Positive id: Int,
     ): PostWithContentDto {
+        if (rq.actorOrNull == null) {
+            return postPublicReadQueryService.getPublicPostDetail(id)
+        }
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        post.checkActorCanRead(rq.actor)
         return makePostWithContentDto(post)
     }
 

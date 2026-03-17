@@ -54,10 +54,10 @@ const StyledWrapper = styled.div`
     gap: 0.65rem;
     min-width: 0;
     min-height: 50px;
-    padding: 0 0.9rem;
-    border-radius: 14px;
+    padding: 0 0.75rem;
+    border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    background: transparent;
 
     .searchIcon {
       display: inline-flex;
@@ -77,8 +77,8 @@ const StyledWrapper = styled.div`
       height: 30px;
       padding: 0 0.7rem;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray5};
-      background: ${({ theme }) => theme.colors.gray2};
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.82rem;
       font-weight: 700;
@@ -88,8 +88,8 @@ const StyledWrapper = styled.div`
 
       &:hover {
         color: ${({ theme }) => theme.colors.gray12};
-        border-color: ${({ theme }) => theme.colors.gray6};
-        background: ${({ theme }) => theme.colors.gray3};
+        border-color: ${({ theme }) => theme.colors.gray8};
+        background: ${({ theme }) => theme.colors.gray2};
       }
 
       @media (max-width: 640px) {
@@ -119,6 +119,6 @@ const StyledWrapper = styled.div`
 
   > .field:focus-within {
     border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 2px ${({ theme }) => theme.colors.blue4};
+    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue7};
   }
 `

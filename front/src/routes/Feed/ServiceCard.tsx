@@ -52,24 +52,25 @@ const StyledTitle = styled.div`
 
 const StyledWrapper = styled.div`
   display: flex;
-  padding: 0.25rem;
+  padding: 0.15rem 0 0.2rem;
   margin-bottom: 2.25rem;
   flex-direction: column;
-  border-radius: 1rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background-color: ${({ theme }) => theme.colors.gray1};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
   > a {
     display: flex;
-    padding: 0.75rem;
+    padding: 0.65rem 0.1rem;
     gap: 0.75rem;
     align-items: center;
-    border-radius: 1rem;
+    border-radius: 0;
     color: ${({ theme }) => theme.colors.gray11};
     cursor: pointer;
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      background-color: ${({ theme }) => theme.colors.gray3};
+      background: transparent;
+      text-decoration: underline;
+      text-underline-offset: 3px;
     }
     .icon {
       font-size: 1.5rem;

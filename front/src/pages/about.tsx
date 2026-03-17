@@ -141,10 +141,8 @@ const StyledWrapper = styled.div`
     .profile-section {
       text-align: center;
       margin-bottom: 3rem;
-      padding: 1.3rem;
-      background-color: ${({ theme }) => theme.colors.gray1};
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      border-radius: 0.9rem;
+      padding: 0.5rem 0 1.25rem;
+      border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
 
       .profile-image-wrapper {
         position: relative;
@@ -156,7 +154,7 @@ const StyledWrapper = styled.div`
           border-radius: 50%;
           object-fit: cover;
           object-position: center 38%;
-          border: 4px solid ${({ theme }) => theme.colors.gray6};
+          border: 1px solid ${({ theme }) => theme.colors.gray6};
         }
       }
 
@@ -206,14 +204,12 @@ const StyledWrapper = styled.div`
           font-size: 1rem;
           display: flex;
           align-items: center;
-          padding: 0.75rem 1rem;
-          background-color: ${({ theme }) => theme.colors.gray1};
-          border: 1px solid ${({ theme }) => theme.colors.gray6};
-          border-radius: 0.5rem;
+          padding: 0.58rem 0;
+          border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
           transition: background-color 0.2s ease, border-color 0.2s ease;
 
           &:hover {
-            background-color: ${({ theme }) => theme.colors.gray2};
+            background-color: transparent;
             border-color: ${({ theme }) => theme.colors.gray7};
           }
 

@@ -1,6 +1,11 @@
 import { RefObject, useEffect } from "react"
 import useScheme from "src/hooks/useScheme"
 
+const MERMAID_SOURCE_PATTERN =
+  /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
+
+const MERMAID_EDGE_PATTERN = /-->|==>|-.->|:::|subgraph\b|classDef\b|style\b/i
+
 const parseDimension = (value: string | null) => {
   if (!value) return 0
   const parsed = Number.parseFloat(value.replace(/[^\d.\-]/g, ""))
@@ -38,6 +43,23 @@ const mergeBounds = (
   const maxX = Math.max(current.x + current.width, next.x + next.width)
   const maxY = Math.max(current.y + current.height, next.y + next.height)
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
+const isMermaidSource = (rawCode: string) => {
+  const normalized = rawCode.trim()
+  if (!normalized) return false
+
+  const fenced = normalized.match(/^`{3,}\s*mermaid\b[\t ]*\n([\s\S]*?)\n`{3,}\s*$/i)
+  const body = (fenced?.[1] || normalized).trim()
+  if (!body) return false
+
+  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean)
+  if (!lines.length) return false
+
+  const firstLine = lines[0].replace(/^\d+\s+/, "")
+  if (MERMAID_SOURCE_PATTERN.test(firstLine)) return true
+
+  return MERMAID_EDGE_PATTERN.test(body)
 }
 
 const getMeasurementBounds = (svg: SVGSVGElement, rawWidth: number, rawHeight: number) => {
@@ -139,6 +161,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             "pre.aq-mermaid > code.language-mermaid",
             "pre > code[data-language='mermaid']",
             "pre[data-language='mermaid'] > code",
+            // language 힌트가 유실된 일반 pre/code 경로도 머메이드 소스 판별 대상으로 포함한다.
+            "pre > code",
           ].join(", ")
         )
       )
@@ -149,6 +173,10 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             "pre.aq-mermaid",
             "pre[data-aq-mermaid='true']",
             "pre[data-language='mermaid']",
+            // rehype-pretty-code 경로에서 language 힌트가 유실된 경우를 대비한 fallback 대상
+            "figure[data-rehype-pretty-code-figure] pre",
+            // SSR/HTML 경로에서 class/data-language 힌트 없이 내려오는 pre도 탐지한다.
+            "pre",
           ].join(", ")
         )
       )
@@ -208,6 +236,15 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         if (!block) return
         const codeBlock =
           block.querySelector<HTMLElement>("code.language-mermaid, code[data-language='mermaid'], code") || null
+        const codeClassName = codeBlock?.className?.toLowerCase() || ""
+        const codeDataLanguage = (codeBlock?.getAttribute("data-language") || "").toLowerCase()
+        const blockClassName = block.className?.toLowerCase() || ""
+        const blockDataLanguage = (block.getAttribute("data-language") || "").toLowerCase()
+        const hasMermaidHint =
+          blockClassName.includes("aq-mermaid") ||
+          blockDataLanguage === "mermaid" ||
+          codeClassName.includes("language-mermaid") ||
+          codeDataLanguage === "mermaid"
         const source = normalizeMermaidSource(
           block.getAttribute("data-mermaid-source") ||
             block.dataset.mermaidSource ||
@@ -216,6 +253,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             ""
         )
         if (!source) return
+        if (!hasMermaidHint && !isMermaidSource(source)) return
 
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
@@ -357,10 +395,10 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
               const rect = block.getBoundingClientRect()
               if (rect.width <= 16 || rect.height <= 8) return
               observer?.unobserve(block)
-          const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
-          if (!Number.isFinite(index)) return
-          enqueueRender(index)
-        })
+              const index = Number.parseInt(block.dataset.mermaidIndex || "", 10)
+              if (!Number.isFinite(index)) return
+              enqueueRender(index)
+            })
           },
           {
             root: null,

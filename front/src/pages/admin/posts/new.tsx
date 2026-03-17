@@ -3980,12 +3980,17 @@ const PostPreviewHeader = styled.div`
 `
 
 const PreviewThumbFrame = styled.div`
-  width: 100%;
+  width: min(100%, 420px);
+  justify-self: start;
   aspect-ratio: 16 / 9;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   overflow: hidden;
+
+  @media (max-width: 780px) {
+    width: 100%;
+  }
 
   img {
     width: 100%;
@@ -5309,7 +5314,8 @@ const ContentInput = styled.textarea`
   line-height: 1.82;
   font-size: 1.02rem;
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
   box-shadow: none;
 
   &:focus {

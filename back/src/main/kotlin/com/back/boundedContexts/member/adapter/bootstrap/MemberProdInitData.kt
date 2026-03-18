@@ -15,6 +15,10 @@ import org.springframework.core.annotation.Order
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.transaction.annotation.Transactional
 
+/**
+ * MemberProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
+ * 애플리케이션 기동 시 필요한 기본 상태를 안전하게 준비합니다.
+ */
 @Profile("prod")
 @Configuration
 class MemberProdInitData(
@@ -36,6 +40,10 @@ class MemberProdInitData(
             self.ensureConfiguredAdminMember()
         }
 
+    /**
+     * 검증 규칙을 적용해 허용 여부를 판정합니다.
+     * 초기화 단계에서 중복 생성 방지와 기본값 보정을 함께 수행합니다.
+     */
     @Transactional
     fun ensureConfiguredAdminMember() {
         val adminUsername = AppConfig.adminUsernameOrBlank.trim()

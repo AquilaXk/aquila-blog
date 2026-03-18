@@ -5,6 +5,10 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+/**
+ * UploadedFileUrlCodec는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
+ * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
+ */
 object UploadedFileUrlCodec {
     private const val IMAGE_PATH_PREFIX = "/post/api/v1/images/"
 
@@ -24,6 +28,10 @@ object UploadedFileUrlCodec {
         return "$IMAGE_PATH_PREFIX$encodedKey"
     }
 
+    /**
+     * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
+     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
+     */
     fun extractObjectKeyFromImageUrl(url: String?): String? {
         val normalizedUrl =
             url
@@ -46,6 +54,10 @@ object UploadedFileUrlCodec {
         return decodeOrNull(encodedKey)
     }
 
+    /**
+     * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
+     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
+     */
     fun extractObjectKeysFromContent(content: String): Set<String> {
         if (content.isBlank()) return emptySet()
 

@@ -624,18 +624,18 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     }
 
     @Nested
-    inner class ToggleLike {
+    inner class Like {
         @Test
         @WithUserDetails("user1")
         fun `성공 - 좋아요 추가`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
-            mvc.post("/post/api/v1/posts/${post.id}/like").andExpect {
+            mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
-                match(handler().methodName("toggleLike"))
+                match(handler().methodName("like"))
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
-                jsonPath("$.msg") { value("좋아요를 눌렀습니다.") }
+                jsonPath("$.msg") { value("좋아요를 반영했습니다.") }
                 jsonPath("$.data.liked") { value(true) }
                 jsonPath("$.data.likesCount") { isNumber() }
             }
@@ -646,18 +646,18 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `성공 - 좋아요 취소`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
-            mvc.post("/post/api/v1/posts/${post.id}/like")
+            mvc.put("/post/api/v1/posts/${post.id}/like")
 
-            mvc.post("/post/api/v1/posts/${post.id}/like").andExpect {
+            mvc.delete("/post/api/v1/posts/${post.id}/like").andExpect {
                 status { isOk() }
-                jsonPath("$.msg") { value("좋아요를 취소했습니다.") }
+                jsonPath("$.msg") { value("좋아요 취소를 반영했습니다.") }
                 jsonPath("$.data.liked") { value(false) }
             }
         }
 
         @Test
         @WithUserDetails("user1")
-        fun `좋아요 카운터 attr 누락 상태에서도 토글 취소가 409 없이 동작한다`() {
+        fun `좋아요 카운터 attr 누락 상태에서도 unlike가 409 없이 동작한다`() {
             val author = actorApplicationService.findByUsername("admin").getOrThrow()
             val post = postFacade.write(author, "like-attr-missing-${System.currentTimeMillis()}", "내용", true, true)
 
@@ -678,9 +678,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             )
             entityManager.clear()
 
-            mvc.post("/post/api/v1/posts/${post.id}/like").andExpect {
+            mvc.delete("/post/api/v1/posts/${post.id}/like").andExpect {
                 status { isOk() }
-                jsonPath("$.msg") { value("좋아요를 취소했습니다.") }
+                jsonPath("$.msg") { value("좋아요 취소를 반영했습니다.") }
                 jsonPath("$.data.liked") { value(false) }
                 jsonPath("$.data.likesCount") { value(0) }
             }
@@ -690,7 +690,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `실패 - 인증 없이`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
-            mvc.post("/post/api/v1/posts/${post.id}/like").andExpect {
+            mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
                 status { isUnauthorized() }
                 jsonPath("$.resultCode") { value("401-1") }
             }

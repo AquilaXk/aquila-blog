@@ -12,6 +12,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 @Service
+
+/**
+ * SignupStartRateLimitService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
+ * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
+ */
 class SignupStartRateLimitService(
     @param:Value("\${custom.member.signup.startRateLimit.maxAttemptsPerEmail:5}")
     private val maxAttemptsPerEmail: Int,
@@ -35,6 +40,10 @@ class SignupStartRateLimitService(
     private val states = ConcurrentHashMap<String, WindowState>()
     private val lastCleanupEpochSeconds = AtomicLong(0)
 
+    /**
+     * 검증 규칙을 적용해 허용 여부를 판정합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     fun checkAndConsume(
         email: String,
         clientIp: String,
@@ -53,6 +62,10 @@ class SignupStartRateLimitService(
         }
     }
 
+    /**
+     * 실행 시점에 필요한 의존성/값을 결정합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     private fun resolveRedisTemplate(): StringRedisTemplate? {
         val redisTemplate = redisTemplateProvider.getIfAvailable()
         if (redisTemplate == null && AppFacade.isProd && requireRedisInProd) {
@@ -61,6 +74,10 @@ class SignupStartRateLimitService(
         return redisTemplate
     }
 
+    /**
+     * consumeInMemory 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun consumeInMemory(
         key: String,
         maxAttempts: Int,
@@ -78,6 +95,10 @@ class SignupStartRateLimitService(
         return next.count <= maxAttempts
     }
 
+    /**
+     * consumeInRedis 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun consumeInRedis(
         redisTemplate: StringRedisTemplate,
         key: String,
@@ -91,6 +112,10 @@ class SignupStartRateLimitService(
         return nextCount <= maxAttempts.toLong()
     }
 
+    /**
+     * 누적 상태를 정리해 메모리/스토리지 사용량을 관리합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     private fun cleanupInMemoryState(nowEpochSeconds: Long) {
         val shouldForceCleanup = states.size > memoryMaxEntries
         val previousCleanupAt = lastCleanupEpochSeconds.get()

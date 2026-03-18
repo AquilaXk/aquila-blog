@@ -117,10 +117,11 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     )
 
     try {
+      const likeMethod: "PUT" | "DELETE" = currentLiked ? "DELETE" : "PUT"
       const response = await apiFetch<RsData<{ liked: boolean; likesCount: number }>>(
         `/post/api/v1/posts/${data.id}/like`,
         {
-          method: "POST",
+          method: likeMethod,
         }
       )
 

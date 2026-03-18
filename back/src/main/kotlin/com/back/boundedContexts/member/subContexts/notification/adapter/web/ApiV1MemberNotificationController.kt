@@ -17,6 +17,10 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 
+/**
+ * ApiV1MemberNotificationController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
+ * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
+ */
 @RestController
 @RequestMapping("/member/api/v1/notifications")
 class ApiV1MemberNotificationController(

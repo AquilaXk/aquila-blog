@@ -26,6 +26,10 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
+/**
+ * ApiV1AuthController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
+ * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
+ */
 @RestController
 @RequestMapping("/member/api/v1/auth")
 class ApiV1AuthController(
@@ -49,6 +53,10 @@ class ApiV1AuthController(
         val item: MemberDto,
     )
 
+    /**
+     * 로그인 요청을 처리하고 인증/잠금 정책을 반영합니다.
+     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
+     */
     @PostMapping("/login")
     @Transactional
     fun login(

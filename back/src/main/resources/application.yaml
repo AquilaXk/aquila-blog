@@ -218,6 +218,15 @@ custom:
     summary:
       enabled: ${CUSTOM__AI__SUMMARY__ENABLED:false}
       timeoutSeconds: ${CUSTOM__AI__SUMMARY__TIMEOUT_SECONDS:7}
+      maxRequestsPerMinute: ${CUSTOM__AI__SUMMARY__MAX_REQUESTS_PER_MINUTE:20}
+      maxRequestsPerDay: ${CUSTOM__AI__SUMMARY__MAX_REQUESTS_PER_DAY:500}
+      cacheTtlSeconds: ${CUSTOM__AI__SUMMARY__CACHE_TTL_SECONDS:300}
+      fallbackCacheTtlSeconds: ${CUSTOM__AI__SUMMARY__FALLBACK_CACHE_TTL_SECONDS:45}
+      retryMaxAttempts: ${CUSTOM__AI__SUMMARY__RETRY_MAX_ATTEMPTS:2}
+      retryBaseDelayMs: ${CUSTOM__AI__SUMMARY__RETRY_BASE_DELAY_MS:350}
+      retryMaxDelayMs: ${CUSTOM__AI__SUMMARY__RETRY_MAX_DELAY_MS:2500}
+      circuitFailureThreshold: ${CUSTOM__AI__SUMMARY__CIRCUIT_FAILURE_THRESHOLD:5}
+      circuitOpenSeconds: ${CUSTOM__AI__SUMMARY__CIRCUIT_OPEN_SECONDS:90}
       gemini:
         apiKey: "${CUSTOM__AI__SUMMARY__GEMINI__API_KEY:}"
         model: "${CUSTOM__AI__SUMMARY__GEMINI__MODEL:gemini-2.5-flash}"

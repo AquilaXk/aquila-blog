@@ -25,6 +25,11 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 @Service
+
+/**
+ * PostImageStorageAdapter는 파일 스토리지 연동을 담당하는 어댑터입니다.
+ * 업로드/URL 생성/삭제와 같은 저장소 I/O를 애플리케이션 계층에 제공합니다.
+ */
 class PostImageStorageAdapter(
     private val properties: PostImageStorageProperties,
 ) : PostImageStoragePort {
@@ -43,8 +48,12 @@ class PostImageStorageAdapter(
         initializeStorage(forceRetry = true)
     }
 
-    // Storage may be unavailable during app boot (container startup race).
-    // Keep this method retryable so requests can recover without a backend restart.
+    // 앱 부팅 시점에는 스토리지가 아직 준비되지 않을 수 있다(컨테이너 기동 순서 경쟁).
+    // 백엔드 재시작 없이 요청 자체가 회복되도록 이 메서드는 재시도 가능해야 한다.
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun initializeStorage(forceRetry: Boolean) {
         if (!properties.enabled) return
 
@@ -87,6 +96,10 @@ class PostImageStorageAdapter(
         }
     }
 
+    /**
+     * 스토리지 I/O를 수행하며 키/경로/콘텐츠 타입 규칙을 함께 검증합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     override fun uploadPostImage(file: MultipartFile): String {
         val client = requireClient()
         if (file.isEmpty) throw AppException("400-1", "이미지 파일이 비어 있습니다.")
@@ -132,6 +145,10 @@ class PostImageStorageAdapter(
         return key
     }
 
+    /**
+     * 스토리지 I/O를 수행하며 키/경로/콘텐츠 타입 규칙을 함께 검증합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     override fun getPostImage(objectKey: String): PostImageStoragePort.StoredImage? {
         val client = requireClient()
         validateObjectKey(objectKey)
@@ -159,6 +176,10 @@ class PostImageStorageAdapter(
         }
     }
 
+    /**
+     * 스토리지 I/O를 수행하며 키/경로/콘텐츠 타입 규칙을 함께 검증합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     override fun deletePostImage(objectKey: String) {
         val client = requireClient()
         validateObjectKey(objectKey)
@@ -178,10 +199,18 @@ class PostImageStorageAdapter(
         }
     }
 
+    /**
+     * ensureStorageEnabled 처리 흐름에서 예외와 경계 조건을 함께 다룹니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun ensureStorageEnabled() {
         if (!properties.enabled) throw AppException("503-1", "이미지 스토리지가 비활성화되어 있습니다.")
     }
 
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun requireClient(): S3Client {
         ensureStorageEnabled()
 
@@ -197,6 +226,10 @@ class PostImageStorageAdapter(
         return s3Client ?: throw AppException("503-1", "이미지 스토리지가 아직 준비되지 않았습니다.")
     }
 
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun buildClient(): S3Client {
         val accessKey =
             resolveProperty(
@@ -243,6 +276,10 @@ class PostImageStorageAdapter(
             .build()
     }
 
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun resolveProperty(
         rawValue: String,
         envKeyName: String,
@@ -262,6 +299,10 @@ class PostImageStorageAdapter(
         return resolved
     }
 
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun resolveEnvReference(value: String): String? {
         val match = ENV_REFERENCE_REGEX.matchEntire(value) ?: return null
         val envName = match.groupValues[1]
@@ -270,6 +311,10 @@ class PostImageStorageAdapter(
         return if (envValue.isNotBlank()) envValue else defaultValue
     }
 
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun buildObjectKey(originalFilename: String?): String {
         val ext = extractExtension(originalFilename)
         val datePath = LocalDate.now().format(datePathFormatter)
@@ -278,6 +323,10 @@ class PostImageStorageAdapter(
         return if (prefix.isBlank()) "$datePath/$uuid$ext" else "$prefix/$datePath/$uuid$ext"
     }
 
+    /**
+     * 입력 데이터를 정규화/검증하여 저장소 연동 시 오류 가능성을 줄입니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun extractExtension(originalFilename: String?): String {
         val name = originalFilename?.trim().orEmpty()
         if (!name.contains(".")) return ""
@@ -290,6 +339,10 @@ class PostImageStorageAdapter(
         return if (ext.isBlank()) "" else ".$ext"
     }
 
+    /**
+     * 입력 데이터를 정규화/검증하여 저장소 연동 시 오류 가능성을 줄입니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun validateObjectKey(objectKey: String) {
         if (objectKey.isBlank() || objectKey.contains("..") || objectKey.startsWith("/")) {
             throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
@@ -316,6 +369,10 @@ class PostImageStorageAdapter(
         private val ENV_REFERENCE_REGEX = Regex("^\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*))?}$")
     }
 
+    /**
+     * 입력 데이터를 정규화/검증하여 저장소 연동 시 오류 가능성을 줄입니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun normalizeDeclaredContentType(raw: String?): String? {
         val normalized =
             raw
@@ -328,6 +385,10 @@ class PostImageStorageAdapter(
         return contentTypeAliases[normalized] ?: normalized
     }
 
+    /**
+     * 입력 데이터를 정규화/검증하여 저장소 연동 시 오류 가능성을 줄입니다.
+     * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
+     */
     private fun detectImageContentType(signature: ByteArray): String? {
         if (signature.size >= 3 &&
             signature[0] == 0xFF.toByte() &&

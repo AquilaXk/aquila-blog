@@ -30,6 +30,10 @@ import org.springframework.web.multipart.MultipartFile
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+/**
+ * ApiV1AdmMemberController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
+ * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
+ */
 @Validated
 @RestController
 @RequestMapping("/member/api/v1/adm/members")
@@ -79,6 +83,10 @@ class ApiV1AdmMemberController(
         val href: String,
     )
 
+    /**
+     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
+     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
+     */
     @GetMapping
     @Transactional(readOnly = true)
     fun getItems(
@@ -120,6 +128,9 @@ class ApiV1AdmMemberController(
     @PatchMapping("/{id}/profileImgUrl")
     @Transactional
     @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    /**
+     * ProfileImg 항목을 수정한다.
+     */
     fun updateProfileImg(
         @PathVariable
         @Positive
@@ -132,6 +143,10 @@ class ApiV1AdmMemberController(
         return MemberWithUsernameDto(member)
     }
 
+    /**
+     * uploadProfileImageFile 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
+     */
     @PostMapping("/{id}/profileImageFile")
     @Transactional
     @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
@@ -163,6 +178,9 @@ class ApiV1AdmMemberController(
     @PatchMapping("/{id}/profileCard")
     @Transactional
     @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    /**
+     * ProfileCard 항목을 수정한다.
+     */
     fun updateProfileCard(
         @PathVariable
         @Positive

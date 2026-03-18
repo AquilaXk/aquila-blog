@@ -21,6 +21,10 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
+/**
+ * ApiV1SignupVerificationController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
+ * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
+ */
 @RestController
 @RequestMapping("/member/api/v1/signup")
 class ApiV1SignupVerificationController(
@@ -51,6 +55,10 @@ class ApiV1SignupVerificationController(
         val nickname: String,
     )
 
+    /**
+     * 생성/시작 처리 흐름을 수행하고 중복 요청과 예외 케이스를 함께 다룹니다.
+     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
+     */
     @PostMapping("/email/start")
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Transactional
@@ -88,6 +96,10 @@ class ApiV1SignupVerificationController(
         )
     }
 
+    /**
+     * 생성/시작 처리 흐름을 수행하고 중복 요청과 예외 케이스를 함께 다룹니다.
+     * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
+     */
     @PostMapping("/complete")
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional

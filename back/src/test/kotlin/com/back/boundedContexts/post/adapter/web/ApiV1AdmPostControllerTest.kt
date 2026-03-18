@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.application.service.PostPreviewSummaryService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.global.app.AppConfig
@@ -53,6 +54,9 @@ class ApiV1AdmPostControllerTest {
 
     @MockitoBean
     private lateinit var postUseCase: PostUseCase
+
+    @MockitoBean
+    private lateinit var postPreviewSummaryService: PostPreviewSummaryService
 
     @MockitoBean(name = "jpaMappingContext")
     private lateinit var jpaMappingContext: JpaMetamodelMappingContext

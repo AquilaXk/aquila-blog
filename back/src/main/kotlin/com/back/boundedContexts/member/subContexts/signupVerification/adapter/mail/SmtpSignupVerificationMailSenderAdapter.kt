@@ -14,6 +14,11 @@ import java.time.format.DateTimeFormatter
 
 @Profile("!test")
 @Component
+
+/**
+ * SmtpSignupVerificationMailSenderAdapter의 책임을 정의하는 클래스입니다.
+ * 해당 도메인 흐름에서 역할 분리를 위해 분리된 구성요소입니다.
+ */
 class SmtpSignupVerificationMailSenderAdapter(
     private val javaMailSender: JavaMailSender,
     @Value("\${custom.member.signup.mailFrom:}")
@@ -21,6 +26,10 @@ class SmtpSignupVerificationMailSenderAdapter(
     @Value("\${custom.member.signup.mailSubject:[AquilaXk] 회원가입 이메일 인증}")
     private val mailSubject: String,
 ) : SignupVerificationMailSenderPort {
+    /**
+     * 외부 시스템으로 메일/메시지를 전송하고 실패를 로깅합니다.
+     * 메일 어댑터 계층에서 SMTP 제약(인코딩/제목 길이/예외)을 고려해 전송합니다.
+     */
     override fun send(
         toEmail: String,
         verificationLink: String,
@@ -132,6 +141,10 @@ class SmtpSignupVerificationMailSenderAdapter(
         </html>
         """.trimIndent()
 
+    /**
+     * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
+     * 메일 어댑터 계층에서 SMTP 제약(인코딩/제목 길이/예외)을 고려해 전송합니다.
+     */
     private fun resolveMailSubject(): String {
         val trimmedSubject = mailSubject.trim()
         if (trimmedSubject.isBlank()) {

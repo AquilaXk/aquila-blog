@@ -4,6 +4,11 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import java.time.Instant
 
+/**
+ * `MemberProfileLinkItemDto` 데이터 클래스입니다.
+ * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
+ * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ */
 data class MemberProfileLinkItemDto(
     val icon: String,
     val label: String,
@@ -16,6 +21,11 @@ data class MemberProfileLinkItemDto(
     )
 }
 
+/**
+ * `MemberWithUsernameDto` 데이터 클래스입니다.
+ * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
+ * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ */
 data class MemberWithUsernameDto(
     val id: Int,
     val createdAt: Instant,

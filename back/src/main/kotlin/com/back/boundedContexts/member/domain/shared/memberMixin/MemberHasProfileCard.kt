@@ -49,16 +49,29 @@ val PROFILE_CONTACT_ICON_ALLOWED =
         "bell",
     )
 
+/**
+ * `MemberProfileLinkItem` 데이터 클래스입니다.
+ * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
+ * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ */
 data class MemberProfileLinkItem(
     val icon: String = PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE,
     val label: String = PROFILE_LINK_LABEL_DEFAULT_VALUE,
     val href: String = PROFILE_LINK_HREF_DEFAULT_VALUE,
 )
 
+/**
+ * MemberProfileLinkItemList는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
+ * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
+ */
 private data class MemberProfileLinkItemList(
     val items: List<MemberProfileLinkItem> = emptyList(),
 )
 
+/**
+ * 외부 입력값을 내부 규칙에 맞게 정규화합니다.
+ * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
+ */
 fun normalizeProfileLinkHref(rawHref: String): String? {
     val href = rawHref.trim()
     if (href.isBlank()) return ""
@@ -76,6 +89,10 @@ fun normalizeProfileLinkHref(rawHref: String): String? {
     return href
 }
 
+/**
+ * 외부 입력값을 내부 규칙에 맞게 정규화합니다.
+ * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
+ */
 private fun normalizeProfileLinkItems(
     items: List<MemberProfileLinkItem>,
     defaultIcon: String,
@@ -98,6 +115,10 @@ private fun normalizeProfileLinkItems(
             item.label.isNotBlank() && item.href.isNotBlank()
         }
 
+/**
+ * decodeProfileLinkItems 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+ * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
+ */
 private fun decodeProfileLinkItems(
     rawValue: String?,
     defaultIcon: String,
@@ -112,6 +133,10 @@ private fun decodeProfileLinkItems(
     }.let { normalizeProfileLinkItems(it, defaultIcon, allowedIcons) }
 }
 
+/**
+ * encodeProfileLinkItems 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+ * 도메인 계층에서 불변조건을 지키며 상태 전이를 캡슐화합니다.
+ */
 private fun encodeProfileLinkItems(
     items: List<MemberProfileLinkItem>,
     defaultIcon: String,
@@ -123,6 +148,11 @@ private fun encodeProfileLinkItems(
         ),
     )
 
+/**
+ * `MemberHasProfileCard` 인터페이스입니다.
+ * - 역할: 계층 간 계약(포트/스펙) 정의를 담당합니다.
+ * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ */
 interface MemberHasProfileCard : MemberAware {
     fun getOrInitProfileRoleAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
         member.getOrPutAttr(PROFILE_ROLE) {

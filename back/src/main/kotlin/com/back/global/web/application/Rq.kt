@@ -13,6 +13,10 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import java.time.Duration
 
+/**
+ * Rq는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
+ * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
+ */
 @Component
 class Rq(
     private val req: HttpServletRequest,
@@ -56,6 +60,10 @@ class Rq(
             ?.lastOrNull()
             ?: defaultValue
 
+    /**
+     * 쿠키 속성을 정책에 맞게 설정하고 보안 플래그를 강제합니다.
+     * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
+     */
     fun setCookie(
         name: String,
         value: String?,

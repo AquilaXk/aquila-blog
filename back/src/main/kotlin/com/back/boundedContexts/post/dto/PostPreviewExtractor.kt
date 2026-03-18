@@ -1,5 +1,10 @@
 package com.back.boundedContexts.post.dto
 
+/**
+ * `PostPreviewExtractor` 오브젝트입니다.
+ * - 역할: 정적 유틸/상수/팩토리 기능을 제공합니다.
+ * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ */
 object PostPreviewExtractor {
     private const val SUMMARY_MAX_LENGTH = 180
     private const val CACHE_MAX_ENTRIES = 1024
@@ -16,11 +21,19 @@ object PostPreviewExtractor {
             RegexOption.IGNORE_CASE,
         )
 
+    /**
+     * Preview는 계층 간 데이터 전달에 사용하는 DTO입니다.
+     * 도메인 엔티티 직접 노출을 피하고 API/서비스 경계를 명확히 유지합니다.
+     */
     data class Preview(
         val thumbnail: String?,
         val summary: String,
     )
 
+    /**
+     * PreviewMetadata는 계층 간 데이터 전달에 사용하는 DTO입니다.
+     * 도메인 엔티티 직접 노출을 피하고 API/서비스 경계를 명확히 유지합니다.
+     */
     private data class PreviewMetadata(
         val body: String,
         val thumbnail: String?,

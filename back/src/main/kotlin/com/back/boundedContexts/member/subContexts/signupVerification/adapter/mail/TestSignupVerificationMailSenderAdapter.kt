@@ -7,6 +7,11 @@ import java.time.Instant
 
 @Profile("test")
 @Component
+
+/**
+ * TestSignupVerificationMailSenderAdapter의 책임을 정의하는 클래스입니다.
+ * 해당 도메인 흐름에서 역할 분리를 위해 분리된 구성요소입니다.
+ */
 class TestSignupVerificationMailSenderAdapter : SignupVerificationMailSenderPort {
     override fun send(
         toEmail: String,

@@ -18,6 +18,10 @@ import java.time.Instant
     ON member_signup_verification (email, created_at DESC)
     """,
 )
+/**
+ * MemberSignupVerification는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
+ * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
+ */
 class MemberSignupVerification(
     @field:Id
     @field:SequenceGenerator(
@@ -48,6 +52,10 @@ class MemberSignupVerification(
         cancelledAt = now
     }
 
+    /**
+     * 검증 규칙을 적용해 허용 여부를 판정합니다.
+     * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
+     */
     fun ensureVerifiable(now: Instant) {
         if (cancelledAt != null || consumedAt != null) {
             throw AppException("410-1", "회원가입 링크가 더 이상 유효하지 않습니다.")
@@ -68,6 +76,10 @@ class MemberSignupVerification(
         signupSessionExpiresAt = expiresAt
     }
 
+    /**
+     * 검증 규칙을 적용해 허용 여부를 판정합니다.
+     * 도메인 모델 내부에서 불변조건을 지키며 상태 변경을 캡슐화합니다.
+     */
     fun ensureCompletable(now: Instant) {
         if (cancelledAt != null || consumedAt != null) {
             throw AppException("410-1", "회원가입 세션이 더 이상 유효하지 않습니다.")

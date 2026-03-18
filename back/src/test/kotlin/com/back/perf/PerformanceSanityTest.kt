@@ -18,6 +18,7 @@ import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
 import org.springframework.transaction.annotation.Transactional
 
 @ActiveProfiles("test")
@@ -101,18 +102,18 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
 
     @Test
     @WithUserDetails("user1")
-    fun `toggle like query count sanity`() {
+    fun `like put query count sanity`() {
         val admin = actorApplicationService.findByUsername("admin")!!
         val post = postFacade.write(admin, "sanity like title", "sanity like content", true, true)
         statistics.clear()
 
         mvc
-            .post("/post/api/v1/posts/${post.id}/like")
+            .put("/post/api/v1/posts/${post.id}/like")
             .andExpect {
                 status { isOk() }
             }
 
-        assertQueryCountWithin("like-toggle", 18)
+        assertQueryCountWithin("like-put", 18)
     }
 
     @Test

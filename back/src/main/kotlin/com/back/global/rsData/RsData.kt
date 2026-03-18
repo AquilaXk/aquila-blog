@@ -2,6 +2,10 @@ package com.back.global.rsData
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 
+/**
+ * RsData는 글로벌 공통 정책을 담당하는 구성요소입니다.
+ * 모듈 간 중복을 줄이고 공통 규칙을 일관되게 적용하기 위해 분리되었습니다.
+ */
 data class RsData<T>(
     val resultCode: String,
     @field:JsonIgnore val statusCode: Int,

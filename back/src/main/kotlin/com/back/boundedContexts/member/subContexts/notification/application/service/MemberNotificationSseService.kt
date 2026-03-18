@@ -15,6 +15,11 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 @Service
+
+/**
+ * MemberNotificationSseService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
+ * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
+ */
 class MemberNotificationSseService(
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
     @param:Value("\${custom.member.notification.sse.maxEmittersPerMember:3}")
@@ -43,6 +48,10 @@ class MemberNotificationSseService(
             }
         }
 
+    /**
+     * subscribe 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     fun subscribe(
         memberId: Int,
         lastEventIdRaw: String?,
@@ -74,6 +83,10 @@ class MemberNotificationSseService(
         return emitter
     }
 
+    /**
+     * 이벤트/메시지를 전파하고 실패를 안전하게 처리합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     fun publish(
         memberId: Int,
         notification: MemberNotificationDto,
@@ -105,6 +118,10 @@ class MemberNotificationSseService(
         )
     }
 
+    /**
+     * 이벤트/메시지를 전파하고 실패를 안전하게 처리합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     private fun send(
         emitter: SseEmitter,
         memberId: Int?,
@@ -142,6 +159,10 @@ class MemberNotificationSseService(
         )
     }
 
+    /**
+     * registerHeartbeat 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun registerHeartbeat(
         memberId: Int,
         emitter: SseEmitter,
@@ -179,6 +200,10 @@ class MemberNotificationSseService(
         }
     }
 
+    /**
+     * enforceMemberEmitterLimit 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun enforceMemberEmitterLimit(
         memberId: Int,
         emitters: MutableSet<SseEmitter>,
@@ -191,6 +216,10 @@ class MemberNotificationSseService(
         }
     }
 
+    /**
+     * enforceGlobalEmitterLimit 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun enforceGlobalEmitterLimit() {
         val safeGlobalLimit = maxGlobalEmitters.coerceAtLeast(100)
         while (emitterConnectedAtEpochMillis.size > safeGlobalLimit) {
@@ -209,6 +238,10 @@ class MemberNotificationSseService(
         }
     }
 
+    /**
+     * replayMissedNotificationEvents 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun replayMissedNotificationEvents(
         memberId: Int,
         emitter: SseEmitter,
@@ -244,6 +277,10 @@ class MemberNotificationSseService(
         return latestId
     }
 
+    /**
+     * 원본 입력에서 필요한 값을 안전하게 추출합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     private fun parseLastNotificationId(lastEventIdRaw: String?): Int? {
         val raw = lastEventIdRaw?.trim().orEmpty()
         if (raw.isBlank()) return null

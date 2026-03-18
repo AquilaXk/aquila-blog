@@ -12,6 +12,11 @@ import org.springframework.mail.javamail.JavaMailSenderImpl
 import org.springframework.stereotype.Service
 import java.time.Instant
 
+/**
+ * `SignupMailDiagnostics` 데이터 클래스입니다.
+ * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
+ * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
+ */
 data class SignupMailDiagnostics(
     val status: String,
     val adapter: String,
@@ -31,6 +36,11 @@ data class SignupMailDiagnostics(
 )
 
 @Service
+
+/**
+ * SignupMailDiagnosticsService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
+ * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
+ */
 class SignupMailDiagnosticsService(
     private val signupVerificationMailSenderProvider: ObjectProvider<SignupVerificationMailSenderPort>,
     private val javaMailSenderProvider: ObjectProvider<JavaMailSender>,
@@ -57,6 +67,10 @@ class SignupMailDiagnosticsService(
             .getAnnotation(com.back.global.task.annotation.Task::class.java)
             .type
 
+    /**
+     * diagnose 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     fun diagnose(checkConnection: Boolean = false): SignupMailDiagnostics {
         val sender = signupVerificationMailSenderProvider.getIfAvailable()
         val adapter = sender?.javaClass?.simpleName ?: "UNAVAILABLE"
@@ -137,6 +151,10 @@ class SignupMailDiagnosticsService(
         )
     }
 
+    /**
+     * 이벤트/메시지를 전파하고 실패를 안전하게 처리합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     fun sendTestMail(email: String) {
         val diagnostics = diagnose(checkConnection = false)
         if (diagnostics.status !in listOf("READY", "TEST_MODE")) {
@@ -154,6 +172,10 @@ class SignupMailDiagnosticsService(
             ) ?: throw AppException("503-2", "회원가입 메일 발송 어댑터를 찾지 못했습니다.")
     }
 
+    /**
+     * buildMissingKeys 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun buildMissingKeys(): List<String> {
         val missing = mutableListOf<String>()
 
@@ -177,6 +199,10 @@ class SignupMailDiagnosticsService(
                 }
             }
 
+    /**
+     * testConnection 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun testConnection(): ConnectionTestResult {
         val javaMailSender = javaMailSenderProvider.getIfAvailable()
 

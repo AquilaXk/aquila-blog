@@ -28,6 +28,10 @@ import java.util.concurrent.TimeoutException
     havingValue = "true",
     matchIfMissing = true,
 )
+/**
+ * TaskProcessingScheduledJob는 주기 작업을 트리거하는 스케줄러 어댑터입니다.
+ * 정기 실행 중 오류가 전체 처리 흐름으로 전파되지 않도록 실패를 격리합니다.
+ */
 class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,
@@ -53,6 +57,10 @@ class TaskProcessingScheduledJob(
         val payload: String,
     )
 
+    /**
+     * processTasks 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
     @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M")
     fun processTasks() {
@@ -89,6 +97,10 @@ class TaskProcessingScheduledJob(
         }
     }
 
+    /**
+     * 만료/중단 상태를 정리해 리소스와 큐 정합성을 유지합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     private fun recoverStaleProcessingTasks(limit: Int) {
         val stuckBefore = Instant.now().minusSeconds(processingTimeoutSeconds)
         val recoveredTaskIds =
@@ -145,6 +157,10 @@ class TaskProcessingScheduledJob(
             TaskExecutionContext(task.id, task.taskType, task.payload)
         }
 
+    /**
+     * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     private fun markTaskCompleted(taskId: Int) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
@@ -154,6 +170,10 @@ class TaskProcessingScheduledJob(
         }
     }
 
+    /**
+     * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     private fun markTaskFailed(
         taskId: Int,
         taskType: String,
@@ -167,6 +187,10 @@ class TaskProcessingScheduledJob(
         }
     }
 
+    /**
+     * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     private fun revertTaskToPending(taskId: Int) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
@@ -175,6 +199,10 @@ class TaskProcessingScheduledJob(
         }
     }
 
+    /**
+     * 핸들러를 제한 시간 내 실행하고 타임아웃/예외를 분리 처리합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     private fun invokeHandlerWithTimeout(
         taskId: Int,
         taskType: String,

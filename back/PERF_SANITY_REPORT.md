@@ -5,7 +5,7 @@
   - `GET /post/api/v1/posts` (list)
   - `GET /post/api/v1/posts/{id}` (detail)
   - `POST /post/api/v1/posts/{id}/comments` (write comment)
-  - `POST /post/api/v1/posts/{id}/like` (toggle like)
+  - `PUT /post/api/v1/posts/{id}/like` (idempotent like)
   - `POST /member/api/v1/auth/login` (auth flow)
 - Environment:
   - Spring profile: `test`
@@ -25,7 +25,7 @@
   - `auth-login`: 2
   - `post-list`: 14
   - `post-detail`: 3
-  - `like-toggle`: 13
+  - `like-put`: 13
   - `comment-write`: 15
 
 ## Guardrails
@@ -33,7 +33,7 @@
   - `auth-login <= 10`
   - `post-list <= 18`
   - `post-detail <= 12`
-  - `like-toggle <= 18`
+  - `like-put <= 18`
   - `comment-write <= 20`
 - Purpose:
   - Detect accidental query explosion/regression quickly while keeping headroom for small implementation variance.

@@ -7,6 +7,10 @@ import jakarta.persistence.Transient
 import org.hibernate.Hibernate
 import org.springframework.data.domain.Persistable
 
+/**
+ * BaseEntity는 글로벌 모듈 도메인 상태와 규칙을 표현하는 모델입니다.
+ * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
+ */
 @MappedSuperclass
 abstract class BaseEntity : Persistable<Int> {
     abstract val id: Int
@@ -35,6 +39,10 @@ abstract class BaseEntity : Persistable<Int> {
         defaultValue: () -> T,
     ): T = attrCache.getOrPut(key, defaultValue) as T
 
+    /**
+     * equals 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
+     * 도메인 계층에서 불변조건을 유지하며 상태 전이를 제어합니다.
+     */
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
         if (other !is BaseEntity) return false
@@ -54,6 +62,10 @@ abstract class BaseEntity : Persistable<Int> {
 
     private fun effectiveClass(entity: Any): Class<*> = Hibernate.getClass(entity)
 
+    /**
+     * identityClass 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
+     * 도메인 계층에서 불변조건을 유지하며 상태 전이를 제어합니다.
+     */
     private fun identityClass(entity: Any): Class<*> {
         var clazz = effectiveClass(entity)
 

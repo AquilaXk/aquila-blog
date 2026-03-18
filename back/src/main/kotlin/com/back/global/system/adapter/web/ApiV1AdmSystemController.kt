@@ -25,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController
 import java.lang.management.ManagementFactory
 import java.time.Instant
 
+/**
+ * ApiV1AdmSystemController는 글로벌 운영 API 요청을 처리하는 웹 어댑터입니다.
+ * 요청 파라미터를 검증하고 애플리케이션 계층 결과를 응답 규격으로 변환합니다.
+ */
 @RestController
 @RequestMapping("/system/api/v1/adm")
 class ApiV1AdmSystemController(
@@ -54,6 +58,10 @@ class ApiV1AdmSystemController(
         val email: String,
     )
 
+    /**
+     * health 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     @GetMapping("/health")
     @Transactional(readOnly = true)
     fun health(): HealthResBody {
@@ -119,6 +127,10 @@ class ApiV1AdmSystemController(
             "DOWN"
         }
 
+    /**
+     * 정책 조건을 검증해 처리 가능 여부를 판정합니다.
+     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
+     */
     private fun checkRedis(): String {
         val redisTemplate = stringRedisTemplateProvider.getIfAvailable() ?: return "DISABLED"
 

@@ -1,5 +1,19 @@
 import { expect, test, type Page } from "@playwright/test"
 
+const AVATAR_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
+const AVATAR_PNG = Buffer.from(AVATAR_PNG_BASE64, "base64")
+
+const mockAvatarAsset = async (page: Page) => {
+  await page.route("**/avatar.png", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: AVATAR_PNG,
+    })
+  })
+}
+
 const createExplorePage = (title: string, tag = "테스트태그") => ({
   content: [
     {
@@ -57,13 +71,15 @@ const mockFeedEndpoints = async (page: Page) => {
   })
 }
 
+test.beforeEach(async ({ page }) => {
+  await mockAvatarAsset(page)
+})
+
 test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
-  await expect(page.getByRole("button", { name: "최신순" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "오래된순" })).toBeVisible()
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
 })
 
@@ -113,7 +129,7 @@ test("태그 쿼리 파라미터는 explore API의 tag 파라미터로 백엔드
   await expect(page.getByText("태그:테스트태그")).toBeVisible()
 })
 
-test("정렬 버튼은 explore API sort 파라미터를 통해 서버 정렬을 요청한다", async ({ page }) => {
+test("메인 피드 탐색 요청은 최신순 정렬(sort=CREATED_AT)로 고정된다", async ({ page }) => {
   const capturedSort: string[] = []
 
   await page.route("**/post/api/v1/posts/explore**", async (route) => {
@@ -137,10 +153,10 @@ test("정렬 버튼은 explore API sort 파라미터를 통해 서버 정렬을 
   })
 
   await page.goto("/")
-  await page.getByRole("button", { name: "오래된순" }).click()
+  await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
 
-  await expect.poll(() => capturedSort.some((value) => value === "CREATED_AT_ASC")).toBeTruthy()
-  await expect(page.getByText("정렬:CREATED_AT_ASC")).toBeVisible()
+  await expect.poll(() => capturedSort.some((value) => value === "CREATED_AT")).toBeTruthy()
+  await expect(page.getByText("정렬:CREATED_AT")).toBeVisible()
 })
 
 test("상세 페이지는 클라이언트 복구 요청으로 렌더되고 조회수 hit는 1회 반영된다", async ({ page }) => {

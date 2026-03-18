@@ -24,6 +24,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 import tools.jackson.databind.ObjectMapper
 
 @Configuration
+/**
+ * SecurityConfig는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
+ * 보안, 캐시, 세션, JPA, 스케줄링 등 공통 인프라 설정을 등록합니다.
+ */
+
 class SecurityConfig(
     private val customAuthenticationFilter: CustomAuthenticationFilter,
     private val customOAuth2LoginSuccessHandler: CustomOAuth2LoginSuccessHandler,
@@ -34,6 +39,10 @@ class SecurityConfig(
     private val postSecurityConfigurer: PostSecurityConfigurer,
     private val objectMapper: ObjectMapper,
 ) {
+    /**
+     * 보안/인프라 설정을 요청 처리 체인에 반영합니다.
+     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+     */
     @Bean
     fun filterChain(http: HttpSecurity): SecurityFilterChain {
         http {
@@ -107,6 +116,10 @@ class SecurityConfig(
         return http.build()
     }
 
+    /**
+     * corsConfigurationSource 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
+     * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+     */
     @Bean
     fun corsConfigurationSource(): UrlBasedCorsConfigurationSource {
         val cookieDomain = AppFacade.siteCookieDomain.trim()

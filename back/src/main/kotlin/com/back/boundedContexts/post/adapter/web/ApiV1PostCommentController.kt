@@ -21,6 +21,10 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 
+/**
+ * ApiV1PostCommentController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
+ * 입력 DTO 검증과 응답 포맷팅을 담당하고 비즈니스 처리는 애플리케이션 계층에 위임합니다.
+ */
 @RestController
 @RequestMapping("/post/api/v1/posts/{postId}/comments")
 class ApiV1PostCommentController(
@@ -66,6 +70,10 @@ class ApiV1PostCommentController(
         val parentCommentId: Int? = null,
     )
 
+    /**
+     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
+     * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional

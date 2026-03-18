@@ -54,6 +54,11 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.jvm.optionals.getOrNull
 
 @Service
+
+/**
+ * PostApplicationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
+ * 트랜잭션 경계, 도메인 규칙 적용, 후속 동기화(캐시/이벤트/스토리지)를 담당합니다.
+ */
 class PostApplicationService(
     private val postRepository: PostRepositoryPort,
     private val postAttrRepository: PostAttrRepositoryPort,
@@ -82,6 +87,10 @@ class PostApplicationService(
 
     fun randomSecureTip(): String = secureTipPort.randomSecureTip()
 
+    /**
+     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun write(
         author: Member,
@@ -157,6 +166,10 @@ class PostApplicationService(
 
     fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 
+    /**
+     * 수정 요청을 처리하고 낙관적 잠금/후속 동기화를 수행합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun modify(
         actor: Member,
@@ -204,6 +217,10 @@ class PostApplicationService(
         }
     }
 
+    /**
+     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     private fun writeNewPost(
         author: Member,
         persistenceAuthor: Member,
@@ -244,6 +261,9 @@ class PostApplicationService(
         return savedPost
     }
 
+    /**
+     * IdempotencyRequestSlot 항목을 생성한다.
+     */
     private fun createIdempotencyRequestSlot(
         persistenceAuthor: Member,
         idempotencyKey: String,
@@ -269,6 +289,10 @@ class PostApplicationService(
         }
     }
 
+    /**
+     * 삭제 요청을 처리하고 캐시/카운터/첨부파일 정리를 후속으로 연결합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun delete(
         post: Post,
@@ -311,6 +335,10 @@ class PostApplicationService(
         }
     }
 
+    /**
+     * 댓글 생성 요청을 처리하고 댓글/작성자 집계값을 함께 갱신합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun writeComment(
         author: Member,
@@ -342,6 +370,10 @@ class PostApplicationService(
         return comment
     }
 
+    /**
+     * 댓글 내용을 수정하고 변경 이벤트를 발행합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun modifyComment(
         postComment: PostComment,
@@ -369,6 +401,10 @@ class PostApplicationService(
         }
     }
 
+    /**
+     * 댓글 삭제를 처리하고 연관 집계값을 함께 보정합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun deleteComment(
         post: Post,
@@ -409,12 +445,10 @@ class PostApplicationService(
         postRepository.flush()
     }
 
-    @Transactional
-    fun toggleLike(
-        post: Post,
-        actor: Member,
-    ): PostLikeToggleResult = if (isLiked(post, actor)) unlike(post, actor) else like(post, actor)
-
+    /**
+     * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun like(
         post: Post,
@@ -467,6 +501,10 @@ class PostApplicationService(
         return PostLikeToggleResult(true, insertedLikeId)
     }
 
+    /**
+     * 좋아요 상태 변경을 반영하고 경쟁 상황에서의 정합성을 보장합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     @Transactional
     fun unlike(
         post: Post,
@@ -548,11 +586,19 @@ class PostApplicationService(
             hydrateMembersProfileImgAttrs(comments.map { it.author })
         }
 
+    /**
+     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     fun findCommentById(
         post: Post,
         id: Int,
     ): PostComment? = postCommentRepository.findByPostAndId(post, id)
 
+    /**
+     * 검증 규칙을 적용해 허용 여부를 판정합니다.
+     * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
+     */
     fun isLiked(
         post: Post,
         liker: Member?,
@@ -561,6 +607,10 @@ class PostApplicationService(
         return postLikeRepository.findByLikerAndPost(toPersistenceMember(liker), post) != null
     }
 
+    /**
+     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     fun findLikedPostIds(
         liker: Member?,
         posts: List<Post>,
@@ -598,6 +648,10 @@ class PostApplicationService(
             )
         }
 
+    /**
+     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     fun findDeletedPagedByKwForAdmin(
         kw: String,
         page: Int,
@@ -608,6 +662,10 @@ class PostApplicationService(
             PageRequest.of(page - 1, pageSize),
         )
 
+    /**
+     * 삭제/복구 흐름을 처리하고 연관 데이터 정합성을 함께 보정합니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     @Transactional
     fun restoreDeletedByIdForAdmin(id: Int): Post {
         val snapshot =
@@ -644,6 +702,10 @@ class PostApplicationService(
             ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
     }
 
+    /**
+     * hardDeleteDeletedByIdForAdmin 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     @Transactional
     fun hardDeleteDeletedByIdForAdmin(id: Int) {
         val snapshot =
@@ -694,6 +756,10 @@ class PostApplicationService(
             )
         }
 
+    /**
+     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     fun getPublicTagCounts(): List<TagCountDto> {
         val now = System.currentTimeMillis()
         publicTagCountsCache?.takeIf { it.expiresAtMillis > now }?.let { return it.values }
@@ -737,6 +803,10 @@ class PostApplicationService(
     fun findTemp(author: Member): Post? =
         postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(toPersistenceMember(author), "임시글")
 
+    /**
+     * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
         val existingTemp = findTemp(author)
@@ -759,6 +829,10 @@ class PostApplicationService(
         post.hitCountAttr ?: postAttrRepository.findBySubjectAndName(post, HIT_COUNT)?.let { post.hitCountAttr = it }
     }
 
+    /**
+     * hydratePostAttrs 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun hydratePostAttrs(posts: List<Post>) {
         if (posts.isEmpty()) return
 
@@ -782,6 +856,10 @@ class PostApplicationService(
             ?.let { member.postCommentsCountAttr = it }
     }
 
+    /**
+     * hydrateMembersProfileImgAttrs 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun hydrateMembersProfileImgAttrs(members: List<Member>) {
         if (members.isEmpty()) return
 
@@ -896,6 +974,10 @@ class PostApplicationService(
         cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)?.clear()
     }
 
+    /**
+     * syncMetaTagIndexAttr 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
+     */
     private fun syncMetaTagIndexAttr(post: Post) {
         val normalizedTags =
             PostMetaExtractor

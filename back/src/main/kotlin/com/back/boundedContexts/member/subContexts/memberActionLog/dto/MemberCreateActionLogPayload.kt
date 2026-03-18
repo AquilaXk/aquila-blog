@@ -13,6 +13,10 @@ import java.util.*
     backoffMultiplier = 2.0,
     maxDelaySeconds = 900,
 )
+/**
+ * MemberCreateActionLogPayload는 계층 간 데이터 전달에 사용하는 DTO입니다.
+ * 도메인 엔티티 직접 노출을 피하고 API/서비스 경계를 명확히 유지합니다.
+ */
 class MemberCreateActionLogPayload(
     override val uid: UUID,
     override val aggregateType: String,

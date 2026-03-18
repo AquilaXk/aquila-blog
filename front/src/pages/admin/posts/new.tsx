@@ -2962,10 +2962,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       type="button"
                       disabled={disabled("likePost")}
                       onClick={() =>
-                        run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "POST" }))
+                        run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
                       }
                     >
-                      좋아요 테스트
+                      좋아요 반영 테스트
                     </Button>
                   </SubActionRow>
                 </SelectedPostPanel>

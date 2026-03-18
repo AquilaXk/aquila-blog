@@ -14,6 +14,10 @@ import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
 import org.springframework.transaction.annotation.Transactional
 
+/**
+ * PostNotProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
+ * 애플리케이션 기동 시 필요한 기본 상태를 안전하게 준비합니다.
+ */
 @Profile("!prod")
 @Configuration
 class PostNotProdInitData(
@@ -44,6 +48,10 @@ class PostNotProdInitData(
         writeIfMissing(memberUser1, "비공개 글", "비공개 내용", false, false)
     }
 
+    /**
+     * 생성 요청을 처리하고 멱등성·후속 동기화 절차를 함께 수행합니다.
+     * 초기화 단계에서 중복 생성 방지와 기본값 보정을 함께 수행합니다.
+     */
     private fun writeIfMissing(
         author: Member,
         title: String,

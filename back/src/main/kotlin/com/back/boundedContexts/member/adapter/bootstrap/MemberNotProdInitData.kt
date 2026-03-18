@@ -11,6 +11,10 @@ import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
 import org.springframework.transaction.annotation.Transactional
 
+/**
+ * MemberNotProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
+ * 애플리케이션 기동 시 필요한 기본 상태를 안전하게 준비합니다.
+ */
 @Profile("!prod")
 @Configuration
 class MemberNotProdInitData(
@@ -27,6 +31,10 @@ class MemberNotProdInitData(
             self.makeBaseMembers()
         }
 
+    /**
+     * makeBaseMembers 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
+     * 부트스트랩 단계에서 중복 실행/기존 데이터 충돌을 방지하며 초기 상태를 맞춥니다.
+     */
     @Transactional
     fun makeBaseMembers() {
         val adminUsername = AppConfig.adminUsernameOrBlank.trim().ifBlank { "admin" }

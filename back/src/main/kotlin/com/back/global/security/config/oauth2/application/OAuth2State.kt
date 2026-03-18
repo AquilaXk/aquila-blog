@@ -9,6 +9,10 @@ import java.util.*
 private const val DELIMITER = "#"
 private const val DEFAULT_REDIRECT_URL = "/"
 
+/**
+ * OAuth2State는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
+ * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
+ */
 data class OAuth2State(
     val redirectUrl: String = DEFAULT_REDIRECT_URL,
     val originState: String = UUID.randomUUID().toString(),
@@ -28,6 +32,10 @@ data class OAuth2State(
             )
         }
 
+        /**
+         * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
+         * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
+         */
         private fun normalizeRedirectUrl(raw: String): String {
             val redirectUrl = raw.trim()
             if (redirectUrl.isBlank()) return DEFAULT_REDIRECT_URL

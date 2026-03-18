@@ -1,9 +1,35 @@
 import { NextRouter } from "next/router"
 
+type CancelledErrorLike = {
+  cancelled?: unknown
+  message?: unknown
+}
+
+const toCancelledErrorLike = (value: unknown): CancelledErrorLike | null => {
+  if (typeof value !== "object" || value === null) return null
+  return value as CancelledErrorLike
+}
+
 export const isNavigationCancelledError = (error: unknown): boolean => {
   if (!error) return false
-  if (typeof error === "string") return error.toLowerCase().includes("cancelled")
-  if (error instanceof Error) return error.message.toLowerCase().includes("cancelled")
+  if (typeof error === "string") {
+    const normalized = error.toLowerCase()
+    return normalized.includes("cancelled") || normalized.includes("canceled")
+  }
+
+  const likeError = toCancelledErrorLike(error)
+  if (likeError?.cancelled === true) return true
+
+  if (typeof likeError?.message === "string") {
+    const normalized = likeError.message.toLowerCase()
+    return normalized.includes("cancelled") || normalized.includes("canceled")
+  }
+
+  if (error instanceof Error) {
+    const normalized = error.message.toLowerCase()
+    return normalized.includes("cancelled") || normalized.includes("canceled")
+  }
+
   return false
 }
 

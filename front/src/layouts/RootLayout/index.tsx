@@ -6,6 +6,7 @@ import styled from "@emotion/styled"
 import Scripts from "src/layouts/RootLayout/Scripts"
 import useGtagEffect from "./useGtagEffect"
 import { useRouter } from "next/router"
+import { isNavigationCancelledError } from "src/libs/router"
 
 type Props = {
   children: ReactNode
@@ -45,6 +46,21 @@ const RootLayout = ({ children }: Props) => {
       router.events.off("routeChangeError", handleDone)
     }
   }, [router.events])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (!isNavigationCancelledError(event.reason)) return
+      // Route competition can reject in-flight Next.js data loading; treat as expected cancellation.
+      event.preventDefault()
+    }
+
+    window.addEventListener("unhandledrejection", handleUnhandledRejection)
+    return () => {
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection)
+    }
+  }, [])
 
   return (
     <ThemeProvider scheme={scheme}>

@@ -253,12 +253,19 @@ export default PostDetail
 const StyledWrapper = styled.div`
   max-width: 72rem;
   margin: 0 auto;
+  min-width: 0;
 
   > article {
     margin: 0 auto;
     max-width: 52rem;
     display: grid;
     gap: 1.1rem;
+    min-width: 0;
+    width: 100%;
+  }
+
+  > article > * {
+    min-width: 0;
   }
 `
 
@@ -266,6 +273,8 @@ const BodySection = styled.div`
   margin-top: 0.8rem;
   padding-top: 1.05rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  width: 100%;
+  min-width: 0;
 
   @media (max-width: 768px) {
     margin-top: 0.55rem;

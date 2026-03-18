@@ -2,7 +2,19 @@ import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
-import { ChangeEvent, ClipboardEvent, CSSProperties, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import {
+  ChangeEvent,
+  ClipboardEvent,
+  CSSProperties,
+  PointerEvent,
+  WheelEvent,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
@@ -19,6 +31,18 @@ import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
 import MarkdownRenderer from "src/routes/Detail/components/MarkdownRenderer"
+import {
+  applyThumbnailTransformToUrl,
+  clampThumbnailFocusY,
+  clampThumbnailZoom,
+  DEFAULT_THUMBNAIL_FOCUS_Y,
+  DEFAULT_THUMBNAIL_ZOOM,
+  getThumbnailFocusYFromUrl,
+  getThumbnailZoomFromUrl,
+  parseThumbnailZoomFromUrl,
+  parseThumbnailFocusYFromUrl,
+  stripThumbnailFocusFromUrl,
+} from "src/libs/thumbnailFocus"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -126,6 +150,8 @@ type LocalDraftPayload = {
   content: string
   summary: string
   thumbnailUrl: string
+  thumbnailFocusY: number
+  thumbnailZoom: number
   tags: string[]
   category: string
   visibility: PostVisibility
@@ -487,12 +513,26 @@ const readLocalDraft = (): LocalDraftPayload | null => {
     const visibility = parsed.visibility
     const isValidVisibility =
       visibility === "PRIVATE" || visibility === "PUBLIC_UNLISTED" || visibility === "PUBLIC_LISTED"
+    const rawThumbnailUrl =
+      typeof parsed.thumbnailUrl === "string" ? normalizeSafeImageUrl(parsed.thumbnailUrl) : ""
+    const legacyFocusY = parseThumbnailFocusYFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y)
+    const legacyZoom = parseThumbnailZoomFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM)
+    const parsedFocusY =
+      typeof parsed.thumbnailFocusY === "number"
+        ? clampThumbnailFocusY(parsed.thumbnailFocusY)
+        : legacyFocusY
+    const parsedZoom =
+      typeof parsed.thumbnailZoom === "number"
+        ? clampThumbnailZoom(parsed.thumbnailZoom)
+        : legacyZoom
 
     return {
       title: typeof parsed.title === "string" ? parsed.title : "",
       content: typeof parsed.content === "string" ? parsed.content : "",
       summary: typeof parsed.summary === "string" ? parsed.summary : "",
-      thumbnailUrl: typeof parsed.thumbnailUrl === "string" ? parsed.thumbnailUrl : "",
+      thumbnailUrl: stripThumbnailFocusFromUrl(rawThumbnailUrl),
+      thumbnailFocusY: parsedFocusY,
+      thumbnailZoom: parsedZoom,
       tags: Array.isArray(parsed.tags)
         ? dedupeStrings(parsed.tags.filter((item): item is string => typeof item === "string"))
         : [],
@@ -705,6 +745,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [postContent, setPostContent] = useState("")
   const [postSummary, setPostSummary] = useState("")
   const [postThumbnailUrl, setPostThumbnailUrl] = useState("")
+  const [postThumbnailFocusY, setPostThumbnailFocusY] = useState(DEFAULT_THUMBNAIL_FOCUS_Y)
+  const [postThumbnailZoom, setPostThumbnailZoom] = useState(DEFAULT_THUMBNAIL_ZOOM)
   const [postTags, setPostTags] = useState<string[]>([])
   const [postCategory, setPostCategory] = useState("")
   const [tagDraft, setTagDraft] = useState("")
@@ -752,6 +794,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [publishActionType, setPublishActionType] = useState<PublishActionType>("create")
   const [isPreviewThumbnailError, setIsPreviewThumbnailError] = useState(false)
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
+  const [isPreviewThumbDragging, setIsPreviewThumbDragging] = useState(false)
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
 
   const [listPage, setListPage] = useState("1")
@@ -785,6 +828,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const autoLoadedPostIdRef = useRef<string | null>(null)
   const lastWriteFingerprintRef = useRef<string>("")
   const lastWriteIdempotencyKeyRef = useRef<string>("")
+  const previewThumbPointerIdRef = useRef<number | null>(null)
   const applyProfileState = useCallback((member: MemberMe) => {
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
@@ -857,6 +901,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       content: postContent,
       summary: postSummary,
       thumbnailUrl: postThumbnailUrl,
+      thumbnailFocusY: postThumbnailFocusY,
+      thumbnailZoom: postThumbnailZoom,
       tags: dedupeStrings(postTags),
       category: postCategory ? normalizeCategoryValue(postCategory) : "",
       visibility: postVisibility,
@@ -875,7 +921,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         "page"
       )
     }
-  }, [postCategory, postContent, postSummary, postTags, postThumbnailUrl, postTitle, postVisibility, setPublishStatus])
+  }, [
+    postCategory,
+    postContent,
+    postSummary,
+    postTags,
+    postThumbnailFocusY,
+    postThumbnailZoom,
+    postThumbnailUrl,
+    postTitle,
+    postVisibility,
+    setPublishStatus,
+  ])
 
   const restoreLocalDraft = useCallback(() => {
     const draft = readLocalDraft()
@@ -901,6 +958,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostContent(draft.content)
     setPostSummary(draft.summary)
     setPostThumbnailUrl(draft.thumbnailUrl)
+    setPostThumbnailFocusY(draft.thumbnailFocusY)
+    setPostThumbnailZoom(draft.thumbnailZoom)
     setPreviewThumbnailSourceUrl("")
     setPostTags(draft.tags)
     setPostCategory(draft.category)
@@ -937,11 +996,19 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
     const parsedCategory = splitCategoryDisplay(parsed.category)
-    const syncedThumbnail =
-      normalizeSafeImageUrl(parsed.thumbnail) || normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
+    const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
+    const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
+    const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
+    const syncedThumbnailFocusY = parseThumbnailFocusYFromUrl(
+      parsedThumbnail || fallbackThumbnail,
+      DEFAULT_THUMBNAIL_FOCUS_Y
+    )
+    const syncedThumbnailZoom = parseThumbnailZoomFromUrl(parsedThumbnail || fallbackThumbnail, DEFAULT_THUMBNAIL_ZOOM)
     setPostContent(parsed.body)
     setPostSummary(parsed.summary || makePreviewSummary(parsed.body))
     setPostThumbnailUrl(syncedThumbnail)
+    setPostThumbnailFocusY(syncedThumbnailFocusY)
+    setPostThumbnailZoom(syncedThumbnailZoom)
     setPreviewThumbnailSourceUrl(syncedThumbnail)
     setPostTags(parsed.tags)
     setPostCategory(parsed.category)
@@ -959,22 +1026,83 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [postContent, postSummary])
 
   const resolvedPreviewThumbnail = useMemo(() => {
-    const manual = normalizeSafeImageUrl(postThumbnailUrl)
+    const manual = stripThumbnailFocusFromUrl(normalizeSafeImageUrl(postThumbnailUrl))
     if (manual) return manual
-    return normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
+    return stripThumbnailFocusFromUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(postContent)))
   }, [postContent, postThumbnailUrl])
-  const effectiveThumbnailUrl = useMemo(
-    () => resolvedPreviewThumbnail.trim(),
-    [resolvedPreviewThumbnail]
-  )
+  const effectiveThumbnailUrl = useMemo(() => {
+    const normalizedThumbnail = resolvedPreviewThumbnail.trim()
+    if (!normalizedThumbnail) return ""
+    return applyThumbnailTransformToUrl(normalizedThumbnail, {
+      focusY: postThumbnailFocusY,
+      zoom: postThumbnailZoom,
+    })
+  }, [postThumbnailFocusY, postThumbnailZoom, resolvedPreviewThumbnail])
   const safePreviewThumbnail = useMemo(
     () => normalizeSafePreviewThumbnailUrl(previewThumbnailSourceUrl),
     [previewThumbnailSourceUrl]
   )
 
+  const updatePreviewThumbnailFocusFromPointer = useCallback((frame: HTMLDivElement, clientY: number) => {
+    const rect = frame.getBoundingClientRect()
+    if (rect.height <= 0) return
+    const nextFocusY = ((clientY - rect.top) / rect.height) * 100
+    setPostThumbnailFocusY(clampThumbnailFocusY(nextFocusY))
+  }, [])
+
+  const handlePreviewThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (!safePreviewThumbnail || isPreviewThumbnailError) return
+    if (event.button !== 0) return
+
+    event.preventDefault()
+    previewThumbPointerIdRef.current = event.pointerId
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsPreviewThumbDragging(true)
+    updatePreviewThumbnailFocusFromPointer(event.currentTarget, event.clientY)
+  }, [isPreviewThumbnailError, safePreviewThumbnail, updatePreviewThumbnailFocusFromPointer])
+
+  const handlePreviewThumbPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (previewThumbPointerIdRef.current !== event.pointerId) return
+    updatePreviewThumbnailFocusFromPointer(event.currentTarget, event.clientY)
+  }, [updatePreviewThumbnailFocusFromPointer])
+
+  const handlePreviewThumbPointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (previewThumbPointerIdRef.current !== event.pointerId) return
+
+    previewThumbPointerIdRef.current = null
+    setIsPreviewThumbDragging(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }, [])
+
+  const handlePreviewThumbPointerCancel = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (previewThumbPointerIdRef.current !== event.pointerId) return
+
+    previewThumbPointerIdRef.current = null
+    setIsPreviewThumbDragging(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }, [])
+
+  const handlePreviewThumbWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    if (!safePreviewThumbnail || isPreviewThumbnailError) return
+
+    event.preventDefault()
+    const delta = event.deltaY < 0 ? 0.08 : -0.08
+    setPostThumbnailZoom((prev) => clampThumbnailZoom(prev + delta))
+  }, [isPreviewThumbnailError, safePreviewThumbnail])
+
   useEffect(() => {
     setIsPreviewThumbnailError(false)
   }, [safePreviewThumbnail])
+
+  useEffect(() => {
+    if (isPublishModalOpen) return
+    previewThumbPointerIdRef.current = null
+    setIsPreviewThumbDragging(false)
+  }, [isPublishModalOpen])
 
   const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
@@ -1137,6 +1265,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostContent("")
       setPostSummary("")
       setPostThumbnailUrl("")
+      setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
+      setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
       setPostTags([])
       setPostCategory("")
       setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
@@ -2184,8 +2314,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const safeUploadedUrl = normalizeSafeImageUrl(uploadedUrl)
       if (!safeUploadedUrl) throw new Error("허용되지 않은 썸네일 URL 형식입니다.")
 
-      setPostThumbnailUrl(safeUploadedUrl)
-      setPreviewThumbnailSourceUrl(safeUploadedUrl)
+      setPostThumbnailUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
+      setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
+      setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
+      setPreviewThumbnailSourceUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
       setIsPreviewThumbnailError(false)
       setPublishStatus({
         tone: "success",
@@ -3342,12 +3474,25 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <strong>포스트 미리보기</strong>
                     <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
                   </PostPreviewHeader>
-                  <PreviewThumbFrame>
+                  <PreviewThumbFrame
+                    data-draggable={safePreviewThumbnail && !isPreviewThumbnailError}
+                    data-dragging={isPreviewThumbDragging}
+                    onPointerDown={handlePreviewThumbPointerDown}
+                    onPointerMove={handlePreviewThumbPointerMove}
+                    onPointerUp={handlePreviewThumbPointerUp}
+                    onPointerCancel={handlePreviewThumbPointerCancel}
+                    onWheel={handlePreviewThumbWheel}
+                  >
                     {safePreviewThumbnail && !isPreviewThumbnailError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={safePreviewThumbnail}
                         alt="포스트 미리보기 썸네일"
+                        style={{
+                          objectPosition: `center ${postThumbnailFocusY}%`,
+                          transform: `scale(${postThumbnailZoom})`,
+                          transformOrigin: `50% ${postThumbnailFocusY}%`,
+                        }}
                         onError={() => setIsPreviewThumbnailError(true)}
                       />
                     ) : (
@@ -3357,13 +3502,43 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       </div>
                     )}
                   </PreviewThumbFrame>
+                  {safePreviewThumbnail && !isPreviewThumbnailError ? (
+                    <>
+                      <FieldHelp>이미지를 드래그해 보이는 위치를 조정할 수 있습니다. 마우스 휠로 확대/축소도 가능합니다.</FieldHelp>
+                      <ZoomControlRow>
+                        <FieldLabel htmlFor="post-thumbnail-zoom-modal">썸네일 배율</FieldLabel>
+                        <ZoomRangeInput
+                          id="post-thumbnail-zoom-modal"
+                          type="range"
+                          min={1}
+                          max={2.5}
+                          step={0.01}
+                          value={postThumbnailZoom}
+                          onChange={(e) => setPostThumbnailZoom(clampThumbnailZoom(Number(e.target.value)))}
+                        />
+                        <ZoomValue>{postThumbnailZoom.toFixed(2)}x</ZoomValue>
+                        <Button type="button" onClick={() => setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)}>
+                          배율 초기화
+                        </Button>
+                      </ZoomControlRow>
+                    </>
+                  ) : null}
                   <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
                   <Input
                     id="post-thumbnail-url-modal"
                     placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
                     value={postThumbnailUrl}
                     onChange={(e) => {
-                      setPostThumbnailUrl(e.target.value)
+                      const nextValue = e.target.value
+                      setPostThumbnailUrl(nextValue)
+                      const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
+                      if (focusFromInput !== null) {
+                        setPostThumbnailFocusY(focusFromInput)
+                      }
+                      const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
+                      if (zoomFromInput !== null) {
+                        setPostThumbnailZoom(zoomFromInput)
+                      }
                       setPreviewThumbnailSourceUrl("")
                     }}
                   />
@@ -3378,7 +3553,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <Button
                       type="button"
                       onClick={() => {
-                        setPostThumbnailUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(postContent)))
+                        const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
+                        setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
+                        setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
+                        setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
                         setPreviewThumbnailSourceUrl("")
                       }}
                     >
@@ -3388,6 +3566,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       type="button"
                       onClick={() => {
                         setPostThumbnailUrl("")
+                        setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
+                        setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
                         setPreviewThumbnailSourceUrl("")
                       }}
                     >
@@ -4389,6 +4569,16 @@ const PreviewThumbFrame = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   overflow: hidden;
+  user-select: none;
+
+  &[data-draggable="true"] {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  &[data-dragging="true"] {
+    cursor: grabbing;
+  }
 
   @media (max-width: 780px) {
     width: 100%;
@@ -4399,6 +4589,9 @@ const PreviewThumbFrame = styled.div`
     height: 100%;
     object-fit: cover;
     display: block;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    transition: transform 0.12s ease;
   }
 
   .placeholder {
@@ -4451,6 +4644,29 @@ const SummaryCounter = styled.span`
   justify-self: end;
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.74rem;
+  line-height: 1;
+`
+
+const ZoomControlRow = styled.div`
+  display: grid;
+  gap: 0.42rem;
+  align-items: center;
+  justify-items: start;
+  width: min(100%, 320px);
+
+  @media (max-width: 780px) {
+    width: 100%;
+  }
+`
+
+const ZoomRangeInput = styled.input`
+  width: 100%;
+  accent-color: ${({ theme }) => theme.colors.blue9};
+`
+
+const ZoomValue = styled.span`
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
   line-height: 1;
 `
 

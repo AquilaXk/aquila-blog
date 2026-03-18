@@ -45,9 +45,6 @@ const StyledWrapper = styled.div`
     gap: 0.35rem;
     padding: 0.25rem;
     margin-bottom: 0.75rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.84rem;
-    font-weight: 700;
 
     .titleIcon {
       font-size: 1rem;

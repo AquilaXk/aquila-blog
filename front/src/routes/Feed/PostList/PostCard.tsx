@@ -6,6 +6,11 @@ import Image from "next/image"
 import styled from "@emotion/styled"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
+import {
+  parseThumbnailFocusYFromUrl,
+  parseThumbnailZoomFromUrl,
+  stripThumbnailFocusFromUrl,
+} from "src/libs/thumbnailFocus"
 
 type Props = {
   data: TPost
@@ -20,23 +25,31 @@ const PostCard: React.FC<Props> = ({ data }) => {
   const summary = data.summary?.trim() || "아직 등록된 요약이 없습니다."
   const commentsCount = data.commentsCount ?? 0
   const likesCount = data.likesCount ?? 0
+  const thumbnailSrc = data.thumbnail ? stripThumbnailFocusFromUrl(data.thumbnail) : ""
+  const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
+  const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
 
   return (
     <StyledWrapper href={toCanonicalPostPath(data.id)}>
       <article>
-        {data.thumbnail && (
+        {thumbnailSrc && (
           <div className="thumbnail">
             <Image
-              src={data.thumbnail}
+              src={thumbnailSrc}
               fill
               alt={data.title}
               sizes="(min-width: 1024px) 46vw, 96vw"
               priority={false}
-              css={{ objectFit: "cover" }}
+              css={{
+                objectFit: "cover",
+                objectPosition: `center ${thumbnailFocusY}%`,
+                transform: `scale(${thumbnailZoom})`,
+                transformOrigin: `50% ${thumbnailFocusY}%`,
+              }}
             />
           </div>
         )}
-        {!data.thumbnail && <div className="thumbnail placeholder" aria-hidden="true" />}
+        {!thumbnailSrc && <div className="thumbnail placeholder" aria-hidden="true" />}
         <div className="content">
           <header>
             <h2>{data.title}</h2>
@@ -101,6 +114,7 @@ const StyledWrapper = styled(Link)`
       width: 100%;
       aspect-ratio: 16 / 9;
       background-color: ${({ theme }) => theme.colors.gray3};
+      overflow: hidden;
 
       &.placeholder {
         background: ${({ theme }) => theme.colors.gray3};

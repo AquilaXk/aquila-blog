@@ -6,6 +6,11 @@ import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
 import { formatDateTime } from "src/libs/utils"
+import {
+  parseThumbnailFocusYFromUrl,
+  parseThumbnailZoomFromUrl,
+  stripThumbnailFocusFromUrl,
+} from "src/libs/thumbnailFocus"
 import { TPost } from "src/types"
 
 type Props = {
@@ -42,6 +47,9 @@ const PostHeader: React.FC<Props> = ({
     data.modifiedTime && data.modifiedTime !== data.createdTime
       ? formatDateTime(data.modifiedTime, CONFIG.lang)
       : ""
+  const thumbnailSrc = data.thumbnail ? stripThumbnailFocusFromUrl(data.thumbnail) : ""
+  const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
+  const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
 
   return (
     <StyledWrapper>
@@ -117,9 +125,19 @@ const PostHeader: React.FC<Props> = ({
         </div>
       </div>
 
-      {data.thumbnail && (
+      {thumbnailSrc && (
         <div className="thumbnail">
-          <Image src={data.thumbnail} css={{ objectFit: "cover" }} fill alt={data.title} />
+          <Image
+            src={thumbnailSrc}
+            css={{
+              objectFit: "cover",
+              objectPosition: `center ${thumbnailFocusY}%`,
+              transform: `scale(${thumbnailZoom})`,
+              transformOrigin: `50% ${thumbnailFocusY}%`,
+            }}
+            fill
+            alt={data.title}
+          />
         </div>
       )}
 

@@ -23,37 +23,6 @@ const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 20_000
 const SSE_RECOVERY_PROBE_MS = 120_000
 
-const toSiteKey = (url: URL) => {
-  const host = url.hostname.toLowerCase()
-
-  if (host === "localhost" || host === "127.0.0.1") {
-    return `${url.protocol}//${host}`
-  }
-
-  const labels = host.split(".")
-  if (labels.length <= 2) {
-    return `${url.protocol}//${host}`
-  }
-
-  const suffix2 = labels.slice(-2).join(".")
-  const commonMultiPartTlds = new Set([
-    "co.kr",
-    "or.kr",
-    "go.kr",
-    "co.uk",
-    "org.uk",
-    "ac.uk",
-    "com.au",
-    "co.jp",
-  ])
-  const registrable =
-    commonMultiPartTlds.has(suffix2) && labels.length >= 3
-      ? labels.slice(-3).join(".")
-      : labels.slice(-2).join(".")
-
-  return `${url.protocol}//${registrable}`
-}
-
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
   const preferPolling = useMemo(() => {
@@ -62,8 +31,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     try {
       const streamUrl = new URL(buildNotificationStreamUrl(), window.location.origin)
       const currentUrl = new URL(window.location.href)
-      const isCrossSite = toSiteKey(streamUrl) !== toSiteKey(currentUrl)
-      return isCrossSite
+      // Cloudflare edge + cross-origin(EventSource) 조합에서는 QUIC/H3 콘솔 오류가 반복될 수 있어
+      // 오리진이 다르면 SSE 대신 폴링을 기본값으로 사용한다.
+      return streamUrl.origin !== currentUrl.origin
     } catch {
       return false
     }

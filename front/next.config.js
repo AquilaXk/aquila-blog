@@ -51,12 +51,20 @@ module.exports = {
     ]
   },
   async rewrites() {
+    const backendOrigin = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").trim().replace(/\/+$/, "")
     const uptimeProxyOrigin = process.env.UPTIME_KUMA_PROXY_ORIGIN?.trim()
-    if (!uptimeProxyOrigin) return []
+    const rules = [
+      {
+        source: "/member/api/v1/notifications/stream",
+        destination: `${backendOrigin}/member/api/v1/notifications/stream`,
+      },
+    ]
+
+    if (!uptimeProxyOrigin) return rules
 
     const origin = uptimeProxyOrigin.replace(/\/+$/, "")
 
-    return [
+    rules.push(
       {
         source: "/status/:path*",
         destination: `${origin}/status/:path*`,
@@ -69,6 +77,8 @@ module.exports = {
         source: "/api/status-page/:path*",
         destination: `${origin}/api/status-page/:path*`,
       },
-    ]
+    )
+
+    return rules
   },
 }

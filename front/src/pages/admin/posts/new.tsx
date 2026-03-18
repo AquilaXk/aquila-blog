@@ -105,6 +105,7 @@ type GeneratePreviewSummaryPayload = {
   summary?: string
   provider?: string
   model?: string | null
+  reason?: string | null
 }
 
 type AdminPostListItem = {
@@ -415,6 +416,29 @@ const isLowQualityGeneratedPreviewSummary = (generated: string, fallback: string
   const hasQuotedFragmentPattern =
     normalizedGenerated.length <= 30 && /["“”]/.test(normalizedGenerated)
   return hasQuotedFragmentPattern && normalizedFallback.length >= 36
+}
+
+const formatPreviewSummaryReason = (rawReason?: string | null) => {
+  const reason = (rawReason || "").trim()
+  switch (reason) {
+    case "ai-disabled":
+      return "AI 요약이 비활성화됨"
+    case "api-key-missing":
+      return "Gemini API 키 누락"
+    case "rate-limited-or-circuit-open":
+      return "요청 제한 또는 회로 차단"
+    case "transport":
+      return "AI API 통신 실패"
+    case "parse-error":
+      return "AI 응답 파싱 실패"
+    case "empty-summary":
+      return "AI 응답이 비어 있음"
+    case "low-quality-summary":
+      return "AI 응답 품질 부족"
+    default:
+      if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
+      return reason
+  }
 }
 
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
@@ -1440,12 +1464,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         response?.data?.provider === "gemini"
           ? `Gemini${response?.data?.model ? ` (${response.data.model})` : ""}`
           : "규칙 기반"
+      const reasonHint =
+        response?.data?.provider === "rule" ? formatPreviewSummaryReason(response?.data?.reason) : ""
       if (fallbackSummary && isLowQualityGeneratedPreviewSummary(generated, fallbackSummary)) {
         setPostSummary(fallbackSummary)
         setPublishStatus(
           {
             tone: "success",
-            text: `AI 결과가 너무 짧아 규칙 기반 요약으로 보정했습니다. (${providerLabel})`,
+            text: `AI 결과가 너무 짧아 규칙 기반 요약으로 보정했습니다. (${providerLabel}${reasonHint ? ` · ${reasonHint}` : ""})`,
           },
           "modal"
         )
@@ -1456,7 +1482,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPublishStatus(
         {
           tone: "success",
-          text: `요약을 생성해 입력창에 반영했습니다. (${providerLabel})`,
+          text: `요약을 생성해 입력창에 반영했습니다. (${providerLabel}${reasonHint ? ` · ${reasonHint}` : ""})`,
         },
         "modal"
       )

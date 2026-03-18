@@ -64,6 +64,7 @@ class PostPreviewSummaryService(
         val summary: String,
         val provider: String,
         val model: String?,
+        val reason: String? = null,
     )
 
     private data class CacheEntry(
@@ -128,33 +129,44 @@ class PostPreviewSummaryService(
 
         val fallback = fallbackSummary(content, normalizedMaxLength)
         val normalizedTitle = title.trim()
+        val titleLength = normalizedTitle.length
+        val contentLength = content.length
 
         if (!aiSummaryEnabled) {
-            return cacheAndReturn(
+            return fallbackAndCache(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = fallback, provider = "rule", model = null),
+                summary = fallback,
+                reason = "ai-disabled",
                 ttlSeconds = normalizedFallbackCacheTtlSeconds,
                 nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
             )
         }
 
         val normalizedApiKey = geminiApiKey.trim()
         if (normalizedApiKey.isEmpty()) {
-            return cacheAndReturn(
+            return fallbackAndCache(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = fallback, provider = "rule", model = null),
+                summary = fallback,
+                reason = "api-key-missing",
                 ttlSeconds = normalizedFallbackCacheTtlSeconds,
                 nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
             )
         }
 
         val normalizedModel = sanitizeModel(geminiModel)
         if (!acquireAiRequestSlot(now)) {
-            return cacheAndReturn(
+            return fallbackAndCache(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = fallback, provider = "rule", model = null),
+                summary = fallback,
+                reason = "rate-limited-or-circuit-open",
                 ttlSeconds = normalizedFallbackCacheTtlSeconds,
                 nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
             )
         }
 
@@ -186,51 +198,108 @@ class PostPreviewSummaryService(
 
         if (responseBody == null) {
             markFailure("transport")
-            return cacheAndReturn(
+            return fallbackAndCache(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = fallback, provider = "rule", model = null),
+                summary = fallback,
+                reason = "transport",
                 ttlSeconds = normalizedFallbackCacheTtlSeconds,
                 nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
             )
         }
 
         if (responseBody.statusCode() >= 400) {
             markFailure("status=${responseBody.statusCode()}")
-            return cacheAndReturn(
+            return fallbackAndCache(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = fallback, provider = "rule", model = null),
+                summary = fallback,
+                reason = "status-${responseBody.statusCode()}",
                 ttlSeconds = normalizedFallbackCacheTtlSeconds,
                 nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
             )
         }
 
-        val aiSummary =
+        val aiSummaryParseResult =
             runCatching {
                 val root = objectMapper.readTree(responseBody.body())
                 extractSummaryText(root)
             }.onFailure { exception ->
                 log.warn("Gemini summary response parse failed", exception)
-            }.getOrNull()
+            }
+        val aiSummary = aiSummaryParseResult.getOrNull()
+        if (aiSummaryParseResult.isFailure) {
+            markFailure("parse-error")
+            return fallbackAndCache(
+                cacheKey = cacheKey,
+                summary = fallback,
+                reason = "parse-error",
+                ttlSeconds = normalizedFallbackCacheTtlSeconds,
+                nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
+            )
+        }
 
         val normalizedAiSummary = normalizeSummary(aiSummary, normalizedMaxLength)
         if (normalizedAiSummary.isBlank() || isLowQualityAiSummary(normalizedAiSummary, fallback, normalizedMaxLength)) {
             val reason = if (normalizedAiSummary.isBlank()) "empty-summary" else "low-quality-summary"
             markFailure(reason)
-            return cacheAndReturn(
+            return fallbackAndCache(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = fallback, provider = "rule", model = null),
+                summary = fallback,
+                reason = reason,
                 ttlSeconds = normalizedFallbackCacheTtlSeconds,
                 nowMillis = now,
+                titleLength = titleLength,
+                contentLength = contentLength,
             )
         }
 
         markSuccess()
         return cacheAndReturn(
             cacheKey = cacheKey,
-            result = SummaryResult(summary = normalizedAiSummary, provider = "gemini", model = normalizedModel),
+            result = SummaryResult(summary = normalizedAiSummary, provider = "gemini", model = normalizedModel, reason = null),
             ttlSeconds = normalizedCacheTtlSeconds,
             nowMillis = now,
         )
+    }
+
+    private fun fallbackAndCache(
+        cacheKey: String,
+        summary: String,
+        reason: String,
+        ttlSeconds: Long,
+        nowMillis: Long,
+        titleLength: Int,
+        contentLength: Int,
+    ): SummaryResult {
+        logFallback(reason = reason, titleLength = titleLength, contentLength = contentLength)
+        return cacheAndReturn(
+            cacheKey = cacheKey,
+            result = SummaryResult(summary = summary, provider = "rule", model = null, reason = reason),
+            ttlSeconds = ttlSeconds,
+            nowMillis = nowMillis,
+        )
+    }
+
+    private fun logFallback(
+        reason: String,
+        titleLength: Int,
+        contentLength: Int,
+    ) {
+        val baseMessage =
+            "Preview summary fallback -> rule (reason={}, titleLength={}, contentLength={})"
+        when (reason) {
+            "ai-disabled", "api-key-missing", "rate-limited-or-circuit-open" -> {
+                log.info(baseMessage, reason, titleLength, contentLength)
+            }
+            else -> {
+                log.warn(baseMessage, reason, titleLength, contentLength)
+            }
+        }
     }
 
     /**

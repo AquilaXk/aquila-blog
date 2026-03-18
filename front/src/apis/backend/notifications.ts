@@ -1,4 +1,4 @@
-import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { apiFetch } from "src/apis/backend/client"
 import { TMemberNotification } from "src/types"
 
 type UnreadCountResponse = {
@@ -32,4 +32,4 @@ export const markAllNotificationsRead = () =>
   })
 
 export const buildNotificationStreamUrl = () =>
-  `${getApiBaseUrl()}/member/api/v1/notifications/stream`
+  "/member/api/v1/notifications/stream"

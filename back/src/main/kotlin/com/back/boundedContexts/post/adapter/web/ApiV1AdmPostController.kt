@@ -126,6 +126,7 @@ class ApiV1AdmPostController(
         val summary: String,
         val provider: String,
         val model: String?,
+        val reason: String? = null,
     )
 
     /**
@@ -154,6 +155,7 @@ class ApiV1AdmPostController(
                 summary = result.summary,
                 provider = result.provider,
                 model = result.model,
+                reason = result.reason,
             ),
         )
     }

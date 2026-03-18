@@ -84,6 +84,9 @@ print_env_key_status "PROD___SPRING__DATA__REDIS__PASSWORD"
 print_env_key_status "CUSTOM_PROD_BACKURL"
 print_env_key_status "CUSTOM_PROD_FRONTURL"
 print_env_key_status "CUSTOM_PROD_COOKIEDOMAIN"
+print_env_key_status "CUSTOM__AI__SUMMARY__ENABLED"
+print_env_key_status "CUSTOM__AI__SUMMARY__GEMINI__API_KEY"
+print_env_key_status "CUSTOM__AI__SUMMARY__GEMINI__MODEL"
 
 print_section "Env Domain Consistency"
 front_url="$(env_value "CUSTOM_PROD_FRONTURL")"
@@ -117,6 +120,16 @@ fi
 
 if [[ -n "${api_site}" && -n "${back_site}" && "${api_site}" != "${back_site}" ]]; then
   echo "WARN: API_DOMAIN does not match BACKURL site (${api_site} vs ${back_site})"
+fi
+
+print_section "Env AI Summary Sanity"
+ai_summary_enabled_raw="$(env_value "CUSTOM__AI__SUMMARY__ENABLED" | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')"
+ai_summary_api_key="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__API_KEY")"
+ai_summary_model="$(env_value "CUSTOM__AI__SUMMARY__GEMINI__MODEL")"
+echo "CUSTOM__AI__SUMMARY__ENABLED=${ai_summary_enabled_raw:-<empty>}"
+echo "CUSTOM__AI__SUMMARY__GEMINI__MODEL=${ai_summary_model:-<empty>}"
+if [[ "${ai_summary_enabled_raw}" == "true" && -z "${ai_summary_api_key}" ]]; then
+  echo "WARN: AI summary is enabled but CUSTOM__AI__SUMMARY__GEMINI__API_KEY is empty."
 fi
 
 print_section "Listening Ports (80/443/22/8080)"

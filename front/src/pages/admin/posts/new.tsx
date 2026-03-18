@@ -101,6 +101,12 @@ type MarkdownRenderResponse = {
   html?: string
 }
 
+type GeneratePreviewSummaryPayload = {
+  summary?: string
+  provider?: string
+  model?: string | null
+}
+
 type AdminPostListItem = {
   id: number
   title: string
@@ -379,6 +385,13 @@ const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LEN
     .replace(whitespaceRegex, " ")
     .trim()
 
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength).trim()}...`
+}
+
+const normalizeGeneratedPreviewSummary = (value: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
+  const normalized = value.replace(/\s+/g, " ").trim()
+  if (!normalized) return ""
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, maxLength).trim()}...`
 }
@@ -1374,6 +1387,70 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
     [postContent]
   )
+
+  const handleGeneratePreviewSummary = useCallback(async () => {
+    const content = postContent.trim()
+    if (!content) {
+      setPublishStatus({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." }, "modal")
+      return
+    }
+
+    try {
+      setLoadingKey("generatePreviewSummary")
+      setPublishStatus({ tone: "loading", text: "AI 요약 생성 중입니다..." }, "modal")
+
+      const response = await apiFetch<RsData<GeneratePreviewSummaryPayload>>("/post/api/v1/adm/posts/preview-summary", {
+        method: "POST",
+        timeoutMs: 18_000,
+        body: JSON.stringify({
+          title: postTitle,
+          content: postContent,
+          maxLength: PREVIEW_SUMMARY_MAX_LENGTH,
+        }),
+      })
+
+      const generated = normalizeGeneratedPreviewSummary(response?.data?.summary || "")
+      if (!generated) {
+        throw new Error("요약 생성 결과가 비어 있습니다.")
+      }
+
+      setPostSummary(generated)
+      const providerLabel =
+        response?.data?.provider === "gemini"
+          ? `Gemini${response?.data?.model ? ` (${response.data.model})` : ""}`
+          : "규칙 기반"
+      setPublishStatus(
+        {
+          tone: "success",
+          text: `요약을 생성해 입력창에 반영했습니다. (${providerLabel})`,
+        },
+        "modal"
+      )
+    } catch (error) {
+      const fallbackSummary = makePreviewSummary(postContent)
+      if (fallbackSummary) {
+        setPostSummary(fallbackSummary)
+        setPublishStatus(
+          {
+            tone: "error",
+            text: `AI 요약 생성 실패로 규칙 기반 요약을 대신 반영했습니다. (${error instanceof Error ? error.message : String(error)})`,
+          },
+          "modal"
+        )
+        return
+      }
+
+      setPublishStatus(
+        {
+          tone: "error",
+          text: `요약 생성 실패: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        "modal"
+      )
+    } finally {
+      setLoadingKey("")
+    }
+  }, [postContent, postTitle, setPublishStatus])
 
   const handleWritePost = async (): Promise<boolean> => {
     if (editorMode === "edit" || postId.trim()) {
@@ -2405,7 +2482,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const closePublishModal = () => {
-    if (loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost") return
+    if (
+      loadingKey === "writePost" ||
+      loadingKey === "modifyPost" ||
+      loadingKey === "publishTempPost" ||
+      loadingKey === "generatePreviewSummary"
+    ) return
     setPublishModalNotice({
       tone: "idle",
       text: publishModalHintByAction(publishActionType),
@@ -3631,16 +3713,40 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <SummaryCounter>
                     {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
                   </SummaryCounter>
-                  <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
-                  <PreviewSummaryText>
-                    {resolvedPreviewSummary || "본문을 입력하면 자동 요약이 생성됩니다."}
-                  </PreviewSummaryText>
+                  <MetaActionRow>
+                    <Button
+                      type="button"
+                      disabled={disabled("generatePreviewSummary") || !postContent.trim()}
+                      onClick={() => void handleGeneratePreviewSummary()}
+                    >
+                      {loadingKey === "generatePreviewSummary" ? "AI 요약 생성 중..." : "AI 요약 생성"}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={disabled("generatePreviewSummary") || !postContent.trim()}
+                      onClick={() => setPostSummary(makePreviewSummary(postContent))}
+                    >
+                      규칙 요약 채우기
+                    </Button>
+                  </MetaActionRow>
+                  <FieldHelp>아래 블록은 목록 카드에 실제로 노출될 제목/요약 미리보기입니다.</FieldHelp>
+                  <PreviewCardSnapshot>
+                    <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
+                    <PreviewSummaryText>
+                      {resolvedPreviewSummary || "본문을 입력하면 자동 요약이 생성됩니다."}
+                    </PreviewSummaryText>
+                  </PreviewCardSnapshot>
                 </PostPreviewSetup>
               </PublishModalBody>
               <PublishModalFooter>
                 <Button
                   type="button"
-                  disabled={loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"}
+                  disabled={
+                    loadingKey === "writePost" ||
+                    loadingKey === "modifyPost" ||
+                    loadingKey === "publishTempPost" ||
+                    loadingKey === "generatePreviewSummary"
+                  }
                   onClick={closePublishModal}
                 >
                   취소
@@ -4725,6 +4831,15 @@ const PreviewFixedTitle = styled.h4`
   font-size: 0.95rem;
   line-height: 1.35;
   letter-spacing: -0.01em;
+`
+
+const PreviewCardSnapshot = styled.div`
+  display: grid;
+  gap: 0.22rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  padding: 0.65rem 0.74rem;
+  background: ${({ theme }) => theme.colors.gray2};
 `
 
 const PreviewSummaryText = styled.p`

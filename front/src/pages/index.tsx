@@ -15,14 +15,11 @@ import type { TPost } from "src/types"
 export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
   const queryClient = createQueryClient()
   const postsQueryTagRaw = typeof query.tag === "string" ? query.tag : ""
-  const postsQueryOrderRaw = typeof query.order === "string" ? query.order : ""
   const currentTag = postsQueryTagRaw.trim()
-  const currentOrder = postsQueryOrderRaw === "asc" ? "asc" : "desc"
 
   const postsPromise = getExplorePostsPage({
     kw: "",
     tag: currentTag,
-    order: currentOrder,
     page: 1,
     pageSize: 30,
   })
@@ -66,7 +63,6 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       queryKey.postsExplore({
         kw: "",
         tag: currentTag || undefined,
-        order: currentOrder,
         page: 1,
         pageSize: 30,
       }),

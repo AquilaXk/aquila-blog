@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.application.service.PostPreviewSummaryService
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
@@ -11,12 +12,17 @@ import com.back.standard.extensions.getOrThrow
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -27,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController
 @SecurityRequirement(name = "bearerAuth")
 class ApiV1AdmPostController(
     private val postUseCase: PostUseCase,
+    private val postPreviewSummaryService: PostPreviewSummaryService,
 ) {
     data class AdmPostCountResBody(
         val all: Long,
@@ -97,4 +104,50 @@ class ApiV1AdmPostController(
     fun getItem(
         @PathVariable id: Int,
     ): PostWithContentDto = PostWithContentDto(postUseCase.findById(id).getOrThrow())
+
+    data class GeneratePreviewSummaryRequest(
+        val title: String = "",
+        @field:NotBlank
+        val content: String,
+        @field:Min(80)
+        @field:Max(220)
+        val maxLength: Int? = null,
+    )
+
+    data class GeneratePreviewSummaryResBody(
+        val summary: String,
+        val provider: String,
+        val model: String?,
+    )
+
+    @PostMapping("/preview-summary")
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자용 미리보기 요약 생성")
+    fun generatePreviewSummary(
+        @Valid @RequestBody reqBody: GeneratePreviewSummaryRequest,
+    ): RsData<GeneratePreviewSummaryResBody> {
+        val result =
+            postPreviewSummaryService.generate(
+                title = reqBody.title,
+                content = reqBody.content,
+                maxLength = reqBody.maxLength ?: 150,
+            )
+
+        val providerLabel =
+            if (result.provider == "gemini") {
+                "AI"
+            } else {
+                "규칙 기반"
+            }
+
+        return RsData(
+            "200-1",
+            "${providerLabel} 요약을 생성했습니다.",
+            GeneratePreviewSummaryResBody(
+                summary = result.summary,
+                provider = result.provider,
+                model = result.model,
+            ),
+        )
+    }
 }

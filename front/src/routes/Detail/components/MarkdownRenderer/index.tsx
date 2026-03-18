@@ -474,8 +474,8 @@ const PrettyCodeBlock: FC<PrettyCodeBlockProps> = ({ language, rawCode, preEleme
         </div>
         <span className="aq-code-language">{toLanguageLabel(language)}</span>
       </div>
-      <div className="aq-code-shell">
-        {preElement}
+      <div className="aq-code-body">
+        <div className="aq-code-shell">{preElement}</div>
         <button
           type="button"
           className={`aq-code-copy aq-code-copy-bottom${copied ? " is-copied" : ""}`}
@@ -1115,13 +1115,16 @@ const StyledWrapper = styled.div`
     padding: 0 0.58rem;
   }
 
+  .aq-code-body {
+    position: relative;
+  }
+
   .aq-code-shell {
     width: 100%;
     max-width: 100%;
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    position: relative;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
   }
@@ -1378,17 +1381,19 @@ const StyledWrapper = styled.div`
     }
 
     table {
-      display: block;
       width: 100%;
       max-width: 100%;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+      table-layout: fixed;
     }
 
-    th,
-    td {
-      white-space: nowrap;
+    table th,
+    table td {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       font-size: 0.95rem;
+      line-height: 1.58;
+      padding: 0.66rem 0.72rem;
     }
 
     .aq-code-toolbar {

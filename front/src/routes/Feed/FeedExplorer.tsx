@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import SearchInput from "./SearchInput"
-import { FeedHeader } from "./FeedHeader"
 import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
 import TagList from "./TagList"
@@ -27,15 +26,10 @@ const FeedExplorer = () => {
 
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
-  const currentOrder =
-    router.query.order === "asc" || router.query.order === "desc"
-      ? router.query.order
-      : "desc"
   const debouncedQ = useDebouncedValue(q)
   const visiblePosts = useExplorePostsQuery({
     kw: debouncedQ,
     tag: currentTag,
-    order: currentOrder,
     page: 1,
     pageSize: 30,
   })
@@ -72,9 +66,6 @@ const FeedExplorer = () => {
             <TagList />
           </div>
         </div>
-        <div className="actions">
-          <FeedHeader />
-        </div>
       </ExplorerCard>
       <PostList
         posts={visiblePosts}
@@ -102,34 +93,16 @@ const ExplorerCard = styled.section`
     display: grid;
     gap: 0.95rem;
     min-width: 0;
-    padding-bottom: 0.72rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   .tags {
     min-width: 0;
   }
 
-  .actions {
-    min-width: 0;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding-top: 0;
-  }
-
   @media (max-width: 768px) {
     gap: 0.85rem;
     padding: 0.72rem 0.72rem 0.74rem;
-  }
-
-  @media (min-width: 1024px) {
-    .filters {
-      gap: 0.82rem;
-    }
-
-    .actions {
-      justify-content: flex-end;
-    }
   }
 `

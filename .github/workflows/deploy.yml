@@ -227,6 +227,9 @@ jobs:
           HOME_BACK_IMAGE: ${{ needs.calculateTag.outputs.image_ref }}
           HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
           HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
+          HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || '' }}
+          HOME_AI_SUMMARY_GEMINI_API_KEY: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || vars.CUSTOM__AI__SUMMARY__GEMINI__API_KEY || '' }}
+          HOME_AI_SUMMARY_GEMINI_MODEL: ${{ secrets.CUSTOM__AI__SUMMARY__GEMINI__MODEL || vars.CUSTOM__AI__SUMMARY__GEMINI__MODEL || '' }}
         run: |
           PORT="${HOME_SSH_PORT:-22}"
           HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
@@ -234,9 +237,12 @@ jobs:
           HOME_BACK_IMAGE_B64="$(printf '%s' "${HOME_BACK_IMAGE:-}" | base64 | tr -d '\n')"
           HOME_GHCR_USERNAME_B64="$(printf '%s' "${HOME_GHCR_USERNAME:-}" | base64 | tr -d '\n')"
           HOME_GHCR_TOKEN_B64="$(printf '%s' "${HOME_GHCR_TOKEN:-}" | base64 | tr -d '\n')"
+          HOME_AI_SUMMARY_ENABLED_B64="$(printf '%s' "${HOME_AI_SUMMARY_ENABLED:-}" | base64 | tr -d '\n')"
+          HOME_AI_SUMMARY_GEMINI_API_KEY_B64="$(printf '%s' "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" | base64 | tr -d '\n')"
+          HOME_AI_SUMMARY_GEMINI_MODEL_B64="$(printf '%s' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" | base64 | tr -d '\n')"
 
           ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
-            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' HOME_SERVER_ENV_B64='${HOME_SERVER_ENV_B64}' HOME_BACK_IMAGE_B64='${HOME_BACK_IMAGE_B64}' HOME_GHCR_USERNAME_B64='${HOME_GHCR_USERNAME_B64}' HOME_GHCR_TOKEN_B64='${HOME_GHCR_TOKEN_B64}' bash -s" <<'REMOTE'
+            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' HOME_SERVER_ENV_B64='${HOME_SERVER_ENV_B64}' HOME_BACK_IMAGE_B64='${HOME_BACK_IMAGE_B64}' HOME_GHCR_USERNAME_B64='${HOME_GHCR_USERNAME_B64}' HOME_GHCR_TOKEN_B64='${HOME_GHCR_TOKEN_B64}' HOME_AI_SUMMARY_ENABLED_B64='${HOME_AI_SUMMARY_ENABLED_B64}' HOME_AI_SUMMARY_GEMINI_API_KEY_B64='${HOME_AI_SUMMARY_GEMINI_API_KEY_B64}' HOME_AI_SUMMARY_GEMINI_MODEL_B64='${HOME_AI_SUMMARY_GEMINI_MODEL_B64}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           decode_b64() {
@@ -252,6 +258,24 @@ jobs:
           HOME_BACK_IMAGE="$(decode_b64 "${HOME_BACK_IMAGE_B64:-}")"
           HOME_GHCR_USERNAME="$(decode_b64 "${HOME_GHCR_USERNAME_B64:-}")"
           HOME_GHCR_TOKEN="$(decode_b64 "${HOME_GHCR_TOKEN_B64:-}")"
+          HOME_AI_SUMMARY_ENABLED="$(decode_b64 "${HOME_AI_SUMMARY_ENABLED_B64:-}")"
+          HOME_AI_SUMMARY_GEMINI_API_KEY="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_API_KEY_B64:-}")"
+          HOME_AI_SUMMARY_GEMINI_MODEL="$(decode_b64 "${HOME_AI_SUMMARY_GEMINI_MODEL_B64:-}")"
+
+          upsert_env_key() {
+            local key="$1"
+            local value="$2"
+            local file="$3"
+            [ -z "${value}" ] && return 0
+
+            if grep -qE "^${key}=" "${file}"; then
+              grep -vE "^${key}=" "${file}" > "${file}.tmp"
+              printf '%s=%s\n' "${key}" "${value}" >> "${file}.tmp"
+              mv "${file}.tmp" "${file}"
+            else
+              printf '%s=%s\n' "${key}" "${value}" >> "${file}"
+            fi
+          }
 
           cd "${HOME_APP_DIR}"
 
@@ -266,6 +290,17 @@ jobs:
           elif [ ! -f deploy/homeserver/.env.prod ]; then
             cp deploy/homeserver/.env.prod.example deploy/homeserver/.env.prod
             echo "deploy/homeserver/.env.prod created from example. Fill required values." >&2
+            exit 1
+          fi
+
+          upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__API_KEY" "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" "deploy/homeserver/.env.prod"
+          upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__MODEL" "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" "deploy/homeserver/.env.prod"
+
+          enabled_value="$(awk -F= '$1=="CUSTOM__AI__SUMMARY__ENABLED"{print tolower($2)}' deploy/homeserver/.env.prod | tail -n 1 | tr -d '"' | tr -d '[:space:]')"
+          api_key_value="$(awk -F= '$1=="CUSTOM__AI__SUMMARY__GEMINI__API_KEY"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod | tail -n 1)"
+          if [ "${enabled_value}" = "true" ] && [ -z "${api_key_value}" ]; then
+            echo "CUSTOM__AI__SUMMARY__ENABLED=true but CUSTOM__AI__SUMMARY__GEMINI__API_KEY is empty." >&2
             exit 1
           fi
 

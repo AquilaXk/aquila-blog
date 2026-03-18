@@ -6,7 +6,6 @@ import { TPost } from "src/types"
 type Params = {
   kw: string
   tag?: string
-  order: "asc" | "desc"
   page?: number
   pageSize?: number
 }
@@ -14,7 +13,6 @@ type Params = {
 const useExplorePostsQuery = ({
   kw,
   tag,
-  order,
   page = 1,
   pageSize = 30,
 }: Params) => {
@@ -22,7 +20,6 @@ const useExplorePostsQuery = ({
     queryKey: queryKey.postsExplore({
       kw,
       tag,
-      order,
       page,
       pageSize,
     }),
@@ -30,7 +27,6 @@ const useExplorePostsQuery = ({
       getExplorePosts({
         kw,
         tag,
-        order,
         page,
         pageSize,
       }),

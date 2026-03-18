@@ -10,23 +10,12 @@ type Props = {
 const Tag: React.FC<Props> = ({ children }) => {
   const router = useRouter()
 
-  const buildFeedQuery = () => {
-    const query: Record<string, string> = { tag: children }
-    if (
-      router.query.order &&
-      (router.query.order === "asc" || router.query.order === "desc")
-    ) {
-      query.order = router.query.order
-    }
-    return query
-  }
-
   const handleClick = (event?: React.SyntheticEvent) => {
     event?.preventDefault()
     event?.stopPropagation()
     replaceShallowRoutePreservingScroll(router, {
       pathname: "/",
-      query: buildFeedQuery(),
+      query: { tag: children },
     })
   }
 

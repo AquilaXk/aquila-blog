@@ -6,7 +6,6 @@ export const queryKey = {
   postsExplore: (params: {
     kw: string
     tag?: string
-    order: "asc" | "desc"
     page: number
     pageSize: number
   }) => ["posts", "explore", params] as const,

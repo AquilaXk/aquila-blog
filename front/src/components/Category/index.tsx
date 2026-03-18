@@ -44,12 +44,6 @@ const Category: React.FC<Props> = ({ readOnly = false, children }) => {
     if (router.query.tag && typeof router.query.tag === "string") {
       query.tag = router.query.tag
     }
-    if (
-      router.query.order &&
-      (router.query.order === "asc" || router.query.order === "desc")
-    ) {
-      query.order = router.query.order
-    }
     return query
   }
 

@@ -50,15 +50,52 @@ const RootLayout = ({ children }: Props) => {
   useEffect(() => {
     if (typeof window === "undefined") return
 
+    const isBenignRouteCancellationMessage = (value: unknown): boolean => {
+      if (typeof value === "string") {
+        return value.toLowerCase().includes("loading initial props cancelled")
+      }
+
+      if (value instanceof Error) {
+        return value.message.toLowerCase().includes("loading initial props cancelled")
+      }
+
+      if (typeof value === "object" && value !== null && "message" in value) {
+        const message = (value as { message?: unknown }).message
+        if (typeof message === "string") {
+          return message.toLowerCase().includes("loading initial props cancelled")
+        }
+      }
+
+      return false
+    }
+
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       if (!isNavigationCancelledError(event.reason)) return
       // Route competition can reject in-flight Next.js data loading; treat as expected cancellation.
       event.preventDefault()
     }
 
+    const handleWindowError = (event: ErrorEvent) => {
+      const reason = event.error ?? event.message
+      if (!isNavigationCancelledError(reason) && !isBenignRouteCancellationMessage(reason)) return
+      event.preventDefault()
+    }
+
+    const originalConsoleError = window.console.error.bind(window.console)
+    const filteredConsoleError: typeof window.console.error = (...args) => {
+      if (args.some((arg) => isNavigationCancelledError(arg) || isBenignRouteCancellationMessage(arg))) {
+        return
+      }
+      originalConsoleError(...args)
+    }
+
+    window.console.error = filteredConsoleError
     window.addEventListener("unhandledrejection", handleUnhandledRejection)
+    window.addEventListener("error", handleWindowError)
     return () => {
+      window.console.error = originalConsoleError
       window.removeEventListener("unhandledrejection", handleUnhandledRejection)
+      window.removeEventListener("error", handleWindowError)
     }
   }, [])
 

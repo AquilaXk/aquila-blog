@@ -333,7 +333,7 @@ const normalizeMermaidCodeBlocksInHtml = (html: string) =>
     if (!hasMermaidClass && !looksLikeMermaid) return full
     if (!source) return full
 
-    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
 const normalizeMermaidParagraphsInHtml = (html: string) =>
@@ -350,7 +350,7 @@ const normalizeMermaidParagraphsInHtml = (html: string) =>
     if (!hasMermaidFence && !looksLikeMermaid) return full
     if (!source) return full
 
-    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
 const normalizeStandaloneMermaidPreBlocksInHtml = (html: string) =>
@@ -371,7 +371,7 @@ const normalizeStandaloneMermaidPreBlocksInHtml = (html: string) =>
     if (!hasMermaidHint && !looksLikeMermaid) return full
     if (!source) return full
 
-    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
   })
 
 const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}[\w-]*[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/
@@ -746,7 +746,12 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
 
           if (shouldRenderMermaid) {
             return (
-              <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-source={mermaidSource || rawCode}>
+              <pre
+                className="aq-mermaid"
+                data-aq-mermaid="true"
+                data-mermaid-rendered="pending"
+                data-mermaid-source={mermaidSource || rawCode}
+              >
                 <code className="language-mermaid">{mermaidSource || rawCode}</code>
               </pre>
             )
@@ -1240,7 +1245,7 @@ const StyledWrapper = styled.div`
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    overflow-x: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     white-space: normal;
     padding: 0.2rem 0;
@@ -1251,19 +1256,30 @@ const StyledWrapper = styled.div`
     scrollbar-width: thin;
   }
 
+  .aq-mermaid[data-mermaid-rendered="pending"] {
+    min-height: 7.5rem;
+  }
+
+  .aq-mermaid[data-mermaid-rendered="pending"] > code {
+    visibility: hidden;
+  }
+
   .aq-mermaid-stage {
-    display: block;
-    width: max-content;
-    min-width: 100%;
-    max-width: none;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: center;
+    align-items: flex-start;
+    overflow-x: hidden;
   }
 
   .aq-mermaid-stage > svg {
     display: block;
     width: auto;
-    max-width: none;
+    max-width: 100%;
     height: auto;
-    margin: 0;
+    margin: 0 auto;
     background: transparent;
     overflow: visible;
   }

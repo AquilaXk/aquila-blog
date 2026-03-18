@@ -160,6 +160,9 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         if (!source) return
         const looksLikeMermaid = isMermaidSource(source)
         if (!hasMermaidHint && !looksLikeMermaid) return
+        if (!block.dataset.mermaidRendered) {
+          block.dataset.mermaidRendered = "pending"
+        }
 
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
@@ -209,52 +212,36 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
               ? viewBoxHeight
               : Math.max(1, fallbackRect.height)
 
-          const minReadableHeight = isMobileViewport ? 120 : 170
           const maxReadableHeight = isMobileViewport
-            ? Math.min(460, Math.floor(window.innerHeight * 0.56))
-            : Math.min(760, Math.floor(window.innerHeight * 0.72))
-          const maxScrollableWidth = isMobileViewport
-            ? Math.max(containerWidth * 2.2, 1200)
-            : Math.max(containerWidth * 3, 2400)
+            ? Math.min(520, Math.floor(window.innerHeight * 0.68))
+            : Math.min(900, Math.floor(window.innerHeight * 0.78))
 
-          let targetWidth = intrinsicWidth
-          let targetHeight = intrinsicHeight
-
-          if (targetHeight < minReadableHeight) {
-            const scaleUp = minReadableHeight / targetHeight
-            targetWidth *= scaleUp
-            targetHeight *= scaleUp
+          let scale = 1
+          if (intrinsicWidth > containerWidth) {
+            scale = Math.min(scale, containerWidth / intrinsicWidth)
+          }
+          if (intrinsicHeight * scale > maxReadableHeight) {
+            scale = Math.min(scale, maxReadableHeight / intrinsicHeight)
           }
 
-          if (targetHeight > maxReadableHeight) {
-            const scaleDown = maxReadableHeight / targetHeight
-            targetWidth *= scaleDown
-            targetHeight *= scaleDown
-          }
-
-          if (targetWidth > maxScrollableWidth) {
-            const scaleDownByWidth = maxScrollableWidth / targetWidth
-            targetWidth *= scaleDownByWidth
-            targetHeight *= scaleDownByWidth
-          }
+          const targetWidth = intrinsicWidth * scale
+          const targetHeight = intrinsicHeight * scale
 
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
-          const shouldCenterWithinBlock = roundedWidth <= containerWidth
-
-          stage.style.width = `${shouldCenterWithinBlock ? containerWidth : roundedWidth}px`
+          stage.style.width = `${containerWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
-          stage.style.display = shouldCenterWithinBlock ? "flex" : "block"
-          stage.style.justifyContent = shouldCenterWithinBlock ? "center" : "initial"
+          stage.style.display = "flex"
+          stage.style.justifyContent = "center"
 
-          svgElement.setAttribute("preserveAspectRatio", shouldCenterWithinBlock ? "xMidYMin meet" : "xMinYMin meet")
+          svgElement.setAttribute("preserveAspectRatio", "xMidYMin meet")
           svgElement.style.width = `${roundedWidth}px`
           svgElement.style.height = `${roundedHeight}px`
-          svgElement.style.maxWidth = "none"
+          svgElement.style.maxWidth = "100%"
           svgElement.style.maxHeight = "none"
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
-          svgElement.style.margin = shouldCenterWithinBlock ? "0 auto" : "0"
+          svgElement.style.margin = "0 auto"
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
 

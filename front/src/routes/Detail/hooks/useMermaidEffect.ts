@@ -181,11 +181,14 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             Math.min(desktopTargetWidth, Math.floor(viewportWidth * 1.6))
           )
           const stageMinWidth = isMobileViewport ? mobileTargetWidth : desktopTargetWidth
+          const reserveHeight = Math.max(120, Math.ceil(block.getBoundingClientRect().height))
 
           const stage = document.createElement("div")
           stage.className = "aq-mermaid-stage mermaid"
           stage.style.minWidth = `${stageMinWidth}px`
           stage.style.width = "100%"
+          stage.style.minHeight = `${reserveHeight}px`
+          block.style.minHeight = `${reserveHeight}px`
           block.innerHTML = ""
           block.appendChild(stage)
 
@@ -201,6 +204,10 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           svgElement.style.maxWidth = "100%"
           svgElement.style.height = "auto"
           svgElement.removeAttribute("height")
+
+          // 렌더 완료 이후에만 높이 고정을 해제해 새로고침 시 레이아웃 점프를 줄인다.
+          block.style.minHeight = ""
+          stage.style.minHeight = ""
         }
 
         try {
@@ -247,6 +254,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidTheme = theme
           block.dataset.mermaidRendered = "error"
           block.classList.add("aq-mermaid-error")
+          block.style.minHeight = ""
           block.innerHTML = `
             <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
               Mermaid 렌더링 실패: 문법 또는 다이어그램 코드를 확인하세요.
@@ -313,14 +321,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     }
 
     void run()
-    const rafId = window.requestAnimationFrame(() => {
-      void run()
-    })
-    const initialTimerIds = [120, 360, 900].map((delay) =>
-      window.setTimeout(() => {
-        void run()
-      }, delay)
-    )
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => void run()) : null
     resizeObserver?.observe(root)
 
@@ -330,8 +330,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       resizeObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
-      window.cancelAnimationFrame(rafId)
-      initialTimerIds.forEach((timerId) => window.clearTimeout(timerId))
     }
   }, [contentKey, rootRef, scheme])
 

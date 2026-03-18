@@ -1,3 +1,5 @@
+import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
+
 const DEFAULT_API_BASE_URL = "http://localhost:8080"
 const DEFAULT_API_FETCH_TIMEOUT_MS = 12_000
 
@@ -119,7 +121,8 @@ export const getApiBaseUrl = () => {
 }
 
 export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Promise<T> => {
-  const url = `${getApiBaseUrl()}${path}`
+  const safePath = normalizeApiRequestPath(path)
+  const url = `${getApiBaseUrl()}${safePath}`
   const { timeoutMs: _timeoutMs, ...requestInit } = init
   const headers = new Headers(requestInit.headers || {})
   const hasBody = requestInit.body !== undefined && requestInit.body !== null
@@ -130,7 +133,7 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
     headers.set("Content-Type", "application/json")
   }
 
-  const resolvedTimeoutMs = resolveTimeoutMs(path, init)
+  const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
   const { signal, cleanup } = createTimedSignal(requestInit.signal, resolvedTimeoutMs)
 
   let response: Response

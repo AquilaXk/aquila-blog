@@ -274,6 +274,8 @@ const inlineCodeRegex = /`([^`]+)`/g
 const markdownPunctuationRegex = /[#>*_~-]/g
 const whitespaceRegex = /\s+/g
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
+const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
+const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 
 const extractFirstMarkdownImage = (content: string): string => {
   const match = markdownImagePattern.exec(content)
@@ -302,6 +304,39 @@ const normalizeSafeImageUrl = (raw: string): string => {
   }
 
   return ""
+}
+
+const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
+  const value = raw.trim()
+  if (!value) return ""
+  if (PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX.test(value)) return ""
+
+  if (value.startsWith("/")) {
+    if (!value.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
+    return value
+  }
+
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
+    if (parsed.username || parsed.password) return ""
+    if (!parsed.pathname.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
+
+    const allowedHosts = new Set<string>()
+    const baseUrl = getApiBaseUrl()
+    try {
+      allowedHosts.add(new URL(baseUrl).host)
+    } catch {
+      return ""
+    }
+    if (typeof window !== "undefined" && window.location.host) {
+      allowedHosts.add(window.location.host)
+    }
+    if (!allowedHosts.has(parsed.host)) return ""
+    return parsed.toString()
+  } catch {
+    return ""
+  }
 }
 
 const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
@@ -929,10 +964,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     () => resolvedPreviewThumbnail.trim(),
     [resolvedPreviewThumbnail]
   )
+  const safePreviewThumbnail = useMemo(
+    () => normalizeSafePreviewThumbnailUrl(resolvedPreviewThumbnail),
+    [resolvedPreviewThumbnail]
+  )
 
   useEffect(() => {
     setIsPreviewThumbnailError(false)
-  }, [resolvedPreviewThumbnail])
+  }, [safePreviewThumbnail])
 
   const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
@@ -3297,10 +3336,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
                   </PostPreviewHeader>
                   <PreviewThumbFrame>
-                    {resolvedPreviewThumbnail && !isPreviewThumbnailError ? (
+                    {safePreviewThumbnail && !isPreviewThumbnailError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={resolvedPreviewThumbnail}
+                        src={safePreviewThumbnail}
                         alt="포스트 미리보기 썸네일"
                         onError={() => setIsPreviewThumbnailError(true)}
                       />

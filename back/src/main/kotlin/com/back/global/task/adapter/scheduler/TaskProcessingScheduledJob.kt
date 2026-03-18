@@ -21,6 +21,10 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
+/**
+ * TaskProcessingScheduledJob는 주기 작업을 트리거하는 스케줄러 어댑터입니다.
+ * 정기 실행 중 오류가 전체 처리 흐름으로 전파되지 않도록 실패를 격리합니다.
+ */
 @Component
 @ConditionalOnProperty(
     prefix = "custom.runtime",
@@ -28,10 +32,6 @@ import java.util.concurrent.TimeoutException
     havingValue = "true",
     matchIfMissing = true,
 )
-/**
- * TaskProcessingScheduledJob는 주기 작업을 트리거하는 스케줄러 어댑터입니다.
- * 정기 실행 중 오류가 전체 처리 흐름으로 전파되지 않도록 실패를 격리합니다.
- */
 class TaskProcessingScheduledJob(
     private val taskRepository: TaskRepository,
     private val taskHandlerRegistry: TaskHandlerRegistry,

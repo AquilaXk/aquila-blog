@@ -542,7 +542,12 @@ class PostPreviewSummaryService(
 
     private fun dayLimitKeyTtl(nowMillis: Long): Duration {
         val now = Instant.ofEpochMilli(nowMillis).atZone(zoneId)
-        val nextRotation = now.toLocalDate().plusDays(1).atStartOfDay(zoneId).plusHours(1)
+        val nextRotation =
+            now
+                .toLocalDate()
+                .plusDays(1)
+                .atStartOfDay(zoneId)
+                .plusHours(1)
         val ttlSeconds = Duration.between(now, nextRotation).seconds.coerceAtLeast(60)
         return Duration.ofSeconds(ttlSeconds)
     }
@@ -686,7 +691,9 @@ class PostPreviewSummaryService(
     ) {
         val nowEpochSeconds = Instant.now().epochSecond
         val previousWarnAt = lastRedisWarnEpochSeconds.get()
-        if (nowEpochSeconds - previousWarnAt < REDIS_WARN_INTERVAL_SECONDS || !lastRedisWarnEpochSeconds.compareAndSet(previousWarnAt, nowEpochSeconds)) {
+        if (nowEpochSeconds - previousWarnAt < REDIS_WARN_INTERVAL_SECONDS ||
+            !lastRedisWarnEpochSeconds.compareAndSet(previousWarnAt, nowEpochSeconds)
+        ) {
             suppressedRedisFallbackWarnCount.incrementAndGet()
             return
         }

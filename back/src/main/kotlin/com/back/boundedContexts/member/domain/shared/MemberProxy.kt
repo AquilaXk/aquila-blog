@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.domain.shared
 
 // SecurityContext에서 꺼낸 lightweight actor를 real Member 참조와 동기화하기 위한 래퍼다.
 // equals/hashCode는 BaseEntity 기준(id + identityClass)으로 동작하도록 별도 하드닝되어 있다.
+
 /**
  * MemberProxy는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
  * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.

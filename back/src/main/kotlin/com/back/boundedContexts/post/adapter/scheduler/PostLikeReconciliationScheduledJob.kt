@@ -8,6 +8,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
+/**
+ * PostLikeReconciliationScheduledJob의 책임을 정의하는 클래스입니다.
+ * 해당 도메인 흐름에서 역할 분리를 위해 분리된 구성요소입니다.
+ */
 @Component
 @ConditionalOnProperty(
     prefix = "custom.runtime",
@@ -15,10 +19,6 @@ import org.springframework.stereotype.Component
     havingValue = "true",
     matchIfMissing = true,
 )
-/**
- * PostLikeReconciliationScheduledJob의 책임을 정의하는 클래스입니다.
- * 해당 도메인 흐름에서 역할 분리를 위해 분리된 구성요소입니다.
- */
 class PostLikeReconciliationScheduledJob(
     private val postLikeReconciliationService: PostLikeReconciliationService,
     @param:Value("\${custom.post.likes.reconciliation.lookbackHours:24}")

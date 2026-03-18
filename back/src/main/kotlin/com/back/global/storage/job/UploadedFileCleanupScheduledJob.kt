@@ -7,6 +7,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 
+/**
+ * UploadedFileCleanupScheduledJob는 글로벌 공통 정책을 담당하는 구성요소입니다.
+ * 모듈 간 중복을 줄이고 공통 규칙을 일관되게 적용하기 위해 분리되었습니다.
+ */
 @Component
 @ConditionalOnProperty(
     prefix = "custom.runtime",
@@ -14,10 +18,6 @@ import org.springframework.stereotype.Component
     havingValue = "true",
     matchIfMissing = true,
 )
-/**
- * UploadedFileCleanupScheduledJob는 글로벌 공통 정책을 담당하는 구성요소입니다.
- * 모듈 간 중복을 줄이고 공통 규칙을 일관되게 적용하기 위해 분리되었습니다.
- */
 class UploadedFileCleanupScheduledJob(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val retentionProperties: UploadedFileRetentionProperties,

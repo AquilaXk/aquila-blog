@@ -14,6 +14,10 @@ import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 
+/**
+ * PostWriteRequestIdempotency는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
+ * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
+ */
 @Entity
 @Table(
     name = "post_write_request_idempotency",
@@ -24,10 +28,6 @@ import jakarta.persistence.UniqueConstraint
         ),
     ],
 )
-/**
- * PostWriteRequestIdempotency는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
- * 도메인 불변조건을 지키며 상태 변경을 메서드 단위로 통제합니다.
- */
 class PostWriteRequestIdempotency(
     @field:Id
     @field:SequenceGenerator(

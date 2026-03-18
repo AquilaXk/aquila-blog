@@ -24,12 +24,11 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-@Service
-
 /**
  * PostImageStorageAdapter는 파일 스토리지 연동을 담당하는 어댑터입니다.
  * 업로드/URL 생성/삭제와 같은 저장소 I/O를 애플리케이션 계층에 제공합니다.
  */
+@Service
 class PostImageStorageAdapter(
     private val properties: PostImageStorageProperties,
 ) : PostImageStoragePort {
@@ -50,6 +49,7 @@ class PostImageStorageAdapter(
 
     // 앱 부팅 시점에는 스토리지가 아직 준비되지 않을 수 있다(컨테이너 기동 순서 경쟁).
     // 백엔드 재시작 없이 요청 자체가 회복되도록 이 메서드는 재시도 가능해야 한다.
+
     /**
      * 실행 환경 설정과 의존성을 확인해 안전한 실행 컨텍스트를 구성합니다.
      * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.

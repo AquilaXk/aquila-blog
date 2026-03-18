@@ -12,13 +12,12 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@Profile("!test")
-@Component
-
 /**
  * SmtpSignupVerificationMailSenderAdapter의 책임을 정의하는 클래스입니다.
  * 해당 도메인 흐름에서 역할 분리를 위해 분리된 구성요소입니다.
  */
+@Profile("!test")
+@Component
 class SmtpSignupVerificationMailSenderAdapter(
     private val javaMailSender: JavaMailSender,
     @Value("\${custom.member.signup.mailFrom:}")

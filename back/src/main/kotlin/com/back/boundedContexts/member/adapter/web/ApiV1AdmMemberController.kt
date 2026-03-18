@@ -125,12 +125,12 @@ class ApiV1AdmMemberController(
         return MemberWithUsernameDto(member)
     }
 
-    @PatchMapping("/{id}/profileImgUrl")
-    @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     /**
      * ProfileImg 항목을 수정한다.
      */
+    @PatchMapping("/{id}/profileImgUrl")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun updateProfileImg(
         @PathVariable
         @Positive
@@ -175,12 +175,12 @@ class ApiV1AdmMemberController(
         return MemberWithUsernameDto(member)
     }
 
-    @PatchMapping("/{id}/profileCard")
-    @Transactional
-    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     /**
      * ProfileCard 항목을 수정한다.
      */
+    @PatchMapping("/{id}/profileCard")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun updateProfileCard(
         @PathVariable
         @Positive

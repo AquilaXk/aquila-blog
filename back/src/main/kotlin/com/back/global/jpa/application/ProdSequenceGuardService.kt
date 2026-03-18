@@ -10,13 +10,13 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Component
 import java.util.regex.Pattern
 
-@Profile("prod")
-@Component
 /**
  * ProdSequenceGuardService는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
  * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
  */
 
+@Profile("prod")
+@Component
 class ProdSequenceGuardService(
     private val jdbcTemplate: JdbcTemplate,
     @param:Value("\${custom.db.sequence-guard-on-startup:true}")

@@ -17,6 +17,7 @@ permissions:
 jobs:
   codeql:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       actions: read
       contents: read
@@ -29,16 +30,17 @@ jobs:
           - javascript-typescript
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@38b3b7bf288d49ccf58644769dc7a6afdccd05eb # v3
         with:
           languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
 
       - name: Set up JDK 24
         if: matrix.language == 'java-kotlin'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: "24"
@@ -51,7 +53,7 @@ jobs:
 
       - name: Set up Node.js 20
         if: matrix.language == 'javascript-typescript'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "yarn"
@@ -65,4 +67,4 @@ jobs:
           yarn build
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@38b3b7bf288d49ccf58644769dc7a6afdccd05eb # v3

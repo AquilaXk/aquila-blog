@@ -16,6 +16,9 @@ on:
       - "deploy/**"
       - ".github/workflows/**"
 
+permissions:
+  contents: read
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -24,10 +27,10 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Detect changed paths
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         with:
           filters: |
             backend:
@@ -45,13 +48,14 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     uses: ./.github/workflows/reusable-backend-quality.yml
-    secrets: inherit
+    secrets:
+      CI_DB_PASSWORD: ${{ secrets.CI_DB_PASSWORD }}
+      CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
 
   front-verify:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     uses: ./.github/workflows/reusable-frontend-verify.yml
-    secrets: inherit
 
   no-op:
     runs-on: ubuntu-latest

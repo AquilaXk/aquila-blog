@@ -30,6 +30,8 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let disposed = false
     let running = false
     let observer: IntersectionObserver | null = null
+    let rerunRequested = false
+    let mutationObserver: MutationObserver | null = null
     const retryTimers = new Set<number>()
     const loggedErrorSignatures = new Set<string>()
     let runRetryCount = 0
@@ -167,10 +169,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         if (alreadyRendered) return
 
         const rect = block.getBoundingClientRect()
-        if (rect.width <= 120 || rect.height <= 8) {
-          scheduleRetry(i, block)
-          return
-        }
 
         const renderSourceIntoBlock = async (sourceToRender: string) => {
           const viewportWidth = Math.max(280, Math.floor(window.innerWidth - 24))
@@ -299,22 +297,33 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     }
 
     const run = async () => {
-      if (running || disposed) return
+      if (disposed) return
+      if (running) {
+        rerunRequested = true
+        return
+      }
+
       running = true
+
       try {
-        await renderMermaidBlocks()
-        runRetryCount = 0
-      } catch (error) {
-        console.warn(error)
-        if (!disposed && runRetryCount < maxRunRetryCount) {
-          runRetryCount += 1
-          const delay = 220 * runRetryCount
-          const timerId = window.setTimeout(() => {
-            retryTimers.delete(timerId)
-            void run()
-          }, delay)
-          retryTimers.add(timerId)
-        }
+        do {
+          rerunRequested = false
+          try {
+            await renderMermaidBlocks()
+            runRetryCount = 0
+          } catch (error) {
+            console.warn(error)
+            if (!disposed && runRetryCount < maxRunRetryCount) {
+              runRetryCount += 1
+              const delay = 220 * runRetryCount
+              const timerId = window.setTimeout(() => {
+                retryTimers.delete(timerId)
+                void run()
+              }, delay)
+              retryTimers.add(timerId)
+            }
+          }
+        } while (!disposed && rerunRequested)
       } finally {
         running = false
       }
@@ -323,11 +332,23 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     void run()
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => void run()) : null
     resizeObserver?.observe(root)
+    mutationObserver =
+      typeof MutationObserver !== "undefined"
+        ? new MutationObserver(() => {
+            void run()
+          })
+        : null
+    mutationObserver?.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
 
     return () => {
       disposed = true
       observer?.disconnect()
       resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
     }

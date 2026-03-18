@@ -213,8 +213,9 @@ class PostPreviewSummaryService(
             }.getOrNull()
 
         val normalizedAiSummary = normalizeSummary(aiSummary, normalizedMaxLength)
-        if (normalizedAiSummary.isBlank()) {
-            markFailure("empty-summary")
+        if (normalizedAiSummary.isBlank() || isLowQualityAiSummary(normalizedAiSummary, fallback, normalizedMaxLength)) {
+            val reason = if (normalizedAiSummary.isBlank()) "empty-summary" else "low-quality-summary"
+            markFailure(reason)
             return cacheAndReturn(
                 cacheKey = cacheKey,
                 result = SummaryResult(summary = fallback, provider = "rule", model = null),
@@ -334,6 +335,32 @@ class PostPreviewSummaryService(
                 .trim()
 
         return truncateSummary(cleaned, maxLength)
+    }
+
+    private fun isLowQualityAiSummary(
+        aiSummary: String,
+        fallbackSummary: String,
+        maxLength: Int,
+    ): Boolean {
+        val normalizedAi = aiSummary.trim()
+        val normalizedFallback = fallbackSummary.trim()
+        if (normalizedAi.isBlank()) return true
+        if (normalizedFallback.isBlank()) return false
+
+        val minExpectedLength =
+            (maxLength * AI_MIN_LENGTH_RATIO)
+                .toInt()
+                .coerceAtLeast(AI_MIN_ABSOLUTE_LENGTH)
+        val isTooShortAgainstFallback =
+            normalizedAi.length < minExpectedLength &&
+                normalizedFallback.length >= FALLBACK_MIN_LENGTH_FOR_OVERRIDE &&
+                normalizedFallback.length >= normalizedAi.length + FALLBACK_LENGTH_GAP_THRESHOLD
+        if (isTooShortAgainstFallback) return true
+
+        val hasQuotedFragmentPattern =
+            normalizedAi.length <= AI_QUOTED_FRAGMENT_MAX_LENGTH &&
+                (normalizedAi.contains('"') || normalizedAi.contains('“') || normalizedAi.contains('”'))
+        return hasQuotedFragmentPattern && normalizedFallback.length >= FALLBACK_MIN_LENGTH_FOR_OVERRIDE
     }
 
     /**
@@ -717,6 +744,11 @@ class PostPreviewSummaryService(
         private const val REDIS_CACHE_KEY_PREFIX = "post:preview:summary:cache:"
         private const val REDIS_RATE_LIMIT_DAY_KEY_PREFIX = "post:preview:summary:limit:day:"
         private const val REDIS_RATE_LIMIT_MINUTE_KEY_PREFIX = "post:preview:summary:limit:minute:"
+        private const val AI_MIN_LENGTH_RATIO = 0.22
+        private const val AI_MIN_ABSOLUTE_LENGTH = 22
+        private const val AI_QUOTED_FRAGMENT_MAX_LENGTH = 30
+        private const val FALLBACK_MIN_LENGTH_FOR_OVERRIDE = 36
+        private const val FALLBACK_LENGTH_GAP_THRESHOLD = 16
         private val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
     }
 

@@ -396,6 +396,24 @@ const normalizeGeneratedPreviewSummary = (value: string, maxLength = PREVIEW_SUM
   return `${normalized.slice(0, maxLength).trim()}...`
 }
 
+const isLowQualityGeneratedPreviewSummary = (generated: string, fallback: string) => {
+  const normalizedGenerated = generated.replace(/\s+/g, " ").trim()
+  const normalizedFallback = fallback.replace(/\s+/g, " ").trim()
+  if (!normalizedGenerated) return true
+  if (!normalizedFallback) return false
+
+  const minExpectedLength = Math.max(22, Math.floor(PREVIEW_SUMMARY_MAX_LENGTH * 0.22))
+  const tooShortComparedToFallback =
+    normalizedGenerated.length < minExpectedLength &&
+    normalizedFallback.length >= 36 &&
+    normalizedFallback.length >= normalizedGenerated.length + 16
+  if (tooShortComparedToFallback) return true
+
+  const hasQuotedFragmentPattern =
+    normalizedGenerated.length <= 30 && /["“”]/.test(normalizedGenerated)
+  return hasQuotedFragmentPattern && normalizedFallback.length >= 36
+}
+
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
   let trimmed = content.trimStart()
   const tags: string[] = []
@@ -1394,6 +1412,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPublishStatus({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." }, "modal")
       return
     }
+    const fallbackSummary = makePreviewSummary(postContent)
 
     try {
       setLoadingKey("generatePreviewSummary")
@@ -1414,11 +1433,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         throw new Error("요약 생성 결과가 비어 있습니다.")
       }
 
-      setPostSummary(generated)
       const providerLabel =
         response?.data?.provider === "gemini"
           ? `Gemini${response?.data?.model ? ` (${response.data.model})` : ""}`
           : "규칙 기반"
+      if (fallbackSummary && isLowQualityGeneratedPreviewSummary(generated, fallbackSummary)) {
+        setPostSummary(fallbackSummary)
+        setPublishStatus(
+          {
+            tone: "success",
+            text: `AI 결과가 너무 짧아 규칙 기반 요약으로 보정했습니다. (${providerLabel})`,
+          },
+          "modal"
+        )
+        return
+      }
+
+      setPostSummary(generated)
       setPublishStatus(
         {
           tone: "success",
@@ -1427,7 +1458,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         "modal"
       )
     } catch (error) {
-      const fallbackSummary = makePreviewSummary(postContent)
       if (fallbackSummary) {
         setPostSummary(fallbackSummary)
         setPublishStatus(

@@ -5,11 +5,13 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.app.application.AppFacade
 import com.back.global.exception.application.AppException
 import com.back.global.security.domain.SecurityUser
-import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseCookie
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
+import java.time.Duration
 
 @Component
 class Rq(
@@ -60,19 +62,22 @@ class Rq(
         maxAgeSeconds: Int = 60 * 60 * 24 * 365,
     ) {
         val cookieDomain = AppFacade.siteCookieDomain.trim()
-        val cookie =
-            Cookie(name, value ?: "").apply {
-                setPath("/")
-                setHttpOnly(true)
-                if (cookieDomain.isNotBlank()) {
-                    setDomain(cookieDomain)
-                }
-                setSecure(true)
-                setAttribute("SameSite", "Strict")
-                setMaxAge(if (value.isNullOrBlank()) 0 else maxAgeSeconds.coerceAtLeast(1))
-            }
+        val maxAge = if (value.isNullOrBlank()) 0 else maxAgeSeconds.coerceAtLeast(1)
 
-        resp.addCookie(cookie)
+        val builder =
+            ResponseCookie
+                .from(name, value ?: "")
+                .path("/")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .maxAge(Duration.ofSeconds(maxAge.toLong()))
+
+        if (cookieDomain.isNotBlank()) {
+            builder.domain(cookieDomain)
+        }
+
+        resp.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString())
     }
 
     fun deleteCookie(name: String) {

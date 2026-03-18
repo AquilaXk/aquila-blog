@@ -102,22 +102,17 @@ export const replaceRoute = async (
 ) => {
   const safeTarget = toSafeClientRedirectTarget(target, "/")
 
-  if (preferHardNavigation && typeof window !== "undefined") {
-    window.location.replace(safeTarget)
-    return
-  }
-
   try {
     await router.replace(safeTarget)
   } catch (error) {
-    if (preferHardNavigation && typeof window !== "undefined") {
-      window.location.replace(safeTarget)
-      return
-    }
-
     if (!isNavigationCancelledError(error)) {
       throw error
     }
+  }
+
+  if (preferHardNavigation && typeof window !== "undefined") {
+    // full document reload without client-side URL redirect sink
+    window.location.reload()
   }
 }
 
@@ -128,22 +123,17 @@ export const pushRoute = async (
 ) => {
   const safeTarget = toSafeClientRedirectTarget(target, "/")
 
-  if (preferHardNavigation && typeof window !== "undefined") {
-    window.location.assign(safeTarget)
-    return
-  }
-
   try {
     await router.push(safeTarget)
   } catch (error) {
-    if (preferHardNavigation && typeof window !== "undefined") {
-      window.location.assign(safeTarget)
-      return
-    }
-
     if (!isNavigationCancelledError(error)) {
       throw error
     }
+  }
+
+  if (preferHardNavigation && typeof window !== "undefined") {
+    // full document reload without client-side URL redirect sink
+    window.location.reload()
   }
 }
 

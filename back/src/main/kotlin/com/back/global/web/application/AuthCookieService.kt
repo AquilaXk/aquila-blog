@@ -1,9 +1,11 @@
 package com.back.global.web.application
 
-import jakarta.servlet.http.Cookie
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.HttpHeaders
+import org.springframework.http.ResponseCookie
 import org.springframework.stereotype.Component
+import java.time.Duration
 
 @Component
 class AuthCookieService(
@@ -48,14 +50,16 @@ class AuthCookieService(
     }
 
     private fun expireHostOnlyCookie(name: String) {
-        response.addCookie(
-            Cookie(name, "").apply {
-                setPath("/")
-                setHttpOnly(true)
-                setSecure(true)
-                setAttribute("SameSite", "Strict")
-                setMaxAge(0)
-            },
-        )
+        val hostOnlyCookie =
+            ResponseCookie
+                .from(name, "")
+                .path("/")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .maxAge(Duration.ZERO)
+                .build()
+
+        response.addHeader(HttpHeaders.SET_COOKIE, hostOnlyCookie.toString())
     }
 }

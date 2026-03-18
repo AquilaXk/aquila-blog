@@ -1,4 +1,5 @@
 import { IncomingMessage } from "http"
+import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
 
 type ServerApiFetchInit = RequestInit & {
   timeoutMs?: number
@@ -40,27 +41,16 @@ export const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
     throw new Error("BACKEND_INTERNAL_URL or NEXT_PUBLIC_BACKEND_URL is required in production.")
   }
 
-  const forwardedProto = req.headers["x-forwarded-proto"]
-  const forwardedHost = req.headers["x-forwarded-host"]
-  const protocolRaw = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto
-  const protocol = typeof protocolRaw === "string" && protocolRaw ? protocolRaw.split(",")[0].trim() : "http"
-  const hostRaw = Array.isArray(forwardedHost)
-    ? forwardedHost[0]
-    : typeof forwardedHost === "string"
-      ? forwardedHost
-      : req.headers.host || ""
-  const host = typeof hostRaw === "string" ? hostRaw.split(",")[0].trim() : ""
-  if (!host) return "http://localhost:8080"
-  const apiHost = host.replace(/^www\./, "api.")
-  return `${protocol}://${apiHost}`
+  return "http://localhost:8080"
 }
 
 export const serverApiFetch = (req: IncomingMessage, path: string, init: ServerApiFetchInit = {}) => {
+  const safePath = normalizeApiRequestPath(path)
   const baseUrl = resolveServerApiBaseUrl(req)
   const { timeoutMs: _timeoutMs, ...requestInit } = init
   const headers = new Headers(init.headers)
   const cookie = req.headers.cookie
-  const timeoutMs = resolveServerTimeoutMs(path, init)
+  const timeoutMs = resolveServerTimeoutMs(safePath, init)
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
   const onAbort = () => controller.abort()
@@ -79,7 +69,7 @@ export const serverApiFetch = (req: IncomingMessage, path: string, init: ServerA
     if (init.signal) init.signal.removeEventListener("abort", onAbort)
   }
 
-  return fetch(`${baseUrl}${path}`, {
+  return fetch(`${baseUrl}${safePath}`, {
     ...requestInit,
     headers,
     signal: controller.signal,

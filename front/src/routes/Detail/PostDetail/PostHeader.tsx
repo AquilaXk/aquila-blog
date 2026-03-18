@@ -7,6 +7,7 @@ import ProfileImage from "src/components/ProfileImage"
 import Tag from "src/components/Tag"
 import { formatDateTime } from "src/libs/utils"
 import {
+  parseThumbnailFocusXFromUrl,
   parseThumbnailFocusYFromUrl,
   parseThumbnailZoomFromUrl,
   stripThumbnailFocusFromUrl,
@@ -48,6 +49,7 @@ const PostHeader: React.FC<Props> = ({
       ? formatDateTime(data.modifiedTime, CONFIG.lang)
       : ""
   const thumbnailSrc = data.thumbnail ? stripThumbnailFocusFromUrl(data.thumbnail) : ""
+  const thumbnailFocusX = parseThumbnailFocusXFromUrl(data.thumbnail || "")
   const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
   const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
 
@@ -131,9 +133,9 @@ const PostHeader: React.FC<Props> = ({
             src={thumbnailSrc}
             css={{
               objectFit: "cover",
-              objectPosition: `center ${thumbnailFocusY}%`,
+              objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
               transform: `scale(${thumbnailZoom})`,
-              transformOrigin: `50% ${thumbnailFocusY}%`,
+              transformOrigin: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
             }}
             fill
             alt={data.title}

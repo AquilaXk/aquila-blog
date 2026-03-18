@@ -7,7 +7,6 @@ import {
   ClipboardEvent,
   CSSProperties,
   PointerEvent,
-  WheelEvent,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -33,12 +32,16 @@ import AppIcon from "src/components/icons/AppIcon"
 import MarkdownRenderer from "src/routes/Detail/components/MarkdownRenderer"
 import {
   applyThumbnailTransformToUrl,
+  clampThumbnailFocusX,
   clampThumbnailFocusY,
   clampThumbnailZoom,
+  DEFAULT_THUMBNAIL_FOCUS_X,
   DEFAULT_THUMBNAIL_FOCUS_Y,
   DEFAULT_THUMBNAIL_ZOOM,
+  getThumbnailFocusXFromUrl,
   getThumbnailFocusYFromUrl,
   getThumbnailZoomFromUrl,
+  parseThumbnailFocusXFromUrl,
   parseThumbnailZoomFromUrl,
   parseThumbnailFocusYFromUrl,
   stripThumbnailFocusFromUrl,
@@ -150,6 +153,7 @@ type LocalDraftPayload = {
   content: string
   summary: string
   thumbnailUrl: string
+  thumbnailFocusX: number
   thumbnailFocusY: number
   thumbnailZoom: number
   tags: string[]
@@ -515,8 +519,13 @@ const readLocalDraft = (): LocalDraftPayload | null => {
       visibility === "PRIVATE" || visibility === "PUBLIC_UNLISTED" || visibility === "PUBLIC_LISTED"
     const rawThumbnailUrl =
       typeof parsed.thumbnailUrl === "string" ? normalizeSafeImageUrl(parsed.thumbnailUrl) : ""
+    const legacyFocusX = parseThumbnailFocusXFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X)
     const legacyFocusY = parseThumbnailFocusYFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y)
     const legacyZoom = parseThumbnailZoomFromUrl(rawThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM)
+    const parsedFocusX =
+      typeof parsed.thumbnailFocusX === "number"
+        ? clampThumbnailFocusX(parsed.thumbnailFocusX)
+        : legacyFocusX
     const parsedFocusY =
       typeof parsed.thumbnailFocusY === "number"
         ? clampThumbnailFocusY(parsed.thumbnailFocusY)
@@ -531,6 +540,7 @@ const readLocalDraft = (): LocalDraftPayload | null => {
       content: typeof parsed.content === "string" ? parsed.content : "",
       summary: typeof parsed.summary === "string" ? parsed.summary : "",
       thumbnailUrl: stripThumbnailFocusFromUrl(rawThumbnailUrl),
+      thumbnailFocusX: parsedFocusX,
       thumbnailFocusY: parsedFocusY,
       thumbnailZoom: parsedZoom,
       tags: Array.isArray(parsed.tags)
@@ -745,6 +755,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [postContent, setPostContent] = useState("")
   const [postSummary, setPostSummary] = useState("")
   const [postThumbnailUrl, setPostThumbnailUrl] = useState("")
+  const [postThumbnailFocusX, setPostThumbnailFocusX] = useState(DEFAULT_THUMBNAIL_FOCUS_X)
   const [postThumbnailFocusY, setPostThumbnailFocusY] = useState(DEFAULT_THUMBNAIL_FOCUS_Y)
   const [postThumbnailZoom, setPostThumbnailZoom] = useState(DEFAULT_THUMBNAIL_ZOOM)
   const [postTags, setPostTags] = useState<string[]>([])
@@ -828,7 +839,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const autoLoadedPostIdRef = useRef<string | null>(null)
   const lastWriteFingerprintRef = useRef<string>("")
   const lastWriteIdempotencyKeyRef = useRef<string>("")
+  const previewThumbFrameRef = useRef<HTMLDivElement>(null)
   const previewThumbPointerIdRef = useRef<number | null>(null)
+  const previewThumbDragOriginRef = useRef<{
+    clientX: number
+    clientY: number
+    focusX: number
+    focusY: number
+  } | null>(null)
   const applyProfileState = useCallback((member: MemberMe) => {
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
@@ -901,6 +919,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       content: postContent,
       summary: postSummary,
       thumbnailUrl: postThumbnailUrl,
+      thumbnailFocusX: postThumbnailFocusX,
       thumbnailFocusY: postThumbnailFocusY,
       thumbnailZoom: postThumbnailZoom,
       tags: dedupeStrings(postTags),
@@ -926,6 +945,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     postContent,
     postSummary,
     postTags,
+    postThumbnailFocusX,
     postThumbnailFocusY,
     postThumbnailZoom,
     postThumbnailUrl,
@@ -958,6 +978,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostContent(draft.content)
     setPostSummary(draft.summary)
     setPostThumbnailUrl(draft.thumbnailUrl)
+    setPostThumbnailFocusX(draft.thumbnailFocusX)
     setPostThumbnailFocusY(draft.thumbnailFocusY)
     setPostThumbnailZoom(draft.thumbnailZoom)
     setPreviewThumbnailSourceUrl("")
@@ -999,6 +1020,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
     const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
     const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
+    const syncedThumbnailFocusX = parseThumbnailFocusXFromUrl(
+      parsedThumbnail || fallbackThumbnail,
+      DEFAULT_THUMBNAIL_FOCUS_X
+    )
     const syncedThumbnailFocusY = parseThumbnailFocusYFromUrl(
       parsedThumbnail || fallbackThumbnail,
       DEFAULT_THUMBNAIL_FOCUS_Y
@@ -1007,6 +1032,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostContent(parsed.body)
     setPostSummary(parsed.summary || makePreviewSummary(parsed.body))
     setPostThumbnailUrl(syncedThumbnail)
+    setPostThumbnailFocusX(syncedThumbnailFocusX)
     setPostThumbnailFocusY(syncedThumbnailFocusY)
     setPostThumbnailZoom(syncedThumbnailZoom)
     setPreviewThumbnailSourceUrl(syncedThumbnail)
@@ -1034,21 +1060,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const normalizedThumbnail = resolvedPreviewThumbnail.trim()
     if (!normalizedThumbnail) return ""
     return applyThumbnailTransformToUrl(normalizedThumbnail, {
+      focusX: postThumbnailFocusX,
       focusY: postThumbnailFocusY,
       zoom: postThumbnailZoom,
     })
-  }, [postThumbnailFocusY, postThumbnailZoom, resolvedPreviewThumbnail])
+  }, [postThumbnailFocusX, postThumbnailFocusY, postThumbnailZoom, resolvedPreviewThumbnail])
   const safePreviewThumbnail = useMemo(
     () => normalizeSafePreviewThumbnailUrl(previewThumbnailSourceUrl),
     [previewThumbnailSourceUrl]
   )
-
-  const updatePreviewThumbnailFocusFromPointer = useCallback((frame: HTMLDivElement, clientY: number) => {
-    const rect = frame.getBoundingClientRect()
-    if (rect.height <= 0) return
-    const nextFocusY = ((clientY - rect.top) / rect.height) * 100
-    setPostThumbnailFocusY(clampThumbnailFocusY(nextFocusY))
-  }, [])
 
   const handlePreviewThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (!safePreviewThumbnail || isPreviewThumbnailError) return
@@ -1056,51 +1076,68 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     event.preventDefault()
     previewThumbPointerIdRef.current = event.pointerId
+    previewThumbDragOriginRef.current = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      focusX: postThumbnailFocusX,
+      focusY: postThumbnailFocusY,
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
     setIsPreviewThumbDragging(true)
-    updatePreviewThumbnailFocusFromPointer(event.currentTarget, event.clientY)
-  }, [isPreviewThumbnailError, safePreviewThumbnail, updatePreviewThumbnailFocusFromPointer])
+  }, [isPreviewThumbnailError, postThumbnailFocusX, postThumbnailFocusY, safePreviewThumbnail])
 
   const handlePreviewThumbPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (previewThumbPointerIdRef.current !== event.pointerId) return
-    updatePreviewThumbnailFocusFromPointer(event.currentTarget, event.clientY)
-  }, [updatePreviewThumbnailFocusFromPointer])
+    const origin = previewThumbDragOriginRef.current
+    if (!origin) return
 
-  const handlePreviewThumbPointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+
+    const zoomFactor = Math.max(postThumbnailZoom, 1)
+    const deltaXRatio = ((event.clientX - origin.clientX) / rect.width) * (100 / zoomFactor)
+    const deltaYRatio = ((event.clientY - origin.clientY) / rect.height) * (100 / zoomFactor)
+
+    // Grab-pan UX: 커서를 오른쪽/아래로 끌면 이미지도 같은 방향으로 따라오도록 focus는 반대로 이동.
+    setPostThumbnailFocusX(clampThumbnailFocusX(origin.focusX - deltaXRatio))
+    setPostThumbnailFocusY(clampThumbnailFocusY(origin.focusY - deltaYRatio))
+  }, [postThumbnailZoom])
+
+  const finalizePreviewThumbPointer = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (previewThumbPointerIdRef.current !== event.pointerId) return
 
     previewThumbPointerIdRef.current = null
+    previewThumbDragOriginRef.current = null
     setIsPreviewThumbDragging(false)
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
   }, [])
-
-  const handlePreviewThumbPointerCancel = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (previewThumbPointerIdRef.current !== event.pointerId) return
-
-    previewThumbPointerIdRef.current = null
-    setIsPreviewThumbDragging(false)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }, [])
-
-  const handlePreviewThumbWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    if (!safePreviewThumbnail || isPreviewThumbnailError) return
-
-    event.preventDefault()
-    const delta = event.deltaY < 0 ? 0.08 : -0.08
-    setPostThumbnailZoom((prev) => clampThumbnailZoom(prev + delta))
-  }, [isPreviewThumbnailError, safePreviewThumbnail])
 
   useEffect(() => {
     setIsPreviewThumbnailError(false)
   }, [safePreviewThumbnail])
 
   useEffect(() => {
+    const frame = previewThumbFrameRef.current
+    if (!frame) return
+
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      if (!safePreviewThumbnail || isPreviewThumbnailError) return
+
+      event.preventDefault()
+      const delta = event.deltaY < 0 ? 0.08 : -0.08
+      setPostThumbnailZoom((prev) => clampThumbnailZoom(prev + delta))
+    }
+
+    frame.addEventListener("wheel", handleWheel, { passive: false })
+    return () => frame.removeEventListener("wheel", handleWheel)
+  }, [isPreviewThumbnailError, safePreviewThumbnail])
+
+  useEffect(() => {
     if (isPublishModalOpen) return
     previewThumbPointerIdRef.current = null
+    previewThumbDragOriginRef.current = null
     setIsPreviewThumbDragging(false)
   }, [isPublishModalOpen])
 
@@ -1265,6 +1302,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostContent("")
       setPostSummary("")
       setPostThumbnailUrl("")
+      setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
       setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
       setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
       setPostTags([])
@@ -2315,6 +2353,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       if (!safeUploadedUrl) throw new Error("허용되지 않은 썸네일 URL 형식입니다.")
 
       setPostThumbnailUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
+      setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
       setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
       setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
       setPreviewThumbnailSourceUrl(stripThumbnailFocusFromUrl(safeUploadedUrl))
@@ -3475,13 +3514,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
                   </PostPreviewHeader>
                   <PreviewThumbFrame
+                    ref={previewThumbFrameRef}
                     data-draggable={safePreviewThumbnail && !isPreviewThumbnailError}
                     data-dragging={isPreviewThumbDragging}
                     onPointerDown={handlePreviewThumbPointerDown}
                     onPointerMove={handlePreviewThumbPointerMove}
-                    onPointerUp={handlePreviewThumbPointerUp}
-                    onPointerCancel={handlePreviewThumbPointerCancel}
-                    onWheel={handlePreviewThumbWheel}
+                    onPointerUp={finalizePreviewThumbPointer}
+                    onPointerCancel={finalizePreviewThumbPointer}
                   >
                     {safePreviewThumbnail && !isPreviewThumbnailError ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -3489,9 +3528,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         src={safePreviewThumbnail}
                         alt="포스트 미리보기 썸네일"
                         style={{
-                          objectPosition: `center ${postThumbnailFocusY}%`,
+                          objectPosition: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
                           transform: `scale(${postThumbnailZoom})`,
-                          transformOrigin: `50% ${postThumbnailFocusY}%`,
+                          transformOrigin: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
                         }}
                         onError={() => setIsPreviewThumbnailError(true)}
                       />
@@ -3504,7 +3543,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   </PreviewThumbFrame>
                   {safePreviewThumbnail && !isPreviewThumbnailError ? (
                     <>
-                      <FieldHelp>이미지를 드래그해 보이는 위치를 조정할 수 있습니다. 마우스 휠로 확대/축소도 가능합니다.</FieldHelp>
+                      <FieldHelp>이미지를 잡아 360도(좌/우/상/하/대각)로 이동할 수 있고, 휠 또는 슬라이더로 확대/축소할 수 있습니다.</FieldHelp>
                       <ZoomControlRow>
                         <FieldLabel htmlFor="post-thumbnail-zoom-modal">썸네일 배율</FieldLabel>
                         <ZoomRangeInput
@@ -3531,6 +3570,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     onChange={(e) => {
                       const nextValue = e.target.value
                       setPostThumbnailUrl(nextValue)
+                      const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
+                      if (focusXFromInput !== null) {
+                        setPostThumbnailFocusX(focusXFromInput)
+                      }
                       const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
                       if (focusFromInput !== null) {
                         setPostThumbnailFocusY(focusFromInput)
@@ -3555,6 +3598,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       onClick={() => {
                         const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
                         setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
+                        setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
                         setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
                         setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
                         setPreviewThumbnailSourceUrl("")
@@ -3566,6 +3610,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       type="button"
                       onClick={() => {
                         setPostThumbnailUrl("")
+                        setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
                         setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
                         setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
                         setPreviewThumbnailSourceUrl("")
@@ -4580,6 +4625,10 @@ const PreviewThumbFrame = styled.div`
     cursor: grabbing;
   }
 
+  &[data-dragging="true"] img {
+    transition: none;
+  }
+
   @media (max-width: 780px) {
     width: 100%;
   }
@@ -4591,7 +4640,7 @@ const PreviewThumbFrame = styled.div`
     display: block;
     pointer-events: none;
     -webkit-user-drag: none;
-    transition: transform 0.12s ease;
+    transition: transform 0.12s ease, object-position 0.08s linear;
   }
 
   .placeholder {

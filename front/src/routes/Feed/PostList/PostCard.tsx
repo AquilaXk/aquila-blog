@@ -7,6 +7,7 @@ import styled from "@emotion/styled"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
 import {
+  parseThumbnailFocusXFromUrl,
   parseThumbnailFocusYFromUrl,
   parseThumbnailZoomFromUrl,
   stripThumbnailFocusFromUrl,
@@ -26,6 +27,7 @@ const PostCard: React.FC<Props> = ({ data }) => {
   const commentsCount = data.commentsCount ?? 0
   const likesCount = data.likesCount ?? 0
   const thumbnailSrc = data.thumbnail ? stripThumbnailFocusFromUrl(data.thumbnail) : ""
+  const thumbnailFocusX = parseThumbnailFocusXFromUrl(data.thumbnail || "")
   const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
   const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
 
@@ -42,9 +44,9 @@ const PostCard: React.FC<Props> = ({ data }) => {
               priority={false}
               css={{
                 objectFit: "cover",
-                objectPosition: `center ${thumbnailFocusY}%`,
+                objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
                 transform: `scale(${thumbnailZoom})`,
-                transformOrigin: `50% ${thumbnailFocusY}%`,
+                transformOrigin: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
               }}
             />
           </div>

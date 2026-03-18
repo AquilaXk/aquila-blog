@@ -240,17 +240,21 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
+          const shouldCenterWithinBlock = roundedWidth <= containerWidth
 
-          stage.style.width = `${Math.max(containerWidth, roundedWidth)}px`
+          stage.style.width = `${shouldCenterWithinBlock ? containerWidth : roundedWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
+          stage.style.display = shouldCenterWithinBlock ? "flex" : "block"
+          stage.style.justifyContent = shouldCenterWithinBlock ? "center" : "initial"
 
-          svgElement.setAttribute("preserveAspectRatio", "xMinYMin meet")
+          svgElement.setAttribute("preserveAspectRatio", shouldCenterWithinBlock ? "xMidYMin meet" : "xMinYMin meet")
           svgElement.style.width = `${roundedWidth}px`
           svgElement.style.height = `${roundedHeight}px`
           svgElement.style.maxWidth = "none"
           svgElement.style.maxHeight = "none"
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
+          svgElement.style.margin = shouldCenterWithinBlock ? "0 auto" : "0"
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
 

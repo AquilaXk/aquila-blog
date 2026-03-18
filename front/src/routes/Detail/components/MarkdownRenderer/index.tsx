@@ -822,6 +822,8 @@ const StyledWrapper = styled.div`
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
   word-break: break-word;
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.75;
@@ -858,6 +860,7 @@ const StyledWrapper = styled.div`
     margin: 0.5rem 0;
     font-size: 1rem;
     line-height: 1.72;
+    overflow-wrap: anywhere;
   }
 
   a {
@@ -929,6 +932,7 @@ const StyledWrapper = styled.div`
 
   li {
     line-height: 1.72;
+    overflow-wrap: anywhere;
   }
 
   ul.contains-task-list,

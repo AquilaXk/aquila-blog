@@ -1,6 +1,5 @@
 package com.back.boundedContexts.post.application.port.output
 
-import org.springframework.web.multipart.MultipartFile
 import java.io.InputStream
 
 /**
@@ -9,13 +8,19 @@ import java.io.InputStream
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface PostImageStoragePort {
+    data class UploadImageRequest(
+        val bytes: ByteArray,
+        val contentType: String?,
+        val originalFilename: String?,
+    )
+
     data class StoredImage(
         val inputStream: InputStream,
         val contentType: String,
         val contentLength: Long?,
     )
 
-    fun uploadPostImage(file: MultipartFile): String
+    fun uploadPostImage(request: UploadImageRequest): String
 
     fun getPostImage(objectKey: String): StoredImage?
 

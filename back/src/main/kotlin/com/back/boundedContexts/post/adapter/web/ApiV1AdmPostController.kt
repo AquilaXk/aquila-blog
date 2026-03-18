@@ -17,6 +17,7 @@ import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
+import jakarta.validation.constraints.Size
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -114,8 +115,10 @@ class ApiV1AdmPostController(
     ): PostWithContentDto = PostWithContentDto(postUseCase.findById(id).getOrThrow())
 
     data class GeneratePreviewSummaryRequest(
+        @field:Size(max = 300)
         val title: String = "",
         @field:NotBlank
+        @field:Size(max = 50_000)
         val content: String,
         @field:Min(80)
         @field:Max(220)

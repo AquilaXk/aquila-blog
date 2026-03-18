@@ -2,6 +2,7 @@ package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.global.security.domain.SecurityUser
+import com.back.global.security.domain.toGrantedAuthorities
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
 import org.springframework.security.oauth2.core.user.OAuth2User
@@ -65,7 +66,7 @@ class CustomOAuth2UserService(
             member.username,
             member.password ?: "",
             member.name,
-            member.authorities,
+            member.toGrantedAuthorities(),
         )
     }
 }

@@ -177,6 +177,85 @@ class ApiV1AdmPostControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 AI 미리보기 요약을 생성할 수 있다`() {
+        given(
+            postPreviewSummaryService.generate(
+                title = "요약 테스트 제목",
+                content = "요약 테스트 본문입니다.",
+                maxLength = 150,
+            ),
+        ).willReturn(
+            PostPreviewSummaryService.SummaryResult(
+                summary = "요약 결과",
+                provider = "gemini",
+                model = "gemini-2.5-flash",
+                reason = null,
+            ),
+        )
+
+        mvc
+            .post("/post/api/v1/adm/posts/preview-summary") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "요약 테스트 제목",
+                      "content": "요약 테스트 본문입니다."
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.data.summary") { value("요약 결과") }
+                jsonPath("$.data.provider") { value("gemini") }
+                jsonPath("$.data.model") { value("gemini-2.5-flash") }
+            }
+
+        then(postPreviewSummaryService).should().generate("요약 테스트 제목", "요약 테스트 본문입니다.", 150)
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `요약 본문 길이가 너무 크면 400으로 차단된다`() {
+        val oversizedContent = "a".repeat(50_001)
+
+        mvc
+            .post("/post/api/v1/adm/posts/preview-summary") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "요약 길이 제한",
+                      "content": "$oversizedContent"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `요약 제목 길이가 너무 크면 400으로 차단된다`() {
+        val oversizedTitle = "t".repeat(301)
+
+        mvc
+            .post("/post/api/v1/adm/posts/preview-summary") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                      "title": "$oversizedTitle",
+                      "content": "요약 테스트 본문"
+                    }
+                    """.trimIndent()
+            }.andExpect {
+                status { isBadRequest() }
+            }
+    }
+
+    @Test
     @WithMockUser(roles = ["USER"])
     fun `일반 사용자는 soft delete 글 목록을 조회할 수 없다`() {
         mvc.get("/post/api/v1/adm/posts/deleted").andExpect {

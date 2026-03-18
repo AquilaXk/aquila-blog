@@ -1,10 +1,9 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.global.app.application.AppFacade
+import com.back.global.cache.application.port.output.RedisKeyValuePort
 import com.back.global.exception.application.AppException
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.Instant
@@ -29,7 +28,7 @@ class LoginAttemptService(
     private val memoryCleanupIntervalSeconds: Long,
     @param:Value("\${custom.auth.login.requireRedisInProd:true}")
     private val requireRedisInProd: Boolean,
-    private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
+    private val redisKeyValuePort: RedisKeyValuePort,
 ) {
     private data class LoginAttemptState(
         var windowStartedAt: Long,
@@ -49,10 +48,8 @@ class LoginAttemptService(
         clientIp: String,
     ): Boolean {
         val key = key(username, clientIp)
-        val redisTemplate = resolveRedisTemplate()
-
-        if (redisTemplate != null) {
-            return isBlockedInRedis(redisTemplate, key)
+        if (resolveRedisAvailability()) {
+            return isBlockedInRedis(key)
         }
 
         val now = nowEpochSeconds()
@@ -78,10 +75,8 @@ class LoginAttemptService(
         clientIp: String,
     ): Boolean {
         val key = key(username, clientIp)
-        val redisTemplate = resolveRedisTemplate()
-
-        if (redisTemplate != null) {
-            return recordFailureInRedis(redisTemplate, key)
+        if (resolveRedisAvailability()) {
+            return recordFailureInRedis(key)
         }
 
         val now = nowEpochSeconds()
@@ -121,10 +116,8 @@ class LoginAttemptService(
         clientIp: String,
     ) {
         val key = key(username, clientIp)
-        val redisTemplate = resolveRedisTemplate()
-
-        if (redisTemplate != null) {
-            redisTemplate.delete(listOf(redisFailureKey(key), redisBlockedKey(key)))
+        if (resolveRedisAvailability()) {
+            redisKeyValuePort.delete(listOf(redisFailureKey(key), redisBlockedKey(key)))
             return
         }
 
@@ -133,9 +126,9 @@ class LoginAttemptService(
 
     fun clearAllForTest() {
         states.clear()
-        redisTemplateProvider.getIfAvailable()?.let { redisTemplate ->
-            val keys = redisTemplate.keys("auth:login:*")
-            if (!keys.isNullOrEmpty()) redisTemplate.delete(keys)
+        if (redisKeyValuePort.isAvailable()) {
+            val keys = redisKeyValuePort.keys("auth:login:*")
+            if (keys.isNotEmpty()) redisKeyValuePort.delete(keys)
         }
     }
 
@@ -152,16 +145,8 @@ class LoginAttemptService(
      * 검증 규칙을 적용해 허용 여부를 판정합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    private fun isBlockedInRedis(
-        redisTemplate: StringRedisTemplate,
-        key: String,
-    ): Boolean {
-        val blockedUntil =
-            redisTemplate
-                .opsForValue()
-                .get(redisBlockedKey(key))
-                ?.toLongOrNull()
-                ?: return false
+    private fun isBlockedInRedis(key: String): Boolean {
+        val blockedUntil = redisKeyValuePort.get(redisBlockedKey(key))?.toLongOrNull() ?: return false
 
         return blockedUntil > nowEpochSeconds()
     }
@@ -170,25 +155,21 @@ class LoginAttemptService(
      * 상태 기록을 남기고 제한 정책 계산에 반영합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    private fun recordFailureInRedis(
-        redisTemplate: StringRedisTemplate,
-        key: String,
-    ): Boolean {
-        if (isBlockedInRedis(redisTemplate, key)) return true
+    private fun recordFailureInRedis(key: String): Boolean {
+        if (isBlockedInRedis(key)) return true
 
         val failureKey = redisFailureKey(key)
         val blockedKey = redisBlockedKey(key)
-        val ops = redisTemplate.opsForValue()
-        val failures = ops.increment(failureKey) ?: 0L
+        val failures = redisKeyValuePort.increment(failureKey) ?: 0L
 
         if (failures == 1L) {
-            redisTemplate.expire(failureKey, Duration.ofSeconds(windowSeconds))
+            redisKeyValuePort.expire(failureKey, Duration.ofSeconds(windowSeconds))
         }
 
         if (failures >= maxAttempts.toLong()) {
             val blockedUntil = nowEpochSeconds() + lockSeconds
-            ops.set(blockedKey, blockedUntil.toString(), Duration.ofSeconds(lockSeconds))
-            redisTemplate.delete(failureKey)
+            redisKeyValuePort.set(blockedKey, blockedUntil.toString(), Duration.ofSeconds(lockSeconds))
+            redisKeyValuePort.delete(listOf(failureKey))
             return true
         }
 
@@ -203,12 +184,12 @@ class LoginAttemptService(
      * 실행 시점에 필요한 의존성/값을 결정합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    private fun resolveRedisTemplate(): StringRedisTemplate? {
-        val redisTemplate = redisTemplateProvider.getIfAvailable()
-        if (redisTemplate == null && AppFacade.isProd && requireRedisInProd) {
+    private fun resolveRedisAvailability(): Boolean {
+        val isRedisAvailable = redisKeyValuePort.isAvailable()
+        if (!isRedisAvailable && AppFacade.isProd && requireRedisInProd) {
             throw AppException("503-2", "로그인 보호 시스템이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.")
         }
-        return redisTemplate
+        return isRedisAvailable
     }
 
     /**

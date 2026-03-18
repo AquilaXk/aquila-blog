@@ -311,6 +311,7 @@ const inlineCodeRegex = /`([^`]+)`/g
 const markdownPunctuationRegex = /[#>*_~-]/g
 const whitespaceRegex = /\s+/g
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
+const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 
@@ -398,24 +399,6 @@ const normalizeGeneratedPreviewSummary = (value: string, maxLength = PREVIEW_SUM
   if (!normalized) return ""
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, maxLength).trim()}...`
-}
-
-const isLowQualityGeneratedPreviewSummary = (generated: string, fallback: string) => {
-  const normalizedGenerated = generated.replace(/\s+/g, " ").trim()
-  const normalizedFallback = fallback.replace(/\s+/g, " ").trim()
-  if (!normalizedGenerated) return true
-  if (!normalizedFallback) return false
-
-  const minExpectedLength = Math.max(22, Math.floor(PREVIEW_SUMMARY_MAX_LENGTH * 0.22))
-  const tooShortComparedToFallback =
-    normalizedGenerated.length < minExpectedLength &&
-    normalizedFallback.length >= 36 &&
-    normalizedFallback.length >= normalizedGenerated.length + 16
-  if (tooShortComparedToFallback) return true
-
-  const hasQuotedFragmentPattern =
-    normalizedGenerated.length <= 30 && /["“”]/.test(normalizedGenerated)
-  return hasQuotedFragmentPattern && normalizedFallback.length >= 36
 }
 
 const formatPreviewSummaryReason = (rawReason?: string | null) => {
@@ -1439,6 +1422,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPublishStatus({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." }, "modal")
       return
     }
+    if (content.length > PREVIEW_SUMMARY_MAX_CONTENT_LENGTH) {
+      setPublishStatus(
+        {
+          tone: "error",
+          text: `요약 생성용 본문은 최대 ${PREVIEW_SUMMARY_MAX_CONTENT_LENGTH.toLocaleString()}자까지 지원됩니다.`,
+        },
+        "modal"
+      )
+      return
+    }
     const fallbackSummary = makePreviewSummary(postContent)
 
     try {
@@ -1447,7 +1440,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       const response = await apiFetch<RsData<GeneratePreviewSummaryPayload>>("/post/api/v1/adm/posts/preview-summary", {
         method: "POST",
-        timeoutMs: 18_000,
+        timeoutMs: 30_000,
         body: JSON.stringify({
           title: postTitle,
           content: postContent,
@@ -1466,17 +1459,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           : "규칙 기반"
       const reasonHint =
         response?.data?.provider === "rule" ? formatPreviewSummaryReason(response?.data?.reason) : ""
-      if (fallbackSummary && isLowQualityGeneratedPreviewSummary(generated, fallbackSummary)) {
-        setPostSummary(fallbackSummary)
-        setPublishStatus(
-          {
-            tone: "success",
-            text: `AI 결과가 너무 짧아 규칙 기반 요약으로 보정했습니다. (${providerLabel}${reasonHint ? ` · ${reasonHint}` : ""})`,
-          },
-          "modal"
-        )
-        return
-      }
 
       setPostSummary(generated)
       setPublishStatus(

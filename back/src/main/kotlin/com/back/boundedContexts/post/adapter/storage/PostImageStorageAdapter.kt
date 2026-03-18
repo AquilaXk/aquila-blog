@@ -6,7 +6,6 @@ import com.back.global.exception.application.AppException
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import org.springframework.web.multipart.MultipartFile
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.core.sync.RequestBody
@@ -100,15 +99,15 @@ class PostImageStorageAdapter(
      * 스토리지 I/O를 수행하며 키/경로/콘텐츠 타입 규칙을 함께 검증합니다.
      * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
      */
-    override fun uploadPostImage(file: MultipartFile): String {
+    override fun uploadPostImage(request: PostImageStoragePort.UploadImageRequest): String {
         val client = requireClient()
-        if (file.isEmpty) throw AppException("400-1", "이미지 파일이 비어 있습니다.")
-        if (file.size > properties.maxFileSizeBytes) {
+        if (request.bytes.isEmpty()) throw AppException("400-1", "이미지 파일이 비어 있습니다.")
+        if (request.bytes.size > properties.maxFileSizeBytes) {
             throw AppException("400-1", "이미지 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.")
         }
 
-        val declaredContentType = normalizeDeclaredContentType(file.contentType)
-        val signature = file.inputStream.use { input -> input.readNBytes(16) }
+        val declaredContentType = normalizeDeclaredContentType(request.contentType)
+        val signature = request.bytes.copyOfRange(0, minOf(16, request.bytes.size))
         val detectedType = detectImageContentType(signature)
         if (detectedType == null || detectedType !in allowedContentTypes) {
             throw AppException("400-1", "지원하지 않는 이미지 형식입니다.")
@@ -125,7 +124,7 @@ class PostImageStorageAdapter(
 
         val contentType = detectedType
 
-        val key = buildObjectKey(file.originalFilename)
+        val key = buildObjectKey(request.originalFilename)
 
         try {
             client.putObject(
@@ -135,7 +134,7 @@ class PostImageStorageAdapter(
                     .key(key)
                     .contentType(contentType)
                     .build(),
-                RequestBody.fromInputStream(file.inputStream, file.size),
+                RequestBody.fromBytes(request.bytes),
             )
         } catch (e: Exception) {
             logger.error("Post image upload failed", e)

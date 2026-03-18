@@ -67,10 +67,23 @@ object PostPreviewExtractor {
                 .replace(markdownPunctuationRegex, " ")
                 .replace(whitespaceRegex, " ")
                 .trim()
+        val compactRaw = metadata.body.replace(whitespaceRegex, " ").trim()
+        val relaxedNormalized =
+            compactRaw
+                .replace(markdownPunctuationRegex, " ")
+                .replace(whitespaceRegex, " ")
+                .trim()
+        val fallbackSummaryCandidate =
+            when {
+                normalized.isNotBlank() -> normalized
+                relaxedNormalized.isNotBlank() -> relaxedNormalized
+                compactRaw.isNotBlank() -> compactRaw
+                else -> "요약을 생성할 수 없습니다."
+            }
 
         val summary =
             metadata.summary?.let { truncateSummary(it) }
-                ?: truncateSummary(normalized)
+                ?: truncateSummary(fallbackSummaryCandidate)
 
         return Preview(
             thumbnail = thumbnail,

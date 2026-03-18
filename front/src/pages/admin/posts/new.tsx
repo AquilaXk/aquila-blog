@@ -384,9 +384,12 @@ const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LEN
     .replace(markdownPunctuationRegex, " ")
     .replace(whitespaceRegex, " ")
     .trim()
+  const compactRaw = content.replace(whitespaceRegex, " ").trim()
+  const relaxedNormalized = compactRaw.replace(markdownPunctuationRegex, " ").replace(whitespaceRegex, " ").trim()
+  const fallbackSummary = normalized || relaxedNormalized || compactRaw || "요약을 생성할 수 없습니다."
 
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength).trim()}...`
+  if (fallbackSummary.length <= maxLength) return fallbackSummary
+  return `${fallbackSummary.slice(0, maxLength).trim()}...`
 }
 
 const normalizeGeneratedPreviewSummary = (value: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {

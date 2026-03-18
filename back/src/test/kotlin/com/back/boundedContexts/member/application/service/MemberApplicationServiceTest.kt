@@ -29,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
     JpaConfig::class,
     AppConfig::class,
 )
+@org.junit.jupiter.api.DisplayName("MemberApplicationService 테스트")
 class MemberApplicationServiceTest {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService

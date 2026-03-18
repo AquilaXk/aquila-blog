@@ -44,6 +44,7 @@ import java.util.Optional
     ],
 )
 @Import(ApiV1MemberControllerWebMvcTest.TestSecurityConfig::class)
+@org.junit.jupiter.api.DisplayName("ApiV1MemberControllerWebMvc 테스트")
 class ApiV1MemberControllerWebMvcTest {
     @Autowired
     private lateinit var mvc: MockMvc

@@ -1244,20 +1244,24 @@ const StyledWrapper = styled.div`
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    scrollbar-width: thin;
   }
 
   .aq-mermaid-stage {
+    display: block;
     width: max-content;
     min-width: 100%;
+    max-width: none;
   }
 
   .aq-mermaid-stage > svg {
     display: block;
-    width: 100%;
-    max-width: 100%;
+    width: auto;
+    max-width: none;
     height: auto;
     margin: 0;
     background: transparent;
+    overflow: visible;
   }
 
   .aq-mermaid-stage > svg .nodeLabel p,

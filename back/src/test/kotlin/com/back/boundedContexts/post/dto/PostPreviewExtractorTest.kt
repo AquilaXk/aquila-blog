@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.dto
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("PostPreviewExtractor 테스트")
 class PostPreviewExtractorTest {
     @Test
     fun `extractThumbnail returns first markdown image url`() {

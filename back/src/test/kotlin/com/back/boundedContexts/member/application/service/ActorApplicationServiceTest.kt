@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import java.util.Optional
 
+@org.junit.jupiter.api.DisplayName("ActorApplicationService 테스트")
 class ActorApplicationServiceTest {
     private lateinit var user1: Member
     private lateinit var actorApplicationService: ActorApplicationService

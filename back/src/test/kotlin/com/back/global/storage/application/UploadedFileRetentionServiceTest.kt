@@ -30,6 +30,7 @@ import java.time.Instant
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(UploadedFileRetentionService::class, JpaConfig::class, UploadedFileRetentionServiceTest.TestConfig::class)
+@org.junit.jupiter.api.DisplayName("UploadedFileRetentionService 테스트")
 class UploadedFileRetentionServiceTest {
     @Autowired
     private lateinit var uploadedFileRetentionService: UploadedFileRetentionService

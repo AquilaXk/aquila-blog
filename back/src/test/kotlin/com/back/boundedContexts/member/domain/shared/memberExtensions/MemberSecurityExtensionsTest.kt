@@ -5,6 +5,7 @@ import com.back.global.app.AppConfig
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("MemberSecurityExtensions 테스트")
 class MemberSecurityExtensionsTest {
     @Test
     fun `관리자 회원은 ROLE_ADMIN 권한을 가진다`() {

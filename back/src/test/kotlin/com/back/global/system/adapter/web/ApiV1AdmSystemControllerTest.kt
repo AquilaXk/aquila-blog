@@ -50,6 +50,7 @@ import java.time.Instant
     ],
 )
 @Import(ApiV1AdmSystemControllerTest.TestSecurityConfig::class)
+@org.junit.jupiter.api.DisplayName("ApiV1AdmSystemController 테스트")
 class ApiV1AdmSystemControllerTest {
     @Autowired
     private lateinit var mvc: MockMvc

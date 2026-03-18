@@ -20,6 +20,7 @@ import org.mockito.Mockito.mock
 import org.springframework.cache.CacheManager
 import java.time.Instant
 
+@org.junit.jupiter.api.DisplayName("PostApplicationServiceDeleteResilience 테스트")
 class PostApplicationServiceDeleteResilienceTest {
     private val postRepository: PostRepositoryPort = mock(PostRepositoryPort::class.java)
     private val postAttrRepository: PostAttrRepositoryPort = mock(PostAttrRepositoryPort::class.java)

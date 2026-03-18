@@ -6,6 +6,7 @@ import org.springframework.mock.env.MockEnvironment
 import org.springframework.mock.web.MockHttpSession
 import tools.jackson.databind.ObjectMapper
 
+@org.junit.jupiter.api.DisplayName("HomeController 테스트")
 class HomeControllerTest {
     private val controller = HomeController()
 

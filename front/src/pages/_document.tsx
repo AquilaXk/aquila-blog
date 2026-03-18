@@ -44,7 +44,7 @@ class MyDocument extends Document {
 
   render() {
     return (
-      <Html lang={CONFIG.lang} data-ui-ready="false">
+      <Html lang={CONFIG.lang}>
         <Head>
           <link rel="icon" href="/favicon.ico" />
           <link

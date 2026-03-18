@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Instant
 
+@org.junit.jupiter.api.DisplayName("PostLikeReconciliationService 테스트")
 class PostLikeReconciliationServiceTest {
     private lateinit var post: Post
     private lateinit var likesAttr: PostAttr

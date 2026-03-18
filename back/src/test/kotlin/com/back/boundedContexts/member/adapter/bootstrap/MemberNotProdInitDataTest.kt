@@ -8,6 +8,7 @@ import org.mockito.BDDMockito.then
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 
+@org.junit.jupiter.api.DisplayName("MemberNotProdInitData 테스트")
 class MemberNotProdInitDataTest {
     private val memberUseCase: MemberUseCase = mock(MemberUseCase::class.java)
     private val fixture = MemberNotProdInitData(memberUseCase)

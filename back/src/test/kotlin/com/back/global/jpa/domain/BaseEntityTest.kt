@@ -3,6 +3,7 @@ package com.back.global.jpa.domain
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("BaseEntity 테스트")
 class BaseEntityTest {
     @Test
     fun `id가 0인 transient 엔티티는 서로 다르다`() {

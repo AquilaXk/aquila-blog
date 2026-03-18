@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@org.junit.jupiter.api.DisplayName("ApiV1AdmMemberController 테스트")
 class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var mvc: MockMvc

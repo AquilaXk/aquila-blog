@@ -156,10 +156,10 @@ const StyledWrapper = styled.div`
   .authArea {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.42rem;
-    width: clamp(9.6rem, 29vw, 16.2rem);
-    min-width: clamp(9.6rem, 29vw, 16.2rem);
+    width: auto;
+    min-width: 0;
     max-width: 100%;
     min-height: 36px;
     flex: none;
@@ -170,12 +170,20 @@ const StyledWrapper = styled.div`
     }
   }
 
+  .authArea[data-auth-state="loading"] {
+    min-width: 6.4rem;
+  }
+
+  .authArea[data-auth-state="authenticated"] {
+    min-width: 0;
+  }
+
   .authLoadingShell {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.45rem;
-    width: 100%;
+    width: auto;
   }
 
   .navPill,
@@ -244,8 +252,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 980px) {
     .authArea {
-      width: clamp(8.2rem, 33vw, 11.6rem);
-      min-width: clamp(8.2rem, 33vw, 11.6rem);
+      width: auto;
+      min-width: 0;
       max-width: 100%;
       overflow: visible;
     }
@@ -284,8 +292,8 @@ const StyledWrapper = styled.div`
     }
 
     .authArea {
-      min-width: clamp(6.4rem, 40vw, 8.8rem);
-      width: clamp(6.4rem, 40vw, 8.8rem);
+      min-width: 0;
+      width: auto;
       gap: 0.26rem;
     }
 

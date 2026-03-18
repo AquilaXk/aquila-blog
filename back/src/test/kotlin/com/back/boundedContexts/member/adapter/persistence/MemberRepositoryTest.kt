@@ -18,6 +18,7 @@ import org.springframework.test.context.ActiveProfiles
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(JpaConfig::class)
+@org.junit.jupiter.api.DisplayName("MemberRepository 테스트")
 class MemberRepositoryTest {
     @Autowired
     private lateinit var memberRepository: MemberRepository

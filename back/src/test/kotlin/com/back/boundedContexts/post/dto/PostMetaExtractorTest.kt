@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.dto
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("PostMetaExtractor 테스트")
 class PostMetaExtractorTest {
     @Test
     fun `front matter 에서 tags 와 categories 를 추출한다`() {

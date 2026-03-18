@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.util.Properties
 
+@org.junit.jupiter.api.DisplayName("SmtpSignupVerificationMailSenderAdapter 테스트")
 class SmtpSignupVerificationMailSenderAdapterTest {
     @Test
     fun `회원가입 메일을 utf-8 html 템플릿으로 보낸다`() {

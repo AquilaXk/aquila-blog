@@ -2,8 +2,8 @@ package com.back.boundedContexts.member.adapter.persistence
 
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Component
 import java.util.Optional
 
@@ -33,8 +33,20 @@ class MemberRepositoryAdapter(
 
     override fun getReferenceById(id: Int): Member = memberRepository.getReferenceById(id)
 
-    override fun findQPagedByKw(
-        kw: String,
-        pageable: Pageable,
-    ): Page<Member> = memberRepository.findQPagedByKw(kw, pageable)
+    override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> {
+        val pageable =
+            PageRequest.of(
+                query.zeroBasedPage,
+                query.pageSize,
+                Sort.by(
+                    if (query.sortAscending) Sort.Direction.ASC else Sort.Direction.DESC,
+                    query.sortProperty,
+                ),
+            )
+        val memberPage = memberRepository.findQPagedByKw(query.kw, pageable)
+        return MemberRepositoryPort.PagedResult(
+            content = memberPage.content,
+            totalElements = memberPage.totalElements,
+        )
+    }
 }

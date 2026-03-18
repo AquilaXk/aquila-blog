@@ -157,7 +157,13 @@ class ApiV1AdmMemberController(
         @RequestPart("file") file: MultipartFile,
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
-        val key = postImageStorageService.uploadPostImage(file)
+        val uploadRequest =
+            PostImageStoragePort.UploadImageRequest(
+                bytes = file.bytes,
+                contentType = file.contentType,
+                originalFilename = file.originalFilename,
+            )
+        val key = postImageStorageService.uploadPostImage(uploadRequest)
         uploadedFileRetentionService.registerTempUpload(
             objectKey = key,
             contentType = file.contentType.orEmpty(),

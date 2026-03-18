@@ -54,7 +54,13 @@ class ApiV1PostImageController(
     fun uploadPostImage(
         @RequestPart("file") file: MultipartFile,
     ): RsData<UploadPostImageResBody> {
-        val key = postImageStorageService.uploadPostImage(file)
+        val uploadRequest =
+            PostImageStoragePort.UploadImageRequest(
+                bytes = file.bytes,
+                contentType = file.contentType,
+                originalFilename = file.originalFilename,
+            )
+        val key = postImageStorageService.uploadPostImage(uploadRequest)
         uploadedFileRetentionService.registerTempUpload(
             objectKey = key,
             contentType = file.contentType.orEmpty(),

@@ -8,8 +8,6 @@ import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import java.util.Optional
 
@@ -139,9 +137,7 @@ class ActorApplicationServiceTest {
 
         override fun getReferenceById(id: Int): Member = member.takeIf { it.id == id } ?: error("member not found")
 
-        override fun findQPagedByKw(
-            kw: String,
-            pageable: Pageable,
-        ): Page<Member> = error("not used in this test")
+        override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> =
+            error("not used in this test")
     }
 }

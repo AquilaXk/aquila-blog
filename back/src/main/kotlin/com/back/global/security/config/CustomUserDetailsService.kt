@@ -2,6 +2,7 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.global.security.domain.SecurityUser
+import com.back.global.security.domain.toGrantedAuthorities
 import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
@@ -30,7 +31,7 @@ class CustomUserDetailsService(
             member.username,
             member.password ?: "",
             member.nickname,
-            member.authorities,
+            member.toGrantedAuthorities(),
         )
     }
 }

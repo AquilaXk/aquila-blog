@@ -10,6 +10,7 @@ import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -192,14 +193,22 @@ class MemberApplicationService(
     ): Page<Member> {
         val safeZeroBasedPage = normalizeZeroBasedPage(page)
         val safePageSize = normalizePageSize(pageSize)
+        val query =
+            MemberRepositoryPort.PagedQuery(
+                kw = kw,
+                zeroBasedPage = safeZeroBasedPage,
+                pageSize = safePageSize,
+                sortProperty = sort.property,
+                sortAscending = sort.isAsc,
+            )
+        val memberPage = memberRepository.findQPagedByKw(query)
+        memberProfileHydrator.hydrateAll(memberPage.content)
 
-        return memberRepository
-            .findQPagedByKw(
-                kw,
-                PageRequest.of(safeZeroBasedPage, safePageSize, sort.sortBy),
-            ).also { memberPage ->
-                memberProfileHydrator.hydrateAll(memberPage.content)
-            }
+        return PageImpl(
+            memberPage.content,
+            PageRequest.of(safeZeroBasedPage, safePageSize, sort.sortBy),
+            memberPage.totalElements,
+        )
     }
 
     /**

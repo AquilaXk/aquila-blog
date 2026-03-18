@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.domain.shared.memberExtensions
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.app.AppConfig
+import com.back.global.security.domain.toGrantedAuthorities
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -26,8 +27,7 @@ class MemberSecurityExtensionsTest {
             )
 
         assertThat(admin.isAdmin).isTrue()
-        assertThat(admin.authoritiesAsStringList).containsExactly("ROLE_MEMBER", "ROLE_ADMIN")
-        assertThat(admin.authorities.map { it.authority }).containsExactly("ROLE_MEMBER", "ROLE_ADMIN")
+        assertThat(admin.toGrantedAuthorities().map { it.authority }).containsExactly("ROLE_MEMBER", "ROLE_ADMIN")
     }
 
     @Test
@@ -49,7 +49,6 @@ class MemberSecurityExtensionsTest {
             )
 
         assertThat(user1.isAdmin).isFalse()
-        assertThat(user1.authoritiesAsStringList).containsExactly("ROLE_MEMBER")
-        assertThat(user1.authorities.map { it.authority }).containsExactly("ROLE_MEMBER")
+        assertThat(user1.toGrantedAuthorities().map { it.authority }).containsExactly("ROLE_MEMBER")
     }
 }

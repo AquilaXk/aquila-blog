@@ -2,7 +2,6 @@ package com.back.boundedContexts.member.domain.shared
 
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileCard
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
-import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasSecurity
 import com.back.boundedContexts.post.domain.PostMember
 import com.back.global.app.AppConfig
 import com.back.global.jpa.domain.AfterDDL
@@ -58,7 +57,6 @@ class Member(
     var apiKey: String,
 ) : BaseTime(id),
     PostMember,
-    MemberHasSecurity,
     MemberHasProfileImgUrl,
     MemberHasProfileCard {
     constructor(

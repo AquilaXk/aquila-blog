@@ -171,20 +171,14 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         const rect = block.getBoundingClientRect()
 
         const renderSourceIntoBlock = async (sourceToRender: string) => {
-          const viewportWidth = Math.max(280, Math.floor(window.innerWidth - 24))
           const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
-          const desktopTargetWidth = Math.max(360, Math.floor(rect.width))
-          const mobileTargetWidth = Math.max(
-            320,
-            Math.min(desktopTargetWidth, Math.floor(viewportWidth * 1.6))
-          )
-          const stageMinWidth = isMobileViewport ? mobileTargetWidth : desktopTargetWidth
+          const containerWidth = Math.max(280, Math.floor(rect.width))
           const reserveHeight = Math.max(120, Math.ceil(block.getBoundingClientRect().height))
 
           const stage = document.createElement("div")
           stage.className = "aq-mermaid-stage mermaid"
-          stage.style.minWidth = `${stageMinWidth}px`
-          stage.style.width = "100%"
+          stage.style.minWidth = `${containerWidth}px`
+          stage.style.width = `${containerWidth}px`
           stage.style.minHeight = `${reserveHeight}px`
           block.style.minHeight = `${reserveHeight}px`
           block.innerHTML = ""
@@ -199,8 +193,65 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
           const svgElement = stage.querySelector("svg")
           if (!svgElement) throw new Error("Mermaid SVG 생성 실패")
-          svgElement.style.maxWidth = "100%"
-          svgElement.style.height = "auto"
+
+          const viewBox = svgElement.getAttribute("viewBox") || ""
+          const viewBoxValues = viewBox
+            .split(/\s+/)
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value))
+          const viewBoxWidth = viewBoxValues.length === 4 ? viewBoxValues[2] : NaN
+          const viewBoxHeight = viewBoxValues.length === 4 ? viewBoxValues[3] : NaN
+          const fallbackRect = svgElement.getBoundingClientRect()
+          const intrinsicWidth =
+            Number.isFinite(viewBoxWidth) && viewBoxWidth > 0 ? viewBoxWidth : Math.max(1, fallbackRect.width)
+          const intrinsicHeight =
+            Number.isFinite(viewBoxHeight) && viewBoxHeight > 0
+              ? viewBoxHeight
+              : Math.max(1, fallbackRect.height)
+
+          const minReadableHeight = isMobileViewport ? 120 : 170
+          const maxReadableHeight = isMobileViewport
+            ? Math.min(460, Math.floor(window.innerHeight * 0.56))
+            : Math.min(760, Math.floor(window.innerHeight * 0.72))
+          const maxScrollableWidth = isMobileViewport
+            ? Math.max(containerWidth * 2.2, 1200)
+            : Math.max(containerWidth * 3, 2400)
+
+          let targetWidth = intrinsicWidth
+          let targetHeight = intrinsicHeight
+
+          if (targetHeight < minReadableHeight) {
+            const scaleUp = minReadableHeight / targetHeight
+            targetWidth *= scaleUp
+            targetHeight *= scaleUp
+          }
+
+          if (targetHeight > maxReadableHeight) {
+            const scaleDown = maxReadableHeight / targetHeight
+            targetWidth *= scaleDown
+            targetHeight *= scaleDown
+          }
+
+          if (targetWidth > maxScrollableWidth) {
+            const scaleDownByWidth = maxScrollableWidth / targetWidth
+            targetWidth *= scaleDownByWidth
+            targetHeight *= scaleDownByWidth
+          }
+
+          const roundedWidth = Math.max(1, Math.round(targetWidth))
+          const roundedHeight = Math.max(1, Math.round(targetHeight))
+
+          stage.style.width = `${Math.max(containerWidth, roundedWidth)}px`
+          stage.style.minHeight = `${roundedHeight}px`
+
+          svgElement.setAttribute("preserveAspectRatio", "xMinYMin meet")
+          svgElement.style.width = `${roundedWidth}px`
+          svgElement.style.height = `${roundedHeight}px`
+          svgElement.style.maxWidth = "none"
+          svgElement.style.maxHeight = "none"
+          svgElement.style.minHeight = "0"
+          svgElement.style.objectFit = "contain"
+          svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
 
           // 렌더 완료 이후에만 높이 고정을 해제해 새로고침 시 레이아웃 점프를 줄인다.

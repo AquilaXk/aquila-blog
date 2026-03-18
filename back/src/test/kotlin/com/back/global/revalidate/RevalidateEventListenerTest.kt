@@ -18,6 +18,7 @@ import java.util.UUID
 
 @ActiveProfiles("test")
 @SpringBootTest
+@org.junit.jupiter.api.DisplayName("RevalidateEventListener 테스트")
 class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var memberApplicationService: MemberApplicationService

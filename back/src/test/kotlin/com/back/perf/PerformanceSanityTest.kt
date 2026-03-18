@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional
         "spring.jpa.properties.hibernate.generate_statistics=true",
     ],
 )
+@org.junit.jupiter.api.DisplayName("PerformanceSanity 테스트")
 class PerformanceSanityTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var mvc: MockMvc

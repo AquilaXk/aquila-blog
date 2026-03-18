@@ -8,6 +8,7 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("ArchitectureGuard 테스트")
 class ArchitectureGuardTest {
     private fun importedClasses(): JavaClasses =
         ClassFileImporter()

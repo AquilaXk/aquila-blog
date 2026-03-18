@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.domain.shared
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("Member 테스트")
 class MemberTest {
     @Test
     fun `SYSTEM 회원은 system 고정 정보로 생성된다`() {

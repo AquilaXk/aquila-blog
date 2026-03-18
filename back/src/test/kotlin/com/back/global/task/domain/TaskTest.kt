@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.UUID
 
+@org.junit.jupiter.api.DisplayName("Task 테스트")
 class TaskTest {
     @Test
     fun `scheduleRetry는 retry policy를 기준으로 pending retry를 예약한다`() {

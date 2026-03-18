@@ -16,6 +16,7 @@ import org.springframework.test.context.ActiveProfiles
 
 @ActiveProfiles("test")
 @SpringBootTest
+@org.junit.jupiter.api.DisplayName("MemberNotificationEventListener 테스트")
 class MemberNotificationEventListenerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService

@@ -751,6 +751,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [publishActionType, setPublishActionType] = useState<PublishActionType>("create")
   const [isPreviewThumbnailError, setIsPreviewThumbnailError] = useState(false)
+  const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
 
   const [listPage, setListPage] = useState("1")
@@ -900,6 +901,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostContent(draft.content)
     setPostSummary(draft.summary)
     setPostThumbnailUrl(draft.thumbnailUrl)
+    setPreviewThumbnailSourceUrl("")
     setPostTags(draft.tags)
     setPostCategory(draft.category)
     setPostVisibility(draft.visibility)
@@ -935,11 +937,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
     const parsedCategory = splitCategoryDisplay(parsed.category)
+    const syncedThumbnail =
+      normalizeSafeImageUrl(parsed.thumbnail) || normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
     setPostContent(parsed.body)
     setPostSummary(parsed.summary || makePreviewSummary(parsed.body))
-    setPostThumbnailUrl(
-      normalizeSafeImageUrl(parsed.thumbnail) || normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
-    )
+    setPostThumbnailUrl(syncedThumbnail)
+    setPreviewThumbnailSourceUrl(syncedThumbnail)
     setPostTags(parsed.tags)
     setPostCategory(parsed.category)
     setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
@@ -965,8 +968,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     [resolvedPreviewThumbnail]
   )
   const safePreviewThumbnail = useMemo(
-    () => normalizeSafePreviewThumbnailUrl(resolvedPreviewThumbnail),
-    [resolvedPreviewThumbnail]
+    () => normalizeSafePreviewThumbnailUrl(previewThumbnailSourceUrl),
+    [previewThumbnailSourceUrl]
   )
 
   useEffect(() => {
@@ -1126,6 +1129,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setIsTempDraftMode(false)
     setPostId("")
     setPostVersion(null)
+    setPreviewThumbnailSourceUrl("")
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     if (!keepContent) {
@@ -2177,8 +2181,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const uploaded = await uploadPostImageFile(file)
       const uploadedUrl = uploaded.data?.url?.trim()
       if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+      const safeUploadedUrl = normalizeSafeImageUrl(uploadedUrl)
+      if (!safeUploadedUrl) throw new Error("허용되지 않은 썸네일 URL 형식입니다.")
 
-      setPostThumbnailUrl(normalizeSafeImageUrl(uploadedUrl))
+      setPostThumbnailUrl(safeUploadedUrl)
+      setPreviewThumbnailSourceUrl(safeUploadedUrl)
       setIsPreviewThumbnailError(false)
       setPublishStatus({
         tone: "success",
@@ -3355,7 +3362,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     id="post-thumbnail-url-modal"
                     placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
                     value={postThumbnailUrl}
-                    onChange={(e) => setPostThumbnailUrl(e.target.value)}
+                    onChange={(e) => {
+                      setPostThumbnailUrl(e.target.value)
+                      setPreviewThumbnailSourceUrl("")
+                    }}
                   />
                   <MetaActionRow>
                     <Button
@@ -3367,11 +3377,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </Button>
                     <Button
                       type="button"
-                      onClick={() => setPostThumbnailUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(postContent)))}
+                      onClick={() => {
+                        setPostThumbnailUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(postContent)))
+                        setPreviewThumbnailSourceUrl("")
+                      }}
                     >
                       본문 첫 이미지 가져오기
                     </Button>
-                    <Button type="button" onClick={() => setPostThumbnailUrl("")}>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setPostThumbnailUrl("")
+                        setPreviewThumbnailSourceUrl("")
+                      }}
+                    >
                       자동 모드로 되돌리기
                     </Button>
                   </MetaActionRow>

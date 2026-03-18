@@ -9,6 +9,7 @@ import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
@@ -168,13 +169,35 @@ class MemberApplicationService(
         sort: MemberSearchSortType1,
         page: Int,
         pageSize: Int,
-    ) = memberRepository
-        .findQPagedByKw(
-            kw,
-            PageRequest.of(page - 1, pageSize, sort.sortBy),
-        ).also { memberPage ->
-            memberProfileHydrator.hydrateAll(memberPage.content)
+    ): Page<Member> {
+        val safeZeroBasedPage = normalizeZeroBasedPage(page)
+        val safePageSize = normalizePageSize(pageSize)
+
+        return memberRepository
+            .findQPagedByKw(
+                kw,
+                PageRequest.of(safeZeroBasedPage, safePageSize, sort.sortBy),
+            ).also { memberPage ->
+                memberProfileHydrator.hydrateAll(memberPage.content)
+            }
+    }
+
+    private fun normalizeZeroBasedPage(page: Int): Int {
+        if (page < 1) {
+            throw AppException("400-1", "page는 1 이상이어야 합니다.")
         }
+
+        // page >= 1 일 때만 변환하여 underflow 가능성을 제거한다.
+        return if (page == 1) 0 else page - 1
+    }
+
+    private fun normalizePageSize(pageSize: Int): Int {
+        if (pageSize !in 1..30) {
+            throw AppException("400-1", "pageSize는 1~30 범위여야 합니다.")
+        }
+
+        return pageSize
+    }
 
     private fun saveProfileImgUrlAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitProfileImgUrlAttr())

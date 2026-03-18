@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
+@org.junit.jupiter.api.DisplayName("AuthTokenService 테스트")
 class AuthTokenServiceTest {
     private val authTokenService =
         AuthTokenService(

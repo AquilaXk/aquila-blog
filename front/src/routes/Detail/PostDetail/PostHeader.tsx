@@ -20,6 +20,7 @@ type Props = {
   hitCount?: number
   actorHasLiked?: boolean
   likePending?: boolean
+  hideLikeActionOnDesktop?: boolean
   onToggleLike?: () => void
   showModifyAction?: boolean
   showDeleteAction?: boolean
@@ -34,6 +35,7 @@ const PostHeader: React.FC<Props> = ({
   hitCount,
   actorHasLiked = false,
   likePending = false,
+  hideLikeActionOnDesktop = false,
   onToggleLike,
   showModifyAction = false,
   showDeleteAction = false,
@@ -113,6 +115,7 @@ const PostHeader: React.FC<Props> = ({
             className="likeButton"
             aria-pressed={actorHasLiked}
             data-active={actorHasLiked}
+            data-hide-desktop={hideLikeActionOnDesktop}
             disabled={likePending}
             onClick={onToggleLike}
           >
@@ -169,7 +172,7 @@ const StyledWrapper = styled.header`
 
   .title {
     margin: 0;
-    font-size: clamp(2rem, 4.2vw, 3.2rem);
+    font-size: clamp(1.94rem, 3.8vw, 3rem);
     line-height: 1.18;
     letter-spacing: -0.035em;
     font-weight: 780;
@@ -360,7 +363,7 @@ const StyledWrapper = styled.header`
     }
 
     .title {
-      font-size: clamp(1.8rem, 8vw, 2.4rem);
+      font-size: clamp(1.75rem, 7.8vw, 2.3rem);
       line-height: 1.2;
     }
 
@@ -379,5 +382,11 @@ const StyledWrapper = styled.header`
       font-size: 0.86rem;
     }
 
+  }
+
+  @media (min-width: 1241px) {
+    .likeButton[data-hide-desktop="true"] {
+      display: none;
+    }
   }
 `

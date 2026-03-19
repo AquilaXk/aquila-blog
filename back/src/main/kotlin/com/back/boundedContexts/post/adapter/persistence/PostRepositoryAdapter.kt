@@ -5,8 +5,8 @@ import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Component
 import java.util.Optional
 
@@ -43,20 +43,23 @@ class PostRepositoryAdapter(
         title: String,
     ): Boolean = postRepository.existsByAuthorAndTitle(author, title)
 
-    override fun findQPagedByKw(
-        kw: String,
-        pageable: Pageable,
-    ): Page<Post> = postRepository.findQPagedByKw(kw, pageable)
+    override fun findQPagedByKw(query: PostRepositoryPort.PagedQuery): PostRepositoryPort.PagedResult<Post> {
+        val pageable = query.toPageRequest()
+        val page = postRepository.findQPagedByKw(query.kw, pageable)
+        return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
+    }
 
-    override fun findQPagedByKwForAdmin(
-        kw: String,
-        pageable: Pageable,
-    ): Page<Post> = postRepository.findQPagedByKwForAdmin(kw, pageable)
+    override fun findQPagedByKwForAdmin(query: PostRepositoryPort.PagedQuery): PostRepositoryPort.PagedResult<Post> {
+        val pageable = query.toPageRequest()
+        val page = postRepository.findQPagedByKwForAdmin(query.kw, pageable)
+        return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
+    }
 
-    override fun findDeletedPagedByKw(
-        kw: String,
-        pageable: Pageable,
-    ): Page<AdmDeletedPostDto> = postDeletedQueryRepository.findDeletedPagedByKw(kw, pageable)
+    override fun findDeletedPagedByKw(query: PostRepositoryPort.DeletedPagedQuery): PostRepositoryPort.PagedResult<AdmDeletedPostDto> {
+        val pageable = PageRequest.of(query.zeroBasedPage, query.pageSize)
+        val page = postDeletedQueryRepository.findDeletedPagedByKw(query.kw, pageable)
+        return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
+    }
 
     override fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto? = postDeletedQueryRepository.findDeletedSnapshotById(id)
 
@@ -68,15 +71,18 @@ class PostRepositoryAdapter(
 
     override fun findQPagedByAuthorAndKw(
         author: Member,
-        kw: String,
-        pageable: Pageable,
-    ): Page<Post> = postRepository.findQPagedByAuthorAndKw(author, kw, pageable)
+        query: PostRepositoryPort.PagedQuery,
+    ): PostRepositoryPort.PagedResult<Post> {
+        val pageable = query.toPageRequest()
+        val page = postRepository.findQPagedByAuthorAndKw(author, query.kw, pageable)
+        return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
+    }
 
-    override fun findQPagedByKwAndTag(
-        kw: String,
-        tag: String,
-        pageable: Pageable,
-    ): Page<Post> = postRepository.findQPagedByKwAndTag(kw, tag, pageable)
+    override fun findQPagedByKwAndTag(query: PostRepositoryPort.TaggedPagedQuery): PostRepositoryPort.PagedResult<Post> {
+        val pageable = query.toPageRequest()
+        val page = postRepository.findQPagedByKwAndTag(query.kw, query.tag, pageable)
+        return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
+    }
 
     override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()
 
@@ -89,4 +95,18 @@ class PostRepositoryAdapter(
     ): Boolean = postRepository.existsByIdAndContentContaining(id, contentFragment)
 
     override fun existsByContentContaining(contentFragment: String): Boolean = postRepository.existsByContentContaining(contentFragment)
+
+    private fun PostRepositoryPort.PagedQuery.toPageRequest(): PageRequest =
+        PageRequest.of(
+            zeroBasedPage,
+            pageSize,
+            Sort.by(if (sortAscending) Sort.Direction.ASC else Sort.Direction.DESC, sortProperty),
+        )
+
+    private fun PostRepositoryPort.TaggedPagedQuery.toPageRequest(): PageRequest =
+        PageRequest.of(
+            zeroBasedPage,
+            pageSize,
+            Sort.by(if (sortAscending) Sort.Direction.ASC else Sort.Direction.DESC, sortProperty),
+        )
 }

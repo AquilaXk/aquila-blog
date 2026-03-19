@@ -7,6 +7,7 @@ import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.member.type1.MemberSearchSortType1
+import com.back.standard.dto.page.PagedResult
 import org.hamcrest.Matchers.containsInAnyOrder
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.BeforeAll
@@ -20,8 +21,6 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.FilterType
 import org.springframework.context.annotation.Import
-import org.springframework.data.domain.PageImpl
-import org.springframework.data.domain.PageRequest
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
@@ -87,7 +86,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
             val first = sampleMember(id = 1, username = "admin", nickname = "관리자", isAdmin = true)
             val second = sampleMember(id = 2, username = "user1", nickname = "사용자")
             given(memberUseCase.findPagedByKw("", MemberSearchSortType1.CREATED_AT, 1, 30))
-                .willReturn(PageImpl(listOf(first, second), PageRequest.of(0, 30), 2))
+                .willReturn(PagedResult(content = listOf(first, second), page = 1, pageSize = 30, totalElements = 2))
 
             val resultActions =
                 mvc
@@ -121,7 +120,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
             val matchedOne = sampleMember(id = 10, username = "android-a", nickname = "안드로이드 가이드")
             val matchedTwo = sampleMember(id = 11, username = "android-guide", nickname = "일반 사용자")
             given(memberUseCase.findPagedByKw("android", MemberSearchSortType1.CREATED_AT, 1, 10))
-                .willReturn(PageImpl(listOf(matchedOne, matchedTwo), PageRequest.of(0, 10), 2))
+                .willReturn(PagedResult(content = listOf(matchedOne, matchedTwo), page = 1, pageSize = 10, totalElements = 2))
 
             mvc
                 .get("/member/api/v1/adm/members") {
@@ -141,7 +140,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
             val first = sampleMember(id = 1, username = "admin", nickname = "관리자", isAdmin = true)
             val second = sampleMember(id = 2, username = "user1", nickname = "사용자")
             given(memberUseCase.findPagedByKw("", MemberSearchSortType1.CREATED_AT, 1, 30))
-                .willReturn(PageImpl(listOf(first, second), PageRequest.of(0, 30), 2))
+                .willReturn(PagedResult(content = listOf(first, second), page = 1, pageSize = 30, totalElements = 2))
 
             mvc
                 .get("/member/api/v1/adm/members") {
@@ -199,7 +198,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
             member.profileRole = "Backend Engineer"
             member.profileBio = "회원 목록 hydrate 검증용 bio"
             given(memberUseCase.findPagedByKw("profile-list-user", MemberSearchSortType1.CREATED_AT, 1, 10))
-                .willReturn(PageImpl(listOf(member), PageRequest.of(0, 10), 1))
+                .willReturn(PagedResult(content = listOf(member), page = 1, pageSize = 10, totalElements = 1))
 
             mvc
                 .get("/member/api/v1/adm/members") {

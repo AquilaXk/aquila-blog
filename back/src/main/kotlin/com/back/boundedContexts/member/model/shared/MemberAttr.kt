@@ -1,4 +1,4 @@
-package com.back.boundedContexts.member.domain.shared
+package com.back.boundedContexts.member.model.shared
 
 import com.back.global.jpa.domain.BaseTime
 import com.back.global.jpa.domain.EntityAttr

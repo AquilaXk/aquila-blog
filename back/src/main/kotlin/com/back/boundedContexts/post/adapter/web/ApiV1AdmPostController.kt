@@ -1,7 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.application.port.input.PostPreviewSummaryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
-import com.back.boundedContexts.post.application.service.PostPreviewSummaryService
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
@@ -38,7 +38,7 @@ import org.springframework.web.bind.annotation.RestController
 @SecurityRequirement(name = "bearerAuth")
 class ApiV1AdmPostController(
     private val postUseCase: PostUseCase,
-    private val postPreviewSummaryService: PostPreviewSummaryService,
+    private val postPreviewSummaryUseCase: PostPreviewSummaryUseCase,
 ) {
     data class AdmPostCountResBody(
         val all: Long,
@@ -143,7 +143,7 @@ class ApiV1AdmPostController(
         @Valid @RequestBody reqBody: GeneratePreviewSummaryRequest,
     ): RsData<GeneratePreviewSummaryResBody> {
         val result =
-            postPreviewSummaryService.generate(
+            postPreviewSummaryUseCase.generate(
                 title = reqBody.title,
                 content = reqBody.content,
                 maxLength = reqBody.maxLength ?: 150,

@@ -1,10 +1,10 @@
 package com.back.boundedContexts.member.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
+import com.back.boundedContexts.member.application.port.input.AuthTokenIssueUseCase
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
+import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicyUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
-import com.back.boundedContexts.member.application.service.ActorApplicationService
-import com.back.boundedContexts.member.application.service.AuthTokenService
-import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.dto.MemberDto
@@ -35,10 +35,10 @@ import org.springframework.web.bind.annotation.RestController
 class ApiV1AuthController(
     private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val memberUseCase: MemberUseCase,
-    private val actorApplicationService: ActorApplicationService,
-    private val authTokenService: AuthTokenService,
+    private val actorQueryUseCase: ActorQueryUseCase,
+    private val authTokenIssueUseCase: AuthTokenIssueUseCase,
     private val authCookieService: AuthCookieService,
-    private val loginAttemptService: LoginAttemptService,
+    private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
 ) {
     data class MemberLoginRequest(
         @field:NotBlank
@@ -66,16 +66,16 @@ class ApiV1AuthController(
         val username = reqBody.username.trim()
         val clientIp = extractClientIp(request)
 
-        if (loginAttemptService.isBlocked(username, clientIp)) {
+        if (loginAttemptPolicyUseCase.isBlocked(username, clientIp)) {
             throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
 
         val authCandidate =
-            actorApplicationService
+            actorQueryUseCase
                 .findByUsername(username)
                 ?.takeIf { isPasswordValid(it, reqBody.password) }
                 ?: run {
-                    val blocked = loginAttemptService.recordFailure(username, clientIp)
+                    val blocked = loginAttemptPolicyUseCase.recordFailure(username, clientIp)
                     if (blocked) throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
                     throw AppException("401-1", "아이디 또는 비밀번호가 올바르지 않습니다.")
                 }
@@ -85,11 +85,11 @@ class ApiV1AuthController(
                 .findById(authCandidate.id)
                 .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
 
-        loginAttemptService.clear(username, clientIp)
+        loginAttemptPolicyUseCase.clear(username, clientIp)
 
         // 로그인 성공 시 장기 인증 식별자(apiKey)를 회전해 탈취된 기존 키 재사용 위험을 줄인다.
         member.modifyApiKey(MemberPolicy.genApiKey())
-        val accessToken = authTokenService.genAccessToken(member)
+        val accessToken = authTokenIssueUseCase.genAccessToken(member)
 
         authCookieService.issueAuthCookies(member.apiKey, accessToken)
 

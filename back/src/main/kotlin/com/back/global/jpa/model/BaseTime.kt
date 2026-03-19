@@ -1,4 +1,4 @@
-package com.back.global.jpa.domain
+package com.back.global.jpa.model
 
 import jakarta.persistence.EntityListeners
 import jakarta.persistence.MappedSuperclass

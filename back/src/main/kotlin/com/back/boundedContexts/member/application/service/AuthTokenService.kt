@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.application.port.input.AuthTokenIssueUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import io.jsonwebtoken.Jwts
@@ -18,13 +19,13 @@ class AuthTokenService(
     private val jwtSecretKey: String,
     @param:Value("\${custom.accessToken.expirationSeconds}")
     private val accessTokenExpirationSeconds: Int,
-) {
+) : AuthTokenIssueUseCase {
     init {
         require(jwtSecretKey.isNotBlank()) { "CUSTOM__JWT__SECRET_KEY must be configured." }
         require(jwtSecretKey.toByteArray().size >= 32) { "CUSTOM__JWT__SECRET_KEY must be at least 32 bytes." }
     }
 
-    fun genAccessToken(member: Member): String =
+    override fun genAccessToken(member: Member): String =
         Jwts
             .builder()
             .claims(

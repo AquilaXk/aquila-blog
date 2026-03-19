@@ -1,6 +1,7 @@
-package com.back.boundedContexts.member.subContexts.notification.domain
+package com.back.boundedContexts.member.subContexts.notification.model
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.subContexts.notification.domain.MemberNotificationType
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime
 import jakarta.persistence.Column

@@ -4,8 +4,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.Pageable
 import java.util.Optional
 
 /**
@@ -14,6 +12,34 @@ import java.util.Optional
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface PostRepositoryPort {
+    data class PagedQuery(
+        val kw: String,
+        val zeroBasedPage: Int,
+        val pageSize: Int,
+        val sortProperty: String,
+        val sortAscending: Boolean,
+    )
+
+    data class TaggedPagedQuery(
+        val kw: String,
+        val tag: String,
+        val zeroBasedPage: Int,
+        val pageSize: Int,
+        val sortProperty: String,
+        val sortAscending: Boolean,
+    )
+
+    data class DeletedPagedQuery(
+        val kw: String,
+        val zeroBasedPage: Int,
+        val pageSize: Int,
+    )
+
+    data class PagedResult<T>(
+        val content: List<T>,
+        val totalElements: Long,
+    )
+
     fun count(): Long
 
     fun countByAuthor(author: Member): Long
@@ -38,20 +64,11 @@ interface PostRepositoryPort {
         title: String,
     ): Boolean
 
-    fun findQPagedByKw(
-        kw: String,
-        pageable: Pageable,
-    ): Page<Post>
+    fun findQPagedByKw(query: PagedQuery): PagedResult<Post>
 
-    fun findQPagedByKwForAdmin(
-        kw: String,
-        pageable: Pageable,
-    ): Page<Post>
+    fun findQPagedByKwForAdmin(query: PagedQuery): PagedResult<Post>
 
-    fun findDeletedPagedByKw(
-        kw: String,
-        pageable: Pageable,
-    ): Page<AdmDeletedPostDto>
+    fun findDeletedPagedByKw(query: DeletedPagedQuery): PagedResult<AdmDeletedPostDto>
 
     fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto?
 
@@ -63,15 +80,10 @@ interface PostRepositoryPort {
 
     fun findQPagedByAuthorAndKw(
         author: Member,
-        kw: String,
-        pageable: Pageable,
-    ): Page<Post>
+        query: PagedQuery,
+    ): PagedResult<Post>
 
-    fun findQPagedByKwAndTag(
-        kw: String,
-        tag: String,
-        pageable: Pageable,
-    ): Page<Post>
+    fun findQPagedByKwAndTag(query: TaggedPagedQuery): PagedResult<Post>
 
     fun findAllPublicListedContents(): List<String>
 

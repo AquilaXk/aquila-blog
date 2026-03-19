@@ -40,12 +40,11 @@ import com.back.global.event.application.EventPublisher
 import com.back.global.exception.application.AppException
 import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
 import org.springframework.cache.CacheManager
 import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -626,11 +625,16 @@ class PostApplicationService(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> =
-        findAndHydratePagedPosts {
+    ): PagedResult<Post> =
+        findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByKw(
-                kw,
-                PageRequest.of(page - 1, pageSize, sort.sortBy),
+                PostRepositoryPort.PagedQuery(
+                    kw = kw,
+                    zeroBasedPage = page - 1,
+                    pageSize = pageSize,
+                    sortProperty = sort.property,
+                    sortAscending = sort.isAsc,
+                ),
             )
         }
 
@@ -639,11 +643,16 @@ class PostApplicationService(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> =
-        findAndHydratePagedPosts {
+    ): PagedResult<Post> =
+        findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByKwForAdmin(
-                kw,
-                PageRequest.of(page - 1, pageSize, sort.sortBy),
+                PostRepositoryPort.PagedQuery(
+                    kw = kw,
+                    zeroBasedPage = page - 1,
+                    pageSize = pageSize,
+                    sortProperty = sort.property,
+                    sortAscending = sort.isAsc,
+                ),
             )
         }
 
@@ -655,11 +664,22 @@ class PostApplicationService(
         kw: String,
         page: Int,
         pageSize: Int,
-    ): Page<AdmDeletedPostDto> =
-        postRepository.findDeletedPagedByKw(
-            kw,
-            PageRequest.of(page - 1, pageSize),
+    ): PagedResult<AdmDeletedPostDto> {
+        val pageResult =
+            postRepository.findDeletedPagedByKw(
+                PostRepositoryPort.DeletedPagedQuery(
+                    kw = kw,
+                    zeroBasedPage = page - 1,
+                    pageSize = pageSize,
+                ),
+            )
+        return PagedResult(
+            content = pageResult.content,
+            page = page,
+            pageSize = pageSize,
+            totalElements = pageResult.totalElements,
         )
+    }
 
     /**
      * 삭제/복구 흐름을 처리하고 연관 데이터 정합성을 함께 보정합니다.
@@ -731,12 +751,17 @@ class PostApplicationService(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> =
-        findAndHydratePagedPosts {
+    ): PagedResult<Post> =
+        findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByAuthorAndKw(
                 toPersistenceMember(author),
-                kw,
-                PageRequest.of(page - 1, pageSize, sort.sortBy),
+                PostRepositoryPort.PagedQuery(
+                    kw = kw,
+                    zeroBasedPage = page - 1,
+                    pageSize = pageSize,
+                    sortProperty = sort.property,
+                    sortAscending = sort.isAsc,
+                ),
             )
         }
 
@@ -746,12 +771,17 @@ class PostApplicationService(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> =
-        findAndHydratePagedPosts {
+    ): PagedResult<Post> =
+        findAndHydratePagedPosts(page, pageSize) {
             postRepository.findQPagedByKwAndTag(
-                kw,
-                tag,
-                PageRequest.of(page - 1, pageSize, sort.sortBy),
+                PostRepositoryPort.TaggedPagedQuery(
+                    kw = kw,
+                    tag = tag,
+                    zeroBasedPage = page - 1,
+                    pageSize = pageSize,
+                    sortProperty = sort.property,
+                    sortAscending = sort.isAsc,
+                ),
             )
         }
 
@@ -770,22 +800,16 @@ class PostApplicationService(
             val tagCounts = ConcurrentHashMap<String, Int>()
             val indexedTagRows = postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)
 
-            if (indexedTagRows.isNotEmpty()) {
-                indexedTagRows.forEach { tagIndex ->
-                    parseTagIndex(tagIndex).forEach { normalizedTag ->
-                        tagCounts.merge(normalizedTag, 1, Int::plus)
-                    }
+            indexedTagRows.forEach { tagIndex ->
+                parseTagIndex(tagIndex).forEach { normalizedTag ->
+                    tagCounts.merge(normalizedTag, 1, Int::plus)
                 }
-            } else {
-                // 태그 인덱스 미구축 레코드가 대부분인 초기 단계에서는 본문 파싱으로 호환한다.
-                postRepository.findAllPublicListedContents().forEach { content ->
-                    PostMetaExtractor.extract(content).tags.forEach { tag ->
-                        val normalizedTag = normalizeTag(tag)
-                        if (normalizedTag.isNotBlank()) {
-                            tagCounts.merge(normalizedTag, 1, Int::plus)
-                        }
-                    }
-                }
+            }
+
+            if (indexedTagRows.isEmpty()) {
+                logger.warn(
+                    "public_tag_counts_index_empty: skip legacy content-scan fallback to protect DB under load",
+                )
             }
 
             val result =
@@ -815,11 +839,20 @@ class PostApplicationService(
         return postRepository.save(newPost) to true
     }
 
-    private fun findAndHydratePagedPosts(loader: () -> Page<Post>): Page<Post> {
-        val page = loader()
-        hydratePostAttrs(page.content)
-        hydrateMembersProfileImgAttrs(page.content.map { it.author })
-        return page
+    private fun findAndHydratePagedPosts(
+        page: Int,
+        pageSize: Int,
+        loader: () -> PostRepositoryPort.PagedResult<Post>,
+    ): PagedResult<Post> {
+        val pageResult = loader()
+        hydratePostAttrs(pageResult.content)
+        hydrateMembersProfileImgAttrs(pageResult.content.map { it.author })
+        return PagedResult(
+            content = pageResult.content,
+            page = page,
+            pageSize = pageSize,
+            totalElements = pageResult.totalElements,
+        )
     }
 
     private fun hydratePostAttrs(post: Post) {

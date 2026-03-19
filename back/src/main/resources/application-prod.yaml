@@ -28,6 +28,10 @@ spring:
         format_sql: false
         highlight_sql: false
         use_sql_comments: false
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: ${CUSTOM__JPA__SLOW_QUERY_LOG_MS:800}
       jakarta.persistence.query.timeout: ${PROD___SPRING__JPA__QUERY_TIMEOUT_MS:5000}
     show-sql: false
   sql:
@@ -53,8 +57,31 @@ logging:
     org.hibernate.orm.jdbc.batch: INFO
     org.springframework.transaction.interceptor: INFO
 custom:
+  cache:
+    ttl-overrides:
+      # 공개 읽기 API는 쓰기 시 즉시 무효화하므로 운영 기본 TTL을 높여 DB 압력을 낮춘다.
+      post-feed-v1: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
+      post-explore-v1: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:45}
+      post-tags-v1: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:120}
+      post-detail-public-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:120}
   db:
     sequence-guard-on-startup: ${CUSTOM__DB__SEQUENCE_GUARD_ON_STARTUP:true}
+  observability:
+    request:
+      slowMs: ${CUSTOM__OBSERVABILITY__REQUEST__SLOW_MS:900}
+  member:
+    notification:
+      sse:
+        replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
+  post:
+    read:
+      bulkhead:
+        enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
+        acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}
+        feedMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__FEED_MAX_CONCURRENT:24}
+        exploreMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__EXPLORE_MAX_CONCURRENT:12}
+        detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:24}
+        tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:8}
   task:
     processor:
       # API/worker 단일 프로세스 기본 운영에서 DB 경쟁을 완화한다.

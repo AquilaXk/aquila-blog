@@ -831,8 +831,8 @@ const StyledWrapper = styled.div`
   overflow-wrap: anywhere;
   word-break: break-word;
   color: ${({ theme }) => theme.colors.gray12};
-  line-height: 1.82;
-  font-size: 1.06rem;
+  line-height: 1.7;
+  font-size: 1.125rem;
 
   h1,
   h2,
@@ -864,8 +864,8 @@ const StyledWrapper = styled.div`
 
   p {
     margin: 0.72rem 0;
-    font-size: 1.06rem;
-    line-height: 1.82;
+    font-size: 1.125rem;
+    line-height: 1.7;
     overflow-wrap: anywhere;
   }
 
@@ -1147,8 +1147,8 @@ const StyledWrapper = styled.div`
   .aq-code code,
   pre code {
     display: block;
-    font-size: 0.9rem;
-    line-height: 1.62;
+    font-size: 0.875rem;
+    line-height: 1.5;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
       monospace;
   }
@@ -1378,8 +1378,8 @@ const StyledWrapper = styled.div`
 
     .aq-code code,
     pre code {
-      font-size: 0.9rem;
-      line-height: 1.62;
+      font-size: 0.875rem;
+      line-height: 1.5;
     }
 
     table {

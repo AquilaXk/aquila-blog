@@ -4,7 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
-import org.springframework.data.domain.Page
+import com.back.standard.dto.page.PagedResult
 import java.util.Optional
 
 /**
@@ -60,5 +60,5 @@ interface MemberUseCase {
         sort: MemberSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Member>
+    ): PagedResult<Member>
 }

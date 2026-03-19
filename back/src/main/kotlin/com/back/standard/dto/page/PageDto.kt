@@ -19,4 +19,18 @@ data class PageDto<T : Any>(
                 paged = page.pageable.isPaged,
             ),
     )
+
+    constructor(page: PagedResult<T>) : this(
+        content = page.content,
+        pageable =
+            PageableDto(
+                pageNumber = page.page,
+                pageSize = page.pageSize,
+                offset = ((page.page - 1).coerceAtLeast(0) * page.pageSize).toLong(),
+                totalElements = page.totalElements,
+                totalPages = page.totalPages,
+                numberOfElements = page.numberOfElements,
+                paged = true,
+            ),
+    )
 }

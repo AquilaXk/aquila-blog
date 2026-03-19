@@ -1,4 +1,4 @@
-package com.back.boundedContexts.post.domain
+package com.back.boundedContexts.post.model
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.postMixin.PostHasComments

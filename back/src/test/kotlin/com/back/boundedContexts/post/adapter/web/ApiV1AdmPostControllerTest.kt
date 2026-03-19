@@ -1,12 +1,14 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.input.PostPreviewSummaryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
-import com.back.boundedContexts.post.application.service.PostPreviewSummaryService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.PostPreviewSummaryResult
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.standard.dto.page.PagedResult
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
@@ -18,8 +20,6 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.FilterType
 import org.springframework.context.annotation.Import
-import org.springframework.data.domain.PageImpl
-import org.springframework.data.domain.PageRequest
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
@@ -56,7 +56,7 @@ class ApiV1AdmPostControllerTest {
     private lateinit var postUseCase: PostUseCase
 
     @MockitoBean
-    private lateinit var postPreviewSummaryService: PostPreviewSummaryService
+    private lateinit var postPreviewSummaryUseCase: PostPreviewSummaryUseCase
 
     @MockitoBean(name = "jpaMappingContext")
     private lateinit var jpaMappingContext: JpaMetamodelMappingContext
@@ -111,7 +111,7 @@ class ApiV1AdmPostControllerTest {
     fun `관리자는 숨김글을 포함한 전체 글 목록을 조회할 수 있다`() {
         val privatePost = samplePost(id = 101, title = "관리자 검색용 숨김 글", content = "숨김 내용", published = false, listed = false)
         given(postUseCase.findPagedByKwForAdmin("관리자 검색용 숨김", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT, 1, 30))
-            .willReturn(PageImpl(listOf(privatePost), PageRequest.of(0, 30), 1))
+            .willReturn(PagedResult(content = listOf(privatePost), page = 1, pageSize = 30, totalElements = 1))
 
         mvc
             .get("/post/api/v1/adm/posts") {
@@ -162,7 +162,7 @@ class ApiV1AdmPostControllerTest {
                 deletedAt = Instant.parse("2026-03-14T00:00:00Z"),
             )
         given(postUseCase.findDeletedPagedByKwForAdmin("삭제된", 1, 30))
-            .willReturn(PageImpl(listOf(deletedPost), PageRequest.of(0, 30), 1))
+            .willReturn(PagedResult(content = listOf(deletedPost), page = 1, pageSize = 30, totalElements = 1))
 
         mvc
             .get("/post/api/v1/adm/posts/deleted") {
@@ -180,13 +180,13 @@ class ApiV1AdmPostControllerTest {
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 AI 미리보기 요약을 생성할 수 있다`() {
         given(
-            postPreviewSummaryService.generate(
+            postPreviewSummaryUseCase.generate(
                 title = "요약 테스트 제목",
                 content = "요약 테스트 본문입니다.",
                 maxLength = 150,
             ),
         ).willReturn(
-            PostPreviewSummaryService.SummaryResult(
+            PostPreviewSummaryResult(
                 summary = "요약 결과",
                 provider = "gemini",
                 model = "gemini-2.5-flash",
@@ -212,7 +212,7 @@ class ApiV1AdmPostControllerTest {
                 jsonPath("$.data.model") { value("gemini-2.5-flash") }
             }
 
-        then(postPreviewSummaryService).should().generate("요약 테스트 제목", "요약 테스트 본문입니다.", 150)
+        then(postPreviewSummaryUseCase).should().generate("요약 테스트 제목", "요약 테스트 본문입니다.", 150)
     }
 
     @Test

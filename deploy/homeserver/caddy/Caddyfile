@@ -20,6 +20,11 @@ http://{$MONITOR_DOMAIN:status.localhost} {
 
 # Cloudflare Tunnel origin: HTTP only between cloudflared and Caddy.
 http://{$API_DOMAIN} {
+  log {
+    output stdout
+    format json
+  }
+
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"

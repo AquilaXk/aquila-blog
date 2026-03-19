@@ -1,6 +1,6 @@
 package com.back.global.task.application
 
-import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.springframework.beans.factory.annotation.Value
@@ -77,7 +77,7 @@ data class TaskQueueDiagnostics(
 
 @Service
 class TaskQueueDiagnosticsService(
-    private val taskRepository: TaskRepository,
+    private val taskRepository: TaskQueueRepositoryPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     @Value("\${custom.task.processor.processingTimeoutSeconds:900}")
     private val processingTimeoutSeconds: Long,

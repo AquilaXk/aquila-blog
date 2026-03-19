@@ -335,18 +335,22 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         <aside className="leftRail" aria-hidden={!showFloatingLike}>
           {showFloatingLike ? (
             <div className="leftRailInner">
-              <button
-                type="button"
-                className="floatingLikeButton"
-                aria-pressed={engagement.actorHasLiked}
-                data-active={engagement.actorHasLiked}
-                disabled={likePending}
-                onClick={handleToggleLike}
-              >
-                <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
-                <span className="floatingLikeLabel">좋아요</span>
-                <strong>{engagement.likesCount}</strong>
-              </button>
+              <div className="floatingLikeCluster">
+                <button
+                  type="button"
+                  className="floatingLikeButton"
+                  aria-label={`좋아요 ${engagement.likesCount}`}
+                  aria-pressed={engagement.actorHasLiked}
+                  data-active={engagement.actorHasLiked}
+                  disabled={likePending}
+                  onClick={handleToggleLike}
+                >
+                  <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
+                </button>
+                <span className="floatingLikeCount" aria-hidden="true">
+                  {engagement.likesCount}
+                </span>
+              </div>
             </div>
           ) : null}
         </aside>
@@ -382,7 +386,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         <aside className="rightRail" aria-hidden={!showStickyToc}>
           {showStickyToc ? (
             <nav className="rightRailInner" aria-label="목차">
-              <h2>목차</h2>
+              <h2 className="rightRailTitle">목차</h2>
               <ol>
                 {tocItems.map((item) => (
                   <li key={item.id} data-level={item.level}>
@@ -414,9 +418,9 @@ const StyledWrapper = styled.div`
 
   .detailLayout {
     display: grid;
-    grid-template-columns: 4rem minmax(0, 49rem) minmax(0, 12.5rem);
+    grid-template-columns: 3.8rem minmax(0, 49rem) minmax(0, 13.25rem);
     justify-content: center;
-    gap: 0.9rem;
+    gap: 0.85rem;
     min-width: 0;
   }
 
@@ -445,29 +449,21 @@ const StyledWrapper = styled.div`
   }
 
   .floatingLikeButton {
-    width: 100%;
+    width: 3rem;
+    height: 3rem;
     display: inline-flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.1rem;
-    min-height: 4rem;
-    padding: 0.6rem 0.28rem;
-    border-radius: 0.95rem;
+    padding: 0;
+    border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(31, 41, 55, 0.7)" : "rgba(248, 250, 252, 0.95)")};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(15, 23, 42, 0.5)" : "rgba(255, 255, 255, 0.95)")};
     color: ${({ theme }) => theme.colors.gray12};
     cursor: pointer;
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 
     svg {
-      font-size: 0.96rem;
-    }
-
-    strong {
-      font-size: 0.9rem;
-      line-height: 1.1;
-      font-weight: 800;
+      font-size: 1.02rem;
     }
 
     &[data-active="true"] {
@@ -484,78 +480,104 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .floatingLikeLabel {
-    font-size: 0.66rem;
+  .floatingLikeCluster {
+    display: grid;
+    justify-items: center;
+    row-gap: 0.34rem;
+  }
+
+  .floatingLikeCount {
+    font-size: 0.78rem;
+    line-height: 1;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    color: ${({ theme }) => theme.colors.gray10};
   }
 
   .rightRailInner {
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 0.95rem;
-    padding: 0.88rem 0.72rem;
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(17, 24, 39, 0.7)" : "rgba(255, 255, 255, 0.94)")};
+    position: sticky;
+    border-left: 2px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : theme.colors.gray6)};
+    padding: 0.18rem 0 0.18rem 0.82rem;
+    background: transparent;
 
-    h2 {
-      margin: 0 0 0.65rem;
-      font-size: 0.82rem;
-      line-height: 1.2;
-      letter-spacing: 0.02em;
-      color: ${({ theme }) => theme.colors.gray11};
-      font-weight: 750;
+    .rightRailTitle {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
     }
 
     ol {
       margin: 0;
       padding: 0;
       list-style: none;
-      display: grid;
-      gap: 0.18rem;
-      max-height: calc(100vh - 10.6rem);
+      display: block;
+      max-height: calc(100vh - 8.8rem);
       overflow-y: auto;
       overflow-x: hidden;
     }
 
     li {
       min-width: 0;
+      margin: 0;
     }
 
     li[data-level="3"] button {
-      padding-left: 0.72rem;
-      font-size: 0.84rem;
+      padding-left: 0.7rem;
+      font-size: 0.83rem;
     }
 
     li[data-level="4"] button {
-      padding-left: 1.1rem;
-      font-size: 0.8rem;
+      padding-left: 1.2rem;
+      font-size: 0.81rem;
     }
 
     button {
       width: 100%;
       text-align: left;
       border: 0;
-      border-radius: 0.5rem;
-      padding: 0.44rem 0.5rem;
+      border-radius: 0;
+      padding: 0.2rem 0;
       background: transparent;
-      color: ${({ theme }) => theme.colors.gray10};
+      color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.92)" : theme.colors.gray10)};
       font-size: 0.84rem;
-      line-height: 1.24;
+      line-height: 1.5;
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;
-      transition: color 0.15s ease, background-color 0.15s ease;
+      position: relative;
+      transition: color 0.15s ease;
+    }
+
+    button::before {
+      content: "";
+      position: absolute;
+      left: -0.82rem;
+      top: 0.24rem;
+      bottom: 0.24rem;
+      width: 2px;
+      opacity: 0;
+      background: ${({ theme }) => (theme.scheme === "dark" ? "#e2e8f0" : "#111827")};
+      transition: opacity 0.15s ease;
     }
 
     button[data-active="true"] {
-      color: ${({ theme }) => (theme.scheme === "dark" ? "#7db7ff" : "#0b63d6")};
-      background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.08)")};
+      color: ${({ theme }) => theme.colors.gray12};
       font-weight: 700;
+    }
+
+    button[data-active="true"]::before {
+      opacity: 1;
     }
   }
 
   @media (max-width: 1240px) {
     .detailLayout {
-      grid-template-columns: minmax(0, 49rem) minmax(0, 12rem);
+      grid-template-columns: minmax(0, 49rem) minmax(0, 12.5rem);
       gap: 0.8rem;
     }
 

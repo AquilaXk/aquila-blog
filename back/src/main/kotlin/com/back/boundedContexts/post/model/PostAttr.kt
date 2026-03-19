@@ -1,4 +1,4 @@
-package com.back.boundedContexts.post.domain
+package com.back.boundedContexts.post.model
 
 import com.back.global.jpa.domain.BaseTime
 import com.back.global.jpa.domain.EntityAttr

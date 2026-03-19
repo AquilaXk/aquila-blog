@@ -1,4 +1,4 @@
-package com.back.global.storage.domain
+package com.back.global.storage.model
 
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime

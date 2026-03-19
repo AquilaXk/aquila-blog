@@ -1,4 +1,4 @@
-package com.back.boundedContexts.member.subContexts.signupVerification.domain
+package com.back.boundedContexts.member.subContexts.signupVerification.model
 
 import com.back.global.exception.application.AppException
 import com.back.global.jpa.domain.AfterDDL

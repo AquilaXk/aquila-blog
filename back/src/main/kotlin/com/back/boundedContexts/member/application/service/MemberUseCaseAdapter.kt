@@ -5,7 +5,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
-import org.springframework.data.domain.Page
+import com.back.standard.dto.page.PagedResult
 import org.springframework.stereotype.Service
 import java.util.Optional
 
@@ -72,5 +72,5 @@ class MemberUseCaseAdapter(
         sort: MemberSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Member> = memberApplicationService.findPagedByKw(kw, sort, page, pageSize)
+    ): PagedResult<Member> = memberApplicationService.findPagedByKw(kw, sort, page, pageSize)
 }

@@ -1,8 +1,8 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
+import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
-import com.back.boundedContexts.post.application.service.PostHitDedupService
-import com.back.boundedContexts.post.application.service.PostPublicReadQueryService
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.FeedPostDto
@@ -13,6 +13,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import com.back.standard.dto.page.PageDto
+import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import jakarta.persistence.OptimisticLockException
@@ -37,8 +38,8 @@ import java.sql.SQLException
 @RequestMapping("/post/api/v1/posts")
 class ApiV1PostController(
     private val postUseCase: PostUseCase,
-    private val postHitDedupService: PostHitDedupService,
-    private val postPublicReadQueryService: PostPublicReadQueryService,
+    private val postHitDedupUseCase: PostHitDedupUseCase,
+    private val postPublicReadQueryUseCase: PostPublicReadQueryUseCase,
     private val rq: Rq,
 ) {
     private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
@@ -47,7 +48,7 @@ class ApiV1PostController(
      * makePostDtoPage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
      */
-    private fun makePostDtoPage(postPage: org.springframework.data.domain.Page<Post>): PageDto<PostDto> {
+    private fun makePostDtoPage(postPage: PagedResult<Post>): PageDto<PostDto> {
         val actor = rq.actorOrNull
         val likedPostIds = postUseCase.findLikedPostIds(actor, postPage.content)
 
@@ -76,9 +77,9 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): PageDto<FeedPostDto> {
-        val validPage = page.coerceAtLeast(1)
+        val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        return postPublicReadQueryService.getPublicFeed(validPage, validPageSize, sort)
+        return postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
     }
 
     /**
@@ -94,14 +95,16 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "") tag: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): PageDto<FeedPostDto> {
-        val validPage = page.coerceAtLeast(1)
+        val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        return postPublicReadQueryService.getPublicExplore(validPage, validPageSize, kw, tag, sort)
+        val normalizedKw = normalizeExploreKeyword(kw)
+        val normalizedTag = normalizeExploreTag(tag)
+        return postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
     }
 
     @GetMapping("/tags")
     @Transactional(readOnly = true)
-    fun getTags(): List<TagCountDto> = postPublicReadQueryService.getPublicTagCounts()
+    fun getTags(): List<TagCountDto> = postPublicReadQueryUseCase.getPublicTagCounts()
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -111,9 +114,9 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): PageDto<PostDto> {
-        val validPage = page.coerceAtLeast(1)
+        val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage = postUseCase.findPagedByKw(kw, sort, validPage, validPageSize)
+        val postPage = postUseCase.findPagedByKw(normalizeExploreKeyword(kw), sort, validPage, validPageSize)
         return makePostDtoPage(postPage)
     }
 
@@ -127,7 +130,7 @@ class ApiV1PostController(
         @PathVariable @Positive id: Int,
     ): PostWithContentDto {
         if (rq.actorOrNull == null) {
-            return postPublicReadQueryService.getPublicPostDetail(id)
+            return postPublicReadQueryUseCase.getPublicPostDetail(id)
         }
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actor)
@@ -251,7 +254,7 @@ class ApiV1PostController(
     ): RsData<PostHitResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
-        if (postHitDedupService.shouldCountHit(id, resolveHitViewerKey())) {
+        if (postHitDedupUseCase.shouldCountHit(id, resolveHitViewerKey())) {
             postUseCase.incrementHit(post)
         }
         return RsData(
@@ -318,9 +321,9 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): PageDto<PostDto> {
-        val validPage = page.coerceAtLeast(1)
+        val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val postPage = postUseCase.findPagedByAuthor(rq.actor, kw, sort, validPage, validPageSize)
+        val postPage = postUseCase.findPagedByAuthor(rq.actor, normalizeExploreKeyword(kw), sort, validPage, validPageSize)
         return makePostDtoPage(postPage)
     }
 
@@ -344,6 +347,21 @@ class ApiV1PostController(
         rq.actorOrNull
             ?.let { "member:${it.id}" }
             ?: "anon:${rq.clientIp}|${rq.userAgent}"
+
+    private fun normalizePublicPage(page: Int): Int = page.coerceIn(1, MAX_PUBLIC_PAGE)
+
+    private fun normalizeExploreKeyword(raw: String): String = normalizeSearchToken(raw, MAX_EXPLORE_KW_LENGTH)
+
+    private fun normalizeExploreTag(raw: String): String = normalizeSearchToken(raw, MAX_EXPLORE_TAG_LENGTH)
+
+    private fun normalizeSearchToken(
+        raw: String,
+        maxLength: Int,
+    ): String =
+        raw
+            .trim()
+            .replace(Regex("\\s+"), " ")
+            .take(maxLength)
 
     /**
      * 실행 시점에 필요한 의존성/값을 결정합니다.
@@ -398,5 +416,11 @@ class ApiV1PostController(
                 .filterIsInstance<SQLException>()
                 .firstOrNull()
         return sqlException?.sqlState in setOf("23505", "40001", "40P01")
+    }
+
+    companion object {
+        private const val MAX_PUBLIC_PAGE = 200
+        private const val MAX_EXPLORE_KW_LENGTH = 80
+        private const val MAX_EXPLORE_TAG_LENGTH = 40
     }
 }

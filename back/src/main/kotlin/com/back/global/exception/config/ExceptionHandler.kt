@@ -4,6 +4,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.rsData.RsData
 import jakarta.persistence.OptimisticLockException
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.ConstraintViolationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
@@ -115,10 +116,26 @@ class ExceptionHandler(
             )
 
     @ExceptionHandler(AppException::class)
-    fun handleAppException(ex: AppException): ResponseEntity<RsData<Void>> =
-        ResponseEntity
+    fun handleAppException(
+        ex: AppException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> {
+        if (ex.rsData.statusCode >= 500) {
+            logger.error(
+                "app_exception status={} method={} path={} query={} resultCode={}",
+                ex.rsData.statusCode,
+                request.method,
+                request.requestURI,
+                normalizeQueryString(request.queryString),
+                ex.rsData.resultCode,
+                ex,
+            )
+        }
+
+        return ResponseEntity
             .status(ex.rsData.statusCode)
             .body(ex.rsData)
+    }
 
     /**
      * 예외 또는 이벤트를 수신해 표준 처리 흐름으로 변환합니다.
@@ -154,10 +171,26 @@ class ExceptionHandler(
     }
 
     @ExceptionHandler(Exception::class)
-    fun handleUnexpectedException(ex: Exception): ResponseEntity<RsData<Void>> {
-        logger.error("Unhandled server exception", ex)
+    fun handleUnexpectedException(
+        ex: Exception,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> {
+        logger.error(
+            "unhandled_server_exception method={} path={} query={}",
+            request.method,
+            request.requestURI,
+            normalizeQueryString(request.queryString),
+            ex,
+        )
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(RsData("500-1", "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."))
     }
+
+    private fun normalizeQueryString(rawQuery: String?): String =
+        rawQuery
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.take(512)
+            ?: "-"
 }

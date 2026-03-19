@@ -5,7 +5,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
-import com.back.global.storage.adapter.persistence.UploadedFileRepository
+import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
 import com.back.global.storage.domain.UploadedFilePurpose
@@ -40,7 +40,7 @@ data class UploadedFileCleanupDiagnostics(
 
 @Service
 class UploadedFileRetentionService(
-    private val uploadedFileRepository: UploadedFileRepository,
+    private val uploadedFileRepository: UploadedFileRepositoryPort,
     private val postRepository: PostRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val postImageStoragePort: PostImageStoragePort,

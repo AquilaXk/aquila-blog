@@ -7,8 +7,8 @@ import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
-import org.springframework.data.domain.Page
 import org.springframework.stereotype.Service
 
 /**
@@ -119,20 +119,20 @@ class PostUseCaseAdapter(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postApplicationService.findPagedByKw(kw, sort, page, pageSize)
+    ): PagedResult<Post> = postApplicationService.findPagedByKw(kw, sort, page, pageSize)
 
     override fun findPagedByKwForAdmin(
         kw: String,
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postApplicationService.findPagedByKwForAdmin(kw, sort, page, pageSize)
+    ): PagedResult<Post> = postApplicationService.findPagedByKwForAdmin(kw, sort, page, pageSize)
 
     override fun findDeletedPagedByKwForAdmin(
         kw: String,
         page: Int,
         pageSize: Int,
-    ): Page<AdmDeletedPostDto> = postApplicationService.findDeletedPagedByKwForAdmin(kw, page, pageSize)
+    ): PagedResult<AdmDeletedPostDto> = postApplicationService.findDeletedPagedByKwForAdmin(kw, page, pageSize)
 
     override fun restoreDeletedByIdForAdmin(id: Int): Post = postApplicationService.restoreDeletedByIdForAdmin(id)
 
@@ -144,7 +144,7 @@ class PostUseCaseAdapter(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postApplicationService.findPagedByAuthor(author, kw, sort, page, pageSize)
+    ): PagedResult<Post> = postApplicationService.findPagedByAuthor(author, kw, sort, page, pageSize)
 
     override fun findPagedByKwAndTag(
         kw: String,
@@ -152,7 +152,7 @@ class PostUseCaseAdapter(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post> = postApplicationService.findPagedByKwAndTag(kw, tag, sort, page, pageSize)
+    ): PagedResult<Post> = postApplicationService.findPagedByKwAndTag(kw, tag, sort, page, pageSize)
 
     override fun getPublicTagCounts(): List<TagCountDto> = postApplicationService.getPublicTagCounts()
 

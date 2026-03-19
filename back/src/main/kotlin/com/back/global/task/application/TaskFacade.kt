@@ -1,7 +1,7 @@
 package com.back.global.task.application
 
 import com.back.global.app.application.AppFacade
-import com.back.global.task.adapter.persistence.TaskRepository
+import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.standard.dto.TaskPayload
 import org.springframework.beans.factory.annotation.Value
@@ -16,7 +16,7 @@ import java.util.*
 
 @Service
 class TaskFacade(
-    private val taskRepository: TaskRepository,
+    private val taskRepository: TaskQueueRepositoryPort,
     private val taskHandlerRegistry: TaskHandlerRegistry,
     private val objectMapper: ObjectMapper,
     @param:Value("\${custom.task.processor.inlineWhenNotProd:false}")

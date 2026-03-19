@@ -1,5 +1,6 @@
 package com.back.global.task.adapter.persistence
 
+import com.back.global.task.application.port.output.TaskQueueRepositoryPort
 import com.back.global.task.domain.Task
 import com.back.global.task.domain.TaskStatus
 import org.springframework.data.domain.Pageable
@@ -11,7 +12,9 @@ import java.time.Instant
  * TaskRepository는 글로벌 모듈 영속 계층 연동을 담당하는 퍼시스턴스 어댑터입니다.
  * 저장소 조회/저장 로직을 도메인 요구사항에 맞게 캡슐화합니다.
  */
-interface TaskRepository : JpaRepository<Task, Int> {
+interface TaskRepository :
+    JpaRepository<Task, Int>,
+    TaskQueueRepositoryPort {
     @Query(
         value = """
             SELECT *
@@ -43,65 +46,65 @@ interface TaskRepository : JpaRepository<Task, Int> {
         limit: Int,
     ): List<Task>
 
-    fun countByStatus(status: TaskStatus): Long
+    override fun countByStatus(status: TaskStatus): Long
 
-    fun countByStatusAndNextRetryAtLessThanEqual(
+    override fun countByStatusAndNextRetryAtLessThanEqual(
         status: TaskStatus,
         nextRetryAt: Instant,
     ): Long
 
-    fun countByStatusAndModifiedAtBefore(
+    override fun countByStatusAndModifiedAtBefore(
         status: TaskStatus,
         modifiedAt: Instant,
     ): Long
 
-    fun countByTaskTypeAndStatus(
+    override fun countByTaskTypeAndStatus(
         taskType: String,
         status: TaskStatus,
     ): Long
 
-    fun countByTaskTypeAndStatusAndNextRetryAtLessThanEqual(
+    override fun countByTaskTypeAndStatusAndNextRetryAtLessThanEqual(
         taskType: String,
         status: TaskStatus,
         nextRetryAt: Instant,
     ): Long
 
-    fun countByTaskTypeAndStatusAndModifiedAtBefore(
+    override fun countByTaskTypeAndStatusAndModifiedAtBefore(
         taskType: String,
         status: TaskStatus,
         modifiedAt: Instant,
     ): Long
 
-    fun findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
+    override fun findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
         status: TaskStatus,
         nextRetryAt: Instant,
         pageable: Pageable,
     ): List<Task>
 
-    fun findByStatusOrderByModifiedAtAsc(
+    override fun findByStatusOrderByModifiedAtAsc(
         status: TaskStatus,
         pageable: Pageable,
     ): List<Task>
 
-    fun findByStatusOrderByModifiedAtDesc(
+    override fun findByStatusOrderByModifiedAtDesc(
         status: TaskStatus,
         pageable: Pageable,
     ): List<Task>
 
-    fun findByStatusAndModifiedAtBeforeOrderByModifiedAtAsc(
+    override fun findByStatusAndModifiedAtBeforeOrderByModifiedAtAsc(
         status: TaskStatus,
         modifiedAt: Instant,
         pageable: Pageable,
     ): List<Task>
 
-    fun findByTaskTypeAndStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
+    override fun findByTaskTypeAndStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(
         taskType: String,
         status: TaskStatus,
         nextRetryAt: Instant,
         pageable: Pageable,
     ): List<Task>
 
-    fun findByTaskTypeAndStatusOrderByModifiedAtDesc(
+    override fun findByTaskTypeAndStatusOrderByModifiedAtDesc(
         taskType: String,
         status: TaskStatus,
         pageable: Pageable,

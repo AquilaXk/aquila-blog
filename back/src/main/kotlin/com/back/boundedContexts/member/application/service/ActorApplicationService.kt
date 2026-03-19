@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.application.port.input.ActorQueryUseCase
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberProxy
@@ -16,7 +17,7 @@ import kotlin.jvm.optionals.getOrNull
 class ActorApplicationService(
     private val authTokenService: AuthTokenService,
     private val memberRepository: MemberRepositoryPort,
-) {
+) : ActorQueryUseCase {
     @Transactional(readOnly = true)
     fun memberOf(securityUser: SecurityUser): Member {
         val realMember = getReferenceById(securityUser.id)
@@ -24,7 +25,7 @@ class ActorApplicationService(
     }
 
     @Transactional(readOnly = true)
-    fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)
+    override fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)
 
     @Transactional(readOnly = true)
     fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)

@@ -87,6 +87,8 @@ class RedisCacheConfig(
             GenericJacksonJsonRedisSerializer
                 .builder()
                 .enableDefaultTyping(ptv)
+                // Kotlin data class / java.time 역직렬화를 위해 모듈을 자동 등록한다.
+                .customize { mapperBuilder -> mapperBuilder.findAndAddModules() }
                 .build()
 
         val defaultConfig =

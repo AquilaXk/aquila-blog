@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
@@ -28,7 +29,7 @@ class PostHitDedupService(
     @param:Value("\${custom.post.hit.redisWarnIntervalSeconds:300}")
     private val redisWarnIntervalSeconds: Long,
     private val redisTemplateProvider: ObjectProvider<StringRedisTemplate>,
-) {
+) : PostHitDedupUseCase {
     private val logger = LoggerFactory.getLogger(PostHitDedupService::class.java)
     private val memoryState = ConcurrentHashMap<String, Long>()
     private val lastCleanupEpochSeconds = AtomicLong(0)
@@ -40,7 +41,7 @@ class PostHitDedupService(
      * shouldCountHit 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    fun shouldCountHit(
+    override fun shouldCountHit(
         postId: Int,
         viewerKey: String,
     ): Boolean {

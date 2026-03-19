@@ -397,6 +397,71 @@ const normalizeGeneratedPreviewSummary = (value: string, maxLength = PREVIEW_SUM
   return `${normalized.slice(0, maxLength).trim()}...`
 }
 
+const resolvePreviewSummaryErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  const normalized = message.trim()
+  if (!normalized) return "요약 생성 요청 처리 중 오류가 발생했습니다."
+
+  const lowered = normalized.toLowerCase()
+  if (lowered.includes("failed to fetch")) {
+    return "네트워크 연결 또는 API 응답 수신에 실패했습니다."
+  }
+
+  if (lowered.includes("abort") || lowered.includes("timeout")) {
+    return "요약 생성 응답 대기 시간이 초과되었습니다."
+  }
+
+  return normalized
+}
+
+const fetchPreviewSummary = async (
+  payload: {
+    title: string
+    content: string
+    maxLength: number
+  }
+): Promise<RsData<GeneratePreviewSummaryPayload>> => {
+  const controller = new AbortController()
+  const timeoutMs = 45_000
+  const timeoutId = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), timeoutMs)
+
+  try {
+    const response = await fetch("/api/post/preview-summary", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const raw = await response.text().catch(() => "")
+      if (raw) {
+        let parsedMessage = ""
+        try {
+          const parsed = JSON.parse(raw) as { msg?: unknown; message?: unknown }
+          const msg = typeof parsed.msg === "string" ? parsed.msg.trim() : ""
+          const message = typeof parsed.message === "string" ? parsed.message.trim() : ""
+          parsedMessage = msg || message
+        } catch {}
+        throw new Error(parsedMessage || `status=${response.status}`)
+      }
+      throw new Error(`status=${response.status}`)
+    }
+
+    return (await response.json()) as RsData<GeneratePreviewSummaryPayload>
+  } catch (error) {
+    if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      throw new Error("요약 생성 응답 대기 시간이 초과되었습니다.")
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 const formatPreviewSummaryReason = (rawReason?: string | null) => {
   const reason = (rawReason || "").trim()
   switch (reason) {
@@ -1353,14 +1418,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPublishStatus({ tone: "loading", text: "AI 요약 생성 중입니다..." }, "modal")
       setPreviewSummaryNotice({ tone: "loading", text: "AI 요약 생성 중입니다..." })
 
-      const response = await apiFetch<RsData<GeneratePreviewSummaryPayload>>("/post/api/v1/adm/posts/preview-summary", {
-        method: "POST",
-        timeoutMs: 30_000,
-        body: JSON.stringify({
-          title: postTitle,
-          content: postContent,
-          maxLength: PREVIEW_SUMMARY_MAX_LENGTH,
-        }),
+      const response = await fetchPreviewSummary({
+        title: postTitle,
+        content: postContent,
+        maxLength: PREVIEW_SUMMARY_MAX_LENGTH,
       })
 
       const generated = normalizeGeneratedPreviewSummary(response?.data?.summary || "")
@@ -1386,9 +1447,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       )
       setPreviewSummaryNotice({ tone: "success", text: summaryNoticeText })
     } catch (error) {
+      const errorMessage = resolvePreviewSummaryErrorMessage(error)
       if (fallbackSummary) {
         setPostSummary(fallbackSummary)
-        const fallbackMessage = `AI 요약 실패로 규칙 기반 요약을 반영했습니다. (${error instanceof Error ? error.message : String(error)})`
+        const fallbackMessage = `AI 요약 실패로 규칙 기반 요약을 반영했습니다. (${errorMessage})`
         setPublishStatus(
           {
             tone: "error",
@@ -1400,7 +1462,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         return
       }
 
-      const failMessage = `요약 생성 실패: ${error instanceof Error ? error.message : String(error)}`
+      const failMessage = `요약 생성 실패: ${errorMessage}`
       setPublishStatus(
         {
           tone: "error",
@@ -4061,17 +4123,22 @@ const SectionDescription = styled.p`
 
 const ContentStudioGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+  grid-template-areas: "list controls";
   gap: 0.9rem;
   align-items: start;
 
   @media (max-width: 1180px) {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "controls"
+      "list";
   }
 `
 
 const ContentStudioLeft = styled.div`
   display: grid;
+  grid-area: controls;
   gap: 0.85rem;
   min-width: 0;
 `
@@ -5422,6 +5489,7 @@ const EditorGrid = styled.div`
 `
 
 const ListPanel = styled.div`
+  grid-area: list;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
   background: ${({ theme }) => theme.colors.gray2};

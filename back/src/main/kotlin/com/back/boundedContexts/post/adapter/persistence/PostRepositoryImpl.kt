@@ -2,9 +2,9 @@ package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.QPost.post
-import com.back.boundedContexts.post.domain.QPostAttr.postAttr
 import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
+import com.back.boundedContexts.post.model.QPost.post
+import com.back.boundedContexts.post.model.QPostAttr.postAttr
 import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
 import com.querydsl.core.types.dsl.BooleanExpression
@@ -106,41 +106,21 @@ class PostRepositoryImpl(
         if (normalizedTag.isBlank()) return Expressions.booleanTemplate("1 = 0")
 
         val indexToken = "%|${escapeLikeToken(normalizedTag)}|%"
-        val hasTagIndex =
-            JPAExpressions
-                .selectOne()
-                .from(postAttr)
-                .where(
-                    postAttr.subject
-                        .eq(post)
-                        .and(postAttr.name.eq(META_TAGS_INDEX)),
-                ).exists()
-        val indexedPredicate =
-            JPAExpressions
-                .selectOne()
-                .from(postAttr)
-                .where(
-                    postAttr.subject
-                        .eq(post)
-                        .and(postAttr.name.eq(META_TAGS_INDEX))
-                        .and(
-                            Expressions.booleanTemplate(
-                                "lower({0}) like {1} escape '\\\\'",
-                                postAttr.strValue,
-                                Expressions.constant(indexToken),
-                            ),
+        return JPAExpressions
+            .selectOne()
+            .from(postAttr)
+            .where(
+                postAttr.subject
+                    .eq(post)
+                    .and(postAttr.name.eq(META_TAGS_INDEX))
+                    .and(
+                        Expressions.booleanTemplate(
+                            "lower({0}) like {1} escape '\\\\'",
+                            postAttr.strValue,
+                            Expressions.constant(indexToken),
                         ),
-                ).exists()
-
-        // 이전 글(태그 인덱스 미구축 레코드) 호환을 위한 임시 fallback.
-        val legacyFallback =
-            Expressions.booleanTemplate(
-                "lower({0}) like {1} escape '\\\\'",
-                post.content,
-                Expressions.constant("%${escapeLikeToken(normalizedTag)}%"),
-            )
-
-        return indexedPredicate.or(hasTagIndex.not().and(legacyFallback))
+                    ),
+            ).exists()
     }
 
     private fun normalizeTagToken(tag: String): String = tag.trim().lowercase()

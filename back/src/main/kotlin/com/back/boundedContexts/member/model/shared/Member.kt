@@ -1,5 +1,6 @@
-package com.back.boundedContexts.member.domain.shared
+package com.back.boundedContexts.member.model.shared
 
+import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileCard
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberHasProfileImgUrl
 import com.back.boundedContexts.post.domain.PostMember

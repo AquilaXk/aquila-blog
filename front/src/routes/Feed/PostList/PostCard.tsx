@@ -95,31 +95,52 @@ export default PostCard
 const StyledWrapper = styled(Link)`
   display: block;
   text-decoration: none;
+  --post-card-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  --post-card-shadow-hover: 0 18px 38px rgba(0, 0, 0, 0.34);
+  --post-card-translate-y: -8px;
+
+  &:focus-visible {
+    outline: 0;
+  }
 
   article {
-    overflow: clip;
+    overflow: hidden;
     position: relative;
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-radius: 10px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: none;
-    transition: border-color 0.2s ease, background-color 0.2s ease;
+    border-radius: 15px;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: var(--post-card-shadow);
+    transition:
+      transform 0.22s ease,
+      box-shadow 0.22s ease,
+      border-color 0.22s ease;
 
-    &:hover {
-      background: ${({ theme }) => theme.colors.gray2};
-    }
     > .thumbnail {
       position: relative;
       width: 100%;
-      aspect-ratio: 16 / 9;
-      background-color: ${({ theme }) => theme.colors.gray3};
+      aspect-ratio: 1.94 / 1;
+      background-color: ${({ theme }) => theme.colors.gray4};
       overflow: hidden;
+      isolation: isolate;
 
       &.placeholder {
-        background: ${({ theme }) => theme.colors.gray3};
+        background: ${({ theme }) => theme.colors.gray4};
+      }
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.16) 100%);
+        opacity: 0.9;
+        pointer-events: none;
+      }
+
+      img {
+        transition: filter 0.22s ease;
       }
     }
 
@@ -128,16 +149,16 @@ const StyledWrapper = styled(Link)`
       grid-template-rows: auto auto auto auto;
       align-content: start;
       min-height: 0;
-      padding: 1rem 1.05rem 0.88rem;
+      padding: 1rem 1.08rem 0.92rem;
       gap: 0;
 
       > header {
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: clamp(1.2rem, 1.8vw, 1.48rem);
-          line-height: 1.42;
-          font-weight: 740;
+          font-size: clamp(1.05rem, 1.18vw, 1.2rem);
+          line-height: 1.38;
+          font-weight: 760;
           letter-spacing: -0.02em;
           word-break: keep-all;
           display: -webkit-box;
@@ -148,18 +169,18 @@ const StyledWrapper = styled(Link)`
       }
 
       > .summary {
-        margin-top: 0.66rem;
+        margin-top: 0.62rem;
         min-height: 0;
 
         p {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray11};
-          font-size: clamp(0.93rem, 1.05vw, 1.02rem);
-          line-height: 1.62;
+          font-size: clamp(0.92rem, 0.95vw, 0.99rem);
+          line-height: 1.58;
           letter-spacing: -0.01em;
           word-break: keep-all;
           display: -webkit-box;
-          -webkit-line-clamp: 4;
+          -webkit-line-clamp: 3;
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
@@ -168,11 +189,13 @@ const StyledWrapper = styled(Link)`
       > .meta {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: 0.42rem;
         align-items: center;
-        margin-top: 0.92rem;
+        margin-top: 0.82rem;
         color: ${({ theme }) => theme.colors.gray10};
-        font-size: 0.88rem;
+        font-size: 0.83rem;
+        line-height: 1.35;
+        letter-spacing: -0.01em;
 
         .dot {
           opacity: 0.56;
@@ -192,35 +215,35 @@ const StyledWrapper = styled(Link)`
       }
 
       > .footer {
-        margin-top: 0.9rem;
-        padding-top: 0.72rem;
-        border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+        margin-top: 0.82rem;
+        padding-top: 0.68rem;
+        border-top: 1px solid ${({ theme }) => theme.colors.gray5};
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 0.7rem;
+        gap: 0.6rem;
 
         .author {
           display: inline-flex;
           align-items: center;
-          gap: 0.45rem;
+          gap: 0.42rem;
           min-width: 0;
 
           .avatar {
             position: relative;
-            width: 34px;
-            height: 34px;
+            width: 24px;
+            height: 24px;
             border-radius: 999px;
             overflow: hidden;
             flex: 0 0 auto;
             border: none;
-            background: ${({ theme }) => theme.colors.gray2};
+            background: ${({ theme }) => theme.colors.gray4};
             display: inline-flex;
             align-items: center;
             justify-content: center;
 
             .initial {
-              font-size: 0.82rem;
+              font-size: 0.72rem;
               font-weight: 800;
               color: ${({ theme }) => theme.colors.gray11};
             }
@@ -228,13 +251,13 @@ const StyledWrapper = styled(Link)`
 
           .by {
             color: ${({ theme }) => theme.colors.gray10};
-            font-size: 0.92rem;
+            font-size: 0.78rem;
           }
 
           strong {
             color: ${({ theme }) => theme.colors.gray12};
-            font-size: 1rem;
-            font-weight: 800;
+            font-size: 0.84rem;
+            font-weight: 760;
             line-height: 1.2;
             white-space: nowrap;
             overflow: hidden;
@@ -243,17 +266,17 @@ const StyledWrapper = styled(Link)`
           }
         }
 
-      .like {
+        .like {
           display: inline-flex;
           align-items: center;
-          gap: 0.38rem;
+          gap: 0.32rem;
           color: ${({ theme }) => theme.colors.gray11};
-          font-size: 1.03rem;
+          font-size: 0.86rem;
           font-weight: 700;
 
           svg {
-            width: 1.02rem;
-            height: 1.02rem;
+            width: 0.9rem;
+            height: 0.9rem;
             color: ${({ theme }) => theme.colors.red10};
           }
         }
@@ -261,10 +284,34 @@ const StyledWrapper = styled(Link)`
     }
   }
 
+  @media (hover: hover) and (pointer: fine) {
+    &:hover article,
+    &:focus-visible article {
+      transform: translateY(var(--post-card-translate-y));
+      box-shadow: var(--post-card-shadow-hover);
+      border-color: ${({ theme }) => theme.colors.gray6};
+    }
+
+    &:hover article > .thumbnail img,
+    &:focus-visible article > .thumbnail img {
+      filter: brightness(0.96);
+    }
+  }
+
+  &:active article {
+    transform: translateY(-3px);
+  }
+
   @media (max-width: 640px) {
+    --post-card-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+    --post-card-shadow-hover: 0 10px 26px rgba(0, 0, 0, 0.28);
+    --post-card-translate-y: -4px;
+
     article {
+      border-radius: 13px;
+
       > .content {
-        padding: 0.9rem 0.92rem 0.78rem;
+        padding: 0.86rem 0.9rem 0.78rem;
 
         > .summary p {
           -webkit-line-clamp: 3;
@@ -272,7 +319,7 @@ const StyledWrapper = styled(Link)`
 
         > .footer {
           .author strong {
-            max-width: 110px;
+            max-width: 132px;
           }
         }
       }
@@ -280,7 +327,8 @@ const StyledWrapper = styled(Link)`
   }
 
   @media (prefers-reduced-motion: reduce) {
-    article {
+    article,
+    article > .thumbnail img {
       transition: none;
     }
   }

@@ -1,4 +1,4 @@
-package com.back.boundedContexts.member.subContexts.memberActionLog.domain
+package com.back.boundedContexts.member.subContexts.memberActionLog.model
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.jpa.domain.BaseEntity

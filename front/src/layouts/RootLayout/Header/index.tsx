@@ -3,14 +3,82 @@ import Logo from "./Logo"
 import ThemeToggle from "./ThemeToggle"
 import styled from "@emotion/styled"
 import { zIndexes } from "src/styles/zIndexes"
+import { useRouter } from "next/router"
+import { useEffect, useRef, useState } from "react"
 
 type Props = {
   fullWidth: boolean
 }
 
 const Header: React.FC<Props> = ({ fullWidth }) => {
+  const router = useRouter()
+  const isPostDetailRoute = router.pathname === "/posts/[id]"
+  const [isHiddenByScroll, setIsHiddenByScroll] = useState(false)
+  const hiddenByScroll = isPostDetailRoute && isHiddenByScroll
+  const lastScrollYRef = useRef(0)
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    if (!isPostDetailRoute) {
+      setIsHiddenByScroll(false)
+      return
+    }
+
+    lastScrollYRef.current = window.scrollY
+    const minDelta = window.innerWidth <= 768 ? 12 : 8
+
+    const handleScroll = () => {
+      if (rafRef.current !== null) return
+
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null
+        const currentY = window.scrollY
+        const previousY = lastScrollYRef.current
+        const delta = currentY - previousY
+
+        if (currentY <= 0) {
+          setIsHiddenByScroll(false)
+          lastScrollYRef.current = currentY
+          return
+        }
+
+        if (delta > minDelta && currentY > 72) {
+          setIsHiddenByScroll(true)
+        } else if (currentY < previousY) {
+          setIsHiddenByScroll(false)
+        }
+
+        lastScrollYRef.current = currentY
+      })
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener("scroll", handleScroll)
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+    }
+  }, [isPostDetailRoute])
+
   return (
-    <StyledWrapper>
+    <StyledWrapper
+      data-autohide={isPostDetailRoute}
+      data-hidden={hiddenByScroll}
+      style={
+        hiddenByScroll
+          ? {
+              transform: "translateY(calc(-100% - 1px))",
+              opacity: 0,
+              pointerEvents: "none",
+              borderBottomColor: "transparent",
+            }
+          : undefined
+      }
+    >
       <div data-full-width={fullWidth} className="container">
         <Logo />
         <div className="nav">
@@ -30,6 +98,11 @@ const StyledWrapper = styled.div`
   top: 0;
   background-color: ${({ theme }) => theme.colors.gray1};
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 
   .container {
     display: flex;
@@ -83,5 +156,9 @@ const StyledWrapper = styled.div`
         display: none;
       }
     }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 `

@@ -1,6 +1,8 @@
 package com.back.boundedContexts.post.application.service
 
+import com.back.boundedContexts.post.application.port.input.PostPreviewSummaryUseCase
 import com.back.boundedContexts.post.dto.PostPreviewExtractor
+import com.back.boundedContexts.post.dto.PostPreviewSummaryResult
 import com.back.global.cache.application.port.output.RedisKeyValuePort
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -57,21 +59,14 @@ class PostPreviewSummaryService(
     private val geminiModel: String,
     private val redisKeyValuePort: RedisKeyValuePort,
     private val objectMapper: ObjectMapper,
-) {
-    data class SummaryResult(
-        val summary: String,
-        val provider: String,
-        val model: String?,
-        val reason: String? = null,
-    )
-
+) : PostPreviewSummaryUseCase {
     private data class ParsedAiSummary(
         val summary: String,
         val modelVersion: String?,
     )
 
     private data class CacheEntry(
-        val result: SummaryResult,
+        val result: PostPreviewSummaryResult,
         val expiresAtMillis: Long,
     )
 
@@ -120,11 +115,11 @@ class PostPreviewSummaryService(
      * 생성 로직을 실행하고 실패 시 대체 경로를 적용합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    fun generate(
+    override fun generate(
         title: String,
         content: String,
         maxLength: Int,
-    ): SummaryResult {
+    ): PostPreviewSummaryResult {
         val normalizedMaxLength = maxLength.coerceIn(80, 220)
         val normalizedModel = sanitizeModel(geminiModel)
         val cacheKey = summaryCacheKey(title, content, normalizedMaxLength, normalizedModel)
@@ -286,7 +281,7 @@ class PostPreviewSummaryService(
             val resolvedModel = parsedAiSummary?.modelVersion?.trim().takeUnless { it.isNullOrBlank() } ?: normalizedModel
             return cacheAndReturn(
                 cacheKey = cacheKey,
-                result = SummaryResult(summary = normalizedAiSummary, provider = "gemini", model = resolvedModel, reason = null),
+                result = PostPreviewSummaryResult(summary = normalizedAiSummary, provider = "gemini", model = resolvedModel, reason = null),
                 ttlSeconds = normalizedCacheTtlSeconds,
                 nowMillis = now,
             )
@@ -312,11 +307,11 @@ class PostPreviewSummaryService(
         nowMillis: Long,
         titleLength: Int,
         contentLength: Int,
-    ): SummaryResult {
+    ): PostPreviewSummaryResult {
         logFallback(reason = reason, titleLength = titleLength, contentLength = contentLength)
         return cacheAndReturn(
             cacheKey = cacheKey,
-            result = SummaryResult(summary = summary, provider = "rule", model = null, reason = reason),
+            result = PostPreviewSummaryResult(summary = summary, provider = "rule", model = null, reason = reason),
             ttlSeconds = ttlSeconds,
             nowMillis = nowMillis,
         )
@@ -631,7 +626,7 @@ class PostPreviewSummaryService(
     private fun readCache(
         cacheKey: String,
         nowMillis: Long,
-    ): SummaryResult? {
+    ): PostPreviewSummaryResult? {
         readCacheInRedis(cacheKey)?.let { return it }
         return readCacheInMemory(cacheKey, nowMillis)
     }
@@ -640,7 +635,7 @@ class PostPreviewSummaryService(
      * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun readCacheInRedis(cacheKey: String): SummaryResult? {
+    private fun readCacheInRedis(cacheKey: String): PostPreviewSummaryResult? {
         if (!isRedisAvailableSafely("cache-available-check")) return null
         val key = redisCacheKey(cacheKey)
         val payload =
@@ -650,7 +645,7 @@ class PostPreviewSummaryService(
                 ?: return null
 
         val parsed =
-            runCatching { objectMapper.readValue(payload, SummaryResult::class.java) }
+            runCatching { objectMapper.readValue(payload, PostPreviewSummaryResult::class.java) }
                 .onFailure { exception ->
                     warnRedisFallback("cache-parse", exception)
                 }.getOrNull()
@@ -666,7 +661,7 @@ class PostPreviewSummaryService(
     private fun readCacheInMemory(
         cacheKey: String,
         nowMillis: Long,
-    ): SummaryResult? =
+    ): PostPreviewSummaryResult? =
         synchronized(cacheLock) {
             val entry = summaryCache[cacheKey] ?: return null
             if (entry.expiresAtMillis <= nowMillis) {
@@ -678,10 +673,10 @@ class PostPreviewSummaryService(
 
     private fun cacheAndReturn(
         cacheKey: String,
-        result: SummaryResult,
+        result: PostPreviewSummaryResult,
         ttlSeconds: Long,
         nowMillis: Long,
-    ): SummaryResult {
+    ): PostPreviewSummaryResult {
         writeCacheInRedis(cacheKey, result, ttlSeconds)
         writeCacheInMemory(cacheKey, result, ttlSeconds, nowMillis)
         return result
@@ -693,7 +688,7 @@ class PostPreviewSummaryService(
      */
     private fun writeCacheInRedis(
         cacheKey: String,
-        result: SummaryResult,
+        result: PostPreviewSummaryResult,
         ttlSeconds: Long,
     ) {
         if (!isRedisAvailableSafely("cache-write-available-check")) return
@@ -713,7 +708,7 @@ class PostPreviewSummaryService(
 
     private fun writeCacheInMemory(
         cacheKey: String,
-        result: SummaryResult,
+        result: PostPreviewSummaryResult,
         ttlSeconds: Long,
         nowMillis: Long,
     ) {

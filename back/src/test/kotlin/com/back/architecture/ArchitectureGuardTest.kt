@@ -5,6 +5,8 @@ import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
+import jakarta.persistence.Entity
+import jakarta.persistence.MappedSuperclass
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
@@ -62,6 +64,34 @@ class ArchitectureGuardTest {
     }
 
     @Test
+    fun `domain layer는 JPA Hibernate Spring 프레임워크에 직접 의존하지 않아야 한다`() {
+        noClasses()
+            .that()
+            .resideInAnyPackage("..boundedContexts..domain..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                "jakarta.persistence..",
+                "org.hibernate..",
+                "org.springframework..",
+            ).check(importedClasses())
+    }
+
+    @Test
+    fun `JPA Entity는 domain 패키지에 두지 않는다`() {
+        noClasses()
+            .that()
+            .resideInAnyPackage(
+                "..boundedContexts..domain..",
+                "..global..domain..",
+            ).should()
+            .beAnnotatedWith(Entity::class.java)
+            .orShould()
+            .beAnnotatedWith(MappedSuperclass::class.java)
+            .check(importedClasses())
+    }
+
+    @Test
     fun `application service는 persistence adapter 구현체를 직접 참조하지 않아야 한다`() {
         noClasses()
             .that()
@@ -85,6 +115,45 @@ class ArchitectureGuardTest {
                 "..boundedContexts..adapter.persistence..",
                 "org.springframework.data.jpa.repository..",
             ).check(importedClasses())
+    }
+
+    @Test
+    fun `global application layer는 persistence adapter 구현체를 직접 참조하지 않아야 한다`() {
+        noClasses()
+            .that()
+            .resideInAnyPackage("..global..application..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage(
+                "..global..adapter.persistence..",
+                "..boundedContexts..adapter.persistence..",
+            ).check(importedClasses())
+    }
+
+    @Test
+    fun `핵심 web controller는 application service 구현체를 직접 참조하지 않아야 한다`() {
+        noClasses()
+            .that()
+            .haveFullyQualifiedName("com.back.boundedContexts.post.adapter.web.ApiV1PostController")
+            .or()
+            .haveFullyQualifiedName("com.back.boundedContexts.post.adapter.web.ApiV1AdmPostController")
+            .or()
+            .haveFullyQualifiedName("com.back.boundedContexts.member.adapter.web.ApiV1AuthController")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("..application.service..")
+            .check(importedClasses())
+    }
+
+    @Test
+    fun `bounded context application port는 Spring Data 타입을 노출하지 않아야 한다`() {
+        noClasses()
+            .that()
+            .resideInAnyPackage("..boundedContexts..application.port..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("org.springframework.data.domain..")
+            .check(importedClasses())
     }
 
     @Test

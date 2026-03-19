@@ -204,8 +204,8 @@ GitHub Actions 기준 필수값:
   예: `MINIO_ROOT_PASSWORD="V7#qL2m@9Tz!4xRb8KpD"`
 - `CUSTOM_STORAGE_ENDPOINT`는 `http://minio_1:9000` 같은 완성된 URI여야 한다.
 - 배포 스크립트는 이제 `http:` 같은 깨진 endpoint나 `${...}` placeholder가 남아 있으면 즉시 실패시킨다.
-- `back/./gradlew test`는 `back/testInfra/docker-compose.yml`을 자동으로 기동하고, Postgres/Redis가 준비될 때까지 기다린 뒤 테스트를 실행한다.
-- `back/./gradlew test`는 이제 테스트 task가 실제로 실행될 때만 test infra를 올린다. `UP-TO-DATE` 또는 스킵된 경우에는 Docker bootstrap 비용을 쓰지 않는다.
+- `cd back && ./gradlew test`는 `back/testInfra/docker-compose.yml`을 자동으로 기동하고, Postgres/Redis가 준비될 때까지 기다린 뒤 테스트를 실행한다.
+- `cd back && ./gradlew test`는 이제 테스트 task가 실제로 실행될 때만 test infra를 올린다. `UP-TO-DATE` 또는 스킵된 경우에는 Docker bootstrap 비용을 쓰지 않는다.
 - test infra는 dev infra와 분리된 전용 포트/볼륨을 사용한다. 기본 포트는 Postgres `15432`, Redis `16379`이다.
 - test workflow는 별도 `docker compose up/down`를 직접 실행하지 않고, Gradle의 자동 bootstrap 흐름을 그대로 사용한다.
 - 순수 로직 테스트는 가능하면 `@SpringBootTest`를 피하고 plain unit test로 유지한다. 전체 컨텍스트를 띄우는 테스트는 DB/Redis/MockMvc가 실제로 필요한 경우에만 쓴다.

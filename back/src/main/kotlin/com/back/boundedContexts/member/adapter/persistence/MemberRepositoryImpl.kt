@@ -1,7 +1,7 @@
 package com.back.boundedContexts.member.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.domain.shared.QMember.member
+import com.back.boundedContexts.member.model.shared.QMember.member
 import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
 import com.querydsl.core.types.dsl.Expressions

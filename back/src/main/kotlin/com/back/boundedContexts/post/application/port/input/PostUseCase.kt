@@ -6,8 +6,8 @@ import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
-import org.springframework.data.domain.Page
 
 /**
  * `PostUseCase` 인터페이스입니다.
@@ -115,20 +115,20 @@ interface PostUseCase {
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post>
+    ): PagedResult<Post>
 
     fun findPagedByKwForAdmin(
         kw: String,
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post>
+    ): PagedResult<Post>
 
     fun findDeletedPagedByKwForAdmin(
         kw: String,
         page: Int,
         pageSize: Int,
-    ): Page<AdmDeletedPostDto>
+    ): PagedResult<AdmDeletedPostDto>
 
     fun restoreDeletedByIdForAdmin(id: Int): Post
 
@@ -140,7 +140,7 @@ interface PostUseCase {
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post>
+    ): PagedResult<Post>
 
     fun findPagedByKwAndTag(
         kw: String,
@@ -148,7 +148,7 @@ interface PostUseCase {
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): Page<Post>
+    ): PagedResult<Post>
 
     fun getPublicTagCounts(): List<TagCountDto>
 

@@ -9,4 +9,9 @@ enum class PostSearchSortType1(
     CREATED_AT_ASC(Sort.by(Sort.Direction.ASC, "createdAt")),
     MODIFIED_AT(Sort.by(Sort.Direction.DESC, "modifiedAt")),
     MODIFIED_AT_ASC(Sort.by(Sort.Direction.ASC, "modifiedAt")),
+    ;
+
+    val property: String by lazy { sortBy.first().property }
+
+    val isAsc: Boolean by lazy { sortBy.first().isAscending }
 }

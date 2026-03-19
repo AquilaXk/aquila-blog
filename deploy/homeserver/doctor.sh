@@ -7,6 +7,8 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -222,6 +224,47 @@ compose logs --no-color --tail=60 db_1 || true
 
 print_section "Redis Logs (tail 60)"
 compose logs --no-color --tail=60 redis_1 || true
+
+print_section "5xx Correlation (last 15m)"
+compose logs --no-color --since=15m caddy > "${TMP_DIR}/caddy.log" 2>&1 || true
+compose logs --no-color --since=15m back_blue > "${TMP_DIR}/back.log" 2>&1 || true
+compose logs --no-color --since=15m db_1 > "${TMP_DIR}/db.log" 2>&1 || true
+
+echo "[proxy] caddy 5xx top uri"
+if grep -Eq '"status":[[:space:]]*5[0-9]{2}' "${TMP_DIR}/caddy.log"; then
+  grep -E '"status":[[:space:]]*5[0-9]{2}' "${TMP_DIR}/caddy.log" \
+    | sed -E 's#.*"uri":"([^"]+)".*"status":[[:space:]]*([0-9]{3}).*#\2 \1#' \
+    | sort | uniq -c | sort -nr | head -n 15
+else
+  echo "no caddy 5xx access log in last 15m"
+fi
+
+echo "[app] back 5xx/error signature top"
+if grep -Eq 'api_error|post_public_read_failed|unhandled_server_exception|app_exception status=5|Data integrity violation|Optimistic lock conflict' "${TMP_DIR}/back.log"; then
+  grep -E 'api_error|post_public_read_failed|unhandled_server_exception|app_exception status=5|Data integrity violation|Optimistic lock conflict' "${TMP_DIR}/back.log" \
+    | sed -E 's#^.*(api_error|post_public_read_failed|unhandled_server_exception|app_exception status=5[0-9]{2}|Data integrity violation|Optimistic lock conflict).*$#\1#' \
+    | sort | uniq -c | sort -nr
+else
+  echo "no app error signature in last 15m"
+fi
+
+echo "[app] requestId 상위(오류 로그 기준)"
+if grep -Eq 'rid=' "${TMP_DIR}/back.log"; then
+  grep -E 'api_error|post_public_read_failed|unhandled_server_exception|app_exception status=5' "${TMP_DIR}/back.log" \
+    | grep -Eo 'rid=[^ ]+' \
+    | sort | uniq -c | sort -nr | head -n 10
+else
+  echo "requestId not found in app logs"
+fi
+
+echo "[db] postgres error signature top"
+if grep -Eiq 'ERROR|FATAL|deadlock|canceling statement due to statement timeout|too many connections|remaining connection slots are reserved|could not obtain lock|out of shared memory' "${TMP_DIR}/db.log"; then
+  grep -Ei 'ERROR|FATAL|deadlock|canceling statement due to statement timeout|too many connections|remaining connection slots are reserved|could not obtain lock|out of shared memory' "${TMP_DIR}/db.log" \
+    | sed -E 's#^[^:]+:[[:space:]]*##' \
+    | sort | uniq -c | sort -nr | head -n 20
+else
+  echo "no db error signature in last 15m"
+fi
 
 print_section "Done"
 echo "doctor.sh completed."

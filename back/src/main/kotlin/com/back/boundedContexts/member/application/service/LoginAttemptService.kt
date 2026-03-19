@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
+import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicyUseCase
 import com.back.global.app.application.AppFacade
 import com.back.global.cache.application.port.output.RedisKeyValuePort
 import com.back.global.exception.application.AppException
@@ -29,7 +30,7 @@ class LoginAttemptService(
     @param:Value("\${custom.auth.login.requireRedisInProd:true}")
     private val requireRedisInProd: Boolean,
     private val redisKeyValuePort: RedisKeyValuePort,
-) {
+) : LoginAttemptPolicyUseCase {
     private data class LoginAttemptState(
         var windowStartedAt: Long,
         var failureCount: Int,
@@ -43,7 +44,7 @@ class LoginAttemptService(
      * 검증 규칙을 적용해 허용 여부를 판정합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    fun isBlocked(
+    override fun isBlocked(
         username: String,
         clientIp: String,
     ): Boolean {
@@ -70,7 +71,7 @@ class LoginAttemptService(
      * 상태 기록을 남기고 제한 정책 계산에 반영합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    fun recordFailure(
+    override fun recordFailure(
         username: String,
         clientIp: String,
     ): Boolean {
@@ -111,7 +112,7 @@ class LoginAttemptService(
      * clear 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    fun clear(
+    override fun clear(
         username: String,
         clientIp: String,
     ) {

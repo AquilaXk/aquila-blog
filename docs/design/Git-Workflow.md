@@ -58,8 +58,8 @@ flowchart LR
 
 | 작업 유형 | 브랜치 분리 | 최소 검증 | 배포 전 체크 |
 | --- | --- | --- | --- |
-| UI 수정 | 권장 | `front/yarn build` | API base URL 영향 여부 |
-| 도메인/비즈니스 로직 | 필수 수준 권장 | `back/gradlew ktlintCheck`, `compileKotlin`, `test` | DB/권한 회귀 |
+| UI 수정 | 권장 | `cd front && yarn build` | API base URL 영향 여부 |
+| 도메인/비즈니스 로직 | 필수 수준 권장 | `cd back && ./gradlew ktlintCheck`, `compileKotlin`, `test` | DB/권한 회귀 |
 | 인프라/배포 | 필수 | workflow/스크립트 리뷰 | Secret, alias, health check |
 | 운영 hotfix | 상황 따라 `main` 직접 가능 | 최소 재현 + 핵심 테스트 | 즉시 smoke test |
 

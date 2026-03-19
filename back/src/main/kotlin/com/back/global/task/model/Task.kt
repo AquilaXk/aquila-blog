@@ -1,4 +1,4 @@
-package com.back.global.task.domain
+package com.back.global.task.model
 
 import com.back.global.jpa.domain.AfterDDL
 import com.back.global.jpa.domain.BaseTime

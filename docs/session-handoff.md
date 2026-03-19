@@ -86,7 +86,7 @@ flowchart LR
 | 글 목록 비어 있음 | `front/src/apis/backend/posts.ts` | 목록 API 응답, `published/listed` |
 | 상세 링크가 이상함 | `front/src/pages/posts/[id].tsx`, `front/src/pages/[slug].tsx` | canonical `/posts/:id`, legacy redirect |
 | 이미지 오류 | `back/src/main/kotlin/com/back/boundedContexts/post/adapter/storage/PostImageStorageAdapter.kt` | endpoint, accessKey, secretKey |
-| Kakao OAuth 실패 | `deploy/homeserver/Caddyfile`, `application.yaml` | `X-Forwarded-Proto`, `custom.site.backUrl`, `redirect_uri` |
+| Kakao OAuth 실패 | `deploy/homeserver/caddy/Caddyfile`, `application.yaml` | `X-Forwarded-Proto`, `custom.site.backUrl`, `redirect_uri` |
 | 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, upstream host, health |
 | 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/*`, `application/port/input|output`, `application` 경계 확인 |
 
@@ -134,7 +134,7 @@ flowchart LR
 - `front/src/libs/server/adminGuard.ts`
 - `.github/workflows/deploy.yml`
 - `deploy/homeserver/blue_green_deploy.sh`
-- `deploy/homeserver/Caddyfile`
+- `deploy/homeserver/caddy/Caddyfile`
 - `deploy/homeserver/docker-compose.prod.yml`
 
 ## 로컬 검증 명령

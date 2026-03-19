@@ -22,12 +22,12 @@ services:
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
-    command: caddy run --config /deploy/homeserver/Caddyfile --adapter caddyfile
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./:/deploy/homeserver:ro
+      - ./caddy:/etc/caddy:ro
       - caddy_data:/data
       - caddy_config:/config
     env_file:

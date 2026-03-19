@@ -10,7 +10,15 @@ STATE_FILE="${SCRIPT_DIR}/.active_backend"
 
 mkdir -p "${BACKUP_DIR}"
 
-for file in Caddyfile .env.prod docker-compose.prod.yml .active_backend; do
+if [[ -d "${SCRIPT_DIR}/caddy" ]]; then
+  cp -R "${SCRIPT_DIR}/caddy" "${BACKUP_DIR}/caddy"
+elif [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
+  # legacy fallback for older layout
+  mkdir -p "${BACKUP_DIR}/caddy"
+  cp "${SCRIPT_DIR}/Caddyfile" "${BACKUP_DIR}/caddy/Caddyfile"
+fi
+
+for file in .env.prod docker-compose.prod.yml .active_backend; do
   if [[ -f "${SCRIPT_DIR}/${file}" ]]; then
     cp "${SCRIPT_DIR}/${file}" "${BACKUP_DIR}/${file}"
   fi

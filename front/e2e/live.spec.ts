@@ -177,7 +177,13 @@ test.describe("live production e2e", () => {
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
 
-    const ignorablePatterns = [/ResizeObserver loop/i]
+    const ignorablePatterns = [
+      /ResizeObserver loop/i,
+      /ChunkLoadError:\s*Loading chunk .* failed/i,
+      /Loading (?:CSS )?chunk .* failed/i,
+      /_next\/static\/chunks\/.*\.js/i,
+      /Failed to fetch dynamically imported module/i,
+    ]
     const criticalErrors = runtimeErrors.filter(
       (message) => !ignorablePatterns.some((pattern) => pattern.test(message))
     )

@@ -173,7 +173,8 @@ GitHub Actions 기준 필수값:
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
-- `frontLiveE2E` job은 실행 전 preflight (`/login`, `/actuator/health/readiness`)를 3회 재시도로 점검하고 실패 시 즉시 중단한다.
+- `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness`를 우선 확인하고, 실패 시 `/member/api/v1/auth/me` fallback으로 도달성까지 확인한다.
+- preflight 기본값은 `5회` 재시도, `--connect-timeout 5`, `--max-time 15`이며 `E2E_PREFLIGHT_*` 환경변수로 조정할 수 있다.
 - `frontLiveE2E` job은 `PLAYWRIGHT_LIVE_FAIL_FAST=true`, `--max-failures=1`, `--reporter=line`로 실행해 첫 치명 실패에서 빠르게 종료한다.
 - `frontLiveE2E` job은 30초 heartbeat 로그(`[live-e2e] still running ...`)를 출력해 무출력 대기를 방지한다.
 - `front/e2e/live.spec.ts`는 UI 로그인 경로 테스트를 최소 1개 유지한다. (회귀 방지)

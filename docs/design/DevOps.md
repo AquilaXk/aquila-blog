@@ -178,6 +178,7 @@ GitHub Actions 기준 필수값:
 - 이미지 키가 누락되면 배포 스크립트는 서버 로컬 Docker cache(`cloudflare/cloudflared:latest`, `jangka512/pgj:latest`, `minio/minio:latest`)의 `RepoDigest`를 조회해 pin 값으로 자동 보강을 시도한다. 보강 실패 시 배포를 중단한다.
 - `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `blueGreenDeploy` 완료 전 공인 API 도메인(`https://API_DOMAIN/actuator/health/readiness`) 외부 도달성까지 검증한다. `status=000` timeout이 지속되면 `cloudflared`를 1회 재시작 후 재검증한다.
+- `blue_green_deploy.sh` 성공 이후의 후속 검증(post-check)에서 실패해도 backup 기준 자동 rollback을 수행해야 한다. (blue_green_deploy 실패와 동일 정책)
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
 - `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness` -> `/member/api/v1/auth/me` -> `/member/api/v1/auth/login` 순서로 도달성과 로그인 가능 여부를 확인한다.
 - `frontLiveE2E`의 API base URL은 추측(`api.<front-host>`)보다 `CUSTOM_PROD_BACKURL`/`HOME_SERVER_ENV`에 정의된 백엔드 URL을 우선 사용한다.
@@ -259,7 +260,7 @@ sequenceDiagram
 | 신규 backend 기동 | `/actuator/health/readiness` 가 `200` 응답 | cutover 전 중단 |
 | alias 전환 | `back_active` IP 일치 여부 | rollback 시도 |
 | Caddy 경유 검증 | `Host` 헤더 기반 `/actuator/health/readiness` 가 `200` 응답 | rollback 시도 |
-| post-check | active backend와 alias 1:1 매칭 확인 | workflow 실패 |
+| post-check | active backend와 alias 1:1 매칭 + Caddy/공인 API 후속 검증 | rollback 시도 후 workflow 실패 |
 
 - 배포 readiness는 `ping,db`만 포함한다.
   외부 SMTP 상태는 관리자용 메일 진단 API에서 별도로 확인하고, 메일 서버 일시 장애 때문에 전체 롤아웃이 막히지 않게 한다.

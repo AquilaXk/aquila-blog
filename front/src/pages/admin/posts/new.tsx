@@ -18,10 +18,8 @@ import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import {
-  CATEGORY_ICON_OPTIONS,
   compareCategoryValues,
   normalizeCategoryValue,
-  splitCategoryDisplay,
 } from "src/libs/utils"
 import { isNavigationCancelledError, replaceRoute, toLoginPath } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
@@ -800,14 +798,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [postTags, setPostTags] = useState<string[]>([])
   const [postCategory, setPostCategory] = useState("")
   const [tagDraft, setTagDraft] = useState("")
-  const [categoryDraft, setCategoryDraft] = useState("")
-  const [categoryIconId, setCategoryIconId] = useState<(typeof CATEGORY_ICON_OPTIONS)[number]["id"]>(
-    CATEGORY_ICON_OPTIONS[0].id
-  )
   const [customTagCatalog, setCustomTagCatalog] = useState<string[]>([])
   const [customCategoryCatalog, setCustomCategoryCatalog] = useState<string[]>([])
   const [knownTags, setKnownTags] = useState<string[]>([])
-  const [knownCategories, setKnownCategories] = useState<string[]>([])
   const [tagUsageMap, setTagUsageMap] = useState<MetaUsageMap>({})
   const [categoryUsageMap, setCategoryUsageMap] = useState<MetaUsageMap>({})
   const [metaCatalogLoading, setMetaCatalogLoading] = useState(false)
@@ -1025,12 +1018,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostCategory(draft.category)
     setPostVisibility(draft.visibility)
 
-    const parsedCategory = splitCategoryDisplay(draft.category)
-    setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
     setKnownTags((prev) => dedupeStrings([...prev, ...draft.tags]).sort((a, b) => a.localeCompare(b)))
-    setKnownCategories((prev) =>
-      dedupeStrings([...prev, ...(draft.category ? [draft.category] : [])]).sort(compareCategoryValues)
-    )
     setLocalDraftSavedAt(draft.savedAt || "")
     setPublishStatus(
       {
@@ -1055,7 +1043,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const syncEditorMeta = useCallback((content: string) => {
     const parsed = parseEditorMeta(content)
-    const parsedCategory = splitCategoryDisplay(parsed.category)
     const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
     const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
     const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
@@ -1077,11 +1064,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPreviewThumbnailSourceUrl(syncedThumbnail)
     setPostTags(parsed.tags)
     setPostCategory(parsed.category)
-    setCategoryIconId(parsedCategory.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsedCategory.iconId)
     setKnownTags((prev) => dedupeStrings([...prev, ...parsed.tags]).sort((a, b) => a.localeCompare(b)))
-    setKnownCategories((prev) =>
-      dedupeStrings([...prev, ...(parsed.category ? [parsed.category] : [])]).sort(compareCategoryValues)
-    )
   }, [])
 
   const resolvedPreviewSummary = useMemo(() => {
@@ -1222,13 +1205,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           a.localeCompare(b)
         )
       )
-      setKnownCategories(
-        dedupeStrings([...Object.keys(nextCategoryUsageMap), ...customCategoryCatalog]).sort(compareCategoryValues)
-      )
     } finally {
       setMetaCatalogLoading(false)
     }
-  }, [customCategoryCatalog, customTagCatalog])
+  }, [customTagCatalog])
 
   const addTagsToPost = (values: string[]) => {
     const normalizedTags = dedupeStrings(values.map((value) => value.trim()).filter(Boolean))
@@ -1296,7 +1276,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
       setPostTags([])
       setPostCategory("")
-      setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
     }
     setPublishStatus(
       {
@@ -1520,9 +1499,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         "page"
       )
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
-      setKnownCategories((prev) =>
-        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
-      )
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1563,9 +1539,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       })
 
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
-      setKnownCategories((prev) =>
-        dedupeStrings([...prev, ...(postCategory ? [postCategory] : [])]).sort(compareCategoryValues)
-      )
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
@@ -2058,17 +2031,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       )
     )
   }, [customTagCatalog, postTags, tagUsageMap])
-
-  useEffect(() => {
-    setKnownCategories((prev) =>
-      dedupeStrings([
-        ...prev,
-        ...Object.keys(categoryUsageMap),
-        ...customCategoryCatalog,
-        ...(postCategory ? [postCategory] : []),
-      ]).sort(compareCategoryValues)
-    )
-  }, [categoryUsageMap, customCategoryCatalog, postCategory])
 
   useEffect(() => {
     if (authStatus === "loading" || authStatus === "unavailable") return
@@ -4926,18 +4888,6 @@ const PublishNotice = styled.div`
   @media (max-width: 720px) {
     width: 100%;
   }
-`
-
-const MetadataSection = styled.section`
-  display: grid;
-  gap: 0.85rem;
-  margin: 0 0 0.85rem;
-  padding: 0.75rem 0;
-  border-radius: 0;
-  border: 0;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
 `
 
 const MetadataStatus = styled.div`

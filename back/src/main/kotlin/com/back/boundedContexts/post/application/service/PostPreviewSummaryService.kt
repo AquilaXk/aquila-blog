@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.node.JsonNodeType
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -393,7 +394,6 @@ class PostPreviewSummaryService(
      * 원본 입력에서 필요한 값을 안전하게 추출합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    @Suppress("DEPRECATION")
     private fun extractSummaryText(root: JsonNode): String {
         val candidates = root.path("candidates")
         if (!candidates.isArray || candidates.isEmpty) return ""
@@ -406,7 +406,7 @@ class PostPreviewSummaryService(
                 val text =
                     part
                         .path("text")
-                        .asText()
+                        .let(::readJsonText)
                         .trim()
                         .orEmpty()
                 if (text.isBlank()) continue
@@ -418,7 +418,6 @@ class PostPreviewSummaryService(
         return ""
     }
 
-    @Suppress("DEPRECATION")
     private fun parseSummaryFromJsonText(raw: String): String? {
         val normalized = raw.trim()
         if (normalized.isBlank()) return null
@@ -438,27 +437,83 @@ class PostPreviewSummaryService(
         }
 
         // 설명 문구 + JSON 형태(예: "Here is the JSON requested: {...}")도 지원한다.
-        JSON_OBJECT_REGEX.findAll(normalized).forEach { match ->
-            val candidate = match.value.trim()
-            if (candidate.isNotBlank()) candidates += candidate
+        extractJsonObjectCandidates(normalized).forEach { candidate ->
+            if (candidate.isNotBlank()) candidates += candidate.trim()
         }
 
         for (candidate in candidates) {
             val parsedSummary =
                 runCatching {
                     val node = objectMapper.readTree(candidate)
-                    node.path("summary").asText().trim()
+                    readJsonText(node.path("summary")).trim()
                 }.getOrNull()
             if (!parsedSummary.isNullOrBlank()) return parsedSummary
+        }
+
+        // JSON 파싱이 실패해도 summary 필드 문자열만 있는 경우를 복구한다.
+        val summaryFieldMatch = SUMMARY_FIELD_REGEX.find(normalized)
+        if (summaryFieldMatch != null) {
+            val escapedValue = summaryFieldMatch.groupValues.getOrNull(1).orEmpty()
+            val decoded =
+                runCatching {
+                    objectMapper.readValue("\"$escapedValue\"", String::class.java)
+                }.getOrNull()?.trim()
+            if (!decoded.isNullOrBlank()) return decoded
         }
 
         return null
     }
 
-    @Suppress("DEPRECATION")
+    private fun extractJsonObjectCandidates(raw: String): List<String> {
+        if (raw.isBlank()) return emptyList()
+        val candidates = mutableListOf<String>()
+        var depth = 0
+        var start = -1
+        var inString = false
+        var escaped = false
+
+        raw.forEachIndexed { index, ch ->
+            if (inString) {
+                if (escaped) {
+                    escaped = false
+                } else {
+                    when (ch) {
+                        '\\' -> escaped = true
+                        '"' -> inString = false
+                    }
+                }
+                return@forEachIndexed
+            }
+
+            when (ch) {
+                '"' -> inString = true
+                '{' -> {
+                    if (depth == 0) start = index
+                    depth += 1
+                }
+                '}' -> {
+                    if (depth == 0) return@forEachIndexed
+                    depth -= 1
+                    if (depth == 0 && start >= 0) {
+                        candidates += raw.substring(start, index + 1)
+                        start = -1
+                    }
+                }
+            }
+        }
+
+        return candidates
+    }
+
     private fun extractModelVersion(root: JsonNode): String? {
-        val modelVersion = root.path("modelVersion").asText().trim()
+        val modelVersion = readJsonText(root.path("modelVersion")).trim()
         return modelVersion.takeIf { it.isNotBlank() }
+    }
+
+    private fun readJsonText(node: JsonNode): String {
+        if (node.isMissingNode || node.isNull || node.nodeType != JsonNodeType.STRING) return ""
+        return runCatching { objectMapper.treeToValue(node, String::class.java) }
+            .getOrDefault("")
     }
 
     private fun normalizeSummary(
@@ -468,6 +523,7 @@ class PostPreviewSummaryService(
         val cleaned =
             raw
                 .orEmpty()
+                .replace(Regex("(?i)^\\s*here\\s+is\\s+the\\s+json\\s+requested\\s*[:：-]?\\s*"), "")
                 .replace(Regex("^[\"'“”‘’\\s]*요약\\s*[:：-]\\s*"), "")
                 .replace(Regex("[\\r\\n]+"), " ")
                 .replace(Regex("\\s+"), " ")
@@ -900,7 +956,7 @@ class PostPreviewSummaryService(
         private const val AI_QUOTED_FRAGMENT_MAX_LENGTH = 30
         private const val EXACT_MATCH_SHORT_THRESHOLD = 46
         private val JSON_FENCE_REGEX = Regex("```(?:json|JSON)?\\s*([\\s\\S]*?)```")
-        private val JSON_OBJECT_REGEX = Regex("\\{[\\s\\S]*?}")
+        private val SUMMARY_FIELD_REGEX = Regex("\"summary\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
         private val UNSAFE_SUMMARY_MARKERS = setOf("ignore previous", "system prompt", "<본문>", "</본문>", "```")
         private val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
     }

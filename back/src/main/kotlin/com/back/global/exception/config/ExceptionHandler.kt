@@ -121,12 +121,15 @@ class ExceptionHandler(
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
         if (ex.rsData.statusCode >= 500) {
+            val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+            val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
+            val query = normalizeQueryString(request.queryString)
             logger.error(
                 "app_exception status={} method={} path={} query={} resultCode={}",
                 ex.rsData.statusCode,
-                request.method,
-                request.requestURI,
-                normalizeQueryString(request.queryString),
+                method,
+                path,
+                query,
                 ex.rsData.resultCode,
                 ex,
             )
@@ -175,11 +178,14 @@ class ExceptionHandler(
         ex: Exception,
         request: HttpServletRequest,
     ): ResponseEntity<RsData<Void>> {
+        val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+        val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
+        val query = normalizeQueryString(request.queryString)
         logger.error(
             "unhandled_server_exception method={} path={} query={}",
-            request.method,
-            request.requestURI,
-            normalizeQueryString(request.queryString),
+            method,
+            path,
+            query,
             ex,
         )
         return ResponseEntity
@@ -188,9 +194,30 @@ class ExceptionHandler(
     }
 
     private fun normalizeQueryString(rawQuery: String?): String =
-        rawQuery
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.take(512)
-            ?: "-"
+        sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
+
+    private fun sanitizeLogValue(
+        raw: String?,
+        maxLength: Int,
+    ): String {
+        if (raw.isNullOrBlank()) return "-"
+
+        val sanitized =
+            raw
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace('\t', ' ')
+                .replace(LOG_CONTROL_CHAR_REGEX, "?")
+                .trim()
+
+        if (sanitized.isBlank()) return "-"
+        return sanitized.take(maxLength)
+    }
+
+    companion object {
+        private const val MAX_METHOD_LENGTH = 16
+        private const val MAX_PATH_LENGTH = 512
+        private const val MAX_QUERY_LENGTH = 512
+        private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+    }
 }

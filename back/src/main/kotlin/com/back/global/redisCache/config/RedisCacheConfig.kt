@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cache.Cache
 import org.springframework.cache.CacheManager
+import org.springframework.cache.annotation.CachingConfigurer
 import org.springframework.cache.annotation.EnableCaching
 import org.springframework.cache.interceptor.CacheErrorHandler
 import org.springframework.context.annotation.Bean
@@ -28,11 +29,9 @@ import java.time.Duration
 @EnableConfigurationProperties(RedisCacheProperties::class)
 class RedisCacheConfig(
     private val properties: RedisCacheProperties,
-) {
+) : CachingConfigurer {
     private val logger = LoggerFactory.getLogger(RedisCacheConfig::class.java)
-
-    @Bean
-    fun cacheErrorHandler(): CacheErrorHandler =
+    private val cacheErrorHandlerDelegate =
         object : CacheErrorHandler {
             override fun handleCacheGetError(
                 exception: RuntimeException,
@@ -67,6 +66,12 @@ class RedisCacheConfig(
                 logger.warn("Cache CLEAR failed (cache={})", cache.name, exception)
             }
         }
+
+    override fun errorHandler(): CacheErrorHandler = cacheErrorHandlerDelegate
+
+    @Bean
+    fun cacheErrorHandler(): CacheErrorHandler =
+        cacheErrorHandlerDelegate
 
     /**
      * cacheManager 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.

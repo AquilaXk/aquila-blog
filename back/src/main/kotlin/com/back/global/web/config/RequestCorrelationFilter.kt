@@ -39,9 +39,11 @@ class RequestCorrelationFilter(
             filterChain.doFilter(request, response)
         } finally {
             val elapsedMs = (System.nanoTime() - startNs) / 1_000_000
-            val method = request.method
-            val path = request.requestURI.orEmpty()
+            val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+            val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
+            val query = normalizeQueryString(request.queryString)
             val status = response.status
+            val remoteIp = resolveClientIp(request)
 
             if (status >= 500) {
                 log.error(
@@ -49,10 +51,10 @@ class RequestCorrelationFilter(
                     requestId,
                     method,
                     path,
-                    normalizeQueryString(request.queryString),
+                    query,
                     status,
                     elapsedMs,
-                    resolveClientIp(request),
+                    remoteIp,
                 )
             } else if (elapsedMs >= slowRequestThresholdMs) {
                 log.warn(
@@ -60,10 +62,10 @@ class RequestCorrelationFilter(
                     requestId,
                     method,
                     path,
-                    normalizeQueryString(request.queryString),
+                    query,
                     status,
                     elapsedMs,
-                    resolveClientIp(request),
+                    remoteIp,
                 )
             }
 
@@ -72,28 +74,49 @@ class RequestCorrelationFilter(
     }
 
     private fun resolveRequestId(rawHeader: String?): String {
-        val trimmed = rawHeader?.trim().orEmpty()
-        if (trimmed.isBlank()) return UUID.randomUUID().toString()
-        return trimmed.take(MAX_REQUEST_ID_LENGTH)
+        val candidate = sanitizeLogValue(rawHeader, MAX_REQUEST_ID_LENGTH)
+        val normalized =
+            candidate.filter { ch ->
+                ch.isLetterOrDigit() || ch == '-' || ch == '_' || ch == '.'
+            }
+        if (normalized.isBlank() || normalized == "-") return UUID.randomUUID().toString()
+        return normalized.take(MAX_REQUEST_ID_LENGTH)
     }
 
     private fun resolveClientIp(request: HttpServletRequest): String {
-        val forwardedFor = request.getHeader("X-Forwarded-For")?.trim().orEmpty()
-        return if (forwardedFor.isNotBlank()) {
-            forwardedFor
-                .split(",")
-                .firstOrNull()
-                ?.trim()
-                .orEmpty()
+        val forwardedFor = request.getHeader("X-Forwarded-For")
+        return if (!forwardedFor.isNullOrBlank()) {
+            sanitizeLogValue(
+                forwardedFor
+                    .split(",")
+                    .firstOrNull(),
+                MAX_REMOTE_IP_LENGTH,
+            )
         } else {
-            request.remoteAddr.orEmpty()
+            sanitizeLogValue(request.remoteAddr, MAX_REMOTE_IP_LENGTH)
         }
     }
 
     private fun normalizeQueryString(rawQuery: String?): String {
-        val normalized = rawQuery?.trim().orEmpty()
-        if (normalized.isBlank()) return "-"
-        return normalized.take(MAX_QUERY_LENGTH)
+        return sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
+    }
+
+    private fun sanitizeLogValue(
+        raw: String?,
+        maxLength: Int,
+    ): String {
+        if (raw.isNullOrBlank()) return "-"
+
+        val sanitized =
+            raw
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace('\t', ' ')
+                .replace(LOG_CONTROL_CHAR_REGEX, "?")
+                .trim()
+
+        if (sanitized.isBlank()) return "-"
+        return sanitized.take(maxLength)
     }
 
     companion object {
@@ -101,6 +124,10 @@ class RequestCorrelationFilter(
         private const val REQUEST_ID_ATTRIBUTE = "requestId"
         private const val MDC_KEY_REQUEST_ID = "requestId"
         private const val MAX_REQUEST_ID_LENGTH = 120
+        private const val MAX_METHOD_LENGTH = 16
+        private const val MAX_PATH_LENGTH = 512
         private const val MAX_QUERY_LENGTH = 512
+        private const val MAX_REMOTE_IP_LENGTH = 120
+        private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

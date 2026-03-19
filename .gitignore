@@ -13,3 +13,6 @@ docs/agent/
 # k6 output artifacts
 perf/k6/results/*.json
 perf/k6/results/*.txt
+
+# local git hooks
+.githooks/commit-msg

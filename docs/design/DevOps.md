@@ -128,6 +128,8 @@ GitHub Actions 기준 필수값:
 - `HOME_KNOWN_HOSTS`
 - `HOME_GHCR_USERNAME`
 - `HOME_GHCR_TOKEN`
+- `E2E_LIVE_ADMIN_USERNAME`
+- `E2E_LIVE_ADMIN_PASSWORD`
 
 회원가입 이메일 인증을 실제로 쓰려면 아래 값도 필요하다.
 
@@ -149,16 +151,29 @@ GitHub Actions 기준 필수값:
 | --- | --- | --- |
 | `HOME_SERVER_ENV` | 홈서버 `.env.prod` 생성 | 운영 환경변수 단일 원본 |
 | `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` / `ci.yml` test job | Gradle이 자동으로 올리는 test infra와 Spring test profile 비밀번호 정합성 유지 |
+| `E2E_LIVE_ADMIN_USERNAME`, `E2E_LIVE_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 라이브 E2E 전용 계정 자격증명(최우선 사용) |
 | `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 배포 후 운영 도메인 실연동 smoke 검증 |
 | `TS_AUTHKEY` | GitHub Actions | Tailscale 연결 |
 | `HOME_SSH_KEY` | GitHub Actions | 서버 SSH 접속 |
 | `HOME_APP_DIR` | GitHub Actions -> SSH 원격 실행 | 서버 Git 저장소 경로 |
 | `HOME_GHCR_USERNAME`, `HOME_GHCR_TOKEN` | 홈서버 GHCR login | private image pull |
 
+## Live E2E 계정/데이터 리셋 정책
+
+- 라이브 E2E는 운영 관리자 개인 계정 대신 전용 계정(`E2E_LIVE_ADMIN_*`)을 기본값으로 사용한다.
+- 전용 계정이 비어 있으면 `CUSTOM__E2E__ADMIN__*` → `CUSTOM__ADMIN__*` → `E2E_ADMIN_*` 순서로 fallback 한다.
+- 라이브 E2E 시나리오는 최소 1개 UI 로그인 경로를 유지하고, 나머지 운영 플로우 검증은 API 로그인 기반으로 안정성을 확보한다.
+- 라이브 E2E 브라우저 매트릭스는 최소 `Chromium + WebKit` 2종을 유지한다.
+- 전용 계정 데이터는 테스트 전용 식별값(예: 제목 prefix, 태그 prefix)을 사용해 운영 데이터와 분리한다.
+- 테스트로 생성된 데이터는 실행 직후 정리하거나, 최소 주 1회 정리 배치를 실행한다.
+- 전용 계정 비밀번호/토큰은 정기(권장: 월 1회) 또는 사고 직후 즉시 교체한다.
+
 ## 중요한 운영 규칙
 
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
+- `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
+- `front/e2e/live.spec.ts`는 UI 로그인 경로 테스트를 최소 1개 유지한다. (회귀 방지)
 - dev/test 프로파일의 DB/Redis 비밀번호 기본값은 비워 두고, 테스트 실행 시 Gradle이 주입하는 값(`CI_DB_PASSWORD`, `CI_REDIS_PASSWORD`)을 사용한다.
 - 로그인 시도 제한은 prod에서 Redis 의존을 기본으로 한다. Redis가 준비되지 않으면 로그인 시도 자체를 `503`으로 막아 보호 일관성을 유지한다.
 - dev/test에서는 Redis가 없을 때만 인메모리 fallback을 사용한다.

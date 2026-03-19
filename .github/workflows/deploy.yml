@@ -425,6 +425,8 @@ jobs:
       PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
       PLAYWRIGHT_USE_WEBSERVER: "false"
       HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
+      E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
+      E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
       E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME || '' }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
 
@@ -507,9 +509,23 @@ jobs:
           echo "PLAYWRIGHT_BASE_URL=${base_url}" >> "$GITHUB_ENV"
           echo "Resolved live e2e base host: $(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
 
-          # 운영에 실제 배포된 관리자 계정을 우선 사용해 시크릿 드리프트로 인한 로그인 실패를 줄인다.
-          resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__USERNAME")"
-          resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__PASSWORD")"
+          # 라이브 E2E 전용 계정을 우선 사용하고, 없으면 운영 관리자 계정으로 fallback 한다.
+          resolved_admin_username="${E2E_LIVE_ADMIN_USERNAME:-}"
+          resolved_admin_password="${E2E_LIVE_ADMIN_PASSWORD:-}"
+
+          if [ -z "${resolved_admin_username}" ]; then
+            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__USERNAME")"
+          fi
+          if [ -z "${resolved_admin_password}" ]; then
+            resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__PASSWORD")"
+          fi
+
+          if [ -z "${resolved_admin_username}" ]; then
+            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__USERNAME")"
+          fi
+          if [ -z "${resolved_admin_password}" ]; then
+            resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__PASSWORD")"
+          fi
 
           if [ -z "${resolved_admin_username}" ]; then
             resolved_admin_username="${E2E_ADMIN_USERNAME:-}"
@@ -545,7 +561,7 @@ jobs:
 
       - name: Install Playwright browser
         working-directory: front
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run live production e2e
         working-directory: front

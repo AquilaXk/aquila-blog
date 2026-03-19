@@ -2,6 +2,25 @@ import { defineConfig, devices } from "@playwright/test"
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const useWebServer = process.env.PLAYWRIGHT_USE_WEBSERVER !== "false"
+const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
+
+const defaultProjects = [
+  {
+    name: "chromium",
+    use: { ...devices["Desktop Chrome"] },
+  },
+]
+
+const liveMultiBrowserProjects = [
+  {
+    name: "chromium",
+    use: { ...devices["Desktop Chrome"] },
+  },
+  {
+    name: "webkit",
+    use: { ...devices["Desktop Safari"] },
+  },
+]
 
 export default defineConfig({
   testDir: "./e2e",
@@ -27,10 +46,5 @@ export default defineConfig({
         reuseExistingServer: true,
       }
     : undefined,
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
+  projects: useLiveMultiBrowser ? liveMultiBrowserProjects : defaultProjects,
 })

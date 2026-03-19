@@ -14,7 +14,7 @@
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.ts",
     "test:e2e:perf": "playwright test e2e/perf.spec.ts",
-    "test:e2e:live": "playwright test e2e/live.spec.ts --workers=1",
+    "test:e2e:live": "PLAYWRIGHT_LIVE_MULTI_BROWSER=true playwright test e2e/live.spec.ts --workers=1",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "postbuild": "echo \"skip next-sitemap (handled by pages/sitemap.xml.tsx)\"",
     "lint": "next lint"

@@ -116,6 +116,59 @@ reload_caddy() {
   compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || true
 }
 
+current_caddy_upstream_host() {
+  awk '
+    $1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {
+      split($2, a, ":")
+      print a[1]
+      exit
+    }
+  ' "${SCRIPT_DIR}/Caddyfile"
+}
+
+current_caddy_mounted_upstream_host() {
+  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
+caddy_mounted_has_legacy_back_active() {
+  compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"
+}
+
+ensure_caddy_mount_sync() {
+  local host_upstream mounted_upstream legacy_token
+  host_upstream="$(current_caddy_upstream_host)"
+  mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  legacy_token="false"
+  if caddy_mounted_has_legacy_back_active; then
+    legacy_token="true"
+  fi
+
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
+    echo "rollback caddy config sync ok: upstream=${mounted_upstream}"
+    return 0
+  fi
+
+  echo "rollback caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  echo "rollback force-recreate caddy to re-bind Caddyfile inode" >&2
+  compose up -d --force-recreate caddy >/dev/null
+  reload_caddy
+
+  mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  legacy_token="false"
+  if caddy_mounted_has_legacy_back_active; then
+    legacy_token="true"
+  fi
+
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
+    echo "rollback caddy config sync repaired: upstream=${mounted_upstream}"
+    return 0
+  fi
+
+  echo "rollback caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  compose logs --no-color --tail=120 caddy >&2 || true
+  return 1
+}
+
 latest_backup() {
   ls -1dt "${BACKUP_ROOT}"/* 2>/dev/null | head -n 1
 }
@@ -129,26 +182,39 @@ backend_http_host() {
   echo "back-green"
 }
 
-standby_backend_http_host() {
+other_backend() {
   local backend="$1"
   if [[ "${backend}" == "back_blue" ]]; then
-    echo "back-green"
+    echo "back_green"
     return
   fi
-  echo "back-blue"
+  echo "back_blue"
+}
+
+is_backend_running() {
+  local backend="$1"
+  compose ps --status running --services 2>/dev/null | grep -qx "${backend}"
+}
+
+stop_backend_if_running() {
+  local backend="$1"
+  if is_backend_running "${backend}"; then
+    compose stop "${backend}" || true
+    echo "rollback stop inactive backend: ${backend}"
+    return
+  fi
+  echo "rollback inactive backend already stopped: ${backend}"
 }
 
 set_caddy_upstream_backend() {
   local backend="$1"
-  local primary_host
-  local standby_host
-  primary_host="$(backend_http_host "${backend}")"
-  standby_host="$(standby_backend_http_host "${backend}")"
+  local active_host
+  active_host="$(backend_http_host "${backend}")"
   local rewritten
-  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${primary_host}:8080 ${standby_host}:8080/g" "${SCRIPT_DIR}/Caddyfile")"
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" "${SCRIPT_DIR}/Caddyfile")"
   printf '%s\n' "${rewritten}" > "${SCRIPT_DIR}/Caddyfile"
   reload_caddy
-  echo "rollback caddy upstream -> primary=${primary_host}:8080 standby=${standby_host}:8080"
+  echo "rollback caddy upstream -> active=${active_host}:8080"
 }
 
 BACKUP_DIR="${1:-$(latest_backup)}"
@@ -168,22 +234,28 @@ done
 
 # normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
-  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back-blue:8080 back-green:8080/g" "${SCRIPT_DIR}/Caddyfile")"
+  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back-blue:8080/g" "${SCRIPT_DIR}/Caddyfile")"
   printf '%s\n' "${normalized}" > "${SCRIPT_DIR}/Caddyfile"
 fi
 
-compose_up_with_retry db_1 redis_1 caddy cloudflared autoheal back_blue back_green
-ensure_db_runtime_guards || true
-reload_caddy
-
+target_backend="back_blue"
 if [[ -f "${STATE_FILE}" ]]; then
-  target_backend="$(cat "${STATE_FILE}" || true)"
-  if [[ "${target_backend}" == "back_blue" || "${target_backend}" == "back_green" ]]; then
-    compose_up_with_retry "${target_backend}"
-    set_caddy_upstream_backend "${target_backend}"
-
-    echo "rollback completed with standby backend kept running for failover"
+  from_state="$(cat "${STATE_FILE}" || true)"
+  if [[ "${from_state}" == "back_blue" || "${from_state}" == "back_green" ]]; then
+    target_backend="${from_state}"
   fi
 fi
+inactive_backend="$(other_backend "${target_backend}")"
+
+compose_up_with_retry db_1 redis_1 caddy cloudflared autoheal
+ensure_db_runtime_guards || true
+reload_caddy
+ensure_caddy_mount_sync
+
+compose_up_with_retry "${target_backend}"
+set_caddy_upstream_backend "${target_backend}"
+ensure_caddy_mount_sync
+stop_backend_if_running "${inactive_backend}"
+echo "rollback completed: active=${target_backend}, inactive stopped=${inactive_backend}"
 
 compose ps

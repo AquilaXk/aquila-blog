@@ -158,6 +158,23 @@ done
 print_section "Caddy Upstream"
 grep -nE 'reverse_proxy back-(blue|green|active):8080' "${SCRIPT_DIR}/Caddyfile" || true
 
+print_section "Caddy Mount Sync"
+host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${SCRIPT_DIR}/Caddyfile" || true)"
+mounted_upstream="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1 || true)"
+legacy_back_active="false"
+if compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile" >/dev/null 2>&1; then
+  legacy_back_active="true"
+fi
+echo "host_upstream=${host_upstream:-<none>}"
+echo "mounted_upstream=${mounted_upstream:-<none>}"
+echo "mounted_legacy_back_active=${legacy_back_active}"
+if [[ -n "${host_upstream}" && "${host_upstream}" != "${mounted_upstream}" ]]; then
+  echo "WARN: host/mounted Caddy upstream mismatch"
+fi
+if [[ "${legacy_back_active}" == "true" ]]; then
+  echo "WARN: mounted Caddyfile still has legacy back_active token"
+fi
+
 print_section "Back Container States"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green)-1|NAMES' || true
 

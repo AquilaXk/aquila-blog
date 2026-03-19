@@ -34,15 +34,7 @@ http://{$API_DOMAIN} {
       Cache-Control "no-cache, no-transform"
     }
 
-    reverse_proxy back-blue:8080 back-green:8080 {
-      lb_policy first
-      lb_retries 1
-      lb_try_duration 4s
-      health_uri /actuator/health/readiness
-      health_interval 10s
-      health_timeout 3s
-      fail_duration 15s
-      max_fails 1
+    reverse_proxy back-blue:8080 {
       header_up Host {host}
       header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
@@ -66,15 +58,7 @@ http://{$API_DOMAIN} {
       Cache-Control "public, max-age=60, stale-while-revalidate=300"
     }
 
-    reverse_proxy back-blue:8080 back-green:8080 {
-      lb_policy first
-      lb_retries 1
-      lb_try_duration 4s
-      health_uri /actuator/health/readiness
-      health_interval 10s
-      health_timeout 3s
-      fail_duration 15s
-      max_fails 1
+    reverse_proxy back-blue:8080 {
       header_up Host {host}
       header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
@@ -87,15 +71,7 @@ http://{$API_DOMAIN} {
       Cache-Control "public, max-age=30, stale-while-revalidate=120"
     }
 
-    reverse_proxy back-blue:8080 back-green:8080 {
-      lb_policy first
-      lb_retries 1
-      lb_try_duration 4s
-      health_uri /actuator/health/readiness
-      health_interval 10s
-      health_timeout 3s
-      fail_duration 15s
-      max_fails 1
+    reverse_proxy back-blue:8080 {
       header_up Host {host}
       header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
@@ -103,20 +79,11 @@ http://{$API_DOMAIN} {
     }
   }
 
-  # Blue/Green cutover rewrites upstream order.
-  # First upstream = active, second upstream = hot standby.
+  # Blue/Green cutover rewrites single active upstream host.
   handle {
     encode gzip zstd
 
-    reverse_proxy back-blue:8080 back-green:8080 {
-      lb_policy first
-      lb_retries 1
-      lb_try_duration 4s
-      health_uri /actuator/health/readiness
-      health_interval 10s
-      health_timeout 3s
-      fail_duration 15s
-      max_fails 1
+    reverse_proxy back-blue:8080 {
       # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
       # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
       # callback URLs, so we pin the upstream scheme/host to the external URL.

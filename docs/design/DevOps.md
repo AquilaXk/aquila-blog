@@ -227,13 +227,14 @@ GitHub Actions 기준 필수값:
 
 ## Blue/Green 전환 원칙
 
-- Caddy는 `back-blue/back-green` 2개 upstream을 항상 유지하고 `lb_policy first`로 1순위(active)부터 사용한다.
-- 신규 컨테이너가 올라오면 readiness check 통과 후 Caddy upstream 순서를 `active -> standby`로 재작성하고 reload한다.
-- 전환 이후에도 이전 backend를 종료하지 않고 standby로 유지해 순간 장애 시 즉시 우회한다.
+- Caddy는 단일 upstream(active 1개: `back-blue` 또는 `back-green`)만 사용한다.
+- 신규 컨테이너가 올라오면 readiness check 통과 후 Caddy upstream host를 active backend로 교체하고 reload한다.
+- 운영 steady-state에서는 back 컨테이너를 1개만 유지한다. cutover 검증이 끝나면 이전 backend는 즉시 stop한다.
 - `back_active` 같은 Docker DNS alias 이동에는 의존하지 않는다.
 - Caddyfile이 bind-mount된 운영 환경에서는 upstream 전환 시 파일 inode를 유지해야 하므로 `mv` 교체 대신 in-place overwrite를 사용한다.
+- 배포/롤백은 호스트 Caddyfile과 컨테이너 `/etc/caddy/Caddyfile` upstream 동기화를 검사한다. mismatch 또는 `back_active` 잔존 시 `caddy --force-recreate`로 mount 드리프트를 자동 복구한다.
 - 직접 backend health probe는 Tomcat의 Host 검증에 걸리지 않도록 `back-blue`, `back-green` 같은 HTTP-safe alias로 호출한다.
-- Caddy 라우팅 검증이 끝나기 전에는 기존 active를 내리지 않는다.
+- Caddy 라우팅 검증이 끝나면 기존 active는 즉시 stop해 메모리 점유를 최소화한다.
 - 실패 시 rollback 스크립트가 backup 상태를 기준으로 복구한다.
 
 ```mermaid
@@ -247,7 +248,7 @@ sequenceDiagram
     HS->>NB: health check
     HS->>CD: switch upstream host (back-blue/back-green)
     HS->>CD: route verify
-    HS->>HS: stop old backend
+    HS->>HS: stop old backend (single-backend steady-state)
 ```
 
 ## 배포 검증 단계

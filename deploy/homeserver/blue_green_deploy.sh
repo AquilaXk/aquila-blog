@@ -300,15 +300,6 @@ backend_http_host() {
   echo "back-green"
 }
 
-standby_backend_http_host() {
-  local backend="$1"
-  if [[ "${backend}" == "back_blue" ]]; then
-    echo "back-green"
-    return
-  fi
-  echo "back-blue"
-}
-
 resolve_in_caddy() {
   local host="$1"
   compose exec -T caddy getent hosts "${host}" >/dev/null 2>&1
@@ -328,20 +319,61 @@ current_caddy_upstream_host() {
   ' "${CADDY_FILE}"
 }
 
+current_caddy_mounted_upstream_host() {
+  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
+caddy_mounted_has_legacy_back_active() {
+  compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"
+}
+
+ensure_caddy_mount_sync() {
+  local host_upstream mounted_upstream legacy_token
+  host_upstream="$(current_caddy_upstream_host)"
+  mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  legacy_token="false"
+  if caddy_mounted_has_legacy_back_active; then
+    legacy_token="true"
+  fi
+
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
+    echo "caddy config sync ok: upstream=${mounted_upstream}"
+    return 0
+  fi
+
+  echo "caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  echo "force-recreate caddy to re-bind Caddyfile inode" >&2
+  compose up -d --force-recreate caddy >/dev/null
+  reload_caddy
+
+  mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  legacy_token="false"
+  if caddy_mounted_has_legacy_back_active; then
+    legacy_token="true"
+  fi
+
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
+    echo "caddy config sync repaired: upstream=${mounted_upstream}"
+    return 0
+  fi
+
+  echo "caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  compose logs --no-color --tail=120 caddy >&2 || true
+  return 1
+}
+
 set_caddy_upstream_backend() {
   local backend="$1"
-  local primary_host
-  local standby_host
-  primary_host="$(backend_http_host "${backend}")"
-  standby_host="$(standby_backend_http_host "${backend}")"
+  local active_host
+  active_host="$(backend_http_host "${backend}")"
 
   # Keep inode for bind-mounted file: do not replace via mv.
   # caddy container may keep seeing old inode if host file is atomically swapped.
   local rewritten
-  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${primary_host}:8080 ${standby_host}:8080/g" "${CADDY_FILE}")"
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
-  echo "caddy upstream switched to primary=${primary_host}:8080 standby=${standby_host}:8080"
+  echo "caddy upstream switched to active=${active_host}:8080"
 }
 
 is_healthy_http_code() {
@@ -450,6 +482,7 @@ switch_caddy_upstream() {
   fi
 
   set_caddy_upstream_backend "${target}"
+  ensure_caddy_mount_sync
 }
 
 verify_caddy_route() {
@@ -528,6 +561,25 @@ detect_active_backend() {
   echo "back_blue"
 }
 
+other_backend() {
+  local backend="$1"
+  if [[ "${backend}" == "back_blue" ]]; then
+    echo "back_green"
+    return
+  fi
+  echo "back_blue"
+}
+
+stop_backend_if_running() {
+  local backend="$1"
+  if is_backend_running "${backend}"; then
+    compose stop "${backend}" || true
+    echo "stopped inactive backend: ${backend}"
+    return
+  fi
+  echo "inactive backend already stopped: ${backend}"
+}
+
 rollback_to_backend() {
   local rollback_backend="$1"
   local api_domain="$2"
@@ -554,6 +606,9 @@ rollback_to_backend() {
   fi
 
   echo "${rollback_backend}" > "${STATE_FILE}"
+  local inactive_backend
+  inactive_backend="$(other_backend "${rollback_backend}")"
+  stop_backend_if_running "${inactive_backend}"
   return 0
 }
 
@@ -591,6 +646,7 @@ action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
 compose_up_with_retry db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal
+ensure_caddy_mount_sync
 check_cloudflared_runtime
 ensure_db_runtime_guards || true
 compose pull "${next_backend}"
@@ -612,12 +668,14 @@ post_code="$(probe_caddy_http_code "${api_domain}")"
 if ! is_healthy_http_code "${post_code}"; then
   echo "post-switch verify failed (status=${post_code:-none})" >&2
   rollback_to_backend "${active_backend}" "${api_domain}" || true
+  compose stop "${next_backend}" || true
   exit 1
 fi
 
 echo "${next_backend}" > "${STATE_FILE}"
+stop_backend_if_running "${active_backend}"
 
 check_cloudflared_runtime
 
-echo "post-switch verify ok (status=${post_code}); keeping standby backend running for failover"
+echo "post-switch verify ok (status=${post_code}); inactive backend stopped"
 compose ps

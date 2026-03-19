@@ -608,13 +608,9 @@ if ! verify_caddy_route "${next_backend}" "${api_domain}"; then
   exit 1
 fi
 
-if [[ "${active_backend}" != "${next_backend}" ]]; then
-  compose stop "${active_backend}" || true
-fi
-
 post_code="$(probe_caddy_http_code "${api_domain}")"
 if ! is_healthy_http_code "${post_code}"; then
-  echo "post-stop verify failed (status=${post_code:-none})" >&2
+  echo "post-switch verify failed (status=${post_code:-none})" >&2
   rollback_to_backend "${active_backend}" "${api_domain}" || true
   exit 1
 fi
@@ -623,5 +619,5 @@ echo "${next_backend}" > "${STATE_FILE}"
 
 check_cloudflared_runtime
 
-echo "post-stop verify ok (status=${post_code})"
+echo "post-switch verify ok (status=${post_code}); keeping standby backend running for failover"
 compose ps

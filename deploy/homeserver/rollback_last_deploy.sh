@@ -182,10 +182,7 @@ if [[ -f "${STATE_FILE}" ]]; then
     compose_up_with_retry "${target_backend}"
     set_caddy_upstream_backend "${target_backend}"
 
-    other_backend="back_blue"
-    [[ "${target_backend}" == "back_blue" ]] || other_backend="back_green"
-
-    compose stop "${other_backend}" || true
+    echo "rollback completed with standby backend kept running for failover"
   fi
 fi
 

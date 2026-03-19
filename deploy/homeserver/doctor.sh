@@ -155,6 +155,9 @@ for svc in back_blue back_green caddy cloudflared autoheal; do
     "${cid}" 2>/dev/null || true
 done
 
+print_section "Caddy Upstream"
+grep -nE 'reverse_proxy back-(blue|green|active):8080' "${SCRIPT_DIR}/Caddyfile" || true
+
 print_section "Back Container States"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green)-1|NAMES' || true
 

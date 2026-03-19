@@ -25,7 +25,7 @@ flowchart LR
     Api --> Tunnel["Cloudflare Tunnel"]
     Status --> Tunnel
     Tunnel --> Caddy["Caddy"]
-    Caddy --> Back["back_active -> back_blue/back_green"]
+    Caddy --> Back["back-blue/back-green (single upstream)"]
     Caddy --> Kuma["uptime_kuma"]
     Back --> DB["PostgreSQL"]
     Back --> Redis["Redis"]
@@ -67,19 +67,19 @@ flowchart LR
 
 ## 라우팅 원칙
 
-- Caddy는 색상 컨테이너를 직접 바라보지 않는다.
-- 항상 `back_active:8080`만 upstream으로 사용한다.
-- 배포 스크립트가 Docker network alias를 옮겨 `back_active`의 실제 대상만 바꾼다.
+- Caddy는 항상 단일 색상 upstream(`back-blue:8080` 또는 `back-green:8080`)만 바라본다.
+- 배포 스크립트가 Caddyfile의 upstream host를 target backend로 교체하고 reload한다.
+- Docker network alias 이동(`back_active`)에 의존하지 않는다.
 - Cloudflare Tunnel -> Caddy 구간은 HTTP origin이지만, Caddy는 backend로 `X-Forwarded-Proto=https`, `X-Forwarded-Host`, `X-Forwarded-Port=443`를 명시해서 외부 scheme 정보를 복원한다.
 
-이 구조 덕분에 Caddy 설정을 매번 color 이름으로 바꿀 필요가 없다.
+이 구조 덕분에 alias DNS 불안정 이슈를 피하면서도 blue/green 전환을 유지할 수 있다.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant CF as Cloudflare
     participant C as Caddy
-    participant A as back_active
+    participant A as back-blue/back-green
     participant D as db_1
     U->>CF: HTTPS request
     CF->>C: tunnel forward
@@ -110,23 +110,23 @@ sequenceDiagram
 
 - 프론트 장애: Vercel/Next 빌드 실패, 잘못된 API base URL
 - API 장애: backend 컨테이너 크래시, 잘못된 env, DB/Redis/MinIO 연결 실패
-- 프록시 장애: Caddy upstream alias mismatch, tunnel misroute
+- 프록시 장애: Caddy upstream host 오선택/미전환, tunnel misroute
 - 데이터 계층 장애: DB volume 손상, Redis 인증 오류, MinIO endpoint/secret 오류
 
 ## 배포 전환 상태표
 
 | 상태 | 활성 backend | Caddy upstream | 사용자 영향 |
 | --- | --- | --- | --- |
-| 평상시 | `back_blue` 또는 `back_green` | `back_active` | 정상 |
-| 신규 기동 중 | 기존 active 유지 | `back_active` | 정상 |
-| alias 전환 직후 | 신규 backend | `back_active` | 정상 또는 짧은 검증 구간 |
-| rollback 중 | 직전 정상 backend | `back_active` | 영향 최소화 목표 |
+| 평상시 | `back_blue` 또는 `back_green` | `back-blue` 또는 `back-green` | 정상 |
+| 신규 기동 중 | 기존 active 유지 | 기존 upstream 유지 | 정상 |
+| 전환 직후 | 신규 backend | target backend host | 정상 또는 짧은 검증 구간 |
+| rollback 중 | 직전 정상 backend | rollback target host | 영향 최소화 목표 |
 
 ## 최근 운영에서 중요해진 포인트
 
 - `HOME_SERVER_ENV`가 실제 운영 설정을 덮어쓴다.
 - MinIO 관련 env는 `${...}` placeholder를 넣지 말고 완성된 값을 넣어야 한다.
-- 배포 스크립트는 storage endpoint와 alias route를 더 엄격하게 검증하도록 강화되어 있다.
+- 배포 스크립트는 storage endpoint와 Caddy upstream route를 더 엄격하게 검증하도록 강화되어 있다.
 - Kakao OAuth에서 `redirect_uri`가 `http://...`로 내려가는 현상은 대부분 프록시 forwarded header 또는 `custom.site.backUrl` 오설정에서 시작된다.
 
 ## 참고 파일

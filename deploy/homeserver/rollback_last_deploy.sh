@@ -7,7 +7,6 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
-NETWORK_NAME="blog_home_default"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -121,53 +120,25 @@ latest_backup() {
   ls -1dt "${BACKUP_ROOT}"/* 2>/dev/null | head -n 1
 }
 
-backend_container_id() {
+backend_http_host() {
   local backend="$1"
-  compose ps -q "${backend}" | head -n 1
+  if [[ "${backend}" == "back_blue" ]]; then
+    echo "back-blue"
+    return
+  fi
+  echo "back-green"
 }
 
-connect_backend_network() {
+set_caddy_upstream_backend() {
   local backend="$1"
-  local with_active_alias="$2"
-  local max_attempts=5
-  local attempt=1
-
-  while [[ "${attempt}" -le "${max_attempts}" ]]; do
-    local cid
-    cid="$(backend_container_id "${backend}")"
-    if [[ -z "${cid}" ]]; then
-      echo "container id not found: ${backend} (try ${attempt}/${max_attempts})" >&2
-      sleep 1
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    docker network disconnect "${NETWORK_NAME}" "${cid}" >/dev/null 2>&1 || true
-
-    local args=(network connect --alias "${backend}" --alias "${backend//_/-}")
-    if [[ "${with_active_alias}" == "true" ]]; then
-      args+=(--alias "back_active")
-    fi
-    args+=("${NETWORK_NAME}" "${cid}")
-
-    local output
-    if output="$(docker "${args[@]}" 2>&1)"; then
-      return 0
-    fi
-
-    if grep -Eqi "network sandbox .* not found|No such container|is not running|already exists in network" <<< "${output}"; then
-      echo "network attach retry (${backend}, try ${attempt}/${max_attempts}): ${output}" >&2
-      sleep 1
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    echo "${output}" >&2
-    return 1
-  done
-
-  echo "failed to attach ${backend} to ${NETWORK_NAME} after ${max_attempts} retries" >&2
-  return 1
+  local host
+  host="$(backend_http_host "${backend}")"
+  local tmp_file
+  tmp_file="$(mktemp)"
+  sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${SCRIPT_DIR}/Caddyfile" > "${tmp_file}"
+  mv "${tmp_file}" "${SCRIPT_DIR}/Caddyfile"
+  reload_caddy
+  echo "rollback caddy upstream -> ${host}:8080"
 }
 
 BACKUP_DIR="${1:-$(latest_backup)}"
@@ -185,10 +156,10 @@ for file in Caddyfile .env.prod docker-compose.prod.yml .active_backend; do
   fi
 done
 
-# keep caddy fixed to back_active even if backup had color-specific upstream
+# normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
   tmp_file="$(mktemp)"
-  sed -E "s/back[-_](blue|green|active):8080/back_active:8080/" "${SCRIPT_DIR}/Caddyfile" > "${tmp_file}"
+  sed -E "s/back[-_](blue|green|active):8080/back-blue:8080/g" "${SCRIPT_DIR}/Caddyfile" > "${tmp_file}"
   mv "${tmp_file}" "${SCRIPT_DIR}/Caddyfile"
 fi
 
@@ -200,14 +171,10 @@ if [[ -f "${STATE_FILE}" ]]; then
   target_backend="$(cat "${STATE_FILE}" || true)"
   if [[ "${target_backend}" == "back_blue" || "${target_backend}" == "back_green" ]]; then
     compose_up_with_retry "${target_backend}"
+    set_caddy_upstream_backend "${target_backend}"
 
     other_backend="back_blue"
     [[ "${target_backend}" == "back_blue" ]] || other_backend="back_green"
-
-    connect_backend_network "${target_backend}" "true" || true
-    connect_backend_network "${other_backend}" "false" || true
-
-    reload_caddy
 
     compose stop "${other_backend}" || true
   fi

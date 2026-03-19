@@ -33,8 +33,8 @@ data class FeedPostDto(
         private const val FALLBACK_PROFILE_IMAGE_URL = "https://placehold.co/600x600?text=U_U"
         private const val FALLBACK_SUMMARY = "미리보기를 불러오지 못했습니다."
 
-        fun from(post: Post): FeedPostDto {
-            return runCatching {
+        fun from(post: Post): FeedPostDto =
+            runCatching {
                 val meta = PostMetaExtractor.extract(post.content)
                 val preview = PostPreviewExtractor.extract(post.content)
 
@@ -67,7 +67,9 @@ data class FeedPostDto(
                     authorId = runCatching { post.author.id }.getOrDefault(0),
                     authorName = runCatching { post.author.name }.getOrDefault("unknown"),
                     authorUsername = runCatching { post.author.username }.getOrDefault("unknown"),
-                    authorProfileImgUrl = runCatching { post.author.profileImgUrlVersionedOrDefault }.getOrDefault(FALLBACK_PROFILE_IMAGE_URL),
+                    authorProfileImgUrl =
+                        runCatching { post.author.profileImgUrlVersionedOrDefault }
+                            .getOrDefault(FALLBACK_PROFILE_IMAGE_URL),
                     title = runCatching { post.title }.getOrDefault("제목 없음"),
                     thumbnail = null,
                     summary = FALLBACK_SUMMARY,
@@ -80,6 +82,5 @@ data class FeedPostDto(
                     hitCount = runCatching { post.hitCount }.getOrDefault(0),
                 )
             }
-        }
     }
 }

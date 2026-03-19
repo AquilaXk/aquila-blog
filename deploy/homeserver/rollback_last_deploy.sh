@@ -7,6 +7,13 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
+CADDY_CONTAINER_FILE="/deploy/homeserver/Caddyfile"
+NETWORK_NAME="blog_home_default"
+HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
+HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-20}"
+HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
+HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
+HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -113,7 +120,7 @@ END $$;
 }
 
 reload_caddy() {
-  compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile || true
+  compose exec -T caddy caddy reload --config "${CADDY_CONTAINER_FILE}" || true
 }
 
 current_caddy_upstream_host() {
@@ -127,11 +134,11 @@ current_caddy_upstream_host() {
 }
 
 current_caddy_mounted_upstream_host() {
-  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1
+  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1
 }
 
 caddy_mounted_has_legacy_back_active() {
-  compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"
+  compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}"
 }
 
 ensure_caddy_mount_sync() {
@@ -149,7 +156,7 @@ ensure_caddy_mount_sync() {
   fi
 
   echo "rollback caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
-  echo "rollback force-recreate caddy to re-bind Caddyfile inode" >&2
+  echo "rollback force-recreate caddy to re-mount config directory" >&2
   compose up -d --force-recreate caddy >/dev/null
   reload_caddy
 
@@ -206,6 +213,35 @@ stop_backend_if_running() {
   echo "rollback inactive backend already stopped: ${backend}"
 }
 
+probe_backend_http_code() {
+  local backend="$1"
+  local host
+  host="$(backend_http_host "${backend}")"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
+    -s -o /dev/null -w "%{http_code}" "http://${host}:8080${HEALTHCHECK_PATH}" || true
+}
+
+wait_backend_ready() {
+  local backend="$1"
+  local attempt=1
+  while [[ "${attempt}" -le "${HEALTHCHECK_RETRIES}" ]]; do
+    local code
+    code="$(probe_backend_http_code "${backend}")"
+    if [[ "${code}" == "200" ]]; then
+      echo "rollback backend ready: ${backend} (status=${code})"
+      return 0
+    fi
+    echo "rollback backend pending: ${backend} (try ${attempt}/${HEALTHCHECK_RETRIES}, status=${code:-none})"
+    sleep "${HEALTHCHECK_INTERVAL_SECONDS}"
+    attempt=$((attempt + 1))
+  done
+  echo "rollback backend healthcheck failed: ${backend}" >&2
+  compose logs --no-color --tail=120 "${backend}" >&2 || true
+  return 1
+}
+
 set_caddy_upstream_backend() {
   local backend="$1"
   local active_host
@@ -253,6 +289,19 @@ reload_caddy
 ensure_caddy_mount_sync
 
 compose_up_with_retry "${target_backend}"
+if ! wait_backend_ready "${target_backend}"; then
+  fallback_backend="$(other_backend "${target_backend}")"
+  echo "rollback primary target unhealthy: ${target_backend}; trying fallback=${fallback_backend}" >&2
+  compose_up_with_retry "${fallback_backend}"
+  if wait_backend_ready "${fallback_backend}"; then
+    target_backend="${fallback_backend}"
+    inactive_backend="$(other_backend "${target_backend}")"
+  else
+    echo "rollback failed: both backends unhealthy (${target_backend}, ${fallback_backend})" >&2
+    exit 1
+  fi
+fi
+
 set_caddy_upstream_backend "${target_backend}"
 ensure_caddy_mount_sync
 stop_backend_if_running "${inactive_backend}"

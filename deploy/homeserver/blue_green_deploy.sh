@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_FILE="${SCRIPT_DIR}/Caddyfile"
+CADDY_CONTAINER_FILE="/deploy/homeserver/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 NETWORK_NAME="blog_home_default"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
@@ -306,7 +307,7 @@ resolve_in_caddy() {
 }
 
 reload_caddy() {
-  compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+  compose exec -T caddy caddy reload --config "${CADDY_CONTAINER_FILE}"
 }
 
 current_caddy_upstream_host() {
@@ -320,11 +321,11 @@ current_caddy_upstream_host() {
 }
 
 current_caddy_mounted_upstream_host() {
-  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1
+  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1
 }
 
 caddy_mounted_has_legacy_back_active() {
-  compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"
+  compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}"
 }
 
 ensure_caddy_mount_sync() {
@@ -342,7 +343,7 @@ ensure_caddy_mount_sync() {
   fi
 
   echo "caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
-  echo "force-recreate caddy to re-bind Caddyfile inode" >&2
+  echo "force-recreate caddy to re-mount config directory" >&2
   compose up -d --force-recreate caddy >/dev/null
   reload_caddy
 
@@ -367,8 +368,7 @@ set_caddy_upstream_backend() {
   local active_host
   active_host="$(backend_http_host "${backend}")"
 
-  # Keep inode for bind-mounted file: do not replace via mv.
-  # caddy container may keep seeing old inode if host file is atomically swapped.
+  # Keep content rewrite in-place; avoids stale config when external tools swap files.
   local rewritten
   rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"

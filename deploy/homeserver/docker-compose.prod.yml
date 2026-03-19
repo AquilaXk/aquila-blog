@@ -22,11 +22,12 @@ services:
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
+    command: caddy run --config /deploy/homeserver/Caddyfile --adapter caddyfile
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./:/deploy/homeserver:ro
       - caddy_data:/data
       - caddy_config:/config
     env_file:
@@ -41,6 +42,8 @@ services:
   back_blue:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
+    mem_limit: ${BACK_MEM_LIMIT:-1024m}
+    mem_reservation: ${BACK_MEM_RESERVATION:-512m}
     labels:
       autoheal: "true"
     healthcheck:
@@ -68,6 +71,8 @@ services:
   back_green:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
+    mem_limit: ${BACK_MEM_LIMIT:-1024m}
+    mem_reservation: ${BACK_MEM_RESERVATION:-512m}
     labels:
       autoheal: "true"
     healthcheck:

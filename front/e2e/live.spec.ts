@@ -23,7 +23,7 @@ test.describe("live production e2e", () => {
     await page.goto("/login?next=%2Fadmin")
     await page.locator("#username").fill(adminUsername)
     await page.locator("#password").fill(adminPassword)
-    await page.getByRole("button", { name: "로그인", exact: true }).click()
+    await page.locator("form button[type='submit']").click()
 
     const loginErrorText = page.locator("p").filter({ hasText: "로그인에 실패" })
     await expect

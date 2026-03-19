@@ -178,8 +178,9 @@ GitHub Actions 기준 필수값:
 - 이미지 키가 누락되면 배포 스크립트는 서버 로컬 Docker cache(`cloudflare/cloudflared:latest`, `jangka512/pgj:latest`, `minio/minio:latest`)의 `RepoDigest`를 조회해 pin 값으로 자동 보강을 시도한다. 보강 실패 시 배포를 중단한다.
 - `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
-- `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness`를 우선 확인하고, 실패 시 `/member/api/v1/auth/me` fallback으로 도달성까지 확인한다.
-- preflight 기본값은 `5회` 재시도, `--connect-timeout 5`, `--max-time 15`이며 `E2E_PREFLIGHT_*` 환경변수로 조정할 수 있다.
+- `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness` -> `/member/api/v1/auth/me` -> `/member/api/v1/auth/login` 순서로 도달성과 로그인 가능 여부를 확인한다.
+- preflight 기본값은 `5회` 재시도, `--connect-timeout 5`, `--max-time 15`, `curl --retry 2`이며 `E2E_PREFLIGHT_*` 환경변수로 조정할 수 있다.
+- 기본값으로 IPv4 우선(`E2E_PREFLIGHT_FORCE_IPV4=true`)을 사용해 `status=000` 타임아웃 재발을 줄인다.
 - `frontLiveE2E` job은 `PLAYWRIGHT_LIVE_FAIL_FAST=true`, `--max-failures=1`, `--reporter=line`로 실행해 첫 치명 실패에서 빠르게 종료한다.
 - `frontLiveE2E` job은 30초 heartbeat 로그(`[live-e2e] still running ...`)를 출력해 무출력 대기를 방지한다.
 - `front/e2e/live.spec.ts`는 UI 로그인 경로 테스트를 최소 1개 유지한다. (회귀 방지)

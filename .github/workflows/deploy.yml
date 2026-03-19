@@ -735,6 +735,20 @@ jobs:
           PREFLIGHT_CONNECT_TIMEOUT_SECONDS="${E2E_PREFLIGHT_CONNECT_TIMEOUT_SECONDS:-5}"
           PREFLIGHT_MAX_TIME_SECONDS="${E2E_PREFLIGHT_MAX_TIME_SECONDS:-15}"
           PREFLIGHT_SLEEP_SECONDS="${E2E_PREFLIGHT_SLEEP_SECONDS:-3}"
+          PREFLIGHT_CURL_RETRY="${E2E_PREFLIGHT_CURL_RETRY:-2}"
+          PREFLIGHT_FORCE_IPV4="${E2E_PREFLIGHT_FORCE_IPV4:-true}"
+
+          curl_args=(
+            -sS
+            --connect-timeout "${PREFLIGHT_CONNECT_TIMEOUT_SECONDS}"
+            -m "${PREFLIGHT_MAX_TIME_SECONDS}"
+            --retry "${PREFLIGHT_CURL_RETRY}"
+            --retry-all-errors
+            --retry-delay 1
+          )
+          if [ "${PREFLIGHT_FORCE_IPV4}" = "true" ]; then
+            curl_args+=(-4)
+          fi
 
           probe_url() {
             local label="$1"
@@ -743,15 +757,29 @@ jobs:
             local attempt="$4"
             local code
             code="$(
-              curl -sS \
-                --connect-timeout "${PREFLIGHT_CONNECT_TIMEOUT_SECONDS}" \
-                -m "${PREFLIGHT_MAX_TIME_SECONDS}" \
+              curl "${curl_args[@]}" \
                 -o /dev/null \
                 -w '%{http_code}' \
                 "${url}" || true
             )"
             echo "[preflight] ${label} attempt=${attempt} status=${code}"
             [[ "${code}" =~ ${status_pattern} ]]
+          }
+
+          probe_login() {
+            local attempt="$1"
+            local code
+            code="$(
+              curl "${curl_args[@]}" \
+                -X POST \
+                -H 'Content-Type: application/json' \
+                -o /dev/null \
+                -w '%{http_code}' \
+                --data "{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" \
+                "${api_base}/member/api/v1/auth/login" || true
+            )"
+            echo "[preflight] api-login attempt=${attempt} status=${code}"
+            [[ "${code}" =~ ^2[0-9][0-9]$ ]]
           }
 
           front_ok=0
@@ -780,6 +808,11 @@ jobs:
                 auth_ok=1
               fi
             fi
+            if [ "${readiness_ok}" -ne 1 ] && [ "${auth_ok}" -ne 1 ]; then
+              if probe_login "${attempt}"; then
+                auth_ok=1
+              fi
+            fi
 
             if [ "${readiness_ok}" -eq 1 ] || [ "${auth_ok}" -eq 1 ]; then
               api_ok=1
@@ -791,10 +824,14 @@ jobs:
 
           if [ "${api_ok}" -ne 1 ]; then
             echo "preflight failed for api routes: ${api_base}" >&2
+            echo "[preflight-diagnostic] api dns lookup"
+            getent hosts "${api_host}" || true
             echo "[preflight-diagnostic] curl headers /actuator/health/readiness"
-            curl -sS --connect-timeout "${PREFLIGHT_CONNECT_TIMEOUT_SECONDS}" -m "${PREFLIGHT_MAX_TIME_SECONDS}" -D - -o /dev/null "${api_base}/actuator/health/readiness" || true
+            curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/actuator/health/readiness" || true
             echo "[preflight-diagnostic] curl headers /member/api/v1/auth/me"
-            curl -sS --connect-timeout "${PREFLIGHT_CONNECT_TIMEOUT_SECONDS}" -m "${PREFLIGHT_MAX_TIME_SECONDS}" -D - -o /dev/null "${api_base}/member/api/v1/auth/me" || true
+            curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/member/api/v1/auth/me" || true
+            echo "[preflight-diagnostic] curl headers /member/api/v1/auth/login"
+            curl "${curl_args[@]}" -X POST -H 'Content-Type: application/json' -D - -o /dev/null --data "{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" "${api_base}/member/api/v1/auth/login" || true
             exit 1
           fi
 

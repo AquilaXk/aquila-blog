@@ -300,6 +300,15 @@ backend_http_host() {
   echo "back-green"
 }
 
+standby_backend_http_host() {
+  local backend="$1"
+  if [[ "${backend}" == "back_blue" ]]; then
+    echo "back-green"
+    return
+  fi
+  echo "back-blue"
+}
+
 resolve_in_caddy() {
   local host="$1"
   compose exec -T caddy getent hosts "${host}" >/dev/null 2>&1
@@ -321,16 +330,18 @@ current_caddy_upstream_host() {
 
 set_caddy_upstream_backend() {
   local backend="$1"
-  local host
-  host="$(backend_http_host "${backend}")"
+  local primary_host
+  local standby_host
+  primary_host="$(backend_http_host "${backend}")"
+  standby_host="$(standby_backend_http_host "${backend}")"
 
   # Keep inode for bind-mounted file: do not replace via mv.
   # caddy container may keep seeing old inode if host file is atomically swapped.
   local rewritten
-  rewritten="$(sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${CADDY_FILE}")"
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${primary_host}:8080 ${standby_host}:8080/g" "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
-  echo "caddy upstream switched to ${host}:8080"
+  echo "caddy upstream switched to primary=${primary_host}:8080 standby=${standby_host}:8080"
 }
 
 is_healthy_http_code() {

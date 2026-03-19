@@ -277,6 +277,16 @@ jobs:
             fi
           }
 
+          remove_env_key() {
+            local key="$1"
+            local file="$2"
+
+            if grep -qE "^${key}=" "${file}"; then
+              grep -vE "^${key}=" "${file}" > "${file}.tmp"
+              mv "${file}.tmp" "${file}"
+            fi
+          }
+
           cd "${HOME_APP_DIR}"
 
           git fetch origin main
@@ -296,6 +306,13 @@ jobs:
           upsert_env_key "CUSTOM__AI__SUMMARY__ENABLED" "${HOME_AI_SUMMARY_ENABLED:-}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__API_KEY" "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__MODEL" "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" "deploy/homeserver/.env.prod"
+
+          # prod에서 sql.init 경로가 켜지면 부팅 실패(DO $$ 분리/DDL 충돌)로 이어질 수 있다.
+          # HOME_SERVER_ENV 드리프트가 있어도 배포 직전에 안전값으로 강제한다.
+          remove_env_key "SPRING_SQL_INIT_SCHEMA_LOCATIONS" "deploy/homeserver/.env.prod"
+          remove_env_key "SPRING_SQL_INIT_DATA_LOCATIONS" "deploy/homeserver/.env.prod"
+          remove_env_key "SPRING_SQL_INIT_CONTINUE_ON_ERROR" "deploy/homeserver/.env.prod"
+          upsert_env_key "SPRING_SQL_INIT_MODE" "never" "deploy/homeserver/.env.prod"
 
           extract_env_value() {
             local key="$1"
@@ -358,9 +375,11 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${HOME_BACK_IMAGE:-}" ]; then
-            export BACK_IMAGE="${HOME_BACK_IMAGE}"
+          if [ -z "${HOME_BACK_IMAGE:-}" ]; then
+            echo "HOME_BACK_IMAGE is empty. abort deploy to avoid pulling stale latest image." >&2
+            exit 1
           fi
+          export BACK_IMAGE="${HOME_BACK_IMAGE}"
 
           echo "Deploying image: ${BACK_IMAGE:-unset}"
 

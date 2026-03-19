@@ -59,6 +59,14 @@ trim_quotes() {
   echo "${value}"
 }
 
+require_back_image() {
+  if [[ -z "${BACK_IMAGE:-}" ]]; then
+    echo "BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
+    echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
+    exit 1
+  fi
+}
+
 resolve_prod_db_name() {
   local db_name
 
@@ -542,6 +550,7 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
 fi
 
 validate_storage_env
+require_back_image
 
 api_domain="$(env_value "API_DOMAIN")"
 if [[ -z "${api_domain}" ]]; then

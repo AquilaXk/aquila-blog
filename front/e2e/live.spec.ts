@@ -25,7 +25,20 @@ test.describe("live production e2e", () => {
     await page.locator("#password").fill(adminPassword)
     await page.getByRole("button", { name: "로그인", exact: true }).click()
 
-    await expect(page).toHaveURL(/\/admin/)
+    const loginErrorText = page.locator("p").filter({ hasText: "로그인에 실패" })
+    await expect
+      .poll(
+        async () => {
+          const currentUrl = page.url()
+          if (/\/admin(\/|$)/.test(new URL(currentUrl).pathname)) return "ok"
+          if (await loginErrorText.first().isVisible().catch(() => false)) return "error"
+          return "pending"
+        },
+        { timeout: 20_000 }
+      )
+      .toBe("ok")
+
+    await expect(page).toHaveURL(/\/admin(\/|$)/)
     await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
 
     await page.goto("/admin/profile")

@@ -106,6 +106,11 @@ class PostLikeReconciliationServiceTest {
             post: Post,
         ) = error("not used in this test")
 
+        override fun existsByLikerAndPost(
+            liker: Member,
+            post: Post,
+        ): Boolean = error("not used in this test")
+
         override fun findByLikerAndPostIn(
             liker: Member,
             posts: List<Post>,

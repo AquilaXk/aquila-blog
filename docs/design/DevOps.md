@@ -173,6 +173,9 @@ GitHub Actions 기준 필수값:
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
+- `frontLiveE2E` job은 실행 전 preflight (`/login`, `/actuator/health/readiness`)를 3회 재시도로 점검하고 실패 시 즉시 중단한다.
+- `frontLiveE2E` job은 `PLAYWRIGHT_LIVE_FAIL_FAST=true`, `--max-failures=1`, `--reporter=line`로 실행해 첫 치명 실패에서 빠르게 종료한다.
+- `frontLiveE2E` job은 30초 heartbeat 로그(`[live-e2e] still running ...`)를 출력해 무출력 대기를 방지한다.
 - `front/e2e/live.spec.ts`는 UI 로그인 경로 테스트를 최소 1개 유지한다. (회귀 방지)
 - dev/test 프로파일의 DB/Redis 비밀번호 기본값은 비워 두고, 테스트 실행 시 Gradle이 주입하는 값(`CI_DB_PASSWORD`, `CI_REDIS_PASSWORD`)을 사용한다.
 - 로그인 시도 제한은 prod에서 Redis 의존을 기본으로 한다. Redis가 준비되지 않으면 로그인 시도 자체를 `503`으로 막아 보호 일관성을 유지한다.

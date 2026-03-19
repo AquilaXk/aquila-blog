@@ -548,6 +548,48 @@ jobs:
           [ -n "${E2E_ADMIN_USERNAME}" ] || (echo "E2E_ADMIN_USERNAME is required" && exit 1)
           [ -n "${E2E_ADMIN_PASSWORD}" ] || (echo "E2E_ADMIN_PASSWORD is required" && exit 1)
 
+      - name: Live e2e preflight checks (fail-fast)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          front_base="${PLAYWRIGHT_BASE_URL}"
+          front_scheme="$(echo "${front_base}" | sed -E 's#(https?)://.*#\1#')"
+          front_host="$(echo "${front_base}" | sed -E 's#https?://([^/]+).*#\1#')"
+
+          if [[ "${front_host}" == www.* ]]; then
+            api_host="api.${front_host#www.}"
+          else
+            api_host="api.${front_host}"
+          fi
+          api_base="${front_scheme}://${api_host}"
+
+          echo "preflight front=${front_base} api=${api_base}"
+
+          check_url() {
+            local label="$1"
+            local url="$2"
+            local ok=0
+
+            for attempt in 1 2 3; do
+              code="$(curl -sS -m 8 -o /dev/null -w '%{http_code}' "${url}" || true)"
+              echo "[preflight] ${label} attempt=${attempt} status=${code}"
+              if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "${ok}" -ne 1 ]; then
+              echo "preflight failed for ${label}: ${url}" >&2
+              exit 1
+            fi
+          }
+
+          check_url "front-login" "${front_base}/login"
+          check_url "api-readiness" "${api_base}/actuator/health/readiness"
+
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -565,7 +607,31 @@ jobs:
 
       - name: Run live production e2e
         working-directory: front
-        run: yarn test:e2e:live
+        env:
+          PLAYWRIGHT_LIVE_FAIL_FAST: "true"
+          PLAYWRIGHT_LIVE_MULTI_BROWSER: "true"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          heartbeat() {
+            while true; do
+              echo "[live-e2e] still running at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+              sleep 30
+            done
+          }
+
+          heartbeat &
+          hb_pid=$!
+          cleanup() {
+            kill "${hb_pid}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          npx playwright test e2e/live.spec.ts \
+            --workers=1 \
+            --reporter=line \
+            --max-failures=1
 
       - name: Upload Playwright report on failure
         if: failure()

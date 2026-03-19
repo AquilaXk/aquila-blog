@@ -35,5 +35,11 @@ interface MemberAttrRepositoryPort {
         valueFragment: String,
     ): Boolean
 
+    fun incrementIntValue(
+        subject: Member,
+        name: String,
+        delta: Int = 1,
+    ): Int
+
     fun save(attr: MemberAttr): MemberAttr
 }

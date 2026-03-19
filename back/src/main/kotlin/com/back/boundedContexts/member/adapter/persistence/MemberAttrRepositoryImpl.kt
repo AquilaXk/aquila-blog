@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.domain.shared.MemberAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import jakarta.persistence.PersistenceException
+import org.springframework.dao.DataIntegrityViolationException
 import org.hibernate.Session
 
 /**
@@ -134,6 +135,11 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
             ).toInt()
         } catch (exception: PersistenceException) {
             // 동시 insert 경쟁으로 이미 생성된 경우 update 경로로 재시도한다.
+            val retriedValues = updateIntValue(subject.id, name, delta)
+            if (retriedValues.isNotEmpty()) return retriedValues.max()
+            throw exception
+        } catch (exception: DataIntegrityViolationException) {
+            // 스프링 예외 변환 계층에서 감싼 중복키 예외도 동일하게 재시도한다.
             val retriedValues = updateIntValue(subject.id, name, delta)
             if (retriedValues.isNotEmpty()) return retriedValues.max()
             throw exception

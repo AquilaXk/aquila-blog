@@ -28,17 +28,7 @@ class MemberAttrRepositoryAdapter(
         subject: Member,
         name: String,
         delta: Int,
-    ): Int {
-        val current = memberAttrRepositoryPort.findBySubjectAndName(subject, name)
-        val currentValue = current?.intValue ?: 0
-        val nextValue = currentValue + delta
-        val attr =
-            (current ?: MemberAttr(0, subject, name, nextValue)).apply {
-                intValue = nextValue
-            }
-        memberAttrRepositoryPort.save(attr)
-        return nextValue
-    }
+    ): Int = memberAttrRepositoryPort.incrementIntValue(subject, name, delta)
 
     override fun save(attr: MemberAttr): MemberAttr = memberAttrRepositoryPort.save(attr)
 }

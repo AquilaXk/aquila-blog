@@ -39,5 +39,11 @@ class MemberAttrPersistenceAdapter(
         valueFragment: String,
     ): Boolean = memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(subjectId, name, valueFragment)
 
+    override fun incrementIntValue(
+        subject: Member,
+        name: String,
+        delta: Int,
+    ): Int = memberAttrRepository.incrementIntValue(subject, name, delta)
+
     override fun save(attr: MemberAttr): MemberAttr = memberAttrRepository.save(attr)
 }

@@ -412,8 +412,12 @@ const formatPreviewSummaryReason = (rawReason?: string | null) => {
       return "AI 응답 파싱 실패"
     case "empty-summary":
       return "AI 응답이 비어 있음"
+    case "unsafe-summary":
+      return "AI 응답에 금지 패턴 포함"
     case "low-quality-summary":
       return "AI 응답 품질 부족"
+    case "internal-error":
+      return "서버 내부 처리 실패"
     default:
       if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
       return reason

@@ -579,12 +579,27 @@ jobs:
             rollback_and_exit "active_backend_not_running"
           fi
 
-          TARGET_IP="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "getent hosts ${ACTIVE_BACKEND} | awk 'NR==1{print \$1}'" | tr -d '\r' | head -n 1)"
-          ACTIVE_IP="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "getent hosts back_active | awk 'NR==1{print \$1}'" | tr -d '\r' | head -n 1)"
+          if [ "${ACTIVE_BACKEND}" = "back_blue" ]; then
+            EXPECTED_UPSTREAM="back-blue"
+            INACTIVE_BACKEND="back_green"
+          else
+            EXPECTED_UPSTREAM="back-green"
+            INACTIVE_BACKEND="back_blue"
+          fi
 
-          echo "post-deploy alias verify: active_backend=${ACTIVE_BACKEND}, target_ip=${TARGET_IP:-none}, back_active_ip=${ACTIVE_IP:-none}"
-          if [ -z "${TARGET_IP}" ] || [ -z "${ACTIVE_IP}" ] || [ "${TARGET_IP}" != "${ACTIVE_IP}" ]; then
-            rollback_and_exit "back_active_alias_mismatch"
+          MOUNTED_UPSTREAM="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /deploy/homeserver/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1)"
+          HAS_LEGACY_BACK_ACTIVE="false"
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /deploy/homeserver/Caddyfile"; then
+            HAS_LEGACY_BACK_ACTIVE="true"
+          fi
+
+          echo "post-deploy upstream verify: active_backend=${ACTIVE_BACKEND}, expected=${EXPECTED_UPSTREAM}, mounted=${MOUNTED_UPSTREAM:-none}, legacy_back_active=${HAS_LEGACY_BACK_ACTIVE}"
+          if [ -z "${MOUNTED_UPSTREAM}" ] || [ "${MOUNTED_UPSTREAM}" != "${EXPECTED_UPSTREAM}" ] || [ "${HAS_LEGACY_BACK_ACTIVE}" = "true" ]; then
+            rollback_and_exit "caddy_upstream_mismatch"
+          fi
+
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${INACTIVE_BACKEND}"; then
+            rollback_and_exit "inactive_backend_still_running"
           fi
 
           HTTP_CODE="$(docker run --rm --network blog_home_default curlimages/curl:8.7.1 -s -o /dev/null -w "%{http_code}" "http://caddy:80/actuator/health/readiness" -H "Host: ${API_DOMAIN}" || true)"

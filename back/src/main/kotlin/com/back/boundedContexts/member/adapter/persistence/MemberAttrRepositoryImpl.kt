@@ -5,8 +5,8 @@ import com.back.boundedContexts.member.domain.shared.MemberAttr
 import jakarta.persistence.EntityManager
 import jakarta.persistence.PersistenceContext
 import jakarta.persistence.PersistenceException
-import org.springframework.dao.DataIntegrityViolationException
 import org.hibernate.Session
+import org.springframework.dao.DataIntegrityViolationException
 
 /**
  * MemberAttrRepositoryImpl는 영속 계층(JPA/쿼리) 연동을 담당하는 퍼시스턴스 어댑터입니다.

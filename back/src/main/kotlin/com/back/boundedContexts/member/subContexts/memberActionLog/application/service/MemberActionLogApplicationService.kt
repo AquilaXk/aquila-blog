@@ -25,14 +25,14 @@ class MemberActionLogApplicationService(
      */
     fun save(event: EventPayload) {
         when (event) {
-            is PostWrittenEvent -> save(event)
-            is PostModifiedEvent -> save(event)
-            is PostDeletedEvent -> save(event)
-            is PostCommentWrittenEvent -> save(event)
-            is PostCommentModifiedEvent -> save(event)
-            is PostCommentDeletedEvent -> save(event)
-            is PostLikedEvent -> save(event)
-            is PostUnlikedEvent -> save(event)
+            is PostWrittenEvent -> savePostWrittenEvent(event)
+            is PostModifiedEvent -> savePostModifiedEvent(event)
+            is PostDeletedEvent -> savePostDeletedEvent(event)
+            is PostCommentWrittenEvent -> savePostCommentWrittenEvent(event)
+            is PostCommentModifiedEvent -> savePostCommentModifiedEvent(event)
+            is PostCommentDeletedEvent -> savePostCommentDeletedEvent(event)
+            is PostLikedEvent -> savePostLikedEvent(event)
+            is PostUnlikedEvent -> savePostUnlikedEvent(event)
             else -> {}
         }
     }
@@ -41,7 +41,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostWrittenEvent) {
+    private fun savePostWrittenEvent(event: PostWrittenEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostWrittenEvent::class.simpleName!!,
@@ -61,7 +61,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostModifiedEvent) {
+    private fun savePostModifiedEvent(event: PostModifiedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostModifiedEvent::class.simpleName!!,
@@ -81,7 +81,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostDeletedEvent) {
+    private fun savePostDeletedEvent(event: PostDeletedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostDeletedEvent::class.simpleName!!,
@@ -101,7 +101,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostCommentWrittenEvent) {
+    private fun savePostCommentWrittenEvent(event: PostCommentWrittenEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostCommentWrittenEvent::class.simpleName!!,
@@ -121,7 +121,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostCommentModifiedEvent) {
+    private fun savePostCommentModifiedEvent(event: PostCommentModifiedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostCommentModifiedEvent::class.simpleName!!,
@@ -141,7 +141,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostCommentDeletedEvent) {
+    private fun savePostCommentDeletedEvent(event: PostCommentDeletedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostCommentDeletedEvent::class.simpleName!!,
@@ -161,7 +161,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostLikedEvent) {
+    private fun savePostLikedEvent(event: PostLikedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostLikedEvent::class.simpleName!!,
@@ -181,7 +181,7 @@ class MemberActionLogApplicationService(
      * save 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
-    private fun save(event: PostUnlikedEvent) {
+    private fun savePostUnlikedEvent(event: PostUnlikedEvent) {
         memberActionLogRepository.save(
             MemberActionLog(
                 type = PostUnlikedEvent::class.simpleName!!,

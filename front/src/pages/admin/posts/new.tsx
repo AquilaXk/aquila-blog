@@ -17,11 +17,9 @@ import {
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
-import CategoryIcon from "src/components/CategoryIcon"
 import {
   CATEGORY_ICON_OPTIONS,
   compareCategoryValues,
-  composeCategoryDisplay,
   normalizeCategoryValue,
   splitCategoryDisplay,
 } from "src/libs/utils"
@@ -1259,32 +1257,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPostTags((prev) => prev.filter((tag) => tag !== value))
   }
 
-  const selectCategoryForPost = (value: string) => {
-    const normalized = value.trim() ? normalizeCategoryValue(value) : ""
-    const parsed = splitCategoryDisplay(normalized)
-    setPostCategory(normalized)
-    setCategoryIconId(parsed.iconId === "all" ? CATEGORY_ICON_OPTIONS[0].id : parsed.iconId)
-    if (!normalized) {
-      setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
-      setMetaNotice({
-        tone: "success",
-        text: "현재 글의 카테고리를 비웠습니다.",
-      })
-      return
-    }
-    setKnownCategories((prev) =>
-      dedupeStrings([...prev, normalized]).sort(compareCategoryValues)
-    )
-    setCustomCategoryCatalog((prev) =>
-      dedupeStrings([...prev, normalized]).sort(compareCategoryValues)
-    )
-    setMetaNotice({
-      tone: "success",
-      text: `카테고리 "${parsed.label}"를 선택했습니다. 현재 글 메타데이터에 반영됩니다.`,
-    })
-    setCategoryDraft("")
-  }
-
   const deleteTagFromCatalog = (tag: string) => {
     const usageCount = tagUsageMap[tag] || 0
 
@@ -1302,30 +1274,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setMetaNotice({
       tone: "success",
       text: `태그 "${tag}"를 카탈로그에서 삭제했습니다.`,
-    })
-  }
-
-  const deleteCategoryFromCatalog = (category: string) => {
-    const parsedCategory = splitCategoryDisplay(category)
-    const usageCount = categoryUsageMap[category] || 0
-
-    if (usageCount > 0) {
-      setMetaNotice({
-        tone: "error",
-        text: `사용 중인 카테고리 "${parsedCategory.label}"는 삭제할 수 없습니다. 현재 ${usageCount}개 글에서 사용 중입니다.`,
-      })
-      return
-    }
-
-    setCustomCategoryCatalog((prev) => prev.filter((item) => item !== category))
-    setKnownCategories((prev) => prev.filter((item) => item !== category))
-    if (postCategory === category) {
-      setPostCategory("")
-      setCategoryIconId(CATEGORY_ICON_OPTIONS[0].id)
-    }
-    setMetaNotice({
-      tone: "success",
-      text: `카테고리 "${parsedCategory.label}"를 카탈로그에서 삭제했습니다.`,
     })
   }
 
@@ -4625,23 +4573,6 @@ const WriterHeader = styled.div`
   }
 `
 
-const PublishActionWrap = styled.div`
-  display: grid;
-  align-items: end;
-
-  ${PrimaryButton} {
-    min-height: 46px;
-    padding-inline: 1.1rem;
-    white-space: nowrap;
-  }
-
-  @media (max-width: 720px) {
-    ${PrimaryButton} {
-      width: 100%;
-    }
-  }
-`
-
 const WriterAccent = styled.div`
   width: 5rem;
   height: 0.42rem;
@@ -4940,25 +4871,6 @@ const MetaToggleButton = styled.button`
   }
 `
 
-const CategoryButtonContent = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  min-width: 0;
-
-  .categoryIcon {
-    flex: 0 0 auto;
-    font-size: 0.95rem;
-  }
-
-  span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-`
-
 const EditorContextChip = styled.span`
   display: inline-flex;
   align-items: center;
@@ -5026,27 +4938,6 @@ const MetadataSection = styled.section`
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
-`
-
-const MetadataHeader = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-
-  h3 {
-    margin: 0;
-    font-size: 0.96rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0.24rem 0 0;
-    font-size: 0.8rem;
-    line-height: 1.55;
-    color: ${({ theme }) => theme.colors.gray11};
-  }
 `
 
 const MetadataStatus = styled.div`
@@ -5125,16 +5016,6 @@ const CompactMetaPanelTop = styled.div`
   }
 `
 
-const MetadataGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
-
-  @media (max-width: 880px) {
-    grid-template-columns: 1fr;
-  }
-`
-
 const MetadataPanel = styled.div`
   display: grid;
   gap: 0.65rem;
@@ -5151,204 +5032,7 @@ const MetadataPanel = styled.div`
   }
 `
 
-const MetadataHint = styled.p`
-  margin: -0.2rem 0 0;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  line-height: 1.45;
-`
-
 const SelectionRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  min-width: 0;
-`
-
-const IconChoiceRow = styled(SelectionRow)`
-  gap: 0.5rem;
-`
-
-const IconChoiceChip = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.1rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.46rem 0.88rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: none;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
-
-  .categoryIcon {
-    font-size: 0.92rem;
-  }
-
-  &:hover {
-    transform: none;
-    border-color: ${({ theme }) => theme.colors.blue7};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-    box-shadow: none;
-  }
-`
-
-const CatalogChipGroup = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
-  max-width: 100%;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  overflow: hidden;
-`
-
-const SelectionChip = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.44rem 0.82rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-
-  &:hover {
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &[data-active="true"] {
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-`
-
-const CategoryChipContent = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  min-width: 0;
-
-  .categoryIcon {
-    flex: 0 0 auto;
-    font-size: 0.92rem;
-  }
-
-  span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .count {
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-`
-
-const CatalogDeleteButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: stretch;
-  min-width: 2rem;
-  padding: 0 0.55rem;
-  border: 0;
-  border-left: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  cursor: pointer;
-  flex: 0 0 auto;
-  font-size: 0.95rem;
-  line-height: 1;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.red3};
-    color: ${({ theme }) => theme.colors.red11};
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-`
-
-const CreateRow = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.5rem;
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const SelectedMetaRow = styled.div`
-  display: grid;
-  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 0.66fr);
-  gap: 0.8rem;
-
-  @media (max-width: 880px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const MetaSummaryCard = styled.div`
-  display: grid;
-  gap: 0.38rem;
-  min-width: 0;
-  padding: 0.55rem 0;
-  border-radius: 0;
-  border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-
-  &.wide {
-    min-width: 0;
-  }
-`
-
-const TagChipRow = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
@@ -6281,55 +5965,6 @@ const WriterFooterActions = styled.div`
       justify-content: center;
     }
   }
-`
-
-const EditorInsightGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-  margin-bottom: 0.8rem;
-
-  @media (max-width: 980px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const EditorInsightCard = styled.div`
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-  padding: 0.2rem 0;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-
-  span {
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.74rem;
-    font-weight: 700;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-`
-
-const EditorSupportNote = styled.p`
-  margin: 0 0 0.85rem;
-  padding: 0;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
-  line-height: 1.6;
 `
 
 const ResultPanel = styled.pre`

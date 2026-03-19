@@ -1,6 +1,5 @@
 import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
-import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"

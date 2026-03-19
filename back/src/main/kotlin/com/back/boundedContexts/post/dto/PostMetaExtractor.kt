@@ -75,10 +75,8 @@ object PostMetaExtractor {
             }
         }
 
-        var consumed = 0
         for (line in remaining.lineSequence()) {
             if (line.isBlank()) {
-                consumed += 1
                 break
             }
 
@@ -90,7 +88,6 @@ object PostMetaExtractor {
                 "tag", "tags" -> appendTags(parseMetaItems(rawValue))
                 "category", "categories" -> appendCategories(parseMetaItems(rawValue))
             }
-            consumed += 1
         }
 
         return PostMeta(

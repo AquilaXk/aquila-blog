@@ -406,7 +406,7 @@ class PostPreviewSummaryService(
                 val text =
                     part
                         .path("text")
-                        .asText("")
+                        .asText()
                         .trim()
                         .orEmpty()
                 if (text.isBlank()) continue
@@ -423,25 +423,41 @@ class PostPreviewSummaryService(
         val normalized = raw.trim()
         if (normalized.isBlank()) return null
 
-        val withoutFence =
-            normalized
-                .removePrefix("```json")
-                .removePrefix("```JSON")
-                .removePrefix("```")
-                .removeSuffix("```")
-                .trim()
+        val candidates = LinkedHashSet<String>()
+        candidates += normalized
 
-        if (!withoutFence.startsWith("{") || !withoutFence.endsWith("}")) return null
+        // code fence 내부 JSON 후보를 우선 추출한다.
+        JSON_FENCE_REGEX.findAll(normalized).forEach { match ->
+            val candidate =
+                match
+                    .groupValues
+                    .getOrNull(1)
+                    ?.trim()
+                    .orEmpty()
+            if (candidate.isNotBlank()) candidates += candidate
+        }
 
-        return runCatching {
-            val node = objectMapper.readTree(withoutFence)
-            node.path("summary").asText("").trim()
-        }.getOrNull()?.takeIf { it.isNotBlank() }
+        // 설명 문구 + JSON 형태(예: "Here is the JSON requested: {...}")도 지원한다.
+        JSON_OBJECT_REGEX.findAll(normalized).forEach { match ->
+            val candidate = match.value.trim()
+            if (candidate.isNotBlank()) candidates += candidate
+        }
+
+        for (candidate in candidates) {
+            val parsedSummary =
+                runCatching {
+                    val node = objectMapper.readTree(candidate)
+                    node.path("summary").asText().trim()
+                }.getOrNull()
+            if (!parsedSummary.isNullOrBlank()) return parsedSummary
+        }
+
+        return null
     }
 
     @Suppress("DEPRECATION")
     private fun extractModelVersion(root: JsonNode): String? {
-        val modelVersion = root.path("modelVersion").asText("").trim()
+        val modelVersion = root.path("modelVersion").asText().trim()
         return modelVersion.takeIf { it.isNotBlank() }
     }
 
@@ -883,6 +899,8 @@ class PostPreviewSummaryService(
         private const val AI_MIN_ABSOLUTE_LENGTH = 16
         private const val AI_QUOTED_FRAGMENT_MAX_LENGTH = 30
         private const val EXACT_MATCH_SHORT_THRESHOLD = 46
+        private val JSON_FENCE_REGEX = Regex("```(?:json|JSON)?\\s*([\\s\\S]*?)```")
+        private val JSON_OBJECT_REGEX = Regex("\\{[\\s\\S]*?}")
         private val UNSAFE_SUMMARY_MARKERS = setOf("ignore previous", "system prompt", "<본문>", "</본문>", "```")
         private val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
     }

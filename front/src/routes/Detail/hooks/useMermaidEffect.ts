@@ -29,7 +29,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     let disposed = false
     let running = false
-    let observer: IntersectionObserver | null = null
     let rerunRequested = false
     let mutationObserver: MutationObserver | null = null
     const retryTimers = new Set<number>()
@@ -325,11 +324,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           })
       }
 
-      if (observer) {
-        observer.disconnect()
-        observer = null
-      }
-
       // 미리보기/상세에서 "가끔 안 나옴"을 제거하기 위해 viewport 관찰 의존을 없애고 즉시 렌더한다.
       // 다이어그램 수가 많은 글에서도 renderQueue(직렬)로 스파이크를 제어한다.
       for (let i = 0; i < blocks.length; i += 1) {
@@ -388,7 +382,6 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     return () => {
       disposed = true
-      observer?.disconnect()
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))

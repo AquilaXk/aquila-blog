@@ -129,15 +129,26 @@ backend_http_host() {
   echo "back-green"
 }
 
+standby_backend_http_host() {
+  local backend="$1"
+  if [[ "${backend}" == "back_blue" ]]; then
+    echo "back-green"
+    return
+  fi
+  echo "back-blue"
+}
+
 set_caddy_upstream_backend() {
   local backend="$1"
-  local host
-  host="$(backend_http_host "${backend}")"
+  local primary_host
+  local standby_host
+  primary_host="$(backend_http_host "${backend}")"
+  standby_host="$(standby_backend_http_host "${backend}")"
   local rewritten
-  rewritten="$(sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${SCRIPT_DIR}/Caddyfile")"
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${primary_host}:8080 ${standby_host}:8080/g" "${SCRIPT_DIR}/Caddyfile")"
   printf '%s\n' "${rewritten}" > "${SCRIPT_DIR}/Caddyfile"
   reload_caddy
-  echo "rollback caddy upstream -> ${host}:8080"
+  echo "rollback caddy upstream -> primary=${primary_host}:8080 standby=${standby_host}:8080"
 }
 
 BACKUP_DIR="${1:-$(latest_backup)}"
@@ -157,7 +168,7 @@ done
 
 # normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
-  normalized="$(sed -E "s/back[-_](blue|green|active):8080/back-blue:8080/g" "${SCRIPT_DIR}/Caddyfile")"
+  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back-blue:8080 back-green:8080/g" "${SCRIPT_DIR}/Caddyfile")"
   printf '%s\n' "${normalized}" > "${SCRIPT_DIR}/Caddyfile"
 fi
 

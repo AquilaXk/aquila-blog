@@ -532,7 +532,12 @@ jobs:
             echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
           fi
 
-          chmod +x deploy/homeserver/create_deploy_backup.sh deploy/homeserver/rollback_last_deploy.sh
+          chmod +x \
+            deploy/homeserver/create_deploy_backup.sh \
+            deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/rollback_last_deploy.sh \
+            deploy/homeserver/steady_state_guard.sh \
+            deploy/homeserver/install_steady_state_guard_cron.sh
 
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created: ${BACKUP_DIR}"
@@ -587,9 +592,9 @@ jobs:
             INACTIVE_BACKEND="back_blue"
           fi
 
-          MOUNTED_UPSTREAM="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /deploy/homeserver/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1)"
+          MOUNTED_UPSTREAM="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' /etc/caddy/Caddyfile" 2>/dev/null | tr -d '\r' | head -n 1)"
           HAS_LEGACY_BACK_ACTIVE="false"
-          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /deploy/homeserver/Caddyfile"; then
+          if docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' /etc/caddy/Caddyfile"; then
             HAS_LEGACY_BACK_ACTIVE="true"
           fi
 

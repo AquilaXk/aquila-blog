@@ -7,7 +7,8 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
-CADDY_CONTAINER_FILE="/deploy/homeserver/Caddyfile"
+CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
+CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 NETWORK_NAME="blog_home_default"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-20}"
@@ -17,6 +18,19 @@ HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+}
+
+warn_unsupported_docker_engine() {
+  local version
+  version="$(docker version --format '{{.Server.Version}}' 2>/dev/null | tr -d '\r' || true)"
+  if [[ -z "${version}" ]]; then
+    echo "warning: failed to detect docker engine version during rollback" >&2
+    return 0
+  fi
+  if [[ "${version}" =~ ^29\.1\.0([.-]|$) ]]; then
+    echo "warning: docker engine ${version} has known networking regression; rollback continues for emergency recovery" >&2
+  fi
+  echo "docker engine version detected: ${version}"
 }
 
 compose_up_with_retry() {
@@ -130,7 +144,7 @@ current_caddy_upstream_host() {
       print a[1]
       exit
     }
-  ' "${SCRIPT_DIR}/Caddyfile"
+  ' "${CADDY_FILE}"
 }
 
 current_caddy_mounted_upstream_host() {
@@ -141,37 +155,48 @@ caddy_mounted_has_legacy_back_active() {
   compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}"
 }
 
+host_caddy_sha256() {
+  sha256sum "${CADDY_FILE}" 2>/dev/null | awk '{print $1}' | tr -d '\r'
+}
+
+mounted_caddy_sha256() {
+  compose exec -T caddy sh -lc "sha256sum ${CADDY_CONTAINER_FILE} | awk '{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
 ensure_caddy_mount_sync() {
-  local host_upstream mounted_upstream legacy_token
+  local host_upstream mounted_upstream legacy_token host_hash mounted_hash
   host_upstream="$(current_caddy_upstream_host)"
   mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  host_hash="$(host_caddy_sha256)"
+  mounted_hash="$(mounted_caddy_sha256)"
   legacy_token="false"
   if caddy_mounted_has_legacy_back_active; then
     legacy_token="true"
   fi
 
-  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
-    echo "rollback caddy config sync ok: upstream=${mounted_upstream}"
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" && -n "${host_hash}" && -n "${mounted_hash}" && "${host_hash}" == "${mounted_hash}" ]]; then
+    echo "rollback caddy config sync ok: upstream=${mounted_upstream}, sha256=${mounted_hash}"
     return 0
   fi
 
-  echo "rollback caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  echo "rollback caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, host_sha=${host_hash:-none}, mounted_sha=${mounted_hash:-none}, legacy_back_active=${legacy_token}" >&2
   echo "rollback force-recreate caddy to re-mount config directory" >&2
   compose up -d --force-recreate caddy >/dev/null
   reload_caddy
 
   mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  mounted_hash="$(mounted_caddy_sha256)"
   legacy_token="false"
   if caddy_mounted_has_legacy_back_active; then
     legacy_token="true"
   fi
 
-  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
-    echo "rollback caddy config sync repaired: upstream=${mounted_upstream}"
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" && -n "${host_hash}" && -n "${mounted_hash}" && "${host_hash}" == "${mounted_hash}" ]]; then
+    echo "rollback caddy config sync repaired: upstream=${mounted_upstream}, sha256=${mounted_hash}"
     return 0
   fi
 
-  echo "rollback caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  echo "rollback caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, host_sha=${host_hash:-none}, mounted_sha=${mounted_hash:-none}, legacy_back_active=${legacy_token}" >&2
   compose logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
@@ -247,10 +272,19 @@ set_caddy_upstream_backend() {
   local active_host
   active_host="$(backend_http_host "${backend}")"
   local rewritten
-  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" "${SCRIPT_DIR}/Caddyfile")"
-  printf '%s\n' "${rewritten}" > "${SCRIPT_DIR}/Caddyfile"
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" "${CADDY_FILE}")"
+  printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "rollback caddy upstream -> active=${active_host}:8080"
+}
+
+ensure_steady_state_guard() {
+  local installer="${SCRIPT_DIR}/install_steady_state_guard_cron.sh"
+  if [[ ! -x "${installer}" ]]; then
+    echo "steady-state guard installer missing or not executable: ${installer}" >&2
+    return 1
+  fi
+  "${installer}"
 }
 
 BACKUP_DIR="${1:-$(latest_backup)}"
@@ -262,16 +296,29 @@ fi
 
 echo "rollback from backup: ${BACKUP_DIR}"
 
-for file in Caddyfile .env.prod docker-compose.prod.yml .active_backend; do
+for file in .env.prod docker-compose.prod.yml .active_backend; do
   if [[ -f "${BACKUP_DIR}/${file}" ]]; then
     cp "${BACKUP_DIR}/${file}" "${SCRIPT_DIR}/${file}"
   fi
 done
 
+if [[ -d "${BACKUP_DIR}/caddy" ]]; then
+  rm -rf "${SCRIPT_DIR}/caddy"
+  cp -R "${BACKUP_DIR}/caddy" "${SCRIPT_DIR}/caddy"
+elif [[ -f "${BACKUP_DIR}/Caddyfile" ]]; then
+  mkdir -p "${SCRIPT_DIR}/caddy"
+  cp "${BACKUP_DIR}/Caddyfile" "${CADDY_FILE}"
+fi
+
+if [[ ! -f "${CADDY_FILE}" ]]; then
+  echo "rollback failed: caddy file missing after backup restore (${CADDY_FILE})" >&2
+  exit 1
+fi
+
 # normalize legacy upstream tokens before rollback target is chosen
-if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
-  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back-blue:8080/g" "${SCRIPT_DIR}/Caddyfile")"
-  printf '%s\n' "${normalized}" > "${SCRIPT_DIR}/Caddyfile"
+if [[ -f "${CADDY_FILE}" ]]; then
+  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back-blue:8080/g" "${CADDY_FILE}")"
+  printf '%s\n' "${normalized}" > "${CADDY_FILE}"
 fi
 
 target_backend="back_blue"
@@ -283,6 +330,7 @@ if [[ -f "${STATE_FILE}" ]]; then
 fi
 inactive_backend="$(other_backend "${target_backend}")"
 
+warn_unsupported_docker_engine
 compose_up_with_retry db_1 redis_1 caddy cloudflared autoheal
 ensure_db_runtime_guards || true
 reload_caddy
@@ -305,6 +353,7 @@ fi
 set_caddy_upstream_backend "${target_backend}"
 ensure_caddy_mount_sync
 stop_backend_if_running "${inactive_backend}"
+ensure_steady_state_guard || true
 echo "rollback completed: active=${target_backend}, inactive stopped=${inactive_backend}"
 
 compose ps

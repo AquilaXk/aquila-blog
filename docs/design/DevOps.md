@@ -105,7 +105,9 @@ NEXT_PUBLIC_UPTIME_KUMA_URL=/status/<slug>
 - `deploy/homeserver/blue_green_deploy.sh`
 - `deploy/homeserver/rollback_last_deploy.sh`
 - `deploy/homeserver/create_deploy_backup.sh`
-- `deploy/homeserver/Caddyfile`
+- `deploy/homeserver/caddy/Caddyfile`
+- `deploy/homeserver/steady_state_guard.sh`
+- `deploy/homeserver/install_steady_state_guard_cron.sh`
 - `deploy/homeserver/.env.prod.example`
 - `back/testInfra/docker-compose.yml`
 
@@ -181,6 +183,8 @@ GitHub Actions 기준 필수값:
 - `blue_green_deploy.sh` 성공 이후의 후속 검증(post-check)에서 실패해도 backup 기준 자동 rollback을 수행해야 한다. (blue_green_deploy 실패와 동일 정책)
 - `back_blue`, `back_green`에는 container healthcheck(readiness probe)가 설정되며, `autoheal` 서비스가 `unhealthy` 컨테이너를 자동 재시작한다.
 - `back_blue`, `back_green`에는 `BACK_MEM_LIMIT`/`BACK_MEM_RESERVATION` 기본 상한이 적용되어 blue/green 동시 기동 시 JVM 메모리 과점유를 방지한다.
+- Docker Engine은 `29.1.0` 버전을 배포/롤백에서 차단한다(알려진 네트워크 회귀 회피).
+- `steady_state_guard.sh`를 cron(1분 주기)으로 설치해 API readiness + Caddy mount sync + back 단일 실행 규칙을 상시 점검한다.
 - `doctor.sh`는 back/caddy/cloudflared/autoheal의 health 상태와 restartCount를 함께 출력해 정체/재시작 루프를 빠르게 식별한다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
 - `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness` -> `/member/api/v1/auth/me` -> `/member/api/v1/auth/login` 순서로 도달성과 로그인 가능 여부를 확인한다.
@@ -232,8 +236,8 @@ GitHub Actions 기준 필수값:
 - 신규 컨테이너가 올라오면 readiness check 통과 후 Caddy upstream host를 active backend로 교체하고 reload한다.
 - 운영 steady-state에서는 back 컨테이너를 1개만 유지한다. cutover 검증이 끝나면 이전 backend는 즉시 stop한다.
 - `back_active` 같은 Docker DNS alias 이동에는 의존하지 않는다.
-- Caddy는 단일 파일 bind-mount가 아니라 deploy 디렉터리를 `/deploy/homeserver`로 mount하고 `/deploy/homeserver/Caddyfile`을 읽는다(파일 inode 드리프트 회피).
-- 배포/롤백은 호스트 Caddyfile과 컨테이너 `/deploy/homeserver/Caddyfile` upstream 동기화를 검사한다. mismatch 또는 `back_active` 잔존 시 `caddy --force-recreate`로 config mount 드리프트를 자동 복구한다.
+- Caddy는 `./caddy:/etc/caddy` 디렉터리 bind-mount를 사용하고 `/etc/caddy/Caddyfile`을 읽는다.
+- 배포/롤백은 호스트 `deploy/homeserver/caddy/Caddyfile`과 컨테이너 `/etc/caddy/Caddyfile` checksum + upstream 동기화를 검사한다. mismatch 또는 `back_active` 잔존 시 `caddy --force-recreate`로 자동 복구한다.
 - 직접 backend health probe는 Tomcat의 Host 검증에 걸리지 않도록 `back-blue`, `back-green` 같은 HTTP-safe alias로 호출한다.
 - Caddy 라우팅 검증이 끝나면 기존 active는 즉시 stop해 메모리 점유를 최소화한다.
 - 롤백은 state file 대상이 unhealthy면 반대 색상으로 자동 fallback하고, 둘 다 unhealthy일 때만 실패 처리한다.

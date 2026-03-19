@@ -131,7 +131,7 @@ sequenceDiagram
 
 ## 참고 파일
 
-- `deploy/homeserver/Caddyfile`
+- `deploy/homeserver/caddy/Caddyfile`
 - `deploy/homeserver/docker-compose.prod.yml`
 - `deploy/homeserver/blue_green_deploy.sh`
 - `.github/workflows/deploy.yml`

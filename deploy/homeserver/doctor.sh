@@ -5,7 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
-CADDY_CONTAINER_FILE="/deploy/homeserver/Caddyfile"
+CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
+CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -71,6 +72,11 @@ echo "Env file: ${ENV_FILE}"
 print_section "Docker"
 docker --version || true
 docker compose version || true
+docker_engine_version="$(docker version --format '{{.Server.Version}}' 2>/dev/null | tr -d '\r' || true)"
+echo "docker engine: ${docker_engine_version:-unknown}"
+if [[ "${docker_engine_version}" =~ ^29\.1\.0([.-]|$) ]]; then
+  echo "WARN: docker engine 29.1.0 is blocked for deploy (known regression)"
+fi
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   print_section "ERROR"
@@ -92,6 +98,13 @@ print_env_key_status "CUSTOM_PROD_COOKIEDOMAIN"
 print_env_key_status "CUSTOM__AI__SUMMARY__ENABLED"
 print_env_key_status "CUSTOM__AI__SUMMARY__GEMINI__API_KEY"
 print_env_key_status "CUSTOM__AI__SUMMARY__GEMINI__MODEL"
+
+print_section "Steady Guard Cron"
+if command -v crontab >/dev/null 2>&1; then
+  crontab -l 2>/dev/null | grep 'steady_state_guard.sh' || echo "steady-state guard cron: not installed"
+else
+  echo "crontab command not found"
+fi
 
 print_section "Env Domain Consistency"
 front_url="$(env_value "CUSTOM_PROD_FRONTURL")"
@@ -157,20 +170,27 @@ for svc in back_blue back_green caddy cloudflared autoheal; do
 done
 
 print_section "Caddy Upstream"
-grep -nE 'reverse_proxy back-(blue|green|active):8080' "${SCRIPT_DIR}/Caddyfile" || true
+grep -nE 'reverse_proxy back-(blue|green|active):8080' "${CADDY_HOST_FILE}" || true
 
 print_section "Caddy Mount Sync"
-host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${SCRIPT_DIR}/Caddyfile" || true)"
+host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${CADDY_HOST_FILE}" || true)"
 mounted_upstream="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1 || true)"
 legacy_back_active="false"
 if compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}" >/dev/null 2>&1; then
   legacy_back_active="true"
 fi
+host_sha="$(sha256sum "${CADDY_HOST_FILE}" 2>/dev/null | awk '{print $1}' || true)"
+mounted_sha="$(compose exec -T caddy sh -lc "sha256sum ${CADDY_CONTAINER_FILE} | awk '{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1 || true)"
 echo "host_upstream=${host_upstream:-<none>}"
 echo "mounted_upstream=${mounted_upstream:-<none>}"
+echo "host_sha=${host_sha:-<none>}"
+echo "mounted_sha=${mounted_sha:-<none>}"
 echo "mounted_legacy_back_active=${legacy_back_active}"
 if [[ -n "${host_upstream}" && "${host_upstream}" != "${mounted_upstream}" ]]; then
   echo "WARN: host/mounted Caddy upstream mismatch"
+fi
+if [[ -n "${host_sha}" && -n "${mounted_sha}" && "${host_sha}" != "${mounted_sha}" ]]; then
+  echo "WARN: host/mounted Caddy file checksum mismatch"
 fi
 if [[ "${legacy_back_active}" == "true" ]]; then
   echo "WARN: mounted Caddyfile still has legacy back_active token"

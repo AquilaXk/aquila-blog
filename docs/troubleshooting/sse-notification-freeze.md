@@ -149,7 +149,7 @@ sequenceDiagram
 - 클라이언트 backoff 재연결
 - Caddy SSE 전용 핸들러 + `flush_interval -1`
 - 관련 파일:
-  - [`deploy/homeserver/Caddyfile`](/Users/aquila/Custom/GitProjects/aquila-blog/deploy/homeserver/Caddyfile)
+  - [`deploy/homeserver/caddy/Caddyfile`](/Users/aquila/Custom/GitProjects/aquila-blog/deploy/homeserver/caddy/Caddyfile)
   - [`back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/application/service/MemberNotificationSseService.kt`](/Users/aquila/Custom/GitProjects/aquila-blog/back/src/main/kotlin/com/back/boundedContexts/member/subContexts/notification/application/service/MemberNotificationSseService.kt)
   - [`front/src/layouts/RootLayout/Header/NotificationBell.tsx`](/Users/aquila/Custom/GitProjects/aquila-blog/front/src/layouts/RootLayout/Header/NotificationBell.tsx)
 

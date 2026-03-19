@@ -5,8 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
-CADDY_FILE="${SCRIPT_DIR}/Caddyfile"
-CADDY_CONTAINER_FILE="/deploy/homeserver/Caddyfile"
+CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
+CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
 NETWORK_NAME="blog_home_default"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
@@ -18,6 +18,21 @@ HEALTHCHECK_LOG_EVERY_N_TRIES="${HEALTHCHECK_LOG_EVERY_N_TRIES:-5}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+}
+
+require_supported_docker_engine() {
+  local version
+  version="$(docker version --format '{{.Server.Version}}' 2>/dev/null | tr -d '\r' || true)"
+  if [[ -z "${version}" ]]; then
+    echo "failed to detect docker engine version" >&2
+    exit 1
+  fi
+  if [[ "${version}" =~ ^29\.1\.0([.-]|$) ]]; then
+    echo "unsupported docker engine version detected: ${version}" >&2
+    echo "known regression in 29.1.0 can break caddy/backend networking. downgrade or upgrade engine first." >&2
+    exit 1
+  fi
+  echo "docker engine version ok: ${version}"
 }
 
 compose_up_with_retry() {
@@ -328,37 +343,48 @@ caddy_mounted_has_legacy_back_active() {
   compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}"
 }
 
+host_caddy_sha256() {
+  sha256sum "${CADDY_FILE}" 2>/dev/null | awk '{print $1}' | tr -d '\r'
+}
+
+mounted_caddy_sha256() {
+  compose exec -T caddy sh -lc "sha256sum ${CADDY_CONTAINER_FILE} | awk '{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
 ensure_caddy_mount_sync() {
-  local host_upstream mounted_upstream legacy_token
+  local host_upstream mounted_upstream legacy_token host_hash mounted_hash
   host_upstream="$(current_caddy_upstream_host)"
   mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  host_hash="$(host_caddy_sha256)"
+  mounted_hash="$(mounted_caddy_sha256)"
   legacy_token="false"
   if caddy_mounted_has_legacy_back_active; then
     legacy_token="true"
   fi
 
-  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
-    echo "caddy config sync ok: upstream=${mounted_upstream}"
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" && -n "${host_hash}" && -n "${mounted_hash}" && "${host_hash}" == "${mounted_hash}" ]]; then
+    echo "caddy config sync ok: upstream=${mounted_upstream}, sha256=${mounted_hash}"
     return 0
   fi
 
-  echo "caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  echo "caddy config drift detected: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, host_sha=${host_hash:-none}, mounted_sha=${mounted_hash:-none}, legacy_back_active=${legacy_token}" >&2
   echo "force-recreate caddy to re-mount config directory" >&2
   compose up -d --force-recreate caddy >/dev/null
   reload_caddy
 
   mounted_upstream="$(current_caddy_mounted_upstream_host)"
+  mounted_hash="$(mounted_caddy_sha256)"
   legacy_token="false"
   if caddy_mounted_has_legacy_back_active; then
     legacy_token="true"
   fi
 
-  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" ]]; then
-    echo "caddy config sync repaired: upstream=${mounted_upstream}"
+  if [[ "${legacy_token}" == "false" && -n "${host_upstream}" && "${host_upstream}" == "${mounted_upstream}" && -n "${host_hash}" && -n "${mounted_hash}" && "${host_hash}" == "${mounted_hash}" ]]; then
+    echo "caddy config sync repaired: upstream=${mounted_upstream}, sha256=${mounted_hash}"
     return 0
   fi
 
-  echo "caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, legacy_back_active=${legacy_token}" >&2
+  echo "caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, host_sha=${host_hash:-none}, mounted_sha=${mounted_hash:-none}, legacy_back_active=${legacy_token}" >&2
   compose logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
@@ -580,6 +606,15 @@ stop_backend_if_running() {
   echo "inactive backend already stopped: ${backend}"
 }
 
+ensure_steady_state_guard() {
+  local installer="${SCRIPT_DIR}/install_steady_state_guard_cron.sh"
+  if [[ ! -x "${installer}" ]]; then
+    echo "steady-state guard installer missing or not executable: ${installer}" >&2
+    return 1
+  fi
+  "${installer}"
+}
+
 rollback_to_backend() {
   local rollback_backend="$1"
   local api_domain="$2"
@@ -622,6 +657,7 @@ if [[ ! -f "${CADDY_FILE}" ]]; then
   exit 1
 fi
 
+require_supported_docker_engine
 validate_storage_env
 require_back_image
 validate_required_runtime_env
@@ -674,6 +710,7 @@ fi
 
 echo "${next_backend}" > "${STATE_FILE}"
 stop_backend_if_running "${active_backend}"
+ensure_steady_state_guard || true
 
 check_cloudflared_runtime
 

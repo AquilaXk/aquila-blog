@@ -3,6 +3,28 @@ import { expect, test } from "@playwright/test"
 const adminUsername = process.env.E2E_ADMIN_USERNAME?.trim() || ""
 const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
 const hasLiveCredentials = Boolean(adminUsername && adminPassword)
+const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
+
+const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
+
+const resolveApiBaseUrl = (currentUrl: string) => {
+  if (explicitApiBaseUrl) return stripTrailingSlash(explicitApiBaseUrl)
+
+  const parsed = new URL(currentUrl)
+
+  if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+    const localApiPort = process.env.E2E_LOCAL_API_PORT?.trim() || "8080"
+    return `${parsed.protocol}//${parsed.hostname}:${localApiPort}`
+  }
+
+  if (parsed.hostname.startsWith("www.")) {
+    parsed.hostname = `api.${parsed.hostname.slice(4)}`
+    return `${parsed.protocol}//${parsed.host}`
+  }
+
+  parsed.hostname = `api.${parsed.hostname}`
+  return `${parsed.protocol}//${parsed.host}`
+}
 
 test.describe("live production e2e", () => {
   test.skip(!hasLiveCredentials, "E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD is required")
@@ -21,26 +43,17 @@ test.describe("live production e2e", () => {
     })
 
     await page.goto("/login?next=%2Fadmin")
-    await page.locator("#username").fill(adminUsername)
-    await page.locator("#password").fill(adminPassword)
-    const loginResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        response.url().includes("/member/api/v1/auth/login"),
-      { timeout: 20_000 }
-    )
-    await page.locator("form button[type='submit']").click()
+    await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
 
-    const loginResponse = await loginResponsePromise.catch(() => null)
-    if (!loginResponse) {
-      throw new Error(`Login request was not observed. currentUrl=${page.url()}`)
-    }
+    const apiBaseUrl = resolveApiBaseUrl(page.url())
+    const loginApiResponse = await page.request.post(`${apiBaseUrl}/member/api/v1/auth/login`, {
+      data: { username: adminUsername, password: adminPassword },
+      timeout: 20_000,
+    })
 
-    if (!loginResponse.ok()) {
-      const body = (await loginResponse.text().catch(() => "")).slice(0, 300)
-      throw new Error(
-        `Login API failed. status=${loginResponse.status()} currentUrl=${page.url()} body=${body}`
-      )
+    if (!loginApiResponse.ok()) {
+      const body = (await loginApiResponse.text().catch(() => "")).slice(0, 300)
+      throw new Error(`Login API failed. status=${loginApiResponse.status()} body=${body}`)
     }
 
     await page.goto("/admin")

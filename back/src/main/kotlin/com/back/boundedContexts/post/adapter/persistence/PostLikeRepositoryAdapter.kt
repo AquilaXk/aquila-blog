@@ -33,6 +33,11 @@ class PostLikeRepositoryAdapter(
         post: Post,
     ): PostLike? = postLikeRepository.findFirstByLikerAndPostOrderByIdAsc(liker, post)
 
+    override fun existsByLikerAndPost(
+        liker: Member,
+        post: Post,
+    ): Boolean = postLikeRepository.existsByLikerAndPost(liker, post)
+
     override fun findByLikerAndPostIn(
         liker: Member,
         posts: List<Post>,

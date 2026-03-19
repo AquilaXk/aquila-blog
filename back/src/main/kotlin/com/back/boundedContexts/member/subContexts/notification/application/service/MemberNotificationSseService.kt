@@ -27,6 +27,8 @@ class MemberNotificationSseService(
     private val maxGlobalEmitters: Int,
     @param:Value("\${custom.member.notification.sse.heartbeatSeconds:20}")
     private val heartbeatSeconds: Long,
+    @param:Value("\${custom.member.notification.sse.replayProbeSeconds:60}")
+    private val replayProbeSeconds: Long,
     @param:Value("\${custom.member.notification.sse.replayBatchSize:50}")
     private val replayBatchSize: Int,
 ) {
@@ -40,6 +42,7 @@ class MemberNotificationSseService(
     private val emitterOwners = ConcurrentHashMap<SseEmitter, Int>()
     private val emitterConnectedAtEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
     private val emitterLastNotificationId = ConcurrentHashMap<SseEmitter, Int>()
+    private val emitterLastReplayEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
     private val heartbeatScheduler =
         Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "member-notification-sse-heartbeat").apply {
@@ -75,6 +78,7 @@ class MemberNotificationSseService(
                 lastNotificationId = replayFrom,
             )
         emitterLastNotificationId[emitter] = maxOf(replayFrom, replayedLastId)
+        emitterLastReplayEpochMillis[emitter] = Instant.now().toEpochMilli()
 
         sendConnectedEvent(emitter)
         registerHeartbeat(memberId, emitter)
@@ -171,11 +175,13 @@ class MemberNotificationSseService(
             heartbeatScheduler.scheduleAtFixedRate(
                 {
                     sendHeartbeat(memberId, emitter)
-                    replayMissedNotificationEvents(
-                        memberId = memberId,
-                        emitter = emitter,
-                        lastNotificationId = emitterLastNotificationId[emitter] ?: 0,
-                    )
+                    if (shouldProbeReplay(emitter)) {
+                        replayMissedNotificationEvents(
+                            memberId = memberId,
+                            emitter = emitter,
+                            lastNotificationId = emitterLastNotificationId[emitter] ?: 0,
+                        )
+                    }
                 },
                 fixedDelaySeconds,
                 fixedDelaySeconds,
@@ -193,10 +199,20 @@ class MemberNotificationSseService(
         emitterOwners.remove(emitter)
         emitterConnectedAtEpochMillis.remove(emitter)
         emitterLastNotificationId.remove(emitter)
+        emitterLastReplayEpochMillis.remove(emitter)
         emittersByMemberId[memberId]?.remove(emitter)
         if (emittersByMemberId[memberId].isNullOrEmpty()) {
             emittersByMemberId.remove(memberId)
         }
+    }
+
+    private fun shouldProbeReplay(emitter: SseEmitter): Boolean {
+        val now = Instant.now().toEpochMilli()
+        val replayIntervalMillis = replayProbeSeconds.coerceAtLeast(heartbeatSeconds).coerceAtLeast(3) * 1_000
+        val lastReplayAt = emitterLastReplayEpochMillis[emitter] ?: 0L
+        if (now - lastReplayAt < replayIntervalMillis) return false
+        emitterLastReplayEpochMillis[emitter] = now
+        return true
     }
 
     /**

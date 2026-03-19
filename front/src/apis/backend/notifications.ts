@@ -1,6 +1,11 @@
 import { apiFetch } from "src/apis/backend/client"
 import { TMemberNotification } from "src/types"
 
+type NotificationSnapshotResponse = {
+  items: TMemberNotification[]
+  unreadCount: number
+}
+
 type UnreadCountResponse = {
   unreadCount: number
 }
@@ -15,6 +20,9 @@ type ReadMutationResponse = {
 }
 
 export const getNotifications = () => apiFetch<TMemberNotification[]>("/member/api/v1/notifications")
+
+export const getNotificationSnapshot = () =>
+  apiFetch<NotificationSnapshotResponse>("/member/api/v1/notifications/snapshot")
 
 export const getUnreadNotificationCount = async () => {
   const response = await apiFetch<UnreadCountResponse>("/member/api/v1/notifications/unread-count")

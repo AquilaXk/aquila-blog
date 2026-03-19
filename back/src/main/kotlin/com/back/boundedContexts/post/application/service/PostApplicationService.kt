@@ -114,7 +114,7 @@ class PostApplicationService(
                     listed = listed,
                     contentHtml = contentHtml,
                 )
-            clearReadCaches()
+            clearReadCaches(created.id)
             return created
         }
 
@@ -149,7 +149,7 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        clearReadCaches()
+        clearReadCaches(createdPost.id)
 
         return createdPost
     }
@@ -205,7 +205,7 @@ class PostApplicationService(
         }.onFailure { exception ->
             logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
         }
-        clearReadCaches()
+        clearReadCaches(post.id)
 
         runCatching {
             eventPublisher.publish(
@@ -303,7 +303,7 @@ class PostApplicationService(
         if (!softDeleted) {
             throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
         }
-        clearReadCaches()
+        clearReadCaches(post.id)
 
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
@@ -469,7 +469,7 @@ class PostApplicationService(
             if (recoveredLikeId == null) {
                 syncLikesCount(post)
                 return PostLikeToggleResult(
-                    isLiked = postLikeRepository.findByLikerAndPost(persistenceActor, post) != null,
+                    isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
                     likeId = 0,
                 )
             }
@@ -603,7 +603,7 @@ class PostApplicationService(
         liker: Member?,
     ): Boolean {
         if (liker == null) return false
-        return postLikeRepository.findByLikerAndPost(toPersistenceMember(liker), post) != null
+        return postLikeRepository.existsByLikerAndPost(toPersistenceMember(liker), post)
     }
 
     /**
@@ -695,7 +695,7 @@ class PostApplicationService(
             logger.warn("Failed to restore attachments for restored post id={}", id, exception)
         }
 
-        clearReadCaches()
+        clearReadCaches(id)
 
         return postRepository.findById(id).getOrNull()
             ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
@@ -722,7 +722,7 @@ class PostApplicationService(
             throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
-        clearReadCaches()
+        clearReadCaches(id)
     }
 
     fun findPagedByAuthor(
@@ -965,12 +965,17 @@ class PostApplicationService(
     // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
     private fun toPersistenceMember(member: Member): Member = if (member is MemberProxy) member.persistenceMember else member
 
-    private fun clearReadCaches() {
+    private fun clearReadCaches(postId: Int? = null) {
         publicTagCountsCache = null
         cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
         cacheManager.getCache(PostQueryCacheNames.EXPLORE)?.clear()
         cacheManager.getCache(PostQueryCacheNames.TAGS)?.clear()
-        cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)?.clear()
+        val detailCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)
+        if (postId == null) {
+            detailCache?.clear()
+        } else {
+            detailCache?.evict(postId)
+        }
     }
 
     /**

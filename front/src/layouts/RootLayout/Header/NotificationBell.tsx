@@ -3,8 +3,7 @@ import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   buildNotificationStreamUrl,
-  getNotifications,
-  getUnreadNotificationCount,
+  getNotificationSnapshot,
   markAllNotificationsRead,
   markNotificationRead,
 } from "src/apis/backend/notifications"
@@ -20,8 +19,36 @@ type Props = {
 }
 
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
-const POLLING_INTERVAL_MS = 20_000
+const POLLING_INTERVAL_MS = 30_000
 const SSE_RECOVERY_PROBE_MS = 120_000
+const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
+const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
+
+const sanitizeNotificationEventId = (raw: string | null | undefined): string | null => {
+  if (!raw) return null
+  const normalized = raw.trim()
+  if (!NOTIFICATION_EVENT_ID_REGEX.test(normalized)) return null
+  return normalized
+}
+
+const persistLastEventId = (eventId: string | null) => {
+  if (typeof window === "undefined") return
+  if (!eventId) {
+    window.sessionStorage.removeItem(LAST_EVENT_ID_STORAGE_KEY)
+    return
+  }
+  window.sessionStorage.setItem(LAST_EVENT_ID_STORAGE_KEY, eventId)
+}
+
+const loadStoredLastEventId = (): string | null => {
+  if (typeof window === "undefined") return null
+  return sanitizeNotificationEventId(window.sessionStorage.getItem(LAST_EVENT_ID_STORAGE_KEY))
+}
+
+const toLatestNotificationEventId = (items: TMemberNotification[]): string | null => {
+  const latestId = items.reduce((maxId, item) => Math.max(maxId, item.id), 0)
+  return latestId > 0 ? `notification-${latestId}` : null
+}
 
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
@@ -46,7 +73,8 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptRef = useRef(0)
-  const lastEventIdRef = useRef<string | null>(null)
+  const initialLastEventId = useMemo(() => loadStoredLastEventId(), [])
+  const lastEventIdRef = useRef<string | null>(initialLastEventId)
   const [streamMode, setStreamMode] = useState<"sse" | "poll">(preferPolling ? "poll" : "sse")
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<TMemberNotification[]>([])
@@ -63,18 +91,25 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     })
   }, [])
 
+  const setLastNotificationEventId = useCallback((eventId: string | null) => {
+    const sanitized = sanitizeNotificationEventId(eventId)
+    lastEventIdRef.current = sanitized
+    persistLastEventId(sanitized)
+  }, [])
+
   const loadSnapshot = useCallback(async () => {
     if (!enabled) return
 
     try {
-      const [nextItems, nextUnreadCount] = await Promise.all([getNotifications(), getUnreadNotificationCount()])
-      setItems(nextItems)
-      setUnreadCount(nextUnreadCount)
+      const snapshot = await getNotificationSnapshot()
+      setItems(snapshot.items)
+      setUnreadCount(snapshot.unreadCount)
+      setLastNotificationEventId(toLatestNotificationEventId(snapshot.items))
       setIsReady(true)
     } catch {
       setIsReady(false)
     }
-  }, [enabled])
+  }, [enabled, setLastNotificationEventId])
 
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -94,7 +129,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setOpen(false)
       setIsReady(false)
       reconnectAttemptRef.current = 0
-      lastEventIdRef.current = null
+      setLastNotificationEventId(null)
       setStreamMode(preferPolling ? "poll" : "sse")
       return
     }
@@ -102,7 +137,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     if (isDocumentVisible) {
       void loadSnapshot()
     }
-  }, [enabled, isDocumentVisible, loadSnapshot, preferPolling])
+  }, [enabled, isDocumentVisible, loadSnapshot, preferPolling, setLastNotificationEventId])
 
   useEffect(() => {
     if (!enabled || streamMode !== "sse" || !isDocumentVisible) return
@@ -153,12 +188,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       eventSourceRef.current = eventSource
 
       const handleNotification = (event: MessageEvent<string>) => {
-        if (event.lastEventId) {
-          lastEventIdRef.current = event.lastEventId
-        }
-
         try {
           const payload = JSON.parse(event.data) as TMemberNotificationStreamPayload
+          setLastNotificationEventId(
+            sanitizeNotificationEventId(event.lastEventId) || `notification-${payload.notification.id}`
+          )
           pushNotification(payload.notification)
           setUnreadCount(payload.unreadCount)
           setIsReady(true)
@@ -167,11 +201,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         }
       }
 
-      const handleConnected = (event: MessageEvent<string>) => {
-        if (event.lastEventId) {
-          lastEventIdRef.current = event.lastEventId
-        }
-
+      const handleConnected = (_event: MessageEvent<string>) => {
         const recovered = reconnectAttemptRef.current > 0
         reconnectAttemptRef.current = 0
         setIsReady(true)
@@ -181,11 +211,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         }
       }
 
-      const handleHeartbeat = (event: MessageEvent<string>) => {
-        if (event.lastEventId) {
-          lastEventIdRef.current = event.lastEventId
-        }
-
+      const handleHeartbeat = (_event: MessageEvent<string>) => {
         setIsReady(true)
       }
 
@@ -209,7 +235,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       eventSourceRef.current?.close()
       eventSourceRef.current = null
     }
-  }, [enabled, isDocumentVisible, loadSnapshot, pushNotification, streamMode])
+  }, [enabled, isDocumentVisible, loadSnapshot, pushNotification, setLastNotificationEventId, streamMode])
 
   useEffect(() => {
     if (!enabled || streamMode !== "poll" || !isDocumentVisible) return

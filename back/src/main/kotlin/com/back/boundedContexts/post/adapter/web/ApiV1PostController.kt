@@ -69,9 +69,6 @@ class ApiV1PostController(
         }
     }
 
-    private fun makeFeedPostDtoPage(postPage: org.springframework.data.domain.Page<Post>): PageDto<FeedPostDto> =
-        PageDto(postPage.map(FeedPostDto::from))
-
     @GetMapping("/feed")
     @Transactional(readOnly = true)
     fun getFeed(
@@ -81,9 +78,7 @@ class ApiV1PostController(
     ): PageDto<FeedPostDto> {
         val validPage = page.coerceAtLeast(1)
         val validPageSize = pageSize.coerceIn(1, 30)
-        // feed는 메인 첫 진입용 "최근 공개 목록" 계약을 유지한다.
-        val postPage = postUseCase.findPagedByKw("", sort, validPage, validPageSize)
-        return makeFeedPostDtoPage(postPage)
+        return postPublicReadQueryService.getPublicFeed(validPage, validPageSize, sort)
     }
 
     /**
@@ -101,15 +96,7 @@ class ApiV1PostController(
     ): PageDto<FeedPostDto> {
         val validPage = page.coerceAtLeast(1)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val normalizedTag = tag.trim()
-        val postPage =
-            if (normalizedTag.isBlank()) {
-                postUseCase.findPagedByKw(kw, sort, validPage, validPageSize)
-            } else {
-                postUseCase.findPagedByKwAndTag(kw, normalizedTag, sort, validPage, validPageSize)
-            }
-
-        return makeFeedPostDtoPage(postPage)
+        return postPublicReadQueryService.getPublicExplore(validPage, validPageSize, kw, tag, sort)
     }
 
     @GetMapping("/tags")

@@ -28,6 +28,11 @@ class ApiV1MemberNotificationController(
     private val memberNotificationSseService: MemberNotificationSseService,
     private val rq: Rq,
 ) {
+    data class SnapshotResBody(
+        val items: List<MemberNotificationDto>,
+        val unreadCount: Int,
+    )
+
     data class UnreadCountResBody(
         val unreadCount: Int,
     )
@@ -35,6 +40,16 @@ class ApiV1MemberNotificationController(
     @GetMapping
     @Transactional(readOnly = true)
     fun getItems(): List<MemberNotificationDto> = memberNotificationApplicationService.getLatest(rq.actor)
+
+    @GetMapping("/snapshot")
+    @Transactional(readOnly = true)
+    fun getSnapshot(): SnapshotResBody {
+        val actor = rq.actor
+        return SnapshotResBody(
+            items = memberNotificationApplicationService.getLatest(actor),
+            unreadCount = memberNotificationApplicationService.unreadCount(actor),
+        )
+    }
 
     @GetMapping("/unread-count")
     @Transactional(readOnly = true)

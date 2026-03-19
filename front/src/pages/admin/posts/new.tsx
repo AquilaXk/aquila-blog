@@ -816,6 +816,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     tone: "idle",
     text: "발행 전 설정을 점검한 뒤 실행하면 결과가 여기에 표시됩니다.",
   })
+  const [previewSummaryNotice, setPreviewSummaryNotice] = useState<NoticeState>({
+    tone: "idle",
+    text: "AI 요약 상태가 여기에 표시됩니다.",
+  })
   const [profileImageNotice, setProfileImageNotice] = useState<NoticeState>({
     tone: "idle",
     text: "프로필 이미지를 선택하면 즉시 업로드됩니다.",
@@ -1327,16 +1331,19 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const content = postContent.trim()
     if (!content) {
       setPublishStatus({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." }, "modal")
+      setPreviewSummaryNotice({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." })
       return
     }
     if (content.length > PREVIEW_SUMMARY_MAX_CONTENT_LENGTH) {
+      const message = `요약 생성용 본문은 최대 ${PREVIEW_SUMMARY_MAX_CONTENT_LENGTH.toLocaleString()}자까지 지원됩니다.`
       setPublishStatus(
         {
           tone: "error",
-          text: `요약 생성용 본문은 최대 ${PREVIEW_SUMMARY_MAX_CONTENT_LENGTH.toLocaleString()}자까지 지원됩니다.`,
+          text: message,
         },
         "modal"
       )
+      setPreviewSummaryNotice({ tone: "error", text: message })
       return
     }
     const fallbackSummary = makePreviewSummary(postContent)
@@ -1344,6 +1351,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("generatePreviewSummary")
       setPublishStatus({ tone: "loading", text: "AI 요약 생성 중입니다..." }, "modal")
+      setPreviewSummaryNotice({ tone: "loading", text: "AI 요약 생성 중입니다..." })
 
       const response = await apiFetch<RsData<GeneratePreviewSummaryPayload>>("/post/api/v1/adm/posts/preview-summary", {
         method: "POST",
@@ -1368,6 +1376,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         response?.data?.provider === "rule" ? formatPreviewSummaryReason(response?.data?.reason) : ""
 
       setPostSummary(generated)
+      const summaryNoticeText = `요약 반영 완료 (${providerLabel}${reasonHint ? ` · ${reasonHint}` : ""})`
       setPublishStatus(
         {
           tone: "success",
@@ -1375,26 +1384,31 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         },
         "modal"
       )
+      setPreviewSummaryNotice({ tone: "success", text: summaryNoticeText })
     } catch (error) {
       if (fallbackSummary) {
         setPostSummary(fallbackSummary)
+        const fallbackMessage = `AI 요약 실패로 규칙 기반 요약을 반영했습니다. (${error instanceof Error ? error.message : String(error)})`
         setPublishStatus(
           {
             tone: "error",
-            text: `AI 요약 생성 실패로 규칙 기반 요약을 대신 반영했습니다. (${error instanceof Error ? error.message : String(error)})`,
+            text: fallbackMessage,
           },
           "modal"
         )
+        setPreviewSummaryNotice({ tone: "error", text: fallbackMessage })
         return
       }
 
+      const failMessage = `요약 생성 실패: ${error instanceof Error ? error.message : String(error)}`
       setPublishStatus(
         {
           tone: "error",
-          text: `요약 생성 실패: ${error instanceof Error ? error.message : String(error)}`,
+          text: failMessage,
         },
         "modal"
       )
+      setPreviewSummaryNotice({ tone: "error", text: failMessage })
     } finally {
       setLoadingKey("")
     }
@@ -2394,6 +2408,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       tone: "idle",
       text: publishModalHintByAction(actionType),
     })
+    setPreviewSummaryNotice({
+      tone: "idle",
+      text: "AI 요약 상태가 여기에 표시됩니다.",
+    })
     setIsPublishModalOpen(true)
   }
 
@@ -2422,6 +2440,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setPublishModalNotice({
       tone: "idle",
       text: publishModalHintByAction(publishActionType),
+    })
+    setPreviewSummaryNotice({
+      tone: "idle",
+      text: "AI 요약 상태가 여기에 표시됩니다.",
     })
     setIsPublishModalOpen(false)
   }
@@ -3655,11 +3677,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <Button
                       type="button"
                       disabled={disabled("generatePreviewSummary") || !postContent.trim()}
-                      onClick={() => setPostSummary(makePreviewSummary(postContent))}
+                      onClick={() => {
+                        setPostSummary(makePreviewSummary(postContent))
+                        setPreviewSummaryNotice({
+                          tone: "success",
+                          text: "규칙 기반 요약을 입력창에 반영했습니다.",
+                        })
+                      }}
                     >
                       규칙 요약 채우기
                     </Button>
                   </MetaActionRow>
+                  <SummaryActionStatus data-tone={previewSummaryNotice.tone}>{previewSummaryNotice.text}</SummaryActionStatus>
                   <FieldHelp>아래 블록은 목록 카드에 실제로 노출될 제목/요약 미리보기입니다.</FieldHelp>
                   <PreviewCardSnapshot>
                     <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
@@ -4714,6 +4743,37 @@ const SummaryCounter = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.74rem;
   line-height: 1;
+`
+
+const SummaryActionStatus = styled.div`
+  padding: 0.48rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+
+  &[data-tone="idle"] {
+    color: ${({ theme }) => theme.colors.gray11};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+  }
+
+  &[data-tone="loading"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
+
+  &[data-tone="success"] {
+    color: ${({ theme }) => theme.colors.green11};
+    border: 1px solid ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+  }
+
+  &[data-tone="error"] {
+    color: ${({ theme }) => theme.colors.red11};
+    border: 1px solid ${({ theme }) => theme.colors.red7};
+    background: ${({ theme }) => theme.colors.red3};
+  }
 `
 
 const ZoomControlRow = styled.div`

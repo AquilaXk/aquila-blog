@@ -1,6 +1,6 @@
 import http from "k6/http";
 import { check } from "k6";
-import { Rate, Trend } from "k6/metrics";
+import { Counter, Rate, Trend } from "k6/metrics";
 
 const BASE_URL = __ENV.BASE_URL || "https://api.aquilaxk.site";
 
@@ -10,6 +10,7 @@ const detailDuration = new Trend("post_detail_duration_ms");
 const tagsDuration = new Trend("post_tags_duration_ms");
 const businessErrorRate = new Rate("post_business_error_rate");
 const serverErrorRate = new Rate("post_server_error_rate");
+const statusCodeCounter = new Counter("post_http_status_code_total");
 
 const KEYWORDS = ["", "spring", "kotlin", "테스트", "아키텍처", "성능"];
 
@@ -85,6 +86,7 @@ function randomPick(list, fallback = null) {
 
 function recordResponse(res, trend, name) {
   trend.add(res.timings.duration);
+  statusCodeCounter.add(1, { endpoint: name, status: String(res.status) });
   const ok = check(res, {
     [`${name} 2xx/3xx`]: (r) => r.status >= 200 && r.status < 400,
   });
@@ -94,15 +96,22 @@ function recordResponse(res, trend, name) {
 }
 
 export function setup() {
-  const feedRes = http.get(`${BASE_URL}/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT`);
-  const feedJson = safeJson(feedRes);
-  const postIds = (feedJson?.content || feedJson?.data?.content || [])
-    .map((p) => p.id)
-    .filter((id) => typeof id === "number");
+  const postIdSet = new Set();
+  for (let page = 1; page <= 3; page += 1) {
+    const feedRes = http.get(`${BASE_URL}/post/api/v1/posts/feed?page=${page}&pageSize=30&sort=CREATED_AT`);
+    const feedJson = safeJson(feedRes);
+    const ids = (feedJson?.content || feedJson?.data?.content || [])
+      .map((p) => p.id)
+      .filter((id) => typeof id === "number");
+    ids.forEach((id) => postIdSet.add(id));
+  }
+  const postIds = Array.from(postIdSet);
 
   const tagsRes = http.get(`${BASE_URL}/post/api/v1/posts/tags`);
   const tagsJson = safeJson(tagsRes) || [];
-  const tags = tagsJson.map((t) => t.name).filter((name) => typeof name === "string" && name.length > 0);
+  const tags = tagsJson
+    .map((t) => (typeof t?.tag === "string" ? t.tag : t?.name))
+    .filter((name) => typeof name === "string" && name.length > 0);
 
   return {
     postIds,
@@ -123,7 +132,8 @@ export function homeFeedScenario() {
 }
 
 export function detailReaderScenario(data) {
-  const postId = randomPick(data?.postIds, 1);
+  const postId = randomPick(data?.postIds, null);
+  if (postId === null) return;
   const res = http.get(`${BASE_URL}/post/api/v1/posts/${postId}`);
   recordResponse(res, detailDuration, "detail");
 }

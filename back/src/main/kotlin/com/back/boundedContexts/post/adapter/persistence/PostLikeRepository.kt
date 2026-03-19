@@ -20,6 +20,11 @@ interface PostLikeRepository :
         post: Post,
     ): PostLike?
 
+    fun existsByLikerAndPost(
+        liker: Member,
+        post: Post,
+    ): Boolean
+
     fun findByLikerAndPostIn(
         liker: Member,
         posts: List<Post>,

@@ -192,7 +192,7 @@ if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
   mv "${tmp_file}" "${SCRIPT_DIR}/Caddyfile"
 fi
 
-compose_up_with_retry db_1 redis_1 caddy cloudflared back_blue back_green
+compose_up_with_retry db_1 redis_1 caddy cloudflared autoheal back_blue back_green
 ensure_db_runtime_guards || true
 reload_caddy
 

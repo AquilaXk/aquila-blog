@@ -300,72 +300,46 @@ backend_http_host() {
   echo "back-green"
 }
 
-other_backend() {
-  local backend="$1"
-  if [[ "${backend}" == "back_blue" ]]; then
-    echo "back_green"
-    return
-  fi
-  echo "back_blue"
-}
-
-backend_container_id() {
-  local backend="$1"
-  compose ps -q "${backend}" | head -n 1
-}
-
 resolve_in_caddy() {
   local host="$1"
   compose exec -T caddy getent hosts "${host}" >/dev/null 2>&1
-}
-
-get_caddy_ip() {
-  local host="$1"
-  compose exec -T caddy sh -lc "getent hosts ${host} | awk 'NR==1{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
-}
-
-get_caddy_ips() {
-  local host="$1"
-  compose exec -T caddy sh -lc "getent hosts ${host} | awk '{print \$1}' | sort -u" 2>/dev/null | tr -d '\r'
-}
-
-has_single_caddy_ip() {
-  local host="$1"
-  local ips
-  ips="$(get_caddy_ips "${host}")"
-  local count
-  count="$(echo "${ips}" | sed '/^$/d' | wc -l | tr -d ' ')"
-  [[ "${count}" == "1" ]]
-}
-
-backend_has_back_active_alias() {
-  local backend="$1"
-  local cid
-  cid="$(backend_container_id "${backend}")"
-  if [[ -z "${cid}" ]]; then
-    return 1
-  fi
-
-  docker inspect \
-    --format '{{range $k,$v := .NetworkSettings.Networks}}{{if eq $k "'"${NETWORK_NAME}"'"}}{{range $v.Aliases}}{{println .}}{{end}}{{end}}{{end}}' \
-    "${cid}" 2>/dev/null | grep -qx "back_active"
-}
-
-ensure_caddyfile_back_active() {
-  local tmp_file
-  tmp_file="$(mktemp)"
-  sed -E "s/back[-_](blue|green|active):8080/back_active:8080/" "${CADDY_FILE}" > "${tmp_file}"
-  mv "${tmp_file}" "${CADDY_FILE}"
-  reload_caddy
 }
 
 reload_caddy() {
   compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 }
 
+current_caddy_upstream_host() {
+  awk '
+    $1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {
+      split($2, a, ":")
+      print a[1]
+      exit
+    }
+  ' "${CADDY_FILE}"
+}
+
+set_caddy_upstream_backend() {
+  local backend="$1"
+  local host
+  host="$(backend_http_host "${backend}")"
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+  sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${CADDY_FILE}" > "${tmp_file}"
+  mv "${tmp_file}" "${CADDY_FILE}"
+  reload_caddy
+  echo "caddy upstream switched to ${host}:8080"
+}
+
 is_healthy_http_code() {
   local code="$1"
   [[ "${code}" == "200" ]]
+}
+
+get_caddy_ip() {
+  local host="$1"
+  compose exec -T caddy sh -lc "getent hosts ${host} | awk 'NR==1{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
 }
 
 check_backend_dns_from_caddy() {
@@ -453,134 +427,52 @@ check_backend_health() {
   return 1
 }
 
-connect_backend_network() {
-  local backend="$1"
-  local with_active_alias="$2"
-  local max_attempts=5
-  local attempt=1
-
-  while [[ "${attempt}" -le "${max_attempts}" ]]; do
-    local cid
-    cid="$(backend_container_id "${backend}")"
-    if [[ -z "${cid}" ]]; then
-      echo "container id not found: ${backend} (try ${attempt}/${max_attempts})" >&2
-      sleep 1
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    docker network disconnect "${NETWORK_NAME}" "${cid}" >/dev/null 2>&1 || true
-
-    local args=(network connect --alias "${backend}" --alias "${backend//_/-}")
-    if [[ "${with_active_alias}" == "true" ]]; then
-      args+=(--alias "back_active")
-    fi
-    args+=("${NETWORK_NAME}" "${cid}")
-
-    local output
-    if output="$(docker "${args[@]}" 2>&1)"; then
-      return 0
-    fi
-
-    if grep -Eqi "network sandbox .* not found|No such container|is not running|already exists in network" <<< "${output}"; then
-      echo "network attach retry (${backend}, try ${attempt}/${max_attempts}): ${output}" >&2
-      sleep 1
-      attempt=$((attempt + 1))
-      continue
-    fi
-
-    echo "${output}" >&2
-    return 1
-  done
-
-  echo "failed to attach ${backend} to ${NETWORK_NAME} after ${max_attempts} retries" >&2
-  return 1
-}
-
-switch_active_alias() {
+switch_caddy_upstream() {
   local target="$1"
-  local other
-  other="$(other_backend "${target}")"
+  local host
+  host="$(backend_http_host "${target}")"
 
-  connect_backend_network "${target}" "true"
-
-  if ! connect_backend_network "${other}" "false"; then
-    echo "failed to refresh aliases for ${other}" >&2
+  if ! resolve_in_caddy "${host}"; then
+    echo "caddy dns resolve failed: ${host}" >&2
     return 1
   fi
 
-  if ! backend_has_back_active_alias "${target}"; then
-    echo "back_active alias missing on target backend: ${target}" >&2
-    return 1
-  fi
-  if backend_has_back_active_alias "${other}"; then
-    echo "back_active alias still attached to non-target backend: ${other}" >&2
-    return 1
-  fi
-
-  if ! resolve_in_caddy "back_active" || ! has_single_caddy_ip "back_active"; then
-    echo "caddy dns resolve failed: back_active" >&2
-    return 1
-  fi
-
-  local active_ip target_ip
-  active_ip="$(get_caddy_ip "back_active")"
-  target_ip="$(get_caddy_ip "$(backend_host "${target}")")"
-  if [[ -z "${active_ip}" || -z "${target_ip}" || "${active_ip}" != "${target_ip}" ]]; then
-    echo "back_active alias mismatch: active=${active_ip:-none}, target=${target_ip:-none}" >&2
-    return 1
-  fi
-
-  # Force Caddy to resolve the updated back_active alias before public route verification.
-  reload_caddy
-
-  echo "back_active alias switched to ${target} (${active_ip})"
+  set_caddy_upstream_backend "${target}"
 }
 
 verify_caddy_route() {
   local expected_backend="$1"
   local api_domain="$2"
-  local expected_ip
-  expected_ip="$(get_caddy_ip "$(backend_host "${expected_backend}")")"
-
-  if [[ -z "${expected_ip}" ]]; then
-    echo "expected backend ip not found for ${expected_backend}" >&2
-    return 1
-  fi
+  local expected_host
+  expected_host="$(backend_http_host "${expected_backend}")"
 
   local attempt=1
   while [[ "${attempt}" -le 20 ]]; do
-    if ! has_single_caddy_ip "back_active"; then
-      local active_ips
-      active_ips="$(get_caddy_ips "back_active" | tr '\n' ',' | sed 's/,$//')"
-      echo "caddy alias pending: back_active resolves to multiple ips [${active_ips:-none}] (try ${attempt}/20)"
+    local current_host
+    current_host="$(current_caddy_upstream_host)"
+    if [[ "${current_host}" != "${expected_host}" ]]; then
+      echo "caddy upstream pending: current=${current_host:-none}, expected=${expected_host} (try ${attempt}/20)"
       sleep 1
       attempt=$((attempt + 1))
       continue
     fi
 
-    local active_ip
-    active_ip="$(get_caddy_ip "back_active")"
-    if [[ -n "${active_ip}" && "${active_ip}" == "${expected_ip}" ]]; then
-      local codes=()
-      local all_healthy="true"
-      for _ in 1 2 3; do
-        local code
-        code="$(probe_caddy_http_code "${api_domain}")"
-        codes+=("${code:-none}")
-        if ! is_healthy_http_code "${code}"; then
-          all_healthy="false"
-        fi
-      done
-
-      if [[ "${all_healthy}" == "true" ]]; then
-        echo "caddy route verify ok: ${expected_backend} (status=${codes[*]})"
-        return 0
+    local codes=()
+    local all_healthy="true"
+    for _ in 1 2 3; do
+      local code
+      code="$(probe_caddy_http_code "${api_domain}")"
+      codes+=("${code:-none}")
+      if ! is_healthy_http_code "${code}"; then
+        all_healthy="false"
       fi
-      echo "caddy route pending: status=${codes[*]} (try ${attempt}/20)"
-    else
-      echo "caddy alias pending: active=${active_ip:-none}, expected=${expected_ip} (try ${attempt}/20)"
+    done
+
+    if [[ "${all_healthy}" == "true" ]]; then
+      echo "caddy route verify ok: ${expected_backend} (status=${codes[*]})"
+      return 0
     fi
+    echo "caddy route pending: status=${codes[*]} (try ${attempt}/20)"
 
     sleep 1
     attempt=$((attempt + 1))
@@ -642,7 +534,7 @@ rollback_to_backend() {
     return 1
   fi
 
-  switch_active_alias "${rollback_backend}"
+  switch_caddy_upstream "${rollback_backend}"
 
   if ! verify_caddy_route "${rollback_backend}" "${api_domain}"; then
     echo "rollback failed: caddy route verify failed" >&2
@@ -692,13 +584,11 @@ ensure_db_runtime_guards || true
 compose pull "${next_backend}"
 compose_up_with_retry "${next_backend}"
 
-ensure_caddyfile_back_active
-
 # Verify cutover target DNS and currently running active backend DNS (if running).
 check_required_backend_dns_from_caddy "${next_backend}" "${active_backend}"
 check_backend_health "${next_backend}"
 
-switch_active_alias "${next_backend}"
+switch_caddy_upstream "${next_backend}"
 
 if ! verify_caddy_route "${next_backend}" "${api_domain}"; then
   rollback_to_backend "${active_backend}" "${api_domain}" || true

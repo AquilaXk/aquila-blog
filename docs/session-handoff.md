@@ -17,7 +17,7 @@ Last updated: 2026-03-13
 - 운영 구조는 `Vercel(front) + Home Server(back/db/redis/minio/caddy/cloudflared)`이다.
 - 글 데이터 소스는 외부 CMS가 아니라 자체 백엔드 API다.
 - 프론트는 Next.js Pages Router 기반이고, 백엔드는 Spring Boot 4 + Kotlin 기반이다.
-- blue/green 배포는 `back_active` alias를 중심으로 동작한다.
+- blue/green 배포는 Caddy upstream host(`back-blue`/`back-green`) 전환으로 동작한다.
 
 ```mermaid
 flowchart LR
@@ -25,7 +25,7 @@ flowchart LR
     Issue --> Back["back"]
     Issue --> Deploy["deploy/workflow"]
     Back --> DB["db/redis/minio"]
-    Deploy --> Alias["back_active"]
+    Deploy --> Alias["caddy upstream host"]
 ```
 
 ## 최근 반영된 큰 변화
@@ -87,7 +87,7 @@ flowchart LR
 | 상세 링크가 이상함 | `front/src/pages/posts/[id].tsx`, `front/src/pages/[slug].tsx` | canonical `/posts/:id`, legacy redirect |
 | 이미지 오류 | `back/src/main/kotlin/com/back/boundedContexts/post/adapter/storage/PostImageStorageAdapter.kt` | endpoint, accessKey, secretKey |
 | Kakao OAuth 실패 | `deploy/homeserver/Caddyfile`, `application.yaml` | `X-Forwarded-Proto`, `custom.site.backUrl`, `redirect_uri` |
-| 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, alias, health |
+| 배포 실패 | `.github/workflows/deploy.yml`, `blue_green_deploy.sh` | Secret, upstream host, health |
 | 구조 파악이 안 됨 | `docs/design/package-structure.md` | `adapter/*`, `application/port/input|output`, `application` 경계 확인 |
 
 ## 빠른 점검 포인트

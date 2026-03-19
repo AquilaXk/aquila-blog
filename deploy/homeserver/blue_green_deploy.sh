@@ -324,10 +324,11 @@ set_caddy_upstream_backend() {
   local host
   host="$(backend_http_host "${backend}")"
 
-  local tmp_file
-  tmp_file="$(mktemp)"
-  sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${CADDY_FILE}" > "${tmp_file}"
-  mv "${tmp_file}" "${CADDY_FILE}"
+  # Keep inode for bind-mounted file: do not replace via mv.
+  # caddy container may keep seeing old inode if host file is atomically swapped.
+  local rewritten
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${CADDY_FILE}")"
+  printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "caddy upstream switched to ${host}:8080"
 }

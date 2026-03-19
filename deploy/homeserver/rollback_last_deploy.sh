@@ -133,10 +133,9 @@ set_caddy_upstream_backend() {
   local backend="$1"
   local host
   host="$(backend_http_host "${backend}")"
-  local tmp_file
-  tmp_file="$(mktemp)"
-  sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${SCRIPT_DIR}/Caddyfile" > "${tmp_file}"
-  mv "${tmp_file}" "${SCRIPT_DIR}/Caddyfile"
+  local rewritten
+  rewritten="$(sed -E "s/back[-_](blue|green|active):8080/${host}:8080/g" "${SCRIPT_DIR}/Caddyfile")"
+  printf '%s\n' "${rewritten}" > "${SCRIPT_DIR}/Caddyfile"
   reload_caddy
   echo "rollback caddy upstream -> ${host}:8080"
 }
@@ -158,9 +157,8 @@ done
 
 # normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${SCRIPT_DIR}/Caddyfile" ]]; then
-  tmp_file="$(mktemp)"
-  sed -E "s/back[-_](blue|green|active):8080/back-blue:8080/g" "${SCRIPT_DIR}/Caddyfile" > "${tmp_file}"
-  mv "${tmp_file}" "${SCRIPT_DIR}/Caddyfile"
+  normalized="$(sed -E "s/back[-_](blue|green|active):8080/back-blue:8080/g" "${SCRIPT_DIR}/Caddyfile")"
+  printf '%s\n' "${normalized}" > "${SCRIPT_DIR}/Caddyfile"
 fi
 
 compose_up_with_retry db_1 redis_1 caddy cloudflared autoheal back_blue back_green

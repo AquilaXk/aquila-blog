@@ -230,6 +230,7 @@ GitHub Actions 기준 필수값:
 - Caddy는 배포 스크립트가 선택한 단일 upstream(`back-blue:8080` 또는 `back-green:8080`)으로 라우팅한다.
 - 신규 컨테이너가 올라오면 readiness check 통과 후 Caddy upstream host를 새 backend로 교체하고 reload한다.
 - `back_active` 같은 Docker DNS alias 이동에는 의존하지 않는다.
+- Caddyfile이 bind-mount된 운영 환경에서는 upstream 전환 시 파일 inode를 유지해야 하므로 `mv` 교체 대신 in-place overwrite를 사용한다.
 - 직접 backend health probe는 Tomcat의 Host 검증에 걸리지 않도록 `back-blue`, `back-green` 같은 HTTP-safe alias로 호출한다.
 - Caddy 라우팅 검증이 끝나기 전에는 기존 active를 내리지 않는다.
 - 실패 시 rollback 스크립트가 backup 상태를 기준으로 복구한다.

@@ -1,6 +1,11 @@
 spring:
   config:
     import: optional:file:.env.test[.properties]
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    locations: classpath:db/migration-test
   data:
     redis:
       password: ${SPRING__DATA__REDIS__PASSWORD:}
@@ -8,10 +13,10 @@ spring:
     password: ${SPRING__DATASOURCE__PASSWORD:}
   sql:
     init:
-      mode: always
+      mode: never
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: com.back.global.jpa.config.CustomTestPostgreSQLDialect

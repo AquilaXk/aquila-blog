@@ -32,6 +32,11 @@ val defaultTestDbPassword = "test_db_password_change_me"
 val defaultTestRedisPassword = "test_redis_password_change_me"
 val defaultTestDbPort = "15432"
 val defaultTestRedisPort = "16379"
+val testInfraMode =
+    providers
+        .gradleProperty("testInfraMode")
+        .orElse(providers.environmentVariable("TEST_INFRA_MODE"))
+        .orElse("compose")
 val testInfraMarkerFile =
     layout.buildDirectory
         .file("tmp/testInfra/running.marker")
@@ -200,8 +205,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("io.micrometer:micrometer-registry-prometheus")
-    implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
 
@@ -243,6 +248,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("com.tngtech.archunit:archunit:1.4.1")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.3")
+    testImplementation("org.testcontainers:postgresql:1.21.3")
+    testImplementation("org.testcontainers:testcontainers:1.21.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -282,14 +290,38 @@ tasks {
     }
 
     withType<Test> {
+        val composeInfraEnabled = testInfraMode.get().equals("compose", ignoreCase = true)
         useJUnitPlatform()
         environment("SPRING__DATASOURCE__PASSWORD", resolvedTestDbPassword.get())
         environment("SPRING__DATA__REDIS__PASSWORD", resolvedTestRedisPassword.get())
         environment("CUSTOM__TEST__DB_PORT", resolvedTestDbPort.get())
         environment("CUSTOM__TEST__REDIS_PORT", resolvedTestRedisPort.get())
-        doFirst {
-            project.startTestInfra()
+        if (composeInfraEnabled) {
+            doFirst {
+                project.startTestInfra()
+            }
+            finalizedBy(testInfraDown)
         }
-        finalizedBy(testInfraDown)
+    }
+
+    named<Test>("test") {
+        filter {
+            // Testcontainers 검증은 별도 태스크(testcontainersTest)에서만 수행한다.
+            excludeTestsMatching("com.back.infrastructure.*")
+        }
+    }
+
+    register<Test>("testcontainersTest") {
+        group = "verification"
+        description = "Run integration tests that bootstrap infra with Testcontainers."
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        useJUnitPlatform()
+        filter {
+            includeTestsMatching("com.back.infrastructure.*")
+        }
+        systemProperty("spring.profiles.active", "test")
+        environment("TEST_INFRA_MODE", "none")
+        shouldRunAfter("test")
     }
 }

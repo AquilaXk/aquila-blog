@@ -23,7 +23,10 @@ jobs:
     permissions:
       contents: read
     if: >
-      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main'
+      ) ||
       (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'push' &&
@@ -36,6 +39,7 @@ jobs:
       image_latest_ref: ${{ steps.meta.outputs.image_latest_ref }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       deploy_sha: ${{ steps.meta.outputs.deploy_sha }}
+      should_deploy: ${{ steps.meta.outputs.should_deploy }}
 
     steps:
       - name: Checkout
@@ -45,6 +49,11 @@ jobs:
 
       - name: Calculate image/release tags
         id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CURRENT_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+          REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -60,15 +69,70 @@ jobs:
           IMAGE_LATEST_REF="${IMAGE_NAME}:latest"
           RELEASE_TAG="deploy-${GITHUB_RUN_ID}-${SHORT_SHA}"
 
+          SHOULD_DEPLOY="true"
+          if [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
+            REQUIRED_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+            CHANGED_FILES=""
+            CHANGE_SOURCE="head-commit"
+            PREV_SUCCESS_SHA=""
+
+            if command -v jq >/dev/null 2>&1 && [ -n "${CURRENT_RUN_ID}" ]; then
+              runs_api="https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20"
+              runs_json="$(curl -fsSL \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "${runs_api}" || true)"
+              if [ -n "${runs_json}" ]; then
+                PREV_SUCCESS_SHA="$(
+                  echo "${runs_json}" |
+                    jq -r --argjson current "${CURRENT_RUN_ID}" '.workflow_runs[] | select(.id != $current) | .head_sha' |
+                    head -n 1
+                )"
+              fi
+            fi
+
+            if [ -n "${PREV_SUCCESS_SHA}" ]; then
+              compare_api="https://api.github.com/repos/${REPOSITORY}/compare/${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
+              compare_json="$(curl -fsSL \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "${compare_api}" || true)"
+              if [ -n "${compare_json}" ] && echo "${compare_json}" | jq -e '.files' >/dev/null 2>&1; then
+                files_len="$(echo "${compare_json}" | jq '.files | length')"
+                if [ "${files_len}" -ge 300 ]; then
+                  # GitHub compare API files 배열은 최대 300개라서 절단 가능성이 있다.
+                  # 절단 시 false-negative(배포 누락)를 피하기 위해 안전하게 deploy=true로 둔다.
+                  CHANGED_FILES=""
+                else
+                  CHANGED_FILES="$(echo "${compare_json}" | jq -r '.files[].filename')"
+                  CHANGE_SOURCE="compare:${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
+                fi
+              fi
+            fi
+
+            if [ -z "${CHANGED_FILES}" ]; then
+              CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r "${DEPLOY_SHA}" || true)"
+              CHANGE_SOURCE="${CHANGE_SOURCE} -> fallback:head-commit"
+            fi
+
+            if [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
+              SHOULD_DEPLOY="false"
+            fi
+
+            echo "should_deploy_source=${CHANGE_SOURCE}"
+          fi
+
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
           echo "image_latest_ref=${IMAGE_LATEST_REF}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
+          echo "should_deploy=${SHOULD_DEPLOY}" >> "$GITHUB_OUTPUT"
 
   buildAndPush:
     runs-on: ubuntu-latest
     needs: calculateTag
+    if: needs.calculateTag.outputs.should_deploy == 'true'
     timeout-minutes: 30
     permissions:
       contents: read
@@ -107,6 +171,7 @@ jobs:
     needs:
       - calculateTag
       - buildAndPush
+    if: needs.calculateTag.outputs.should_deploy == 'true'
     timeout-minutes: 30
     permissions:
       contents: read
@@ -225,6 +290,7 @@ jobs:
           HOME_APP_DIR: ${{ secrets.HOME_APP_DIR }}
           HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
           HOME_BACK_IMAGE: ${{ needs.calculateTag.outputs.image_ref }}
+          HOME_DEPLOY_SHA: ${{ needs.calculateTag.outputs.deploy_sha }}
           HOME_GHCR_USERNAME: ${{ secrets.HOME_GHCR_USERNAME }}
           HOME_GHCR_TOKEN: ${{ secrets.HOME_GHCR_TOKEN }}
           HOME_AI_SUMMARY_ENABLED: ${{ secrets.CUSTOM__AI__SUMMARY__ENABLED || vars.CUSTOM__AI__SUMMARY__ENABLED || '' }}
@@ -235,6 +301,7 @@ jobs:
           HOME_APP_DIR_B64="$(printf '%s' "${HOME_APP_DIR}" | base64 | tr -d '\n')"
           HOME_SERVER_ENV_B64="$(printf '%s' "${HOME_SERVER_ENV}" | base64 | tr -d '\n')"
           HOME_BACK_IMAGE_B64="$(printf '%s' "${HOME_BACK_IMAGE:-}" | base64 | tr -d '\n')"
+          HOME_DEPLOY_SHA_B64="$(printf '%s' "${HOME_DEPLOY_SHA:-}" | base64 | tr -d '\n')"
           HOME_GHCR_USERNAME_B64="$(printf '%s' "${HOME_GHCR_USERNAME:-}" | base64 | tr -d '\n')"
           HOME_GHCR_TOKEN_B64="$(printf '%s' "${HOME_GHCR_TOKEN:-}" | base64 | tr -d '\n')"
           HOME_AI_SUMMARY_ENABLED_B64="$(printf '%s' "${HOME_AI_SUMMARY_ENABLED:-}" | base64 | tr -d '\n')"
@@ -242,7 +309,7 @@ jobs:
           HOME_AI_SUMMARY_GEMINI_MODEL_B64="$(printf '%s' "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" | base64 | tr -d '\n')"
 
           ssh -i "$SSH_DIR/home_key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -p "$PORT" "$HOME_SSH_USER@$HOME_HOST" \
-            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' HOME_SERVER_ENV_B64='${HOME_SERVER_ENV_B64}' HOME_BACK_IMAGE_B64='${HOME_BACK_IMAGE_B64}' HOME_GHCR_USERNAME_B64='${HOME_GHCR_USERNAME_B64}' HOME_GHCR_TOKEN_B64='${HOME_GHCR_TOKEN_B64}' HOME_AI_SUMMARY_ENABLED_B64='${HOME_AI_SUMMARY_ENABLED_B64}' HOME_AI_SUMMARY_GEMINI_API_KEY_B64='${HOME_AI_SUMMARY_GEMINI_API_KEY_B64}' HOME_AI_SUMMARY_GEMINI_MODEL_B64='${HOME_AI_SUMMARY_GEMINI_MODEL_B64}' bash -s" <<'REMOTE'
+            "HOME_APP_DIR_B64='${HOME_APP_DIR_B64}' HOME_SERVER_ENV_B64='${HOME_SERVER_ENV_B64}' HOME_BACK_IMAGE_B64='${HOME_BACK_IMAGE_B64}' HOME_DEPLOY_SHA_B64='${HOME_DEPLOY_SHA_B64}' HOME_GHCR_USERNAME_B64='${HOME_GHCR_USERNAME_B64}' HOME_GHCR_TOKEN_B64='${HOME_GHCR_TOKEN_B64}' HOME_AI_SUMMARY_ENABLED_B64='${HOME_AI_SUMMARY_ENABLED_B64}' HOME_AI_SUMMARY_GEMINI_API_KEY_B64='${HOME_AI_SUMMARY_GEMINI_API_KEY_B64}' HOME_AI_SUMMARY_GEMINI_MODEL_B64='${HOME_AI_SUMMARY_GEMINI_MODEL_B64}' bash -s" <<'REMOTE'
           set -euo pipefail
 
           decode_b64() {
@@ -256,6 +323,7 @@ jobs:
           HOME_APP_DIR="$(decode_b64 "${HOME_APP_DIR_B64:-}")"
           HOME_SERVER_ENV="$(decode_b64 "${HOME_SERVER_ENV_B64:-}")"
           HOME_BACK_IMAGE="$(decode_b64 "${HOME_BACK_IMAGE_B64:-}")"
+          HOME_DEPLOY_SHA="$(decode_b64 "${HOME_DEPLOY_SHA_B64:-}")"
           HOME_GHCR_USERNAME="$(decode_b64 "${HOME_GHCR_USERNAME_B64:-}")"
           HOME_GHCR_TOKEN="$(decode_b64 "${HOME_GHCR_TOKEN_B64:-}")"
           HOME_AI_SUMMARY_ENABLED="$(decode_b64 "${HOME_AI_SUMMARY_ENABLED_B64:-}")"
@@ -289,9 +357,24 @@ jobs:
 
           cd "${HOME_APP_DIR}"
 
-          git fetch origin main
-          git checkout main
-          git pull --ff-only origin main
+          if [ -z "${HOME_DEPLOY_SHA:-}" ]; then
+            echo "HOME_DEPLOY_SHA is empty. abort deploy." >&2
+            exit 1
+          fi
+
+          git fetch origin main --prune
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "${HOME_DEPLOY_SHA}" --depth 1 || true
+          fi
+          if ! git cat-file -e "${HOME_DEPLOY_SHA}^{commit}" 2>/dev/null; then
+            echo "deploy sha not found in remote repository: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${HOME_DEPLOY_SHA}" "origin/main"; then
+            echo "deploy sha is not reachable from origin/main: ${HOME_DEPLOY_SHA}" >&2
+            exit 1
+          fi
+          git checkout --force "${HOME_DEPLOY_SHA}"
 
           mkdir -p deploy/homeserver
 
@@ -328,6 +411,39 @@ jobs:
               }
             ' deploy/homeserver/.env.prod | tail -n 1
           }
+
+          require_nonempty_env_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            if [ -z "${value}" ]; then
+              echo "required env key is missing or empty: ${key}" >&2
+              exit 1
+            fi
+          }
+
+          require_pinned_image_key() {
+            local key="$1"
+            local value
+            value="$(extract_env_value "${key}")"
+            if [ -z "${value}" ]; then
+              echo "required image env key is missing: ${key}" >&2
+              exit 1
+            fi
+            if [[ "${value}" == *":latest" ]]; then
+              echo "latest tag is not allowed for ${key}: ${value}" >&2
+              exit 1
+            fi
+            if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
+              echo "image must have tag or digest for ${key}: ${value}" >&2
+              exit 1
+            fi
+          }
+
+          require_nonempty_env_key "CF_TUNNEL_TOKEN"
+          require_pinned_image_key "CLOUDFLARED_IMAGE"
+          require_pinned_image_key "DB_IMAGE"
+          require_pinned_image_key "MINIO_IMAGE"
 
           DB_BASE_NAME_VALUE="$(extract_env_value "DB_BASE_NAME")"
           CUSTOM_PROD_DBNAME_VALUE="$(extract_env_value "CUSTOM_PROD_DBNAME")"
@@ -437,6 +553,7 @@ jobs:
     needs:
       - calculateTag
       - blueGreenDeploy
+    if: needs.calculateTag.outputs.should_deploy == 'true'
     timeout-minutes: 20
     permissions:
       contents: read

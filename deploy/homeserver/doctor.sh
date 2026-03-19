@@ -79,6 +79,10 @@ fi
 
 print_section "Env Required Keys"
 print_env_key_status "API_DOMAIN"
+print_env_key_status "CF_TUNNEL_TOKEN"
+print_env_key_status "CLOUDFLARED_IMAGE"
+print_env_key_status "DB_IMAGE"
+print_env_key_status "MINIO_IMAGE"
 print_env_key_status "PROD___SPRING__DATASOURCE__PASSWORD"
 print_env_key_status "PROD___SPRING__DATA__REDIS__PASSWORD"
 print_env_key_status "CUSTOM_PROD_BACKURL"
@@ -143,6 +147,9 @@ docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blo
 
 print_section "Caddy Logs (tail 80)"
 compose logs --no-color --tail=80 caddy || true
+
+print_section "Cloudflared Logs (tail 80)"
+compose logs --no-color --tail=80 cloudflared || true
 
 print_section "Back Blue Logs (tail 120)"
 compose logs --no-color --tail=120 back_blue || true

@@ -65,7 +65,7 @@ class MemberApplicationServiceTest {
 
     @Test
     fun `회원 수정은 nickname 과 profileImgUrl 을 함께 변경한다`() {
-        val member = createMember("user1", "유저1")
+        val member = createMember("member-modify-target", "유저1")
 
         memberFacade.modify(
             member = member,
@@ -84,17 +84,18 @@ class MemberApplicationServiceTest {
 
     @Test
     fun `modifyOrJoin 은 기존 회원이 있으면 회원 정보를 수정하고 200을 반환한다`() {
-        createMember("user1", "유저1")
+        val existingUsername = "member-modify-or-join-target"
+        createMember(existingUsername, "유저1")
 
         val rsData =
             memberFacade.modifyOrJoin(
-                username = "user1",
+                username = existingUsername,
                 password = "ignored-password",
                 nickname = "수정유저1",
                 profileImgUrl = "https://example.com/modify-or-join-user1.png",
             )
 
-        val member = memberFacade.findByUsername("user1")!!
+        val member = memberFacade.findByUsername(existingUsername)!!
 
         assertThat(rsData.resultCode).isEqualTo("200-1")
         assertThat(rsData.msg).isEqualTo("회원 정보가 수정되었습니다.")

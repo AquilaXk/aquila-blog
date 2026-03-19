@@ -45,6 +45,42 @@ compose_up_with_retry() {
   return 1
 }
 
+check_cloudflared_runtime() {
+  local cid
+  cid="$(compose ps -q cloudflared | head -n 1)"
+  if [[ -z "${cid}" ]]; then
+    echo "cloudflared container is missing" >&2
+    return 1
+  fi
+
+  local status restarting restart_count
+  status="$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null || echo "unknown")"
+  restarting="$(docker inspect --format '{{.State.Restarting}}' "${cid}" 2>/dev/null || echo "unknown")"
+  restart_count="$(docker inspect --format '{{.RestartCount}}' "${cid}" 2>/dev/null || echo "0")"
+
+  if [[ "${status}" != "running" || "${restarting}" == "true" ]]; then
+    echo "cloudflared is not healthy: status=${status}, restarting=${restarting}" >&2
+    compose logs --no-color --tail=120 cloudflared >&2 || true
+    return 1
+  fi
+
+  if [[ "${restart_count}" =~ ^[0-9]+$ ]] && (( restart_count > 5 )); then
+    echo "cloudflared restart count is too high: ${restart_count}" >&2
+    compose logs --no-color --tail=120 cloudflared >&2 || true
+    return 1
+  fi
+
+  local cf_logs
+  cf_logs="$(compose logs --no-color --tail=160 cloudflared || true)"
+  if ! echo "${cf_logs}" | grep -Eqi 'Registered tunnel connection|Connection .* registered'; then
+    echo "cloudflared tunnel registration log not found" >&2
+    echo "${cf_logs}" >&2
+    return 1
+  fi
+
+  echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}"
+}
+
 env_value() {
   local key="$1"
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
@@ -65,6 +101,43 @@ require_back_image() {
     echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
     exit 1
   fi
+}
+
+require_nonempty_env_key() {
+  local key="$1"
+  local value
+  value="$(trim_quotes "$(env_value "${key}")")"
+  if [[ -z "${value}" ]]; then
+    echo "required env key is missing or empty: ${key}" >&2
+    return 1
+  fi
+}
+
+require_pinned_image_env_key() {
+  local key="$1"
+  local value
+  value="$(trim_quotes "$(env_value "${key}")")"
+
+  if [[ -z "${value}" ]]; then
+    echo "required image env key is missing: ${key}" >&2
+    return 1
+  fi
+  if [[ "${value}" == *":latest" ]]; then
+    echo "latest tag is not allowed for ${key}: ${value}" >&2
+    return 1
+  fi
+  if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
+    echo "image must have tag or digest for ${key}: ${value}" >&2
+    return 1
+  fi
+}
+
+validate_required_runtime_env() {
+  require_nonempty_env_key "API_DOMAIN"
+  require_nonempty_env_key "CF_TUNNEL_TOKEN"
+  require_pinned_image_env_key "CLOUDFLARED_IMAGE"
+  require_pinned_image_env_key "DB_IMAGE"
+  require_pinned_image_env_key "MINIO_IMAGE"
 }
 
 resolve_prod_db_name() {
@@ -551,6 +624,7 @@ fi
 
 validate_storage_env
 require_back_image
+validate_required_runtime_env
 
 api_domain="$(env_value "API_DOMAIN")"
 if [[ -z "${api_domain}" ]]; then
@@ -572,6 +646,7 @@ action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
 compose_up_with_retry db_1 redis_1 minio_1 caddy cloudflared uptime_kuma
+check_cloudflared_runtime
 ensure_db_runtime_guards || true
 compose pull "${next_backend}"
 compose_up_with_retry "${next_backend}"
@@ -602,6 +677,8 @@ if ! is_healthy_http_code "${post_code}"; then
 fi
 
 echo "${next_backend}" > "${STATE_FILE}"
+
+check_cloudflared_runtime
 
 echo "post-stop verify ok (status=${post_code})"
 compose ps

@@ -2,7 +2,7 @@ name: blog_home
 
 services:
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: ${CLOUDFLARED_IMAGE}
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
     depends_on:
@@ -66,7 +66,7 @@ services:
           - back-green
 
   db_1:
-    image: jangka512/pgj:latest
+    image: ${DB_IMAGE}
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -86,7 +86,7 @@ services:
       --requirepass ${PROD___SPRING__DATA__REDIS__PASSWORD}
 
   minio_1:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE}
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}

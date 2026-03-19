@@ -1,6 +1,6 @@
 # DevOps
 
-Last updated: 2026-03-16
+Last updated: 2026-03-19
 
 ## 3줄 요약
 
@@ -37,6 +37,8 @@ flowchart LR
    `back/Dockerfile`로 백엔드 이미지를 빌드해 GHCR에 push한다.
 4. `blueGreenDeploy`
    Tailscale + SSH로 홈서버에 접속해 blue/green 배포를 수행한다.
+   실행 전 `.env.prod`의 `CF_TUNNEL_TOKEN`, `CLOUDFLARED_IMAGE`, `DB_IMAGE`, `MINIO_IMAGE`를 검증하고
+   이미지 ref에 `latest`가 포함되면 배포를 중단한다.
 5. `frontLiveE2E`
    배포 직후 운영 프론트 도메인에서 Playwright live smoke를 실행한다.
    (로그인 -> `/admin`/`/admin/profile`/`/admin/tools`/`/admin/posts/new` -> 로그아웃)
@@ -172,6 +174,8 @@ GitHub Actions 기준 필수값:
 
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
+- `HOME_SERVER_ENV`에는 `CF_TUNNEL_TOKEN`, `CLOUDFLARED_IMAGE`, `DB_IMAGE`, `MINIO_IMAGE`를 반드시 포함해야 한다.
+- `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
 - `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness`를 우선 확인하고, 실패 시 `/member/api/v1/auth/me` fallback으로 도달성까지 확인한다.
 - preflight 기본값은 `5회` 재시도, `--connect-timeout 5`, `--max-time 15`이며 `E2E_PREFLIGHT_*` 환경변수로 조정할 수 있다.

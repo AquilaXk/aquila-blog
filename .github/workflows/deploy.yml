@@ -297,6 +297,60 @@ jobs:
           upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__API_KEY" "${HOME_AI_SUMMARY_GEMINI_API_KEY:-}" "deploy/homeserver/.env.prod"
           upsert_env_key "CUSTOM__AI__SUMMARY__GEMINI__MODEL" "${HOME_AI_SUMMARY_GEMINI_MODEL:-}" "deploy/homeserver/.env.prod"
 
+          extract_env_value() {
+            local key="$1"
+            awk -F= -v k="$key" '
+              $1==k {
+                value=substr($0, index($0, "=")+1)
+                gsub(/\r/, "", value)
+                gsub(/^"/, "", value)
+                gsub(/"$/, "", value)
+                gsub(/^'\''/, "", value)
+                gsub(/'\''$/, "", value)
+                print value
+              }
+            ' deploy/homeserver/.env.prod | tail -n 1
+          }
+
+          DB_BASE_NAME_VALUE="$(extract_env_value "DB_BASE_NAME")"
+          CUSTOM_PROD_DBNAME_VALUE="$(extract_env_value "CUSTOM_PROD_DBNAME")"
+          TARGET_DB_NAME="${CUSTOM_PROD_DBNAME_VALUE:-}"
+          if [ -z "${TARGET_DB_NAME}" ]; then
+            if [ -n "${DB_BASE_NAME_VALUE}" ]; then
+              TARGET_DB_NAME="${DB_BASE_NAME_VALUE}_prod"
+            else
+              TARGET_DB_NAME="blog_prod"
+            fi
+          fi
+
+          pgroonga_precheck_fail() {
+            local code="$1"
+            local detail="$2"
+            echo "::error title=PGroonga precheck failed::[PGROONGA_PRECHECK_FAILED] code=${code} db=${TARGET_DB_NAME} detail=${detail}"
+            echo "[PGROONGA_PRECHECK_FAILED] code=${code} db=${TARGET_DB_NAME} detail=${detail}" >&2
+            exit 1
+          }
+
+          echo "pgroonga precheck target db=${TARGET_DB_NAME}"
+          docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d db_1 >/dev/null
+
+          echo "pgroonga install attempt"
+          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -v ON_ERROR_STOP=1 -c \"CREATE EXTENSION IF NOT EXISTS pgroonga;\""; then
+            pgroonga_precheck_fail "install_failed" "create_extension_failed"
+          fi
+
+          PGROONGA_EXT_OK="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pgroonga');\"" 2>/dev/null | tr -d '\r' | xargs || true)"
+          if [ "${PGROONGA_EXT_OK}" != "t" ]; then
+            pgroonga_precheck_fail "extension_missing" "pg_extension_not_found"
+          fi
+
+          PGROONGA_OP_OK="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"SELECT (ARRAY['ping'::text, 'pong'::text] &@~ 'ping');\"" 2>/dev/null | tr -d '\r' | xargs || true)"
+          if [ "${PGROONGA_OP_OK}" != "t" ]; then
+            pgroonga_precheck_fail "operator_failed" "andatilde_operator_check_failed"
+          fi
+
+          echo "pgroonga precheck passed"
+
           enabled_value="$(awk -F= '$1=="CUSTOM__AI__SUMMARY__ENABLED"{print tolower($2)}' deploy/homeserver/.env.prod | tail -n 1 | tr -d '"' | tr -d '[:space:]')"
           api_key_value="$(awk -F= '$1=="CUSTOM__AI__SUMMARY__GEMINI__API_KEY"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod | tail -n 1)"
           if [ "${enabled_value}" = "true" ] && [ -z "${api_key_value}" ]; then

@@ -802,7 +802,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [customCategoryCatalog, setCustomCategoryCatalog] = useState<string[]>([])
   const [knownTags, setKnownTags] = useState<string[]>([])
   const [tagUsageMap, setTagUsageMap] = useState<MetaUsageMap>({})
-  const [categoryUsageMap, setCategoryUsageMap] = useState<MetaUsageMap>({})
   const [metaCatalogLoading, setMetaCatalogLoading] = useState(false)
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [publishNotice, setPublishNotice] = useState<NoticeState>({
@@ -1168,16 +1167,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       const nextTagUsageMap: MetaUsageMap = {}
-      const nextCategoryUsageMap: MetaUsageMap = {}
-
-      // 운영 환경에서 관리자 진입 시 전 게시글 상세를 모두 조회하면 O(N) API 호출이 발생한다.
-      // 태그는 집계 API를 사용하고, 카테고리는 최신 N개(첫 페이지)만 샘플링해 부하를 제한한다.
-      const [tagRows, firstPage] = await Promise.all([
-        apiFetch<TagUsageDto[]>("/post/api/v1/posts/tags").catch(() => [] as TagUsageDto[]),
-        apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=30&sort=CREATED_AT").catch(
-          () => ({ content: [] as { id: number }[] })
-        ),
-      ])
+      const tagRows = await apiFetch<TagUsageDto[]>("/post/api/v1/posts/tags").catch(() => [] as TagUsageDto[])
 
       tagRows.forEach((row) => {
         const key = typeof row.tag === "string" ? row.tag.trim() : ""
@@ -1185,21 +1175,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         nextTagUsageMap[key] = Number.isFinite(row.count) ? row.count : 0
       })
 
-      const ids = dedupeStrings((firstPage.content || []).map((row) => String(row.id))).map(Number)
-      const details = await Promise.allSettled(
-        ids.map((id) => apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${id}`))
-      )
-
-      details.forEach((result) => {
-        if (result.status !== "fulfilled") return
-        const parsed = parseEditorMeta(result.value.content || "")
-        if (parsed.category) {
-          nextCategoryUsageMap[parsed.category] = (nextCategoryUsageMap[parsed.category] || 0) + 1
-        }
-      })
-
       setTagUsageMap(nextTagUsageMap)
-      setCategoryUsageMap(nextCategoryUsageMap)
       setKnownTags(
         dedupeStrings([...Object.keys(nextTagUsageMap), ...customTagCatalog]).sort((a, b) =>
           a.localeCompare(b)

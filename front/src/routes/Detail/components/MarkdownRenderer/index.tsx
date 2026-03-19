@@ -823,7 +823,7 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
 export default MarkdownRenderer
 
 const StyledWrapper = styled.div`
-  margin-top: 1.5rem;
+  margin-top: 1.65rem;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -831,40 +831,41 @@ const StyledWrapper = styled.div`
   overflow-wrap: anywhere;
   word-break: break-word;
   color: ${({ theme }) => theme.colors.gray12};
-  line-height: 1.75;
-  font-size: 1rem;
+  line-height: 1.82;
+  font-size: 1.06rem;
 
   h1,
   h2,
   h3,
   h4 {
-    line-height: 1.32;
-    letter-spacing: -0.015em;
-    margin-top: 1.35rem;
-    margin-bottom: 0.5rem;
-    font-weight: 700;
+    line-height: 1.34;
+    letter-spacing: -0.017em;
+    margin-top: 1.65rem;
+    margin-bottom: 0.68rem;
+    font-weight: 760;
+    scroll-margin-top: 6.8rem;
   }
 
   h1 {
-    font-size: clamp(1.72rem, 2.7vw, 2.15rem);
+    font-size: clamp(1.88rem, 3vw, 2.3rem);
   }
 
   h2 {
-    font-size: clamp(1.38rem, 2.2vw, 1.68rem);
+    font-size: clamp(1.5rem, 2.35vw, 1.84rem);
   }
 
   h3 {
-    font-size: clamp(1.14rem, 1.75vw, 1.32rem);
+    font-size: clamp(1.2rem, 1.9vw, 1.42rem);
   }
 
   h4 {
-    font-size: 1rem;
+    font-size: 1.04rem;
   }
 
   p {
-    margin: 0.5rem 0;
-    font-size: 1rem;
-    line-height: 1.72;
+    margin: 0.72rem 0;
+    font-size: 1.06rem;
+    line-height: 1.82;
     overflow-wrap: anywhere;
   }
 
@@ -897,11 +898,12 @@ const StyledWrapper = styled.div`
   }
 
   figure {
-    margin: 1rem 0;
+    margin: 1.25rem 0;
   }
 
   .aq-image-frame {
-    width: min(100%, 860px);
+    width: min(100%, 50rem);
+    margin: 0 auto;
   }
 
   .aq-image-frame img {
@@ -909,26 +911,26 @@ const StyledWrapper = styled.div`
     width: 100%;
     max-width: 100%;
     height: auto;
-    max-height: min(78vh, 920px);
+    max-height: min(76vh, 880px);
     object-fit: contain;
-    border-radius: 18px;
+    border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   }
 
   .aq-image-frame figcaption {
-    margin-top: 0.55rem;
+    margin-top: 0.62rem;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
-    line-height: 1.5;
+    font-size: 0.84rem;
+    line-height: 1.56;
     text-align: center;
   }
 
   ul,
   ol {
-    margin: 0.55rem 0;
-    padding-left: 1.15rem;
+    margin: 0.68rem 0;
+    padding-left: 1.28rem;
   }
 
   li + li {
@@ -936,7 +938,7 @@ const StyledWrapper = styled.div`
   }
 
   li {
-    line-height: 1.72;
+    line-height: 1.78;
     overflow-wrap: anywhere;
   }
 
@@ -968,9 +970,9 @@ const StyledWrapper = styled.div`
 
   .aq-inline-code {
     border-radius: 6px;
-    padding: 0.12rem 0.34rem;
+    padding: 0.16rem 0.38rem;
     background: ${({ theme }) => theme.colors.gray4};
-    font-size: 0.92em;
+    font-size: 0.9em;
   }
 
   .aq-inline-color {
@@ -979,8 +981,8 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code {
-    border-radius: 18px;
-    padding: 1rem 1.1rem;
+    border-radius: 14px;
+    padding: 1.02rem 1.1rem;
     overflow-x: auto;
     background: ${({ theme }) =>
       theme.scheme === "dark"
@@ -994,10 +996,10 @@ const StyledWrapper = styled.div`
   }
 
   .aq-code-block {
-    margin: 1rem 0;
+    margin: 1.2rem 0;
     max-width: 100%;
     min-width: 0;
-    border-radius: 18px;
+    border-radius: 14px;
     overflow: hidden;
     border: 1px solid
       ${({ theme }) =>
@@ -1011,7 +1013,7 @@ const StyledWrapper = styled.div`
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.9rem 1rem 0.82rem;
+    padding: 0.84rem 0.96rem 0.76rem;
     background: ${({ theme }) =>
       theme.scheme === "dark"
         ? "linear-gradient(180deg, #3a3f59, #363b54)"
@@ -1048,7 +1050,7 @@ const StyledWrapper = styled.div`
 
   .aq-code-language {
     justify-self: end;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1066,9 +1068,9 @@ const StyledWrapper = styled.div`
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(255, 255, 255, 0.72)"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#d7dbe5" : "#334155")};
     border-radius: 10px;
-    width: 2.4rem;
-    min-width: 2.4rem;
-    height: 2.2rem;
+    width: 2.25rem;
+    min-width: 2.25rem;
+    height: 2.05rem;
     padding: 0;
     font-size: 0.8rem;
     font-weight: 700;
@@ -1098,8 +1100,8 @@ const StyledWrapper = styled.div`
 
   .aq-code-copy-bottom {
     position: absolute;
-    right: 0.82rem;
-    bottom: 0.82rem;
+    right: 0.74rem;
+    bottom: 0.74rem;
     z-index: 1;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
   }
@@ -1135,7 +1137,7 @@ const StyledWrapper = styled.div`
     border: 0;
     border-radius: 0;
     box-shadow: none;
-    padding: 1.1rem 1.25rem 3.8rem;
+    padding: 1.05rem 1.18rem 3.55rem;
     min-width: 100%;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
@@ -1145,8 +1147,8 @@ const StyledWrapper = styled.div`
   .aq-code code,
   pre code {
     display: block;
-    font-size: 0.92rem;
-    line-height: 1.7;
+    font-size: 0.9rem;
+    line-height: 1.62;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New",
       monospace;
   }
@@ -1353,31 +1355,31 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 768px) {
-    font-size: 1.03rem;
+    font-size: 1rem;
     line-height: 1.8;
 
     h1 {
-      font-size: clamp(1.58rem, 7.2vw, 1.92rem);
+      font-size: clamp(1.62rem, 7.4vw, 1.98rem);
     }
 
     h2 {
-      font-size: clamp(1.3rem, 5.9vw, 1.56rem);
+      font-size: clamp(1.36rem, 6.1vw, 1.64rem);
     }
 
     h3 {
-      font-size: clamp(1.12rem, 4.9vw, 1.3rem);
+      font-size: clamp(1.17rem, 5.1vw, 1.36rem);
     }
 
     p,
     li {
-      font-size: 1.03rem;
-      line-height: 1.8;
+      font-size: 1rem;
+      line-height: 1.76;
     }
 
     .aq-code code,
     pre code {
-      font-size: 0.96rem;
-      line-height: 1.74;
+      font-size: 0.9rem;
+      line-height: 1.62;
     }
 
     table {
@@ -1401,20 +1403,20 @@ const StyledWrapper = styled.div`
     }
 
     .aq-code-block .aq-code {
-      padding-left: 0.92rem;
-      padding-right: 0.95rem;
-      padding-bottom: 3.85rem;
+      padding-left: 0.88rem;
+      padding-right: 0.88rem;
+      padding-bottom: 3.55rem;
     }
 
     .aq-code-copy-bottom {
-      right: 0.72rem;
-      bottom: 0.72rem;
+      right: 0.66rem;
+      bottom: 0.66rem;
     }
 
     .aq-code-copy {
-      width: 2.2rem;
-      min-width: 2.2rem;
-      height: 2rem;
+      width: 2.12rem;
+      min-width: 2.12rem;
+      height: 1.94rem;
       font-size: 0.74rem;
     }
 

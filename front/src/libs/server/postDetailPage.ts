@@ -13,6 +13,11 @@ type DetailPageProps = {
   initialComments: TPostComment[]
 }
 
+const toSerializableState = (value: unknown): unknown =>
+  JSON.parse(
+    JSON.stringify(value, (_key, currentValue) => (currentValue === undefined ? null : currentValue))
+  )
+
 const fetchInitialComments = async (req: IncomingMessage, postId: string) => {
   try {
     const response = await serverApiFetch(req, `/post/api/v1/posts/${postId}/comments`)
@@ -56,7 +61,7 @@ export const buildCanonicalPostDetailPage = async (
 
   return {
     props: {
-      dehydratedState: dehydrate(queryClient),
+      dehydratedState: toSerializableState(dehydrate(queryClient)),
       initialComments,
     },
   }

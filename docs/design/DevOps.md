@@ -179,6 +179,8 @@ GitHub Actions 기준 필수값:
 - `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `blueGreenDeploy` 완료 전 공인 API 도메인(`https://API_DOMAIN/actuator/health/readiness`) 외부 도달성까지 검증한다. `status=000` timeout이 지속되면 `cloudflared`를 1회 재시작 후 재검증한다.
 - `blue_green_deploy.sh` 성공 이후의 후속 검증(post-check)에서 실패해도 backup 기준 자동 rollback을 수행해야 한다. (blue_green_deploy 실패와 동일 정책)
+- `back_blue`, `back_green`에는 container healthcheck(readiness probe)가 설정되며, `autoheal` 서비스가 `unhealthy` 컨테이너를 자동 재시작한다.
+- `doctor.sh`는 back/caddy/cloudflared/autoheal의 health 상태와 restartCount를 함께 출력해 정체/재시작 루프를 빠르게 식별한다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
 - `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness` -> `/member/api/v1/auth/me` -> `/member/api/v1/auth/login` 순서로 도달성과 로그인 가능 여부를 확인한다.
 - `frontLiveE2E`의 API base URL은 추측(`api.<front-host>`)보다 `CUSTOM_PROD_BACKURL`/`HOME_SERVER_ENV`에 정의된 백엔드 URL을 우선 사용한다.

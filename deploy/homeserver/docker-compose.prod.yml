@@ -1,6 +1,17 @@
 name: blog_home
 
 services:
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: ${AUTOHEAL_INTERVAL_SECONDS:-15}
+      AUTOHEAL_START_PERIOD: ${AUTOHEAL_START_PERIOD_SECONDS:-300}
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   cloudflared:
     image: ${CLOUDFLARED_IMAGE}
     restart: unless-stopped
@@ -30,6 +41,14 @@ services:
   back_blue:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     env_file:
       - ./.env.prod
     environment:
@@ -49,6 +68,14 @@ services:
   back_green:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     env_file:
       - ./.env.prod
     environment:

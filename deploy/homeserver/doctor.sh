@@ -142,6 +142,19 @@ ss -lntp '( sport = :80 or sport = :443 or sport = :22 or sport = :8080 )' || tr
 print_section "Compose PS"
 compose ps || true
 
+print_section "Container Health"
+for svc in back_blue back_green caddy cloudflared autoheal; do
+  cid="$(compose ps -q "${svc}" 2>/dev/null | head -n 1 || true)"
+  if [[ -z "${cid}" ]]; then
+    echo "${svc}: MISSING"
+    continue
+  fi
+
+  docker inspect --format \
+    "${svc}: status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restartCount={{.RestartCount}}" \
+    "${cid}" 2>/dev/null || true
+done
+
 print_section "Back Container States"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green)-1|NAMES' || true
 
@@ -150,6 +163,9 @@ compose logs --no-color --tail=80 caddy || true
 
 print_section "Cloudflared Logs (tail 80)"
 compose logs --no-color --tail=80 cloudflared || true
+
+print_section "Autoheal Logs (tail 80)"
+compose logs --no-color --tail=80 autoheal || true
 
 print_section "Back Blue Logs (tail 120)"
 compose logs --no-color --tail=120 back_blue || true

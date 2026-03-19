@@ -575,6 +575,41 @@ jobs:
             echo "post-deploy healthcheck failed via caddy route" >&2
             exit 1
           fi
+
+          wait_public_api_health() {
+            local api_domain="$1"
+            local attempts="${DEPLOY_PUBLIC_API_ATTEMPTS:-12}"
+            local connect_timeout="${DEPLOY_PUBLIC_API_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_PUBLIC_API_MAX_TIME_SECONDS:-15}"
+            local sleep_seconds="${DEPLOY_PUBLIC_API_SLEEP_SECONDS:-5}"
+            local restarted=0
+            local code
+
+            for attempt in $(seq 1 "${attempts}"); do
+              code="$(curl -sS --connect-timeout "${connect_timeout}" -m "${max_time}" -o /dev/null -w "%{http_code}" "https://${api_domain}/actuator/health/readiness" || true)"
+              echo "post-deploy public-api health attempt=${attempt}/${attempts} status=${code}"
+              if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+                return 0
+              fi
+
+              if [ "${code}" = "000" ] && [ "${restarted}" -eq 0 ] && [ "${attempt}" -ge 3 ]; then
+                echo "public-api timeout detected; restarting cloudflared once"
+                docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml restart cloudflared || true
+                restarted=1
+                sleep 8
+              fi
+
+              sleep "${sleep_seconds}"
+            done
+
+            echo "post-deploy public-api healthcheck failed for https://${api_domain}/actuator/health/readiness" >&2
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared >&2 || true
+            return 1
+          }
+
+          if ! wait_public_api_health "${API_DOMAIN}"; then
+            exit 1
+          fi
           REMOTE
 
   frontLiveE2E:
@@ -588,6 +623,7 @@ jobs:
       contents: read
     env:
       PLAYWRIGHT_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_FRONTURL || vars.CUSTOM_PROD_FRONTURL || secrets.HOME_FRONT_BASE_URL || vars.HOME_FRONT_BASE_URL || '' }}
+      E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
       PLAYWRIGHT_USE_WEBSERVER: "false"
       HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
       E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
@@ -674,6 +710,42 @@ jobs:
           echo "PLAYWRIGHT_BASE_URL=${base_url}" >> "$GITHUB_ENV"
           echo "Resolved live e2e base host: $(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
 
+          base_scheme="$(echo "${base_url}" | sed -E 's#(https?)://.*#\1#')"
+          api_base_url="${E2E_API_BASE_URL_OVERRIDE:-}"
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "CUSTOM_PROD_BACKURL")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "custom.prod.backUrl")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_base_url="$(extract_from_home_server_env "custom.site.backUrl")"
+          fi
+          if [ -z "${api_base_url}" ]; then
+            api_domain_from_env="$(extract_from_home_server_env "API_DOMAIN")"
+            if [ -n "${api_domain_from_env}" ]; then
+              api_base_url="${base_scheme}://${api_domain_from_env}"
+            fi
+          fi
+          if [ -z "${api_base_url}" ]; then
+            resolved_front_host="$(echo "${base_url}" | sed -E 's#https?://([^/]+).*#\1#')"
+            if [[ "${resolved_front_host}" == www.* ]]; then
+              api_base_url="${base_scheme}://api.${resolved_front_host#www.}"
+            else
+              api_base_url="${base_scheme}://api.${resolved_front_host}"
+            fi
+          fi
+
+          case "${api_base_url}" in
+            http://*|https://*) ;;
+            *)
+              echo "Invalid E2E_API_BASE_URL: ${api_base_url}" >&2
+              exit 1
+              ;;
+          esac
+          echo "E2E_API_BASE_URL=${api_base_url}" >> "$GITHUB_ENV"
+          echo "Resolved live e2e api base: ${api_base_url}"
+
           # 라이브 E2E 전용 계정을 우선 사용하고, 없으면 운영 관리자 계정으로 fallback 한다.
           resolved_admin_username="${E2E_LIVE_ADMIN_USERNAME:-}"
           resolved_admin_password="${E2E_LIVE_ADMIN_PASSWORD:-}"
@@ -719,15 +791,8 @@ jobs:
           set -euo pipefail
 
           front_base="${PLAYWRIGHT_BASE_URL}"
-          front_scheme="$(echo "${front_base}" | sed -E 's#(https?)://.*#\1#')"
-          front_host="$(echo "${front_base}" | sed -E 's#https?://([^/]+).*#\1#')"
-
-          if [[ "${front_host}" == www.* ]]; then
-            api_host="api.${front_host#www.}"
-          else
-            api_host="api.${front_host}"
-          fi
-          api_base="${front_scheme}://${api_host}"
+          api_base="${E2E_API_BASE_URL:-}"
+          api_host="$(echo "${api_base}" | sed -E 's#https?://([^/]+).*#\1#')"
 
           echo "preflight front=${front_base} api=${api_base}"
 

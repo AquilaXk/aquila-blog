@@ -45,9 +45,11 @@ services:
     mem_limit: ${BACK_MEM_LIMIT:-1024m}
     mem_reservation: ${BACK_MEM_RESERVATION:-512m}
     labels:
-      autoheal: "true"
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
+      # Restart 판단은 liveness 기준으로만 수행한다.
+      # readiness(db 포함)는 트래픽 수용 판단용이며, autoheal 재기동 신호로 쓰면 재시작 루프가 발생할 수 있다.
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -74,9 +76,9 @@ services:
     mem_limit: ${BACK_MEM_LIMIT:-1024m}
     mem_reservation: ${BACK_MEM_RESERVATION:-512m}
     labels:
-      autoheal: "true"
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -181,7 +181,7 @@ GitHub Actions 기준 필수값:
 - `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `blueGreenDeploy` 완료 전 공인 API 도메인(`https://API_DOMAIN/actuator/health/readiness`) 외부 도달성까지 검증한다. `status=000` timeout이 지속되면 `cloudflared`를 1회 재시작 후 재검증한다.
 - `blue_green_deploy.sh` 성공 이후의 후속 검증(post-check)에서 실패해도 backup 기준 자동 rollback을 수행해야 한다. (blue_green_deploy 실패와 동일 정책)
-- `back_blue`, `back_green`에는 container healthcheck(readiness probe)가 설정되며, `autoheal` 서비스가 `unhealthy` 컨테이너를 자동 재시작한다.
+- `back_blue`, `back_green`의 container healthcheck는 `liveness`를 사용하며, `autoheal` 서비스가 `unhealthy` 컨테이너를 자동 재시작한다. (`readiness`는 트래픽 수용/배포 검증 용도이며 재시작 신호로 쓰지 않는다.)
 - `back_blue`, `back_green`에는 `BACK_MEM_LIMIT`/`BACK_MEM_RESERVATION` 기본 상한이 적용되어 blue/green 동시 기동 시 JVM 메모리 과점유를 방지한다.
 - Docker Engine은 `29.1.0` 버전을 배포/롤백에서 차단한다(알려진 네트워크 회귀 회피).
 - `steady_state_guard.sh`를 cron(1분 주기)으로 설치해 API readiness + Caddy mount sync + back 단일 실행 규칙을 상시 점검한다.

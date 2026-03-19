@@ -165,7 +165,7 @@ for svc in back_blue back_green caddy cloudflared autoheal; do
   fi
 
   docker inspect --format \
-    "${svc}: status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restartCount={{.RestartCount}}" \
+    "${svc}: status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restartCount={{.RestartCount}} oomKilled={{.State.OOMKilled}} exitCode={{.State.ExitCode}}" \
     "${cid}" 2>/dev/null || true
 done
 

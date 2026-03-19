@@ -174,7 +174,8 @@ GitHub Actions 기준 필수값:
 
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
-- `HOME_SERVER_ENV`에는 `CF_TUNNEL_TOKEN`, `CLOUDFLARED_IMAGE`, `DB_IMAGE`, `MINIO_IMAGE`를 반드시 포함해야 한다.
+- `HOME_SERVER_ENV`에는 `CF_TUNNEL_TOKEN`, `CLOUDFLARED_IMAGE`, `DB_IMAGE`, `MINIO_IMAGE`를 포함하는 것을 권장한다.
+- 이미지 키가 누락되면 배포 스크립트는 서버 로컬 Docker cache(`cloudflare/cloudflared:latest`, `jangka512/pgj:latest`, `minio/minio:latest`)의 `RepoDigest`를 조회해 pin 값으로 자동 보강을 시도한다. 보강 실패 시 배포를 중단한다.
 - `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `yarn test:e2e:live`는 `PLAYWRIGHT_LIVE_MULTI_BROWSER=true`로 실행되며 `Chromium + WebKit` 2개 프로젝트를 검증한다.
 - `frontLiveE2E` job은 실행 전 preflight를 수행한다. 프론트(`/login`) 확인 후 API는 `/actuator/health/readiness`를 우선 확인하고, 실패 시 `/member/api/v1/auth/me` fallback으로 도달성까지 확인한다.

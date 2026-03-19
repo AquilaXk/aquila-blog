@@ -95,6 +95,44 @@ trim_quotes() {
   echo "${value}"
 }
 
+upsert_env_key() {
+  local key="$1"
+  local value="$2"
+  if grep -qE "^${key}=" "${ENV_FILE}"; then
+    grep -vE "^${key}=" "${ENV_FILE}" > "${ENV_FILE}.tmp"
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}.tmp"
+    mv "${ENV_FILE}.tmp" "${ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
+resolve_local_repo_digest() {
+  local image_ref="$1"
+  docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
+}
+
+ensure_image_env_key_from_local_digest() {
+  local key="$1"
+  local fallback_image="$2"
+  local value
+  value="$(trim_quotes "$(env_value "${key}")")"
+  if [[ -n "${value}" ]]; then
+    return 0
+  fi
+
+  local digest
+  digest="$(resolve_local_repo_digest "${fallback_image}" || true)"
+  if [[ -n "${digest}" ]]; then
+    upsert_env_key "${key}" "${digest}"
+    echo "auto-filled ${key} from local digest (${fallback_image} -> ${digest})"
+    return 0
+  fi
+
+  echo "required image env key is missing and local digest lookup failed: ${key} (fallback=${fallback_image})" >&2
+  return 1
+}
+
 require_back_image() {
   if [[ -z "${BACK_IMAGE:-}" ]]; then
     echo "BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
@@ -135,6 +173,9 @@ require_pinned_image_env_key() {
 validate_required_runtime_env() {
   require_nonempty_env_key "API_DOMAIN"
   require_nonempty_env_key "CF_TUNNEL_TOKEN"
+  ensure_image_env_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
+  ensure_image_env_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
+  ensure_image_env_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
   require_pinned_image_env_key "CLOUDFLARED_IMAGE"
   require_pinned_image_env_key "DB_IMAGE"
   require_pinned_image_env_key "MINIO_IMAGE"

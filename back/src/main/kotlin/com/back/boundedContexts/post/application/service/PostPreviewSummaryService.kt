@@ -371,7 +371,10 @@ class PostPreviewSummaryService(
         ).joinToString("\n")
     }
 
-    private fun buildGeminiUri(model: String): URI = URI.create("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+    private fun buildGeminiUri(model: String): URI =
+        URI.create(
+            "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent",
+        )
 
     /**
      * sanitizeModel 처리 로직을 수행하고 예외 경로를 함께 다룹니다.

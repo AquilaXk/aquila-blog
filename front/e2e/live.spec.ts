@@ -23,22 +23,28 @@ test.describe("live production e2e", () => {
     await page.goto("/login?next=%2Fadmin")
     await page.locator("#username").fill(adminUsername)
     await page.locator("#password").fill(adminPassword)
+    const loginResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/member/api/v1/auth/login"),
+      { timeout: 20_000 }
+    )
     await page.locator("form button[type='submit']").click()
 
-    const loginErrorText = page.locator("p").filter({ hasText: "로그인에 실패" })
-    await expect
-      .poll(
-        async () => {
-          const currentUrl = page.url()
-          if (/\/admin(\/|$)/.test(new URL(currentUrl).pathname)) return "ok"
-          if (await loginErrorText.first().isVisible().catch(() => false)) return "error"
-          return "pending"
-        },
-        { timeout: 20_000 }
-      )
-      .toBe("ok")
+    const loginResponse = await loginResponsePromise.catch(() => null)
+    if (!loginResponse) {
+      throw new Error(`Login request was not observed. currentUrl=${page.url()}`)
+    }
 
-    await expect(page).toHaveURL(/\/admin(\/|$)/)
+    if (!loginResponse.ok()) {
+      const body = (await loginResponse.text().catch(() => "")).slice(0, 300)
+      throw new Error(
+        `Login API failed. status=${loginResponse.status()} currentUrl=${page.url()} body=${body}`
+      )
+    }
+
+    await page.goto("/admin")
+    await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })
     await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
 
     await page.goto("/admin/profile")

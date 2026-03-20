@@ -24,15 +24,25 @@ data class PostModifiedEvent
         @get:JsonIgnore
         val postDto: PostDto,
         val actorDto: MemberDto,
+        val beforeTags: List<String> = emptyList(),
+        val afterTags: List<String> = emptyList(),
     ) : EventPayload {
         @JsonGetter("postDto")
         fun getPostDtoForJson() = postDto.forEventLog()
 
-        constructor(uid: UUID, postDto: PostDto, actorDto: MemberDto) : this(
+        constructor(
+            uid: UUID,
+            postDto: PostDto,
+            actorDto: MemberDto,
+            beforeTags: List<String> = emptyList(),
+            afterTags: List<String> = emptyList(),
+        ) : this(
             uid,
             postDto::class.simpleName!!,
             postDto.id,
             postDto,
             actorDto,
+            beforeTags,
+            afterTags,
         )
     }

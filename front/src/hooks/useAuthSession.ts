@@ -87,17 +87,21 @@ const useAuthSession = () => {
     queryClient.setQueryData(queryKey.authMe(), member)
   }
 
-  const me = query.data ?? null
+  const me =
+    query.data ??
+    (query.isError && hasCachedMemberSnapshot
+      ? (cachedSnapshot as AuthMember)
+      : null)
   const isIdleAnonymous = !query.isFetching && hasCachedAnonymousSnapshot
   const hasResolvedSnapshot = query.status === "success" || query.data !== undefined || isIdleAnonymous
   const authStatus: AuthSessionStatus =
-    query.isError
-      ? "unavailable"
-      : me
+    me
         ? "authenticated"
-        : hasResolvedSnapshot
-          ? "anonymous"
-          : "loading"
+        : query.isError
+          ? "unavailable"
+          : hasResolvedSnapshot
+            ? "anonymous"
+            : "loading"
 
   const logout = async () => {
     try {

@@ -224,6 +224,15 @@ custom:
   revalidate:
     url: "${CUSTOM__REVALIDATE__URL:}"
     token: "${CUSTOM__REVALIDATE__TOKEN:}"
+  cdn:
+    purge:
+      enabled: ${CUSTOM__CDN__PURGE__ENABLED:false}
+      url: "${CUSTOM__CDN__PURGE__URL:}"
+      token: "${CUSTOM__CDN__PURGE__TOKEN:}"
+      connectTimeoutMs: ${CUSTOM__CDN__PURGE__CONNECT_TIMEOUT_MS:1200}
+      requestTimeoutMs: ${CUSTOM__CDN__PURGE__REQUEST_TIMEOUT_MS:2500}
+      coalesceWindowMs: ${CUSTOM__CDN__PURGE__COALESCE_WINDOW_MS:1200}
+      coalesceMaxTags: ${CUSTOM__CDN__PURGE__COALESCE_MAX_TAGS:2048}
   ai:
     summary:
       enabled: ${CUSTOM__AI__SUMMARY__ENABLED:false}
@@ -232,14 +241,22 @@ custom:
       maxRequestsPerDay: ${CUSTOM__AI__SUMMARY__MAX_REQUESTS_PER_DAY:500}
       cacheTtlSeconds: ${CUSTOM__AI__SUMMARY__CACHE_TTL_SECONDS:300}
       fallbackCacheTtlSeconds: ${CUSTOM__AI__SUMMARY__FALLBACK_CACHE_TTL_SECONDS:45}
+      quotaFallbackCacheTtlSeconds: ${CUSTOM__AI__SUMMARY__QUOTA_FALLBACK_CACHE_TTL_SECONDS:300}
       retryMaxAttempts: ${CUSTOM__AI__SUMMARY__RETRY_MAX_ATTEMPTS:2}
       retryBaseDelayMs: ${CUSTOM__AI__SUMMARY__RETRY_BASE_DELAY_MS:350}
       retryMaxDelayMs: ${CUSTOM__AI__SUMMARY__RETRY_MAX_DELAY_MS:2500}
       circuitFailureThreshold: ${CUSTOM__AI__SUMMARY__CIRCUIT_FAILURE_THRESHOLD:5}
       circuitOpenSeconds: ${CUSTOM__AI__SUMMARY__CIRCUIT_OPEN_SECONDS:90}
+      quotaCircuitOpenSeconds: ${CUSTOM__AI__SUMMARY__QUOTA_CIRCUIT_OPEN_SECONDS:600}
+      failureSignatureThreshold: ${CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_THRESHOLD:2}
+      failureSignatureTtlSeconds: ${CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_TTL_SECONDS:900}
+      failureSignatureOpenSeconds: ${CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_OPEN_SECONDS:300}
+      adaptiveRelaxedFirstContentLength: ${CUSTOM__AI__SUMMARY__ADAPTIVE_RELAXED_FIRST_CONTENT_LENGTH:9000}
+      adaptiveRelaxedFirstCodeFenceCount: ${CUSTOM__AI__SUMMARY__ADAPTIVE_RELAXED_FIRST_CODE_FENCE_COUNT:3}
       gemini:
         apiKey: "${CUSTOM__AI__SUMMARY__GEMINI__API_KEY:}"
         model: "${CUSTOM__AI__SUMMARY__GEMINI__MODEL:gemini-2.5-flash}"
+        baseUrl: "${CUSTOM__AI__SUMMARY__GEMINI__BASE_URL:https://generativelanguage.googleapis.com/v1beta}"
   storage:
     enabled: ${CUSTOM_STORAGE_ENABLED:false}
     endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}
@@ -268,6 +285,7 @@ custom:
         searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:10}
         detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:24}
         tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:8}
+      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
     idempotency:
       retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}
       cleanup:

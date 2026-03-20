@@ -25,7 +25,7 @@
 
 ### 사용자 경험
 
-- 메인 피드, 검색, 정렬, 카테고리 필터
+- 메인 피드, 검색, 정렬, 태그 기반 탐색
 - Markdown 기반 글 상세 페이지
 - 댓글, 좋아요, 조회수
 - 일반 로그인과 Kakao OAuth 로그인
@@ -39,6 +39,8 @@
 - Redis 기반 로그인 제한과 조회수 dedupe
 - MinIO 기반 게시글/프로필 이미지 저장
 - 캐시와 SSR을 함께 활용한 빠른 초기 렌더
+- 공개 피드/탐색 `cursor + page fallback` 읽기 경로
+- 캐시 역직렬화 실패 시 source fallback으로 500 전파 방지
 
 ## Representative Screens
 
@@ -46,7 +48,7 @@
   <tr>
     <td width="33%">
       <img src="docs/assets/portfolio/feed-overview.svg" alt="Feed overview" />
-      <p><strong>Feed Experience</strong><br/>검색, 카테고리 필터, 프로필 카드, 정렬이 한 화면에서 동작하는 메인 피드</p>
+      <p><strong>Feed Experience</strong><br/>검색, 태그 탐색, 프로필 카드, 정렬이 한 화면에서 동작하는 메인 피드</p>
     </td>
     <td width="33%">
       <img src="docs/assets/portfolio/post-detail.svg" alt="Post detail" />
@@ -143,6 +145,14 @@ sequenceDiagram
 - SSR + React Query hydrate로 인증 상태와 프로필 이미지 지연 최소화
 - 상세 페이지 canonical URL을 `/posts/:id`로 정리
 - 모바일/반응형 레이아웃 흔들림 제거
+- Markdown 렌더러 모듈 분리로 미리보기/상세 렌더 회귀 구간 축소
+
+## Current Runtime Status (2026-03)
+
+- 공개 읽기 경로를 `feed/explore/detail`로 분리하고 캐시 실패 시 원본 조회 fallback을 적용했다.
+- Markdown 렌더 파이프라인을 `front/src/libs/markdown`으로 분리해 머메이드/코드블록 회귀를 줄였다.
+- 검색 품질은 `title > tags > content` 가중치 정렬로 고정했다.
+- 주요 장애 대응 내역은 트러블슈팅 인덱스와 종합 회고에 최신화해 유지한다.
 
 ## Documentation Map
 
@@ -152,7 +162,9 @@ sequenceDiagram
 2. [System Architecture](docs/design/System-Architecture.md)
 3. [Domain Design](docs/design/Domain-Design.md)
 4. [Infrastructure Architecture](docs/design/Infrastructure-Architecture.md)
-5. [좋아요/조회수 동시성·멱등성 개선기](docs/troubleshooting/post-like-hit-concurrency.md)
+5. [트러블슈팅 인덱스](docs/troubleshooting/00-INDEX.md)
+6. [좋아요/조회수 동시성·멱등성 개선기](docs/troubleshooting/02-like-hit-idempotency-concurrency.md)
+7. [운영 트러블슈팅 종합 회고](docs/troubleshooting/13-operations-troubleshooting-retrospective.md)
 
 ## Repository Structure
 
@@ -175,8 +187,8 @@ sequenceDiagram
 
 ```bash
 cd back && ./gradlew test --rerun-tasks
-cd front && npm run lint
-cd front && npm run build
+cd front && yarn build
+cd front && yarn test:e2e:smoke
 ```
 
 운영성 변경은 추가로 아래 관점에서 확인했습니다.

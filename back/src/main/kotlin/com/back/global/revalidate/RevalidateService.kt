@@ -23,11 +23,7 @@ class RevalidateService(
     private val revalidateToken: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val httpClient =
-        HttpClient
-            .newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
-            .build()
+    private val httpClient = SHARED_HTTP_CLIENT
 
     fun revalidateHome() = revalidatePath("/")
 
@@ -63,5 +59,13 @@ class RevalidateService(
             // revalidate가 실패해도 글 작성/수정/삭제 요청 경로는 비차단으로 유지한다.
             log.warn("Revalidate request failed", exception)
         }
+    }
+
+    companion object {
+        private val SHARED_HTTP_CLIENT: HttpClient =
+            HttpClient
+                .newBuilder()
+                .connectTimeout(Duration.ofSeconds(2))
+                .build()
     }
 }

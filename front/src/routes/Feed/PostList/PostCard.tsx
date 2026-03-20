@@ -380,8 +380,8 @@ export default memo(PostCard, arePostCardPropsEqual)
 const StyledWrapper = styled(Link)`
   display: block;
   text-decoration: none;
-  --post-card-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.04);
-  --post-card-shadow-hover: 0 12px 20px 0 rgba(0, 0, 0, 0.08);
+  --post-card-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
+  --post-card-shadow-hover: ${({ theme }) => theme.variables.ui.card.shadowHover};
   --post-card-translate-y: -8px;
 
   &:focus-visible {
@@ -396,8 +396,8 @@ const StyledWrapper = styled(Link)`
     contain-intrinsic-size: 420px;
     display: flex;
     flex-direction: column;
-    border-radius: 4px;
-    border: 1px solid ${({ theme }) => theme.colors.gray4};
+    border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+    border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
     background: ${({ theme }) => theme.colors.gray1};
     box-shadow: var(--post-card-shadow);
 
@@ -429,7 +429,7 @@ const StyledWrapper = styled(Link)`
       grid-template-rows: auto auto auto auto;
       align-content: start;
       min-height: 0;
-      padding: 1rem;
+      padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
       gap: 0;
 
       > header {
@@ -585,15 +585,15 @@ const StyledWrapper = styled(Link)`
   }
 
   @media (max-width: 640px) {
-    --post-card-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
-    --post-card-shadow-hover: 0 10px 20px 0 rgba(0, 0, 0, 0.1);
+    --post-card-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
+    --post-card-shadow-hover: ${({ theme }) => theme.variables.ui.card.shadowHover};
     --post-card-translate-y: -4px;
 
     article {
-      border-radius: 4px;
+      border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
 
       > .content {
-        padding: 1rem;
+        padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
 
         > .summary p {
           -webkit-line-clamp: 3;

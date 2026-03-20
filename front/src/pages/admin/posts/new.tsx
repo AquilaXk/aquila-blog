@@ -93,10 +93,6 @@ type PostWriteResult = {
   listed: boolean
 }
 
-type MarkdownRenderResponse = {
-  html?: string
-}
-
 type GeneratePreviewSummaryPayload = {
   summary?: string
   provider?: string
@@ -484,6 +480,10 @@ const formatPreviewSummaryReason = (rawReason?: string | null) => {
       return "Gemini API 키 누락"
     case "rate-limited-or-circuit-open":
       return "요청 제한 또는 회로 차단"
+    case "repeated-failure-signature":
+      return "동일 입력 반복 실패로 임시 AI 우회"
+    case "quota-exhausted":
+      return "AI API 사용 한도 초과"
     case "transport":
       return "AI API 통신 실패"
     case "parse-error":
@@ -1415,53 +1415,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }, [applyLoadedPostContext, postId, syncEditorMeta])
 
-  const renderContentHtml = useCallback(
-    async (source: "new-post" | "modify-post" | "publish-temp-post"): Promise<string | undefined> => {
-      try {
-        const rendered = await fetch("/api/markdown/render", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            markdown: postContent,
-          }),
-        })
-
-        if (!rendered.ok) {
-          throw new Error(`status=${rendered.status}`)
-        }
-
-        const payload = (await rendered.json()) as MarkdownRenderResponse
-        if (typeof payload.html === "string" && payload.html.trim()) {
-          return payload.html
-        }
-      } catch (error) {
-        console.warn(`[admin/${source}] markdown render failed, fallback to markdown content`, error)
-      }
-
-      return undefined
-    },
-    [postContent]
-  )
-
   const handleGeneratePreviewSummary = useCallback(async () => {
     const content = postContent.trim()
     if (!content) {
-      setPublishStatus({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." }, "modal")
       setPreviewSummaryNotice({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." })
       setPreviewSummaryDebug("")
       return
     }
     if (content.length > PREVIEW_SUMMARY_MAX_CONTENT_LENGTH) {
       const message = `요약 생성용 본문은 최대 ${PREVIEW_SUMMARY_MAX_CONTENT_LENGTH.toLocaleString()}자까지 지원됩니다.`
-      setPublishStatus(
-        {
-          tone: "error",
-          text: message,
-        },
-        "modal"
-      )
       setPreviewSummaryNotice({ tone: "error", text: message })
       setPreviewSummaryDebug("")
       return
@@ -1470,7 +1432,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("generatePreviewSummary")
-      setPublishStatus({ tone: "loading", text: "AI 요약 생성 중입니다..." }, "modal")
       setPreviewSummaryNotice({ tone: "loading", text: "AI 요약 생성 중입니다..." })
       setPreviewSummaryDebug("")
 
@@ -1500,25 +1461,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       if (isRuleFallback) {
         const fallbackNoticeText = `규칙 기반 요약 반영 (${reasonHint || "AI 요약 실패"})${traceHint}`
-        setPublishStatus(
-          {
-            tone: "error",
-            text: `AI 요약을 사용할 수 없어 규칙 기반 요약으로 반영했습니다.${reasonHint ? ` (${reasonHint})` : ""}${traceHint}`,
-          },
-          "modal"
-        )
         setPreviewSummaryNotice({ tone: "error", text: fallbackNoticeText })
         return
       }
 
       const summaryNoticeText = `요약 반영 완료 (${providerLabel})${traceHint}`
-      setPublishStatus(
-        {
-          tone: "success",
-          text: `요약을 생성해 입력창에 반영했습니다. (${providerLabel})${traceHint}`,
-        },
-        "modal"
-      )
       setPreviewSummaryNotice({ tone: "success", text: summaryNoticeText })
     } catch (error) {
       const errorMessage = resolvePreviewSummaryErrorMessage(error)
@@ -1526,30 +1473,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       if (fallbackSummary) {
         setPostSummary(fallbackSummary)
         const fallbackMessage = `AI 요약 실패로 규칙 기반 요약을 반영했습니다. (${errorMessage})`
-        setPublishStatus(
-          {
-            tone: "error",
-            text: fallbackMessage,
-          },
-          "modal"
-        )
         setPreviewSummaryNotice({ tone: "error", text: fallbackMessage })
         return
       }
 
       const failMessage = `요약 생성 실패: ${errorMessage}`
-      setPublishStatus(
-        {
-          tone: "error",
-          text: failMessage,
-        },
-        "modal"
-      )
       setPreviewSummaryNotice({ tone: "error", text: failMessage })
     } finally {
       setLoadingKey("")
     }
-  }, [postContent, postTitle, setPublishStatus])
+  }, [postContent, postTitle])
 
   const handleWritePost = async (): Promise<boolean> => {
     if (editorMode === "edit" || postId.trim()) {
@@ -1581,7 +1514,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         summary: postSummary,
         thumbnail: effectiveThumbnailUrl,
       })
-      const contentHtml = await renderContentHtml("new-post")
 
       const fingerprint = `${postTitle}\n---\n${contentWithMetadata}\n---\n${postVisibility}`
       if (lastWriteFingerprintRef.current !== fingerprint || !lastWriteIdempotencyKeyRef.current) {
@@ -1597,7 +1529,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         body: JSON.stringify({
           title: postTitle,
           content: contentWithMetadata,
-          ...(contentHtml ? { contentHtml } : {}),
           ...toFlags(postVisibility),
         }),
       })
@@ -1652,7 +1583,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("modifyPost")
       setPublishStatus({ tone: "loading", text: "글 수정 중입니다..." })
-      const contentHtml = await renderContentHtml("modify-post")
 
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
         method: "PUT",
@@ -1663,7 +1593,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
           }),
-          ...(contentHtml ? { contentHtml } : {}),
           ...toFlags(postVisibility),
           version: postVersion ?? undefined,
         }),
@@ -1724,7 +1653,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("publishTempPost")
       setPublishStatus({ tone: "loading", text: "임시글을 발행하는 중입니다..." })
-      const contentHtml = await renderContentHtml("publish-temp-post")
 
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
         method: "PUT",
@@ -1735,7 +1663,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
           }),
-          ...(contentHtml ? { contentHtml } : {}),
           published: true,
           listed: true,
           version: postVersion ?? undefined,

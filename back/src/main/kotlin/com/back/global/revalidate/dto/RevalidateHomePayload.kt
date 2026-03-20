@@ -6,7 +6,7 @@ import java.util.UUID
 
 @Task(
     type = "global.revalidate.home",
-    label = "홈 revalidate",
+    label = "경로 revalidate",
     maxRetries = 5,
     baseDelaySeconds = 30,
     backoffMultiplier = 2.0,

@@ -34,7 +34,7 @@ export const useTagsQuery = () => {
     queryKey: queryKey.tags(),
     queryFn: getTagCounts,
     select: toTagsQueryData,
-    staleTime: 60_000,
+    staleTime: 300_000,
     retry: 1,
     refetchOnWindowFocus: false,
   })

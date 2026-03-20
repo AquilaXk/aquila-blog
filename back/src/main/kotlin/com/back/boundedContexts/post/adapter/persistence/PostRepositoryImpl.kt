@@ -8,6 +8,7 @@ import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
 import com.querydsl.core.types.dsl.BooleanExpression
 import com.querydsl.core.types.dsl.Expressions
+import com.querydsl.core.types.dsl.NumberExpression
 import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQuery
 import com.querydsl.jpa.impl.JPAQueryFactory
@@ -125,9 +126,9 @@ class PostRepositoryImpl(
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
         if (tagLikeToken != null) builder.and(buildTagIndexPredicate(tagLikeToken))
 
-        val postIds = fetchPagedPostIds(builder, pageable)
+        val postIds = fetchPagedPostIds(builder, pageable, kw)
         val posts = fetchPostsByIds(postIds)
-        if (shouldSkipCountQuery(publicOnly, pageable)) {
+        if (shouldSkipCountQuery(publicOnly)) {
             return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
         }
 
@@ -179,12 +180,45 @@ class PostRepositoryImpl(
         return fetchPostsByIds(ids)
     }
 
-    private fun buildKwPredicate(kw: String): BooleanExpression =
+    private fun buildKwPredicate(kw: String): BooleanExpression {
+        val normalizedKeyword = kw.trim()
+        val keywordTokens =
+            normalizedKeyword
+                .split(Regex("\\s+"))
+                .map { it.trim() }
+                .filter { it.length >= 2 }
+                .distinct()
+                .take(4)
+
+        val basePredicate = buildKeywordTokenPredicate(normalizedKeyword)
+
+        return keywordTokens.fold(basePredicate) { acc, token ->
+            if (token.equals(normalizedKeyword, ignoreCase = true)) {
+                acc
+            } else {
+                acc.or(buildKeywordTokenPredicate(token))
+            }
+        }
+    }
+
+    private fun buildKeywordTokenPredicate(token: String): BooleanExpression {
+        val tagLikeToken = buildTagLikeToken(token)
+        val tagPredicate =
+            if (tagLikeToken == null) {
+                Expressions.booleanTemplate("1 = 0")
+            } else {
+                buildTagIndexPredicate(tagLikeToken)
+            }
+
+        return buildPGroongaMatchPredicate(token).or(tagPredicate)
+    }
+
+    private fun buildPGroongaMatchPredicate(token: String): BooleanExpression =
         Expressions.booleanTemplate(
             "function('pgroonga_post_match', {0}, {1}, {2}) = true",
             post.title,
             post.content,
-            Expressions.constant(kw),
+            Expressions.constant(token),
         )
 
     private fun buildTagIndexPredicate(tagLikeToken: String): BooleanExpression =
@@ -241,6 +275,7 @@ class PostRepositoryImpl(
     private fun fetchPagedPostIds(
         builder: BooleanBuilder,
         pageable: Pageable,
+        kw: String,
     ): List<Long> {
         val idQuery =
             queryFactory
@@ -252,16 +287,25 @@ class PostRepositoryImpl(
 
         idQuery.where(builder)
 
-        QueryDslUtil.applySorting(idQuery, pageable) { property ->
-            when (property) {
-                "createdAt" -> post.createdAt
-                "modifiedAt" -> post.modifiedAt
-                "authorName" -> post.author.nickname
-                else -> null
+        val normalizedKeyword = kw.trim()
+        if (normalizedKeyword.isNotBlank()) {
+            idQuery.orderBy(
+                buildKeywordRelevanceExpression(normalizedKeyword).desc(),
+                post.createdAt.desc(),
+                post.id.desc(),
+            )
+        } else {
+            QueryDslUtil.applySorting(idQuery, pageable) { property ->
+                when (property) {
+                    "createdAt" -> post.createdAt
+                    "modifiedAt" -> post.modifiedAt
+                    "authorName" -> post.author.nickname
+                    else -> null
+                }
             }
-        }
 
-        if (pageable.sort.isEmpty) idQuery.orderBy(post.id.desc())
+            if (pageable.sort.isEmpty) idQuery.orderBy(post.id.desc())
+        }
 
         return idQuery
             .offset(pageable.offset)
@@ -303,13 +347,63 @@ class PostRepositoryImpl(
             .where(builder)
 
     /**
-     * 공개 목록의 깊은 페이지는 전체 카운트 비용이 커서 생략하고 추정 total을 사용한다.
+     * 공개 목록은 countDistinct 비용이 커서 모든 페이지에서 추정 total을 사용한다.
      * 마지막 페이지 판단은 `fetchedSize < pageSize`이면 확정하고, 그 외에는 다음 페이지 존재 가능성을 1건으로 표현한다.
      */
-    private fun shouldSkipCountQuery(
-        publicOnly: Boolean,
-        pageable: Pageable,
-    ): Boolean = publicOnly && pageable.pageNumber > 0
+    private fun shouldSkipCountQuery(publicOnly: Boolean): Boolean = publicOnly
+
+    /**
+     * Velog의 검색 랭킹 전략(제목 우선 + 보조 신호)을 반영해
+     * title > tags(metaTagsIndex) > content 순서로 점수를 부여한다.
+     */
+    private fun buildKeywordRelevanceExpression(keyword: String): NumberExpression<Int> {
+        val likePattern = buildEscapedLikePattern(keyword)
+        val tagToken = buildTagLikeToken(keyword) ?: "||"
+        val hasTagMatch =
+            JPAExpressions
+                .selectOne()
+                .from(postAttr)
+                .where(
+                    postAttr.subject.id
+                        .eq(post.id)
+                        .and(postAttr.name.eq(META_TAGS_INDEX_ATTR_NAME))
+                        .and(postAttr.strValue.isNotNull)
+                        .and(postAttr.strValue.lower().like(tagToken)),
+                ).exists()
+
+        val titleScore =
+            Expressions.numberTemplate(
+                Int::class.java,
+                "case when lower({0}) like {1} then 300 else 0 end",
+                post.title,
+                Expressions.constant(likePattern),
+            )
+        val tagScore =
+            Expressions.numberTemplate(
+                Int::class.java,
+                "case when {0} then 120 else 0 end",
+                hasTagMatch,
+            )
+        val contentScore =
+            Expressions.numberTemplate(
+                Int::class.java,
+                "case when lower({0}) like {1} then 40 else 0 end",
+                post.content,
+                Expressions.constant(likePattern),
+            )
+
+        return titleScore.add(tagScore).add(contentScore)
+    }
+
+    private fun buildEscapedLikePattern(raw: String): String {
+        val normalized = raw.trim().lowercase()
+        val escaped =
+            normalized
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+        return "%$escaped%"
+    }
 
     private fun estimateTotalElements(
         pageable: Pageable,

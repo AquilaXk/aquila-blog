@@ -33,7 +33,7 @@ class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
     private lateinit var revalidateEventListener: RevalidateEventListener
 
     @Test
-    fun `게시글 저장 시 홈 revalidate task가 큐에 적재된다`() {
+    fun `게시글 저장 시 홈과 상세와 사이트맵 revalidate task가 큐에 적재된다`() {
         val testId = UUID.randomUUID().toString().take(8)
         val author =
             memberApplicationService.join(
@@ -70,12 +70,17 @@ class RevalidateEventListenerTest : SeededSpringBootTestSupport() {
                     it.taskType == "global.revalidate.home" &&
                         it.aggregateId == post.id
                 }
-            if (revalidateTasks.size == 1) return@repeat
+            if (revalidateTasks.size == 3) return@repeat
             Thread.sleep(100)
         }
-        assertThat(revalidateTasks).hasSize(1)
-
-        assertThat(revalidateTasks.single().aggregateId).isEqualTo(post.id)
-        assertThat(revalidateTasks.single().status).isIn(TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.COMPLETED)
+        assertThat(revalidateTasks).hasSize(3)
+        val payloads = revalidateTasks.map { it.payload }
+        assertThat(payloads.any { it.contains("\"path\":\"/\"") }).isTrue()
+        assertThat(payloads.any { it.contains("\"path\":\"/posts/${post.id}\"") }).isTrue()
+        assertThat(payloads.any { it.contains("\"path\":\"/sitemap.xml\"") }).isTrue()
+        assertThat(revalidateTasks.map { it.aggregateId }).containsOnly(post.id)
+        assertThat(revalidateTasks.map { it.status }).allMatch { status ->
+            status in listOf(TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.COMPLETED)
+        }
     }
 }

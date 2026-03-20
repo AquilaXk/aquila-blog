@@ -291,7 +291,18 @@ tasks {
 
     withType<Test> {
         val composeInfraEnabled = testInfraMode.get().equals("compose", ignoreCase = true)
+        val resolvedTestMaxHeapMb =
+            providers
+                .gradleProperty("testMaxHeapMb")
+                .orElse("2048")
+                .get()
+                .toIntOrNull()
+                ?.coerceIn(1024, 8192)
+                ?: 2048
         useJUnitPlatform()
+        maxHeapSize = "${resolvedTestMaxHeapMb}m"
+        maxParallelForks = 1
+        forkEvery = 80
         environment("SPRING__DATASOURCE__PASSWORD", resolvedTestDbPassword.get())
         environment("SPRING__DATA__REDIS__PASSWORD", resolvedTestRedisPassword.get())
         environment("CUSTOM__TEST__DB_PORT", resolvedTestDbPort.get())

@@ -123,11 +123,11 @@ const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) 320px;
   gap: 1rem;
-  padding: 1.2rem;
-  border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  padding: ${({ theme }) => `${theme.variables.ui.card.paddingLg}px`};
+  border-radius: ${({ theme }) => `${theme.variables.ui.card.radiusLg}px`};
+  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray5}`};
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  box-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -174,12 +174,13 @@ const ActionLink = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 11px;
+  border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
-  font-size: 0.92rem;
+  min-height: ${({ theme }) => `${theme.variables.ui.button.minHeightSm}px`};
+  font-size: ${({ theme }) => `${theme.variables.ui.button.fontSize}rem`};
   font-weight: 700;
   text-decoration: none;
   cursor: pointer;
@@ -213,8 +214,8 @@ const ProfilePanel = styled.aside`
   align-content: center;
   gap: 0.45rem;
   padding: 1rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray5}`};
   background: ${({ theme }) => theme.colors.gray3};
   text-align: center;
 
@@ -250,8 +251,8 @@ const StatusItem = styled.div`
   display: grid;
   gap: 0.22rem;
   padding: 0.56rem 0.64rem;
-  border-radius: 11px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray5}`};
   background: ${({ theme }) => theme.colors.gray1};
 
   span {
@@ -304,20 +305,20 @@ const CardGrid = styled.section`
 const QuickCard = styled.a`
   display: grid;
   gap: 0.7rem;
-  padding: 1.02rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
+  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray5}`};
   background: ${({ theme }) => theme.colors.gray2};
   text-decoration: none;
   color: inherit;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
   transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 
   &:hover {
     border-color: ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
     transform: translateY(-4px);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+    box-shadow: ${({ theme }) => theme.variables.ui.card.shadowHover};
   }
 
   small {

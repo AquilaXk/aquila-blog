@@ -29,17 +29,23 @@ export default async function handler(
 
   const pathFromQuery = typeof req.query.path === "string" ? req.query.path : ""
   const pathFromBody = typeof req.body?.path === "string" ? req.body.path : ""
-  const targetPath = pathFromBody || pathFromQuery
+  const pathsFromBody =
+    Array.isArray(req.body?.paths)
+      ? req.body.paths.filter((value: unknown): value is string => typeof value === "string")
+      : []
+  const targetPaths = [pathFromBody || pathFromQuery, ...pathsFromBody].filter((value) => value.trim().length > 0)
 
   try {
     let paths: string[] = []
 
-    if (targetPath) {
-      const normalizedPath = targetPath.startsWith("/")
-        ? targetPath
-        : `/${targetPath}`
-      await res.revalidate(normalizedPath)
-      paths = [normalizedPath]
+    if (targetPaths.length > 0) {
+      const normalizedPaths = Array.from(
+        new Set(
+          targetPaths.map((path) => (path.startsWith("/") ? path : `/${path}`))
+        )
+      )
+      await Promise.all(normalizedPaths.map((path) => res.revalidate(path)))
+      paths = normalizedPaths
     } else {
       const posts = await getPosts()
       const pathsToRevalidate = new Set<string>(["/"])

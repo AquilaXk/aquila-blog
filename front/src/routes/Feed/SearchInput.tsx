@@ -53,9 +53,9 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: 0.5rem;
     min-width: 0;
-    min-height: 36px;
+    min-height: ${({ theme }) => `${theme.variables.ui.button.minHeightSm}px`};
     padding: 0 0.625rem;
-    border-radius: 8px;
+    border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray1};
     transition: all 0.125s ease-in;
@@ -84,7 +84,7 @@ const StyledWrapper = styled.div`
       min-width: 60px;
       height: 28px;
       padding: 0 0.65rem;
-      border-radius: 999px;
+      border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
       border: 1px solid ${({ theme }) => theme.colors.gray6};
       background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray11};
@@ -141,7 +141,7 @@ const StyledWrapper = styled.div`
     > .field {
       min-height: 34px;
       padding: 0 0.5rem;
-      border-radius: 7px;
+      border-radius: ${({ theme }) => `${Math.max(theme.variables.ui.button.radius - 1, 6)}px`};
     }
 
     > .field > .mid {

@@ -437,6 +437,30 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `공개 feed 조회는 단일 Cache-Control 정책만 반환한다`() {
+            val response =
+                mvc
+                    .get("/post/api/v1/posts/feed") {
+                        param("page", "1")
+                        param("pageSize", "10")
+                        param("sort", "CREATED_AT")
+                    }.andExpect {
+                        status { isOk() }
+                        header { exists(HttpHeaders.CACHE_CONTROL) }
+                    }.andReturn()
+                    .response
+
+            val cacheControlHeaders = response.getHeaders(HttpHeaders.CACHE_CONTROL)
+            assertThat(cacheControlHeaders).hasSize(1)
+            assertThat(cacheControlHeaders.single())
+                .contains("public")
+                .contains("s-maxage")
+                .contains("stale-while-revalidate")
+            assertThat(response.getHeader(HttpHeaders.PRAGMA)).isNull()
+            assertThat(response.getHeader(HttpHeaders.EXPIRES)).isNull()
+        }
+
+        @Test
         fun `탐색 목록 조회는 tags 와 category 메타를 포함한다`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             val uniqueTitle = "feed-meta-${System.currentTimeMillis()}"
@@ -496,6 +520,118 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `검색 목록 조회는 제목-태그-본문 가중치 순서로 정렬된다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val keyword = "rank-${System.currentTimeMillis()}"
+            val titleMatchedPost =
+                postFacade.write(
+                    actor,
+                    "제목 $keyword 매칭",
+                    "제목 우선순위 검증 본문",
+                    true,
+                    true,
+                )
+            val tagMatchedPost =
+                postFacade.write(
+                    actor,
+                    "태그 매칭 글",
+                    """
+                    tags: [$keyword]
+
+                    태그 우선순위 검증 본문
+                    """.trimIndent(),
+                    true,
+                    true,
+                )
+            val contentMatchedPost =
+                postFacade.write(
+                    actor,
+                    "본문 매칭 글",
+                    "이 글은 본문에서만 $keyword 를 포함합니다.",
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", keyword)
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "CREATED_AT")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(3) }
+                    jsonPath("$.content[0].id") { value(titleMatchedPost.id) }
+                    jsonPath("$.content[1].id") { value(tagMatchedPost.id) }
+                    jsonPath("$.content[2].id") { value(contentMatchedPost.id) }
+                }
+        }
+
+        @Test
+        fun `검색 목록 조회는 hashtag 의도를 태그 필터로 인식한다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val uniqueTitle = "search-hashtag-${System.currentTimeMillis()}"
+            val post =
+                postFacade.write(
+                    actor,
+                    uniqueTitle,
+                    """
+                    tags: [SSE, 실시간]
+
+                    hashtag 검색 의도 테스트 본문
+                    """.trimIndent(),
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", "#SSE")
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "CREATED_AT")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("search"))
+                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                    jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("SSE")) }
+                }
+        }
+
+        @Test
+        fun `검색 목록 조회는 tag prefix 의도를 태그 필터로 인식한다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val uniqueTitle = "search-tag-prefix-${System.currentTimeMillis()}"
+            val post =
+                postFacade.write(
+                    actor,
+                    uniqueTitle,
+                    """
+                    tags: [Kotlin, JVM]
+
+                    tag prefix 검색 의도 테스트 본문
+                    """.trimIndent(),
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", "tag:Kotlin")
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "CREATED_AT")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("search"))
+                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                    jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("Kotlin")) }
+                }
+        }
+
+        @Test
         fun `탐색 목록 조회는 tag 파라미터로 필터링된다`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             val uniqueTitle = "tag-filter-${System.currentTimeMillis()}"
@@ -551,6 +687,37 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     match(handler().methodName("getTags"))
                     jsonPath("$[*].tag") { value(Matchers.hasItems("운영", "성능")) }
                     jsonPath("$[?(@.tag == '운영')].count") { value(Matchers.hasItem(Matchers.greaterThanOrEqualTo(1))) }
+                }
+        }
+
+        @Test
+        fun `태그 집계 조회는 public Cache-Control 정책을 반환한다`() {
+            val response =
+                mvc
+                    .get("/post/api/v1/posts/tags")
+                    .andExpect {
+                        status { isOk() }
+                        header { exists(HttpHeaders.CACHE_CONTROL) }
+                    }.andReturn()
+                    .response
+
+            val cacheControlHeaders = response.getHeaders(HttpHeaders.CACHE_CONTROL)
+            assertThat(cacheControlHeaders).hasSize(1)
+            assertThat(cacheControlHeaders.single())
+                .contains("public")
+                .contains("s-maxage")
+                .contains("stale-while-revalidate")
+                .doesNotContain("no-store")
+        }
+
+        @Test
+        fun `인증 필요 API는 Cache-Control 누락 시 private no-store 기본값을 반환한다`() {
+            mvc
+                .get("/post/api/v1/posts/mine")
+                .andExpect {
+                    status { isUnauthorized() }
+                    header { string(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0") }
+                    header { string(HttpHeaders.PRAGMA, "no-cache") }
                 }
         }
     }
@@ -1075,13 +1242,11 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                 }
 
             mvc
-                .get("/post/api/v1/adm/posts") {
-                    param("kw", uniqueTitle)
-                    param("page", "1")
-                    param("pageSize", "30")
-                }.andExpect {
+                .get("/post/api/v1/adm/posts/${post.id}")
+                .andExpect {
                     status { isOk() }
-                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                    jsonPath("$.id") { value(post.id) }
+                    jsonPath("$.title") { value(uniqueTitle) }
                 }
 
             mvc

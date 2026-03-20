@@ -176,10 +176,14 @@ GitHub Actions 기준 필수값:
 
 - `HOME_SERVER_ENV`가 배포 시점마다 `deploy/homeserver/.env.prod`를 덮어쓴다.
   즉, 서버의 로컬 `.env.prod`가 아니라 GitHub Secret이 사실상 운영 환경의 source of truth다.
+- CDN cache-tag purge를 사용하면 `CUSTOM__CDN__PURGE__ENABLED=true`, `CUSTOM__CDN__PURGE__URL`, `CUSTOM__CDN__PURGE__TOKEN`을 운영 환경변수로 반드시 설정한다.
+- purge coalescing을 사용하면 `CUSTOM__CDN__PURGE__COALESCE_WINDOW_MS`, `CUSTOM__CDN__PURGE__COALESCE_MAX_TAGS`로 짧은 윈도우 태그 병합 폭을 조정한다.
+- 게시글 발행/수정/삭제 이벤트는 `global.revalidate.post-cache-purge` 작업으로 비동기 큐잉되며, purge 실패는 fail-open(로그 경고)으로 처리한다.
 - `HOME_SERVER_ENV`에는 `CF_TUNNEL_TOKEN`, `CLOUDFLARED_IMAGE`, `DB_IMAGE`, `MINIO_IMAGE`를 포함하는 것을 권장한다.
 - 이미지 키가 누락되면 배포 스크립트는 서버 로컬 Docker cache(`cloudflare/cloudflared:latest`, `jangka512/pgj:latest`, `minio/minio:latest`)의 `RepoDigest`를 조회해 pin 값으로 자동 보강을 시도한다. 보강 실패 시 배포를 중단한다.
 - `cloudflared`는 cutover 전/후 컨테이너 상태(`running`, restart count)와 tunnel registration 로그를 검사한다.
 - `blueGreenDeploy` 완료 전 공인 API 도메인(`https://API_DOMAIN/actuator/health/readiness`) 외부 도달성까지 검증한다. `status=000` timeout이 지속되면 `cloudflared`를 1회 재시작 후 재검증한다.
+- blue/green 전환 완료 후 `feed/explore/tags`(및 첫 태그 기반 `explore/cursor`)와 최신 공개글 상세 1건 prewarm을 수행해 cold-start 지연을 줄인다. (`PREWARM_ENABLED=true` 기본)
 - `blue_green_deploy.sh` 성공 이후의 후속 검증(post-check)에서 실패해도 backup 기준 자동 rollback을 수행해야 한다. (blue_green_deploy 실패와 동일 정책)
 - `back_blue`, `back_green`의 container healthcheck는 `liveness`를 사용하며, `autoheal` 서비스가 `unhealthy` 컨테이너를 자동 재시작한다. (`readiness`는 트래픽 수용/배포 검증 용도이며 재시작 신호로 쓰지 않는다.)
 - `back_blue`, `back_green`에는 `BACK_MEM_LIMIT`/`BACK_MEM_RESERVATION` 기본 상한이 적용되어 blue/green 동시 기동 시 JVM 메모리 과점유를 방지한다.
@@ -215,7 +219,7 @@ GitHub Actions 기준 필수값:
 - non-prod에서도 queue worker 동작을 기본으로 유지한다. (`CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD=false`)
 - `PROCESSING` 상태가 `CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS`를 넘기면 stale task로 판단하고 다음 poll에서 자동 복구한다.
 - task retry 정책은 task type별로 다르게 가진다.
-  `global.revalidate.home`은 짧고 빠르게 재시도하고, `member.signupVerification.sendMail`은 더 긴 간격과 더 많은 재시도를 사용한다.
+  `global.revalidate.home`(홈/상세/사이트맵 경로 revalidate 공용)은 짧고 빠르게 재시도하고, `member.signupVerification.sendMail`은 더 긴 간격과 더 많은 재시도를 사용한다.
 - 게시글 작성 idempotency 레코드는 보존기간/배치 기준으로 정리한다.
   (`CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS`, `CUSTOM__POST__IDEMPOTENCY__CLEANUP__*`)
 - 파일 정리 잡 기본값은 `1시간` poll, `100건` batch이며, temp/profile/post attachment 보존기간도 env로 조정할 수 있다.

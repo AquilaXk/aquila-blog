@@ -2,6 +2,9 @@ import { normalizeApiRequestPath } from "src/libs/backend/requestPath"
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080"
 const DEFAULT_API_FETCH_TIMEOUT_MS = 12_000
+const DEFAULT_REVALIDATE_CACHE_TTL_MS = 15_000
+const REVALIDATE_CACHE_MAX_TTL_MS = 300_000
+const REVALIDATE_CACHE_MAX_ENTRIES = 200
 
 export type ApiFetchOptions = RequestInit & {
   timeoutMs?: number
@@ -10,6 +13,73 @@ export type ApiFetchOptions = RequestInit & {
 const isServer = typeof window === "undefined"
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
+
+type RevalidateCacheEntry = {
+  etag: string
+  payload: unknown
+  expiresAt: number
+  maxAgeMs: number
+}
+
+const browserRevalidateCache = new Map<string, RevalidateCacheEntry>()
+const browserInFlightGetRequests = new Map<string, Promise<unknown>>()
+
+const parseCacheControlMaxAgeMs = (cacheControlHeader: string | null) => {
+  if (!cacheControlHeader) return DEFAULT_REVALIDATE_CACHE_TTL_MS
+  const matched = cacheControlHeader.match(/(?:^|,)\s*max-age=(\d+)/i)
+  if (!matched) return DEFAULT_REVALIDATE_CACHE_TTL_MS
+  const seconds = Number.parseInt(matched[1], 10)
+  if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_REVALIDATE_CACHE_TTL_MS
+  return Math.min(seconds * 1000, REVALIDATE_CACHE_MAX_TTL_MS)
+}
+
+const getRevalidateCacheEntry = (url: string) => {
+  if (isServer) return null
+  const cached = browserRevalidateCache.get(url)
+  if (!cached) return null
+  if (cached.expiresAt <= Date.now()) {
+    browserRevalidateCache.delete(url)
+    return null
+  }
+  return cached
+}
+
+const setRevalidateCacheEntry = (
+  url: string,
+  etag: string,
+  payload: unknown,
+  cacheControlHeader: string | null,
+) => {
+  if (isServer) return
+  const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
+  browserRevalidateCache.set(url, {
+    etag,
+    payload,
+    maxAgeMs,
+    expiresAt: Date.now() + maxAgeMs,
+  })
+
+  if (browserRevalidateCache.size <= REVALIDATE_CACHE_MAX_ENTRIES) return
+  const oldestKey = browserRevalidateCache.keys().next().value
+  if (oldestKey) browserRevalidateCache.delete(oldestKey)
+}
+
+const refreshRevalidateCacheEntry = (
+  url: string,
+  fallback: RevalidateCacheEntry,
+  etagHeader: string | null,
+  cacheControlHeader: string | null,
+) => {
+  if (isServer) return
+  const maxAgeMs = parseCacheControlMaxAgeMs(cacheControlHeader)
+  const nextEtag = etagHeader?.trim() || fallback.etag
+  browserRevalidateCache.set(url, {
+    etag: nextEtag,
+    payload: fallback.payload,
+    maxAgeMs,
+    expiresAt: Date.now() + maxAgeMs,
+  })
+}
 
 const resolveStatusMessage = (status: number) => {
   if (status === 400) return "요청 값이 올바르지 않습니다."
@@ -128,52 +198,103 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
   const hasBody = requestInit.body !== undefined && requestInit.body !== null
   const isFormLikeBody =
     typeof FormData !== "undefined" && requestInit.body instanceof FormData
+  const method = (requestInit.method || "GET").toUpperCase()
+  const canUseRevalidateCache =
+    !isServer &&
+    method === "GET" &&
+    !hasBody &&
+    requestInit.cache !== "no-store"
+  const canUseInFlightDedupe =
+    canUseRevalidateCache &&
+    !requestInit.signal &&
+    init.timeoutMs === undefined
+  const inFlightKey = canUseInFlightDedupe ? `${method}:${url}` : null
+  const revalidateCacheEntry = canUseRevalidateCache ? getRevalidateCacheEntry(url) : null
 
   if (hasBody && !isFormLikeBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
   }
+  if (canUseRevalidateCache && revalidateCacheEntry && !headers.has("If-None-Match")) {
+    headers.set("If-None-Match", revalidateCacheEntry.etag)
+  }
 
-  const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
-  const { signal, cleanup } = createTimedSignal(requestInit.signal, resolvedTimeoutMs)
+  if (inFlightKey) {
+    const existing = browserInFlightGetRequests.get(inFlightKey)
+    if (existing) return existing as Promise<T>
+  }
 
-  let response: Response
+  const executeRequest = async (): Promise<T> => {
+    const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
+    const { signal, cleanup } = createTimedSignal(requestInit.signal, resolvedTimeoutMs)
 
-  try {
-    response = await fetch(url, {
-      credentials: "include",
-      ...requestInit,
-      headers,
-      signal,
-    })
-  } catch (error) {
-    cleanup()
-    if (error instanceof DOMException && error.name === "TimeoutError") {
-      throw new ApiTimeoutError(url, resolvedTimeoutMs)
+    let response: Response
+
+    try {
+      response = await fetch(url, {
+        credentials: "include",
+        ...requestInit,
+        headers,
+        signal,
+      })
+    } catch (error) {
+      cleanup()
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        throw new ApiTimeoutError(url, resolvedTimeoutMs)
+      }
+      throw error
     }
-    throw error
+
+    cleanup()
+
+    if (response.status === 304 && canUseRevalidateCache && revalidateCacheEntry) {
+      refreshRevalidateCacheEntry(
+        url,
+        revalidateCacheEntry,
+        response.headers.get("etag"),
+        response.headers.get("cache-control"),
+      )
+      return revalidateCacheEntry.payload as T
+    }
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      throw new ApiError(response.status, url, body)
+    }
+
+    if (response.status === 204) {
+      return undefined as T
+    }
+
+    const contentLength = response.headers.get("content-length")
+    if (contentLength === "0") {
+      return undefined as T
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() || ""
+    const etag = response.headers.get("etag")?.trim() || null
+
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as T
+      if (canUseRevalidateCache && etag) {
+        setRevalidateCacheEntry(url, etag, payload, response.headers.get("cache-control"))
+      }
+      return payload
+    }
+
+    const body = await response.text()
+    if (canUseRevalidateCache && etag) {
+      setRevalidateCacheEntry(url, etag, body, response.headers.get("cache-control"))
+    }
+    return body as unknown as T
   }
 
-  cleanup()
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "")
-    throw new ApiError(response.status, url, body)
+  if (!inFlightKey) {
+    return executeRequest()
   }
 
-  if (response.status === 204) {
-    return undefined as T
-  }
-
-  const contentLength = response.headers.get("content-length")
-  if (contentLength === "0") {
-    return undefined as T
-  }
-
-  const contentType = response.headers.get("content-type")?.toLowerCase() || ""
-  if (contentType.includes("application/json")) {
-    return response.json() as Promise<T>
-  }
-
-  const body = await response.text()
-  return body as unknown as T
+  const inFlightPromise = executeRequest().finally(() => {
+    browserInFlightGetRequests.delete(inFlightKey)
+  })
+  browserInFlightGetRequests.set(inFlightKey, inFlightPromise as Promise<unknown>)
+  return inFlightPromise
 }

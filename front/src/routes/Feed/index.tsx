@@ -50,13 +50,13 @@ export default Feed
 
 const StyledWrapper = styled.div`
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  padding: 1.2rem 0 2rem;
+  padding: 1rem 0 1.9rem;
   display: grid;
   gap: 1.25rem;
 
   @media (max-width: 768px) {
     display: block;
-    padding: 0.5rem 0 1.2rem;
+    padding: 0.42rem 0 1.1rem;
   }
 
   > .mid {

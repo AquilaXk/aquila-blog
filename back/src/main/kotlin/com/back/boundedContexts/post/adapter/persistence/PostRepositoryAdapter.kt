@@ -84,6 +84,23 @@ class PostRepositoryAdapter(
         return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
     }
 
+    override fun findPublicByCursor(query: PostRepositoryPort.CursorQuery): List<Post> =
+        postRepository.findPublicByCursor(
+            query.cursorCreatedAt,
+            query.cursorId,
+            query.limit,
+            query.sortAscending,
+        )
+
+    override fun findPublicByTagCursor(query: PostRepositoryPort.TaggedCursorQuery): List<Post> =
+        postRepository.findPublicByTagCursor(
+            query.tag,
+            query.cursorCreatedAt,
+            query.cursorId,
+            query.limit,
+            query.sortAscending,
+        )
+
     override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()
 
     override fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String> =

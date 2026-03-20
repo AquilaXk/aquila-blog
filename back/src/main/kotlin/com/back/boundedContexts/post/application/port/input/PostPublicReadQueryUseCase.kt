@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.application.port.input
 
+import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.TagCountDto
@@ -13,6 +14,12 @@ interface PostPublicReadQueryUseCase {
         sort: PostSearchSortType1,
     ): PageDto<FeedPostDto>
 
+    fun getPublicFeedByCursor(
+        cursor: String?,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto
+
     fun getPublicExplore(
         page: Int,
         pageSize: Int,
@@ -20,6 +27,13 @@ interface PostPublicReadQueryUseCase {
         tag: String,
         sort: PostSearchSortType1,
     ): PageDto<FeedPostDto>
+
+    fun getPublicExploreByCursor(
+        cursor: String?,
+        pageSize: Int,
+        tag: String,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto
 
     fun getPublicSearch(
         page: Int,

@@ -282,14 +282,14 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   useEffect(() => {
     if (!open) return
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false)
       }
     }
 
-    document.addEventListener("mousedown", handlePointerDown)
-    return () => document.removeEventListener("mousedown", handlePointerDown)
+    document.addEventListener("pointerdown", handlePointerDown)
+    return () => document.removeEventListener("pointerdown", handlePointerDown)
   }, [open])
 
   useEffect(() => {
@@ -425,6 +425,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         ref={triggerRef}
         type="button"
         className="trigger"
+        data-open={open}
         aria-label="알림"
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -502,92 +503,131 @@ const StyledWrapper = styled.div`
     justify-content: center;
     min-width: 36px;
     min-height: 36px;
-    padding: 0 0.42rem;
-    border-radius: 8px;
-    border: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid transparent;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
+    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 
-    &:hover {
+    &:hover,
+    &[data-open="true"] {
       color: ${({ theme }) => theme.colors.gray12};
-      text-decoration: underline;
-      text-underline-offset: 3px;
-      text-decoration-thickness: 1px;
+      border-color: ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray3};
+    }
+
+    &:focus-visible {
+      outline: none;
+      border-color: ${({ theme }) => theme.colors.blue8};
+      box-shadow: 0 0 0 2px ${({ theme }) => theme.colors.blue4};
     }
 
     svg {
       width: 18px;
       height: 18px;
       display: block;
-      transform: translateY(-0.3px);
     }
   }
 
   .badge {
     position: absolute;
-    top: -6px;
-    right: -5px;
-    min-width: 19px;
-    height: 19px;
-    padding: 0 0.27rem;
+    top: -5px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 0.24rem;
     border-radius: 999px;
     background: ${({ theme }) => theme.colors.red10};
     color: white;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     font-weight: 700;
-    line-height: 19px;
+    line-height: 18px;
     text-align: center;
     border: 2px solid ${({ theme }) => theme.colors.gray2};
   }
 
   .panel {
     position: absolute;
-    top: calc(100% + 0.6rem);
+    top: calc(100% + 0.5rem);
     right: 0;
-    width: min(24rem, calc(100vw - 1.4rem));
-    border-radius: 24px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background:
-      radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 32%),
-      ${({ theme }) => theme.colors.gray2};
-    box-shadow: 0 22px 56px rgba(0, 0, 0, 0.34);
-    padding: 1rem;
+    width: min(24rem, calc(100vw - 1.6rem));
+    max-height: min(70vh, 28rem);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    border-radius: 16px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: 0 20px 42px rgba(0, 0, 0, 0.44);
+    padding: 0.74rem;
+    overflow: hidden;
+    transform-origin: top right;
+    animation: panelIn 0.14s ease-out;
     z-index: 30;
+
+    &:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 2px ${({ theme }) => theme.colors.blue4},
+        0 20px 42px rgba(0, 0, 0, 0.44);
+    }
+  }
+
+  @keyframes panelIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   .panelHead {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 0.8rem;
-    margin-bottom: 0.85rem;
+    gap: 0.7rem;
+    margin-bottom: 0.62rem;
+    padding: 0.08rem 0.12rem;
 
     strong {
       display: block;
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 1rem;
-      margin-bottom: 0.2rem;
+      font-size: 0.96rem;
+      margin-bottom: 0.14rem;
     }
 
     span {
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.78rem;
-      line-height: 1.45;
+      font-size: 0.75rem;
+      line-height: 1.4;
     }
   }
 
   .readAllBtn {
-    min-height: 34px;
-    padding: 0 0.72rem;
+    min-height: 30px;
+    padding: 0 0.66rem;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     font-weight: 700;
+    white-space: nowrap;
+    transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
 
-    :disabled {
+    &:hover:not(:disabled) {
+      border-color: ${({ theme }) => theme.colors.gray7};
+      color: ${({ theme }) => theme.colors.gray12};
+      background: ${({ theme }) => theme.colors.gray4};
+    }
+
+    &:disabled {
       opacity: 0.45;
       cursor: not-allowed;
     }
@@ -598,31 +638,57 @@ const StyledWrapper = styled.div`
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 0.55rem;
+    gap: 0.46rem;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: ${({ theme }) => theme.colors.gray7} transparent;
+
+    &::-webkit-scrollbar {
+      width: 7px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: ${({ theme }) => theme.colors.gray7};
+    }
   }
 
   .itemBtn {
     width: 100%;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.7rem;
+    gap: 0.62rem;
     align-items: center;
-    padding: 0.78rem 0.82rem;
-    border-radius: 18px;
+    padding: 0.66rem 0.72rem;
+    border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray1};
     text-align: left;
+    transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
+
+    &:hover {
+      border-color: ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray2};
+      transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+      outline: none;
+      border-color: ${({ theme }) => theme.colors.blue8};
+      box-shadow: 0 0 0 2px ${({ theme }) => theme.colors.blue4};
+    }
 
     &[data-read="false"] {
       border-color: ${({ theme }) => theme.colors.blue7};
-      background: ${({ theme }) => theme.colors.blue3};
+      background: ${({ theme }) => "rgba(24, 67, 135, 0.22)"};
     }
   }
 
   .avatar {
     position: relative;
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     border-radius: 999px;
     overflow: hidden;
     flex-shrink: 0;
@@ -639,14 +705,19 @@ const StyledWrapper = styled.div`
 
     p {
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.82rem;
-      line-height: 1.5;
-      margin-bottom: 0.22rem;
+      font-size: 0.8rem;
+      line-height: 1.43;
+      margin-bottom: 0.18rem;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
     small {
       color: ${({ theme }) => theme.colors.gray10};
       display: block;
+      font-size: 0.73rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -662,7 +733,7 @@ const StyledWrapper = styled.div`
 
     strong {
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.82rem;
+      font-size: 0.79rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -670,53 +741,124 @@ const StyledWrapper = styled.div`
 
     span {
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.72rem;
+      font-size: 0.69rem;
       flex-shrink: 0;
     }
   }
 
   .dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 999px;
-    background: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue9};
     flex-shrink: 0;
   }
 
   .empty {
     display: grid;
-    gap: 0.26rem;
-    padding: 1.1rem 0.35rem 0.55rem;
+    gap: 0.24rem;
+    padding: 1rem 0.28rem 0.45rem;
     text-align: center;
 
     strong {
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.92rem;
+      font-size: 0.88rem;
     }
 
     span {
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.8rem;
+      font-size: 0.76rem;
       line-height: 1.5;
     }
   }
 
   @media (max-width: 720px) {
     .trigger {
-      min-width: 34px;
-      min-height: 34px;
-      padding: 0 0.34rem;
+      min-width: 36px;
+      min-height: 36px;
+      width: 36px;
+      height: 36px;
 
       svg {
-        width: 17px;
-        height: 17px;
+        width: 18px;
+        height: 18px;
       }
     }
 
     .panel {
-      right: -0.35rem;
-      width: min(22rem, calc(100vw - 1rem));
-      padding: 0.92rem;
+      position: fixed;
+      top: calc(var(--app-header-height, 56px) + 0.56rem + env(safe-area-inset-top, 0px));
+      left: max(0.5rem, env(safe-area-inset-left, 0px));
+      right: max(0.5rem, env(safe-area-inset-right, 0px));
+      width: auto;
+      max-height: calc(
+        100dvh - var(--app-header-height, 56px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+          1.02rem
+      );
+      padding: 0.62rem;
+      border-radius: 14px;
+      animation-name: panelInMobile;
+      transform-origin: top center;
+    }
+
+    .panelHead {
+      margin-bottom: 0.56rem;
+
+      strong {
+        font-size: 0.92rem;
+      }
+
+      span {
+        display: none;
+      }
+    }
+
+    .readAllBtn {
+      min-height: 32px;
+      padding: 0 0.72rem;
+    }
+
+    .itemBtn {
+      padding: 0.64rem 0.64rem;
+      gap: 0.56rem;
+    }
+
+    .copy p {
+      font-size: 0.78rem;
+      line-height: 1.42;
+      margin-bottom: 0.14rem;
+    }
+
+    .headLine {
+      align-items: flex-start;
+      justify-content: flex-start;
+      flex-direction: column;
+      gap: 0.12rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .headLine strong {
+      font-size: 0.76rem;
+      max-width: 100%;
+    }
+
+    .headLine span {
+      font-size: 0.66rem;
+    }
+
+    .list {
+      gap: 0.42rem;
+    }
+  }
+
+  @keyframes panelInMobile {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.99);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
   }
 `

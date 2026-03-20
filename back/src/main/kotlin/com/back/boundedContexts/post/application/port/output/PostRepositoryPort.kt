@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import java.time.Instant
 import java.util.Optional
 
 /**
@@ -33,6 +34,21 @@ interface PostRepositoryPort {
         val kw: String,
         val zeroBasedPage: Int,
         val pageSize: Int,
+    )
+
+    data class CursorQuery(
+        val cursorCreatedAt: Instant?,
+        val cursorId: Long?,
+        val limit: Int,
+        val sortAscending: Boolean,
+    )
+
+    data class TaggedCursorQuery(
+        val tag: String,
+        val cursorCreatedAt: Instant?,
+        val cursorId: Long?,
+        val limit: Int,
+        val sortAscending: Boolean,
     )
 
     data class PagedResult<T>(
@@ -84,6 +100,10 @@ interface PostRepositoryPort {
     ): PagedResult<Post>
 
     fun findQPagedByKwAndTag(query: TaggedPagedQuery): PagedResult<Post>
+
+    fun findPublicByCursor(query: CursorQuery): List<Post>
+
+    fun findPublicByTagCursor(query: TaggedCursorQuery): List<Post>
 
     fun findAllPublicListedContents(): List<String>
 

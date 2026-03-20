@@ -14,6 +14,7 @@ import type { ExplorePostsPage } from "src/apis/backend/posts"
 import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
+const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
@@ -416,6 +417,7 @@ const FeedExplorer = () => {
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
   const lastLoadMoreAtRef = useRef(0)
+  const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
   const isFetchingNextPageRef = useRef(isFetchingNextPage)
 
@@ -650,6 +652,10 @@ const FeedExplorer = () => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+        const now = Date.now()
+        if (now - lastObserverTriggerAtRef.current < LOAD_MORE_OBSERVER_THROTTLE_MS) return
+        lastObserverTriggerAtRef.current = now
         handleLoadMoreRef.current()
       },
       {

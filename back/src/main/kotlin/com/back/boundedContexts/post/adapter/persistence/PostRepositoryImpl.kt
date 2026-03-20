@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.data.support.PageableExecutionUtils
+import java.time.Instant
 
 /**
  * PostRepositoryImpl는 영속 계층(JPA/쿼리) 연동을 담당하는 퍼시스턴스 어댑터입니다.
@@ -48,6 +49,21 @@ class PostRepositoryImpl(
         tag: String,
         pageable: Pageable,
     ): Page<Post> = findPosts(null, kw, pageable, publicOnly = true, tag = tag)
+
+    override fun findPublicByCursor(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sortAscending: Boolean,
+    ): List<Post> = findPublicPostsByCursor(cursorCreatedAt, cursorId, limit, sortAscending, tag = null)
+
+    override fun findPublicByTagCursor(
+        tag: String,
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sortAscending: Boolean,
+    ): List<Post> = findPublicPostsByCursor(cursorCreatedAt, cursorId, limit, sortAscending, tag = tag)
 
     override fun findAllPublicListedContents(): List<String> =
         queryFactory
@@ -102,6 +118,49 @@ class PostRepositoryImpl(
         return PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
     }
 
+    private fun findPublicPostsByCursor(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sortAscending: Boolean,
+        tag: String?,
+    ): List<Post> {
+        val safeLimit = limit.coerceIn(1, 100)
+        val builder =
+            BooleanBuilder()
+                .and(post.published.isTrue)
+                .and(post.listed.isTrue)
+
+        val tagLikeToken = buildTagLikeToken(tag)
+        if (tag != null && tag.isNotBlank() && tagLikeToken == null) {
+            return emptyList()
+        }
+        if (tagLikeToken != null) {
+            builder.and(buildTagIndexPredicate(tagLikeToken))
+        }
+        buildCursorPredicate(cursorCreatedAt, cursorId, sortAscending)?.let(builder::and)
+
+        val idQuery =
+            queryFactory
+                .select(post.id)
+                .from(post)
+                .where(builder)
+
+        if (sortAscending) {
+            idQuery.orderBy(post.createdAt.asc(), post.id.asc())
+        } else {
+            idQuery.orderBy(post.createdAt.desc(), post.id.desc())
+        }
+
+        val ids =
+            idQuery
+                .limit(safeLimit.toLong())
+                .fetch()
+                .filterNotNull()
+
+        return fetchPostsByIds(ids)
+    }
+
     private fun buildKwPredicate(kw: String): BooleanExpression =
         Expressions.booleanTemplate(
             "function('pgroonga_post_match', {0}, {1}, {2}) = true",
@@ -122,6 +181,23 @@ class PostRepositoryImpl(
                         .and(postAttr.strValue.lower().like(tagLikeToken)),
                 ),
         )
+
+    private fun buildCursorPredicate(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        sortAscending: Boolean,
+    ): BooleanExpression? {
+        if (cursorCreatedAt == null || cursorId == null || cursorId <= 0L) return null
+        return if (sortAscending) {
+            post.createdAt
+                .gt(cursorCreatedAt)
+                .or(post.createdAt.eq(cursorCreatedAt).and(post.id.gt(cursorId)))
+        } else {
+            post.createdAt
+                .lt(cursorCreatedAt)
+                .or(post.createdAt.eq(cursorCreatedAt).and(post.id.lt(cursorId)))
+        }
+    }
 
     private fun normalizeTagToken(tag: String): String = tag.trim().lowercase()
 

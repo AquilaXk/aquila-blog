@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
+import java.time.Instant
 
 /**
  * `PostRepositoryCustom` 인터페이스입니다.
@@ -32,6 +33,21 @@ interface PostRepositoryCustom {
         tag: String,
         pageable: Pageable,
     ): Page<Post>
+
+    fun findPublicByCursor(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sortAscending: Boolean,
+    ): List<Post>
+
+    fun findPublicByTagCursor(
+        tag: String,
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sortAscending: Boolean,
+    ): List<Post>
 
     fun findAllPublicListedContents(): List<String>
 

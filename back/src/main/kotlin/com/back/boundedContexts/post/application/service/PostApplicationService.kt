@@ -48,6 +48,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.jvm.optionals.getOrNull
@@ -785,6 +786,42 @@ class PostApplicationService(
             )
         }
 
+    fun findPublicByCursor(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post> =
+        findAndHydratePublicCursorPosts {
+            postRepository.findPublicByCursor(
+                PostRepositoryPort.CursorQuery(
+                    cursorCreatedAt = cursorCreatedAt,
+                    cursorId = cursorId,
+                    limit = limit,
+                    sortAscending = sort.isAsc,
+                ),
+            )
+        }
+
+    fun findPublicByTagCursor(
+        tag: String,
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post> =
+        findAndHydratePublicCursorPosts {
+            postRepository.findPublicByTagCursor(
+                PostRepositoryPort.TaggedCursorQuery(
+                    tag = tag,
+                    cursorCreatedAt = cursorCreatedAt,
+                    cursorId = cursorId,
+                    limit = limit,
+                    sortAscending = sort.isAsc,
+                ),
+            )
+        }
+
     /**
      * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
@@ -853,6 +890,14 @@ class PostApplicationService(
             pageSize = pageSize,
             totalElements = pageResult.totalElements,
         )
+    }
+
+    private fun findAndHydratePublicCursorPosts(loader: () -> List<Post>): List<Post> {
+        val posts = loader()
+        if (posts.isEmpty()) return posts
+        hydratePostAttrs(posts)
+        hydrateMembersProfileImgAttrs(posts.map { it.author })
+        return posts
     }
 
     private fun hydratePostAttrs(post: Post) {

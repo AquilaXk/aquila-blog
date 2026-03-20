@@ -14,6 +14,7 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
   const router = useRouter()
   const isPostDetailRoute = router.pathname === "/posts/[id]"
   const [isHiddenByScroll, setIsHiddenByScroll] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
   const hiddenByScroll = isPostDetailRoute && isHiddenByScroll
   const lastScrollYRef = useRef(0)
   const rafRef = useRef<number | null>(null)
@@ -64,8 +65,53 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
     }
   }, [isPostDetailRoute])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+
+    const root = document.documentElement
+    const syncHeaderHeight = () => {
+      const measured = Math.round(wrapper.getBoundingClientRect().height)
+      if (measured <= 0) return
+      root.style.setProperty("--app-header-height", `${measured}px`)
+    }
+
+    syncHeaderHeight()
+
+    let rafId: number | null = null
+    const handleResize = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        syncHeaderHeight()
+      })
+    }
+
+    window.addEventListener("resize", handleResize, { passive: true })
+
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        syncHeaderHeight()
+      })
+      observer.observe(wrapper)
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      observer?.disconnect()
+    }
+  }, [])
+
   return (
     <StyledWrapper
+      ref={wrapperRef}
       data-autohide={isPostDetailRoute}
       data-hidden={hiddenByScroll}
       style={
@@ -115,7 +161,7 @@ const StyledWrapper = styled.div`
     justify-content: space-between;
     align-items: center;
     width: min(100%, 1180px);
-    min-height: 3.65rem;
+    min-height: 3.45rem;
     margin: 0 auto;
 
     @media (max-width: 1440px) and (min-width: 1057px) {
@@ -126,6 +172,7 @@ const StyledWrapper = styled.div`
       width: 100%;
       padding-left: 1rem;
       padding-right: 1rem;
+      min-height: 3.35rem;
     }
 
     &[data-full-width="true"] {

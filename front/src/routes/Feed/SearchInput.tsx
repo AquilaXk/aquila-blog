@@ -51,15 +51,14 @@ const StyledWrapper = styled.div`
   > .field {
     display: flex;
     align-items: center;
-    gap: 0.72rem;
+    gap: 0.5rem;
     min-width: 0;
-    min-height: 54px;
-    padding: 0 0.88rem;
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    min-height: 36px;
+    padding: 0 0.625rem;
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+    transition: all 0.125s ease-in;
 
     .searchIcon {
       display: inline-flex;
@@ -67,7 +66,14 @@ const StyledWrapper = styled.div`
       justify-content: center;
       flex: 0 0 auto;
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 1.04rem;
+      width: 16px;
+      height: 16px;
+      transition: all 0.125s ease-in;
+
+      svg {
+        width: 16px;
+        height: 16px;
+      }
     }
 
     .shortcut {
@@ -75,18 +81,19 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      min-width: 72px;
-      height: 34px;
-      padding: 0 0.9rem;
+      min-width: 60px;
+      height: 28px;
+      padding: 0 0.65rem;
       border-radius: 999px;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
       background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.86rem;
+      font-size: 0.8rem;
       font-weight: 700;
       letter-spacing: 0;
       line-height: 1;
       cursor: pointer;
+      transition: all 0.125s ease-in;
 
       &:hover {
         color: ${({ theme }) => theme.colors.gray12};
@@ -103,14 +110,15 @@ const StyledWrapper = styled.div`
   > .field > .mid {
     width: 100%;
     min-width: 0;
-    min-height: 34px;
-    font-size: 0.98rem;
-    line-height: 1.5;
+    min-height: 16px;
+    font-size: 0.875rem;
+    line-height: 16px;
     color: ${({ theme }) => theme.colors.gray12};
     border: 0;
     outline: none;
     box-shadow: none;
     background: transparent;
+    transition: all 0.125s ease-in;
 
     &::-webkit-search-decoration,
     &::-webkit-search-cancel-button,
@@ -121,8 +129,23 @@ const StyledWrapper = styled.div`
   }
 
   > .field:focus-within {
-    border-color: ${({ theme }) => theme.colors.blue8};
+    border-color: ${({ theme }) => theme.colors.gray8};
     background: ${({ theme }) => theme.colors.gray2};
-    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue7};
+
+    .searchIcon {
+      color: ${({ theme }) => theme.colors.gray12};
+    }
+  }
+
+  @media (max-width: 768px) {
+    > .field {
+      min-height: 34px;
+      padding: 0 0.5rem;
+      border-radius: 7px;
+    }
+
+    > .field > .mid {
+      font-size: 0.75rem;
+    }
   }
 `

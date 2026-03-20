@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import java.time.Instant
 
 /**
  * `PostUseCase` 인터페이스입니다.
@@ -149,6 +150,21 @@ interface PostUseCase {
         page: Int,
         pageSize: Int,
     ): PagedResult<Post>
+
+    fun findPublicByCursor(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post>
+
+    fun findPublicByTagCursor(
+        tag: String,
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post>
 
     fun getPublicTagCounts(): List<TagCountDto>
 

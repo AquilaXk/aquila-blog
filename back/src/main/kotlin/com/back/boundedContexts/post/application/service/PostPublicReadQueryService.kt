@@ -2,9 +2,11 @@ package com.back.boundedContexts.post.application.service
 
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.global.exception.application.AppException
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -14,6 +16,7 @@ import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
+import java.time.Instant
 
 /**
  * PostPublicReadQueryService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
@@ -42,6 +45,31 @@ class PostPublicReadQueryService(
                 toFeedPostDtoPage(
                     postUseCase.findPagedByKw("", sort, page, pageSize),
                 )
+            }
+        }
+
+    @Transactional(readOnly = true)
+    override fun getPublicFeedByCursor(
+        cursor: String?,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto =
+        runReadQuery(
+            "feed-cursor",
+            "pageSize=$pageSize sort=${sort.name} cursor=${cursor?.take(80) ?: "_"}",
+        ) {
+            postReadBulkheadService.withFeedPermit {
+                val safeSort = requireCursorSort(sort)
+                val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
+                val parsedCursor = parseCursor(cursor)
+                val rows =
+                    postUseCase.findPublicByCursor(
+                        cursorCreatedAt = parsedCursor?.createdAt,
+                        cursorId = parsedCursor?.id,
+                        limit = safePageSize + 1,
+                        sort = safeSort,
+                    )
+                toCursorFeedPageDto(rows, safePageSize)
             }
         }
 
@@ -77,6 +105,37 @@ class PostPublicReadQueryService(
                         postUseCase.findPagedByKwAndTag(kw, normalizedTag, sort, page, pageSize)
                     }
                 toFeedPostDtoPage(postPage)
+            }
+        }
+
+    @Transactional(readOnly = true)
+    override fun getPublicExploreByCursor(
+        cursor: String?,
+        pageSize: Int,
+        tag: String,
+        sort: PostSearchSortType1,
+    ): CursorFeedPageDto =
+        runReadQuery(
+            "explore-cursor",
+            "pageSize=$pageSize sort=${sort.name} tag=${tag.take(80)} cursor=${cursor?.take(80) ?: "_"}",
+        ) {
+            postReadBulkheadService.withExplorePermit {
+                val safeSort = requireCursorSort(sort)
+                val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
+                val normalizedTag = tag.trim()
+                if (normalizedTag.isBlank()) {
+                    throw AppException("400-1", "태그 커서 탐색에는 tag 파라미터가 필요합니다.")
+                }
+                val parsedCursor = parseCursor(cursor)
+                val rows =
+                    postUseCase.findPublicByTagCursor(
+                        tag = normalizedTag,
+                        cursorCreatedAt = parsedCursor?.createdAt,
+                        cursorId = parsedCursor?.id,
+                        limit = safePageSize + 1,
+                        sort = safeSort,
+                    )
+                toCursorFeedPageDto(rows, safePageSize)
             }
         }
 
@@ -149,6 +208,65 @@ class PostPublicReadQueryService(
     private fun toFeedPostDtoPage(postPage: PagedResult<com.back.boundedContexts.post.domain.Post>): PageDto<FeedPostDto> =
         PageDto(postPage.map(FeedPostDto::from))
 
+    private fun toCursorFeedPageDto(
+        rows: List<com.back.boundedContexts.post.domain.Post>,
+        pageSize: Int,
+    ): CursorFeedPageDto {
+        if (rows.isEmpty()) {
+            return CursorFeedPageDto(
+                content = emptyList(),
+                pageSize = pageSize,
+                hasNext = false,
+                nextCursor = null,
+            )
+        }
+
+        val hasNext = rows.size > pageSize
+        val currentRows = if (hasNext) rows.take(pageSize) else rows
+        val last = currentRows.last()
+        val nextCursor = if (hasNext) encodeCursor(last.createdAt, last.id) else null
+
+        return CursorFeedPageDto(
+            content = currentRows.map(FeedPostDto::from),
+            pageSize = pageSize,
+            hasNext = hasNext,
+            nextCursor = nextCursor,
+        )
+    }
+
+    private fun requireCursorSort(sort: PostSearchSortType1): PostSearchSortType1 {
+        if (sort == PostSearchSortType1.CREATED_AT || sort == PostSearchSortType1.CREATED_AT_ASC) {
+            return sort
+        }
+        throw AppException("400-1", "커서 조회는 CREATED_AT 정렬만 지원합니다.")
+    }
+
+    private fun parseCursor(raw: String?): CursorToken? {
+        val value = raw?.trim().orEmpty()
+        if (value.isBlank()) return null
+        val parts = value.split(":", limit = 2)
+        if (parts.size != 2) {
+            throw AppException("400-1", "cursor 형식이 올바르지 않습니다.")
+        }
+
+        val epochMillis =
+            parts[0].toLongOrNull()
+                ?: throw AppException("400-1", "cursor timestamp 형식이 올바르지 않습니다.")
+        val id =
+            parts[1].toLongOrNull()
+                ?: throw AppException("400-1", "cursor id 형식이 올바르지 않습니다.")
+        if (epochMillis < 0 || id <= 0L) {
+            throw AppException("400-1", "cursor 값이 유효하지 않습니다.")
+        }
+
+        return CursorToken(Instant.ofEpochMilli(epochMillis), id)
+    }
+
+    private fun encodeCursor(
+        createdAt: Instant,
+        id: Long,
+    ): String = "${createdAt.toEpochMilli()}:$id"
+
     companion object {
         @JvmStatic
         fun normalizeCacheToken(raw: String): String =
@@ -201,5 +319,11 @@ class PostPublicReadQueryService(
         private const val MAX_CACHEABLE_KW_LENGTH = 40
         private const val MAX_CACHEABLE_TAG_LENGTH = 24
         private const val MAX_CACHEABLE_TOTAL_LENGTH = 48
+        private const val MAX_CURSOR_PAGE_SIZE = 30
     }
+
+    private data class CursorToken(
+        val createdAt: Instant,
+        val id: Long,
+    )
 }

@@ -1,5 +1,10 @@
 import { useInfiniteQuery } from "@tanstack/react-query"
-import { getExplorePostsPage, getFeedPostsPage, getSearchPostsPage } from "src/apis/backend/posts"
+import {
+  getExplorePostsCursorPage,
+  getExplorePostsPage,
+  getFeedPostsCursorPage,
+  getSearchPostsPage,
+} from "src/apis/backend/posts"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { TPost } from "src/types"
@@ -22,8 +27,9 @@ const useExplorePostsQuery = ({
 }: Params) => {
   const normalizedKw = kw.trim()
   const normalizedTag = typeof tag === "string" ? tag.trim() || undefined : undefined
+  const cursorMode = normalizedKw.length === 0
   const searchMode = normalizedKw.length > 0 && !normalizedTag
-  const feedMode = normalizedKw.length === 0 && !normalizedTag
+  const feedMode = cursorMode && !normalizedTag
 
   const query = useInfiniteQuery({
     queryKey: feedMode
@@ -43,20 +49,34 @@ const useExplorePostsQuery = ({
             pageSize,
             order,
           }),
-    queryFn: ({ pageParam = 1, signal }) => {
-      if (feedMode) {
-        return getFeedPostsPage({
+    queryFn: ({ pageParam, signal }) => {
+      const pageNumber = typeof pageParam === "number" ? pageParam : 1
+      const cursor = typeof pageParam === "string" ? pageParam : undefined
+
+      if (cursorMode) {
+        if (feedMode) {
+          return getFeedPostsCursorPage({
+            order,
+            pageSize,
+            cursor,
+            signal: signal ?? undefined,
+          })
+        }
+
+        return getExplorePostsCursorPage({
+          tag: normalizedTag,
           order,
-          page: pageParam,
           pageSize,
+          cursor,
           signal: signal ?? undefined,
         })
       }
+
       if (searchMode) {
         return getSearchPostsPage({
           kw: normalizedKw,
           order,
-          page: pageParam,
+          page: pageNumber,
           pageSize,
           signal: signal ?? undefined,
         })
@@ -65,7 +85,7 @@ const useExplorePostsQuery = ({
         kw: normalizedKw,
         tag: normalizedTag,
         order,
-        page: pageParam,
+        page: pageNumber,
         pageSize,
         signal: signal ?? undefined,
       })
@@ -74,6 +94,15 @@ const useExplorePostsQuery = ({
     retry: 1,
     refetchOnWindowFocus: false,
     getNextPageParam: (lastPage) => {
+      if (cursorMode) {
+        if (!lastPage.hasNext) return undefined
+        const nextCursor =
+          typeof lastPage.nextCursor === "string" && lastPage.nextCursor.trim()
+            ? lastPage.nextCursor
+            : null
+        return nextCursor ?? undefined
+      }
+
       if (lastPage.posts.length === 0) return undefined
       if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
       return lastPage.pageNumber + 1
@@ -91,9 +120,14 @@ const useExplorePostsQuery = ({
 
     const pinned: TPost[] = []
     const regular: TPost[] = []
+    const seenPostIds = new Set<string>()
 
     for (const page of pages) {
       for (const post of page.posts) {
+        const postId = String(post.id)
+        if (seenPostIds.has(postId)) continue
+        seenPostIds.add(postId)
+
         if (post.tags?.includes("Pinned")) {
           pinned.push(post)
           continue

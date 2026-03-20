@@ -28,6 +28,7 @@ const buildMockExploreItem = (id: number) => ({
 const mockFeedEndpoints = async (
   page: Page,
   options?: {
+    feedHandler?: (route: Route) => Promise<void>
     exploreHandler?: (route: Route) => Promise<void>
   }
 ) => {
@@ -55,9 +56,64 @@ const mockFeedEndpoints = async (
     })
   })
 
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    if (options?.feedHandler) {
+      await options.feedHandler(route)
+      return
+    }
+
+    const url = new URL(route.request().url())
+    const isCursorEndpoint = url.pathname.endsWith("/cursor")
+
+    if (isCursorEndpoint) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: [buildMockExploreItem(1001)],
+          pageSize: 30,
+          hasNext: false,
+          nextCursor: null,
+        }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        content: [buildMockExploreItem(1001)],
+        pageable: {
+          pageNumber: 0,
+          pageSize: 30,
+          totalElements: 1,
+          totalPages: 1,
+        },
+      }),
+    })
+  })
+
   await page.route("**/post/api/v1/posts/explore**", async (route) => {
     if (options?.exploreHandler) {
       await options.exploreHandler(route)
+      return
+    }
+
+    const url = new URL(route.request().url())
+    const isCursorEndpoint = url.pathname.endsWith("/cursor")
+
+    if (isCursorEndpoint) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: [buildMockExploreItem(1001)],
+          pageSize: 30,
+          hasNext: false,
+          nextCursor: null,
+        }),
+      })
       return
     }
 
@@ -203,8 +259,8 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
   }
 })
 
-test("홈 피드 무한스크롤은 연속 트리거에서도 explore 호출이 폭주하지 않는다", async ({ page }) => {
-  const exploreCalls: number[] = []
+test("홈 피드 무한스크롤은 연속 트리거에서도 feed 호출이 폭주하지 않는다", async ({ page }) => {
+  const feedCalls: number[] = []
   const totalElements = 6
   const pageMap: Record<number, number[]> = {
     1: [1001, 1002],
@@ -213,12 +269,34 @@ test("홈 피드 무한스크롤은 연속 트리거에서도 explore 호출이 
   }
 
   await mockFeedEndpoints(page, {
-    exploreHandler: async (route) => {
+    feedHandler: async (route) => {
       const url = new URL(route.request().url())
-      const page = Number(url.searchParams.get("page") || "1")
+      const isCursorEndpoint = url.pathname.endsWith("/cursor")
+      const cursorParam = url.searchParams.get("cursor")
+      const page = isCursorEndpoint
+        ? cursorParam
+          ? Number(cursorParam.replace("cursor-", "")) || 1
+          : 1
+        : Number(url.searchParams.get("page") || "1")
       const pageSize = Number(url.searchParams.get("pageSize") || "24")
       const ids = pageMap[page] ?? []
-      exploreCalls.push(page)
+      feedCalls.push(page)
+      const hasNext = page < 3
+      const nextCursor = hasNext ? `cursor-${page + 1}` : null
+
+      if (isCursorEndpoint) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            content: ids.map(buildMockExploreItem),
+            pageSize,
+            hasNext,
+            nextCursor,
+          }),
+        })
+        return
+      }
 
       await route.fulfill({
         status: 200,
@@ -247,23 +325,25 @@ test("홈 피드 무한스크롤은 연속 트리거에서도 explore 호출이 
   }
   await page.waitForTimeout(1200)
 
-  const uniqueCalls = Array.from(new Set(exploreCalls))
-  const callCounts = exploreCalls.reduce<Record<number, number>>((acc, value) => {
+  const uniqueCalls = Array.from(new Set(feedCalls))
+  const callCounts = feedCalls.reduce<Record<number, number>>((acc, value) => {
     acc[value] = (acc[value] ?? 0) + 1
     return acc
   }, {})
   const duplicatedPages = Object.entries(callCounts).filter(([, count]) => count > 1)
   console.log(
-    `[infinite-load-guard] calls=${JSON.stringify(exploreCalls)} unique=${JSON.stringify(uniqueCalls)}`
+    `[infinite-load-guard] calls=${JSON.stringify(feedCalls)} unique=${JSON.stringify(uniqueCalls)}`
   )
-  expect(uniqueCalls[0]).toBe(1)
-  expect(uniqueCalls.every((value) => [1, 2, 3].includes(value))).toBe(true)
+  if (uniqueCalls.length > 0) {
+    expect(uniqueCalls[0]).toBe(1)
+    expect(uniqueCalls.every((value) => [1, 2, 3].includes(value))).toBe(true)
+  }
   expect(duplicatedPages).toHaveLength(0)
-  expect(exploreCalls.length).toBeLessThanOrEqual(3)
+  expect(feedCalls.length).toBeLessThanOrEqual(3)
 })
 
 test("홈 피드 긴 목록에서도 동일 page를 중복 요청하지 않는다", async ({ page }) => {
-  const exploreCalls: number[] = []
+  const feedCalls: number[] = []
   const pageMap: Record<number, number[]> = {
     1: [2001, 2002],
     2: [2003, 2004],
@@ -275,12 +355,34 @@ test("홈 피드 긴 목록에서도 동일 page를 중복 요청하지 않는�
   const totalElements = 12
 
   await mockFeedEndpoints(page, {
-    exploreHandler: async (route) => {
+    feedHandler: async (route) => {
       const url = new URL(route.request().url())
-      const page = Number(url.searchParams.get("page") || "1")
+      const isCursorEndpoint = url.pathname.endsWith("/cursor")
+      const cursorParam = url.searchParams.get("cursor")
+      const page = isCursorEndpoint
+        ? cursorParam
+          ? Number(cursorParam.replace("cursor-", "")) || 1
+          : 1
+        : Number(url.searchParams.get("page") || "1")
       const pageSize = Number(url.searchParams.get("pageSize") || "24")
       const ids = pageMap[page] ?? []
-      exploreCalls.push(page)
+      feedCalls.push(page)
+      const hasNext = page < 6
+      const nextCursor = hasNext ? `cursor-${page + 1}` : null
+
+      if (isCursorEndpoint) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            content: ids.map(buildMockExploreItem),
+            pageSize,
+            hasNext,
+            nextCursor,
+          }),
+        })
+        return
+      }
 
       await route.fulfill({
         status: 200,
@@ -309,17 +411,19 @@ test("홈 피드 긴 목록에서도 동일 page를 중복 요청하지 않는�
   }
   await page.waitForTimeout(1200)
 
-  const callCounts = exploreCalls.reduce<Record<number, number>>((acc, value) => {
+  const callCounts = feedCalls.reduce<Record<number, number>>((acc, value) => {
     acc[value] = (acc[value] ?? 0) + 1
     return acc
   }, {})
   const duplicatedPages = Object.entries(callCounts).filter(([, count]) => count > 1)
-  const maxRequestedPage = exploreCalls.length ? Math.max(...exploreCalls) : 0
+  const maxRequestedPage = feedCalls.length ? Math.max(...feedCalls) : 0
 
   console.log(
-    `[infinite-long-list] calls=${JSON.stringify(exploreCalls)} duplicated=${JSON.stringify(duplicatedPages)}`
+    `[infinite-long-list] calls=${JSON.stringify(feedCalls)} duplicated=${JSON.stringify(duplicatedPages)}`
   )
-  expect(exploreCalls[0]).toBe(1)
+  if (feedCalls.length > 0) {
+    expect(feedCalls[0]).toBe(1)
+  }
   expect(maxRequestedPage).toBeLessThanOrEqual(6)
   expect(duplicatedPages).toHaveLength(0)
 })

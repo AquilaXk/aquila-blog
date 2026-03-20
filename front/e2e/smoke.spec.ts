@@ -105,6 +105,31 @@ test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
 })
 
+test("상단 내비 컨트롤은 공통 높이 토큰을 유지한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ resultCode: "401-1", msg: "unauthorized" }),
+    })
+  })
+
+  await page.goto("/")
+  await expect(page.locator("[data-ui='nav-control']").first()).toBeVisible()
+
+  const uniqueHeights = await page.locator("[data-ui='nav-control']").evaluateAll((elements) => {
+    const roundedHeights = elements
+      .map((element) => Math.round(element.getBoundingClientRect().height))
+      .filter((value) => value > 0)
+    return Array.from(new Set(roundedHeights))
+  })
+
+  expect(uniqueHeights.length).toBe(1)
+  expect(uniqueHeights[0]).toBeGreaterThanOrEqual(34)
+  expect(uniqueHeights[0]).toBeLessThanOrEqual(40)
+})
+
 test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색으로 동작한다", async ({ page }) => {
   const capturedKw: string[] = []
 

@@ -26,19 +26,19 @@ class RevalidateEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
         fallbackExecution = true,
     )
-    fun handle(event: PostWrittenEvent) = enqueueHomeRevalidate(event.aggregateType, event.aggregateId)
+    fun handle(event: PostWrittenEvent) = enqueueRevalidatePaths(event.aggregateType, event.aggregateId)
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
         fallbackExecution = true,
     )
-    fun handle(event: PostModifiedEvent) = enqueueHomeRevalidate(event.aggregateType, event.aggregateId)
+    fun handle(event: PostModifiedEvent) = enqueueRevalidatePaths(event.aggregateType, event.aggregateId)
 
     @TransactionalEventListener(
         phase = TransactionPhase.AFTER_COMMIT,
         fallbackExecution = true,
     )
-    fun handle(event: PostDeletedEvent) = enqueueHomeRevalidate(event.aggregateType, event.aggregateId)
+    fun handle(event: PostDeletedEvent) = enqueueRevalidatePaths(event.aggregateType, event.aggregateId)
 
     @TaskHandler
     fun handle(payload: RevalidateHomePayload) {
@@ -49,25 +49,36 @@ class RevalidateEventListener(
      * enqueueHomeRevalidate 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
-    private fun enqueueHomeRevalidate(
+    private fun enqueueRevalidatePaths(
         aggregateType: String,
         aggregateId: Long,
     ) {
-        runCatching {
-            taskFacade.addToQueue(
-                RevalidateHomePayload(
-                    uid = UUID.randomUUID(),
-                    aggregateType = aggregateType,
-                    aggregateId = aggregateId,
-                ),
+        val pathsToRevalidate =
+            linkedSetOf(
+                "/",
+                "/posts/$aggregateId",
+                "/sitemap.xml",
             )
-        }.onFailure { exception ->
-            log.warn(
-                "Failed to enqueue revalidate task: aggregate={}:{}",
-                aggregateType,
-                aggregateId,
-                exception,
-            )
+
+        pathsToRevalidate.forEach { path ->
+            runCatching {
+                taskFacade.addToQueue(
+                    RevalidateHomePayload(
+                        uid = UUID.randomUUID(),
+                        aggregateType = aggregateType,
+                        aggregateId = aggregateId,
+                        path = path,
+                    ),
+                )
+            }.onFailure { exception ->
+                log.warn(
+                    "Failed to enqueue revalidate task: aggregate={}:{} path={}",
+                    aggregateType,
+                    aggregateId,
+                    path,
+                    exception,
+                )
+            }
         }
     }
 

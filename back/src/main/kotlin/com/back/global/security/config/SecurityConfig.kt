@@ -9,8 +9,10 @@ import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
 import com.back.global.security.config.oauth2.CustomOAuth2LoginSuccessHandler
 import com.back.global.security.config.oauth2.CustomOAuth2UserService
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
@@ -73,6 +75,11 @@ class SecurityConfig(
 
             cors { }
 
+            headers {
+                // Public read APIs expose explicit cache policy/etag headers; disable Spring Security default no-store writer.
+                cacheControl { disable() }
+            }
+
             csrf { disable() }
             formLogin { disable() }
             logout { disable() }
@@ -102,6 +109,7 @@ class SecurityConfig(
                         if (response.isCommitted) {
                             return@AuthenticationEntryPoint
                         }
+                        applyNoStoreHeaders(response)
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 401
                         response.writer.write(objectMapper.writeValueAsString(RsData<Void>("401-1", "로그인 후 이용해주세요.")))
@@ -112,6 +120,7 @@ class SecurityConfig(
                         if (response.isCommitted) {
                             return@AccessDeniedHandler
                         }
+                        applyNoStoreHeaders(response)
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 403
                         response.writer.write(objectMapper.writeValueAsString(RsData<Void>("403-1", "권한이 없습니다.")))
@@ -159,5 +168,11 @@ class SecurityConfig(
         return UrlBasedCorsConfigurationSource().apply {
             registerCorsConfiguration("/*/api/**", configuration)
         }
+    }
+
+    private fun applyNoStoreHeaders(response: HttpServletResponse) {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
+        response.setHeader(HttpHeaders.PRAGMA, "no-cache")
+        response.setDateHeader(HttpHeaders.EXPIRES, 0)
     }
 }

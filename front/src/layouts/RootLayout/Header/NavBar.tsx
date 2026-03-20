@@ -25,7 +25,8 @@ const NavBar: React.FC = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
-  const authState = authStatus === "authenticated" && me ? "authenticated" : authStatus
+  const isAuthenticated = Boolean(me) && (authStatus === "authenticated" || authStatus === "unavailable")
+  const authState = isAuthenticated ? "authenticated" : authStatus
 
   const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
   const nextPath = useMemo(() => {
@@ -53,7 +54,7 @@ const NavBar: React.FC = () => {
       <ul className="primaryLinks">
         {primaryLinks.map((link) => (
           <li key={link.id}>
-            <Link href={link.to}>{link.name}</Link>
+            <Link href={link.to} data-ui="nav-control">{link.name}</Link>
           </li>
         ))}
       </ul>
@@ -69,6 +70,7 @@ const NavBar: React.FC = () => {
           <button
             type="button"
             className="navPill"
+            data-ui="nav-control"
             onMouseEnter={preloadAuthEntryModal}
             onFocus={preloadAuthEntryModal}
             onClick={() => setAuthModalOpen(true)}
@@ -78,22 +80,27 @@ const NavBar: React.FC = () => {
         )}
         {authStatus === "unavailable" && !me && (
           <>
-            <button type="button" className="navPill navPill--warning" onClick={() => void handleUnavailableAuthLogin()}>
+            <button
+              type="button"
+              className="navPill navPill--warning"
+              data-ui="nav-control"
+              onClick={() => void handleUnavailableAuthLogin()}
+            >
               Login
             </button>
             <span className="authNotice">Auth check failed</span>
           </>
         )}
-        {authStatus === "authenticated" && me && <NotificationBell enabled />}
-        {authStatus === "authenticated" && me?.isAdmin && (
-          <Link href="/admin" className="navPill">
+        {isAuthenticated && <NotificationBell enabled />}
+        {isAuthenticated && me?.isAdmin && (
+          <Link href="/admin" className="navPill" data-ui="nav-control">
             Admin
           </Link>
         )}
-        {authStatus === "authenticated" && me && (
+        {isAuthenticated && me && (
           <>
             <span className="identity">{me.nickname || me.username}</span>
-            <button type="button" onClick={handleLogout} className="logoutBtn">
+            <button type="button" onClick={handleLogout} className="logoutBtn" data-ui="nav-control">
               Logout
             </button>
           </>
@@ -135,13 +142,13 @@ const StyledWrapper = styled.div`
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 36px;
+      min-height: ${({ theme }) => theme.variables.navControl.height}px;
       padding: 0 0.46rem;
-      border-radius: 8px;
+      border-radius: ${({ theme }) => theme.variables.navControl.radius}px;
       border: none;
       background: transparent;
       color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.87rem;
+      font-size: ${({ theme }) => theme.variables.navControl.fontSize}rem;
       font-weight: 620;
       line-height: 1;
 
@@ -162,7 +169,7 @@ const StyledWrapper = styled.div`
     width: auto;
     min-width: 0;
     max-width: 100%;
-    min-height: 36px;
+    min-height: ${({ theme }) => theme.variables.navControl.height}px;
     flex: none;
     overflow: visible;
 
@@ -193,13 +200,13 @@ const StyledWrapper = styled.div`
     align-items: center;
     justify-content: center;
     min-width: 0;
-    min-height: 36px;
+    min-height: ${({ theme }) => theme.variables.navControl.height}px;
     padding: 0 0.46rem;
-    border-radius: 8px;
+    border-radius: ${({ theme }) => theme.variables.navControl.radius}px;
     border: none;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.87rem;
+    font-size: ${({ theme }) => theme.variables.navControl.fontSize}rem;
     font-weight: 630;
     cursor: pointer;
     line-height: 1;

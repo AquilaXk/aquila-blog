@@ -49,6 +49,7 @@ class PostApplicationServiceDeleteResilienceTest {
             eventPublisher = eventPublisher,
             uploadedFileRetentionService = uploadedFileRetentionService,
             cacheManager = cacheManager,
+            tagsLocalCacheTtlSeconds = 180,
         )
 
     @Test

@@ -15,6 +15,9 @@ HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
 HEALTHCHECK_LOG_EVERY_N_TRIES="${HEALTHCHECK_LOG_EVERY_N_TRIES:-5}"
+PREWARM_ENABLED="${PREWARM_ENABLED:-true}"
+PREWARM_CONNECT_TIMEOUT_SECONDS="${PREWARM_CONNECT_TIMEOUT_SECONDS:-2}"
+PREWARM_MAX_TIME_SECONDS="${PREWARM_MAX_TIME_SECONDS:-6}"
 
 compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
@@ -408,6 +411,11 @@ is_healthy_http_code() {
   [[ "${code}" == "200" ]]
 }
 
+is_cacheable_warmup_http_code() {
+  local code="$1"
+  [[ "${code}" =~ ^2[0-9][0-9]$ || "${code}" == "304" ]]
+}
+
 get_caddy_ip() {
   local host="$1"
   compose exec -T caddy sh -lc "getent hosts ${host} | awk 'NR==1{print \$1}'" 2>/dev/null | tr -d '\r' | head -n 1
@@ -457,6 +465,85 @@ probe_caddy_http_code() {
     --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
     -s -o /dev/null -w "%{http_code}" "http://caddy:80${HEALTHCHECK_PATH}" \
     -H "Host: ${api_domain}" || true
+}
+
+probe_caddy_route_http_code() {
+  local api_domain="$1"
+  local path="$2"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${PREWARM_MAX_TIME_SECONDS}" \
+    -s -o /dev/null -w "%{http_code}" "http://caddy:80${path}" \
+    -H "Host: ${api_domain}" || true
+}
+
+prewarm_public_read_cache() {
+  local api_domain="$1"
+  if [[ "${PREWARM_ENABLED}" != "true" ]]; then
+    echo "prewarm skipped: PREWARM_ENABLED=${PREWARM_ENABLED}"
+    return 0
+  fi
+
+  local warm_paths=(
+    "/post/api/v1/posts/feed/cursor?pageSize=30&sort=CREATED_AT"
+    "/post/api/v1/posts/explore?page=1&pageSize=30&sort=CREATED_AT"
+    "/post/api/v1/posts/tags"
+  )
+
+  local path
+  for path in "${warm_paths[@]}"; do
+    local code
+    code="$(probe_caddy_route_http_code "${api_domain}" "${path}")"
+    if is_cacheable_warmup_http_code "${code}"; then
+      echo "prewarm ok: ${path} status=${code}"
+    else
+      echo "prewarm warn: ${path} status=${code:-none}" >&2
+    fi
+  done
+
+  local first_feed_id detail_code feed_body
+  feed_body="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${PREWARM_MAX_TIME_SECONDS}" \
+    -s "http://caddy:80/post/api/v1/posts/feed/cursor?pageSize=30&sort=CREATED_AT" \
+    -H "Host: ${api_domain}" || true)"
+  first_feed_id="$(printf '%s' "${feed_body}" | awk -F'"id":' 'NF > 1 {split($2,a,/[^0-9]/); print a[1]; exit}')"
+  if [[ -n "${first_feed_id}" ]]; then
+    detail_code="$(probe_caddy_route_http_code "${api_domain}" "/post/api/v1/posts/${first_feed_id}")"
+    if is_cacheable_warmup_http_code "${detail_code}"; then
+      echo "prewarm ok: /post/api/v1/posts/${first_feed_id} status=${detail_code}"
+    else
+      echo "prewarm warn: /post/api/v1/posts/${first_feed_id} status=${detail_code:-none}" >&2
+    fi
+  else
+    echo "prewarm skipped: no public post id available for detail warmup"
+  fi
+
+  local tags_body first_tag tag_cursor_code
+  tags_body="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
+    --max-time "${PREWARM_MAX_TIME_SECONDS}" \
+    -s "http://caddy:80/post/api/v1/posts/tags" \
+    -H "Host: ${api_domain}" || true)"
+  first_tag="$(printf '%s' "${tags_body}" | awk -F'"tag":"' 'NF > 1 {split($2,a,"\""); print a[1]; exit}')"
+  if [[ -n "${first_tag}" ]]; then
+    tag_cursor_code="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+      --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
+      --max-time "${PREWARM_MAX_TIME_SECONDS}" \
+      --get \
+      --data-urlencode "pageSize=30" \
+      --data-urlencode "sort=CREATED_AT" \
+      --data-urlencode "tag=${first_tag}" \
+      -s -o /dev/null -w "%{http_code}" "http://caddy:80/post/api/v1/posts/explore/cursor" \
+      -H "Host: ${api_domain}" || true)"
+    if is_cacheable_warmup_http_code "${tag_cursor_code}"; then
+      echo "prewarm ok: /post/api/v1/posts/explore/cursor(tag=${first_tag}) status=${tag_cursor_code}"
+    else
+      echo "prewarm warn: /post/api/v1/posts/explore/cursor(tag=${first_tag}) status=${tag_cursor_code:-none}" >&2
+    fi
+  else
+    echo "prewarm skipped: no public tags available for explore/cursor"
+  fi
 }
 
 check_backend_health() {
@@ -714,6 +801,7 @@ stop_backend_if_running "${active_backend}"
 ensure_steady_state_guard || true
 
 check_cloudflared_runtime
+prewarm_public_read_cache "${api_domain}"
 
 echo "post-switch verify ok (status=${post_code}); inactive backend stopped"
 compose ps

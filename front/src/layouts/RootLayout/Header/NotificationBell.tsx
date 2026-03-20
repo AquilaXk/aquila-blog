@@ -22,6 +22,7 @@ const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 30_000
 const SSE_RECOVERY_PROBE_MS = 120_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
+const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
 const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
 
 const sanitizeNotificationEventId = (raw: string | null | undefined): string | null => {
@@ -48,6 +49,36 @@ const loadStoredLastEventId = (): string | null => {
 const toLatestNotificationEventId = (items: TMemberNotification[]): string | null => {
   const latestId = items.reduce((maxId, item) => Math.max(maxId, item.id), 0)
   return latestId > 0 ? `notification-${latestId}` : null
+}
+
+type StoredNotificationSnapshot = {
+  items: TMemberNotification[]
+  unreadCount: number
+}
+
+const persistSnapshot = (payload: StoredNotificationSnapshot) => {
+  if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore storage quota failures
+  }
+}
+
+const loadStoredSnapshot = (): StoredNotificationSnapshot | null => {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.sessionStorage.getItem(SNAPSHOT_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredNotificationSnapshot>
+    if (!Array.isArray(parsed.items) || typeof parsed.unreadCount !== "number") return null
+    return {
+      items: parsed.items as TMemberNotification[],
+      unreadCount: Math.max(0, parsed.unreadCount),
+    }
+  } catch {
+    return null
+  }
 }
 
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
@@ -80,6 +111,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const [items, setItems] = useState<TMemberNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isReady, setIsReady] = useState(false)
+  const [isSnapshotFallback, setIsSnapshotFallback] = useState(false)
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState !== "hidden"
   )
@@ -106,8 +138,23 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setUnreadCount(snapshot.unreadCount)
       setLastNotificationEventId(toLatestNotificationEventId(snapshot.items))
       setIsReady(true)
+      setIsSnapshotFallback(false)
+      persistSnapshot({
+        items: snapshot.items,
+        unreadCount: snapshot.unreadCount,
+      })
     } catch {
+      const stored = loadStoredSnapshot()
+      if (stored) {
+        setItems(stored.items)
+        setUnreadCount(stored.unreadCount)
+        setLastNotificationEventId(toLatestNotificationEventId(stored.items))
+        setIsReady(true)
+        setIsSnapshotFallback(true)
+        return
+      }
       setIsReady(false)
+      setIsSnapshotFallback(false)
     }
   }, [enabled, setLastNotificationEventId])
 
@@ -128,6 +175,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setUnreadCount(0)
       setOpen(false)
       setIsReady(false)
+      setIsSnapshotFallback(false)
       reconnectAttemptRef.current = 0
       setLastNotificationEventId(null)
       setStreamMode(preferPolling ? "poll" : "sse")
@@ -138,6 +186,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       void loadSnapshot()
     }
   }, [enabled, isDocumentVisible, loadSnapshot, preferPolling, setLastNotificationEventId])
+
+  useEffect(() => {
+    if (!enabled || !isReady) return
+    persistSnapshot({ items, unreadCount })
+  }, [enabled, isReady, items, unreadCount])
 
   useEffect(() => {
     if (!enabled || streamMode !== "sse" || !isDocumentVisible) return
@@ -196,6 +249,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
           pushNotification(payload.notification)
           setUnreadCount(payload.unreadCount)
           setIsReady(true)
+          setIsSnapshotFallback(false)
         } catch {
           // ignore malformed payloads
         }
@@ -205,6 +259,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         const recovered = reconnectAttemptRef.current > 0
         reconnectAttemptRef.current = 0
         setIsReady(true)
+        setIsSnapshotFallback(false)
 
         if (recovered) {
           void loadSnapshot()
@@ -379,8 +434,13 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const handleMarkAllRead = async () => {
     try {
       await markAllNotificationsRead()
+      const nextItems = items.map((item) => ({ ...item, isRead: true }))
       setUnreadCount(0)
-      setItems((prev) => prev.map((item) => ({ ...item, isRead: true })))
+      setItems(nextItems)
+      persistSnapshot({
+        items: nextItems,
+        unreadCount: 0,
+      })
     } catch {
       // keep current state if mark-all fails
     }
@@ -402,10 +462,14 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     if (!notification.isRead) {
       try {
         await markNotificationRead(notification.id)
-        setUnreadCount((prev) => Math.max(0, prev - 1))
-        setItems((prev) =>
-          prev.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
-        )
+        const nextUnreadCount = Math.max(0, unreadCount - 1)
+        const nextItems = items.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+        setUnreadCount(nextUnreadCount)
+        setItems(nextItems)
+        persistSnapshot({
+          items: nextItems,
+          unreadCount: nextUnreadCount,
+        })
       } catch {
         // move to target even if mark-read fails
       }
@@ -425,6 +489,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         ref={triggerRef}
         type="button"
         className="trigger"
+        data-ui="nav-control"
         data-open={open}
         aria-label="알림"
         aria-expanded={open}
@@ -439,7 +504,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
           <div className="panelHead">
             <div>
               <strong>알림</strong>
-              <span>답글과 댓글 알림을 확인할 수 있습니다.</span>
+              <span>{isSnapshotFallback ? "연결이 불안정해 마지막 알림 스냅샷을 표시 중입니다." : "답글과 댓글 알림을 확인할 수 있습니다."}</span>
             </div>
             <button type="button" className="readAllBtn" onClick={() => void handleMarkAllRead()} disabled={!hasUnread}>
               모두 읽음
@@ -501,10 +566,10 @@ const StyledWrapper = styled.div`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 36px;
-    min-height: 36px;
-    width: 36px;
-    height: 36px;
+    min-width: ${({ theme }) => theme.variables.navControl.height}px;
+    min-height: ${({ theme }) => theme.variables.navControl.height}px;
+    width: ${({ theme }) => theme.variables.navControl.height}px;
+    height: ${({ theme }) => theme.variables.navControl.height}px;
     padding: 0;
     border-radius: 999px;
     border: 1px solid transparent;

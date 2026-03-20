@@ -44,6 +44,7 @@ import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.CacheManager
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
@@ -71,6 +72,8 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val cacheManager: CacheManager,
+    @param:Value("\${custom.post.read.tags-local-cache-ttl-seconds:180}")
+    private val tagsLocalCacheTtlSeconds: Long,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -82,7 +85,7 @@ class PostApplicationService(
     @Volatile
     private var publicTagCountsCache: TagCountsCache? = null
 
-    private val tagCacheTtlMillis: Long = 60_000
+    private val tagCacheTtlMillis: Long = tagsLocalCacheTtlSeconds.coerceAtLeast(5) * 1_000
 
     fun count(): Long = postRepository.count()
 
@@ -199,6 +202,7 @@ class PostApplicationService(
         }
 
         val previousContent = post.content
+        val previousTags = PostMetaExtractor.extract(previousContent).tags
         try {
             val sanitizedContentHtml =
                 if (contentHtml == null) {
@@ -218,10 +222,17 @@ class PostApplicationService(
             logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
         }
         clearReadCaches(post.id)
+        val afterTags = PostMetaExtractor.extract(post.content).tags
 
         runCatching {
             eventPublisher.publish(
-                PostModifiedEvent(UUID.randomUUID(), PostDto(post), MemberDto(actor)),
+                PostModifiedEvent(
+                    UUID.randomUUID(),
+                    PostDto(post),
+                    MemberDto(actor),
+                    previousTags,
+                    afterTags,
+                ),
             )
         }.onFailure { exception ->
             logger.warn("Failed to publish PostModifiedEvent: postId={}", post.id, exception)
@@ -260,10 +271,17 @@ class PostApplicationService(
             logger.warn("Failed to sync post attachments on write: postId={}", savedPost.id, exception)
         }
         incrementMemberPostsCount(persistenceAuthor)
+        val afterTags = PostMetaExtractor.extract(savedPost.content).tags
 
         runCatching {
             eventPublisher.publish(
-                PostWrittenEvent(UUID.randomUUID(), PostDto(savedPost), MemberDto(author)),
+                PostWrittenEvent(
+                    UUID.randomUUID(),
+                    PostDto(savedPost),
+                    MemberDto(author),
+                    emptyList(),
+                    afterTags,
+                ),
             )
         }.onFailure { exception ->
             logger.warn("Failed to publish PostWrittenEvent: postId={}", savedPost.id, exception)
@@ -338,8 +356,15 @@ class PostApplicationService(
 
         runCatching {
             val postDto = PostDto(post)
+            val beforeTags = PostMetaExtractor.extract(deletedPostContent).tags
             eventPublisher.publish(
-                PostDeletedEvent(UUID.randomUUID(), postDto, MemberDto(actor)),
+                PostDeletedEvent(
+                    UUID.randomUUID(),
+                    postDto,
+                    MemberDto(actor),
+                    beforeTags,
+                    emptyList(),
+                ),
             )
         }.onFailure { exception ->
             logger.warn("Failed to publish PostDeletedEvent for post id={}", post.id, exception)

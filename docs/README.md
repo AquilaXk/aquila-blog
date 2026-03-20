@@ -13,7 +13,7 @@
 1. 저장소 개요: `README.md`
 2. 전체 구조: [System Architecture](design/System-Architecture.md)
 3. 세부 설계: 필요한 카테고리 문서 1~2개
-4. 실제 개선 사례: [좋아요/조회수 동시성·멱등성 개선기](troubleshooting/post-like-hit-concurrency.md)
+4. 실제 개선 사례: [트러블슈팅 인덱스](troubleshooting/00-INDEX.md)에서 P0/P1 문서 우선 확인
 
 이 문서들은 단순 참고 자료가 아니라, 이 프로젝트를 어떻게 설계했고 어떤 운영 문제를 어떻게 풀었는지를 보여주는 포트폴리오 자료입니다.
 
@@ -61,7 +61,12 @@ flowchart LR
 
 | 문서 | 무엇을 보여주는가 | 핵심 주제 |
 | --- | --- | --- |
-| [좋아요/조회수 동시성·멱등성 개선기](troubleshooting/post-like-hit-concurrency.md) | 선택지 비교, 설계 결정, 검증 과정 | 멱등성, 동시성, Redis dedupe, DB atomic update |
+| [트러블슈팅 인덱스](troubleshooting/00-INDEX.md) | 전체 장애 사례의 우선순위/난이도/읽기 순서 | P0~P2 분류, 운영 위험도 |
+| [좋아요/조회수 동시성·멱등성 개선기](troubleshooting/02-like-hit-idempotency-concurrency.md) | 선택지 비교, 설계 결정, 검증 과정 | 멱등성, 동시성, Redis dedupe, DB atomic update |
+| [운영 트러블슈팅 종합 회고](troubleshooting/13-operations-troubleshooting-retrospective.md) | 반복 장애의 공통 원인과 구조 개선 | 회귀 방지, 운영 표준화 |
+| [런타임 안정화 2차](troubleshooting/14-runtime-stability-and-ai-summary-hardening.md) | 5xx/AI 요약/보안 경고 동시 대응 | fail-open, reason 분리, CodeQL 대응 |
+| [MarkdownRenderer 모듈 분리](troubleshooting/15-markdown-renderer-modularization.md) | 렌더 파이프라인 구조 개선 | 머메이드/코드블록 회귀 차단 |
+| [검색 랭킹 가중치 정렬](troubleshooting/17-search-ranking-weighted-order.md) | 검색 체감 품질 개선 | title > tags > content |
 
 ## How To Read This As a Portfolio
 
@@ -102,7 +107,7 @@ AI 에이전트 규칙과 초압축 브리프는 아래를 따른다.
 
 1. [Domain Design](design/Domain-Design.md)
 2. [Package Structure](design/package-structure.md)
-3. [좋아요/조회수 동시성·멱등성 개선기](troubleshooting/post-like-hit-concurrency.md)
+3. [좋아요/조회수 동시성·멱등성 개선기](troubleshooting/02-like-hit-idempotency-concurrency.md)
 
 ### 인프라/배포에 관심 있다면
 
@@ -114,4 +119,4 @@ AI 에이전트 규칙과 초압축 브리프는 아래를 따른다.
 
 1. [System Architecture](design/System-Architecture.md)
 2. [Domain Design](design/Domain-Design.md)
-3. [좋아요/조회수 동시성·멱등성 개선기](troubleshooting/post-like-hit-concurrency.md)
+3. [운영 트러블슈팅 종합 회고](troubleshooting/13-operations-troubleshooting-retrospective.md)

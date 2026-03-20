@@ -3,6 +3,7 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.application.support.PostCacheTags
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
@@ -37,6 +38,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.sql.SQLException
 import java.time.Instant
+import java.util.Locale
 
 /**
  * ApiV1PostController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
@@ -52,22 +54,78 @@ class ApiV1PostController(
 ) {
     private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
 
+    private data class SearchIntent(
+        val keyword: String,
+        val tag: String,
+    )
+
     private fun applyPublicReadCacheHeaders(
         response: HttpServletResponse,
-        maxAgeSeconds: Int,
-        staleWhileRevalidateSeconds: Int,
+        policy: PublicReadCachePolicy,
+        surrogateKeys: Set<String>,
     ) {
-        val safeMaxAge = maxAgeSeconds.coerceAtLeast(0)
-        val safeSWR = staleWhileRevalidateSeconds.coerceAtLeast(0)
-        val staleIfError = (safeMaxAge + safeSWR).coerceAtLeast(safeSWR)
+        val safeMaxAge = policy.maxAgeSeconds.coerceAtLeast(0)
+        val safeSharedMaxAge = policy.sharedMaxAgeSeconds.coerceAtLeast(safeMaxAge)
+        val safeSWR = policy.staleWhileRevalidateSeconds.coerceAtLeast(0)
+        val staleIfError = (safeSharedMaxAge + safeSWR).coerceAtLeast(safeSWR)
         response.setHeader(
             "Cache-Control",
-            "public, max-age=$safeMaxAge, stale-while-revalidate=$safeSWR, stale-if-error=$staleIfError",
+            "public, max-age=$safeMaxAge, s-maxage=$safeSharedMaxAge, stale-while-revalidate=$safeSWR, stale-if-error=$staleIfError",
         )
+        response.setHeader("X-Cache-Policy", policy.name)
+        applySurrogateKeyHeaders(response, surrogateKeys)
+        appendServerTiming(response, "cache-policy;desc=\"${policy.name}\"")
     }
 
     private fun applyPrivateNoStoreHeaders(response: HttpServletResponse) {
         response.setHeader("Cache-Control", "private, no-store, max-age=0")
+    }
+
+    private fun applySurrogateKeyHeaders(
+        response: HttpServletResponse,
+        surrogateKeys: Set<String>,
+    ) {
+        val normalized =
+            surrogateKeys
+                .asSequence()
+                .map(::normalizeCacheTagToken)
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
+        if (normalized.isEmpty()) return
+        response.setHeader("Surrogate-Key", normalized.joinToString(" "))
+        response.setHeader("Cache-Tag", normalized.joinToString(","))
+    }
+
+    private fun normalizeCacheTagToken(raw: String): String =
+        raw
+            .trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9:_-]"), "-")
+            .replace(Regex("-+"), "-")
+            .trim('-')
+            .take(MAX_CACHE_TAG_LENGTH)
+
+    private fun appendServerTiming(
+        response: HttpServletResponse,
+        metric: String,
+    ) {
+        val current = response.getHeader("Server-Timing")
+        if (current.isNullOrBlank()) {
+            response.setHeader("Server-Timing", metric)
+            return
+        }
+        response.setHeader("Server-Timing", "$current, $metric")
+    }
+
+    private fun appendOriginTiming(
+        response: HttpServletResponse,
+        startedAtNanos: Long,
+        description: String,
+    ) {
+        val elapsedMs = ((System.nanoTime() - startedAtNanos).coerceAtLeast(0L)).toDouble() / 1_000_000.0
+        val durationToken = String.format(Locale.US, "%.1f", elapsedMs)
+        appendServerTiming(response, "origin;dur=$durationToken;desc=\"$description\"")
     }
 
     private fun normalizeEtagToken(raw: String): String = raw.trim().removePrefix("W/").removePrefix("w/")
@@ -101,23 +159,59 @@ class ApiV1PostController(
     private fun <T : Any> respondPublicWithEtag(
         request: HttpServletRequest,
         response: HttpServletResponse,
-        maxAgeSeconds: Int,
-        staleWhileRevalidateSeconds: Int,
+        cachePolicy: PublicReadCachePolicy,
+        surrogateKeys: Set<String>,
         etagSeed: String,
+        startedAtNanos: Long,
         body: T,
     ): ResponseEntity<T> {
         applyPublicReadCacheHeaders(
             response,
-            maxAgeSeconds = maxAgeSeconds,
-            staleWhileRevalidateSeconds = staleWhileRevalidateSeconds,
+            policy = cachePolicy,
+            surrogateKeys = surrogateKeys,
         )
         val etag = toWeakEtag(etagSeed)
         response.setHeader(HttpHeaders.ETAG, etag)
         if (isNotModified(request, etag)) {
+            appendServerTiming(response, "cache;desc=\"etag-304\"")
+            appendOriginTiming(response, startedAtNanos, "etag-304")
             response.status = HttpServletResponse.SC_NOT_MODIFIED
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build<T>()
         }
+        appendOriginTiming(response, startedAtNanos, "etag-200")
         return ResponseEntity.ok(body)
+    }
+
+    private fun resolveSearchReadCachePolicy(keyword: String): PublicReadCachePolicy {
+        val normalized = keyword.trim()
+        if (normalized.isBlank()) {
+            return SEARCH_DEFAULT_CACHE_POLICY
+        }
+        if (isHighEntropyKeyword(normalized)) {
+            return SEARCH_NO_STORE_CACHE_POLICY
+        }
+        if (normalized.length >= SEARCH_SHORT_TTL_KEYWORD_LENGTH) {
+            return SEARCH_SHORT_CACHE_POLICY
+        }
+        return SEARCH_DEFAULT_CACHE_POLICY
+    }
+
+    private fun isHighEntropyKeyword(keyword: String): Boolean {
+        if (keyword.length >= SEARCH_NO_STORE_KEYWORD_LENGTH) return true
+
+        val tokens = keyword.split(Regex("\\s+")).filter { it.isNotBlank() }
+        if (tokens.size >= SEARCH_NO_STORE_TOKEN_COUNT) return true
+
+        val alphaNumeric = keyword.filter { it.isLetterOrDigit() }
+        if (alphaNumeric.length < SEARCH_HIGH_ENTROPY_MIN_LENGTH) return false
+
+        val uniqueRatio =
+            alphaNumeric
+                .lowercase()
+                .toSet()
+                .size
+                .toDouble() / alphaNumeric.length
+        return uniqueRatio >= SEARCH_HIGH_ENTROPY_UNIQUE_RATIO_THRESHOLD
     }
 
     private fun toEpochMillis(instant: Instant): Long = instant.toEpochMilli()
@@ -239,6 +333,7 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): ResponseEntity<PageDto<FeedPostDto>> {
+        val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
         val data = postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
@@ -246,9 +341,10 @@ class ApiV1PostController(
         return respondPublicWithEtag(
             request = request,
             response = response,
-            maxAgeSeconds = 20,
-            staleWhileRevalidateSeconds = 60,
+            cachePolicy = FEED_CACHE_POLICY,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.FEED),
             etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }
@@ -262,6 +358,7 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): ResponseEntity<CursorFeedPageDto> {
+        val startedAtNanos = System.nanoTime()
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = normalizeCursorSort(sort)
         val data = postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
@@ -269,9 +366,10 @@ class ApiV1PostController(
         return respondPublicWithEtag(
             request = request,
             response = response,
-            maxAgeSeconds = 20,
-            staleWhileRevalidateSeconds = 60,
+            cachePolicy = FEED_CURSOR_CACHE_POLICY,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.FEED, PostCacheTags.FEED_CURSOR),
             etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }
@@ -291,18 +389,28 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "") tag: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): ResponseEntity<PageDto<FeedPostDto>> {
+        val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val normalizedKw = normalizeExploreKeyword(kw)
-        val normalizedTag = normalizeExploreTag(tag)
+        val searchIntent = resolveSearchIntent(kw, tag)
+        val normalizedKw = searchIntent.keyword
+        val normalizedTag = searchIntent.tag
         val data = postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
         val etagSeed = buildFeedPageEtagSeed("explore", validPage, validPageSize, sort, normalizedKw, normalizedTag, data)
         return respondPublicWithEtag(
             request = request,
             response = response,
-            maxAgeSeconds = 20,
-            staleWhileRevalidateSeconds = 60,
+            cachePolicy = EXPLORE_CACHE_POLICY,
+            surrogateKeys =
+                buildSet {
+                    add(PostCacheTags.LIST)
+                    add(PostCacheTags.EXPLORE)
+                    if (normalizedTag.isNotBlank()) {
+                        add(PostCacheTags.byTag(normalizedTag))
+                    }
+                },
             etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }
@@ -317,6 +425,7 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "") tag: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): ResponseEntity<CursorFeedPageDto> {
+        val startedAtNanos = System.nanoTime()
         val validPageSize = pageSize.coerceIn(1, 30)
         val normalizedTag = normalizeExploreTag(tag)
         val validSort = normalizeCursorSort(sort)
@@ -325,9 +434,16 @@ class ApiV1PostController(
         return respondPublicWithEtag(
             request = request,
             response = response,
-            maxAgeSeconds = 20,
-            staleWhileRevalidateSeconds = 60,
+            cachePolicy = EXPLORE_CURSOR_CACHE_POLICY,
+            surrogateKeys =
+                setOf(
+                    PostCacheTags.LIST,
+                    PostCacheTags.EXPLORE,
+                    PostCacheTags.EXPLORE_CURSOR,
+                    PostCacheTags.byTag(normalizedTag),
+                ),
             etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }
@@ -342,17 +458,54 @@ class ApiV1PostController(
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
     ): ResponseEntity<PageDto<FeedPostDto>> {
+        val startedAtNanos = System.nanoTime()
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        val normalizedKw = normalizeExploreKeyword(kw)
-        val data = postPublicReadQueryUseCase.getPublicSearch(validPage, validPageSize, normalizedKw, sort)
-        val etagSeed = buildFeedPageEtagSeed("search", validPage, validPageSize, sort, normalizedKw, data = data)
+        val searchIntent = resolveSearchIntent(kw, "")
+        val normalizedKw = searchIntent.keyword
+        val normalizedTag = searchIntent.tag
+        val data =
+            if (normalizedTag.isBlank()) {
+                postPublicReadQueryUseCase.getPublicSearch(validPage, validPageSize, normalizedKw, sort)
+            } else {
+                postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
+            }
+        val etagSeed =
+            buildFeedPageEtagSeed(
+                if (normalizedTag.isBlank()) "search" else "search-tag-intent",
+                validPage,
+                validPageSize,
+                sort,
+                normalizedKw,
+                normalizedTag,
+                data,
+            )
+        val searchPolicy = resolveSearchReadCachePolicy(normalizedKw)
+        if (searchPolicy.noStore) {
+            applyPrivateNoStoreHeaders(response)
+            response.setHeader("X-Cache-Policy", searchPolicy.name)
+            applySurrogateKeyHeaders(
+                response,
+                buildSet {
+                    add(PostCacheTags.SEARCH)
+                    if (normalizedTag.isNotBlank()) add(PostCacheTags.byTag(normalizedTag))
+                },
+            )
+            appendServerTiming(response, "cache-policy;desc=\"${searchPolicy.name}\"")
+            appendOriginTiming(response, startedAtNanos, "search-no-store")
+            return ResponseEntity.ok(data)
+        }
         return respondPublicWithEtag(
             request = request,
             response = response,
-            maxAgeSeconds = 15,
-            staleWhileRevalidateSeconds = 45,
+            cachePolicy = searchPolicy,
+            surrogateKeys =
+                buildSet {
+                    add(PostCacheTags.SEARCH)
+                    if (normalizedTag.isNotBlank()) add(PostCacheTags.byTag(normalizedTag))
+                },
             etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }
@@ -363,14 +516,16 @@ class ApiV1PostController(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ): ResponseEntity<List<TagCountDto>> {
+        val startedAtNanos = System.nanoTime()
         val data = postPublicReadQueryUseCase.getPublicTagCounts()
         val etagSeed = buildTagsEtagSeed(data)
         return respondPublicWithEtag(
             request = request,
             response = response,
-            maxAgeSeconds = 60,
-            staleWhileRevalidateSeconds = 300,
+            cachePolicy = TAGS_CACHE_POLICY,
+            surrogateKeys = setOf(PostCacheTags.TAGS),
             etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
             body = data,
         )
     }
@@ -400,15 +555,17 @@ class ApiV1PostController(
         response: HttpServletResponse,
         @PathVariable @Positive id: Long,
     ): ResponseEntity<PostWithContentDto> {
+        val startedAtNanos = System.nanoTime()
         if (rq.actorOrNull == null) {
             val data = postPublicReadQueryUseCase.getPublicPostDetail(id)
             val etagSeed = buildPublicDetailEtagSeed(data)
             return respondPublicWithEtag(
                 request = request,
                 response = response,
-                maxAgeSeconds = 20,
-                staleWhileRevalidateSeconds = 60,
+                cachePolicy = DETAIL_CACHE_POLICY,
+                surrogateKeys = setOf(PostCacheTags.DETAIL, PostCacheTags.byPostId(id)),
                 etagSeed = etagSeed,
+                startedAtNanos = startedAtNanos,
                 body = data,
             )
         }
@@ -652,6 +809,52 @@ class ApiV1PostController(
             .replace(Regex("\\s+"), " ")
             .take(maxLength)
 
+    private fun resolveSearchIntent(
+        rawKw: String,
+        rawTag: String,
+    ): SearchIntent {
+        val normalizedKw = normalizeExploreKeyword(rawKw)
+        val normalizedTag = normalizeExploreTag(rawTag)
+        if (normalizedTag.isNotBlank()) {
+            return SearchIntent(keyword = normalizedKw, tag = normalizedTag)
+        }
+
+        val hashtagRegex = Regex("(^|\\s)#([\\p{L}\\p{N}_-]{1,40})")
+        val hashMatchedTag =
+            hashtagRegex
+                .find(normalizedKw)
+                ?.groupValues
+                ?.getOrNull(2)
+                .orEmpty()
+        if (hashMatchedTag.isNotBlank()) {
+            val cleanedKeyword =
+                hashtagRegex
+                    .replace(normalizedKw, " ")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+            return SearchIntent(
+                keyword = cleanedKeyword.take(MAX_EXPLORE_KW_LENGTH),
+                tag = normalizeExploreTag(hashMatchedTag),
+            )
+        }
+
+        val prefixedTagRegex = Regex("^(?:tag|태그)\\s*:\\s*([\\p{L}\\p{N}_-]{1,40})$", RegexOption.IGNORE_CASE)
+        val prefixedTag =
+            prefixedTagRegex
+                .find(normalizedKw)
+                ?.groupValues
+                ?.getOrNull(1)
+                .orEmpty()
+        if (prefixedTag.isNotBlank()) {
+            return SearchIntent(
+                keyword = "",
+                tag = normalizeExploreTag(prefixedTag),
+            )
+        }
+
+        return SearchIntent(keyword = normalizedKw, tag = "")
+    }
+
     /**
      * 실행 시점에 필요한 의존성/값을 결정합니다.
      * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
@@ -708,8 +911,87 @@ class ApiV1PostController(
     }
 
     companion object {
+        private val FEED_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "feed-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
+            )
+        private val FEED_CURSOR_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "feed-cursor-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
+            )
+        private val EXPLORE_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "explore-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
+            )
+        private val EXPLORE_CURSOR_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "explore-cursor-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
+            )
+        private val SEARCH_DEFAULT_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "search-max15-smax45-swr45",
+                maxAgeSeconds = 15,
+                sharedMaxAgeSeconds = 45,
+                staleWhileRevalidateSeconds = 45,
+            )
+        private val SEARCH_SHORT_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "search-short-max5-smax10-swr15",
+                maxAgeSeconds = 5,
+                sharedMaxAgeSeconds = 10,
+                staleWhileRevalidateSeconds = 15,
+            )
+        private val SEARCH_NO_STORE_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "search-high-entropy-no-store",
+                maxAgeSeconds = 0,
+                sharedMaxAgeSeconds = 0,
+                staleWhileRevalidateSeconds = 0,
+                noStore = true,
+            )
+        private val TAGS_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "tags-max60-smax300-swr300",
+                maxAgeSeconds = 60,
+                sharedMaxAgeSeconds = 300,
+                staleWhileRevalidateSeconds = 300,
+            )
+        private val DETAIL_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "detail-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
+            )
+
         private const val MAX_PUBLIC_PAGE = 200
         private const val MAX_EXPLORE_KW_LENGTH = 80
         private const val MAX_EXPLORE_TAG_LENGTH = 40
+        private const val MAX_CACHE_TAG_LENGTH = 64
+        private const val SEARCH_SHORT_TTL_KEYWORD_LENGTH = 16
+        private const val SEARCH_NO_STORE_KEYWORD_LENGTH = 36
+        private const val SEARCH_NO_STORE_TOKEN_COUNT = 6
+        private const val SEARCH_HIGH_ENTROPY_MIN_LENGTH = 20
+        private const val SEARCH_HIGH_ENTROPY_UNIQUE_RATIO_THRESHOLD = 0.65
     }
+
+    private data class PublicReadCachePolicy(
+        val name: String,
+        val maxAgeSeconds: Int,
+        val sharedMaxAgeSeconds: Int,
+        val staleWhileRevalidateSeconds: Int,
+        val noStore: Boolean = false,
+    )
 }

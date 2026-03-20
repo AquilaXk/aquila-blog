@@ -387,7 +387,7 @@ const Modal = styled.div`
     display: grid;
     grid-template-columns: 1fr;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 12px;
+    border-radius: ${({ theme }) => `${theme.variables.ui.field.radius}px`};
     background: ${({ theme }) => theme.colors.gray3};
     overflow: hidden;
   }
@@ -401,8 +401,9 @@ const Modal = styled.div`
     border: 0;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
-    padding: 0.9rem 0.92rem;
-    font-size: 0.95rem;
+    min-height: ${({ theme }) => `${theme.variables.ui.field.minHeight}px`};
+    padding: 0.84rem 0.92rem;
+    font-size: ${({ theme }) => `${theme.variables.ui.field.fontSize}rem`};
     line-height: 1.45;
 
     &::placeholder {
@@ -425,7 +426,7 @@ const Modal = styled.div`
     transform: translateY(-50%);
     min-width: auto;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 999px;
+    border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
     padding: 0.3rem 0.56rem;
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
@@ -461,9 +462,9 @@ const Modal = styled.div`
     align-items: center;
     justify-content: center;
     width: 100%;
-    min-height: 46px;
-    border-radius: 10px;
-    font-size: 0.93rem;
+    min-height: ${({ theme }) => `${theme.variables.ui.button.minHeight}px`};
+    border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
+    font-size: ${({ theme }) => `${theme.variables.ui.button.fontSize}rem`};
     font-weight: 700;
   }
 

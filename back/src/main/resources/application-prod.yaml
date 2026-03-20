@@ -62,10 +62,10 @@ custom:
       # 공개 읽기 API는 쓰기 시 즉시 무효화하므로 운영 기본 TTL을 높여 DB 압력을 낮춘다.
       post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
       post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:60}
-      post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:45}
-      post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:45}
-      post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:45}
-      post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:120}
+      post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:120}
+      post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:120}
+      post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:90}
+      post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:300}
       post-detail-public-v4: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:120}
   db:
     sequence-guard-on-startup: ${CUSTOM__DB__SEQUENCE_GUARD_ON_STARTUP:true}
@@ -87,6 +87,7 @@ custom:
         searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:10}
         detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:24}
         tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:8}
+      tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
   task:
     processor:
       # API/worker 단일 프로세스 기본 운영에서 DB 경쟁을 완화한다.

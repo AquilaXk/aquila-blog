@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.dto.PostPreviewExtractor
 import com.back.boundedContexts.post.dto.PostPreviewSummaryDebug
 import com.back.boundedContexts.post.dto.PostPreviewSummaryResult
 import com.back.global.cache.application.port.output.RedisKeyValuePort
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -44,6 +45,8 @@ class PostPreviewSummaryService(
     private val cacheTtlSeconds: Long,
     @param:Value("\${custom.ai.summary.fallbackCacheTtlSeconds:45}")
     private val fallbackCacheTtlSeconds: Long,
+    @param:Value("\${custom.ai.summary.quotaFallbackCacheTtlSeconds:300}")
+    private val quotaFallbackCacheTtlSeconds: Long,
     @param:Value("\${custom.ai.summary.retryMaxAttempts:2}")
     private val retryMaxAttempts: Int,
     @param:Value("\${custom.ai.summary.retryBaseDelayMs:350}")
@@ -54,12 +57,27 @@ class PostPreviewSummaryService(
     private val circuitFailureThreshold: Int,
     @param:Value("\${custom.ai.summary.circuitOpenSeconds:90}")
     private val circuitOpenSeconds: Long,
+    @param:Value("\${custom.ai.summary.quotaCircuitOpenSeconds:600}")
+    private val quotaCircuitOpenSeconds: Long,
+    @param:Value("\${custom.ai.summary.failureSignatureThreshold:2}")
+    private val failureSignatureThreshold: Int,
+    @param:Value("\${custom.ai.summary.failureSignatureTtlSeconds:900}")
+    private val failureSignatureTtlSeconds: Long,
+    @param:Value("\${custom.ai.summary.failureSignatureOpenSeconds:300}")
+    private val failureSignatureOpenSeconds: Long,
+    @param:Value("\${custom.ai.summary.adaptiveRelaxedFirstContentLength:9000}")
+    private val adaptiveRelaxedFirstContentLength: Int,
+    @param:Value("\${custom.ai.summary.adaptiveRelaxedFirstCodeFenceCount:3}")
+    private val adaptiveRelaxedFirstCodeFenceCount: Int,
     @param:Value("\${custom.ai.summary.gemini.apiKey:}")
     private val geminiApiKey: String,
     @param:Value("\${custom.ai.summary.gemini.model:gemini-2.5-flash}")
     private val geminiModel: String,
+    @param:Value("\${custom.ai.summary.gemini.baseUrl:https://generativelanguage.googleapis.com/v1beta}")
+    private val geminiBaseUrl: String,
     private val redisKeyValuePort: RedisKeyValuePort,
     private val objectMapper: ObjectMapper,
+    private val meterRegistry: MeterRegistry? = null,
 ) : PostPreviewSummaryUseCase {
     private data class ParsedAiSummary(
         val summary: String,
@@ -69,6 +87,12 @@ class PostPreviewSummaryService(
     private data class CacheEntry(
         val result: PostPreviewSummaryResult,
         val expiresAtMillis: Long,
+    )
+
+    private data class FailureSignatureEntry(
+        val consecutiveFailures: Int,
+        val expiresAtMillis: Long,
+        val skipUntilMillis: Long,
     )
 
     private data class SummaryTraceContext(
@@ -85,11 +109,7 @@ class PostPreviewSummaryService(
     )
 
     private val log = LoggerFactory.getLogger(javaClass)
-    private val httpClient =
-        HttpClient
-            .newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
-            .build()
+    private val httpClient = SHARED_HTTP_CLIENT
     private val zoneId: ZoneId = ZoneId.systemDefault()
 
     // 설계상 서킷 브레이커 상태는 프로세스 로컬로만 유지한다.
@@ -107,11 +127,19 @@ class PostPreviewSummaryService(
     private val normalizedMaxRequestsPerDay = maxRequestsPerDay.coerceIn(10, 200_000)
     private val normalizedCacheTtlSeconds = cacheTtlSeconds.coerceIn(5, 3_600)
     private val normalizedFallbackCacheTtlSeconds = fallbackCacheTtlSeconds.coerceIn(5, 600)
+    private val normalizedQuotaFallbackCacheTtlSeconds = quotaFallbackCacheTtlSeconds.coerceIn(30, 3_600)
     private val normalizedRetryMaxAttempts = retryMaxAttempts.coerceIn(0, 5)
     private val normalizedRetryBaseDelayMs = retryBaseDelayMs.coerceIn(50, 5_000)
     private val normalizedRetryMaxDelayMs = retryMaxDelayMs.coerceIn(normalizedRetryBaseDelayMs, 30_000)
     private val normalizedCircuitFailureThreshold = circuitFailureThreshold.coerceIn(1, 20)
     private val normalizedCircuitOpenMillis = circuitOpenSeconds.coerceIn(5, 600) * 1_000
+    private val normalizedQuotaCircuitOpenMillis = quotaCircuitOpenSeconds.coerceIn(30, 3_600) * 1_000
+    private val normalizedFailureSignatureThreshold = failureSignatureThreshold.coerceIn(2, 8)
+    private val normalizedFailureSignatureTtlMillis = failureSignatureTtlSeconds.coerceIn(60, 3_600) * 1_000
+    private val normalizedFailureSignatureOpenMillis = failureSignatureOpenSeconds.coerceIn(30, 1_800) * 1_000
+    private val normalizedAdaptiveRelaxedFirstContentLength = adaptiveRelaxedFirstContentLength.coerceIn(2_000, 20_000)
+    private val normalizedAdaptiveRelaxedFirstCodeFenceCount = adaptiveRelaxedFirstCodeFenceCount.coerceIn(1, 10)
+    private val normalizedGeminiBaseUrl = sanitizeGeminiBaseUrl(geminiBaseUrl)
     private val normalizedCacheMaxEntries = DEFAULT_CACHE_MAX_ENTRIES
 
     // Redis가 불가할 때 사용할 메모리 기반 대체 캐시.
@@ -119,6 +147,14 @@ class PostPreviewSummaryService(
     private val summaryCache =
         object : LinkedHashMap<String, CacheEntry>(normalizedCacheMaxEntries, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CacheEntry>): Boolean = size > normalizedCacheMaxEntries
+        }
+
+    // 동일 입력에서 empty/low-quality가 반복되면 일정 시간 AI를 우회한다.
+    private val failureSignatureLock = Any()
+    private val failureSignatures =
+        object : LinkedHashMap<String, FailureSignatureEntry>(DEFAULT_FAILURE_SIGNATURE_MAX_ENTRIES, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FailureSignatureEntry>): Boolean =
+                size > DEFAULT_FAILURE_SIGNATURE_MAX_ENTRIES
         }
 
     // Redis 대체 경로 경고 로그 스로틀링.
@@ -136,6 +172,15 @@ class PostPreviewSummaryService(
     ): PostPreviewSummaryResult {
         val traceId = newTraceId()
         val traceContext = SummaryTraceContext()
+        val startedAtNanos = System.nanoTime()
+        val normalizedMaxLength = maxLength.coerceIn(80, 220)
+        val normalizedModel = sanitizeModel(geminiModel)
+        val cacheKey = summaryCacheKey(title, content, normalizedMaxLength, normalizedModel)
+        val now = System.currentTimeMillis()
+        val normalizedTitle = title.trim()
+        val titleLength = normalizedTitle.length
+        val contentLength = content.length
+        val fallback = safeFallbackSummary(content, normalizedMaxLength)
 
         fun finish(result: PostPreviewSummaryResult): PostPreviewSummaryResult {
             val tracedResult =
@@ -166,22 +211,39 @@ class PostPreviewSummaryService(
                 traceContext.relaxedResponseStatus ?: -1,
                 traceContext.parsedSummaryLength ?: -1,
             )
+            recordSummaryMetrics(
+                result = tracedResult,
+                contentLength = contentLength,
+                elapsedNanos = System.nanoTime() - startedAtNanos,
+            )
             return tracedResult
         }
 
-        val normalizedMaxLength = maxLength.coerceIn(80, 220)
-        val normalizedModel = sanitizeModel(geminiModel)
-        val cacheKey = summaryCacheKey(title, content, normalizedMaxLength, normalizedModel)
-        val now = System.currentTimeMillis()
-        val normalizedTitle = title.trim()
-        val titleLength = normalizedTitle.length
-        val contentLength = content.length
-        val fallback = safeFallbackSummary(content, normalizedMaxLength)
+        data class AttemptOutcome(
+            val summary: String? = null,
+            val model: String? = null,
+            val reason: String? = null,
+            val fallbackTtlSeconds: Long = normalizedFallbackCacheTtlSeconds,
+        )
 
         try {
             readCache(cacheKey, now)?.let {
                 traceContext.cacheStatus = "hit"
                 return finish(it)
+            }
+
+            if (shouldBypassAiByFailureSignature(cacheKey, now)) {
+                return finish(
+                    fallbackAndCache(
+                        cacheKey = cacheKey,
+                        summary = fallback,
+                        reason = "repeated-failure-signature",
+                        ttlSeconds = normalizedFallbackCacheTtlSeconds,
+                        nowMillis = now,
+                        titleLength = titleLength,
+                        contentLength = contentLength,
+                    ),
+                )
             }
 
             if (!aiSummaryEnabled) {
@@ -227,154 +289,119 @@ class PostPreviewSummaryService(
                 )
             }
 
+            val preparedPromptContent = preprocessContentForPrompt(content)
+            val preferRelaxedFirst = shouldPreferRelaxedFirst(content)
             val prompt =
                 buildPrompt(
                     title = normalizedTitle,
-                    content = content,
+                    content = preparedPromptContent,
                     maxLength = normalizedMaxLength,
                 )
             traceContext.promptLength = prompt.length
             traceContext.promptPreview = summarizeForDebug(prompt)
 
-            val requestBody =
-                buildRequestBody(
-                    prompt = prompt,
-                    useStrictJsonSchema = true,
-                )
-
-            val responseBody = sendWithRetry(normalizedModel, normalizedApiKey, requestBody)
-            traceContext.strictResponseStatus = responseBody?.statusCode()
-            traceContext.strictResponsePreview = summarizeForDebug(responseBody?.body())
-
-            if (responseBody == null) {
-                markFailure("transport")
-                return finish(
-                    fallbackAndCache(
-                        cacheKey = cacheKey,
-                        summary = fallback,
-                        reason = "transport",
-                        ttlSeconds = normalizedFallbackCacheTtlSeconds,
-                        nowMillis = now,
-                        titleLength = titleLength,
-                        contentLength = contentLength,
-                    ),
-                )
-            }
-
-            if (responseBody.statusCode() >= 400) {
-                if (shouldCountAsProviderFailure(responseBody.statusCode())) {
-                    markFailure("status=${responseBody.statusCode()}")
+            fun assignAttemptTrace(
+                useStrictJsonSchema: Boolean,
+                response: HttpResponse<String>?,
+            ) {
+                if (useStrictJsonSchema) {
+                    traceContext.strictResponseStatus = response?.statusCode()
+                    traceContext.strictResponsePreview = summarizeForDebug(response?.body())
+                } else {
+                    traceContext.relaxedRetried = true
+                    traceContext.relaxedResponseStatus = response?.statusCode()
+                    traceContext.relaxedResponsePreview = summarizeForDebug(response?.body())
                 }
-                return finish(
-                    fallbackAndCache(
-                        cacheKey = cacheKey,
-                        summary = fallback,
-                        reason = "status-${responseBody.statusCode()}",
-                        ttlSeconds = normalizedFallbackCacheTtlSeconds,
-                        nowMillis = now,
-                        titleLength = titleLength,
-                        contentLength = contentLength,
-                    ),
-                )
             }
 
-            val parsedAiSummary = parseAiSummary(responseBody.body())
-            if (parsedAiSummary == null) {
-                return finish(
-                    fallbackAndCache(
-                        cacheKey = cacheKey,
-                        summary = fallback,
-                        reason = "parse-error",
-                        ttlSeconds = normalizedFallbackCacheTtlSeconds,
-                        nowMillis = now,
-                        titleLength = titleLength,
-                        contentLength = contentLength,
-                    ),
-                )
-            }
-
-            val normalizedAiSummary = normalizeSummary(parsedAiSummary.summary, normalizedMaxLength)
-            traceContext.parsedSummaryLength = normalizedAiSummary.length.takeIf { normalizedAiSummary.isNotBlank() }
-            traceContext.parsedSummaryPreview = summarizeForDebug(normalizedAiSummary)
-            val hasLowQuality = isLowQualityAiSummary(normalizedAiSummary, fallback, normalizedMaxLength)
-            val hasUnsafePattern = hasUnsafeSummaryPattern(normalizedAiSummary)
-            if (normalizedAiSummary.isBlank()) {
-                // 일부 Gemini 응답은 strict JSON schema 경로에서 본문이 비어오는 경우가 있어
-                // 비스키마 모드로 1회 재시도해 요약을 회복한다.
-                traceContext.relaxedRetried = true
-                val relaxedRequestBody =
+            fun runAttempt(useStrictJsonSchema: Boolean): AttemptOutcome {
+                val requestBody =
                     buildRequestBody(
                         prompt = prompt,
-                        useStrictJsonSchema = false,
+                        useStrictJsonSchema = useStrictJsonSchema,
                     )
-                val relaxedResponse = sendWithRetry(normalizedModel, normalizedApiKey, relaxedRequestBody)
-                traceContext.relaxedResponseStatus = relaxedResponse?.statusCode()
-                traceContext.relaxedResponsePreview = summarizeForDebug(relaxedResponse?.body())
-                if (relaxedResponse != null && relaxedResponse.statusCode() in 200..299) {
-                    val parsedRelaxedSummary = parseAiSummary(relaxedResponse.body())
-                    val normalizedRelaxedSummary = normalizeSummary(parsedRelaxedSummary?.summary, normalizedMaxLength)
-                    val relaxedLowQuality = isLowQualityAiSummary(normalizedRelaxedSummary, fallback, normalizedMaxLength)
-                    val relaxedUnsafe = hasUnsafeSummaryPattern(normalizedRelaxedSummary)
+                val response = sendWithRetry(normalizedModel, normalizedApiKey, requestBody)
+                assignAttemptTrace(useStrictJsonSchema = useStrictJsonSchema, response = response)
 
-                    if (normalizedRelaxedSummary.isNotBlank() && !relaxedLowQuality && !relaxedUnsafe) {
-                        traceContext.parsedSummaryLength = normalizedRelaxedSummary.length
-                        traceContext.parsedSummaryPreview = summarizeForDebug(normalizedRelaxedSummary)
-                        markSuccess()
-                        val resolvedModel =
-                            parsedRelaxedSummary?.modelVersion?.trim().takeUnless { it.isNullOrBlank() }
-                                ?: normalizedModel
-                        return finish(
-                            cacheAndReturn(
-                                cacheKey = cacheKey,
-                                result =
-                                    PostPreviewSummaryResult(
-                                        summary = normalizedRelaxedSummary,
-                                        provider = "gemini",
-                                        model = resolvedModel,
-                                        reason = null,
-                                    ),
-                                ttlSeconds = normalizedCacheTtlSeconds,
-                                nowMillis = now,
-                            ),
-                        )
-                    }
+                if (response == null) {
+                    markFailure("transport")
+                    return AttemptOutcome(reason = "transport")
                 }
-            }
-            if (normalizedAiSummary.isBlank() || hasLowQuality || hasUnsafePattern) {
+
+                if (response.statusCode() >= 400) {
+                    val providerErrorReason = resolveProviderErrorReason(response)
+                    val fallbackTtlSeconds =
+                        if (providerErrorReason == "quota-exhausted") {
+                            markQuotaExhausted("status=${response.statusCode()}")
+                            normalizedQuotaFallbackCacheTtlSeconds
+                        } else {
+                            normalizedFallbackCacheTtlSeconds
+                        }
+                    if (shouldCountAsProviderFailure(response.statusCode())) {
+                        markFailure("status=${response.statusCode()}")
+                    }
+                    return AttemptOutcome(reason = providerErrorReason, fallbackTtlSeconds = fallbackTtlSeconds)
+                }
+
+                val parsed = parseAiSummary(response.body()) ?: return AttemptOutcome(reason = "parse-error")
+                val normalizedSummary = normalizeSummary(parsed.summary, normalizedMaxLength)
+                traceContext.parsedSummaryLength = normalizedSummary.length.takeIf { normalizedSummary.isNotBlank() }
+                traceContext.parsedSummaryPreview = summarizeForDebug(normalizedSummary)
+
+                val hasUnsafe = hasUnsafeSummaryPattern(normalizedSummary)
+                val hasLowQuality = isLowQualityAiSummary(normalizedSummary, fallback, normalizedMaxLength)
+
                 val reason =
                     when {
-                        normalizedAiSummary.isBlank() -> "empty-summary"
-                        hasUnsafePattern -> "unsafe-summary"
-                        else -> "low-quality-summary"
+                        normalizedSummary.isBlank() -> "empty-summary"
+                        hasUnsafe -> "unsafe-summary"
+                        hasLowQuality -> "low-quality-summary"
+                        else -> null
                     }
-                return finish(
-                    fallbackAndCache(
-                        cacheKey = cacheKey,
-                        summary = fallback,
-                        reason = reason,
-                        ttlSeconds = normalizedFallbackCacheTtlSeconds,
-                        nowMillis = now,
-                        titleLength = titleLength,
-                        contentLength = contentLength,
-                    ),
-                )
+                if (reason != null) return AttemptOutcome(reason = reason)
+
+                val resolvedModel = parsed.modelVersion?.trim().takeUnless { it.isNullOrBlank() } ?: normalizedModel
+                return AttemptOutcome(summary = normalizedSummary, model = resolvedModel)
             }
 
-            markSuccess()
-            val resolvedModel =
-                parsedAiSummary.modelVersion?.trim().takeUnless { it.isNullOrBlank() } ?: normalizedModel
-            return finish(
-                cacheAndReturn(
+            fun toSuccessResult(outcome: AttemptOutcome): PostPreviewSummaryResult {
+                clearFailureSignature(cacheKey)
+                markSuccess()
+                return cacheAndReturn(
                     cacheKey = cacheKey,
                     result =
                         PostPreviewSummaryResult(
-                            summary = normalizedAiSummary,
+                            summary = outcome.summary.orEmpty(),
                             provider = "gemini",
-                            model = resolvedModel,
+                            model = outcome.model,
                             reason = null,
                         ),
                     ttlSeconds = normalizedCacheTtlSeconds,
                     nowMillis = now,
+                )
+            }
+
+            val primaryUseStrictJsonSchema = !preferRelaxedFirst
+            var finalOutcome = runAttempt(primaryUseStrictJsonSchema)
+            if (finalOutcome.summary != null) return finish(toSuccessResult(finalOutcome))
+
+            if (shouldTryAlternateMode(finalOutcome.reason)) {
+                val secondaryUseStrictJsonSchema = !primaryUseStrictJsonSchema
+                val secondaryOutcome = runAttempt(secondaryUseStrictJsonSchema)
+                if (secondaryOutcome.summary != null) return finish(toSuccessResult(secondaryOutcome))
+                finalOutcome = secondaryOutcome
+            }
+
+            val fallbackReason = finalOutcome.reason ?: "internal-error"
+            return finish(
+                fallbackAndCache(
+                    cacheKey = cacheKey,
+                    summary = fallback,
+                    reason = fallbackReason,
+                    ttlSeconds = finalOutcome.fallbackTtlSeconds,
+                    nowMillis = now,
+                    titleLength = titleLength,
+                    contentLength = contentLength,
                 ),
             )
         } catch (exception: Exception) {
@@ -402,6 +429,9 @@ class PostPreviewSummaryService(
         titleLength: Int,
         contentLength: Int,
     ): PostPreviewSummaryResult {
+        if (isFailureSignatureReason(reason)) {
+            recordFailureSignature(cacheKey = cacheKey, nowMillis = nowMillis)
+        }
         logFallback(reason = reason, titleLength = titleLength, contentLength = contentLength)
         return cacheAndReturn(
             cacheKey = cacheKey,
@@ -452,6 +482,130 @@ class PostPreviewSummaryService(
                 lastResortSummary
             }
     }
+
+    private fun shouldTryAlternateMode(reason: String?): Boolean =
+        reason == "empty-summary" ||
+            reason == "low-quality-summary" ||
+            reason == "unsafe-summary" ||
+            reason == "parse-error"
+
+    private fun shouldPreferRelaxedFirst(content: String): Boolean {
+        if (content.length >= normalizedAdaptiveRelaxedFirstContentLength) return true
+        val codeFenceCount = PROMPT_CODE_FENCE_REGEX.findAll(content).take(normalizedAdaptiveRelaxedFirstCodeFenceCount).count()
+        return codeFenceCount >= normalizedAdaptiveRelaxedFirstCodeFenceCount
+    }
+
+    private fun preprocessContentForPrompt(content: String): String {
+        val sanitized = sanitizePromptInput(content)
+        if (sanitized.isBlank()) return sanitized
+
+        val normalizedForPrompt =
+            sanitized
+                .replace(PROMPT_CODE_FENCE_REGEX, " ")
+                .replace(PROMPT_MARKDOWN_IMAGE_REGEX, " ")
+                .replace(PROMPT_INLINE_CODE_REGEX, "$1")
+                .replace(PROMPT_MARKDOWN_LINK_REGEX, "$1")
+                .replace(PROMPT_MARKDOWN_PUNCTUATION_REGEX, " ")
+                .replace(PROMPT_WHITESPACE_REGEX, " ")
+                .trim()
+
+        if (normalizedForPrompt.length <= MAX_PROMPT_CONTENT_LENGTH) {
+            return normalizedForPrompt
+        }
+
+        val quickSummary =
+            PostPreviewExtractor
+                .makeSummary(sanitized)
+                .replace(PROMPT_WHITESPACE_REGEX, " ")
+                .trim()
+        val head = normalizedForPrompt.take(PROMPT_PREPROCESS_HEAD_TAIL_LENGTH)
+        val tail = normalizedForPrompt.takeLast(PROMPT_PREPROCESS_HEAD_TAIL_LENGTH)
+
+        return listOf(
+            "[요약 후보]",
+            quickSummary,
+            "[본문 앞부분]",
+            head,
+            "[본문 뒷부분]",
+            tail,
+        ).joinToString("\n").take(MAX_PROMPT_CONTENT_LENGTH)
+    }
+
+    private fun isFailureSignatureReason(reason: String): Boolean = reason == "empty-summary" || reason == "low-quality-summary"
+
+    private fun shouldBypassAiByFailureSignature(
+        cacheKey: String,
+        nowMillis: Long,
+    ): Boolean =
+        synchronized(failureSignatureLock) {
+            val entry = failureSignatures[cacheKey] ?: return false
+            if (entry.expiresAtMillis <= nowMillis) {
+                failureSignatures.remove(cacheKey)
+                return false
+            }
+            entry.skipUntilMillis > nowMillis
+        }
+
+    private fun recordFailureSignature(
+        cacheKey: String,
+        nowMillis: Long,
+    ) {
+        synchronized(failureSignatureLock) {
+            val previous = failureSignatures[cacheKey]?.takeIf { it.expiresAtMillis > nowMillis }
+            val nextCount = (previous?.consecutiveFailures ?: 0) + 1
+            val nextSkipUntil =
+                when {
+                    nextCount >= normalizedFailureSignatureThreshold -> nowMillis + normalizedFailureSignatureOpenMillis
+                    previous != null && previous.skipUntilMillis > nowMillis -> previous.skipUntilMillis
+                    else -> 0L
+                }
+
+            failureSignatures[cacheKey] =
+                FailureSignatureEntry(
+                    consecutiveFailures = nextCount,
+                    expiresAtMillis = nowMillis + normalizedFailureSignatureTtlMillis,
+                    skipUntilMillis = nextSkipUntil,
+                )
+        }
+    }
+
+    private fun clearFailureSignature(cacheKey: String) {
+        synchronized(failureSignatureLock) {
+            failureSignatures.remove(cacheKey)
+        }
+    }
+
+    private fun recordSummaryMetrics(
+        result: PostPreviewSummaryResult,
+        contentLength: Int,
+        elapsedNanos: Long,
+    ) {
+        val registry = meterRegistry ?: return
+        val reasonTag = result.reason ?: "success"
+        val contentBucket = toContentLengthBucket(contentLength)
+        val tags =
+            arrayOf(
+                "provider",
+                result.provider,
+                "reason",
+                reasonTag,
+                "content_bucket",
+                contentBucket,
+            )
+        registry.counter("post.preview.summary.requests", *tags).increment()
+        registry
+            .timer("post.preview.summary.latency", *tags)
+            .record(Duration.ofNanos(elapsedNanos.coerceAtLeast(0)))
+    }
+
+    private fun toContentLengthBucket(length: Int): String =
+        when {
+            length < 1_000 -> "lt1k"
+            length < 3_000 -> "1k-3k"
+            length < 8_000 -> "3k-8k"
+            length < 15_000 -> "8k-15k"
+            else -> "15k+"
+        }
 
     /**
      * buildPrompt 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
@@ -528,7 +682,7 @@ class PostPreviewSummaryService(
 
     private fun buildGeminiUri(model: String): URI =
         URI.create(
-            "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent",
+            "$normalizedGeminiBaseUrl/models/$model:generateContent",
         )
 
     /**
@@ -542,6 +696,26 @@ class PostPreviewSummaryService(
         } else {
             "gemini-2.5-flash"
         }
+    }
+
+    private fun sanitizeGeminiBaseUrl(raw: String): String {
+        val candidate = raw.trim().ifBlank { DEFAULT_GEMINI_BASE_URL }
+        return runCatching {
+            val uri = URI.create(candidate)
+            val scheme = uri.scheme?.lowercase().orEmpty()
+            if (scheme != "https" && scheme != "http") return@runCatching DEFAULT_GEMINI_BASE_URL
+            val host = uri.host?.trim().orEmpty()
+            if (host.isBlank()) return@runCatching DEFAULT_GEMINI_BASE_URL
+
+            val portPart = if (uri.port >= 0) ":${uri.port}" else ""
+            val path =
+                uri.path
+                    ?.trim()
+                    .orEmpty()
+                    .trimEnd('/')
+            val normalizedPath = if (path.isBlank()) "" else path
+            "$scheme://$host$portPart$normalizedPath"
+        }.getOrDefault(DEFAULT_GEMINI_BASE_URL)
     }
 
     /**
@@ -610,9 +784,12 @@ class PostPreviewSummaryService(
             val parsedSummary =
                 runCatching {
                     val node = objectMapper.readTree(candidate)
+                    if (!node.isObject || !node.has("summary")) {
+                        return@runCatching null
+                    }
                     readJsonText(node.path("summary")).trim()
                 }.getOrNull()
-            if (!parsedSummary.isNullOrBlank()) return parsedSummary
+            if (parsedSummary != null) return parsedSummary
         }
 
         // JSON 파싱이 실패해도 summary 필드 문자열만 있는 경우를 복구한다.
@@ -623,7 +800,7 @@ class PostPreviewSummaryService(
                 runCatching {
                     objectMapper.readValue("\"$escapedValue\"", String::class.java)
                 }.getOrNull()?.trim()
-            if (!decoded.isNullOrBlank()) return decoded
+            if (decoded != null) return decoded
         }
 
         return null
@@ -737,15 +914,24 @@ class PostPreviewSummaryService(
                 (normalizedAi.contains('"') || normalizedAi.contains('“') || normalizedAi.contains('”'))
         if (hasQuotedFragmentPattern) return true
 
-        val suspiciousOpenQuote =
-            (normalizedAi.contains('"') || normalizedAi.contains('“')) &&
-                !normalizedAi.contains('”') &&
-                normalizedAi.length < maxLength
-        if (suspiciousOpenQuote) return true
+        if (normalizedAi.length < maxLength && hasUnbalancedQuote(normalizedAi)) return true
 
         val normalizedFallback = fallbackSummary.trim()
         if (normalizedFallback.isBlank()) return false
         return normalizedAi == normalizedFallback && normalizedAi.length < EXACT_MATCH_SHORT_THRESHOLD
+    }
+
+    private fun hasUnbalancedQuote(value: String): Boolean {
+        val asciiQuoteCount = value.count { it == '"' }
+        if (asciiQuoteCount % 2 != 0) return true
+
+        val leftCurlyQuoteCount = value.count { it == '“' }
+        val rightCurlyQuoteCount = value.count { it == '”' }
+        if (leftCurlyQuoteCount != rightCurlyQuoteCount) return true
+
+        val leftSingleCurlyQuoteCount = value.count { it == '‘' }
+        val rightSingleCurlyQuoteCount = value.count { it == '’' }
+        return leftSingleCurlyQuoteCount != rightSingleCurlyQuoteCount
     }
 
     /**
@@ -989,6 +1175,14 @@ class PostPreviewSummaryService(
         }
     }
 
+    private fun markQuotaExhausted(reason: String) {
+        synchronized(stateLock) {
+            consecutiveFailures = 0
+            circuitOpenedUntilMillis = System.currentTimeMillis() + normalizedQuotaCircuitOpenMillis
+        }
+        log.warn("Gemini summary quota exhausted. circuit opened for {}ms ({})", normalizedQuotaCircuitOpenMillis, reason)
+    }
+
     /**
      * 이벤트/메시지를 전파하고 실패를 안전하게 처리합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
@@ -1028,6 +1222,8 @@ class PostPreviewSummaryService(
 
             if (response.statusCode() in 200..299) return response
 
+            if (isQuotaExhaustedResponse(response)) return response
+
             if (shouldRetry(response.statusCode()) && attempt < normalizedRetryMaxAttempts) {
                 if (!sleepBeforeRetry(resolveRetryDelayMs(response, attempt))) return response
                 attempt += 1
@@ -1041,6 +1237,24 @@ class PostPreviewSummaryService(
     private fun shouldRetry(statusCode: Int): Boolean = statusCode in RETRYABLE_STATUSES
 
     private fun shouldCountAsProviderFailure(statusCode: Int): Boolean = statusCode in RETRYABLE_STATUSES
+
+    private fun resolveProviderErrorReason(response: HttpResponse<String>): String {
+        if (isQuotaExhaustedResponse(response)) return "quota-exhausted"
+        return "status-${response.statusCode()}"
+    }
+
+    private fun isQuotaExhaustedResponse(response: HttpResponse<String>): Boolean =
+        isQuotaExhausted(statusCode = response.statusCode(), body = response.body())
+
+    private fun isQuotaExhausted(
+        statusCode: Int,
+        body: String?,
+    ): Boolean {
+        if (statusCode !in QUOTA_CANDIDATE_STATUSES) return false
+        val normalized = body.orEmpty().lowercase()
+        if (normalized.isBlank()) return false
+        return QUOTA_MARKERS.any { marker -> normalized.contains(marker) }
+    }
 
     /**
      * 실행 시점에 필요한 의존성/값을 결정합니다.
@@ -1130,11 +1344,20 @@ class PostPreviewSummaryService(
     }
 
     companion object {
+        private val SHARED_HTTP_CLIENT: HttpClient =
+            HttpClient
+                .newBuilder()
+                .connectTimeout(Duration.ofSeconds(2))
+                .build()
+
+        private const val DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
         private const val SUMMARY_PIPELINE_VERSION = "v2"
         private const val MINUTE_WINDOW_MILLIS = 60_000L
         private const val MINUTE_WINDOW_KEY_TTL_SECONDS = 180L
         private const val DEFAULT_CACHE_MAX_ENTRIES = 2048
+        private const val DEFAULT_FAILURE_SIGNATURE_MAX_ENTRIES = 4096
         private const val MAX_PROMPT_CONTENT_LENGTH = 8_000
+        private const val PROMPT_PREPROCESS_HEAD_TAIL_LENGTH = 2_400
         private const val REDIS_WARN_INTERVAL_SECONDS = 300L
         private const val REDIS_CACHE_KEY_PREFIX = "post:preview:summary:cache:"
         private const val REDIS_RATE_LIMIT_DAY_KEY_PREFIX = "post:preview:summary:limit:day:"
@@ -1146,7 +1369,23 @@ class PostPreviewSummaryService(
         private val JSON_FENCE_REGEX = Regex("```(?:json|JSON)?\\s*([\\s\\S]*?)```")
         private val SUMMARY_FIELD_REGEX = Regex("\"summary\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
         private val UNSAFE_SUMMARY_MARKERS = setOf("ignore previous", "system prompt", "<본문>", "</본문>", "```")
+        private val PROMPT_CODE_FENCE_REGEX = Regex("```[\\s\\S]*?```")
+        private val PROMPT_MARKDOWN_IMAGE_REGEX = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
+        private val PROMPT_MARKDOWN_LINK_REGEX = Regex("\\[(.*?)\\]\\((.*?)\\)")
+        private val PROMPT_INLINE_CODE_REGEX = Regex("`([^`]+)`")
+        private val PROMPT_MARKDOWN_PUNCTUATION_REGEX = Regex("[#>*_~-]")
+        private val PROMPT_WHITESPACE_REGEX = Regex("\\s+")
         private val RETRYABLE_STATUSES = setOf(429, 500, 502, 503, 504)
+        private val QUOTA_CANDIDATE_STATUSES = setOf(400, 403, 429)
+        private val QUOTA_MARKERS =
+            setOf(
+                "resource_exhausted",
+                "quota",
+                "quota exceeded",
+                "insufficient_quota",
+                "daily limit",
+                "billing",
+            )
     }
 
     private object InstantEpoch {

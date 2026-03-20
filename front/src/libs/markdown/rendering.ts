@@ -1,0 +1,596 @@
+import { ReactElement, ReactNode, isValidElement } from "react"
+import {
+  extractNormalizedMermaidSource,
+  normalizeEscapedMarkdownFences,
+  normalizeEscapedMermaidFences,
+} from "src/libs/markdown/mermaid"
+
+export type CalloutKind = "tip" | "info" | "warning" | "outline" | "example" | "summary"
+
+export type MarkdownSegment =
+  | { type: "markdown"; content: string }
+  | { type: "toggle"; title: string; content: string }
+  | { type: "callout"; kind: CalloutKind; title: string; content: string }
+
+export const markdownGuide = `### 작성 가이드
+- 코드블록: \`\`\`ts
+const x = 1
+\`\`\`
+- 글자색: \`{{color:#60a5fa|강조 텍스트}}\`
+- 머메이드: \`\`\`mermaid
+graph TD
+  A[Start] --> B{Check}
+\`\`\`
+- 토글:
+  :::toggle 토글 제목
+  접기/펼치기 본문
+  :::
+- 콜아웃:
+  > [!TIP]
+  > 내용
+  또는
+  <aside>
+  ℹ️
+  내용
+  </aside>
+  지원 타입: TIP, INFO, WARNING, OUTLINE, EXAMPLE, SUMMARY
+- 테이블:
+  | name | value |
+  | --- | --- |
+  | a | 1 |`
+
+const CALLOUT_KIND_MAP: Record<string, CalloutKind> = {
+  TIP: "tip",
+  INFO: "info",
+  NOTE: "info",
+  WARNING: "warning",
+  CAUTION: "warning",
+  OUTLINE: "outline",
+  EXAMPLE: "example",
+  SUMMARY: "summary",
+  IMPORTANT: "summary",
+}
+
+const CALLOUT_TITLE_MAP: Record<CalloutKind, string> = {
+  tip: "Tip",
+  info: "Information",
+  warning: "Warning",
+  outline: "개요",
+  example: "정답",
+  summary: "정리",
+}
+
+const CALLOUT_EMOJI_MAP: Array<{ marker: string; kind: CalloutKind }> = [
+  { marker: "💡", kind: "tip" },
+  { marker: "ℹ️", kind: "info" },
+  { marker: "ℹ", kind: "info" },
+  { marker: "⚠️", kind: "warning" },
+  { marker: "⚠", kind: "warning" },
+  { marker: "📋", kind: "outline" },
+  { marker: "✅", kind: "example" },
+  { marker: "📚", kind: "summary" },
+]
+
+type ParsedCalloutHeader = {
+  kind: CalloutKind
+  title: string
+}
+
+const LANGUAGE_LABEL_MAP: Record<string, string> = {
+  js: "JavaScript",
+  javascript: "JavaScript",
+  ts: "TypeScript",
+  typescript: "TypeScript",
+  tsx: "TSX",
+  jsx: "JSX",
+  java: "Java",
+  kt: "Kotlin",
+  kotlin: "Kotlin",
+  py: "Python",
+  python: "Python",
+  sh: "Shell",
+  shell: "Shell",
+  bash: "Bash",
+  md: "Markdown",
+  markdown: "Markdown",
+  yml: "YAML",
+  yaml: "YAML",
+  sql: "SQL",
+  json: "JSON",
+  html: "HTML",
+  xml: "XML",
+  css: "CSS",
+  scss: "SCSS",
+  go: "Go",
+  rust: "Rust",
+  rs: "Rust",
+  mermaid: "Mermaid",
+}
+
+const MERMAID_SOURCE_PATTERN =
+  /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
+
+const HTML_ENTITY_MAP: Record<string, string> = {
+  lt: "<",
+  gt: ">",
+  amp: "&",
+  quot: "\"",
+  "#39": "'",
+  "#x27": "'",
+  apos: "'",
+}
+
+const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}[\w-]*[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/
+const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/i
+
+const containsTokenByCharCodes = (text: string, token: number[]) => {
+  if (!text || token.length === 0 || text.length < token.length) return false
+
+  outer: for (let i = 0; i <= text.length - token.length; i += 1) {
+    for (let j = 0; j < token.length; j += 1) {
+      if (text.charCodeAt(i + j) !== token[j]) {
+        continue outer
+      }
+    }
+    return true
+  }
+
+  return false
+}
+
+const hasMermaidConnectorOrKeyword = (source: string) => {
+  const normalized = source.toLowerCase()
+  if (/\b(subgraph|end)\b/.test(normalized)) return true
+
+  const connectorTokens = [
+    [45, 45, 62],
+    [61, 61, 62],
+    [45, 46, 45, 62],
+    [58, 58, 58],
+  ]
+
+  return connectorTokens.some((token) => containsTokenByCharCodes(normalized, token))
+}
+
+const parseCalloutHeader = (raw: string): ParsedCalloutHeader | null => {
+  const line = raw.trim()
+  if (!line) return null
+
+  const blockquoteMatch = line.match(/^\[!([A-Za-z]+)\](?:\s*(.*))?$/)
+  const rawKind = blockquoteMatch?.[1]?.toUpperCase() || ""
+  const mappedKind = CALLOUT_KIND_MAP[rawKind]
+  if (mappedKind) {
+    const customTitle = blockquoteMatch?.[2]?.trim() || ""
+    return {
+      kind: mappedKind,
+      title: customTitle || CALLOUT_TITLE_MAP[mappedKind],
+    }
+  }
+
+  const emojiMatch = CALLOUT_EMOJI_MAP.find(({ marker }) => line === marker || line.startsWith(`${marker} `))
+  if (!emojiMatch) return null
+
+  const inlineTitle = line.slice(emojiMatch.marker.length).trim()
+  return {
+    kind: emojiMatch.kind,
+    title: inlineTitle || CALLOUT_TITLE_MAP[emojiMatch.kind],
+  }
+}
+
+const buildCalloutSegment = (
+  header: ParsedCalloutHeader,
+  bodyLines: string[]
+): MarkdownSegment => {
+  const firstBodyLineIndex = bodyLines.findIndex((row) => row.trim().length > 0)
+  const firstBodyLine = firstBodyLineIndex >= 0 ? bodyLines[firstBodyLineIndex].trim() : ""
+  const standaloneTitle =
+    firstBodyLine.match(/^\*\*(.+?)\*\*$/)?.[1]?.trim() ||
+    firstBodyLine.match(/^__(.+?)__$/)?.[1]?.trim() ||
+    firstBodyLine.match(/^#{1,6}\s+(.+)$/)?.[1]?.trim() ||
+    ""
+
+  const resolvedTitle = standaloneTitle || header.title
+  const resolvedBodyLines =
+    standaloneTitle && firstBodyLineIndex >= 0
+      ? bodyLines.filter((_, index) => index !== firstBodyLineIndex)
+      : bodyLines
+
+  return {
+    type: "callout",
+    kind: header.kind,
+    title: resolvedTitle,
+    content: resolvedBodyLines.join("\n").trim() || "내용을 입력하세요.",
+  }
+}
+
+const decodeBasicHtmlEntities = (raw: string) =>
+  raw.replace(/&(lt|gt|amp|quot|#39|#x27|apos);/gi, (entity, key: string) => {
+    const decoded = HTML_ENTITY_MAP[key.toLowerCase()]
+    return decoded ?? entity
+  })
+
+const escapeHtml = (raw: string) =>
+  raw
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;")
+
+const escapeHtmlAttribute = (raw: string) => escapeHtml(raw).replaceAll("\n", "&#10;")
+
+const BLOCK_BREAK_TAGS = new Set(["p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"])
+
+const isAsciiWhitespace = (char: string) => char === " " || char === "\n" || char === "\t" || char === "\r"
+
+const isAsciiAlphaNumeric = (char: string) => {
+  const code = char.charCodeAt(0)
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122)
+  )
+}
+
+const extractPlainTextByHtmlScanner = (rawHtml: string) => {
+  let index = 0
+  let plainText = ""
+
+  while (index < rawHtml.length) {
+    const currentChar = rawHtml[index]
+    if (currentChar !== "<") {
+      plainText += currentChar
+      index += 1
+      continue
+    }
+
+    const tagEndIndex = rawHtml.indexOf(">", index + 1)
+    if (tagEndIndex < 0) {
+      plainText += rawHtml.slice(index)
+      break
+    }
+
+    const rawTagBody = rawHtml.slice(index + 1, tagEndIndex).trim()
+    if (rawTagBody.length === 0 || rawTagBody.startsWith("!")) {
+      index = tagEndIndex + 1
+      continue
+    }
+
+    let tagPointer = 0
+    let closing = false
+    if (rawTagBody[tagPointer] === "/") {
+      closing = true
+      tagPointer += 1
+      while (tagPointer < rawTagBody.length && isAsciiWhitespace(rawTagBody[tagPointer])) {
+        tagPointer += 1
+      }
+    }
+
+    const tagNameStart = tagPointer
+    while (tagPointer < rawTagBody.length && isAsciiAlphaNumeric(rawTagBody[tagPointer])) {
+      tagPointer += 1
+    }
+    const tagName = rawTagBody.slice(tagNameStart, tagPointer).toLowerCase()
+
+    if (!closing && BLOCK_BREAK_TAGS.has(tagName)) {
+      plainText += "\n"
+    }
+
+    index = tagEndIndex + 1
+  }
+
+  return plainText
+}
+
+const extractPlainTextFromHtml = (rawHtml: string) => {
+  if (!rawHtml) return ""
+  if (!rawHtml.includes("<")) return decodeBasicHtmlEntities(rawHtml)
+
+  if (typeof window !== "undefined" && typeof window.DOMParser !== "undefined") {
+    const parser = new window.DOMParser()
+    const doc = parser.parseFromString(rawHtml, "text/html")
+
+    doc.querySelectorAll("br").forEach((br) => br.replaceWith("\n"))
+    doc.querySelectorAll("p,div,li,tr,h1,h2,h3,h4,h5,h6").forEach((el) => el.append("\n"))
+
+    return decodeBasicHtmlEntities(doc.body.textContent || "")
+  }
+
+  return decodeBasicHtmlEntities(extractPlainTextByHtmlScanner(rawHtml))
+}
+
+const extractMermaidSource = (rawCode: string) => {
+  return extractNormalizedMermaidSource(extractPlainTextFromHtml(rawCode))
+}
+
+export const isMermaidSource = (rawCode: string) => {
+  const normalized = extractMermaidSource(rawCode).trimStart()
+  if (!normalized) return false
+  return MERMAID_SOURCE_PATTERN.test(normalized)
+}
+
+const normalizeMermaidCodeBlocksInHtml = (html: string) =>
+  html.replace(/<pre\b[^>]*>\s*<code\b([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/gi, (full, rawCodeAttrs, rawCodeBody) => {
+    const attrs = String(rawCodeAttrs || "")
+    const lowerAttrs = attrs.toLowerCase()
+    const hasMermaidClass =
+      lowerAttrs.includes("language-mermaid") || lowerAttrs.includes("data-language=\"mermaid\"")
+    const source = extractMermaidSource(String(rawCodeBody || ""))
+    const looksLikeMermaid = MERMAID_SOURCE_PATTERN.test(source)
+    if (!hasMermaidClass && !looksLikeMermaid) return full
+    if (!source) return full
+
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+  })
+
+const normalizeMermaidParagraphsInHtml = (html: string) =>
+  html.replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, (full, rawBody) => {
+    const body = String(rawBody || "")
+    const normalizedText = normalizeEscapedMermaidFences(extractPlainTextFromHtml(body)).trim()
+    if (!normalizedText) return full
+
+    const hasMermaidFence =
+      /^`{3,}\s*mermaid\b/i.test(normalizedText) || /^\\`{3,}\s*mermaid\b/i.test(body.trim())
+    const source = extractMermaidSource(body)
+    const looksLikeMermaid = MERMAID_SOURCE_PATTERN.test(source) && hasMermaidConnectorOrKeyword(source)
+
+    if (!hasMermaidFence && !looksLikeMermaid) return full
+    if (!source) return full
+
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+  })
+
+const normalizeStandaloneMermaidPreBlocksInHtml = (html: string) =>
+  html.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/gi, (full, rawPreAttrs, rawBody) => {
+    if (/<code\b/i.test(rawBody)) return full
+
+    const attrs = String(rawPreAttrs || "")
+    const lowerAttrs = attrs.toLowerCase()
+    const hasMermaidHint =
+      lowerAttrs.includes("aq-mermaid") ||
+      lowerAttrs.includes("language-mermaid") ||
+      lowerAttrs.includes("data-language=\"mermaid\"") ||
+      lowerAttrs.includes("data-language='mermaid'")
+
+    const source = extractMermaidSource(String(rawBody || ""))
+    const looksLikeMermaid = MERMAID_SOURCE_PATTERN.test(source)
+
+    if (!hasMermaidHint && !looksLikeMermaid) return full
+    if (!source) return full
+
+    return `<pre class="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending" data-mermaid-source="${escapeHtmlAttribute(source)}"><code class="language-mermaid">${escapeHtml(source)}</code></pre>`
+  })
+
+export const normalizeContentHtmlForMermaid = (rawHtml: string): string =>
+  rawHtml
+    ? normalizeStandaloneMermaidPreBlocksInHtml(
+      normalizeMermaidParagraphsInHtml(normalizeMermaidCodeBlocksInHtml(rawHtml))
+    )
+    : ""
+
+export const shouldPreferMarkdownPipeline = (markdown: string) => {
+  if (!markdown.trim()) return false
+  if (HAS_MERMAID_BLOCK_REGEX.test(markdown)) return true
+  return HAS_FENCED_CODE_BLOCK_REGEX.test(markdown)
+}
+
+const extractTextFromNode = (node: ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join("")
+  if (!isValidElement(node)) return ""
+  return extractTextFromNode((node.props as { children?: ReactNode }).children)
+}
+
+export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
+  const list = Array.isArray(children) ? children : [children]
+  const codeElement = list.find(
+    (child): child is ReactElement<Record<string, unknown>> =>
+      isValidElement(child) && typeof child.type === "string" && child.type.toLowerCase() === "code"
+  )
+
+  const codeClassName =
+    typeof codeElement?.props.className === "string" ? codeElement.props.className : ""
+  const classLanguage =
+    codeClassName
+      .split(" ")
+      .map((token) => token.trim())
+      .find((token) => token.startsWith("language-"))
+      ?.replace("language-", "")
+      .toLowerCase() || ""
+
+  const dataLanguage =
+    typeof codeElement?.props["data-language"] === "string"
+      ? String(codeElement.props["data-language"]).toLowerCase()
+      : ""
+
+  const codeChildren = (codeElement?.props.children as ReactNode | undefined) ?? children
+  const rawCode = extractTextFromNode(codeChildren).replace(/\n$/, "")
+
+  return {
+    language: dataLanguage || classLanguage || "text",
+    rawCode,
+  }
+}
+
+export const toLanguageLabel = (lang: string) => {
+  const normalized = lang.trim().toLowerCase()
+  if (!normalized) return "Plain text"
+  return LANGUAGE_LABEL_MAP[normalized] || normalized.toUpperCase()
+}
+
+export const hashString = (value: string) => {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+const parseFenceMarker = (line: string): "`" | "~" | null => {
+  const match = line.trim().match(/^([`~]{3,})(.*)$/)
+  if (!match) return null
+
+  const fence = match[1]
+  const marker = fence[0] as "`" | "~"
+  if (!fence.split("").every((char) => char === marker)) return null
+  return marker
+}
+
+export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
+  const lines = content.split("\n")
+  const segments: MarkdownSegment[] = []
+  let markdownBuffer: string[] = []
+  let activeFenceMarker: "`" | "~" | null = null
+
+  const flushMarkdown = () => {
+    const text = markdownBuffer.join("\n").trim()
+    if (text) segments.push({ type: "markdown", content: text })
+    markdownBuffer = []
+  }
+
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const fenceMarker = parseFenceMarker(line)
+
+    if (activeFenceMarker) {
+      markdownBuffer.push(line)
+      if (fenceMarker === activeFenceMarker) {
+        activeFenceMarker = null
+      }
+      i += 1
+      continue
+    }
+
+    if (fenceMarker) {
+      markdownBuffer.push(line)
+      activeFenceMarker = fenceMarker
+      i += 1
+      continue
+    }
+
+    if (line.startsWith(":::toggle")) {
+      const title = line.replace(/^:::toggle\s*/, "").trim() || "토글"
+      const bodyLines: string[] = []
+      let closed = false
+
+      for (let j = i + 1; j < lines.length; j += 1) {
+        if (lines[j].trim() === ":::") {
+          flushMarkdown()
+          segments.push({
+            type: "toggle",
+            title,
+            content: bodyLines.join("\n").trim() || "내용을 입력하세요.",
+          })
+          i = j
+          closed = true
+          break
+        }
+        bodyLines.push(lines[j])
+      }
+
+      if (!closed) {
+        markdownBuffer.push(line)
+        markdownBuffer.push(...bodyLines)
+      }
+
+      i += 1
+      continue
+    }
+
+    if (line.trimStart().startsWith(">")) {
+      const blockStart = i
+      const quoteLines: string[] = []
+
+      while (i < lines.length && lines[i].trimStart().startsWith(">")) {
+        quoteLines.push(lines[i].replace(/^\s*>\s?/, ""))
+        i += 1
+      }
+
+      const firstContentIndex = quoteLines.findIndex((row) => row.trim().length > 0)
+      if (firstContentIndex >= 0) {
+        const firstLine = quoteLines[firstContentIndex].trim()
+        const header = parseCalloutHeader(firstLine)
+        if (header) {
+          flushMarkdown()
+          segments.push(buildCalloutSegment(header, quoteLines.slice(firstContentIndex + 1)))
+          continue
+        }
+      }
+
+      markdownBuffer.push(lines.slice(blockStart, i).join("\n"))
+      continue
+    }
+
+    if (/^\s*<aside(?:\s+[^>]*)?>/i.test(line)) {
+      const originalLines = [line]
+      const openingMatch = line.match(/^\s*<aside(?:\s+[^>]*)?>(.*)$/i)
+      const bodyLines: string[] = []
+      let closed = false
+
+      const appendAsideContent = (value: string) => {
+        if (value.length === 0) return
+        bodyLines.push(value)
+      }
+
+      const openingTail = openingMatch?.[1] ?? ""
+      if (openingTail.includes("</aside>")) {
+        appendAsideContent(openingTail.replace(/<\/aside>\s*$/i, "").trimEnd())
+        closed = true
+      } else {
+        appendAsideContent(openingTail)
+      }
+
+      let j = i + 1
+      while (!closed && j < lines.length) {
+        const currentLine = lines[j]
+        originalLines.push(currentLine)
+
+        if (/<\/aside>\s*$/i.test(currentLine)) {
+          appendAsideContent(currentLine.replace(/<\/aside>\s*$/i, "").trimEnd())
+          closed = true
+          i = j
+          break
+        }
+
+        bodyLines.push(currentLine)
+        j += 1
+      }
+
+      if (closed) {
+        const normalizedBodyLines = bodyLines
+          .map((row) => row.replace(/^\s+|\s+$/g, ""))
+        const firstContentIndex = normalizedBodyLines.findIndex((row) => row.length > 0)
+        const header = firstContentIndex >= 0 ? parseCalloutHeader(normalizedBodyLines[firstContentIndex]) : null
+
+        flushMarkdown()
+        if (header) {
+          segments.push(buildCalloutSegment(header, normalizedBodyLines.slice(firstContentIndex + 1)))
+        } else {
+          segments.push({
+            type: "callout",
+            kind: "info",
+            title: CALLOUT_TITLE_MAP.info,
+            content: normalizedBodyLines.join("\n").trim() || "내용을 입력하세요.",
+          })
+        }
+
+        i += 1
+        continue
+      }
+
+      markdownBuffer.push(originalLines.join("\n"))
+      i += 1
+      continue
+    }
+
+    markdownBuffer.push(line)
+    i += 1
+  }
+
+  flushMarkdown()
+  return segments
+}
+
+export const normalizeMarkdownForRender = (rawMarkdown: string) => normalizeEscapedMarkdownFences(rawMarkdown.trim())

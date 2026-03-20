@@ -3297,10 +3297,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           )}
                           <th>ID</th>
                           <th>제목</th>
-                          <th className="visibilityCell">
-                            공개<br />
-                            상태
-                          </th>
+                          <th className="visibilityCell">공개상태</th>
                           <th className="authorCell">작성자</th>
                           <th className="dateCell">
                             {listScope === "active" ? (
@@ -4560,12 +4557,12 @@ const Section = styled.section`
   }
 
   &[id="content-studio"] {
-    border: 0;
-    border-radius: 0;
-    padding: 0;
-    background: transparent;
-    box-shadow: none;
-    margin-bottom: 0.95rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    border-radius: 14px;
+    padding: 0.96rem;
+    background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray2} 0%, ${({ theme }) => theme.colors.gray1} 100%);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+    margin-bottom: 1.05rem;
   }
 
   @media (max-width: 420px) {
@@ -4609,26 +4606,26 @@ const GlobalNoticeBar = styled.div`
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray10};
-    background: transparent;
+    background: ${({ theme }) => theme.colors.gray2};
     border-color: ${({ theme }) => theme.colors.gray6};
   }
 
   &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.gray12};
-    background: transparent;
-    border-color: ${({ theme }) => theme.colors.gray6};
+    color: ${({ theme }) => theme.colors.blue11};
+    background: ${({ theme }) => theme.colors.blue3};
+    border-color: ${({ theme }) => theme.colors.blue7};
   }
 
   &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.gray12};
-    background: transparent;
-    border-color: ${({ theme }) => theme.colors.gray6};
+    color: ${({ theme }) => theme.colors.green11};
+    background: ${({ theme }) => theme.colors.green3};
+    border-color: ${({ theme }) => theme.colors.green7};
   }
 
   &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.gray12};
-    background: transparent;
-    border-color: ${({ theme }) => theme.colors.gray6};
+    color: ${({ theme }) => theme.colors.red11};
+    background: ${({ theme }) => theme.colors.red3};
+    border-color: ${({ theme }) => theme.colors.red7};
   }
 
   @media (max-width: 420px) {
@@ -4649,10 +4646,11 @@ const ContentStudioLeft = styled.div`
   display: grid;
   gap: 0.95rem;
   min-width: 0;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 10px;
-  background: transparent;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.9rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
   overflow: hidden;
 
   @media (max-width: 720px) {
@@ -4662,15 +4660,15 @@ const ContentStudioLeft = styled.div`
 `
 
 const QueryPanel = styled.div`
-  border: 0;
-  border-radius: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
   background: transparent;
-  padding: 0 0 0.82rem;
+  padding: 0.72rem 0.72rem 0.82rem;
   margin: 0;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
 
   @media (max-width: 420px) {
-    padding: 0 0 0.72rem;
+    padding: 0.62rem 0.62rem 0.72rem;
   }
 `
 
@@ -5123,9 +5121,9 @@ const Button = styled.button`
     box-shadow 0.18s ease;
 
   &[data-variant="danger"] {
-    border-color: ${({ theme }) => theme.colors.gray7};
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${({ theme }) => theme.colors.red8};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
   }
 
   &:hover:not(:disabled) {
@@ -5149,15 +5147,15 @@ const Button = styled.button`
 const PrimaryButton = styled(Button)`
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => theme.colors.gray7};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
+  border-color: ${({ theme }) => theme.colors.blue9};
+  background: ${({ theme }) => theme.colors.blue9};
+  color: ${({ theme }) => theme.colors.gray1};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.gray1};
   }
 `
 
@@ -5201,7 +5199,7 @@ const VisibilitySelect = styled.select`
 `
 
 const EditorSection = styled.div`
-  margin: 0.5rem 0 0.25rem;
+  margin: 1.12rem 0 0.25rem;
   border: none;
   border-radius: 0;
   padding: 0;
@@ -5209,6 +5207,7 @@ const EditorSection = styled.div`
 
   @media (max-width: 720px) {
     padding: 0;
+    margin-top: 0.92rem;
   }
 `
 
@@ -6117,10 +6116,10 @@ const EditorGrid = styled.div`
 `
 
 const ListPanel = styled.div`
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.82rem;
   margin: 0;
   min-width: 0;
   display: grid;
@@ -6187,7 +6186,7 @@ const ReadOnlyHint = styled.span`
   align-items: center;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
   min-height: 32px;
   padding: 0 0.7rem;
@@ -6234,11 +6233,12 @@ const ListTableWrap = styled.div`
 `
 
 const SelectedPostPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 10px;
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.9rem;
   margin: 0;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
 
   @media (max-width: 420px) {
     border-radius: 10px;
@@ -6417,12 +6417,13 @@ const ListTable = styled.table`
 
   th.visibilityCell,
   td.visibilityCell {
-    width: 84px;
+    width: 96px;
   }
 
   th.visibilityCell {
     line-height: 1.25;
     text-align: center;
+    white-space: nowrap;
   }
 
   th.actionsCell,
@@ -6489,18 +6490,22 @@ const VisibilityBadge = styled.span`
   font-size: 0.72rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   color: ${({ theme }) => theme.colors.gray11};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray2};
 
   &[data-tone="PRIVATE"] {
     color: ${({ theme }) => theme.colors.gray11};
   }
 
   &[data-tone="PUBLIC_UNLISTED"] {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.blue11};
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
   }
 
   &[data-tone="PUBLIC_LISTED"] {
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.green11};
+    border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
   }
 `
 

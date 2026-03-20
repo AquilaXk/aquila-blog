@@ -60,10 +60,10 @@ custom:
   cache:
     ttl-overrides:
       # 공개 읽기 API는 쓰기 시 즉시 무효화하므로 운영 기본 TTL을 높여 DB 압력을 낮춘다.
-      post-feed-v1: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
-      post-explore-v1: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:45}
-      post-tags-v1: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:120}
-      post-detail-public-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:120}
+      post-feed-v3: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
+      post-explore-v3: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:45}
+      post-tags-v3: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:120}
+      post-detail-public-v3: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:120}
   db:
     sequence-guard-on-startup: ${CUSTOM__DB__SEQUENCE_GUARD_ON_STARTUP:true}
   observability:

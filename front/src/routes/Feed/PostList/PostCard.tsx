@@ -32,7 +32,7 @@ const PostCard: React.FC<Props> = ({ data }) => {
   const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
 
   return (
-    <StyledWrapper href={toCanonicalPostPath(data.id)}>
+    <StyledWrapper href={toCanonicalPostPath(data.id)} prefetch={false}>
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
@@ -113,10 +113,8 @@ const StyledWrapper = styled(Link)`
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray2};
     box-shadow: var(--post-card-shadow);
-    transition:
-      transform 0.22s ease,
-      box-shadow 0.22s ease,
-      border-color 0.22s ease;
+    transition: transform 0.18s ease;
+    will-change: transform;
 
     > .thumbnail {
       position: relative;
@@ -139,9 +137,6 @@ const StyledWrapper = styled(Link)`
         pointer-events: none;
       }
 
-      img {
-        transition: filter 0.22s ease;
-      }
     }
 
     > .content {
@@ -288,13 +283,6 @@ const StyledWrapper = styled(Link)`
     &:hover article,
     &:focus-visible article {
       transform: translateY(var(--post-card-translate-y));
-      box-shadow: var(--post-card-shadow-hover);
-      border-color: ${({ theme }) => theme.colors.gray6};
-    }
-
-    &:hover article > .thumbnail img,
-    &:focus-visible article > .thumbnail img {
-      filter: brightness(0.96);
     }
   }
 

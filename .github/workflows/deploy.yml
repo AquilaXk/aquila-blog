@@ -647,6 +647,88 @@ jobs:
           if ! wait_public_api_health "${API_DOMAIN}"; then
             rollback_and_exit "public_api_healthcheck_failed"
           fi
+
+          run_canary_ratio_check() {
+            local label="$1"
+            local url="$2"
+            local attempts="${DEPLOY_CANARY_ATTEMPTS:-10}"
+            local min_success_percent="${DEPLOY_CANARY_MIN_SUCCESS_PERCENT:-90}"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-12}"
+
+            local success=0
+            local code
+            for attempt in $(seq 1 "${attempts}"); do
+              code="$(
+                curl -sS \
+                  --connect-timeout "${connect_timeout}" \
+                  -m "${max_time}" \
+                  -o /dev/null \
+                  -w "%{http_code}" \
+                  "${url}" || true
+              )"
+              echo "[post-deploy-canary] ${label} attempt=${attempt}/${attempts} status=${code}"
+              if [ "${code}" = "200" ]; then
+                success=$((success + 1))
+              fi
+            done
+
+            local success_percent
+            success_percent="$(awk -v s="${success}" -v a="${attempts}" 'BEGIN { printf "%.1f", (a == 0 ? 0 : (s * 100.0) / a) }')"
+            local required_success
+            required_success=$(( (attempts * min_success_percent + 99) / 100 ))
+
+            echo "[post-deploy-canary] ${label} success=${success}/${attempts} (${success_percent}%), threshold=${min_success_percent}%"
+            [ "${success}" -ge "${required_success}" ]
+          }
+
+          extract_canary_post_id() {
+            local feed_url="$1"
+            local connect_timeout="${DEPLOY_CANARY_CONNECT_TIMEOUT_SECONDS:-5}"
+            local max_time="${DEPLOY_CANARY_MAX_TIME_SECONDS:-12}"
+            local body
+            body="$(
+              curl -sS \
+                --connect-timeout "${connect_timeout}" \
+                -m "${max_time}" \
+                "${feed_url}" || true
+            )"
+            [ -z "${body}" ] && return 1
+
+            local post_id=""
+            if command -v python3 >/dev/null 2>&1; then
+              post_id="$(
+                printf '%s' "${body}" | python3 -c 'import json,sys; payload=json.load(sys.stdin); data=payload.get("data") or {}; content=data.get("content") or []; value=content[0].get("id") if content and isinstance(content[0], dict) else None; print(value if isinstance(value, int) else "")' 2>/dev/null || true
+              )"
+            fi
+
+            if [ -z "${post_id}" ]; then
+              post_id="$(printf '%s' "${body}" | grep -oE '"id":[0-9]+' | head -n 1 | cut -d: -f2 || true)"
+            fi
+
+            [ -n "${post_id}" ] && printf '%s' "${post_id}"
+          }
+
+          FEED_URL="https://${API_DOMAIN}/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT"
+          EXPLORE_URL="https://${API_DOMAIN}/post/api/v1/posts/explore?kw=&tag=&sort=CREATED_AT&page=1&pageSize=30"
+
+          if ! run_canary_ratio_check "feed" "${FEED_URL}"; then
+            rollback_and_exit "post_public_read_canary_feed_failed"
+          fi
+
+          if ! run_canary_ratio_check "explore" "${EXPLORE_URL}"; then
+            rollback_and_exit "post_public_read_canary_explore_failed"
+          fi
+
+          DETAIL_POST_ID="$(extract_canary_post_id "${FEED_URL}" || true)"
+          if [ -z "${DETAIL_POST_ID}" ]; then
+            rollback_and_exit "post_public_read_canary_missing_post_id"
+          fi
+          DETAIL_URL="https://${API_DOMAIN}/post/api/v1/posts/${DETAIL_POST_ID}"
+
+          if ! run_canary_ratio_check "detail(${DETAIL_POST_ID})" "${DETAIL_URL}"; then
+            rollback_and_exit "post_public_read_canary_detail_failed"
+          fi
           REMOTE
 
   frontLiveE2E:

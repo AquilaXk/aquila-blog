@@ -74,7 +74,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.
   res.setHeader(
     "Cache-Control",
-    !authMember && initialAdminProfile && postsLoaded
+    authMember === null && initialAdminProfile && postsLoaded
       ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )

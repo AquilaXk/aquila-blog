@@ -14,6 +14,7 @@ import org.springframework.data.redis.cache.RedisCacheManager
 import org.springframework.data.redis.connection.RedisConnectionFactory
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializationContext
+import org.springframework.data.redis.serializer.RedisSerializer
 import org.springframework.scheduling.annotation.EnableScheduling
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator
 import java.time.Duration
@@ -69,6 +70,9 @@ class RedisCacheConfig(
 
     override fun errorHandler(): CacheErrorHandler = cacheErrorHandlerDelegate
 
+    @Bean("errorHandler")
+    fun springCacheErrorHandler(): CacheErrorHandler = cacheErrorHandlerDelegate
+
     @Bean
     fun cacheErrorHandler(): CacheErrorHandler = cacheErrorHandlerDelegate
 
@@ -94,13 +98,29 @@ class RedisCacheConfig(
                 // Kotlin data class / java.time 역직렬화를 위해 모듈을 자동 등록한다.
                 .customize { mapperBuilder -> mapperBuilder.findAndAddModules() }
                 .build()
+        val safeSerializer =
+            object : RedisSerializer<Any> {
+                override fun serialize(value: Any?): ByteArray = serializer.serialize(value) ?: ByteArray(0)
+
+                override fun deserialize(bytes: ByteArray?): Any? =
+                    try {
+                        serializer.deserialize(bytes)
+                    } catch (exception: Exception) {
+                        logger.warn(
+                            "Cache DESERIALIZE failed (bytes={}), fallback to source",
+                            bytes?.size ?: 0,
+                            exception,
+                        )
+                        null
+                    }
+            }
 
         val defaultConfig =
             RedisCacheConfiguration
                 .defaultCacheConfig()
                 .entryTtl(Duration.ofSeconds(properties.ttlSeconds))
                 .serializeValuesWith(
-                    RedisSerializationContext.SerializationPair.fromSerializer(serializer),
+                    RedisSerializationContext.SerializationPair.fromSerializer(safeSerializer),
                 )
 
         val perCacheConfigs =

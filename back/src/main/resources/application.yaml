@@ -214,10 +214,10 @@ custom:
     ttl-seconds: 3600
     ttl-overrides:
       member-admin-profile-v2: 120
-      post-feed-v1: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
-      post-explore-v1: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
-      post-tags-v1: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
-      post-detail-public-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:15}
+      post-feed-v3: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
+      post-explore-v3: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
+      post-tags-v3: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
+      post-detail-public-v3: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:15}
   revalidate:
     url: "${CUSTOM__REVALIDATE__URL:}"
     token: "${CUSTOM__REVALIDATE__TOKEN:}"

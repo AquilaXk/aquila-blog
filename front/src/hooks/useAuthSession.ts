@@ -4,11 +4,6 @@ import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 
 const isClient = typeof window !== "undefined"
-const hasAuthCookieInBrowser = () => {
-  if (!isClient) return false
-  const rawCookie = document.cookie || ""
-  return rawCookie.includes("apiKey=") || rawCookie.includes("accessToken=")
-}
 
 const clearCookie = (name: string, domain?: string) => {
   if (!isClient) return
@@ -57,8 +52,9 @@ const useAuthSession = () => {
   const hasCachedSnapshot = cachedSnapshot !== undefined
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
-  const hasAuthCookieSnapshot = hasAuthCookieInBrowser()
-  const shouldFetchAuthMe = hasAuthCookieSnapshot || hasCachedMemberSnapshot
+  // auth 쿠키는 HttpOnly라 document.cookie에서 감지할 수 없으므로,
+  // 첫 진입에서는 항상 auth/me를 1회 조회해 실제 로그인 상태를 판별한다.
+  const shouldFetchAuthMe = !hasCachedSnapshot || hasCachedMemberSnapshot
   const shouldRefetchOnMount = shouldFetchAuthMe && (!hasCachedSnapshot || hasCachedAnonymousSnapshot)
   const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 5 * 60_000 : 0
   const query = useQuery({
@@ -88,7 +84,7 @@ const useAuthSession = () => {
   }
 
   const me = query.data ?? null
-  const isIdleAnonymous = !query.isFetching && !hasCachedSnapshot && !hasAuthCookieSnapshot
+  const isIdleAnonymous = !query.isFetching && hasCachedAnonymousSnapshot
   const hasResolvedSnapshot = query.status === "success" || query.data !== undefined || isIdleAnonymous
   const authStatus: AuthSessionStatus =
     query.isError

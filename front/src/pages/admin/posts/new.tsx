@@ -483,7 +483,12 @@ const formatPreviewSummaryReason = (rawReason?: string | null) => {
       return "AI 응답 품질 부족"
     case "internal-error":
       return "서버 내부 처리 실패"
+    case "proxy-transport":
+      return "프록시 통신 실패(규칙 요약 대체)"
     default:
+      if (reason.startsWith("proxy-upstream-")) {
+        return `프록시 업스트림 오류(${reason.slice("proxy-upstream-".length)})`
+      }
       if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
       return reason
   }

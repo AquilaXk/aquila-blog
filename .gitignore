@@ -16,3 +16,6 @@ perf/k6/results/*.txt
 
 # local git hooks
 .githooks/commit-msg
+
+# local troubleshooting portfolio docs
+docs/troubleshooting/

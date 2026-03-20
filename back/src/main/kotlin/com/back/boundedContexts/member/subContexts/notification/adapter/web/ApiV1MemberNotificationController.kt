@@ -6,6 +6,7 @@ import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotifi
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.http.MediaType
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
@@ -28,6 +29,8 @@ class ApiV1MemberNotificationController(
     private val memberNotificationSseService: MemberNotificationSseService,
     private val rq: Rq,
 ) {
+    private val logger = LoggerFactory.getLogger(ApiV1MemberNotificationController::class.java)
+
     data class SnapshotResBody(
         val items: List<MemberNotificationDto>,
         val unreadCount: Int,
@@ -39,12 +42,38 @@ class ApiV1MemberNotificationController(
 
     @GetMapping
     @Transactional(readOnly = true)
-    fun getItems(): List<MemberNotificationDto> = memberNotificationApplicationService.getLatest(rq.actor)
+    fun getItems(): List<MemberNotificationDto> {
+        val actor = rq.actorOrNull ?: return emptyList()
+        return runCatching { memberNotificationApplicationService.getLatest(actor) }
+            .onFailure { exception ->
+                logger.warn(
+                    "notification_items_fallback actorId={} reason={}",
+                    actor.id,
+                    exception::class.java.simpleName,
+                    exception,
+                )
+            }.getOrDefault(emptyList())
+    }
 
     @GetMapping("/snapshot")
     @Transactional(readOnly = true)
     fun getSnapshot(): SnapshotResBody {
-        val snapshot = memberNotificationApplicationService.getSnapshotSafe(rq.actor)
+        val actor = rq.actorOrNull ?: return SnapshotResBody(items = emptyList(), unreadCount = 0)
+        val snapshot =
+            runCatching { memberNotificationApplicationService.getSnapshotSafe(actor) }
+                .onFailure { exception ->
+                    logger.warn(
+                        "notification_snapshot_fallback actorId={} reason={}",
+                        actor.id,
+                        exception::class.java.simpleName,
+                        exception,
+                    )
+                }.getOrElse {
+                    MemberNotificationApplicationService.NotificationSnapshot(
+                        items = emptyList(),
+                        unreadCount = 0,
+                    )
+                }
         return SnapshotResBody(
             items = snapshot.items,
             unreadCount = snapshot.unreadCount,
@@ -53,7 +82,20 @@ class ApiV1MemberNotificationController(
 
     @GetMapping("/unread-count")
     @Transactional(readOnly = true)
-    fun unreadCount(): UnreadCountResBody = UnreadCountResBody(memberNotificationApplicationService.unreadCountSafe(rq.actor))
+    fun unreadCount(): UnreadCountResBody {
+        val actor = rq.actorOrNull ?: return UnreadCountResBody(0)
+        val unreadCount =
+            runCatching { memberNotificationApplicationService.unreadCountSafe(actor) }
+                .onFailure { exception ->
+                    logger.warn(
+                        "notification_unread_count_controller_fallback actorId={} reason={}",
+                        actor.id,
+                        exception::class.java.simpleName,
+                        exception,
+                    )
+                }.getOrDefault(0)
+        return UnreadCountResBody(unreadCount)
+    }
 
     @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun stream(

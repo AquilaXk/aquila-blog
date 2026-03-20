@@ -8,6 +8,7 @@ import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
 import com.querydsl.core.types.dsl.BooleanExpression
 import com.querydsl.core.types.dsl.Expressions
+import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQuery
 import com.querydsl.jpa.impl.JPAQueryFactory
 import org.springframework.data.domain.Page
@@ -88,10 +89,11 @@ class PostRepositoryImpl(
         }
         author?.let { builder.and(post.author.eq(it)) }
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
+        if (tagLikeToken != null) builder.and(buildTagIndexPredicate(tagLikeToken))
 
-        val postsQuery = createPostsQuery(builder, pageable, tagLikeToken)
+        val postsQuery = createPostsQuery(builder, pageable)
         // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
-        val countQuery = createCountQuery(builder, tagLikeToken)
+        val countQuery = createCountQuery(builder)
 
         return PageableExecutionUtils.getPage(
             postsQuery.fetch(),
@@ -105,6 +107,19 @@ class PostRepositoryImpl(
             post.title,
             post.content,
             Expressions.constant(kw),
+        )
+
+    private fun buildTagIndexPredicate(tagLikeToken: String): BooleanExpression =
+        post.id.`in`(
+            JPAExpressions
+                .select(postAttr.subject.id)
+                .from(postAttr)
+                .where(
+                    postAttr.name
+                        .eq(META_TAGS_INDEX_ATTR_NAME)
+                        .and(postAttr.strValue.isNotNull)
+                        .and(postAttr.strValue.lower().like(tagLikeToken)),
+                ),
         )
 
     private fun normalizeTagToken(tag: String): String = tag.trim().lowercase()
@@ -129,7 +144,6 @@ class PostRepositoryImpl(
     private fun createPostsQuery(
         builder: BooleanBuilder,
         pageable: Pageable,
-        tagLikeToken: String?,
     ): JPAQuery<Post> {
         val query =
             queryFactory
@@ -138,17 +152,6 @@ class PostRepositoryImpl(
                 // 목록 DTO에서 author 접근이 필수라 fetchJoin으로 N+1을 방지한다.
                 .leftJoin(post.author)
                 .fetchJoin()
-
-        if (tagLikeToken != null) {
-            query.join(postAttr).on(
-                postAttr.subject
-                    .id
-                    .eq(post.id)
-                    .and(postAttr.name.eq(META_TAGS_INDEX_ATTR_NAME))
-                    .and(postAttr.strValue.isNotNull)
-                    .and(postAttr.strValue.lower().like(tagLikeToken)),
-            )
-        }
 
         query.where(builder)
 
@@ -171,26 +174,9 @@ class PostRepositoryImpl(
     /**
      * CountQuery 항목을 생성한다.
      */
-    private fun createCountQuery(
-        builder: BooleanBuilder,
-        tagLikeToken: String?,
-    ): JPAQuery<Long> {
-        val query =
-            queryFactory
-                .select(post.id.countDistinct())
-                .from(post)
-
-        if (tagLikeToken != null) {
-            query.join(postAttr).on(
-                postAttr.subject
-                    .id
-                    .eq(post.id)
-                    .and(postAttr.name.eq(META_TAGS_INDEX_ATTR_NAME))
-                    .and(postAttr.strValue.isNotNull)
-                    .and(postAttr.strValue.lower().like(tagLikeToken)),
-            )
-        }
-
-        return query.where(builder)
-    }
+    private fun createCountQuery(builder: BooleanBuilder): JPAQuery<Long> =
+        queryFactory
+            .select(post.id.countDistinct())
+            .from(post)
+            .where(builder)
 }

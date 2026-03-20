@@ -75,7 +75,7 @@ sequenceDiagram
 
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/application/service/MemberSignupVerificationService.kt`
 - `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/adapter/web/ApiV1SignupVerificationController.kt`
-- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/domain/MemberSignupVerification.kt`
+- `back/src/main/kotlin/com/back/boundedContexts/member/subContexts/signupVerification/model/MemberSignupVerification.kt`
 
 ### 2. 메일 발송 인프라
 

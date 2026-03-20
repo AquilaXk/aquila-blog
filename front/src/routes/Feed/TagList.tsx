@@ -124,9 +124,9 @@ const StyledWrapper = styled.div`
     display: none;
     min-width: 0;
     position: sticky;
-    top: 5.2rem;
-    max-height: calc(100vh - 6rem);
-    max-height: calc(100dvh - 6rem);
+    top: calc(var(--app-header-height, 56px) + 1.2rem);
+    max-height: calc(100vh - var(--app-header-height, 56px) - 1.8rem);
+    max-height: calc(100dvh - var(--app-header-height, 56px) - 1.8rem);
     overflow: hidden;
 
     @media (min-width: 1201px) {
@@ -151,18 +151,16 @@ const StyledWrapper = styled.div`
     padding: 0;
     display: grid;
     gap: 0.16rem;
-    max-height: calc(100vh - 10.5rem);
-    max-height: calc(100dvh - 10.5rem);
+    max-height: calc(100vh - var(--app-header-height, 56px) - 6.35rem);
+    max-height: calc(100dvh - var(--app-header-height, 56px) - 6.35rem);
     overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 
     &::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      border-radius: 999px;
-      background: ${({ theme }) => theme.colors.gray6};
+      display: none;
+      width: 0;
+      height: 0;
     }
   }
 
@@ -235,11 +233,21 @@ const StyledWrapper = styled.div`
     gap: 0.35rem;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: thin;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     min-height: 0;
     min-width: 0;
 
     padding-bottom: 0.28rem;
+
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
 
     @media (min-width: 1201px) {
       display: none;
@@ -259,8 +267,9 @@ const StyledWrapper = styled.div`
     padding: 0.4rem 0.84rem;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
+    scroll-snap-align: start;
     cursor: pointer;
-    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+    transition: all 0.125s ease-in;
 
     &:hover {
       border-color: ${({ theme }) => theme.colors.gray7};

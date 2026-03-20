@@ -12,6 +12,13 @@ type PageDto<T> = {
   }
 }
 
+type CursorPageDto<T> = {
+  content: T[]
+  pageSize: number
+  hasNext: boolean
+  nextCursor?: string | null
+}
+
 type ApiPostDto = {
   id: number
   createdAt: string
@@ -298,6 +305,8 @@ export type ExplorePostsPage = {
   totalCount: number
   pageNumber: number
   pageSize: number
+  hasNext?: boolean
+  nextCursor?: string | null
 }
 
 const toSortParam = (order: "asc" | "desc") => (order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT")
@@ -352,6 +361,45 @@ const buildFeedPath = ({
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   return `/post/api/v1/posts/feed?${params.toString()}`
+}
+
+const buildFeedCursorPath = ({
+  order = "desc",
+  pageSize = PAGE_SIZE,
+  cursor,
+}: {
+  order?: "asc" | "desc"
+  pageSize?: number
+  cursor?: string
+}) => {
+  const params = new URLSearchParams()
+  params.set("sort", toSortParam(order))
+  params.set("pageSize", String(toValidPageSize(pageSize)))
+  if (cursor && cursor.trim()) {
+    params.set("cursor", cursor.trim())
+  }
+  return `/post/api/v1/posts/feed/cursor?${params.toString()}`
+}
+
+const buildExploreCursorPath = ({
+  tag = "",
+  order = "desc",
+  pageSize = PAGE_SIZE,
+  cursor,
+}: {
+  tag?: string
+  order?: "asc" | "desc"
+  pageSize?: number
+  cursor?: string
+}) => {
+  const params = new URLSearchParams()
+  params.set("tag", tag.trim())
+  params.set("sort", toSortParam(order))
+  params.set("pageSize", String(toValidPageSize(pageSize)))
+  if (cursor && cursor.trim()) {
+    params.set("cursor", cursor.trim())
+  }
+  return `/post/api/v1/posts/explore/cursor?${params.toString()}`
 }
 
 export const getFeedPosts = async ({
@@ -462,6 +510,77 @@ export const getFeedPostsPage = async ({
       typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
         ? Math.max(1, Math.trunc(response.pageable.pageSize))
         : fallbackPageSize,
+  }
+}
+
+export const getFeedPostsCursorPage = async ({
+  order = "desc",
+  pageSize = PAGE_SIZE,
+  cursor,
+  signal,
+}: {
+  order?: "asc" | "desc"
+  pageSize?: number
+  cursor?: string
+  signal?: AbortSignal
+}): Promise<ExplorePostsPage> => {
+  const safePageSize = toValidPageSize(pageSize)
+  const response = await apiFetch<CursorPageDto<ApiPostDto>>(
+    buildFeedCursorPath({
+      order,
+      pageSize: safePageSize,
+      cursor,
+    }),
+    {
+      signal,
+    }
+  )
+
+  const mappedPosts = response.content.map(mapPostDto)
+  return {
+    posts: mappedPosts,
+    totalCount: mappedPosts.length,
+    pageNumber: 1,
+    pageSize: safePageSize,
+    hasNext: response.hasNext === true,
+    nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+  }
+}
+
+export const getExplorePostsCursorPage = async ({
+  tag = "",
+  order = "desc",
+  pageSize = PAGE_SIZE,
+  cursor,
+  signal,
+}: {
+  tag?: string
+  order?: "asc" | "desc"
+  pageSize?: number
+  cursor?: string
+  signal?: AbortSignal
+}): Promise<ExplorePostsPage> => {
+  const safePageSize = toValidPageSize(pageSize)
+  const response = await apiFetch<CursorPageDto<ApiPostDto>>(
+    buildExploreCursorPath({
+      tag,
+      order,
+      pageSize: safePageSize,
+      cursor,
+    }),
+    {
+      signal,
+    }
+  )
+
+  const mappedPosts = response.content.map(mapPostDto)
+  return {
+    posts: mappedPosts,
+    totalCount: mappedPosts.length,
+    pageNumber: 1,
+    pageSize: safePageSize,
+    hasNext: response.hasNext === true,
+    nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
   }
 }
 
@@ -591,4 +710,12 @@ export const getPostDetailById = async (id: string): Promise<PostDetail | null> 
     }
     throw error
   }
+}
+
+export const createFeedCursorFromPost = (post: TPost): string | null => {
+  const id = Number(post.id)
+  if (!Number.isFinite(id) || id <= 0) return null
+  const createdAtMillis = new Date(post.createdTime).getTime()
+  if (!Number.isFinite(createdAtMillis) || createdAtMillis <= 0) return null
+  return `${Math.trunc(createdAtMillis)}:${Math.trunc(id)}`
 }

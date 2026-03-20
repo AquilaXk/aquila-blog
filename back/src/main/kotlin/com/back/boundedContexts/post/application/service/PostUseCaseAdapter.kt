@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import org.springframework.stereotype.Service
+import java.time.Instant
 
 /**
  * PostUseCaseAdapter는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
@@ -153,6 +154,21 @@ class PostUseCaseAdapter(
         page: Int,
         pageSize: Int,
     ): PagedResult<Post> = postApplicationService.findPagedByKwAndTag(kw, tag, sort, page, pageSize)
+
+    override fun findPublicByCursor(
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post> = postApplicationService.findPublicByCursor(cursorCreatedAt, cursorId, limit, sort)
+
+    override fun findPublicByTagCursor(
+        tag: String,
+        cursorCreatedAt: Instant?,
+        cursorId: Long?,
+        limit: Int,
+        sort: PostSearchSortType1,
+    ): List<Post> = postApplicationService.findPublicByTagCursor(tag, cursorCreatedAt, cursorId, limit, sort)
 
     override fun getPublicTagCounts(): List<TagCountDto> = postApplicationService.getPublicTagCounts()
 

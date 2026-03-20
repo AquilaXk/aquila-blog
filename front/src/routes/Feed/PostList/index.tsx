@@ -87,7 +87,7 @@ const PostList: React.FC<Props> = ({
       )}
       {showEmptyState && <EmptyPostState hasFilter={hasFilter} onClearFilters={onClearFilters} />}
       {posts.map((post) => (
-        <PostCard key={post.id} data={post} />
+        <PostCard key={post.id} data={post} layout="regular" />
       ))}
       {(hasNextPage || isFetchingNextPage) && (
         <section className="loadMoreArea">
@@ -281,18 +281,50 @@ const StyledWrapper = styled.div`
   }
 
   .skeletonCard {
-    min-height: 18.5rem;
+    position: relative;
+    overflow: hidden;
+    min-height: 26rem;
     border-radius: 15px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background:
-      linear-gradient(
-        90deg,
-        ${({ theme }) => theme.colors.gray2} 0%,
-        ${({ theme }) => theme.colors.gray3} 50%,
-        ${({ theme }) => theme.colors.gray2} 100%
-      );
-    background-size: 240% 100%;
-    animation: feed-card-skeleton-pulse 1.1s ease-in-out infinite;
+    background: ${({ theme }) => theme.colors.gray2};
+
+    &::before,
+    &::after {
+      content: "";
+      display: block;
+      background:
+        linear-gradient(
+          90deg,
+          ${({ theme }) => theme.colors.gray2} 0%,
+          ${({ theme }) => theme.colors.gray3} 50%,
+          ${({ theme }) => theme.colors.gray2} 100%
+        );
+      background-size: 240% 100%;
+      animation: feed-card-skeleton-pulse 1.1s ease-in-out infinite;
+    }
+
+    &::before {
+      width: 100%;
+      aspect-ratio: 1.94 / 1;
+    }
+
+    &::after {
+      margin: 0.95rem 1rem 1rem;
+      border-radius: 10px;
+      min-height: 10.6rem;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .skeletonCard {
+      min-height: 24rem;
+      border-radius: 13px;
+
+      &::after {
+        margin: 0.86rem 0.9rem 0.86rem;
+        min-height: 9.6rem;
+      }
+    }
   }
 
   @keyframes feed-card-skeleton-pulse {

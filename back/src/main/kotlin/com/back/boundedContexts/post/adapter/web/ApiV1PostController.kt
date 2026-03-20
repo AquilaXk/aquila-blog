@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryU
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
+import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
@@ -82,6 +83,18 @@ class ApiV1PostController(
         return postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
     }
 
+    @GetMapping("/feed/cursor")
+    @Transactional(readOnly = true)
+    fun getFeedByCursor(
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): CursorFeedPageDto {
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val validSort = normalizeCursorSort(sort)
+        return postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
+    }
+
     /**
      * 검색/목록 조회 조건을 정규화해 페이징 결과를 구성합니다.
      * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
@@ -100,6 +113,20 @@ class ApiV1PostController(
         val normalizedKw = normalizeExploreKeyword(kw)
         val normalizedTag = normalizeExploreTag(tag)
         return postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
+    }
+
+    @GetMapping("/explore/cursor")
+    @Transactional(readOnly = true)
+    fun exploreByCursor(
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "") tag: String,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): CursorFeedPageDto {
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val normalizedTag = normalizeExploreTag(tag)
+        val validSort = normalizeCursorSort(sort)
+        return postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
     }
 
     @GetMapping("/search")
@@ -367,6 +394,14 @@ class ApiV1PostController(
     private fun normalizeExploreKeyword(raw: String): String = normalizeSearchToken(raw, MAX_EXPLORE_KW_LENGTH)
 
     private fun normalizeExploreTag(raw: String): String = normalizeSearchToken(raw, MAX_EXPLORE_TAG_LENGTH)
+
+    private fun normalizeCursorSort(sort: PostSearchSortType1): PostSearchSortType1 =
+        when (sort) {
+            PostSearchSortType1.CREATED_AT,
+            PostSearchSortType1.CREATED_AT_ASC,
+            -> sort
+            else -> PostSearchSortType1.CREATED_AT
+        }
 
     private fun normalizeSearchToken(
         raw: String,

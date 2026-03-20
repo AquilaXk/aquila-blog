@@ -1,7 +1,12 @@
 import Feed from "src/routes/Feed"
 import { CONFIG } from "../../site.config"
 import { NextPageWithLayout } from "../types"
-import { getExplorePostsPage, getFeedPostsPage, getTagCounts } from "../apis/backend/posts"
+import {
+  createFeedCursorFromPost,
+  getExplorePostsPage,
+  getFeedPostsPage,
+  getTagCounts,
+} from "../apis/backend/posts"
 import MetaConfig from "src/components/MetaConfig"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
@@ -65,6 +70,10 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     queryClient.setQueryData(queryKey.postsTotalCount(), totalCount)
   }
   if (postsLoaded) {
+    const lastPost = posts.length > 0 ? posts[posts.length - 1] : null
+    const hasNextPage = posts.length >= FEED_EXPLORE_PAGE_SIZE && totalCount > posts.length
+    const hydratedNextCursor = hasNextPage && lastPost ? createFeedCursorFromPost(lastPost) : null
+
     queryClient.setQueryData(
       currentTag
         ? queryKey.postsExploreInfinite({
@@ -84,9 +93,11 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
             totalCount,
             pageNumber: 1,
             pageSize: FEED_EXPLORE_PAGE_SIZE,
+            hasNext: Boolean(hydratedNextCursor),
+            nextCursor: hydratedNextCursor,
           },
         ],
-        pageParams: [1],
+        pageParams: [null],
       }
     )
   }

@@ -17,6 +17,7 @@ import {
 
 type Props = {
   data: TPost
+  layout?: "regular" | "pinned"
 }
 
 type NavigatorConnectionLike = {
@@ -34,7 +35,7 @@ const MAX_PREFETCH_QUEUE_SIZE_MID_MEMORY = 12
 const MAX_PREFETCH_QUEUE_SIZE_LOW_MEMORY = 8
 const MAX_PREFETCHED_PATHS = 256
 const POST_CARD_THUMBNAIL_SIZES =
-  "(min-width: 1400px) 420px, (min-width: 1201px) 32vw, (min-width: 860px) 46vw, 94vw"
+  "(min-width: 1520px) 420px, (min-width: 1057px) 368px, (min-width: 768px) 46vw, 94vw"
 const prefetchedPostPathLRU = new Map<string, true>()
 const queuedPrefetchListeners = new Map<string, Array<(success: boolean) => void>>()
 const pendingPrefetchPaths: string[] = []
@@ -146,6 +147,8 @@ const flushPrefetchQueue = () => {
 }
 
 const enqueuePostPrefetch = (path: string, listener: (success: boolean) => void) => {
+  ensurePrefetchRuntimeListeners()
+
   if (hasPrefetchedPostPath(path)) {
     listener(true)
     return
@@ -212,7 +215,13 @@ const registerPrefetchOnlineListener = () => {
   window.addEventListener("online", handleOnline)
 }
 
-const PostCard: React.FC<Props> = ({ data }) => {
+const ensurePrefetchRuntimeListeners = () => {
+  registerPrefetchVisibilityListener()
+  registerPrefetchConnectionListener()
+  registerPrefetchOnlineListener()
+}
+
+const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
   const author = data.author?.[0]
   const postPath = toCanonicalPostPath(data.id)
   const prefetchTimeoutRef = useRef<number | null>(null)
@@ -277,15 +286,13 @@ const PostCard: React.FC<Props> = ({ data }) => {
   }, [clearPrefetchTimer])
 
   useEffect(() => {
-    registerPrefetchVisibilityListener()
-    registerPrefetchConnectionListener()
-    registerPrefetchOnlineListener()
     return () => clearPrefetchTimer()
   }, [clearPrefetchTimer])
 
   return (
     <StyledWrapper
       href={postPath}
+      data-layout={layout}
       prefetch={false}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -354,6 +361,7 @@ const arePostCardPropsEqual = (prev: Props, next: Props) => {
   const nextAuthor = next.data.author?.[0]
 
   return (
+    prev.layout === next.layout &&
     prev.data.id === next.data.id &&
     prev.data.title === next.data.title &&
     prev.data.summary === next.data.summary &&
@@ -598,6 +606,40 @@ const StyledWrapper = styled(Link)`
         > .footer {
           .author strong {
             max-width: 132px;
+          }
+        }
+      }
+    }
+  }
+
+  &[data-layout="regular"] {
+    @media (min-width: 1201px) and (max-width: 1519px) {
+      article {
+        > .content {
+          padding: 0.9rem 0.94rem 0.82rem;
+
+          > header h2 {
+            font-size: 1.08rem;
+            line-height: 1.34;
+          }
+
+          > .summary {
+            margin-top: 0.52rem;
+            height: 4.25rem;
+
+            p {
+              font-size: 0.93rem;
+              line-height: 1.52;
+            }
+          }
+
+          > .meta {
+            margin-top: 0.7rem;
+          }
+
+          > .footer {
+            margin-top: 0.7rem;
+            padding-top: 0.58rem;
           }
         }
       }

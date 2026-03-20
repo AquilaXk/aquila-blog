@@ -17,7 +17,7 @@ const PinnedPosts: React.FC<Props> = ({ posts }) => {
       </div>
       <div className="my-2">
         {posts.map((post) => (
-          <PostCard key={post.id} data={post} />
+          <PostCard key={post.id} data={post} layout="pinned" />
         ))}
       </div>
     </StyledWrapper>

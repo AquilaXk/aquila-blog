@@ -69,12 +69,6 @@ const StyledWrapper = styled.div`
       grid-column: span 9 / span 9;
     }
 
-    @media (min-width: 1201px) and (max-width: 1519px) {
-      grid-column: span 12 / span 12;
-      width: min(768px, 100%);
-      justify-self: center;
-    }
-
     .mobileProfileCard {
       @media (min-width: 1024px) {
         display: none;
@@ -108,10 +102,6 @@ const StyledWrapper = styled.div`
     @media (min-width: 1024px) {
       display: block;
       grid-column: span 3 / span 3;
-    }
-
-    @media (min-width: 1201px) and (max-width: 1519px) {
-      display: none;
     }
 
     .footer {

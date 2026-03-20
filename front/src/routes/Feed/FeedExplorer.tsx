@@ -748,19 +748,11 @@ const FeedBody = styled.section`
     min-width: 0;
   }
 
-  @media (min-width: 1201px) {
+  @media (min-width: 1520px) {
     .tagColumn {
       position: absolute;
       top: 0;
       z-index: 1;
-    }
-  }
-
-  @media (min-width: 1201px) and (max-width: 1519px) {
-    .tagColumn {
-      left: -188px;
-      width: 156px;
-      min-width: 156px;
     }
   }
 

@@ -228,10 +228,24 @@ class PostPublicReadQueryService(
         try {
             block()
         } catch (exception: Exception) {
+            val safeEndpoint =
+                endpoint
+                    .replace('\r', ' ')
+                    .replace('\n', ' ')
+                    .replace('\t', ' ')
+                    .trim()
+                    .take(MAX_LOG_FIELD_LENGTH)
+            val safeDetail =
+                detail
+                    .replace('\r', ' ')
+                    .replace('\n', ' ')
+                    .replace('\t', ' ')
+                    .trim()
+                    .take(MAX_LOG_FIELD_LENGTH)
             logger.error(
                 "post_public_read_failed endpoint={} detail={} exception={}",
-                endpoint,
-                detail,
+                safeEndpoint,
+                safeDetail,
                 exception::class.java.simpleName,
                 exception,
             )
@@ -383,6 +397,7 @@ class PostPublicReadQueryService(
         private const val MAX_CACHEABLE_KW_LENGTH = 40
         private const val MAX_CACHEABLE_TAG_LENGTH = 24
         private const val MAX_CACHEABLE_TOTAL_LENGTH = 48
+        private const val MAX_LOG_FIELD_LENGTH = 240
         private const val MAX_CURSOR_PAGE_SIZE = 30
         private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
         private const val CURSOR_SIGNATURE_BYTES = 18

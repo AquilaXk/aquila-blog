@@ -129,7 +129,7 @@ const StyledWrapper = styled.div`
     max-height: calc(100dvh - var(--app-header-height, 56px) - 1.8rem);
     overflow: hidden;
 
-    @media (min-width: 1201px) {
+    @media (min-width: 1520px) {
       display: block;
     }
   }
@@ -255,7 +255,7 @@ const StyledWrapper = styled.div`
       height: 0;
     }
 
-    @media (min-width: 1201px) {
+    @media (min-width: 1520px) {
       display: none;
     }
   }

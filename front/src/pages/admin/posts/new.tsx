@@ -98,6 +98,7 @@ type GeneratePreviewSummaryPayload = {
   provider?: string
   model?: string | null
   reason?: string | null
+  degraded?: boolean
   traceId?: string | null
   debug?: {
     cacheStatus?: string | null
@@ -127,6 +128,14 @@ type AdminPostListItem = {
 type DeleteConfirmState = {
   ids: number[]
   headline: string
+}
+
+type ListQuickPreset = "none" | "today" | "temp"
+
+type SoftDeleteUndoState = {
+  ids: number[]
+  expiresAt: number
+  message: string
 }
 
 type PageDto<T> = {
@@ -177,6 +186,13 @@ type LocalDraftPayload = {
 const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
 const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
+const LIST_CONDITION_STORAGE_KEY = "admin.contentStudio.listConditions.v1"
+const LIST_CACHE_TTL_MS = 45_000
+
+const LIST_SORT_OPTIONS = [
+  { value: "CREATED_AT", label: "최신순" },
+  { value: "CREATED_AT_ASC", label: "오래된순" },
+] as const
 
 const TAG_TONES = [
   {
@@ -431,7 +447,7 @@ const fetchPreviewSummary = async (
   }
 ): Promise<RsData<GeneratePreviewSummaryPayload>> => {
   const controller = new AbortController()
-  const timeoutMs = 45_000
+  const timeoutMs = 16_000
   const timeoutId = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), timeoutMs)
 
   try {
@@ -896,6 +912,25 @@ const convertHtmlToMarkdown = (html: string): string => {
   return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
 }
 
+const sanitizeNumberInput = (value: string) => value.replace(/[^\d]/g, "")
+
+const getTodayDateKey = () => new Date().toISOString().slice(0, 10)
+
+const buildListCacheKey = (params: {
+  scope: PostListScope
+  page: string
+  pageSize: string
+  kw: string
+  sort: string
+}) =>
+  JSON.stringify({
+    scope: params.scope,
+    page: params.page.trim(),
+    pageSize: params.pageSize.trim(),
+    kw: params.kw.trim(),
+    sort: params.sort.trim(),
+  })
+
 const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -938,6 +973,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     text: "AI 요약 상태가 여기에 표시됩니다.",
   })
   const [previewSummaryDebug, setPreviewSummaryDebug] = useState("")
+  const [globalNotice, setGlobalNotice] = useState<NoticeState>({
+    tone: "idle",
+    text: "운영 작업 상태가 여기에 표시됩니다.",
+  })
   const [profileImageNotice, setProfileImageNotice] = useState<NoticeState>({
     tone: "idle",
     text: "프로필 이미지를 선택하면 즉시 업로드됩니다.",
@@ -970,6 +1009,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [listKw, setListKw] = useState("")
   const [listSort, setListSort] = useState("CREATED_AT")
   const [listScope, setListScope] = useState<PostListScope>("active")
+  const [listQuickPreset, setListQuickPreset] = useState<ListQuickPreset>("none")
 
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(() =>
     (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
@@ -982,6 +1022,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
   const [selectedPostIds, setSelectedPostIds] = useState<number[]>([])
+  const [rowActionMenuId, setRowActionMenuId] = useState<number | null>(null)
+  const [mobileActionSheetRow, setMobileActionSheetRow] = useState<AdminPostListItem | null>(null)
+  const [softDeleteUndoState, setSoftDeleteUndoState] = useState<SoftDeleteUndoState | null>(null)
   const [deleteConfirmState, setDeleteConfirmState] = useState<DeleteConfirmState | null>(null)
   const [deleteConfirmNotice, setDeleteConfirmNotice] = useState<NoticeState>({
     tone: "idle",
@@ -996,6 +1039,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const autoLoadedPostIdRef = useRef<string | null>(null)
   const lastWriteFingerprintRef = useRef<string>("")
   const lastWriteIdempotencyKeyRef = useRef<string>("")
+  const listCacheRef = useRef(
+    new Map<string, { rows: AdminPostListItem[]; total: number; storedAt: number }>()
+  )
   const previewThumbFrameRef = useRef<HTMLDivElement>(null)
   const previewThumbPointerIdRef = useRef<number | null>(null)
   const previewThumbDragOriginRef = useRef<{
@@ -1030,17 +1076,46 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const run = async (key: string, fn: () => Promise<JsonValue>) => {
     try {
       setLoadingKey(key)
+      setGlobalNotice({ tone: "loading", text: `작업 실행 중: ${key}` })
       const data = await fn()
       setResult(pretty(data))
+      setGlobalNotice({ tone: "success", text: `작업 완료: ${key}` })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
+      setGlobalNotice({ tone: "error", text: `작업 실패: ${message}` })
     } finally {
       setLoadingKey("")
     }
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
+
+  const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setListPage(sanitizeNumberInput(e.target.value))
+  }, [])
+
+  const handleListPageSizeChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setListPageSize(sanitizeNumberInput(e.target.value))
+  }, [])
+
+  const handleListSortChange = useCallback((e: ChangeEvent<HTMLSelectElement>) => {
+    setListSort(e.target.value)
+  }, [])
+
+  const applyListQuickPreset = useCallback((preset: ListQuickPreset) => {
+    setListScope("active")
+    setListPage("1")
+    setListPageSize("30")
+    if (preset === "today") {
+      setListKw("")
+      setListSort("CREATED_AT")
+    } else if (preset === "temp") {
+      setListKw("임시글")
+      setListSort("CREATED_AT")
+    }
+    setListQuickPreset(preset)
+  }, [])
 
   const publishModalHintByAction = useCallback((actionType: PublishActionType): string => {
     if (actionType === "create") return "작성 전 검증 결과와 오류가 여기에 표시됩니다."
@@ -1050,6 +1125,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const setPublishStatus = useCallback(
     (next: NoticeState, target: "auto" | "page" | "modal" = "auto") => {
+      setGlobalNotice(next)
       if (target === "page") {
         setPublishNotice(next)
         return
@@ -1690,6 +1766,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     return "전체 공개"
   }
 
+  const todayDateKey = useMemo(() => getTodayDateKey(), [])
+
   const adminPostViewRows = useMemo(() => {
     const copy = [...adminPostRows]
     copy.sort((a, b) => {
@@ -1700,8 +1778,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       if (Number.isNaN(aMs) || Number.isNaN(bMs)) return 0
       return modifiedSortOrder === "desc" ? bMs - aMs : aMs - bMs
     })
+
+    if (listScope !== "active") {
+      return copy
+    }
+    if (listQuickPreset === "today") {
+      return copy.filter((row) => row.modifiedAt?.startsWith(todayDateKey))
+    }
+    if (listQuickPreset === "temp") {
+      return copy.filter((row) => row.title.includes("임시글") || (!row.published && !row.listed))
+    }
     return copy
-  }, [adminPostRows, listScope, modifiedSortOrder])
+  }, [adminPostRows, listScope, modifiedSortOrder, listQuickPreset, todayDateKey])
 
   const selectedPostIdSet = useMemo(() => new Set(selectedPostIds), [selectedPostIds])
   const isAllVisiblePostsSelected = useMemo(
@@ -1710,11 +1798,42 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   )
 
   const loadAdminPosts = async () => {
+    const safePage = sanitizeNumberInput(listPage || "1") || "1"
+    const safePageSize = sanitizeNumberInput(listPageSize || "30") || "30"
+    const safeSort =
+      LIST_SORT_OPTIONS.find((option) => option.value === listSort)?.value || LIST_SORT_OPTIONS[0].value
+    const cacheKey = buildListCacheKey({
+      scope: listScope,
+      page: safePage,
+      pageSize: safePageSize,
+      kw: listKw,
+      sort: safeSort,
+    })
+
+    const cached = listCacheRef.current.get(cacheKey)
+    if (cached && Date.now() - cached.storedAt < LIST_CACHE_TTL_MS) {
+      setAdminPostRows(cached.rows)
+      setAdminPostTotal(cached.total)
+      setGlobalNotice({
+        tone: "success",
+        text: `목록을 최근 캐시로 즉시 표시했습니다. (총 ${cached.total}건)`,
+      })
+      setResult(
+        pretty({
+          source: "memory-cache",
+          total: cached.total,
+          rows: cached.rows.length,
+        })
+      )
+      return
+    }
+
     try {
       setLoadingKey("postList")
+      setGlobalNotice({ tone: "loading", text: "글 목록을 불러오는 중입니다..." })
       const query = new URLSearchParams({
-        page: listPage,
-        pageSize: listPageSize,
+        page: safePage,
+        pageSize: safePageSize,
         kw: listKw,
       })
       const endpoint =
@@ -1722,20 +1841,32 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           ? "/post/api/v1/adm/posts/deleted"
           : "/post/api/v1/adm/posts"
       if (listScope === "active") {
-        query.set("sort", listSort)
+        query.set("sort", safeSort)
       }
       const data = await apiFetch<PageDto<AdminPostListItem>>(
         `${endpoint}?${query.toString()}`
       )
-      setAdminPostRows(data.content || [])
-      setAdminPostTotal(data.pageable?.totalElements ?? data.content?.length ?? 0)
+      const nextRows = data.content || []
+      const nextTotal = data.pageable?.totalElements ?? data.content?.length ?? 0
+      setAdminPostRows(nextRows)
+      setAdminPostTotal(nextTotal)
+      listCacheRef.current.set(cacheKey, {
+        rows: nextRows,
+        total: nextTotal,
+        storedAt: Date.now(),
+      })
       if (listScope === "deleted") {
         setSelectedPostIds([])
       }
+      setGlobalNotice({
+        tone: "success",
+        text: `목록 조회 완료: ${nextTotal}건`,
+      })
       setResult(pretty(data as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
+      setGlobalNotice({ tone: "error", text: `목록 조회 실패: ${message}` })
       setAdminPostRows([])
       setAdminPostTotal(0)
     } finally {
@@ -1832,6 +1963,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
 
       if (failedIds.length === 0) {
+        setSoftDeleteUndoState({
+          ids: successIds,
+          expiresAt: Date.now() + 12_000,
+          message: `${successIds.length}개 글을 삭제했습니다. 실행 취소 가능`,
+        })
+        setGlobalNotice({
+          tone: "success",
+          text: `${successIds.length}개 글 삭제 완료 (12초 내 실행 취소 가능)`,
+        })
         setDeleteConfirmNotice({
           tone: "success",
           text: `${successIds.length}개 글을 삭제했습니다.`,
@@ -1843,6 +1983,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "error",
         text: `${failedIds.length}개 글 삭제에 실패했습니다. 다시 시도해주세요.`,
       })
+      setGlobalNotice({
+        tone: "error",
+        text: `${failedIds.length}개 글 삭제에 실패했습니다.`,
+      })
       return false
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1851,6 +1995,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "error",
         text: `삭제 실패: ${message}`,
       })
+      setGlobalNotice({ tone: "error", text: `삭제 실패: ${message}` })
       return false
     } finally {
       setLoadingKey("")
@@ -1860,6 +2005,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const restoreDeletedPostFromList = useCallback(async (row: AdminPostListItem) => {
     try {
       setLoadingKey("restoreDeletedPost")
+      setGlobalNotice({ tone: "loading", text: `#${row.id} 글 복구 중...` })
       setDeletedListNotice({
         tone: "loading",
         text: `#${row.id} 글을 복구하고 있습니다...`,
@@ -1876,6 +2022,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "success",
         text: `#${row.id} 글을 복구했습니다.`,
       })
+      setGlobalNotice({ tone: "success", text: `#${row.id} 글 복구 완료` })
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1883,6 +2030,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "error",
         text: `복구 실패: ${message}`,
       })
+      setGlobalNotice({ tone: "error", text: `복구 실패: ${message}` })
       setResult(pretty({ error: message }))
       return false
     } finally {
@@ -1896,6 +2044,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("hardDeleteDeletedPost")
+      setGlobalNotice({ tone: "loading", text: `#${row.id} 글 영구삭제 중...` })
       setDeletedListNotice({
         tone: "loading",
         text: `#${row.id} 글을 영구삭제하고 있습니다...`,
@@ -1912,6 +2061,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "success",
         text: `#${row.id} 글을 영구삭제했습니다.`,
       })
+      setGlobalNotice({ tone: "success", text: `#${row.id} 글 영구삭제 완료` })
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1919,12 +2069,58 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "error",
         text: `영구삭제 실패: ${message}`,
       })
+      setGlobalNotice({ tone: "error", text: `영구삭제 실패: ${message}` })
       setResult(pretty({ error: message }))
       return false
     } finally {
       setLoadingKey("")
     }
   }, [])
+
+  const handleUndoSoftDelete = useCallback(async () => {
+    if (!softDeleteUndoState || softDeleteUndoState.ids.length === 0) return
+
+    try {
+      setLoadingKey("undoDeletePost")
+      setGlobalNotice({ tone: "loading", text: "삭제 실행을 취소하는 중입니다..." })
+      const restoredIds: number[] = []
+      const failedIds: number[] = []
+
+      for (const id of softDeleteUndoState.ids) {
+        try {
+          await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/adm/posts/${id}/restore`, {
+            method: "POST",
+          })
+          restoredIds.push(id)
+        } catch {
+          failedIds.push(id)
+        }
+      }
+
+      setResult(
+        pretty({
+          restoredIds,
+          failedIds,
+        })
+      )
+
+      if (restoredIds.length > 0) {
+        await loadAdminPosts()
+      }
+
+      if (failedIds.length === 0) {
+        setGlobalNotice({ tone: "success", text: `${restoredIds.length}개 글 복구를 완료했습니다.` })
+      } else {
+        setGlobalNotice({
+          tone: "error",
+          text: `복구 일부 실패: 성공 ${restoredIds.length}건 / 실패 ${failedIds.length}건`,
+        })
+      }
+    } finally {
+      setSoftDeleteUndoState(null)
+      setLoadingKey("")
+    }
+  }, [loadAdminPosts, softDeleteUndoState])
 
   useEffect(() => {
     if (adminPostRows.length === 0) {
@@ -1940,11 +2136,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setSelectedPostIds([])
     setAdminPostRows([])
     setAdminPostTotal(0)
+    setRowActionMenuId(null)
+    setMobileActionSheetRow(null)
+    setListQuickPreset("none")
     setDeletedListNotice({
       tone: "idle",
       text: "",
     })
   }, [listScope])
+
+  useEffect(() => {
+    if (!softDeleteUndoState) return
+    const timeout = window.setTimeout(
+      () => setSoftDeleteUndoState(null),
+      Math.max(0, softDeleteUndoState.expiresAt - Date.now())
+    )
+    return () => window.clearTimeout(timeout)
+  }, [softDeleteUndoState])
+
+  useEffect(() => {
+    if (rowActionMenuId === null) return
+    const close = () => setRowActionMenuId(null)
+    window.addEventListener("click", close)
+    return () => window.removeEventListener("click", close)
+  }, [rowActionMenuId])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
     const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
@@ -2048,11 +2263,51 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         compareCategoryValues
       )
     )
+    try {
+      const raw = localStorage.getItem(LIST_CONDITION_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<{
+          page: string
+          pageSize: string
+          kw: string
+          sort: string
+          scope: PostListScope
+          preset: ListQuickPreset
+        }>
+        if (typeof parsed.page === "string") setListPage(sanitizeNumberInput(parsed.page) || "1")
+        if (typeof parsed.pageSize === "string") setListPageSize(sanitizeNumberInput(parsed.pageSize) || "30")
+        if (typeof parsed.kw === "string") setListKw(parsed.kw)
+        if (typeof parsed.sort === "string") {
+          const hasOption = LIST_SORT_OPTIONS.some((option) => option.value === parsed.sort)
+          setListSort(hasOption ? parsed.sort : LIST_SORT_OPTIONS[0].value)
+        }
+        if (parsed.scope === "active" || parsed.scope === "deleted") setListScope(parsed.scope)
+        if (parsed.preset === "none" || parsed.preset === "today" || parsed.preset === "temp") {
+          setListQuickPreset(parsed.preset)
+        }
+      }
+    } catch {
+      // noop: 깨진 저장값은 무시하고 기본값 사용
+    }
     const localDraft = readLocalDraft()
     if (localDraft?.savedAt) {
       setLocalDraftSavedAt(localDraft.savedAt)
     }
   }, [])
+
+  useEffect(() => {
+    localStorage.setItem(
+      LIST_CONDITION_STORAGE_KEY,
+      JSON.stringify({
+        page: listPage,
+        pageSize: listPageSize,
+        kw: listKw,
+        sort: listSort,
+        scope: listScope,
+        preset: listQuickPreset,
+      })
+    )
+  }, [listKw, listPage, listPageSize, listQuickPreset, listScope, listSort])
 
   useEffect(() => {
     persistCatalog(TAG_CATALOG_STORAGE_KEY, customTagCatalog)
@@ -2816,6 +3071,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </SectionDescription>
               </div>
             </SectionTop>
+            <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
             <ContentStudioGrid>
               <ContentStudioLeft>
                 <QueryPanel>
@@ -2823,8 +3079,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <h3>글 목록 조회 조건</h3>
                     <p>
                       {listScope === "active"
-                        ? "관리자 활성 글 목록과 임시글을 불러오는 조건입니다."
-                        : "soft delete된 글을 조회하고 복구/영구삭제를 수행하는 조건입니다."}
+                        ? "활성 글/임시글 조회 조건입니다."
+                        : "삭제 글 조회 및 복구/영구삭제 조건입니다."}
                     </p>
                     <ListScopeTabs>
                       <ListScopeButton
@@ -2848,18 +3104,25 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       <FieldLabel htmlFor="list-page">페이지</FieldLabel>
                       <Input
                         id="list-page"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
                         placeholder="예: 1"
                         value={listPage}
-                        onChange={(e) => setListPage(e.target.value)}
+                        onChange={handleListPageChange}
                       />
                     </FieldBox>
                     <FieldBox>
                       <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
                       <Input
                         id="list-page-size"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={30}
                         placeholder="1~30"
                         value={listPageSize}
-                        onChange={(e) => setListPageSize(e.target.value)}
+                        onChange={handleListPageSizeChange}
                       />
                     </FieldBox>
                     <FieldBox>
@@ -2874,12 +3137,17 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     {listScope === "active" && (
                       <FieldBox>
                         <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
-                        <Input
+                        <FieldSelect
                           id="list-sort"
-                          placeholder="예: CREATED_AT"
                           value={listSort}
-                          onChange={(e) => setListSort(e.target.value)}
-                        />
+                          onChange={handleListSortChange}
+                        >
+                          {LIST_SORT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </FieldSelect>
                       </FieldBox>
                     )}
                   </QueryGrid>
@@ -2900,6 +3168,44 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       </Button>
                     )}
                   </QueryActions>
+                  {listScope === "active" && (
+                    <PresetRow role="group" aria-label="빠른 프리셋">
+                      <PresetButton
+                        type="button"
+                        data-active={listQuickPreset === "today"}
+                        onClick={() => applyListQuickPreset("today")}
+                      >
+                        오늘 수정
+                      </PresetButton>
+                      <PresetButton
+                        type="button"
+                        data-active={listQuickPreset === "temp"}
+                        onClick={() => applyListQuickPreset("temp")}
+                      >
+                        임시글
+                      </PresetButton>
+                      <PresetButton
+                        type="button"
+                        data-active={false}
+                        onClick={() => {
+                          setListQuickPreset("none")
+                          setListScope("deleted")
+                        }}
+                      >
+                        삭제 글
+                      </PresetButton>
+                      <PresetButton
+                        type="button"
+                        data-active={listQuickPreset === "none"}
+                        onClick={() => {
+                          setListQuickPreset("none")
+                          setListKw("")
+                        }}
+                      >
+                        프리셋 해제
+                      </PresetButton>
+                    </PresetRow>
+                  )}
                 </QueryPanel>
 
                 <SelectedPostPanel>
@@ -2907,7 +3213,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <div>
                       <h3>선택한 글 작업</h3>
                       <p>
-                        목록에서 불러온 글이나 직접 입력한 `post id` 기준으로 수정, 삭제, 동작 점검을 수행합니다.
+                        목록에서 글을 불러오거나 `post id`를 입력해 수정/삭제를 진행합니다.
                       </p>
                     </div>
                     <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
@@ -3015,6 +3321,24 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     )}
                   </ListHeaderActions>
                 </ListHeader>
+                {listScope === "active" && selectedPostIds.length > 0 && (
+                  <SelectionStickyBar role="status" aria-live="polite">
+                    <strong>{selectedPostIds.length}개 선택됨</strong>
+                    <div>
+                      <Button type="button" onClick={() => setSelectedPostIds([])} disabled={loadingKey.length > 0}>
+                        선택 해제
+                      </Button>
+                      <Button
+                        type="button"
+                        data-variant="danger"
+                        disabled={loadingKey.length > 0}
+                        onClick={() => openDeleteConfirm(selectedPostIds)}
+                      >
+                        선택 삭제
+                      </Button>
+                    </div>
+                  </SelectionStickyBar>
+                )}
                 {adminPostRows.length === 0 ? (
                   <ListEmpty>
                     <p>
@@ -3042,121 +3366,240 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </div>
                   </ListEmpty>
                 ) : (
-                  <ListTableWrap>
-                    <ListTable>
-                    <thead>
-                      <tr>
-                        {listScope === "active" && (
-                          <th className="checkboxCell">
-                            <input
-                              type="checkbox"
-                              aria-label="현재 목록 전체 선택"
-                              checked={isAllVisiblePostsSelected}
-                              onChange={toggleSelectAllVisiblePosts}
-                            />
-                          </th>
-                        )}
-                        <th>ID</th>
-                        <th>제목</th>
-                        <th>공개상태</th>
-                        <th>작성자</th>
-                        <th>
-                          {listScope === "active" ? (
-                            <SortHeaderButton
-                              type="button"
-                              onClick={() =>
-                                setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
-                              }
-                            >
-                              수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
-                            </SortHeaderButton>
-                          ) : (
-                            "삭제일"
-                          )}
-                        </th>
-                        <th>작업</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {adminPostViewRows.map((row) => (
-                        <tr key={row.id}>
+                  <>
+                    <ListTableWrap>
+                      <ListTable>
+                      <thead>
+                        <tr>
                           {listScope === "active" && (
-                            <td className="checkboxCell">
+                            <th className="checkboxCell">
+                              <input
+                                type="checkbox"
+                                aria-label="현재 목록 전체 선택"
+                                checked={isAllVisiblePostsSelected}
+                                onChange={toggleSelectAllVisiblePosts}
+                              />
+                            </th>
+                          )}
+                          <th>ID</th>
+                          <th>제목</th>
+                          <th>공개상태</th>
+                          <th className="authorCell">작성자</th>
+                          <th className="dateCell">
+                            {listScope === "active" ? (
+                              <SortHeaderButton
+                                type="button"
+                                onClick={() =>
+                                  setModifiedSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))
+                                }
+                              >
+                                수정일 {modifiedSortOrder === "desc" ? "↓" : "↑"}
+                              </SortHeaderButton>
+                            ) : (
+                              "삭제일"
+                            )}
+                          </th>
+                          <th className="actionsCell">작업</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminPostViewRows.map((row) => (
+                          <tr key={row.id}>
+                            {listScope === "active" && (
+                              <td className="checkboxCell">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`${row.id}번 글 선택`}
+                                  checked={selectedPostIdSet.has(row.id)}
+                                  onChange={() => togglePostSelection(row.id)}
+                                />
+                              </td>
+                            )}
+                            <td>{row.id}</td>
+                            <td className="title">
+                              <TitleCell>
+                                <span className="text">{row.title}</span>
+                                {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                              </TitleCell>
+                            </td>
+                            <td>
+                              <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                                {visibilityLabel(row.published, row.listed)}
+                              </VisibilityBadge>
+                            </td>
+                            <td className="authorCell">{row.authorName}</td>
+                            <td className="dateCell">{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
+                            <td className="actionsCell">
+                              <InlineActions>
+                                {listScope === "active" ? (
+                                  <Button
+                                    type="button"
+                                    disabled={loadingKey.length > 0}
+                                    onClick={() => {
+                                      setPostId(String(row.id))
+                                      void loadPostForEditor(String(row.id))
+                                    }}
+                                  >
+                                    불러오기
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    disabled={loadingKey.length > 0}
+                                    onClick={() => void restoreDeletedPostFromList(row)}
+                                  >
+                                    복구
+                                  </Button>
+                                )}
+                                <MoreMenuWrap>
+                                  <MoreMenuButton
+                                    type="button"
+                                    aria-label={`${row.id}번 글 추가 작업`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setRowActionMenuId((prev) => (prev === row.id ? null : row.id))
+                                    }}
+                                  >
+                                    ⋯
+                                  </MoreMenuButton>
+                                  {rowActionMenuId === row.id && (
+                                    <MoreMenuList onClick={(event) => event.stopPropagation()}>
+                                      {listScope === "active" ? (
+                                        <button
+                                          type="button"
+                                          disabled={loadingKey.length > 0}
+                                          onClick={() => {
+                                            setRowActionMenuId(null)
+                                            openDeleteConfirm([row.id], row.title)
+                                          }}
+                                        >
+                                          삭제
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          disabled={loadingKey.length > 0}
+                                          onClick={() => {
+                                            setRowActionMenuId(null)
+                                            void hardDeleteDeletedPostFromList(row)
+                                          }}
+                                        >
+                                          영구삭제
+                                        </button>
+                                      )}
+                                    </MoreMenuList>
+                                  )}
+                                </MoreMenuWrap>
+                              </InlineActions>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      </ListTable>
+                    </ListTableWrap>
+
+                    <MobileListCards>
+                      {adminPostViewRows.map((row) => (
+                        <article key={`mobile-${row.id}`}>
+                          <header>
+                            {listScope === "active" ? (
                               <input
                                 type="checkbox"
                                 aria-label={`${row.id}번 글 선택`}
                                 checked={selectedPostIdSet.has(row.id)}
                                 onChange={() => togglePostSelection(row.id)}
                               />
-                            </td>
-                          )}
-                          <td>{row.id}</td>
-                          <td className="title">
-                            <TitleCell>
-                              <span className="text">{row.title}</span>
-                              {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
-                            </TitleCell>
-                          </td>
-                          <td>
+                            ) : (
+                              <span className="rowId">#{row.id}</span>
+                            )}
+                            <button type="button" onClick={() => setMobileActionSheetRow(row)} aria-label="더보기">
+                              ⋯
+                            </button>
+                          </header>
+                          <h4>{row.title}</h4>
+                          <p>
+                            <span>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</span>
                             <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                               {visibilityLabel(row.published, row.listed)}
                             </VisibilityBadge>
-                          </td>
-                          <td>{row.authorName}</td>
-                          <td>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
-                          <td>
+                          </p>
+                          <div className="mainAction">
                             {listScope === "active" ? (
-                              <InlineActions>
-                                <Button
-                                  type="button"
-                                  disabled={loadingKey.length > 0}
-                                  onClick={() => {
-                                    setPostId(String(row.id))
-                                    void loadPostForEditor(String(row.id))
-                                  }}
-                                >
-                                  불러오기
-                                </Button>
-                                <Button
-                                  type="button"
-                                  data-variant="danger"
-                                  disabled={loadingKey.length > 0}
-                                  onClick={() => openDeleteConfirm([row.id], row.title)}
-                                >
-                                  삭제
-                                </Button>
-                              </InlineActions>
+                              <Button
+                                type="button"
+                                disabled={loadingKey.length > 0}
+                                onClick={() => {
+                                  setPostId(String(row.id))
+                                  void loadPostForEditor(String(row.id))
+                                }}
+                              >
+                                불러오기
+                              </Button>
                             ) : (
-                              <InlineActions>
-                                <Button
-                                  type="button"
-                                  disabled={loadingKey.length > 0}
-                                  onClick={() => void restoreDeletedPostFromList(row)}
-                                >
-                                  복구
-                                </Button>
-                                <Button
-                                  type="button"
-                                  disabled={loadingKey.length > 0}
-                                  data-variant="danger"
-                                  onClick={() => void hardDeleteDeletedPostFromList(row)}
-                                >
-                                  영구삭제
-                                </Button>
-                              </InlineActions>
+                              <Button
+                                type="button"
+                                disabled={loadingKey.length > 0}
+                                onClick={() => void restoreDeletedPostFromList(row)}
+                              >
+                                복구
+                              </Button>
                             )}
-                          </td>
-                        </tr>
+                          </div>
+                        </article>
                       ))}
-                    </tbody>
-                    </ListTable>
-                  </ListTableWrap>
+                    </MobileListCards>
+                  </>
                 )}
                 {listScope === "deleted" && deletedListNotice.text && (
                   <InlineStatus data-tone={deletedListNotice.tone}>{deletedListNotice.text}</InlineStatus>
                 )}
               </ListPanel>
             </ContentStudioGrid>
+
+            {softDeleteUndoState && (
+              <UndoToast role="status" aria-live="polite">
+                <p>{softDeleteUndoState.message}</p>
+                <Button type="button" onClick={() => void handleUndoSoftDelete()} disabled={disabled("undoDeletePost")}>
+                  실행 취소
+                </Button>
+              </UndoToast>
+            )}
+
+            {mobileActionSheetRow && (
+              <ActionSheetBackdrop onClick={() => setMobileActionSheetRow(null)}>
+                <ActionSheet onClick={(event) => event.stopPropagation()}>
+                  <h4>#{mobileActionSheetRow.id} 작업</h4>
+                  <p>{mobileActionSheetRow.title}</p>
+                  {listScope === "active" ? (
+                    <Button
+                      type="button"
+                      data-variant="danger"
+                      onClick={() => {
+                        setMobileActionSheetRow(null)
+                        openDeleteConfirm([mobileActionSheetRow.id], mobileActionSheetRow.title)
+                      }}
+                    >
+                      삭제
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      data-variant="danger"
+                      onClick={() => {
+                        const row = mobileActionSheetRow
+                        setMobileActionSheetRow(null)
+                        void hardDeleteDeletedPostFromList(row)
+                      }}
+                    >
+                      영구삭제
+                    </Button>
+                  )}
+                  <Button type="button" onClick={() => setMobileActionSheetRow(null)}>
+                    닫기
+                  </Button>
+                </ActionSheet>
+              </ActionSheetBackdrop>
+            )}
 
         {deleteConfirmState && (
           <ModalBackdrop onClick={closeDeleteConfirm}>
@@ -3946,6 +4389,14 @@ const Main = styled.main`
   max-width: 1360px;
   margin: 0 auto;
   padding: 1.5rem 1rem 2.8rem;
+
+  @media (max-width: 720px) {
+    padding:
+      1rem
+      max(0.78rem, env(safe-area-inset-right))
+      calc(2rem + env(safe-area-inset-bottom))
+      max(0.78rem, env(safe-area-inset-left));
+  }
 `
 
 const HeroCard = styled.section`
@@ -4103,6 +4554,12 @@ const Section = styled.section`
     font-size: 1.2rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
+
+  @media (max-width: 420px) {
+    border-radius: 12px;
+    padding: 0.74rem;
+    margin-bottom: 0.95rem;
+  }
 `
 
 const SectionTop = styled.div`
@@ -4125,15 +4582,53 @@ const SectionEyebrow = styled.span`
 
 const SectionDescription = styled.p`
   margin: 0.3rem 0 0;
-  color: ${({ theme }) => theme.colors.gray11};
+  color: ${({ theme }) => theme.colors.gray10};
   line-height: 1.65;
+`
+
+const GlobalNoticeBar = styled.div`
+  margin-bottom: 0.9rem;
+  padding: 0.66rem 0.78rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+
+  &[data-tone="idle"] {
+    color: ${({ theme }) => theme.colors.gray10};
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
+  &[data-tone="loading"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    background: ${({ theme }) => theme.colors.blue3};
+    border-color: ${({ theme }) => theme.colors.blue7};
+  }
+
+  &[data-tone="success"] {
+    color: ${({ theme }) => theme.colors.green11};
+    background: ${({ theme }) => theme.colors.green3};
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &[data-tone="error"] {
+    color: ${({ theme }) => theme.colors.red11};
+    background: ${({ theme }) => theme.colors.red3};
+    border-color: ${({ theme }) => theme.colors.red7};
+  }
+
+  @media (max-width: 420px) {
+    margin-bottom: 0.7rem;
+    padding: 0.58rem 0.62rem;
+    font-size: 0.8rem;
+  }
 `
 
 const ContentStudioGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.38fr) minmax(380px, 1fr);
   grid-template-areas: "list controls";
-  gap: 0.9rem;
+  gap: 1rem;
   align-items: start;
 
   @media (max-width: 1180px) {
@@ -4149,14 +4644,24 @@ const ContentStudioLeft = styled.div`
   grid-area: controls;
   gap: 0.85rem;
   min-width: 0;
+
+  @media (min-width: 1181px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 56px) + 0.9rem);
+  }
 `
 
 const QueryPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
   background: ${({ theme }) => theme.colors.gray1};
   padding: 0.82rem;
   margin: 0;
+
+  @media (max-width: 420px) {
+    border-radius: 10px;
+    padding: 0.68rem;
+  }
 `
 
 const QueryHeader = styled.div`
@@ -4173,7 +4678,7 @@ const QueryHeader = styled.div`
     margin: 0.24rem 0 0;
     font-size: 0.84rem;
     line-height: 1.56;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: ${({ theme }) => theme.colors.gray10};
   }
 `
 
@@ -4244,6 +4749,52 @@ const QueryActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+
+  @media (max-width: 420px) {
+    display: grid;
+    grid-template-columns: 1fr;
+
+    > button {
+      width: 100%;
+    }
+  }
+`
+
+const PresetRow = styled.div`
+  margin-top: 0.6rem;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+
+  @media (max-width: 420px) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.18rem;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+`
+
+const PresetButton = styled.button`
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 0.72rem;
+  cursor: pointer;
+
+  &[data-active="true"] {
+    color: ${({ theme }) => theme.colors.blue11};
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
 `
 
 const ProfileStudioGrid = styled.div`
@@ -4446,6 +4997,15 @@ const ActionRow = styled.div`
   gap: 0.55rem;
   margin-top: 0.85rem;
   align-items: center;
+
+  @media (max-width: 420px) {
+    display: grid;
+    grid-template-columns: 1fr;
+
+    > button {
+      width: 100%;
+    }
+  }
 `
 
 const UtilityGrid = styled.div`
@@ -4462,11 +5022,29 @@ const Input = styled.input`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 8px;
   padding: 0.72rem 0.8rem;
-  min-width: 120px;
+  min-height: 44px;
+  min-width: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
 
-  &:focus {
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
+  }
+`
+
+const FieldSelect = styled.select`
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
+  padding: 0.72rem 0.8rem;
+  min-height: 44px;
+  min-width: 0;
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.95rem;
+
+  &:focus-visible {
     outline: none;
     border-color: ${({ theme }) => theme.colors.blue8};
     box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
@@ -4504,9 +5082,9 @@ const Button = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 8px;
   padding: 0.62rem 0.92rem;
-  min-height: 40px;
+  min-height: 44px;
   background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
+  color: ${({ theme }) => theme.colors.gray10};
   cursor: pointer;
   font-size: 0.84rem;
   font-weight: 600;
@@ -5512,7 +6090,7 @@ const EditorGrid = styled.div`
 
 const ListPanel = styled.div`
   grid-area: list;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
   background: ${({ theme }) => theme.colors.gray1};
   padding: 0.82rem;
@@ -5520,6 +6098,12 @@ const ListPanel = styled.div`
   min-width: 0;
   display: grid;
   gap: 0.62rem;
+
+  @media (max-width: 420px) {
+    border-radius: 10px;
+    padding: 0.68rem;
+    gap: 0.54rem;
+  }
 `
 
 const ListHeader = styled.div`
@@ -5556,6 +6140,10 @@ const ListHeaderActions = styled.div`
   span {
     margin-right: 0.1rem;
     white-space: nowrap;
+  }
+
+  @media (max-width: 920px) {
+    justify-content: flex-start;
   }
 `
 
@@ -5604,14 +6192,23 @@ const ListTableWrap = styled.div`
   max-height: 52vh;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 10px;
+
+  @media (max-width: 900px) {
+    display: none;
+  }
 `
 
 const SelectedPostPanel = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.82rem;
   margin: 0;
+
+  @media (max-width: 420px) {
+    border-radius: 10px;
+    padding: 0.68rem;
+  }
 `
 
 const SelectedPostHeader = styled.div`
@@ -5651,6 +6248,11 @@ const SelectedPostBadge = styled.span`
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
+
+  @media (max-width: 420px) {
+    white-space: normal;
+    line-height: 1.45;
+  }
 `
 
 const SelectedPostGrid = styled.div`
@@ -5676,6 +6278,37 @@ const SubActionRow = styled.div`
 
   ${Button} {
     border-style: dashed;
+  }
+`
+
+const SelectionStickyBar = styled.div`
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 0 0.68rem;
+  padding: 0.55rem 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  border-radius: 10px;
+  background: ${({ theme }) => theme.colors.blue3};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+
+  strong {
+    color: ${({ theme }) => theme.colors.blue11};
+    font-size: 0.8rem;
+  }
+
+  > div {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 900px) {
+    top: calc(var(--app-header-height, 56px) + 0.35rem);
   }
 `
 
@@ -5722,7 +6355,36 @@ const ListTable = styled.table`
   }
 
   td.title {
-    max-width: 320px;
+    min-width: 240px;
+    max-width: 420px;
+  }
+
+  th.authorCell,
+  td.authorCell {
+    width: 96px;
+  }
+
+  th.dateCell,
+  td.dateCell {
+    width: 104px;
+    white-space: nowrap;
+  }
+
+  th.actionsCell,
+  td.actionsCell {
+    width: 170px;
+    min-width: 170px;
+  }
+
+  @media (max-width: 1360px) {
+    th.authorCell,
+    td.authorCell {
+      display: none;
+    }
+
+    td.title {
+      max-width: 480px;
+    }
   }
 `
 
@@ -5794,6 +6456,209 @@ const InlineActions = styled.div`
   display: flex;
   gap: 0.35rem;
   flex-wrap: wrap;
+  align-items: center;
+
+  ${Button} {
+    min-height: 44px;
+    padding: 0.42rem 0.66rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+`
+
+const MoreMenuWrap = styled.div`
+  position: relative;
+`
+
+const MoreMenuButton = styled.button`
+  min-height: 44px;
+  min-width: 44px;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+`
+
+const MoreMenuList = styled.div`
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  z-index: 5;
+  min-width: 7.2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.25rem;
+  display: grid;
+  gap: 0.2rem;
+
+  button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.8rem;
+    text-align: left;
+    padding: 0 0.55rem;
+    cursor: pointer;
+  }
+`
+
+const MobileListCards = styled.div`
+  display: none;
+  margin-top: 0.65rem;
+
+  @media (max-width: 900px) {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  article {
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 10px;
+    padding: 0.62rem;
+    background: ${({ theme }) => theme.colors.gray2};
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+
+  h4 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  p {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+  }
+
+  .mainAction {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .rowId {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+  }
+
+  > article header > button {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 8px;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+
+  @media (max-width: 420px) {
+    gap: 0.52rem;
+
+    article {
+      padding: 0.56rem;
+    }
+
+    p {
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
+  }
+`
+
+const UndoToast = styled.div`
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.72rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.green7};
+  background: ${({ theme }) => theme.colors.green3};
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.green11};
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 720px) {
+    left: 0.85rem;
+    right: 0.85rem;
+    bottom: calc(0.85rem + env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+  }
+`
+
+const ActionSheetBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.58);
+  z-index: 150;
+  display: grid;
+  align-items: end;
+`
+
+const ActionSheet = styled.div`
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-bottom: 0;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+  max-height: min(76vh, 540px);
+  overflow: auto;
+
+  h4 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.94rem;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  @media (max-width: 720px) {
+    padding:
+      0.82rem
+      max(0.82rem, env(safe-area-inset-right))
+      calc(0.82rem + env(safe-area-inset-bottom))
+      max(0.82rem, env(safe-area-inset-left));
+  }
 `
 
 const ModalBackdrop = styled.div`

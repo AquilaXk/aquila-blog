@@ -19,6 +19,7 @@ type PreviewSummarySuccessResponse = {
     provider: "rule" | "gemini"
     model: string | null
     reason: string | null
+    degraded?: boolean
     traceId?: string | null
     debug?: {
       cacheStatus?: string | null
@@ -39,7 +40,7 @@ const MAX_TITLE_LENGTH = 300
 const MAX_CONTENT_LENGTH = 50_000
 const MIN_SUMMARY_LENGTH = 80
 const MAX_SUMMARY_LENGTH = 220
-const PREVIEW_SUMMARY_PROXY_TIMEOUT_MS = 45_000
+const PREVIEW_SUMMARY_PROXY_TIMEOUT_MS = 15_000
 
 const toStringOrEmpty = (value: unknown): string => (typeof value === "string" ? value : "")
 
@@ -89,10 +90,25 @@ const buildRuleFallbackResponse = (
     provider: "rule",
     model: null,
     reason,
+    degraded: true,
     traceId: null,
     debug: null,
   },
 })
+
+const applyDegradedHeaders = (res: NextApiResponse, reason: string) => {
+  res.setHeader("X-Preview-Summary-Degraded", "1")
+  res.setHeader("X-Preview-Summary-Degraded-Reason", reason)
+}
+
+const getDebugHeaderValue = (req: NextApiRequest): string | null => {
+  const raw = req.query.debug
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (typeof value !== "string") return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "1" || normalized === "true" || normalized === "yes") return "1"
+  return null
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -127,10 +143,12 @@ export default async function handler(
   }
 
   try {
+    const debugHeaderValue = getDebugHeaderValue(req)
     const upstreamResponse = await serverApiFetch(req, "/post/api/v1/adm/posts/preview-summary", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(debugHeaderValue ? { "X-Debug-Preview-Summary": debugHeaderValue } : {}),
       },
       body: JSON.stringify({
         title,
@@ -148,6 +166,7 @@ export default async function handler(
         upstreamResponse.status,
         responseText.slice(0, 500)
       )
+      applyDegradedHeaders(res, reason)
       return res.status(200).json(buildRuleFallbackResponse(content, maxLength ?? 150, reason))
     }
 
@@ -159,12 +178,34 @@ export default async function handler(
       res.setHeader("Content-Type", "application/json; charset=utf-8")
     }
 
+    let outgoingText = responseText
+    const isJsonResponse = responseContentType?.toLowerCase().includes("application/json") ?? false
+    if (isJsonResponse) {
+      try {
+        const payload = JSON.parse(responseText) as {
+          data?: { provider?: string; reason?: string | null; degraded?: boolean }
+        }
+        const provider = payload?.data?.provider
+        if (provider === "rule") {
+          const degradedReason = payload?.data?.reason?.trim() || "rule-fallback"
+          applyDegradedHeaders(res, degradedReason)
+          if (payload.data && typeof payload.data.degraded !== "boolean") {
+            payload.data.degraded = true
+            outgoingText = JSON.stringify(payload)
+          }
+        }
+      } catch {
+        // pass-through 응답 파싱 실패 시 원본 바디를 유지한다.
+      }
+    }
+
     res.status(upstreamResponse.status)
-    return res.send(responseText)
+    return res.send(outgoingText)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to proxy preview summary request."
     console.error("[api/post/preview-summary] proxy failed:", error)
     console.error("[api/post/preview-summary] fallback reason:", message)
+    applyDegradedHeaders(res, "proxy-transport")
     return res.status(200).json(buildRuleFallbackResponse(content, maxLength ?? 150, "proxy-transport"))
   }
 }

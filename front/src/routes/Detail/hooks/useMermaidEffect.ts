@@ -33,6 +33,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
     let mutationObserver: MutationObserver | null = null
     const retryTimers = new Set<number>()
     const loggedErrorSignatures = new Set<string>()
+    let scheduledRunFrame: number | null = null
     let runRetryCount = 0
     const maxRetryCount = 6
     const retryBaseDelayMs = 150
@@ -170,12 +171,12 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
           block.dataset.mermaidTheme === theme
         if (alreadyRendered) return
 
-        const rect = block.getBoundingClientRect()
+        const blockRect = block.getBoundingClientRect()
 
         const renderSourceIntoBlock = async (sourceToRender: string) => {
           const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
-          const containerWidth = Math.max(280, Math.floor(rect.width))
-          const reserveHeight = Math.max(120, Math.ceil(block.getBoundingClientRect().height))
+          const containerWidth = Math.max(280, Math.floor(blockRect.width))
+          const reserveHeight = Math.max(120, Math.ceil(blockRect.height))
 
           const stage = document.createElement("div")
           stage.className = "aq-mermaid-stage mermaid"
@@ -203,13 +204,19 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             .filter((value) => Number.isFinite(value))
           const viewBoxWidth = viewBoxValues.length === 4 ? viewBoxValues[2] : NaN
           const viewBoxHeight = viewBoxValues.length === 4 ? viewBoxValues[3] : NaN
-          const fallbackRect = svgElement.getBoundingClientRect()
+          const attrWidth = Number(svgElement.getAttribute("width"))
+          const attrHeight = Number(svgElement.getAttribute("height"))
+          const fallbackWidth = Number.isFinite(attrWidth) && attrWidth > 0 ? attrWidth : containerWidth
+          const fallbackHeight =
+            Number.isFinite(attrHeight) && attrHeight > 0
+              ? attrHeight
+              : Math.max(120, Math.round(fallbackWidth * 0.6))
           const intrinsicWidth =
-            Number.isFinite(viewBoxWidth) && viewBoxWidth > 0 ? viewBoxWidth : Math.max(1, fallbackRect.width)
+            Number.isFinite(viewBoxWidth) && viewBoxWidth > 0 ? viewBoxWidth : Math.max(1, fallbackWidth)
           const intrinsicHeight =
             Number.isFinite(viewBoxHeight) && viewBoxHeight > 0
               ? viewBoxHeight
-              : Math.max(1, fallbackRect.height)
+              : Math.max(1, fallbackHeight)
 
           const maxReadableHeight = isMobileViewport
             ? Math.min(520, Math.floor(window.innerHeight * 0.68))
@@ -354,7 +361,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
               const delay = 220 * runRetryCount
               const timerId = window.setTimeout(() => {
                 retryTimers.delete(timerId)
-                void run()
+                scheduleRun()
               }, delay)
               retryTimers.add(timerId)
             }
@@ -365,14 +372,20 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       }
     }
 
-    void run()
-    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => void run()) : null
+    const scheduleRun = () => {
+      if (disposed || scheduledRunFrame !== null) return
+      scheduledRunFrame = window.requestAnimationFrame(() => {
+        scheduledRunFrame = null
+        void run()
+      })
+    }
+
+    scheduleRun()
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleRun) : null
     resizeObserver?.observe(root)
     mutationObserver =
       typeof MutationObserver !== "undefined"
-        ? new MutationObserver(() => {
-            void run()
-          })
+        ? new MutationObserver(scheduleRun)
         : null
     mutationObserver?.observe(root, {
       childList: true,
@@ -386,6 +399,10 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       mutationObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
+      if (scheduledRunFrame !== null) {
+        window.cancelAnimationFrame(scheduledRunFrame)
+        scheduledRunFrame = null
+      }
     }
   }, [contentKey, rootRef, scheme])
 

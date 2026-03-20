@@ -1090,20 +1090,107 @@ jobs:
             const repo = context.repo.repo;
             const tag = "${{ needs.calculateTag.outputs.release_tag }}";
             const imageRef = "${{ needs.calculateTag.outputs.image_ref }}";
+            const deploySha = "${{ needs.calculateTag.outputs.deploy_sha }}";
 
-            await github.rest.git.createRef({
-              owner,
-              repo,
-              ref: `refs/tags/${tag}`,
-              sha: "${{ needs.calculateTag.outputs.deploy_sha }}"
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const retryableStatuses = new Set([429, 500, 502, 503, 504]);
+
+            const withRetry = async (label, fn, options = {}) => {
+              const attempts = options.attempts || 5;
+              const baseDelayMs = options.baseDelayMs || 1200;
+              let lastError;
+
+              for (let attempt = 1; attempt <= attempts; attempt += 1) {
+                try {
+                  return await fn();
+                } catch (error) {
+                  lastError = error;
+                  const status = error?.status;
+                  const retryable = retryableStatuses.has(status);
+                  if (!retryable || attempt === attempts) {
+                    throw error;
+                  }
+
+                  const delayMs = baseDelayMs * attempt;
+                  core.warning(`[release] ${label} failed(status=${status}) attempt=${attempt}/${attempts}, retry in ${delayMs}ms`);
+                  await sleep(delayMs);
+                }
+              }
+
+              throw lastError;
+            };
+
+            await withRetry("create tag ref", async () => {
+              try {
+                await github.rest.git.createRef({
+                  owner,
+                  repo,
+                  ref: `refs/tags/${tag}`,
+                  sha: deploySha
+                });
+              } catch (error) {
+                if (error?.status !== 422) {
+                  throw error;
+                }
+
+                const existingTagRef = await withRetry("read existing tag ref", () =>
+                  github.rest.git.getRef({
+                    owner,
+                    repo,
+                    ref: `tags/${tag}`
+                  })
+                );
+                const existingSha = existingTagRef?.data?.object?.sha;
+
+                if (existingSha !== deploySha) {
+                  throw new Error(`[release] tag ${tag} already exists at different sha(existing=${existingSha}, expected=${deploySha})`);
+                }
+
+                core.info(`[release] tag ${tag} already exists and points to deploy sha`);
+              }
             });
 
-            await github.rest.repos.createRelease({
-              owner,
-              repo,
-              tag_name: tag,
-              target_commitish: "${{ needs.calculateTag.outputs.deploy_sha }}",
-              name: `Deploy ${tag}`,
-              body: `Backend image: ${imageRef}\nWorkflow run: ${context.runId}`,
-              generate_release_notes: true
-            });
+            const releaseName = `Deploy ${tag}`;
+            const releaseBody = `Backend image: ${imageRef}\nWorkflow run: ${context.runId}`;
+
+            try {
+              await withRetry("create release", () =>
+                github.rest.repos.createRelease({
+                  owner,
+                  repo,
+                  tag_name: tag,
+                  target_commitish: deploySha,
+                  name: releaseName,
+                  body: releaseBody,
+                  generate_release_notes: true
+                })
+              );
+              core.info(`[release] created tag=${tag}`);
+            } catch (error) {
+              if (error?.status !== 422) {
+                throw error;
+              }
+
+              core.warning(`[release] release already exists for tag=${tag}, update metadata`);
+              const existingRelease = await withRetry("get release by tag", () =>
+                github.rest.repos.getReleaseByTag({
+                  owner,
+                  repo,
+                  tag
+                })
+              );
+
+              await withRetry("update existing release", () =>
+                github.rest.repos.updateRelease({
+                  owner,
+                  repo,
+                  release_id: existingRelease.data.id,
+                  tag_name: tag,
+                  target_commitish: deploySha,
+                  name: releaseName,
+                  body: releaseBody
+                })
+              );
+
+              core.info(`[release] updated existing release id=${existingRelease.data.id}`);
+            }

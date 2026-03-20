@@ -200,6 +200,8 @@ const normalizeStringArray = (value?: string[]) => {
 const normalizeCategoryArray = (value?: string[]) =>
   normalizeStringArray(value).map(normalizeCategoryValue)
 
+const isAbortError = (error: unknown): boolean => error instanceof Error && error.name === "AbortError"
+
 const mapPostDto = (post: ApiPostDto): TPost => {
   const normalizedTags = normalizeStringArray(post.tags)
   const normalizedCategories = normalizeCategoryArray(post.category)
@@ -525,25 +527,50 @@ export const getFeedPostsCursorPage = async ({
   signal?: AbortSignal
 }): Promise<ExplorePostsPage> => {
   const safePageSize = toValidPageSize(pageSize)
-  const response = await apiFetch<CursorPageDto<ApiPostDto>>(
-    buildFeedCursorPath({
-      order,
-      pageSize: safePageSize,
-      cursor,
-    }),
-    {
-      signal,
-    }
-  )
+  const normalizedCursor = typeof cursor === "string" && cursor.trim() ? cursor.trim() : undefined
+  try {
+    const response = await apiFetch<CursorPageDto<ApiPostDto>>(
+      buildFeedCursorPath({
+        order,
+        pageSize: safePageSize,
+        cursor: normalizedCursor,
+      }),
+      {
+        signal,
+      }
+    )
 
-  const mappedPosts = response.content.map(mapPostDto)
-  return {
-    posts: mappedPosts,
-    totalCount: mappedPosts.length,
-    pageNumber: 1,
-    pageSize: safePageSize,
-    hasNext: response.hasNext === true,
-    nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+    const mappedPosts = response.content.map(mapPostDto)
+    return {
+      posts: mappedPosts,
+      totalCount: mappedPosts.length,
+      pageNumber: 1,
+      pageSize: safePageSize,
+      hasNext: response.hasNext === true,
+      nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+    }
+  } catch (error) {
+    // 커서 모드가 불안정할 때 홈 첫 진입이 깨지지 않도록 1페이지 API로 복구한다.
+    if (!normalizedCursor) {
+      const fallback = await getFeedPostsPage({ order, page: 1, pageSize: safePageSize, signal })
+      return {
+        ...fallback,
+        hasNext: false,
+        nextCursor: null,
+      }
+    }
+
+    if (isAbortError(error)) {
+      throw error
+    }
+    return {
+      posts: [],
+      totalCount: 0,
+      pageNumber: 1,
+      pageSize: safePageSize,
+      hasNext: false,
+      nextCursor: null,
+    }
   }
 }
 
@@ -561,26 +588,51 @@ export const getExplorePostsCursorPage = async ({
   signal?: AbortSignal
 }): Promise<ExplorePostsPage> => {
   const safePageSize = toValidPageSize(pageSize)
-  const response = await apiFetch<CursorPageDto<ApiPostDto>>(
-    buildExploreCursorPath({
-      tag,
-      order,
-      pageSize: safePageSize,
-      cursor,
-    }),
-    {
-      signal,
-    }
-  )
+  const normalizedCursor = typeof cursor === "string" && cursor.trim() ? cursor.trim() : undefined
+  try {
+    const response = await apiFetch<CursorPageDto<ApiPostDto>>(
+      buildExploreCursorPath({
+        tag,
+        order,
+        pageSize: safePageSize,
+        cursor: normalizedCursor,
+      }),
+      {
+        signal,
+      }
+    )
 
-  const mappedPosts = response.content.map(mapPostDto)
-  return {
-    posts: mappedPosts,
-    totalCount: mappedPosts.length,
-    pageNumber: 1,
-    pageSize: safePageSize,
-    hasNext: response.hasNext === true,
-    nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+    const mappedPosts = response.content.map(mapPostDto)
+    return {
+      posts: mappedPosts,
+      totalCount: mappedPosts.length,
+      pageNumber: 1,
+      pageSize: safePageSize,
+      hasNext: response.hasNext === true,
+      nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+    }
+  } catch (error) {
+    // 태그 탐색도 첫 진입 시 page API로 복구해 UX 단절을 막는다.
+    if (!normalizedCursor) {
+      const fallback = await getExplorePostsPage({ kw: "", tag, order, page: 1, pageSize: safePageSize, signal })
+      return {
+        ...fallback,
+        hasNext: false,
+        nextCursor: null,
+      }
+    }
+
+    if (isAbortError(error)) {
+      throw error
+    }
+    return {
+      posts: [],
+      totalCount: 0,
+      pageNumber: 1,
+      pageSize: safePageSize,
+      hasNext: false,
+      nextCursor: null,
+    }
   }
 }
 
@@ -710,12 +762,4 @@ export const getPostDetailById = async (id: string): Promise<PostDetail | null> 
     }
     throw error
   }
-}
-
-export const createFeedCursorFromPost = (post: TPost): string | null => {
-  const id = Number(post.id)
-  if (!Number.isFinite(id) || id <= 0) return null
-  const createdAtMillis = new Date(post.createdTime).getTime()
-  if (!Number.isFinite(createdAtMillis) || createdAtMillis <= 0) return null
-  return `${Math.trunc(createdAtMillis)}:${Math.trunc(id)}`
 }

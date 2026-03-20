@@ -2,9 +2,8 @@ import Feed from "src/routes/Feed"
 import { CONFIG } from "../../site.config"
 import { NextPageWithLayout } from "../types"
 import {
-  createFeedCursorFromPost,
-  getExplorePostsPage,
-  getFeedPostsPage,
+  getExplorePostsCursorPage,
+  getFeedPostsCursorPage,
   getTagCounts,
 } from "../apis/backend/posts"
 import MetaConfig from "src/components/MetaConfig"
@@ -24,24 +23,32 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   const currentTag = postsQueryTagRaw.trim()
 
   const postsPromise = (currentTag
-    ? getExplorePostsPage({
-        kw: "",
+    ? getExplorePostsCursorPage({
         tag: currentTag,
-        page: 1,
         pageSize: FEED_EXPLORE_PAGE_SIZE,
       })
-    : getFeedPostsPage({
-        page: 1,
+    : getFeedPostsCursorPage({
         pageSize: FEED_EXPLORE_PAGE_SIZE,
       }))
-    .then(({ posts, totalCount }) => ({
-      posts,
-      totalCount,
-      postsLoaded: true,
-    }))
+    .then((cursorPage) => {
+      const hasNext = cursorPage.hasNext ?? false
+      const resolvedTotalCount = hasNext ? null : cursorPage.posts.length
+
+      return {
+        posts: cursorPage.posts,
+        totalCount: resolvedTotalCount,
+        initialPageTotalCount: resolvedTotalCount ?? cursorPage.posts.length,
+        hasNext,
+        nextCursor: cursorPage.nextCursor ?? null,
+        postsLoaded: true,
+      }
+    })
     .catch(() => ({
       posts: [] as TPost[],
-      totalCount: 0,
+      totalCount: null as number | null,
+      initialPageTotalCount: 0,
+      hasNext: false,
+      nextCursor: null as string | null,
       postsLoaded: false,
     }))
   const tagsPromise = getTagCounts()
@@ -59,21 +66,17 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     postsPromise,
     tagsPromise,
   ])
-  const { posts, totalCount, postsLoaded } = postsResult
+  const { posts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded } = postsResult
   const { tagCounts, tagsLoaded } = tagsResult
 
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   if (tagsLoaded) {
     queryClient.setQueryData(queryKey.tags(), tagCounts)
   }
-  if (postsLoaded) {
+  if (postsLoaded && typeof totalCount === "number") {
     queryClient.setQueryData(queryKey.postsTotalCount(), totalCount)
   }
   if (postsLoaded) {
-    const lastPost = posts.length > 0 ? posts[posts.length - 1] : null
-    const hasNextPage = posts.length >= FEED_EXPLORE_PAGE_SIZE && totalCount > posts.length
-    const hydratedNextCursor = hasNextPage && lastPost ? createFeedCursorFromPost(lastPost) : null
-
     queryClient.setQueryData(
       currentTag
         ? queryKey.postsExploreInfinite({
@@ -90,11 +93,11 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
         pages: [
           {
             posts,
-            totalCount,
+            totalCount: initialPageTotalCount,
             pageNumber: 1,
             pageSize: FEED_EXPLORE_PAGE_SIZE,
-            hasNext: Boolean(hydratedNextCursor),
-            nextCursor: hydratedNextCursor,
+            hasNext,
+            nextCursor,
           },
         ],
         pageParams: [null],

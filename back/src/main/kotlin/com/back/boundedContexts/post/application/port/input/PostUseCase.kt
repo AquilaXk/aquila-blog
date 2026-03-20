@@ -32,6 +32,8 @@ interface PostUseCase {
 
     fun findById(id: Long): Post?
 
+    fun findPublicDetailById(id: Long): Post?
+
     fun findLatest(): Post?
 
     fun modify(

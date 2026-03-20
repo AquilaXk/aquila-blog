@@ -215,6 +215,33 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `비로그인 상세 조회는 ETag 조건부 요청에 304를 반환한다`() {
+            val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
+
+            val etag =
+                requireNotNull(
+                    mvc
+                        .get("/post/api/v1/posts/${post.id}")
+                        .andExpect {
+                            status { isOk() }
+                            header { exists(HttpHeaders.ETAG) }
+                        }.andReturn()
+                        .response
+                        .getHeader(HttpHeaders.ETAG),
+                )
+
+            assertThat(etag).isNotBlank()
+
+            mvc
+                .get("/post/api/v1/posts/${post.id}") {
+                    header(HttpHeaders.IF_NONE_MATCH, etag)
+                }.andExpect {
+                    status { isNotModified() }
+                    header { string(HttpHeaders.ETAG, etag) }
+                }
+        }
+
+        @Test
         @WithUserDetails("user1")
         fun `성공 - 미공개 글 작성자 조회`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
@@ -329,6 +356,83 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostController::class.java))
                     match(handler().methodName("getItems"))
+                }
+        }
+
+        @Test
+        fun `feed 커서 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
+            mvc
+                .get("/post/api/v1/posts/feed/cursor") {
+                    param("sort", "CREATED_AT")
+                    param("pageSize", "24")
+                    cookie(Cookie("apiKey", "invalid-api-key"))
+                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("getFeedByCursor"))
+                }
+        }
+
+        @Test
+        fun `explore 커서 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            postFacade.write(
+                actor,
+                "explore-cursor-public-${System.currentTimeMillis()}",
+                """
+                tags: [커서공개]
+
+                커서 공개 검증
+                """.trimIndent(),
+                true,
+                true,
+            )
+
+            mvc
+                .get("/post/api/v1/posts/explore/cursor") {
+                    param("sort", "CREATED_AT")
+                    param("tag", "커서공개")
+                    param("pageSize", "24")
+                    cookie(Cookie("apiKey", "invalid-api-key"))
+                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("exploreByCursor"))
+                }
+        }
+
+        @Test
+        fun `공개 feed 조회는 ETag 조건부 요청에 304를 반환한다`() {
+            val etag =
+                requireNotNull(
+                    mvc
+                        .get("/post/api/v1/posts/feed") {
+                            param("page", "1")
+                            param("pageSize", "10")
+                            param("sort", "CREATED_AT")
+                        }.andExpect {
+                            status { isOk() }
+                            header { exists(HttpHeaders.ETAG) }
+                        }.andReturn()
+                        .response
+                        .getHeader(HttpHeaders.ETAG),
+                )
+
+            assertThat(etag).isNotBlank()
+
+            mvc
+                .get("/post/api/v1/posts/feed") {
+                    param("page", "1")
+                    param("pageSize", "10")
+                    param("sort", "CREATED_AT")
+                    header(HttpHeaders.IF_NONE_MATCH, etag)
+                }.andExpect {
+                    status { isNotModified() }
+                    header { string(HttpHeaders.ETAG, etag) }
                 }
         }
 

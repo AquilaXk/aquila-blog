@@ -60,10 +60,13 @@ custom:
   cache:
     ttl-overrides:
       # 공개 읽기 API는 쓰기 시 즉시 무효화하므로 운영 기본 TTL을 높여 DB 압력을 낮춘다.
-      post-feed-v3: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
-      post-explore-v3: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:45}
-      post-tags-v3: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:120}
-      post-detail-public-v3: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:120}
+      post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
+      post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:60}
+      post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:45}
+      post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:45}
+      post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:45}
+      post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:120}
+      post-detail-public-v4: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:120}
   db:
     sequence-guard-on-startup: ${CUSTOM__DB__SEQUENCE_GUARD_ON_STARTUP:true}
   observability:
@@ -75,6 +78,7 @@ custom:
         replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
   post:
     read:
+      cursor-signing-secret: ${PROD___CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}}
       bulkhead:
         enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
         acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}

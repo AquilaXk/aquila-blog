@@ -3,11 +3,14 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useMemo, useState } from "react"
-import NotificationBell from "src/layouts/RootLayout/Header/NotificationBell"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
+  ssr: false,
+  loading: () => null,
+})
+const NotificationBell = dynamic(() => import("src/layouts/RootLayout/Header/NotificationBell"), {
   ssr: false,
   loading: () => null,
 })

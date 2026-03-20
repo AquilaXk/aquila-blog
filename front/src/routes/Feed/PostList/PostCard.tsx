@@ -396,9 +396,9 @@ const StyledWrapper = styled(Link)`
     contain-intrinsic-size: 420px;
     display: flex;
     flex-direction: column;
-    border-radius: 15px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray2};
+    border-radius: 4px;
+    border: 1px solid ${({ theme }) => theme.colors.gray4};
+    background: ${({ theme }) => theme.colors.gray1};
     box-shadow: var(--post-card-shadow);
 
     > .thumbnail {
@@ -410,7 +410,7 @@ const StyledWrapper = styled(Link)`
       isolation: isolate;
 
       &.placeholder {
-        background: ${({ theme }) => theme.colors.gray4};
+        background: ${({ theme }) => theme.colors.gray3};
       }
 
       &::after {
@@ -429,17 +429,17 @@ const StyledWrapper = styled(Link)`
       grid-template-rows: auto auto auto auto;
       align-content: start;
       min-height: 0;
-      padding: 1rem 1.08rem 0.92rem;
+      padding: 1rem;
       gap: 0;
 
       > header {
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: clamp(1.05rem, 1.18vw, 1.2rem);
-          line-height: 1.38;
+          font-size: 1rem;
+          line-height: 1.5;
           font-weight: 760;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
           display: -webkit-box;
@@ -450,14 +450,14 @@ const StyledWrapper = styled(Link)`
       }
 
       > .summary {
-        margin-top: 0.62rem;
-        height: 4.75rem;
+        margin-top: 0.25rem;
+        height: 3.9375rem;
 
         p {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray11};
-          font-size: clamp(0.92rem, 0.95vw, 0.99rem);
-          line-height: 1.58;
+          font-size: 0.875rem;
+          line-height: 1.5;
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -473,10 +473,10 @@ const StyledWrapper = styled(Link)`
         flex-wrap: wrap;
         gap: 0.42rem;
         align-items: center;
-        margin-top: 0.82rem;
+        margin-top: 0.75rem;
         color: ${({ theme }) => theme.colors.gray10};
-        font-size: 0.83rem;
-        line-height: 1.35;
+        font-size: 0.75rem;
+        line-height: 1.5;
         letter-spacing: -0.01em;
 
         .dot {
@@ -497,9 +497,9 @@ const StyledWrapper = styled(Link)`
       }
 
       > .footer {
-        margin-top: 0.82rem;
-        padding-top: 0.68rem;
-        border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+        margin-top: auto;
+        padding-top: 0.625rem;
+        border-top: 1px solid ${({ theme }) => theme.colors.gray4};
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -533,12 +533,12 @@ const StyledWrapper = styled(Link)`
 
           .by {
             color: ${({ theme }) => theme.colors.gray10};
-            font-size: 0.78rem;
+            font-size: 0.75rem;
           }
 
           strong {
             color: ${({ theme }) => theme.colors.gray12};
-            font-size: 0.84rem;
+            font-size: 0.78rem;
             font-weight: 760;
             line-height: 1.2;
             white-space: nowrap;
@@ -551,14 +551,14 @@ const StyledWrapper = styled(Link)`
         .like {
           display: inline-flex;
           align-items: center;
-          gap: 0.32rem;
+          gap: 0.5rem;
           color: ${({ theme }) => theme.colors.gray11};
-          font-size: 0.86rem;
+          font-size: 0.75rem;
           font-weight: 700;
 
           svg {
-            width: 0.9rem;
-            height: 0.9rem;
+            width: 0.75rem;
+            height: 0.75rem;
             color: ${({ theme }) => theme.colors.red10};
           }
         }
@@ -585,22 +585,22 @@ const StyledWrapper = styled(Link)`
   }
 
   @media (max-width: 640px) {
-    --post-card-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
-    --post-card-shadow-hover: 0 10px 26px rgba(0, 0, 0, 0.28);
+    --post-card-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.06);
+    --post-card-shadow-hover: 0 10px 20px 0 rgba(0, 0, 0, 0.1);
     --post-card-translate-y: -4px;
 
     article {
-      border-radius: 13px;
+      border-radius: 4px;
 
       > .content {
-        padding: 0.86rem 0.9rem 0.78rem;
+        padding: 1rem;
 
         > .summary p {
           -webkit-line-clamp: 3;
         }
 
         > .summary {
-          height: 4.2rem;
+          height: 3.9375rem;
         }
 
         > .footer {

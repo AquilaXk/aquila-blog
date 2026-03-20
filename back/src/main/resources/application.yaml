@@ -214,10 +214,13 @@ custom:
     ttl-seconds: 3600
     ttl-overrides:
       member-admin-profile-v2: 120
-      post-feed-v3: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
-      post-explore-v3: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
-      post-tags-v3: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
-      post-detail-public-v3: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:15}
+      post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
+      post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:8}
+      post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
+      post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:8}
+      post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:8}
+      post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
+      post-detail-public-v4: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:15}
   revalidate:
     url: "${CUSTOM__REVALIDATE__URL:}"
     token: "${CUSTOM__REVALIDATE__TOKEN:}"
@@ -256,6 +259,7 @@ custom:
       cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
   post:
     read:
+      cursor-signing-secret: ${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
       bulkhead:
         enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
         acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}

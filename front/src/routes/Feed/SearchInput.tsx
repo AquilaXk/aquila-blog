@@ -101,7 +101,7 @@ const StyledWrapper = styled.div`
         background: ${({ theme }) => theme.colors.gray3};
       }
 
-      @media (max-width: 640px) {
+      @media (max-width: 1200px) {
         display: none;
       }
     }

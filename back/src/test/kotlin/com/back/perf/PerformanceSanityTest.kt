@@ -79,7 +79,7 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
                 status { isOk() }
             }
 
-        assertQueryCountWithin("post-detail", 12)
+        assertQueryCountWithin("post-detail", 8)
     }
 
     @Test

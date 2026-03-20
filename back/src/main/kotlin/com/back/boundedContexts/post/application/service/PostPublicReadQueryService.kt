@@ -12,11 +12,16 @@ import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
+import java.util.Base64
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * PostPublicReadQueryService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
@@ -26,8 +31,18 @@ import java.time.Instant
 class PostPublicReadQueryService(
     private val postUseCase: PostUseCase,
     private val postReadBulkheadService: PostReadBulkheadService,
+    @Value("\${custom.post.read.cursor-signing-secret:}") cursorSigningSecret: String,
 ) : PostPublicReadQueryUseCase {
     private val logger = LoggerFactory.getLogger(PostPublicReadQueryService::class.java)
+    private val cursorSecretBytes = resolveCursorSecret(cursorSigningSecret).toByteArray(StandardCharsets.UTF_8)
+
+    init {
+        if (cursorSigningSecret.isBlank()) {
+            logger.warn(
+                "cursor_signing_secret_not_set: fallback secret is in use. set custom.post.read.cursor-signing-secret in production",
+            )
+        }
+    }
 
     @Transactional(readOnly = true)
     @Cacheable(
@@ -49,6 +64,14 @@ class PostPublicReadQueryService(
         }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.FEED_CURSOR_FIRST],
+        key = "'size=' + #pageSize + ':sort=' + #sort.name()",
+        condition =
+            "T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".isFirstCursorRequest(#cursor)",
+        sync = true,
+    )
     override fun getPublicFeedByCursor(
         cursor: String?,
         pageSize: Int,
@@ -109,6 +132,16 @@ class PostPublicReadQueryService(
         }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.EXPLORE_CURSOR_FIRST],
+        key =
+            "'size=' + #pageSize + ':sort=' + #sort.name()" +
+                " + ':tag=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#tag)",
+        condition =
+            "T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".isFirstCursorRequest(#cursor) && #tag.trim().length() > 0",
+        sync = true,
+    )
     override fun getPublicExploreByCursor(
         cursor: String?,
         pageSize: Int,
@@ -172,7 +205,7 @@ class PostPublicReadQueryService(
     override fun getPublicPostDetail(id: Long): PostWithContentDto =
         runReadQuery("detail", "id=$id") {
             postReadBulkheadService.withDetailPermit {
-                val post = postUseCase.findById(id).getOrThrow()
+                val post = postUseCase.findPublicDetailById(id).getOrThrow()
                 post.checkActorCanRead(null)
                 PostWithContentDto(post)
             }
@@ -244,8 +277,8 @@ class PostPublicReadQueryService(
     private fun parseCursor(raw: String?): CursorToken? {
         val value = raw?.trim().orEmpty()
         if (value.isBlank()) return null
-        val parts = value.split(":", limit = 2)
-        if (parts.size != 2) {
+        val parts = value.split(":", limit = 3)
+        if (parts.size != 3) {
             throw AppException("400-1", "cursor 형식이 올바르지 않습니다.")
         }
 
@@ -259,13 +292,41 @@ class PostPublicReadQueryService(
             throw AppException("400-1", "cursor 값이 유효하지 않습니다.")
         }
 
+        val signature = parts[2].trim()
+        if (signature.isBlank()) {
+            throw AppException("400-1", "cursor 서명이 비어 있습니다.")
+        }
+        val payload = "$epochMillis:$id"
+        val expectedSignature = signCursorPayload(payload)
+        val isSignatureValid =
+            MessageDigest.isEqual(
+                expectedSignature.toByteArray(StandardCharsets.UTF_8),
+                signature.toByteArray(StandardCharsets.UTF_8),
+            )
+        if (!isSignatureValid) {
+            throw AppException("400-1", "cursor 서명이 유효하지 않습니다.")
+        }
+
         return CursorToken(Instant.ofEpochMilli(epochMillis), id)
     }
 
     private fun encodeCursor(
         createdAt: Instant,
         id: Long,
-    ): String = "${createdAt.toEpochMilli()}:$id"
+    ): String {
+        val payload = "${createdAt.toEpochMilli()}:$id"
+        return "$payload:${signCursorPayload(payload)}"
+    }
+
+    private fun signCursorPayload(payload: String): String {
+        val mac = Mac.getInstance(CURSOR_HMAC_ALGORITHM)
+        mac.init(SecretKeySpec(cursorSecretBytes, CURSOR_HMAC_ALGORITHM))
+        val digest = mac.doFinal(payload.toByteArray(StandardCharsets.UTF_8))
+        val truncated = digest.copyOf(CURSOR_SIGNATURE_BYTES)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(truncated)
+    }
+
+    private fun resolveCursorSecret(raw: String): String = raw.ifBlank { DEFAULT_CURSOR_SIGNING_SECRET }
 
     companion object {
         @JvmStatic
@@ -307,6 +368,9 @@ class PostPublicReadQueryService(
             return page > MAX_CACHEABLE_PAGE || normalizedKw.length > MAX_CACHEABLE_KW_LENGTH
         }
 
+        @JvmStatic
+        fun isFirstCursorRequest(cursor: String?): Boolean = cursor.isNullOrBlank()
+
         private fun sha256Hex(value: String): String =
             MessageDigest
                 .getInstance("SHA-256")
@@ -320,6 +384,9 @@ class PostPublicReadQueryService(
         private const val MAX_CACHEABLE_TAG_LENGTH = 24
         private const val MAX_CACHEABLE_TOTAL_LENGTH = 48
         private const val MAX_CURSOR_PAGE_SIZE = 30
+        private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
+        private const val CURSOR_SIGNATURE_BYTES = 18
+        private const val DEFAULT_CURSOR_SIGNING_SECRET = "aquila-post-cursor-signing-secret-change-me"
     }
 
     private data class CursorToken(

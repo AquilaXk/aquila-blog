@@ -102,6 +102,19 @@ type GeneratePreviewSummaryPayload = {
   provider?: string
   model?: string | null
   reason?: string | null
+  traceId?: string | null
+  debug?: {
+    cacheStatus?: string | null
+    promptLength?: number | null
+    promptPreview?: string | null
+    strictResponseStatus?: number | null
+    strictResponsePreview?: string | null
+    relaxedRetried?: boolean | null
+    relaxedResponseStatus?: number | null
+    relaxedResponsePreview?: string | null
+    parsedSummaryLength?: number | null
+    parsedSummaryPreview?: string | null
+  } | null
 }
 
 type AdminPostListItem = {
@@ -492,6 +505,40 @@ const formatPreviewSummaryReason = (rawReason?: string | null) => {
       if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
       return reason
   }
+}
+
+const trimDebugPreview = (value?: string | null, maxLength = 180) => {
+  const normalized = (value || "").replace(/\s+/g, " ").trim()
+  if (!normalized) return ""
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, maxLength).trim()}...`
+}
+
+const formatPreviewSummaryDebug = (payload?: GeneratePreviewSummaryPayload) => {
+  const traceId = (payload?.traceId || "").trim()
+  const debug = payload?.debug
+  if (!traceId && !debug) return ""
+
+  const lines: string[] = []
+  if (traceId) lines.push(`traceId: ${traceId}`)
+  if (debug?.cacheStatus) lines.push(`cache: ${debug.cacheStatus}`)
+  if (typeof debug?.promptLength === "number") lines.push(`promptLength: ${debug.promptLength}`)
+  if (typeof debug?.strictResponseStatus === "number") lines.push(`strictStatus: ${debug.strictResponseStatus}`)
+  if (typeof debug?.relaxedRetried === "boolean") lines.push(`relaxedRetried: ${debug.relaxedRetried ? "yes" : "no"}`)
+  if (typeof debug?.relaxedResponseStatus === "number") lines.push(`relaxedStatus: ${debug.relaxedResponseStatus}`)
+  if (typeof debug?.parsedSummaryLength === "number") lines.push(`parsedSummaryLength: ${debug.parsedSummaryLength}`)
+
+  const promptPreview = trimDebugPreview(debug?.promptPreview)
+  const strictRawPreview = trimDebugPreview(debug?.strictResponsePreview)
+  const relaxedRawPreview = trimDebugPreview(debug?.relaxedResponsePreview)
+  const parsedPreview = trimDebugPreview(debug?.parsedSummaryPreview)
+
+  if (promptPreview) lines.push(`promptPreview: ${promptPreview}`)
+  if (strictRawPreview) lines.push(`strictRaw: ${strictRawPreview}`)
+  if (relaxedRawPreview) lines.push(`relaxedRaw: ${relaxedRawPreview}`)
+  if (parsedPreview) lines.push(`parsedSummary: ${parsedPreview}`)
+
+  return lines.join("\n")
 }
 
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
@@ -890,6 +937,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     tone: "idle",
     text: "AI 요약 상태가 여기에 표시됩니다.",
   })
+  const [previewSummaryDebug, setPreviewSummaryDebug] = useState("")
   const [profileImageNotice, setProfileImageNotice] = useState<NoticeState>({
     tone: "idle",
     text: "프로필 이미지를 선택하면 즉시 업로드됩니다.",
@@ -1402,6 +1450,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (!content) {
       setPublishStatus({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." }, "modal")
       setPreviewSummaryNotice({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." })
+      setPreviewSummaryDebug("")
       return
     }
     if (content.length > PREVIEW_SUMMARY_MAX_CONTENT_LENGTH) {
@@ -1414,6 +1463,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         "modal"
       )
       setPreviewSummaryNotice({ tone: "error", text: message })
+      setPreviewSummaryDebug("")
       return
     }
     const fallbackSummary = makePreviewSummary(postContent)
@@ -1422,37 +1472,57 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("generatePreviewSummary")
       setPublishStatus({ tone: "loading", text: "AI 요약 생성 중입니다..." }, "modal")
       setPreviewSummaryNotice({ tone: "loading", text: "AI 요약 생성 중입니다..." })
+      setPreviewSummaryDebug("")
 
       const response = await fetchPreviewSummary({
         title: postTitle,
         content: postContent,
         maxLength: PREVIEW_SUMMARY_MAX_LENGTH,
       })
+      const debugText = formatPreviewSummaryDebug(response?.data)
+      setPreviewSummaryDebug(debugText)
 
       const generated = normalizeGeneratedPreviewSummary(response?.data?.summary || "")
       if (!generated) {
         throw new Error("요약 생성 결과가 비어 있습니다.")
       }
 
+      const isRuleFallback = response?.data?.provider === "rule"
       const providerLabel =
         response?.data?.provider === "gemini"
           ? `Gemini${response?.data?.model ? ` (${response.data.model})` : ""}`
           : "규칙 기반"
+      const traceHint = response?.data?.traceId ? ` · trace=${response.data.traceId}` : ""
       const reasonHint =
         response?.data?.provider === "rule" ? formatPreviewSummaryReason(response?.data?.reason) : ""
 
       setPostSummary(generated)
-      const summaryNoticeText = `요약 반영 완료 (${providerLabel}${reasonHint ? ` · ${reasonHint}` : ""})`
+
+      if (isRuleFallback) {
+        const fallbackNoticeText = `규칙 기반 요약 반영 (${reasonHint || "AI 요약 실패"})${traceHint}`
+        setPublishStatus(
+          {
+            tone: "error",
+            text: `AI 요약을 사용할 수 없어 규칙 기반 요약으로 반영했습니다.${reasonHint ? ` (${reasonHint})` : ""}${traceHint}`,
+          },
+          "modal"
+        )
+        setPreviewSummaryNotice({ tone: "error", text: fallbackNoticeText })
+        return
+      }
+
+      const summaryNoticeText = `요약 반영 완료 (${providerLabel})${traceHint}`
       setPublishStatus(
         {
           tone: "success",
-          text: `요약을 생성해 입력창에 반영했습니다. (${providerLabel}${reasonHint ? ` · ${reasonHint}` : ""})`,
+          text: `요약을 생성해 입력창에 반영했습니다. (${providerLabel})${traceHint}`,
         },
         "modal"
       )
       setPreviewSummaryNotice({ tone: "success", text: summaryNoticeText })
     } catch (error) {
       const errorMessage = resolvePreviewSummaryErrorMessage(error)
+      setPreviewSummaryDebug(`client-error: ${errorMessage}`)
       if (fallbackSummary) {
         setPostSummary(fallbackSummary)
         const fallbackMessage = `AI 요약 실패로 규칙 기반 요약을 반영했습니다. (${errorMessage})`
@@ -3750,12 +3820,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           tone: "success",
                           text: "규칙 기반 요약을 입력창에 반영했습니다.",
                         })
+                        setPreviewSummaryDebug("")
                       }}
                     >
                       규칙 요약 채우기
                     </Button>
                   </MetaActionRow>
                   <SummaryActionStatus data-tone={previewSummaryNotice.tone}>{previewSummaryNotice.text}</SummaryActionStatus>
+                  {previewSummaryDebug ? <SummaryDebugPanel>{previewSummaryDebug}</SummaryDebugPanel> : null}
                   <FieldHelp>아래 블록은 목록 카드에 실제로 노출될 제목/요약 미리보기입니다.</FieldHelp>
                   <PreviewCardSnapshot>
                     <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
@@ -4850,6 +4922,20 @@ const SummaryActionStatus = styled.div`
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
   }
+`
+
+const SummaryDebugPanel = styled.pre`
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  padding: 0.58rem 0.62rem;
+  border-radius: 8px;
+  border: 1px dashed ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.74rem;
+  line-height: 1.55;
 `
 
 const ZoomControlRow = styled.div`

@@ -1,7 +1,7 @@
 package com.back.boundedContexts.post.adapter.persistence
 
-import com.back.boundedContexts.member.model.shared.Member
-import com.back.boundedContexts.post.model.Post
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostAttr.postAttr
 import com.back.standard.util.QueryDslUtil
@@ -64,6 +64,24 @@ class PostRepositoryImpl(
         limit: Int,
         sortAscending: Boolean,
     ): List<Post> = findPublicPostsByCursor(cursorCreatedAt, cursorId, limit, sortAscending, tag = tag)
+
+    override fun findPublicDetailById(id: Long): Post? =
+        queryFactory
+            .selectFrom(post)
+            .leftJoin(post.author)
+            .fetchJoin()
+            .leftJoin(post.likesCountAttr)
+            .fetchJoin()
+            .leftJoin(post.commentsCountAttr)
+            .fetchJoin()
+            .leftJoin(post.hitCountAttr)
+            .fetchJoin()
+            .where(
+                post.id
+                    .eq(id)
+                    .and(post.published.isTrue)
+                    .and(post.listed.isTrue),
+            ).fetchOne()
 
     override fun findAllPublicListedContents(): List<String> =
         queryFactory

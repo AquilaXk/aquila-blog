@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryP
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostWriteRequestIdempotencyRepositoryPort
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
@@ -60,6 +61,7 @@ import kotlin.jvm.optionals.getOrNull
 @Service
 class PostApplicationService(
     private val postRepository: PostRepositoryPort,
+    private val postTagIndexRepository: PostTagIndexRepositoryPort,
     private val postAttrRepository: PostAttrRepositoryPort,
     private val memberAttrRepository: MemberAttrRepositoryPort,
     private val postCommentRepository: PostCommentRepositoryPort,
@@ -160,6 +162,16 @@ class PostApplicationService(
             .getOrNull()
             ?.also { post ->
                 hydratePostAttrs(post)
+                hydrateMembersProfileImgAttrs(listOf(post.author))
+            }
+
+    fun findPublicDetailById(id: Long): Post? =
+        postRepository
+            .findPublicDetailById(id)
+            ?.also { post ->
+                if (post.likesCountAttr == null || post.commentsCountAttr == null || post.hitCountAttr == null) {
+                    hydratePostAttrs(post)
+                }
                 hydrateMembersProfileImgAttrs(listOf(post.author))
             }
 
@@ -834,26 +846,18 @@ class PostApplicationService(
             val refreshedNow = System.currentTimeMillis()
             publicTagCountsCache?.takeIf { it.expiresAtMillis > refreshedNow }?.let { return it.values }
 
-            val tagCounts = ConcurrentHashMap<String, Int>()
-            val indexedTagRows = postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)
-
-            indexedTagRows.forEach { tagIndex ->
-                parseTagIndex(tagIndex).forEach { normalizedTag ->
-                    tagCounts.merge(normalizedTag, 1, Int::plus)
-                }
-            }
-
-            if (indexedTagRows.isEmpty()) {
-                logger.warn(
-                    "public_tag_counts_index_empty: skip legacy content-scan fallback to protect DB under load",
-                )
-            }
-
             val result =
-                tagCounts
-                    .entries
-                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
-                    .map { TagCountDto(it.key, it.value) }
+                runCatching {
+                    postTagIndexRepository.findAllPublicTagCounts().map { row ->
+                        TagCountDto(row.tag, row.count)
+                    }
+                }.getOrElse { exception ->
+                    logger.warn(
+                        "public_tag_counts_query_failed: fallback to legacy metaTagsIndex path",
+                        exception,
+                    )
+                    loadPublicTagCountsFromMetaTagIndex()
+                }
 
             publicTagCountsCache = TagCountsCache(refreshedNow + tagCacheTtlMillis, result)
             return result
@@ -1047,6 +1051,8 @@ class PostApplicationService(
         publicTagCountsCache = null
         cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
         cacheManager.getCache(PostQueryCacheNames.EXPLORE)?.clear()
+        cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)?.clear()
+        cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)?.clear()
         cacheManager.getCache(PostQueryCacheNames.SEARCH)?.clear()
         cacheManager.getCache(PostQueryCacheNames.TAGS)?.clear()
         val detailCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)
@@ -1078,10 +1084,38 @@ class PostApplicationService(
             }
 
         val tagIndexAttr = postAttrRepository.findBySubjectAndName(post, META_TAGS_INDEX) ?: PostAttr(0, post, META_TAGS_INDEX, "")
-        if ((tagIndexAttr.strValue ?: "") == indexValue) return
+        if ((tagIndexAttr.strValue ?: "") != indexValue) {
+            tagIndexAttr.strValue = indexValue
+            postAttrRepository.save(tagIndexAttr)
+        }
 
-        tagIndexAttr.strValue = indexValue
-        postAttrRepository.save(tagIndexAttr)
+        runCatching {
+            postTagIndexRepository.replacePostTags(post.id, normalizedTags)
+        }.onFailure { exception ->
+            logger.warn("failed_to_sync_post_tag_index postId={}", post.id, exception)
+        }
+    }
+
+    private fun loadPublicTagCountsFromMetaTagIndex(): List<TagCountDto> {
+        val tagCounts = ConcurrentHashMap<String, Int>()
+        val indexedTagRows = postRepository.findAllPublicListedTagIndexes(META_TAGS_INDEX)
+
+        indexedTagRows.forEach { tagIndex ->
+            parseTagIndex(tagIndex).forEach { normalizedTag ->
+                tagCounts.merge(normalizedTag, 1, Int::plus)
+            }
+        }
+
+        if (indexedTagRows.isEmpty()) {
+            logger.warn(
+                "public_tag_counts_index_empty: skip legacy content-scan fallback to protect DB under load",
+            )
+        }
+
+        return tagCounts
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
+            .map { TagCountDto(it.key, it.value) }
     }
 
     private fun normalizeTag(tag: String): String = tag.trim()

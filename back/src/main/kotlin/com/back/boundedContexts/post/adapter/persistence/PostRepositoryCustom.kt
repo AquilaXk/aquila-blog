@@ -49,6 +49,8 @@ interface PostRepositoryCustom {
         sortAscending: Boolean,
     ): List<Post>
 
+    fun findPublicDetailById(id: Long): Post?
+
     fun findAllPublicListedContents(): List<String>
 
     fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String>

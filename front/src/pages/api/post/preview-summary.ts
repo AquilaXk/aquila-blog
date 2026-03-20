@@ -16,9 +16,22 @@ type PreviewSummarySuccessResponse = {
   msg: string
   data: {
     summary: string
-    provider: "rule"
-    model: null
-    reason: string
+    provider: "rule" | "gemini"
+    model: string | null
+    reason: string | null
+    traceId?: string | null
+    debug?: {
+      cacheStatus?: string | null
+      promptLength?: number | null
+      promptPreview?: string | null
+      strictResponseStatus?: number | null
+      strictResponsePreview?: string | null
+      relaxedRetried?: boolean | null
+      relaxedResponseStatus?: number | null
+      relaxedResponsePreview?: string | null
+      parsedSummaryLength?: number | null
+      parsedSummaryPreview?: string | null
+    } | null
   }
 }
 
@@ -76,6 +89,8 @@ const buildRuleFallbackResponse = (
     provider: "rule",
     model: null,
     reason,
+    traceId: null,
+    debug: null,
   },
 })
 

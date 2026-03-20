@@ -12,8 +12,8 @@ const TagList: React.FC<Props> = () => {
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
   const totalPostCount = usePostsTotalCountQuery()
-  const { tagEntries, totalCount } = useTagsQuery()
-  const allCount = totalPostCount ?? totalCount
+  const { tagEntries } = useTagsQuery()
+  const allCount = totalPostCount
 
   const navigateWithTag = useCallback((value?: string) => {
     const { category: _deprecatedCategory, ...restQuery } = router.query
@@ -64,7 +64,7 @@ const TagList: React.FC<Props> = () => {
               onClick={handleClickAll}
             >
               <span className="name">전체보기</span>
-              <span className="count">({allCount})</span>
+              {typeof allCount === "number" && <span className="count">({allCount})</span>}
             </button>
           </li>
           {tagEntries.map(([key, count]) => (
@@ -94,7 +94,7 @@ const TagList: React.FC<Props> = () => {
           onClick={handleClickAll}
         >
           <span className="name">전체</span>
-          <span className="count">({allCount})</span>
+          {typeof allCount === "number" && <span className="count">({allCount})</span>}
         </button>
         {tagEntries.map(([key, count]) => (
           <button
@@ -137,20 +137,20 @@ const StyledWrapper = styled.div`
   .panelTitle {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.22rem;
-    font-weight: 760;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-    padding: 0.02rem 0 0.66rem;
-    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.5;
+    padding: 0 0 0.5rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
   }
 
   .desktopList {
     list-style: none;
-    margin: 0.56rem 0 0;
+    margin: 1rem 0 0;
     padding: 0;
     display: grid;
-    gap: 0.16rem;
+    gap: 0.25rem;
     max-height: calc(100vh - var(--app-header-height, 56px) - 6.35rem);
     max-height: calc(100dvh - var(--app-header-height, 56px) - 6.35rem);
     overflow-y: auto;
@@ -170,11 +170,11 @@ const StyledWrapper = styled.div`
 
   .desktopList button {
     width: 100%;
-    min-height: 34px;
+    min-height: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: 4px;
     background: transparent;
-    padding: 0.2rem 0.36rem;
+    padding: 0.125rem 0.25rem;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -182,11 +182,16 @@ const StyledWrapper = styled.div`
     text-align: left;
     color: ${({ theme }) => theme.colors.gray11};
     cursor: pointer;
-    transition: background-color 0.14s ease, color 0.14s ease;
+    transition: all 0.125s ease-in;
 
     &:hover {
-      background: ${({ theme }) => theme.colors.gray2};
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray12};
+
+      .name {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
     }
 
     &:focus-visible {
@@ -195,13 +200,13 @@ const StyledWrapper = styled.div`
     }
 
     &[data-active="true"] {
-      background: ${({ theme }) => theme.colors.gray2};
+      background: transparent;
     }
   }
 
   .desktopList button .name {
-    font-size: 0.96rem;
-    font-weight: 640;
+    font-size: 0.875rem;
+    font-weight: 620;
     color: ${({ theme }) => theme.colors.gray12};
     white-space: nowrap;
     overflow: hidden;
@@ -210,11 +215,12 @@ const StyledWrapper = styled.div`
 
   .desktopList button[data-active="true"] .name {
     color: ${({ theme }) => theme.colors.blue11};
-    font-weight: 760;
+    font-weight: 700;
+    text-decoration: none;
   }
 
   .desktopList button .count {
-    font-size: 0.86rem;
+    font-size: 0.75rem;
     color: ${({ theme }) => theme.colors.gray10};
     font-variant-numeric: tabular-nums;
   }
@@ -289,12 +295,12 @@ const StyledWrapper = styled.div`
   }
 
   .chipRail button .name {
-    font-size: 0.82rem;
+    font-size: 0.75rem;
     font-weight: 650;
   }
 
   .chipRail button .count {
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: ${({ theme }) => theme.colors.gray10};
   }
 
@@ -305,6 +311,14 @@ const StyledWrapper = styled.div`
   @media (max-width: 768px) {
     .chipRail {
       margin-bottom: 0;
+    }
+  }
+
+  @media (min-width: 769px) and (max-width: 1200px) {
+    .chipRail button {
+      min-height: 24px;
+      padding: 0 0.75rem;
+      border-radius: 12px;
     }
   }
 `

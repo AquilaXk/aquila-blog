@@ -516,8 +516,8 @@ const StyledWrapper = styled.div`
     &:hover,
     &[data-open="true"] {
       color: ${({ theme }) => theme.colors.gray12};
-      border-color: ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray3};
+      border-color: transparent;
+      background: transparent;
     }
 
     &:focus-visible {

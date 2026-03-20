@@ -35,6 +35,9 @@ BEGIN
             ON post (author_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS post_idx_author_modified_at_desc
             ON post (author_id, modified_at DESC);
+        CREATE INDEX IF NOT EXISTS post_idx_public_listed_created_at_id_desc
+            ON post (created_at DESC, id DESC)
+            WHERE published IS TRUE AND listed IS TRUE;
     END IF;
 
     IF to_regclass('public.post') IS NOT NULL

@@ -130,6 +130,21 @@ class ApiV1AdmPostController(
         val provider: String,
         val model: String?,
         val reason: String? = null,
+        val traceId: String? = null,
+        val debug: GeneratePreviewSummaryDebugResBody? = null,
+    )
+
+    data class GeneratePreviewSummaryDebugResBody(
+        val cacheStatus: String? = null,
+        val promptLength: Int? = null,
+        val promptPreview: String? = null,
+        val strictResponseStatus: Int? = null,
+        val strictResponsePreview: String? = null,
+        val relaxedRetried: Boolean? = null,
+        val relaxedResponseStatus: Int? = null,
+        val relaxedResponsePreview: String? = null,
+        val parsedSummaryLength: Int? = null,
+        val parsedSummaryPreview: String? = null,
     )
 
     /**
@@ -158,6 +173,22 @@ class ApiV1AdmPostController(
                 provider = result.provider,
                 model = result.model,
                 reason = result.reason,
+                traceId = result.traceId,
+                debug =
+                    result.debug?.let { debug ->
+                        GeneratePreviewSummaryDebugResBody(
+                            cacheStatus = debug.cacheStatus,
+                            promptLength = debug.promptLength,
+                            promptPreview = debug.promptPreview,
+                            strictResponseStatus = debug.strictResponseStatus,
+                            strictResponsePreview = debug.strictResponsePreview,
+                            relaxedRetried = debug.relaxedRetried,
+                            relaxedResponseStatus = debug.relaxedResponseStatus,
+                            relaxedResponsePreview = debug.relaxedResponsePreview,
+                            parsedSummaryLength = debug.parsedSummaryLength,
+                            parsedSummaryPreview = debug.parsedSummaryPreview,
+                        )
+                    },
             ),
         )
     }

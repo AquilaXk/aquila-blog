@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.application.port.output.PostAttrRepositoryP
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostLikeRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
+import com.back.boundedContexts.post.application.port.output.PostTagIndexRepositoryPort
 import com.back.boundedContexts.post.application.port.output.PostWriteRequestIdempotencyRepositoryPort
 import com.back.boundedContexts.post.application.port.output.SecureTipPort
 import com.back.boundedContexts.post.domain.POSTS_COUNT
@@ -27,6 +28,7 @@ class PostApplicationServiceDeleteResilienceTest {
     private val memberAttrRepository: MemberAttrRepositoryPort = mock(MemberAttrRepositoryPort::class.java)
     private val postCommentRepository: PostCommentRepositoryPort = mock(PostCommentRepositoryPort::class.java)
     private val postLikeRepository: PostLikeRepositoryPort = mock(PostLikeRepositoryPort::class.java)
+    private val postTagIndexRepository: PostTagIndexRepositoryPort = mock(PostTagIndexRepositoryPort::class.java)
     private val postWriteRequestIdempotencyRepository: PostWriteRequestIdempotencyRepositoryPort =
         mock(PostWriteRequestIdempotencyRepositoryPort::class.java)
     private val secureTipPort: SecureTipPort = mock(SecureTipPort::class.java)
@@ -37,6 +39,7 @@ class PostApplicationServiceDeleteResilienceTest {
     private val service =
         PostApplicationService(
             postRepository = postRepository,
+            postTagIndexRepository = postTagIndexRepository,
             postAttrRepository = postAttrRepository,
             memberAttrRepository = memberAttrRepository,
             postCommentRepository = postCommentRepository,

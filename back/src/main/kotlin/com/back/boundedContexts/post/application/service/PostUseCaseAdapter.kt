@@ -36,6 +36,8 @@ class PostUseCaseAdapter(
 
     override fun findById(id: Long): Post? = postApplicationService.findById(id)
 
+    override fun findPublicDetailById(id: Long): Post? = postApplicationService.findPublicDetailById(id)
+
     override fun findLatest(): Post? = postApplicationService.findLatest()
 
     override fun modify(

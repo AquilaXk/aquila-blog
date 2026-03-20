@@ -101,6 +101,8 @@ class PostRepositoryAdapter(
             query.sortAscending,
         )
 
+    override fun findPublicDetailById(id: Long): Post? = postRepository.findPublicDetailById(id)
+
     override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()
 
     override fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String> =

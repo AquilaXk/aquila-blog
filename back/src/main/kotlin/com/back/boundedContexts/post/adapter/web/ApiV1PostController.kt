@@ -3,13 +3,13 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.post.application.port.input.PostHitDedupUseCase
 import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
-import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.TagCountDto
+import com.back.boundedContexts.post.model.Post
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
@@ -18,6 +18,8 @@ import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import jakarta.persistence.OptimisticLockException
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
@@ -25,11 +27,16 @@ import jakarta.validation.constraints.Size
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.dao.OptimisticLockingFailureException
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.sql.SQLException
+import java.time.Instant
 
 /**
  * ApiV1PostController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
@@ -44,6 +51,158 @@ class ApiV1PostController(
     private val rq: Rq,
 ) {
     private val logger = LoggerFactory.getLogger(ApiV1PostController::class.java)
+
+    private fun applyPublicReadCacheHeaders(
+        response: HttpServletResponse,
+        maxAgeSeconds: Int,
+        staleWhileRevalidateSeconds: Int,
+    ) {
+        val safeMaxAge = maxAgeSeconds.coerceAtLeast(0)
+        val safeSWR = staleWhileRevalidateSeconds.coerceAtLeast(0)
+        val staleIfError = (safeMaxAge + safeSWR).coerceAtLeast(safeSWR)
+        response.setHeader(
+            "Cache-Control",
+            "public, max-age=$safeMaxAge, stale-while-revalidate=$safeSWR, stale-if-error=$staleIfError",
+        )
+    }
+
+    private fun applyPrivateNoStoreHeaders(response: HttpServletResponse) {
+        response.setHeader("Cache-Control", "private, no-store, max-age=0")
+    }
+
+    private fun normalizeEtagToken(raw: String): String = raw.trim().removePrefix("W/").removePrefix("w/")
+
+    private fun toWeakEtag(seed: String): String {
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(seed.toByteArray(StandardCharsets.UTF_8))
+                .joinToString("") { each -> "%02x".format(each) }
+                .take(32)
+        return "W/\"$digest\""
+    }
+
+    private fun isNotModified(
+        request: HttpServletRequest,
+        etag: String,
+    ): Boolean {
+        val ifNoneMatch = request.getHeader(HttpHeaders.IF_NONE_MATCH)?.trim().orEmpty()
+        if (ifNoneMatch.isBlank()) return false
+        if (ifNoneMatch == "*") return true
+
+        val expected = normalizeEtagToken(etag)
+        return ifNoneMatch
+            .split(",")
+            .asSequence()
+            .map { normalizeEtagToken(it) }
+            .any { it == expected }
+    }
+
+    private fun <T : Any> respondPublicWithEtag(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        maxAgeSeconds: Int,
+        staleWhileRevalidateSeconds: Int,
+        etagSeed: String,
+        body: T,
+    ): ResponseEntity<T> {
+        applyPublicReadCacheHeaders(
+            response,
+            maxAgeSeconds = maxAgeSeconds,
+            staleWhileRevalidateSeconds = staleWhileRevalidateSeconds,
+        )
+        val etag = toWeakEtag(etagSeed)
+        response.setHeader(HttpHeaders.ETAG, etag)
+        if (isNotModified(request, etag)) {
+            response.status = HttpServletResponse.SC_NOT_MODIFIED
+            return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build<T>()
+        }
+        return ResponseEntity.ok(body)
+    }
+
+    private fun toEpochMillis(instant: Instant): Long = instant.toEpochMilli()
+
+    private fun buildFeedPageEtagSeed(
+        source: String,
+        page: Int,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        kw: String = "",
+        tag: String = "",
+        data: PageDto<FeedPostDto>,
+    ): String {
+        val itemsToken =
+            data.content.joinToString(separator = "|") {
+                "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}"
+            }
+        return buildString {
+            append(source)
+            append("|page=")
+            append(page)
+            append("|size=")
+            append(pageSize)
+            append("|sort=")
+            append(sort.name)
+            append("|kw=")
+            append(kw.trim())
+            append("|tag=")
+            append(tag.trim())
+            append("|total=")
+            append(data.pageable.totalElements)
+            append("|pages=")
+            append(data.pageable.totalPages)
+            append("|items=")
+            append(itemsToken)
+        }
+    }
+
+    private fun buildCursorFeedEtagSeed(
+        source: String,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        cursor: String?,
+        tag: String = "",
+        data: CursorFeedPageDto,
+    ): String {
+        val itemsToken =
+            data.content.joinToString(separator = "|") {
+                "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}"
+            }
+        return buildString {
+            append(source)
+            append("|size=")
+            append(pageSize)
+            append("|sort=")
+            append(sort.name)
+            append("|cursor=")
+            append(cursor?.trim().orEmpty())
+            append("|tag=")
+            append(tag.trim())
+            append("|hasNext=")
+            append(data.hasNext)
+            append("|nextCursor=")
+            append(data.nextCursor.orEmpty())
+            append("|items=")
+            append(itemsToken)
+        }
+    }
+
+    private fun buildPublicDetailEtagSeed(data: PostWithContentDto): String =
+        buildString {
+            append(data.id)
+            append("|")
+            append(toEpochMillis(data.modifiedAt))
+            append("|")
+            append(data.version)
+            append("|")
+            append(data.likesCount)
+            append("|")
+            append(data.commentsCount)
+            append("|")
+            append(data.hitCount)
+        }
+
+    private fun buildTagsEtagSeed(tags: List<TagCountDto>): String = tags.joinToString(separator = "|") { "${it.tag}:${it.count}" }
 
     /**
      * makePostDtoPage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
@@ -74,25 +233,47 @@ class ApiV1PostController(
     @GetMapping("/feed")
     @Transactional(readOnly = true)
     fun getFeed(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): PageDto<FeedPostDto> {
+    ): ResponseEntity<PageDto<FeedPostDto>> {
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
-        return postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
+        val data = postPublicReadQueryUseCase.getPublicFeed(validPage, validPageSize, sort)
+        val etagSeed = buildFeedPageEtagSeed("feed", validPage, validPageSize, sort, data = data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            maxAgeSeconds = 20,
+            staleWhileRevalidateSeconds = 60,
+            etagSeed = etagSeed,
+            body = data,
+        )
     }
 
     @GetMapping("/feed/cursor")
     @Transactional(readOnly = true)
     fun getFeedByCursor(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): CursorFeedPageDto {
+    ): ResponseEntity<CursorFeedPageDto> {
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = normalizeCursorSort(sort)
-        return postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
+        val data = postPublicReadQueryUseCase.getPublicFeedByCursor(cursor, validPageSize, validSort)
+        val etagSeed = buildCursorFeedEtagSeed("feed-cursor", validPageSize, validSort, cursor, data = data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            maxAgeSeconds = 20,
+            staleWhileRevalidateSeconds = 60,
+            etagSeed = etagSeed,
+            body = data,
+        )
     }
 
     /**
@@ -102,50 +283,97 @@ class ApiV1PostController(
     @GetMapping("/explore")
     @Transactional(readOnly = true)
     fun explore(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "") tag: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): PageDto<FeedPostDto> {
+    ): ResponseEntity<PageDto<FeedPostDto>> {
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
         val normalizedKw = normalizeExploreKeyword(kw)
         val normalizedTag = normalizeExploreTag(tag)
-        return postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
+        val data = postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
+        val etagSeed = buildFeedPageEtagSeed("explore", validPage, validPageSize, sort, normalizedKw, normalizedTag, data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            maxAgeSeconds = 20,
+            staleWhileRevalidateSeconds = 60,
+            etagSeed = etagSeed,
+            body = data,
+        )
     }
 
     @GetMapping("/explore/cursor")
     @Transactional(readOnly = true)
     fun exploreByCursor(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "") tag: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): CursorFeedPageDto {
+    ): ResponseEntity<CursorFeedPageDto> {
         val validPageSize = pageSize.coerceIn(1, 30)
         val normalizedTag = normalizeExploreTag(tag)
         val validSort = normalizeCursorSort(sort)
-        return postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
+        val data = postPublicReadQueryUseCase.getPublicExploreByCursor(cursor, validPageSize, normalizedTag, validSort)
+        val etagSeed = buildCursorFeedEtagSeed("explore-cursor", validPageSize, validSort, cursor, normalizedTag, data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            maxAgeSeconds = 20,
+            staleWhileRevalidateSeconds = 60,
+            etagSeed = etagSeed,
+            body = data,
+        )
     }
 
     @GetMapping("/search")
     @Transactional(readOnly = true)
     fun search(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @RequestParam(defaultValue = "1") page: Int,
         @RequestParam(defaultValue = "30") pageSize: Int,
         @RequestParam(defaultValue = "") kw: String,
         @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
-    ): PageDto<FeedPostDto> {
+    ): ResponseEntity<PageDto<FeedPostDto>> {
         val validPage = normalizePublicPage(page)
         val validPageSize = pageSize.coerceIn(1, 30)
         val normalizedKw = normalizeExploreKeyword(kw)
-        return postPublicReadQueryUseCase.getPublicSearch(validPage, validPageSize, normalizedKw, sort)
+        val data = postPublicReadQueryUseCase.getPublicSearch(validPage, validPageSize, normalizedKw, sort)
+        val etagSeed = buildFeedPageEtagSeed("search", validPage, validPageSize, sort, normalizedKw, data = data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            maxAgeSeconds = 15,
+            staleWhileRevalidateSeconds = 45,
+            etagSeed = etagSeed,
+            body = data,
+        )
     }
 
     @GetMapping("/tags")
     @Transactional(readOnly = true)
-    fun getTags(): List<TagCountDto> = postPublicReadQueryUseCase.getPublicTagCounts()
+    fun getTags(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+    ): ResponseEntity<List<TagCountDto>> {
+        val data = postPublicReadQueryUseCase.getPublicTagCounts()
+        val etagSeed = buildTagsEtagSeed(data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            maxAgeSeconds = 60,
+            staleWhileRevalidateSeconds = 300,
+            etagSeed = etagSeed,
+            body = data,
+        )
+    }
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -168,14 +396,26 @@ class ApiV1PostController(
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
     fun getItem(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
         @PathVariable @Positive id: Long,
-    ): PostWithContentDto {
+    ): ResponseEntity<PostWithContentDto> {
         if (rq.actorOrNull == null) {
-            return postPublicReadQueryUseCase.getPublicPostDetail(id)
+            val data = postPublicReadQueryUseCase.getPublicPostDetail(id)
+            val etagSeed = buildPublicDetailEtagSeed(data)
+            return respondPublicWithEtag(
+                request = request,
+                response = response,
+                maxAgeSeconds = 20,
+                staleWhileRevalidateSeconds = 60,
+                etagSeed = etagSeed,
+                body = data,
+            )
         }
+        applyPrivateNoStoreHeaders(response)
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actor)
-        return makePostWithContentDto(post)
+        return ResponseEntity.ok(makePostWithContentDto(post))
     }
 
     data class PostWriteRequest(

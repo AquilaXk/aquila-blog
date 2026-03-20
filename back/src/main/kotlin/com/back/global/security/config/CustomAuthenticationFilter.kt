@@ -60,9 +60,10 @@ class CustomAuthenticationFilter(
                 // 공개 API는 잘못된 인증정보가 있어도 익명으로 계속 처리한다.
                 SecurityContextHolder.clearContext()
             } catch (e: Exception) {
+                val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
                 log.warn(
                     "authentication_filter_fallback path={} publicApi={} reason={}",
-                    request.requestURI,
+                    path,
                     isPublicApi,
                     e::class.java.simpleName,
                     e,
@@ -76,9 +77,10 @@ class CustomAuthenticationFilter(
             filterChain.doFilter(request, response)
         } catch (e: AppException) {
             if (response.isCommitted) {
+                val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
                 log.warn(
                     "authentication_app_exception_response_committed path={} code={}",
-                    request.requestURI,
+                    path,
                     e.rsData.resultCode,
                     e,
                 )
@@ -175,5 +177,28 @@ class CustomAuthenticationFilter(
             UsernamePasswordAuthenticationToken(user, user.password, user.authorities)
 
         SecurityContextHolder.getContext().authentication = authentication
+    }
+
+    private fun sanitizeLogValue(
+        raw: String?,
+        maxLength: Int,
+    ): String {
+        if (raw.isNullOrBlank()) return "-"
+
+        val sanitized =
+            raw
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace('\t', ' ')
+                .replace(LOG_CONTROL_CHAR_REGEX, "?")
+                .trim()
+
+        if (sanitized.isBlank()) return "-"
+        return sanitized.take(maxLength)
+    }
+
+    companion object {
+        private const val MAX_PATH_LENGTH = 512
+        private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
     }
 }

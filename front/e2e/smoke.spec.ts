@@ -44,6 +44,28 @@ const createExplorePage = (title: string, tag = "테스트태그") => ({
 })
 
 const mockFeedEndpoints = async (page: Page) => {
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    const url = new URL(route.request().url())
+    const sort = url.searchParams.get("sort") || "CREATED_AT"
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(`정렬:${sort}`)),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/search**", async (route) => {
+    const url = new URL(route.request().url())
+    const kw = url.searchParams.get("kw") || ""
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage(kw ? `검색:${kw}` : "초기목록")),
+    })
+  })
+
   await page.route("**/post/api/v1/posts/explore**", async (route) => {
     const url = new URL(route.request().url())
     const kw = url.searchParams.get("kw") || ""
@@ -83,11 +105,11 @@ test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
 })
 
-test("검색 입력은 explore API의 kw 파라미터를 통해 백엔드 탐색으로 동작한다", async ({ page }) => {
+test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색으로 동작한다", async ({ page }) => {
   const capturedKw: string[] = []
 
   await mockFeedEndpoints(page)
-  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+  await page.route("**/post/api/v1/posts/search**", async (route) => {
     const url = new URL(route.request().url())
     const kw = url.searchParams.get("kw") || ""
     capturedKw.push(kw)
@@ -132,7 +154,7 @@ test("태그 쿼리 파라미터는 explore API의 tag 파라미터로 백엔드
 test("메인 피드 탐색 요청은 최신순 정렬(sort=CREATED_AT)로 고정된다", async ({ page }) => {
   const capturedSort: string[] = []
 
-  await page.route("**/post/api/v1/posts/explore**", async (route) => {
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
     const url = new URL(route.request().url())
     const sort = url.searchParams.get("sort") || "CREATED_AT"
     capturedSort.push(sort)

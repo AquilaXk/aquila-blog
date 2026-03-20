@@ -328,19 +328,47 @@ const buildExplorePath = ({
   return `/post/api/v1/posts/explore?${params.toString()}`
 }
 
+const buildSearchPath = ({
+  kw = "",
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+}: ExplorePostsParams) => {
+  const params = new URLSearchParams()
+  params.set("kw", kw.trim())
+  params.set("sort", toSortParam(order))
+  params.set("page", String(toValidPage(page)))
+  params.set("pageSize", String(toValidPageSize(pageSize)))
+  return `/post/api/v1/posts/search?${params.toString()}`
+}
+
+const buildFeedPath = ({
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+}: Pick<ExplorePostsParams, "order" | "page" | "pageSize">) => {
+  const params = new URLSearchParams()
+  params.set("sort", toSortParam(order))
+  params.set("page", String(toValidPage(page)))
+  params.set("pageSize", String(toValidPageSize(pageSize)))
+  return `/post/api/v1/posts/feed?${params.toString()}`
+}
+
 export const getFeedPosts = async ({
   page = 1,
   pageSize = PAGE_SIZE,
+  order = "desc",
 }: {
   page?: number
   pageSize?: number
+  order?: "asc" | "desc"
 } = {}): Promise<TPost[]> => {
-  const validPage = toValidPage(page)
-  const validPageSize = toValidPageSize(pageSize)
-  const firstPage = await apiFetch<PageDto<ApiPostDto>>(
-    `/post/api/v1/posts/feed?page=${validPage}&pageSize=${validPageSize}&sort=CREATED_AT`
-  )
-  return firstPage.content.map(mapPostDto)
+  const { posts } = await getFeedPostsPage({
+    order,
+    page,
+    pageSize,
+  })
+  return posts
 }
 
 export const getExplorePosts = async ({
@@ -376,6 +404,79 @@ export const getExplorePostsPage = async ({
     buildExplorePath({
       kw,
       tag,
+      order,
+      page,
+      pageSize,
+    }),
+    {
+      signal,
+    }
+  )
+  return {
+    posts: response.content.map(mapPostDto),
+    totalCount:
+      typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
+        ? response.pageable.totalElements
+        : response.content.length,
+    pageNumber:
+      typeof response?.pageable?.pageNumber === "number" && Number.isFinite(response.pageable.pageNumber)
+        ? Math.max(1, Math.trunc(response.pageable.pageNumber))
+        : fallbackPageNumber,
+    pageSize:
+      typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
+        ? Math.max(1, Math.trunc(response.pageable.pageSize))
+        : fallbackPageSize,
+  }
+}
+
+export const getFeedPostsPage = async ({
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+  signal,
+}: Pick<ExplorePostsParams, "order" | "page" | "pageSize" | "signal"> = {}): Promise<ExplorePostsPage> => {
+  const fallbackPageNumber = toValidPage(page)
+  const fallbackPageSize = toValidPageSize(pageSize)
+  const response = await apiFetch<PageDto<ApiPostDto>>(
+    buildFeedPath({
+      order,
+      page,
+      pageSize,
+    }),
+    {
+      signal,
+    }
+  )
+
+  return {
+    posts: response.content.map(mapPostDto),
+    totalCount:
+      typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
+        ? response.pageable.totalElements
+        : response.content.length,
+    pageNumber:
+      typeof response?.pageable?.pageNumber === "number" && Number.isFinite(response.pageable.pageNumber)
+        ? Math.max(1, Math.trunc(response.pageable.pageNumber))
+        : fallbackPageNumber,
+    pageSize:
+      typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
+        ? Math.max(1, Math.trunc(response.pageable.pageSize))
+        : fallbackPageSize,
+  }
+}
+
+export const getSearchPostsPage = async ({
+  kw = "",
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+  signal,
+}: ExplorePostsParams = {}): Promise<ExplorePostsPage> => {
+  const fallbackPageNumber = toValidPage(page)
+  const fallbackPageSize = toValidPageSize(pageSize)
+  const response = await apiFetch<PageDto<ApiPostDto>>(
+    buildSearchPath({
+      kw,
       order,
       page,
       pageSize,

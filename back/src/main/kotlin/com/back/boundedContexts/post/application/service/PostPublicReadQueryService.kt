@@ -81,6 +81,34 @@ class PostPublicReadQueryService(
         }
 
     @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.SEARCH],
+        key =
+            "'page=' + #page + ':size=' + #pageSize + ':sort=' + #sort.name()" +
+                " + ':kw=' + T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService).toCacheKeyToken(#kw)",
+        condition =
+            "#kw.trim().length() > 0 && !T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".shouldBypassSearchCache(#page, #kw)",
+        sync = true,
+    )
+    override fun getPublicSearch(
+        page: Int,
+        pageSize: Int,
+        kw: String,
+        sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> =
+        runReadQuery(
+            "search",
+            "page=$page size=$pageSize sort=${sort.name} kw=${kw.trim().take(80)}",
+        ) {
+            postReadBulkheadService.withSearchPermit {
+                toFeedPostDtoPage(
+                    postUseCase.findPagedByKw(kw, sort, page, pageSize),
+                )
+            }
+        }
+
+    @Transactional(readOnly = true)
     @Cacheable(cacheNames = [PostQueryCacheNames.DETAIL_PUBLIC], key = "#id", sync = true)
     override fun getPublicPostDetail(id: Long): PostWithContentDto =
         runReadQuery("detail", "id=$id") {
@@ -149,6 +177,16 @@ class PostPublicReadQueryService(
                 normalizedKw.length > MAX_CACHEABLE_KW_LENGTH ||
                 normalizedTag.length > MAX_CACHEABLE_TAG_LENGTH ||
                 normalizedKw.length + normalizedTag.length > MAX_CACHEABLE_TOTAL_LENGTH
+        }
+
+        @JvmStatic
+        fun shouldBypassSearchCache(
+            page: Int,
+            kw: String,
+        ): Boolean {
+            val normalizedKw = normalizeCacheToken(kw)
+            if (normalizedKw.isBlank()) return true
+            return page > MAX_CACHEABLE_PAGE || normalizedKw.length > MAX_CACHEABLE_KW_LENGTH
         }
 
         private fun sha256Hex(value: String): String =

@@ -20,6 +20,8 @@ class PostReadBulkheadService(
     private val feedMaxConcurrent: Int,
     @param:Value("\${custom.post.read.bulkhead.exploreMaxConcurrent:12}")
     private val exploreMaxConcurrent: Int,
+    @param:Value("\${custom.post.read.bulkhead.searchMaxConcurrent:10}")
+    private val searchMaxConcurrent: Int,
     @param:Value("\${custom.post.read.bulkhead.detailMaxConcurrent:24}")
     private val detailMaxConcurrent: Int,
     @param:Value("\${custom.post.read.bulkhead.tagsMaxConcurrent:8}")
@@ -27,12 +29,15 @@ class PostReadBulkheadService(
 ) {
     private val feedSemaphore = Semaphore(feedMaxConcurrent.coerceAtLeast(1))
     private val exploreSemaphore = Semaphore(exploreMaxConcurrent.coerceAtLeast(1))
+    private val searchSemaphore = Semaphore(searchMaxConcurrent.coerceAtLeast(1))
     private val detailSemaphore = Semaphore(detailMaxConcurrent.coerceAtLeast(1))
     private val tagsSemaphore = Semaphore(tagsMaxConcurrent.coerceAtLeast(1))
 
     fun <T> withFeedPermit(block: () -> T): T = withPermit(feedSemaphore, block)
 
     fun <T> withExplorePermit(block: () -> T): T = withPermit(exploreSemaphore, block)
+
+    fun <T> withSearchPermit(block: () -> T): T = withPermit(searchSemaphore, block)
 
     fun <T> withDetailPermit(block: () -> T): T = withPermit(detailSemaphore, block)
 

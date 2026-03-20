@@ -91,14 +91,15 @@ class PostRepositoryImpl(
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
         if (tagLikeToken != null) builder.and(buildTagIndexPredicate(tagLikeToken))
 
-        val postsQuery = createPostsQuery(builder, pageable)
+        val postIds = fetchPagedPostIds(builder, pageable)
+        val posts = fetchPostsByIds(postIds)
+        if (shouldSkipCountQuery(publicOnly, pageable)) {
+            return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
+        }
+
         // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
         val countQuery = createCountQuery(builder)
-
-        return PageableExecutionUtils.getPage(
-            postsQuery.fetch(),
-            pageable,
-        ) { countQuery.fetchOne() ?: 0L }
+        return PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
     }
 
     private fun buildKwPredicate(kw: String): BooleanExpression =
@@ -139,23 +140,25 @@ class PostRepositoryImpl(
     }
 
     /**
-     * PostsQuery 항목을 생성한다.
+     * 페이지 목록 조회는 먼저 id만 정렬/페이징으로 가져와서(offset/limit),
+     * 이후 본문 엔티티+author를 한 번에 hydrate 하는 2단계 전략을 사용한다.
+     * (fetchJoin + distinct + offset 동시 사용으로 인한 비용 증가를 완화)
      */
-    private fun createPostsQuery(
+    private fun fetchPagedPostIds(
         builder: BooleanBuilder,
         pageable: Pageable,
-    ): JPAQuery<Post> {
-        val query =
+    ): List<Long> {
+        val idQuery =
             queryFactory
-                .selectDistinct(post)
+                .select(post.id)
                 .from(post)
-                // 목록 DTO에서 author 접근이 필수라 fetchJoin으로 N+1을 방지한다.
-                .leftJoin(post.author)
-                .fetchJoin()
+        if (requiresAuthorSort(pageable)) {
+            idQuery.leftJoin(post.author)
+        }
 
-        query.where(builder)
+        idQuery.where(builder)
 
-        QueryDslUtil.applySorting(query, pageable) { property ->
+        QueryDslUtil.applySorting(idQuery, pageable) { property ->
             when (property) {
                 "createdAt" -> post.createdAt
                 "modifiedAt" -> post.modifiedAt
@@ -164,11 +167,36 @@ class PostRepositoryImpl(
             }
         }
 
-        if (pageable.sort.isEmpty) query.orderBy(post.id.desc())
+        if (pageable.sort.isEmpty) idQuery.orderBy(post.id.desc())
 
-        return query
+        return idQuery
             .offset(pageable.offset)
             .limit(pageable.pageSize.toLong())
+            .fetch()
+            .filterNotNull()
+    }
+
+    private fun requiresAuthorSort(pageable: Pageable): Boolean = pageable.sort.any { it.property == "authorName" }
+
+    /**
+     * id 목록 기반으로 Post + author를 로드하고, id 순서를 그대로 복원한다.
+     */
+    private fun fetchPostsByIds(ids: List<Long>): List<Post> {
+        if (ids.isEmpty()) return emptyList()
+
+        val rows =
+            queryFactory
+                .selectDistinct(post)
+                .from(post)
+                .leftJoin(post.author)
+                .fetchJoin()
+                .where(post.id.`in`(ids))
+                .fetch()
+
+        if (rows.size <= 1) return rows
+
+        val orderById = ids.withIndex().associate { (index, id) -> id to index }
+        return rows.sortedBy { row -> orderById[row.id] ?: Int.MAX_VALUE }
     }
 
     /**
@@ -179,4 +207,23 @@ class PostRepositoryImpl(
             .select(post.id.countDistinct())
             .from(post)
             .where(builder)
+
+    /**
+     * 공개 목록의 깊은 페이지는 전체 카운트 비용이 커서 생략하고 추정 total을 사용한다.
+     * 마지막 페이지 판단은 `fetchedSize < pageSize`이면 확정하고, 그 외에는 다음 페이지 존재 가능성을 1건으로 표현한다.
+     */
+    private fun shouldSkipCountQuery(
+        publicOnly: Boolean,
+        pageable: Pageable,
+    ): Boolean = publicOnly && pageable.pageNumber > 0
+
+    private fun estimateTotalElements(
+        pageable: Pageable,
+        fetchedSize: Int,
+    ): Long {
+        val safeFetched = fetchedSize.coerceAtLeast(0)
+        val safePageSize = pageable.pageSize.coerceAtLeast(1)
+        val consumed = pageable.offset + safeFetched
+        return if (safeFetched < safePageSize) consumed else consumed + 1L
+    }
 }

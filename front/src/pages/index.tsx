@@ -1,7 +1,7 @@
 import Feed from "src/routes/Feed"
 import { CONFIG } from "../../site.config"
 import { NextPageWithLayout } from "../types"
-import { getExplorePostsPage, getTagCounts } from "../apis/backend/posts"
+import { getExplorePostsPage, getFeedPostsPage, getTagCounts } from "../apis/backend/posts"
 import MetaConfig from "src/components/MetaConfig"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
@@ -18,12 +18,17 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   const postsQueryTagRaw = typeof query.tag === "string" ? query.tag : ""
   const currentTag = postsQueryTagRaw.trim()
 
-  const postsPromise = getExplorePostsPage({
-    kw: "",
-    tag: currentTag,
-    page: 1,
-    pageSize: FEED_EXPLORE_PAGE_SIZE,
-  })
+  const postsPromise = (currentTag
+    ? getExplorePostsPage({
+        kw: "",
+        tag: currentTag,
+        page: 1,
+        pageSize: FEED_EXPLORE_PAGE_SIZE,
+      })
+    : getFeedPostsPage({
+        page: 1,
+        pageSize: FEED_EXPLORE_PAGE_SIZE,
+      }))
     .then(({ posts, totalCount }) => ({
       posts,
       totalCount,
@@ -61,16 +66,24 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   }
   if (postsLoaded) {
     queryClient.setQueryData(
-      queryKey.postsExploreInfinite({
-        kw: "",
-        tag: currentTag || undefined,
-        pageSize: FEED_EXPLORE_PAGE_SIZE,
-      }),
+      currentTag
+        ? queryKey.postsExploreInfinite({
+            kw: "",
+            tag: currentTag || undefined,
+            pageSize: FEED_EXPLORE_PAGE_SIZE,
+            order: "desc",
+          })
+        : queryKey.postsFeedInfinite({
+            pageSize: FEED_EXPLORE_PAGE_SIZE,
+            order: "desc",
+          }),
       {
         pages: [
           {
             posts,
             totalCount,
+            pageNumber: 1,
+            pageSize: FEED_EXPLORE_PAGE_SIZE,
           },
         ],
         pageParams: [1],

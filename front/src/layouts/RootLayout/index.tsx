@@ -115,9 +115,25 @@ export default RootLayout
 
 const StyledMain = styled.main`
   margin: 0 auto;
-  width: 100%;
-  max-width: 1180px;
+  box-sizing: border-box;
+  width: min(100%, 1180px);
   padding: 0 clamp(0.85rem, 1.6vw, 1.2rem);
+
+  /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
+  @media (max-width: 1440px) and (min-width: 1057px) {
+    width: 1024px;
+  }
+
+  @media (max-width: 1056px) {
+    width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (max-width: 768px) {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
 `
 
 const RouteProgress = styled.div`

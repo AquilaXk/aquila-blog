@@ -108,15 +108,26 @@ const StyledWrapper = styled.div`
 
   .container {
     display: flex;
+    box-sizing: border-box;
     padding-left: 1rem;
     padding-right: 1rem;
     gap: 0.75rem;
     justify-content: space-between;
     align-items: center;
-    width: 100%;
-    max-width: 1180px;
+    width: min(100%, 1180px);
     min-height: 3.65rem;
     margin: 0 auto;
+
+    @media (max-width: 1440px) and (min-width: 1057px) {
+      width: 1024px;
+    }
+
+    @media (max-width: 1056px) {
+      width: 100%;
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
     &[data-full-width="true"] {
       @media (min-width: 768px) {
         padding-left: 6rem;

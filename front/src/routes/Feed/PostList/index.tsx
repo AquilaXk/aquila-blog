@@ -152,14 +152,14 @@ export default memo(PostList, arePostListPropsEqual)
 const StyledWrapper = styled.div`
   margin: 0.9rem 0 0.35rem;
   display: grid;
-  gap: 1.2rem;
+  gap: 1rem;
   align-items: start;
   grid-auto-rows: 1fr;
   overflow-anchor: none;
 
-  @media (min-width: 860px) {
+  @media (min-width: 768px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.36rem;
+    gap: 2rem;
   }
 
   .emptyState {
@@ -270,13 +270,13 @@ const StyledWrapper = styled.div`
   .skeletonGrid {
     width: 100%;
     display: grid;
-    gap: 1.2rem;
+    gap: 1rem;
     align-items: start;
     grid-auto-rows: 1fr;
 
-    @media (min-width: 860px) {
+    @media (min-width: 768px) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1.36rem;
+      gap: 2rem;
     }
   }
 

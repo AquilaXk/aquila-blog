@@ -102,6 +102,20 @@ class ApiV1PostController(
         return postPublicReadQueryUseCase.getPublicExplore(validPage, validPageSize, normalizedKw, normalizedTag, sort)
     }
 
+    @GetMapping("/search")
+    @Transactional(readOnly = true)
+    fun search(
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "30") pageSize: Int,
+        @RequestParam(defaultValue = "") kw: String,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): PageDto<FeedPostDto> {
+        val validPage = normalizePublicPage(page)
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val normalizedKw = normalizeExploreKeyword(kw)
+        return postPublicReadQueryUseCase.getPublicSearch(validPage, validPageSize, normalizedKw, sort)
+    }
+
     @GetMapping("/tags")
     @Transactional(readOnly = true)
     fun getTags(): List<TagCountDto> = postPublicReadQueryUseCase.getPublicTagCounts()

@@ -7,9 +7,11 @@ export const queryKey = {
     tag?: string
     page: number
     pageSize: number
+    order?: "asc" | "desc"
   }) => {
     const normalizedKw = params.kw.trim()
     const normalizedTag = typeof params.tag === "string" ? params.tag.trim() : ""
+    const normalizedOrder = params.order === "asc" ? "asc" : "desc"
     return [
       "posts",
       "explore",
@@ -17,6 +19,7 @@ export const queryKey = {
         kw: normalizedKw,
         page: params.page,
         pageSize: params.pageSize,
+        order: normalizedOrder,
         ...(normalizedTag ? { tag: normalizedTag } : {}),
       },
     ] as const
@@ -25,9 +28,11 @@ export const queryKey = {
     kw: string
     tag?: string
     pageSize: number
+    order?: "asc" | "desc"
   }) => {
     const normalizedKw = params.kw.trim()
     const normalizedTag = typeof params.tag === "string" ? params.tag.trim() : ""
+    const normalizedOrder = params.order === "asc" ? "asc" : "desc"
     return [
       "posts",
       "explore",
@@ -35,7 +40,38 @@ export const queryKey = {
       {
         kw: normalizedKw,
         pageSize: params.pageSize,
+        order: normalizedOrder,
         ...(normalizedTag ? { tag: normalizedTag } : {}),
+      },
+    ] as const
+  },
+  postsFeedInfinite: (params: { pageSize: number; order?: "asc" | "desc" }) => {
+    const normalizedOrder = params.order === "asc" ? "asc" : "desc"
+    return [
+      "posts",
+      "feed",
+      "infinite",
+      {
+        pageSize: params.pageSize,
+        order: normalizedOrder,
+      },
+    ] as const
+  },
+  postsSearchInfinite: (params: {
+    kw: string
+    pageSize: number
+    order?: "asc" | "desc"
+  }) => {
+    const normalizedKw = params.kw.trim()
+    const normalizedOrder = params.order === "asc" ? "asc" : "desc"
+    return [
+      "posts",
+      "search",
+      "infinite",
+      {
+        kw: normalizedKw,
+        pageSize: params.pageSize,
+        order: normalizedOrder,
       },
     ] as const
   },

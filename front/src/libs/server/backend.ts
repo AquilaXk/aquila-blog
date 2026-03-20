@@ -19,7 +19,11 @@ const resolveServerTimeoutMs = (path: string, init: ServerApiFetchInit): number 
     return 5_000
   }
 
-  if (normalizedPath.includes("/post/api/v1/posts/feed") || normalizedPath.includes("/post/api/v1/posts/explore")) {
+  if (
+    normalizedPath.includes("/post/api/v1/posts/feed") ||
+    normalizedPath.includes("/post/api/v1/posts/explore") ||
+    normalizedPath.includes("/post/api/v1/posts/search")
+  ) {
     return 6_500
   }
 

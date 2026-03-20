@@ -361,6 +361,37 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `검색 목록 조회는 keyword 기준으로 공개 글을 반환한다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val uniqueTitle = "search-list-${System.currentTimeMillis()}"
+            val post =
+                postFacade.write(
+                    actor,
+                    uniqueTitle,
+                    """
+                    tags: [검색, 검증]
+
+                    검색 API 검증 본문
+                    """.trimIndent(),
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", uniqueTitle)
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "CREATED_AT")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("search"))
+                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                }
+        }
+
+        @Test
         fun `탐색 목록 조회는 tag 파라미터로 필터링된다`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             val uniqueTitle = "tag-filter-${System.currentTimeMillis()}"

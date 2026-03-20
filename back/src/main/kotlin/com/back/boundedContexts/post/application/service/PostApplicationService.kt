@@ -1002,6 +1002,7 @@ class PostApplicationService(
         publicTagCountsCache = null
         cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
         cacheManager.getCache(PostQueryCacheNames.EXPLORE)?.clear()
+        cacheManager.getCache(PostQueryCacheNames.SEARCH)?.clear()
         cacheManager.getCache(PostQueryCacheNames.TAGS)?.clear()
         val detailCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)
         if (postId == null) {

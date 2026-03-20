@@ -80,4 +80,13 @@ BEGIN
             ON post_comment (post_id, parent_comment_id, created_at ASC, id ASC)
             WHERE deleted_at IS NULL;
     END IF;
+
+    IF to_regclass('public.post_attr') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS post_attr_idx_name_subject_id
+            ON post_attr (name, subject_id);
+
+        CREATE INDEX IF NOT EXISTS post_attr_idx_meta_tags_subject_id
+            ON post_attr (subject_id)
+            WHERE name = 'metaTagsIndex';
+    END IF;
 END $$;

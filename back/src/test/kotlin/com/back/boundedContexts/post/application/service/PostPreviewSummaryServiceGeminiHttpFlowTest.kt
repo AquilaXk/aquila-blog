@@ -61,7 +61,14 @@ class PostPreviewSummaryServiceGeminiHttpFlowTest {
             assertThat(generationConfig.path("responseMimeType").asText()).isEqualTo("application/json")
             assertThat(generationConfig.has("responseSchema")).isTrue()
 
-            val prompt = payload.path("contents").path(0).path("parts").path(0).path("text").asText("")
+            val prompt =
+                payload
+                    .path("contents")
+                    .path(0)
+                    .path("parts")
+                    .path(0)
+                    .path("text")
+                    .asText("")
             assertThat(prompt).contains("<제목>")
             assertThat(prompt).contains("SSE 알림 트러블슈팅")
             assertThat(prompt).contains("<본문>")
@@ -217,7 +224,15 @@ class PostPreviewSummaryServiceGeminiHttpFlowTest {
             assertThat(generationConfig.has("responseMimeType")).isFalse()
             assertThat(generationConfig.has("responseSchema")).isFalse()
 
-            val prompt = objectMapper.readTree(requests[0].body).path("contents").path(0).path("parts").path(0).path("text").asText("")
+            val prompt =
+                objectMapper
+                    .readTree(requests[0].body)
+                    .path("contents")
+                    .path(0)
+                    .path("parts")
+                    .path(0)
+                    .path("text")
+                    .asText("")
             assertThat(prompt).doesNotContain("```")
         }
     }

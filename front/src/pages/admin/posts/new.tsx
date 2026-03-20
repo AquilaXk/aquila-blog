@@ -3100,7 +3100,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </ListScopeTabs>
                   </QueryHeader>
                   <QueryGrid>
-                    <FieldBox>
+                    <FieldBox className="listPage">
                       <FieldLabel htmlFor="list-page">페이지</FieldLabel>
                       <Input
                         id="list-page"
@@ -3112,7 +3112,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         onChange={handleListPageChange}
                       />
                     </FieldBox>
-                    <FieldBox>
+                    <FieldBox className="listPageSize">
                       <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
                       <Input
                         id="list-page-size"
@@ -3125,7 +3125,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         onChange={handleListPageSizeChange}
                       />
                     </FieldBox>
-                    <FieldBox>
+                    <FieldBox className="listKw">
                       <FieldLabel htmlFor="list-kw">검색어</FieldLabel>
                       <Input
                         id="list-kw"
@@ -3135,7 +3135,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       />
                     </FieldBox>
                     {listScope === "active" && (
-                      <FieldBox>
+                      <FieldBox className="listSort">
                         <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
                         <FieldSelect
                           id="list-sort"
@@ -3207,92 +3207,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </PresetRow>
                   )}
                 </QueryPanel>
-
-                <SelectedPostPanel>
-                  <SelectedPostHeader>
-                    <div>
-                      <h3>선택한 글 작업</h3>
-                      <p>
-                        목록에서 글을 불러오거나 `post id`를 입력해 수정/삭제를 진행합니다.
-                      </p>
-                    </div>
-                    <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
-                  </SelectedPostHeader>
-                  <SelectedPostGrid>
-                    <FieldBox>
-                      <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
-                      <Input
-                        id="selected-post-id"
-                        placeholder="예: 1"
-                        value={postId}
-                        onChange={(e) => {
-                          const nextId = e.target.value.trim()
-                          setPostId(nextId)
-                          if (!nextId) {
-                            setEditorMode("create")
-                            setPostVersion(null)
-                            setIsTempDraftMode(false)
-                          }
-                        }}
-                      />
-                    </FieldBox>
-                  </SelectedPostGrid>
-                  <SelectedPostHint>목록의 ‘불러오기’를 누르거나 ID 입력 후 ‘글 불러오기’를 실행하세요.</SelectedPostHint>
-                  <ActionRow>
-                    <Button
-                      type="button"
-                      disabled={loadingKey.length > 0}
-                      onClick={() => switchToCreateMode({ keepContent: true })}
-                    >
-                      새 글 모드 전환
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={disabled("postOne")}
-                      onClick={() => void loadPostForEditor()}
-                    >
-                      글 불러오기
-                    </Button>
-                    <PrimaryButton
-                      type="button"
-                      disabled={editorMode !== "edit" || disabled("modifyPost")}
-                      onClick={() => openPublishModal("modify")}
-                    >
-                      글 수정
-                    </PrimaryButton>
-                    <Button
-                      type="button"
-                      data-variant="danger"
-                      disabled={disabled("deletePost")}
-                      onClick={() =>
-                        run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
-                      }
-                    >
-                      글 삭제
-                    </Button>
-                  </ActionRow>
-                  <SubActionRow>
-                    <Button
-                      type="button"
-                      disabled={disabled("hitPost")}
-                      onClick={() =>
-                        run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-                      }
-                    >
-                      조회수 테스트
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={disabled("likePost")}
-                      onClick={() =>
-                        run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
-                      }
-                    >
-                      좋아요 반영 테스트
-                    </Button>
-                  </SubActionRow>
-                </SelectedPostPanel>
-              </ContentStudioLeft>
 
               <ListPanel>
                 <ListHeader>
@@ -3383,7 +3297,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           )}
                           <th>ID</th>
                           <th>제목</th>
-                          <th>공개상태</th>
+                          <th className="visibilityCell">
+                            공개<br />
+                            상태
+                          </th>
                           <th className="authorCell">작성자</th>
                           <th className="dateCell">
                             {listScope === "active" ? (
@@ -3422,7 +3339,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                 {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
                               </TitleCell>
                             </td>
-                            <td>
+                            <td className="visibilityCell">
                               <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                                 {visibilityLabel(row.published, row.listed)}
                               </VisibilityBadge>
@@ -3502,22 +3419,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       {adminPostViewRows.map((row) => (
                         <article key={`mobile-${row.id}`}>
                           <header>
-                            {listScope === "active" ? (
-                              <input
-                                type="checkbox"
-                                aria-label={`${row.id}번 글 선택`}
-                                checked={selectedPostIdSet.has(row.id)}
-                                onChange={() => togglePostSelection(row.id)}
-                              />
-                            ) : (
+                            <div className="metaLeading">
+                              {listScope === "active" && (
+                                <input
+                                  type="checkbox"
+                                  aria-label={`${row.id}번 글 선택`}
+                                  checked={selectedPostIdSet.has(row.id)}
+                                  onChange={() => togglePostSelection(row.id)}
+                                />
+                              )}
                               <span className="rowId">#{row.id}</span>
-                            )}
+                            </div>
                             <button type="button" onClick={() => setMobileActionSheetRow(row)} aria-label="더보기">
                               ⋯
                             </button>
                           </header>
                           <h4>{row.title}</h4>
-                          <p>
+                          <p className="metaLine">
                             <span>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</span>
                             <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                               {visibilityLabel(row.published, row.listed)}
@@ -3554,6 +3472,92 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <InlineStatus data-tone={deletedListNotice.tone}>{deletedListNotice.text}</InlineStatus>
                 )}
               </ListPanel>
+              </ContentStudioLeft>
+
+              <SelectedPostPanel>
+                <SelectedPostHeader>
+                  <div>
+                    <h3>선택한 글 작업</h3>
+                    <p>
+                      목록에서 글을 불러오거나 `post id`를 입력해 수정/삭제를 진행합니다.
+                    </p>
+                  </div>
+                  <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
+                </SelectedPostHeader>
+                <SelectedPostGrid>
+                  <FieldBox>
+                    <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
+                    <Input
+                      id="selected-post-id"
+                      placeholder="예: 1"
+                      value={postId}
+                      onChange={(e) => {
+                        const nextId = e.target.value.trim()
+                        setPostId(nextId)
+                        if (!nextId) {
+                          setEditorMode("create")
+                          setPostVersion(null)
+                          setIsTempDraftMode(false)
+                        }
+                      }}
+                    />
+                  </FieldBox>
+                </SelectedPostGrid>
+                <SelectedPostHint>목록의 ‘불러오기’를 누르거나 ID 입력 후 ‘글 불러오기’를 실행하세요.</SelectedPostHint>
+                <ActionRow>
+                  <Button
+                    type="button"
+                    disabled={loadingKey.length > 0}
+                    onClick={() => switchToCreateMode({ keepContent: true })}
+                  >
+                    새 글 모드 전환
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={disabled("postOne")}
+                    onClick={() => void loadPostForEditor()}
+                  >
+                    글 불러오기
+                  </Button>
+                  <PrimaryButton
+                    type="button"
+                    disabled={editorMode !== "edit" || disabled("modifyPost")}
+                    onClick={() => openPublishModal("modify")}
+                  >
+                    글 수정
+                  </PrimaryButton>
+                  <Button
+                    type="button"
+                    data-variant="danger"
+                    disabled={disabled("deletePost")}
+                    onClick={() =>
+                      run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
+                    }
+                  >
+                    글 삭제
+                  </Button>
+                </ActionRow>
+                <SubActionRow>
+                  <Button
+                    type="button"
+                    disabled={disabled("hitPost")}
+                    onClick={() =>
+                      run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+                    }
+                  >
+                    조회수 테스트
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={disabled("likePost")}
+                    onClick={() =>
+                      run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
+                    }
+                  >
+                    좋아요 반영 테스트
+                  </Button>
+                </SubActionRow>
+              </SelectedPostPanel>
             </ContentStudioGrid>
 
             {softDeleteUndoState && (
@@ -4555,6 +4559,15 @@ const Section = styled.section`
     color: ${({ theme }) => theme.colors.gray12};
   }
 
+  &[id="content-studio"] {
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+    margin-bottom: 0.95rem;
+  }
+
   @media (max-width: 420px) {
     border-radius: 12px;
     padding: 0.74rem;
@@ -4596,25 +4609,26 @@ const GlobalNoticeBar = styled.div`
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray10};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: transparent;
+    border-color: ${({ theme }) => theme.colors.gray6};
   }
 
   &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    background: ${({ theme }) => theme.colors.blue3};
-    border-color: ${({ theme }) => theme.colors.blue7};
+    color: ${({ theme }) => theme.colors.gray12};
+    background: transparent;
+    border-color: ${({ theme }) => theme.colors.gray6};
   }
 
   &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-    background: ${({ theme }) => theme.colors.green3};
-    border-color: ${({ theme }) => theme.colors.green7};
+    color: ${({ theme }) => theme.colors.gray12};
+    background: transparent;
+    border-color: ${({ theme }) => theme.colors.gray6};
   }
 
   &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red11};
-    background: ${({ theme }) => theme.colors.red3};
-    border-color: ${({ theme }) => theme.colors.red7};
+    color: ${({ theme }) => theme.colors.gray12};
+    background: transparent;
+    border-color: ${({ theme }) => theme.colors.gray6};
   }
 
   @media (max-width: 420px) {
@@ -4626,41 +4640,37 @@ const GlobalNoticeBar = styled.div`
 
 const ContentStudioGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1.38fr) minmax(380px, 1fr);
-  grid-template-areas: "list controls";
+  grid-template-columns: 1fr;
   gap: 1rem;
   align-items: start;
-
-  @media (max-width: 1180px) {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "controls"
-      "list";
-  }
 `
 
 const ContentStudioLeft = styled.div`
   display: grid;
-  grid-area: controls;
-  gap: 0.85rem;
+  gap: 0.95rem;
   min-width: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  background: transparent;
+  padding: 0.9rem;
+  overflow: hidden;
 
-  @media (min-width: 1181px) {
-    position: sticky;
-    top: calc(var(--app-header-height, 56px) + 0.9rem);
+  @media (max-width: 720px) {
+    padding: 0.72rem;
+    gap: 0.8rem;
   }
 `
 
 const QueryPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.82rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 0.82rem;
   margin: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
 
   @media (max-width: 420px) {
-    border-radius: 10px;
-    padding: 0.68rem;
+    padding: 0 0 0.72rem;
   }
 `
 
@@ -4709,7 +4719,7 @@ const ListScopeButton = styled.button`
 
   &[data-active="true"] {
     background: transparent;
-    color: ${({ theme }) => theme.colors.blue11};
+    color: ${({ theme }) => theme.colors.gray12};
     text-decoration: underline;
     text-underline-offset: 4px;
   }
@@ -4720,7 +4730,16 @@ const QueryGrid = styled.div`
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
 
-  @media (max-width: 720px) {
+  @media (min-width: 1280px) {
+    grid-template-columns: 110px 140px minmax(260px, 1fr) 180px;
+    align-items: end;
+
+    .listKw {
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 960px) {
     grid-template-columns: 1fr;
   }
 `
@@ -4749,6 +4768,10 @@ const QueryActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+
+  > button {
+    min-width: 9.5rem;
+  }
 
   @media (max-width: 420px) {
     display: grid;
@@ -4791,9 +4814,10 @@ const PresetButton = styled.button`
   cursor: pointer;
 
   &[data-active="true"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${({ theme }) => theme.colors.gray7};
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
 `
 
@@ -4998,6 +5022,10 @@ const ActionRow = styled.div`
   margin-top: 0.85rem;
   align-items: center;
 
+  > button {
+    min-width: 8.8rem;
+  }
+
   @media (max-width: 420px) {
     display: grid;
     grid-template-columns: 1fr;
@@ -5095,9 +5123,9 @@ const Button = styled.button`
     box-shadow 0.18s ease;
 
   &[data-variant="danger"] {
-    border-color: ${({ theme }) => theme.colors.red8};
-    background: ${({ theme }) => theme.colors.red3};
-    color: ${({ theme }) => theme.colors.red11};
+    border-color: ${({ theme }) => theme.colors.gray7};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:hover:not(:disabled) {
@@ -5121,15 +5149,15 @@ const Button = styled.button`
 const PrimaryButton = styled(Button)`
   border-radius: 8px;
   padding: 0.6rem 0.88rem;
-  border-color: ${({ theme }) => theme.colors.blue9};
-  background: ${({ theme }) => theme.colors.blue9};
-  color: ${({ theme }) => theme.colors.gray1};
+  border-color: ${({ theme }) => theme.colors.gray7};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
   font-weight: 700;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
-    color: ${({ theme }) => theme.colors.gray1};
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 `
 
@@ -6089,21 +6117,14 @@ const EditorGrid = styled.div`
 `
 
 const ListPanel = styled.div`
-  grid-area: list;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.82rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   margin: 0;
   min-width: 0;
   display: grid;
   gap: 0.62rem;
-
-  @media (max-width: 420px) {
-    border-radius: 10px;
-    padding: 0.68rem;
-    gap: 0.54rem;
-  }
 `
 
 const ListHeader = styled.div`
@@ -6144,6 +6165,20 @@ const ListHeaderActions = styled.div`
 
   @media (max-width: 920px) {
     justify-content: flex-start;
+  }
+
+  @media (max-width: 720px) {
+    width: 100%;
+
+    span {
+      width: 100%;
+      margin-right: 0;
+    }
+
+    > button {
+      width: 100%;
+      justify-content: center;
+    }
   }
 `
 
@@ -6200,9 +6235,9 @@ const ListTableWrap = styled.div`
 
 const SelectedPostPanel = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.82rem;
+  border-radius: 10px;
+  background: transparent;
+  padding: 0.9rem;
   margin: 0;
 
   @media (max-width: 420px) {
@@ -6279,6 +6314,16 @@ const SubActionRow = styled.div`
   ${Button} {
     border-style: dashed;
   }
+
+  @media (max-width: 720px) {
+    display: grid;
+    grid-template-columns: 1fr;
+
+    > button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
 `
 
 const SelectionStickyBar = styled.div`
@@ -6287,9 +6332,9 @@ const SelectionStickyBar = styled.div`
   z-index: 2;
   margin: 0 0 0.68rem;
   padding: 0.55rem 0.62rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  border: 1px dashed ${({ theme }) => theme.colors.gray6};
   border-radius: 10px;
-  background: ${({ theme }) => theme.colors.blue3};
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -6297,7 +6342,7 @@ const SelectionStickyBar = styled.div`
   flex-wrap: wrap;
 
   strong {
-    color: ${({ theme }) => theme.colors.blue11};
+    color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.8rem;
   }
 
@@ -6370,6 +6415,16 @@ const ListTable = styled.table`
     white-space: nowrap;
   }
 
+  th.visibilityCell,
+  td.visibilityCell {
+    width: 84px;
+  }
+
+  th.visibilityCell {
+    line-height: 1.25;
+    text-align: center;
+  }
+
   th.actionsCell,
   td.actionsCell {
     width: 170px;
@@ -6407,9 +6462,9 @@ const DeletedBadge = styled.span`
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.red7};
-  background: ${({ theme }) => theme.colors.red3};
-  color: ${({ theme }) => theme.colors.red11};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.68rem;
   font-weight: 700;
   padding: 0.12rem 0.42rem;
@@ -6432,23 +6487,20 @@ const VisibilityBadge = styled.span`
   border-radius: 999px;
   padding: 0.16rem 0.46rem;
   font-size: 0.72rem;
-  border: none;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  color: ${({ theme }) => theme.colors.gray11};
+  background: transparent;
 
   &[data-tone="PRIVATE"] {
     color: ${({ theme }) => theme.colors.gray11};
-    background: ${({ theme }) => theme.colors.gray3};
   }
 
   &[data-tone="PUBLIC_UNLISTED"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    background: ${({ theme }) => theme.colors.blue3};
-    border-color: ${({ theme }) => theme.colors.blue7};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &[data-tone="PUBLIC_LISTED"] {
-    color: ${({ theme }) => theme.colors.green11};
-    background: ${({ theme }) => theme.colors.green3};
-    border-color: ${({ theme }) => theme.colors.green7};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 `
 
@@ -6533,12 +6585,29 @@ const MobileListCards = styled.div`
     gap: 0.45rem;
   }
 
+  .metaLeading {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .metaLeading input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: ${({ theme }) => theme.colors.gray10};
+  }
+
   h4 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.9rem;
     line-height: 1.45;
     word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   p {
@@ -6551,9 +6620,21 @@ const MobileListCards = styled.div`
     font-size: 0.78rem;
   }
 
-  .mainAction {
+  .metaLine {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.42rem;
+  }
+
+  .mainAction {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .mainAction > button {
+    width: 100%;
+    justify-content: center;
   }
 
   .rowId {
@@ -6595,12 +6676,12 @@ const UndoToast = styled.div`
   gap: 0.6rem;
   padding: 0.6rem 0.72rem;
   border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.green7};
-  background: ${({ theme }) => theme.colors.green3};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
 
   p {
     margin: 0;
-    color: ${({ theme }) => theme.colors.green11};
+    color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.8rem;
   }
 

@@ -193,8 +193,7 @@ class ExceptionHandler(
             .body(RsData("500-1", "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."))
     }
 
-    private fun normalizeQueryString(rawQuery: String?): String =
-        sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
+    private fun normalizeQueryString(rawQuery: String?): String = sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
 
     private fun sanitizeLogValue(
         raw: String?,

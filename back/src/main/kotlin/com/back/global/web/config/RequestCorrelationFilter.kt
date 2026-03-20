@@ -97,9 +97,7 @@ class RequestCorrelationFilter(
         }
     }
 
-    private fun normalizeQueryString(rawQuery: String?): String {
-        return sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
-    }
+    private fun normalizeQueryString(rawQuery: String?): String = sanitizeLogValue(rawQuery, MAX_QUERY_LENGTH)
 
     private fun sanitizeLogValue(
         raw: String?,

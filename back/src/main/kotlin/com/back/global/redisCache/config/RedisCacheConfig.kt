@@ -70,8 +70,7 @@ class RedisCacheConfig(
     override fun errorHandler(): CacheErrorHandler = cacheErrorHandlerDelegate
 
     @Bean
-    fun cacheErrorHandler(): CacheErrorHandler =
-        cacheErrorHandlerDelegate
+    fun cacheErrorHandler(): CacheErrorHandler = cacheErrorHandlerDelegate
 
     /**
      * cacheManager 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.

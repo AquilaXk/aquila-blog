@@ -56,22 +56,24 @@ const FeedExplorer = () => {
     <>
       <PinnedPosts posts={pinnedPosts} />
       <ExplorerCard>
-        <div className="filters">
-          <SearchInput
-            inputRef={searchInputRef}
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-          />
-          <div className="tags">
-            <TagList />
-          </div>
-        </div>
+        <SearchInput
+          inputRef={searchInputRef}
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
       </ExplorerCard>
-      <PostList
-        posts={visiblePosts}
-        hasFilter={Boolean(debouncedQ.trim() || currentTag)}
-        onClearFilters={handleClearFilters}
-      />
+      <FeedBody>
+        <aside className="tagColumn">
+          <TagList />
+        </aside>
+        <section className="postColumn">
+          <PostList
+            posts={visiblePosts}
+            hasFilter={Boolean(debouncedQ.trim() || currentTag)}
+            onClearFilters={handleClearFilters}
+          />
+        </section>
+      </FeedBody>
     </>
   )
 }
@@ -79,33 +81,41 @@ const FeedExplorer = () => {
 export default FeedExplorer
 
 const ExplorerCard = styled.section`
-  container-type: inline-size;
   display: grid;
-  gap: 1rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 16px;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
-  padding: 1rem;
+  gap: 0;
+  padding: 0;
   min-width: 0;
+  min-height: 0;
+  height: auto;
   overflow: visible;
-
-  .filters {
-    display: grid;
-    gap: 1rem;
-    min-width: 0;
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-
-  .tags {
-    min-width: 0;
-  }
+  margin-bottom: 0.52rem;
 
   @media (max-width: 768px) {
-    border-radius: 14px;
-    gap: 0.85rem;
-    padding: 0.8rem;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    margin-bottom: 0.38rem;
+  }
+`
+
+const FeedBody = styled.section`
+  min-width: 0;
+  position: relative;
+  overflow: visible;
+
+  .tagColumn {
+    min-width: 0;
+  }
+
+  .postColumn {
+    min-width: 0;
+  }
+
+  @media (min-width: 1201px) {
+    .tagColumn {
+      position: absolute;
+      left: calc(-1 * min(188px, max(24px, (100vw - 1200px) * 0.5)));
+      top: 0;
+      width: 156px;
+      min-width: 156px;
+      z-index: 1;
+    }
   }
 `

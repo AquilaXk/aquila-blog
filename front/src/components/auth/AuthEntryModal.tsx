@@ -1,11 +1,12 @@
 import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import { FormEvent, useEffect, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
-import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
+import { normalizeNextPath, toLoginPath } from "src/libs/router"
 
 type RsData<T> = {
   resultCode: string
@@ -97,7 +98,6 @@ const AuthEntryModal: React.FC<Props> = ({
   }, [nextPath])
 
   const loginHref = useMemo(() => toLoginPath(normalizedNextPath), [normalizedNextPath])
-  const signupHref = useMemo(() => toSignupPath(normalizedNextPath), [normalizedNextPath])
   const kakaoAuthUrl = useMemo(() => {
     if (typeof window === "undefined") return ""
     const redirectUrl = `${window.location.origin}${normalizedNextPath}`
@@ -227,7 +227,7 @@ const AuthEntryModal: React.FC<Props> = ({
             visualDescription: "메일에 들어 있는 링크를 누르면 이메일이 검증되고, 마지막 가입 폼으로 바로 이어집니다.",
           }
 
-  return (
+  const modalNode = (
     <Backdrop onClick={onClose} role="presentation">
       <Modal
         role="dialog"
@@ -276,7 +276,6 @@ const AuthEntryModal: React.FC<Props> = ({
               signupEmail={signupEmail}
               signupError={signupError}
               signupLoading={signupLoading}
-              signupHref={signupHref}
               kakaoAuthUrl={kakaoAuthUrl}
               onSubmit={handleSignupEmailStart}
               onSignupEmailChange={setSignupEmail}
@@ -292,7 +291,6 @@ const AuthEntryModal: React.FC<Props> = ({
             <SignupSentPanel
               sentEmail={sentEmail}
               signupEmail={signupEmail}
-              signupHref={signupHref}
               onBackToLogin={() => setView("login")}
               onRetryWithAnotherEmail={() => setView("signup")}
             />
@@ -301,6 +299,9 @@ const AuthEntryModal: React.FC<Props> = ({
       </Modal>
     </Backdrop>
   )
+
+  if (typeof document === "undefined") return null
+  return createPortal(modalNode, document.body)
 }
 
 export default AuthEntryModal

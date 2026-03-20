@@ -17,14 +17,14 @@ class MemberNotificationRepositoryAdapter(
     override fun save(notification: MemberNotification): MemberNotification = memberNotificationRepository.save(notification)
 
     override fun findLatestByReceiverId(receiverId: Int): List<MemberNotification> =
-        memberNotificationRepository.findTop20ByReceiverIdOrderByCreatedAtDesc(receiverId)
+        memberNotificationRepository.findLatestByReceiverId(receiverId, PageRequest.of(0, 20))
 
     override fun findByReceiverIdAndIdGreaterThan(
         receiverId: Int,
         lastNotificationId: Int,
         limit: Int,
     ): List<MemberNotification> =
-        memberNotificationRepository.findByReceiverIdAndIdGreaterThanOrderByIdAsc(
+        memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
             receiverId,
             lastNotificationId,
             PageRequest.of(0, limit),

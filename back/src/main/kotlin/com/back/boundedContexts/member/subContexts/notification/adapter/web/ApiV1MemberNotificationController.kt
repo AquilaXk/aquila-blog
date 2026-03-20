@@ -44,16 +44,16 @@ class ApiV1MemberNotificationController(
     @GetMapping("/snapshot")
     @Transactional(readOnly = true)
     fun getSnapshot(): SnapshotResBody {
-        val actor = rq.actor
+        val snapshot = memberNotificationApplicationService.getSnapshotSafe(rq.actor)
         return SnapshotResBody(
-            items = memberNotificationApplicationService.getLatest(actor),
-            unreadCount = memberNotificationApplicationService.unreadCount(actor),
+            items = snapshot.items,
+            unreadCount = snapshot.unreadCount,
         )
     }
 
     @GetMapping("/unread-count")
     @Transactional(readOnly = true)
-    fun unreadCount(): UnreadCountResBody = UnreadCountResBody(memberNotificationApplicationService.unreadCount(rq.actor))
+    fun unreadCount(): UnreadCountResBody = UnreadCountResBody(memberNotificationApplicationService.unreadCountSafe(rq.actor))
 
     @GetMapping("/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun stream(

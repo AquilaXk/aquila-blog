@@ -1,10 +1,8 @@
-import Link from "next/link"
 import AppIcon from "src/components/icons/AppIcon"
 
 type Props = {
   sentEmail: string
   signupEmail: string
-  signupHref: string
   onBackToLogin: () => void
   onRetryWithAnotherEmail: () => void
 }
@@ -12,7 +10,6 @@ type Props = {
 const AuthEntrySignupSentPanel = ({
   sentEmail,
   signupEmail,
-  signupHref,
   onBackToLogin,
   onRetryWithAnotherEmail,
 }: Props) => {
@@ -34,10 +31,6 @@ const AuthEntrySignupSentPanel = ({
           다른 이메일로 다시 보내기
         </button>
       </div>
-
-      <Link href={signupHref} className="fullPageLink">
-        전체 회원가입 페이지에서 계속하기
-      </Link>
     </div>
   )
 }

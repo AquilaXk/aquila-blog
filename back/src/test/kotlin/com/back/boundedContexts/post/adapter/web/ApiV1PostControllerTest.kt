@@ -361,6 +361,39 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `탐색 목록 조회는 tag 파라미터로 필터링된다`() {
+            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val uniqueTitle = "tag-filter-${System.currentTimeMillis()}"
+            val post =
+                postFacade.write(
+                    actor,
+                    uniqueTitle,
+                    """
+                    tags: [SSE, 실시간]
+
+                    태그 필터 검증 본문
+                    """.trimIndent(),
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/explore") {
+                    param("kw", "")
+                    param("tag", "SSE")
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", "CREATED_AT")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("explore"))
+                    jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
+                    jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("SSE")) }
+                }
+        }
+
+        @Test
         fun `태그 집계 조회는 공개 목록의 태그 카운트를 반환한다`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             postFacade.write(

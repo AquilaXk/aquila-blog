@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.subContexts.notification.application.port
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationStreamPayload
 import jakarta.annotation.PreDestroy
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
@@ -32,6 +33,8 @@ class MemberNotificationSseService(
     @param:Value("\${custom.member.notification.sse.replayBatchSize:50}")
     private val replayBatchSize: Int,
 ) {
+    private val logger = LoggerFactory.getLogger(MemberNotificationSseService::class.java)
+
     companion object {
         private const val DEFAULT_RETRY_MILLIS = 5_000L
         private const val MAX_REPLAY_NOTIFICATIONS = 100
@@ -270,11 +273,36 @@ class MemberNotificationSseService(
                 limit = safeLimit,
             )
         if (notifications.isEmpty()) return lastNotificationId
-        val unreadCount = memberNotificationRepository.countUnreadByReceiverId(memberId).toInt()
+        val unreadCount =
+            runCatching { memberNotificationRepository.countUnreadByReceiverId(memberId).toInt() }
+                .onFailure { exception ->
+                    logger.warn(
+                        "notification_replay_unread_count_fallback memberId={} reason={}",
+                        memberId,
+                        exception::class.java.simpleName,
+                        exception,
+                    )
+                }.getOrDefault(0)
 
         var latestId = lastNotificationId
         notifications.forEach { notification ->
-            val payload = MemberNotificationStreamPayload(MemberNotificationDto(notification), unreadCount)
+            val dto =
+                runCatching { MemberNotificationDto(notification) }
+                    .onFailure { exception ->
+                        logger.warn(
+                            "notification_replay_item_skip memberId={} notificationId={} reason={}",
+                            memberId,
+                            notification.id,
+                            exception::class.java.simpleName,
+                            exception,
+                        )
+                    }.getOrNull()
+            if (dto == null) {
+                latestId = notification.id
+                emitterLastNotificationId[emitter] = latestId
+                return@forEach
+            }
+            val payload = MemberNotificationStreamPayload(dto, unreadCount)
             val sent =
                 send(
                     emitter = emitter,

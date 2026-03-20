@@ -55,7 +55,6 @@ const TagList: React.FC<Props> = () => {
     <StyledWrapper>
       <section className="desktopPanel" aria-label="태그 목록">
         <h2 className="panelTitle">태그 목록</h2>
-        <div className="divider" />
         <ul className="desktopList">
           <li>
             <button
@@ -86,7 +85,7 @@ const TagList: React.FC<Props> = () => {
         </ul>
       </section>
 
-      <div className="mobileRail" role="group" aria-label="태그 선택">
+      <div className="chipRail" role="group" aria-label="태그 선택">
         <button
           type="button"
           data-active={!currentTag}
@@ -123,85 +122,154 @@ const StyledWrapper = styled.div`
   .desktopPanel {
     display: none;
     min-width: 0;
-    padding: 0.22rem 0.16rem 0.14rem;
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
-    container-type: inline-size;
+    position: sticky;
+    top: 5.2rem;
+    max-height: calc(100vh - 6rem);
+    max-height: calc(100dvh - 6rem);
+    overflow: hidden;
 
-    @media (min-width: 1024px) {
+    @media (min-width: 1201px) {
       display: block;
     }
   }
 
   .panelTitle {
     margin: 0;
-    padding: 0.28rem 0.36rem 0.58rem;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.25rem, 0.58vw + 1.02rem, 1.48rem);
-    font-weight: 750;
+    font-size: 1.22rem;
+    font-weight: 760;
     letter-spacing: -0.02em;
     line-height: 1.2;
-  }
-
-  .divider {
-    height: 1px;
-    margin: 0 0.3rem 0.52rem;
-    background: ${({ theme }) => theme.colors.gray6};
+    padding: 0.02rem 0 0.66rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 
   .desktopList {
     list-style: none;
-    margin: 0;
+    margin: 0.56rem 0 0;
     padding: 0;
     display: grid;
-    gap: 0.18rem;
-    max-height: clamp(360px, calc(100vh - 200px), 74vh);
+    gap: 0.16rem;
+    max-height: calc(100vh - 10.5rem);
+    max-height: calc(100dvh - 10.5rem);
     overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-gutter: stable both-edges;
     scrollbar-width: thin;
 
     &::-webkit-scrollbar {
       width: 6px;
     }
 
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
     &::-webkit-scrollbar-thumb {
       border-radius: 999px;
       background: ${({ theme }) => theme.colors.gray6};
     }
+  }
 
-    li {
-      min-width: 0;
-    }
+  .desktopList li {
+    min-width: 0;
   }
 
   .desktopList button {
     width: 100%;
     min-height: 34px;
-    min-width: 0;
     border: 0;
+    border-radius: 8px;
     background: transparent;
-    border-radius: 10px;
-    padding: 0.28rem 0.52rem;
-    cursor: pointer;
+    padding: 0.2rem 0.36rem;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.4rem;
     align-items: center;
+    gap: 0.35rem;
     text-align: left;
     color: ${({ theme }) => theme.colors.gray11};
-    transition: color 120ms ease, opacity 120ms ease;
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease;
 
     &:hover {
-      color: ${({ theme }) => theme.colors.gray12};
-      opacity: 1;
       background: ${({ theme }) => theme.colors.gray2};
+      color: ${({ theme }) => theme.colors.gray12};
+    }
+
+    &:focus-visible {
+      outline: 2px solid ${({ theme }) => theme.colors.blue8};
+      outline-offset: 1px;
+    }
+
+    &[data-active="true"] {
+      background: ${({ theme }) => theme.colors.gray2};
+    }
+  }
+
+  .desktopList button .name {
+    font-size: 0.96rem;
+    font-weight: 640;
+    color: ${({ theme }) => theme.colors.gray12};
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .desktopList button[data-active="true"] .name {
+    color: ${({ theme }) => theme.colors.blue11};
+    font-weight: 760;
+  }
+
+  .desktopList button .count {
+    font-size: 0.86rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-variant-numeric: tabular-nums;
+  }
+
+  .desktopList button[data-active="true"] .count {
+    color: ${({ theme }) => theme.colors.blue10};
+  }
+
+  .chipRail {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: center;
+    align-content: flex-start;
+    margin-bottom: 0;
+    gap: 0.35rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    min-height: 0;
+    min-width: 0;
+
+    padding-bottom: 0.28rem;
+
+    @media (min-width: 1201px) {
+      display: none;
+    }
+  }
+
+  .chipRail button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    text-align: left;
+    white-space: nowrap;
+    min-height: 34px;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    padding: 0.4rem 0.84rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+
+    &:hover {
+      border-color: ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray2};
+    }
+
+    &[data-active="true"] {
+      border-color: ${({ theme }) => theme.colors.blue8};
+      background: ${({ theme }) => theme.colors.gray2};
+      color: ${({ theme }) => theme.colors.blue11};
     }
 
     &:focus-visible {
@@ -210,124 +278,23 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .desktopList button[data-active="true"] {
-    font-weight: 760;
-    background: ${({ theme }) => theme.colors.gray2};
-    box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray6};
-  }
-
-  .desktopList button .name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 1.02rem;
-    line-height: 1.33;
-    font-weight: 610;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .desktopList button[data-active="true"] .name {
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  .desktopList button .count {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.92rem;
-    line-height: 1.2;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .desktopList button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.blue10};
-  }
-
-  @container (max-width: 235px) {
-    .panelTitle {
-      padding: 0.15rem 0 0.46rem;
-      font-size: 1.06rem;
-      letter-spacing: -0.015em;
-    }
-
-    .divider {
-      margin: 0 0 0.36rem;
-    }
-
-    .desktopList button {
-      padding: 0.08rem 0;
-      gap: 0.32rem;
-    }
-
-    .desktopList button .name {
-      font-size: 0.93rem;
-    }
-
-    .desktopList button .count {
-      font-size: 0.84rem;
-    }
-  }
-
-  .mobileRail {
-    display: flex;
-    margin-bottom: 1rem;
-    gap: 0.35rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
-    min-height: 2.2rem;
-    padding-bottom: 0.3rem;
-    padding-left: 0.08rem;
-    padding-right: 0.08rem;
-    min-width: 0;
-
-    @media (min-width: 1024px) {
-      display: none;
-    }
-  }
-
-  .mobileRail button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.28rem;
-    text-align: left;
-    white-space: nowrap;
-    min-height: 34px;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray5};
-    background: ${({ theme }) => theme.colors.gray1};
-    padding: 0.42rem 0.84rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    flex-shrink: 0;
-    cursor: pointer;
-
-    &:hover {
-      border-color: ${({ theme }) => theme.colors.gray7};
-      background: ${({ theme }) => theme.colors.gray2};
-    }
-
-    &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.gray7};
-      background: ${({ theme }) => theme.colors.gray2};
-      color: ${({ theme }) => theme.colors.gray12};
-    }
-  }
-
-  .mobileRail button .name {
-    font-size: 0.84rem;
+  .chipRail button .name {
+    font-size: 0.82rem;
     font-weight: 650;
   }
 
-  .mobileRail button .count {
+  .chipRail button .count {
     font-size: 0.78rem;
     color: ${({ theme }) => theme.colors.gray10};
   }
 
-  .mobileRail button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.gray10};
+  .chipRail button[data-active="true"] .count {
+    color: ${({ theme }) => theme.colors.blue10};
   }
 
   @media (max-width: 768px) {
-    .mobileRail {
-      margin-bottom: 0.8rem;
+    .chipRail {
+      margin-bottom: 0;
     }
   }
 `

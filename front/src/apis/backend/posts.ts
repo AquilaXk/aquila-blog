@@ -193,36 +193,40 @@ const normalizeStringArray = (value?: string[]) => {
 const normalizeCategoryArray = (value?: string[]) =>
   normalizeStringArray(value).map(normalizeCategoryValue)
 
-const mapPostDto = (post: ApiPostDto): TPost => ({
-  id: String(post.id),
-  date: { start_date: post.createdAt.slice(0, 10) },
-  type: ["Post"],
-  slug: toSlug(post.id, post.title),
-  summary: post.summary,
-  author: [
-    {
-      id: String(post.authorId),
-      name: post.authorUsername || post.authorName,
-      profile_photo: post.authorProfileImgUrl,
-    },
-  ],
-  title: post.title,
-  thumbnail: post.thumbnail,
-  ...(normalizeStringArray(post.tags).length > 0
-    ? { tags: normalizeStringArray(post.tags) }
-    : {}),
-  ...(normalizeCategoryArray(post.category).length > 0
-    ? { category: normalizeCategoryArray(post.category) }
-    : {}),
-  status: toStatus(post.published, post.listed),
-  createdTime: post.createdAt,
-  modifiedTime: post.modifiedAt,
-  fullWidth: false,
-  likesCount: post.likesCount ?? 0,
-  commentsCount: post.commentsCount ?? 0,
-  hitCount: post.hitCount ?? 0,
-  actorHasLiked: post.actorHasLiked,
-})
+const mapPostDto = (post: ApiPostDto): TPost => {
+  const normalizedTags = normalizeStringArray(post.tags)
+  const normalizedCategories = normalizeCategoryArray(post.category)
+  const hasSummary = typeof post.summary === "string" && post.summary.trim().length > 0
+  const hasThumbnail = typeof post.thumbnail === "string" && post.thumbnail.trim().length > 0
+  const hasActorHasLiked = typeof post.actorHasLiked === "boolean"
+
+  return {
+    id: String(post.id),
+    date: { start_date: post.createdAt.slice(0, 10) },
+    type: ["Post"],
+    slug: toSlug(post.id, post.title),
+    ...(hasSummary ? { summary: post.summary } : {}),
+    author: [
+      {
+        id: String(post.authorId),
+        name: post.authorUsername || post.authorName,
+        profile_photo: post.authorProfileImgUrl,
+      },
+    ],
+    title: post.title,
+    ...(hasThumbnail ? { thumbnail: post.thumbnail } : {}),
+    ...(normalizedTags.length > 0 ? { tags: normalizedTags } : {}),
+    ...(normalizedCategories.length > 0 ? { category: normalizedCategories } : {}),
+    status: toStatus(post.published, post.listed),
+    createdTime: post.createdAt,
+    modifiedTime: post.modifiedAt,
+    fullWidth: false,
+    likesCount: post.likesCount ?? 0,
+    commentsCount: post.commentsCount ?? 0,
+    hitCount: post.hitCount ?? 0,
+    ...(hasActorHasLiked ? { actorHasLiked: post.actorHasLiked } : {}),
+  }
+}
 
 const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
   const parsed = parsePostMeta(post.content)
@@ -232,6 +236,10 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
   const category = dtoCategories.length > 0 ? dtoCategories : parsed.category
   const normalizedContent = parsed.content
   const summary = toSummary(normalizedContent)
+
+  const hasActorHasLiked = typeof post.actorHasLiked === "boolean"
+  const hasActorCanModify = typeof post.actorCanModify === "boolean"
+  const hasActorCanDelete = typeof post.actorCanDelete === "boolean"
 
   return {
     ...mapPostDto({
@@ -259,9 +267,9 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
     hitCount: post.hitCount,
-    actorHasLiked: post.actorHasLiked,
-    actorCanModify: post.actorCanModify,
-    actorCanDelete: post.actorCanDelete,
+    ...(hasActorHasLiked ? { actorHasLiked: post.actorHasLiked } : {}),
+    ...(hasActorCanModify ? { actorCanModify: post.actorCanModify } : {}),
+    ...(hasActorCanDelete ? { actorCanDelete: post.actorCanDelete } : {}),
   }
 }
 

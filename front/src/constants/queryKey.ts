@@ -8,7 +8,19 @@ export const queryKey = {
     tag?: string
     page: number
     pageSize: number
-  }) => ["posts", "explore", params] as const,
+  }) => {
+    const normalizedTag = typeof params.tag === "string" ? params.tag.trim() : ""
+    return [
+      "posts",
+      "explore",
+      {
+        kw: params.kw,
+        page: params.page,
+        pageSize: params.pageSize,
+        ...(normalizedTag ? { tag: normalizedTag } : {}),
+      },
+    ] as const
+  },
   postsTotalCount: () => ["posts", "totalCount"] as const,
   tags: () => ["tags"] as const,
   categories: () => ["categories"] as const,

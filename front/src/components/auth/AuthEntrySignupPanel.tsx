@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { FormEvent } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 
@@ -6,7 +5,6 @@ type Props = {
   signupEmail: string
   signupError: string
   signupLoading: boolean
-  signupHref: string
   kakaoAuthUrl: string
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSignupEmailChange: (value: string) => void
@@ -18,7 +16,6 @@ const AuthEntrySignupPanel = ({
   signupEmail,
   signupError,
   signupLoading,
-  signupHref,
   kakaoAuthUrl,
   onSubmit,
   onSignupEmailChange,
@@ -69,10 +66,6 @@ const AuthEntrySignupPanel = ({
           로그인
         </button>
       </div>
-
-      <Link href={signupHref} className="fullPageLink">
-        전체 회원가입 페이지로 이동
-      </Link>
     </>
   )
 }

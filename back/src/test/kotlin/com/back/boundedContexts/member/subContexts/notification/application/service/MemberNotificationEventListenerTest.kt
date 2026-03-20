@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.data.domain.PageRequest
 import org.springframework.test.context.ActiveProfiles
 
 @ActiveProfiles("test")
@@ -46,7 +47,11 @@ class MemberNotificationEventListenerTest : SeededSpringBootTestSupport() {
 
         entityManager.clear()
 
-        val notifications = memberNotificationRepository.findTop20ByReceiverIdOrderByCreatedAtDesc(author.id)
+        val notifications =
+            memberNotificationRepository.findLatestByReceiverId(
+                author.id,
+                PageRequest.of(0, 20),
+            )
 
         assertThat(notifications).hasSize(1)
         val notification = notifications.first()
@@ -68,7 +73,11 @@ class MemberNotificationEventListenerTest : SeededSpringBootTestSupport() {
 
         entityManager.clear()
 
-        val notifications = memberNotificationRepository.findTop20ByReceiverIdOrderByCreatedAtDesc(author.id)
+        val notifications =
+            memberNotificationRepository.findLatestByReceiverId(
+                author.id,
+                PageRequest.of(0, 20),
+            )
 
         assertThat(notifications).hasSize(1)
         val notification = notifications.first()
@@ -89,7 +98,11 @@ class MemberNotificationEventListenerTest : SeededSpringBootTestSupport() {
 
         entityManager.clear()
 
-        val notifications = memberNotificationRepository.findTop20ByReceiverIdOrderByCreatedAtDesc(author.id)
+        val notifications =
+            memberNotificationRepository.findLatestByReceiverId(
+                author.id,
+                PageRequest.of(0, 20),
+            )
 
         assertThat(notifications).isEmpty()
     }

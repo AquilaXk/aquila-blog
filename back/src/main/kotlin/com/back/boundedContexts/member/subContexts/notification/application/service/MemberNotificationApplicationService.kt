@@ -8,6 +8,7 @@ import com.back.boundedContexts.member.subContexts.notification.domain.MemberNot
 import com.back.boundedContexts.member.subContexts.notification.dto.MemberNotificationDto
 import com.back.boundedContexts.post.application.port.output.PostCommentRepositoryPort
 import com.back.boundedContexts.post.event.PostCommentWrittenEvent
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -24,6 +25,13 @@ class MemberNotificationApplicationService(
     private val memberNotificationRepository: MemberNotificationRepositoryPort,
     private val memberNotificationRealtimeRelayService: MemberNotificationRealtimeRelayService,
 ) {
+    private val logger = LoggerFactory.getLogger(MemberNotificationApplicationService::class.java)
+
+    data class NotificationSnapshot(
+        val items: List<MemberNotificationDto>,
+        val unreadCount: Int,
+    )
+
     /**
      * ForCommentWritten 항목을 생성한다.
      */
@@ -60,10 +68,49 @@ class MemberNotificationApplicationService(
     fun getLatest(member: Member): List<MemberNotificationDto> =
         memberNotificationRepository
             .findLatestByReceiverId(member.id)
-            .map(::MemberNotificationDto)
+            .mapNotNull { notification ->
+                runCatching { MemberNotificationDto(notification) }
+                    .onFailure { exception ->
+                        logger.warn(
+                            "notification_snapshot_item_skip receiverId={} notificationId={} reason={}",
+                            member.id,
+                            notification.id,
+                            exception::class.java.simpleName,
+                            exception,
+                        )
+                    }.getOrNull()
+            }
 
     @Transactional(readOnly = true)
     fun unreadCount(member: Member): Int = memberNotificationRepository.countUnreadByReceiverId(member.id).toInt()
+
+    @Transactional(readOnly = true)
+    fun unreadCountSafe(member: Member): Int =
+        runCatching { unreadCount(member) }
+            .onFailure { exception ->
+                logger.warn(
+                    "notification_unread_count_fallback memberId={} reason={}",
+                    member.id,
+                    exception::class.java.simpleName,
+                    exception,
+                )
+            }.getOrDefault(0)
+
+    @Transactional(readOnly = true)
+    fun getSnapshotSafe(member: Member): NotificationSnapshot {
+        val items =
+            runCatching { getLatest(member) }
+                .onFailure { exception ->
+                    logger.warn(
+                        "notification_snapshot_items_fallback memberId={} reason={}",
+                        member.id,
+                        exception::class.java.simpleName,
+                        exception,
+                    )
+                }.getOrDefault(emptyList())
+        val unreadCount = unreadCountSafe(member)
+        return NotificationSnapshot(items = items, unreadCount = unreadCount)
+    }
 
     @Transactional
     fun markAllRead(member: Member): Int = memberNotificationRepository.markAllRead(member.id, java.time.Instant.now())

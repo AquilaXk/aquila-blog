@@ -1,18 +1,17 @@
 package com.back.boundedContexts.post.adapter.persistence
 
-import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.domain.Post
-import com.back.boundedContexts.post.domain.postMixin.META_TAGS_INDEX
+import com.back.boundedContexts.member.model.shared.Member
+import com.back.boundedContexts.post.model.Post
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostAttr.postAttr
 import com.back.standard.util.QueryDslUtil
 import com.querydsl.core.BooleanBuilder
 import com.querydsl.core.types.dsl.BooleanExpression
 import com.querydsl.core.types.dsl.Expressions
-import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQuery
 import com.querydsl.jpa.impl.JPAQueryFactory
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.data.support.PageableExecutionUtils
 
@@ -23,6 +22,10 @@ import org.springframework.data.support.PageableExecutionUtils
 class PostRepositoryImpl(
     private val queryFactory: JPAQueryFactory,
 ) : PostRepositoryCustom {
+    companion object {
+        private const val META_TAGS_INDEX_ATTR_NAME = "metaTagsIndex"
+    }
+
     override fun findQPagedByKw(
         kw: String,
         pageable: Pageable,
@@ -74,6 +77,10 @@ class PostRepositoryImpl(
         tag: String? = null,
     ): Page<Post> {
         val builder = BooleanBuilder()
+        val tagLikeToken = buildTagLikeToken(tag)
+        if (tag != null && tag.isNotBlank() && tagLikeToken == null) {
+            return PageImpl(emptyList(), pageable, 0)
+        }
 
         if (publicOnly) {
             builder.and(post.published.isTrue)
@@ -81,11 +88,10 @@ class PostRepositoryImpl(
         }
         author?.let { builder.and(post.author.eq(it)) }
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
-        if (!tag.isNullOrBlank()) builder.and(buildTagPredicate(tag))
 
-        val postsQuery = createPostsQuery(builder, pageable)
+        val postsQuery = createPostsQuery(builder, pageable, tagLikeToken)
         // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
-        val countQuery = createCountQuery(builder)
+        val countQuery = createCountQuery(builder, tagLikeToken)
 
         return PageableExecutionUtils.getPage(
             postsQuery.fetch(),
@@ -101,35 +107,21 @@ class PostRepositoryImpl(
             Expressions.constant(kw),
         )
 
-    private fun buildTagPredicate(tag: String): BooleanExpression {
-        val normalizedTag = normalizeTagToken(tag)
-        if (normalizedTag.isBlank()) return Expressions.booleanTemplate("1 = 0")
-
-        val indexToken = "%|${escapeLikeToken(normalizedTag)}|%"
-        return JPAExpressions
-            .selectOne()
-            .from(postAttr)
-            .where(
-                postAttr.subject
-                    .eq(post)
-                    .and(postAttr.name.eq(META_TAGS_INDEX))
-                    .and(
-                        Expressions.booleanTemplate(
-                            "lower({0}) like {1} escape '\\\\'",
-                            postAttr.strValue,
-                            Expressions.constant(indexToken),
-                        ),
-                    ),
-            ).exists()
-    }
-
     private fun normalizeTagToken(tag: String): String = tag.trim().lowercase()
 
-    private fun escapeLikeToken(token: String): String =
-        token
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
+    private fun buildTagLikeToken(tag: String?): String? {
+        val raw = tag?.trim().orEmpty()
+        if (raw.isBlank()) return null
+
+        val normalizedTag = normalizeTagToken(raw)
+        val safeTagToken =
+            normalizedTag
+                .replace("%", "")
+                .replace("_", "")
+                .replace("\\", "")
+        if (safeTagToken.isBlank()) return null
+        return "%|$safeTagToken|%"
+    }
 
     /**
      * PostsQuery 항목을 생성한다.
@@ -137,14 +129,28 @@ class PostRepositoryImpl(
     private fun createPostsQuery(
         builder: BooleanBuilder,
         pageable: Pageable,
+        tagLikeToken: String?,
     ): JPAQuery<Post> {
         val query =
             queryFactory
-                .selectFrom(post)
+                .selectDistinct(post)
+                .from(post)
                 // 목록 DTO에서 author 접근이 필수라 fetchJoin으로 N+1을 방지한다.
                 .leftJoin(post.author)
                 .fetchJoin()
-                .where(builder)
+
+        if (tagLikeToken != null) {
+            query.join(postAttr).on(
+                postAttr.subject
+                    .id
+                    .eq(post.id)
+                    .and(postAttr.name.eq(META_TAGS_INDEX_ATTR_NAME))
+                    .and(postAttr.strValue.isNotNull)
+                    .and(postAttr.strValue.lower().like(tagLikeToken)),
+            )
+        }
+
+        query.where(builder)
 
         QueryDslUtil.applySorting(query, pageable) { property ->
             when (property) {
@@ -165,9 +171,26 @@ class PostRepositoryImpl(
     /**
      * CountQuery 항목을 생성한다.
      */
-    private fun createCountQuery(builder: BooleanBuilder): JPAQuery<Long> =
-        queryFactory
-            .select(post.count())
-            .from(post)
-            .where(builder)
+    private fun createCountQuery(
+        builder: BooleanBuilder,
+        tagLikeToken: String?,
+    ): JPAQuery<Long> {
+        val query =
+            queryFactory
+                .select(post.id.countDistinct())
+                .from(post)
+
+        if (tagLikeToken != null) {
+            query.join(postAttr).on(
+                postAttr.subject
+                    .id
+                    .eq(post.id)
+                    .and(postAttr.name.eq(META_TAGS_INDEX_ATTR_NAME))
+                    .and(postAttr.strValue.isNotNull)
+                    .and(postAttr.strValue.lower().like(tagLikeToken)),
+            )
+        }
+
+        return query.where(builder)
+    }
 }

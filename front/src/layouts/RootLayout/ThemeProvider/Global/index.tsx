@@ -17,6 +17,7 @@ export const Global = () => {
         }
 
         body {
+          display: block;
           min-height: 100%;
           margin: 0;
           padding: 0;

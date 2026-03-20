@@ -33,6 +33,7 @@ class CustomAuthenticationFilter(
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
+    private val log = org.slf4j.LoggerFactory.getLogger(CustomAuthenticationFilter::class.java)
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/")
 
     override fun shouldNotFilter(request: HttpServletRequest): Boolean {
@@ -57,6 +58,19 @@ class CustomAuthenticationFilter(
             } catch (e: AppException) {
                 if (!isPublicApi) throw e
                 // 공개 API는 잘못된 인증정보가 있어도 익명으로 계속 처리한다.
+                SecurityContextHolder.clearContext()
+            } catch (e: Exception) {
+                log.warn(
+                    "authentication_filter_fallback path={} publicApi={} reason={}",
+                    request.requestURI,
+                    isPublicApi,
+                    e::class.java.simpleName,
+                    e,
+                )
+                if (!isPublicApi) {
+                    throw AppException("401-1", "로그인 후 이용해주세요.")
+                }
+                // 공개 API는 예기치 못한 인증 오류에서도 익명으로 계속 처리한다.
                 SecurityContextHolder.clearContext()
             }
             filterChain.doFilter(request, response)

@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional
 @TestPropertySource(
     properties = [
         "spring.jpa.properties.hibernate.generate_statistics=true",
+        "spring.task.scheduling.enabled=false",
     ],
 )
 @org.junit.jupiter.api.DisplayName("PerformanceSanity 테스트")

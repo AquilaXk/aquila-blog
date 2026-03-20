@@ -81,17 +81,18 @@ export default FeedExplorer
 const ExplorerCard = styled.section`
   container-type: inline-size;
   display: grid;
-  gap: 0.95rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.78rem 0.85rem 0.82rem;
+  gap: 1rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 16px;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  padding: 1rem;
   min-width: 0;
   overflow: visible;
 
   .filters {
     display: grid;
-    gap: 0.95rem;
+    gap: 1rem;
     min-width: 0;
     padding-bottom: 0;
     border-bottom: 0;
@@ -102,7 +103,9 @@ const ExplorerCard = styled.section`
   }
 
   @media (max-width: 768px) {
+    border-radius: 14px;
     gap: 0.85rem;
-    padding: 0.72rem 0.72rem 0.74rem;
+    padding: 0.8rem;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   }
 `

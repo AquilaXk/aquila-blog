@@ -123,7 +123,7 @@ export default AboutPage
 const StyledWrapper = styled.div`
   max-width: 56rem;
   margin: 0 auto;
-  padding: 2rem 0 2.6rem;
+  padding: 1.8rem 0 2.6rem;
 
   .about-content {
     .page-title {
@@ -141,10 +141,11 @@ const StyledWrapper = styled.div`
     .profile-section {
       text-align: center;
       margin-bottom: 3rem;
-      padding: 1rem 0.9rem 1.25rem;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      border-radius: 12px;
-      background: ${({ theme }) => theme.colors.gray1};
+      padding: 1.15rem 1rem 1.3rem;
+      border: 1px solid ${({ theme }) => theme.colors.gray5};
+      border-radius: 16px;
+      background: ${({ theme }) => theme.colors.gray2};
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
 
       .profile-image-wrapper {
         position: relative;
@@ -191,8 +192,8 @@ const StyledWrapper = styled.div`
         font-weight: 700;
         margin-bottom: 1.5rem;
         color: ${({ theme }) => theme.colors.gray12};
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid ${({ theme }) => theme.colors.gray6};
+        padding-bottom: 0.58rem;
+        border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
       }
 
       .contact-list,
@@ -207,14 +208,17 @@ const StyledWrapper = styled.div`
           display: flex;
           align-items: center;
           min-height: 44px;
-          padding: 0.58rem 0.65rem;
-          border-radius: 8px;
-          border: 1px solid ${({ theme }) => theme.colors.gray6};
-          transition: background-color 0.2s ease, border-color 0.2s ease;
+          padding: 0.58rem 0.72rem;
+          border-radius: 11px;
+          border: 1px solid ${({ theme }) => theme.colors.gray5};
+          background: ${({ theme }) => theme.colors.gray2};
+          box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+          transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 
           &:hover {
             background-color: ${({ theme }) => theme.colors.gray2};
-            border-color: ${({ theme }) => theme.colors.gray8};
+            border-color: ${({ theme }) => theme.colors.gray7};
+            transform: translateY(-2px);
           }
 
           .icon {

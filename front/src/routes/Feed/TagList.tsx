@@ -123,7 +123,11 @@ const StyledWrapper = styled.div`
   .desktopPanel {
     display: none;
     min-width: 0;
-    padding: 0.05rem 0 0;
+    padding: 0.22rem 0.16rem 0.14rem;
+    border-radius: 14px;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    background: ${({ theme }) => theme.colors.gray1};
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
     container-type: inline-size;
 
     @media (min-width: 1024px) {
@@ -133,7 +137,7 @@ const StyledWrapper = styled.div`
 
   .panelTitle {
     margin: 0;
-    padding: 0.2rem 0 0.56rem;
+    padding: 0.28rem 0.36rem 0.58rem;
     color: ${({ theme }) => theme.colors.gray12};
     font-size: clamp(1.25rem, 0.58vw + 1.02rem, 1.48rem);
     font-weight: 750;
@@ -143,7 +147,7 @@ const StyledWrapper = styled.div`
 
   .divider {
     height: 1px;
-    margin: 0 0 0.48rem;
+    margin: 0 0.3rem 0.52rem;
     background: ${({ theme }) => theme.colors.gray6};
   }
 
@@ -153,7 +157,7 @@ const StyledWrapper = styled.div`
     padding: 0;
     display: grid;
     gap: 0.18rem;
-    max-height: clamp(360px, calc(100vh - 190px), 76vh);
+    max-height: clamp(360px, calc(100vh - 200px), 74vh);
     overflow-y: auto;
     overflow-x: hidden;
     scrollbar-gutter: stable both-edges;
@@ -183,8 +187,8 @@ const StyledWrapper = styled.div`
     min-width: 0;
     border: 0;
     background: transparent;
-    border-radius: 8px;
-    padding: 0.18rem 0.42rem;
+    border-radius: 10px;
+    padding: 0.28rem 0.52rem;
     cursor: pointer;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -209,6 +213,7 @@ const StyledWrapper = styled.div`
   .desktopList button[data-active="true"] {
     font-weight: 760;
     background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: inset 0 0 0 1px ${({ theme }) => theme.colors.gray6};
   }
 
   .desktopList button .name {
@@ -270,6 +275,8 @@ const StyledWrapper = styled.div`
     scrollbar-width: thin;
     min-height: 2.2rem;
     padding-bottom: 0.3rem;
+    padding-left: 0.08rem;
+    padding-right: 0.08rem;
     min-width: 0;
 
     @media (min-width: 1024px) {
@@ -285,7 +292,7 @@ const StyledWrapper = styled.div`
     white-space: nowrap;
     min-height: 34px;
     border-radius: 999px;
-    border: none;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray1};
     padding: 0.42rem 0.84rem;
     color: ${({ theme }) => theme.colors.gray11};
@@ -293,12 +300,13 @@ const StyledWrapper = styled.div`
     cursor: pointer;
 
     &:hover {
-      background: ${({ theme }) => theme.colors.gray3};
+      border-color: ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray2};
     }
 
     &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.gray8};
-      background: ${({ theme }) => theme.colors.gray3};
+      border-color: ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray12};
     }
   }

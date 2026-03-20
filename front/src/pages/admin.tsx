@@ -114,23 +114,25 @@ export default AdminHubPage
 const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
-  padding: 1.6rem 1rem 2.6rem;
+  padding: 1.5rem 1rem 2.6rem;
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 `
 
 const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) 320px;
-  gap: 0.9rem;
-  padding: 1.1rem;
-  border-radius: 18px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: none;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
+    border-radius: 16px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   }
 `
 
@@ -172,9 +174,9 @@ const ActionLink = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 11px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
@@ -211,8 +213,8 @@ const ProfilePanel = styled.aside`
   align-content: center;
   gap: 0.45rem;
   padding: 1rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray3};
   text-align: center;
 
@@ -248,8 +250,9 @@ const StatusItem = styled.div`
   display: grid;
   gap: 0.22rem;
   padding: 0.56rem 0.64rem;
-  border-radius: 10px;
-  background: ${({ theme }) => theme.colors.gray2};
+  border-radius: 11px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray1};
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
@@ -291,7 +294,7 @@ const ProfileFallback = styled.div`
 const CardGrid = styled.section`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: 0.95rem;
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
@@ -301,18 +304,20 @@ const CardGrid = styled.section`
 const QuickCard = styled.a`
   display: grid;
   gap: 0.7rem;
-  padding: 1rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  padding: 1.02rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   text-decoration: none;
   color: inherit;
-  box-shadow: none;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.gray8};
+    border-color: ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
+    transform: translateY(-4px);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
   }
 
   small {

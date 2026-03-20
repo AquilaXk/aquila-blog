@@ -116,8 +116,8 @@ export default RootLayout
 const StyledMain = styled.main`
   margin: 0 auto;
   width: 100%;
-  max-width: 1120px;
-  padding: 0 1rem;
+  max-width: 1180px;
+  padding: 0 clamp(0.85rem, 1.6vw, 1.2rem);
 `
 
 const RouteProgress = styled.div`

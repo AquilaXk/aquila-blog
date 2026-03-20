@@ -22,13 +22,19 @@ export const Global = () => {
           padding: 0;
           overflow-y: scroll;
           color: ${theme.colors.gray12};
-          background-color: ${theme.colors.gray2};
+          background-color: ${theme.colors.gray1};
+          background-image: radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.08), transparent 38%);
           font-family: ${pretendard.style.fontFamily};
           font-weight: ${pretendard.style.fontWeight};
           font-style: ${pretendard.style.fontStyle};
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
           font-synthesis: none;
+        }
+
+        ::selection {
+          background: ${theme.colors.blue7};
+          color: #fff;
         }
 
         * {

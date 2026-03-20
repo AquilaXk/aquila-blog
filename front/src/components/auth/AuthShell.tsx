@@ -67,7 +67,7 @@ const Main = styled.main`
   position: relative;
   min-height: calc(100vh - 4rem);
   min-height: calc(100dvh - 4rem);
-  padding: 2rem 1rem;
+  padding: 1.8rem 1rem;
   display: grid;
   place-items: center;
 `
@@ -75,21 +75,23 @@ const Main = styled.main`
 const Backdrop = styled.div`
   position: absolute;
   inset: 0;
-  background: ${({ theme }) => theme.colors.gray2};
+  background:
+    radial-gradient(circle at 16% -6%, rgba(59, 130, 246, 0.12), transparent 36%),
+    ${({ theme }) => theme.colors.gray1};
 `
 
 const Shell = styled.section`
   position: relative;
   z-index: 1;
   width: min(520px, 100%);
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 22px;
   overflow: hidden;
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray2};
   box-shadow: ${({ theme }) =>
     theme.scheme === "light"
-      ? "0 10px 28px rgba(15, 23, 42, 0.08)"
-      : "0 8px 24px rgba(0, 0, 0, 0.28)"};
+      ? "0 12px 32px rgba(15, 23, 42, 0.1)"
+      : "0 18px 40px rgba(0, 0, 0, 0.3)"};
 `
 
 const FormPanel = styled.section`
@@ -128,8 +130,8 @@ const Tabs = styled.div`
 `
 
 const ActiveTab = styled.div`
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray7};
+  border-radius: 11px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray3};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.66rem 0.76rem;
@@ -138,9 +140,9 @@ const ActiveTab = styled.div`
 `
 
 const PassiveTab = styled(Link)`
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  border-radius: 11px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.76rem;
   text-align: center;

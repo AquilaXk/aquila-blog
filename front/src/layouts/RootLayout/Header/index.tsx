@@ -96,8 +96,10 @@ const StyledWrapper = styled.div`
   z-index: ${zIndexes.header};
   position: sticky;
   top: 0;
-  background-color: ${({ theme }) => theme.colors.gray1};
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  background-color: ${({ theme }) => `${theme.colors.gray1}e6`};
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   transform: translateY(0);
   opacity: 1;
   transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
@@ -113,7 +115,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     width: 100%;
     max-width: 1180px;
-    min-height: 3.5rem;
+    min-height: 3.65rem;
     margin: 0 auto;
     &[data-full-width="true"] {
       @media (min-width: 768px) {

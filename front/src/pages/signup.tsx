@@ -160,17 +160,17 @@ const FieldHint = styled.span`
 
 const Input = styled.input`
   width: 100%;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 12px;
   padding: 0.78rem 0.84rem;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   &:focus {
     outline: none;
     border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue3};
   }
 `
 
@@ -178,18 +178,19 @@ const PrimaryButton = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.blue8};
   border-radius: 12px;
   padding: 0.84rem 1rem;
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  background: ${({ theme }) => theme.colors.blue9};
   color: #fff;
   font-weight: 700;
   cursor: pointer;
-  transition: filter 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
 
   &:hover:not(:disabled) {
-    filter: brightness(1.06);
+    border-color: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue10};
   }
 
   &:disabled {
-    filter: saturate(0.6) brightness(0.92);
+    opacity: 0.68;
     cursor: not-allowed;
   }
 `
@@ -223,8 +224,8 @@ const SuccessText = styled.p`
 const InfoText = styled.p`
   margin: 0;
   border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.82rem 0.9rem;
   font-size: 0.87rem;

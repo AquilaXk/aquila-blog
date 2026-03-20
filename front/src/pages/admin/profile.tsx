@@ -709,17 +709,19 @@ export default AdminProfilePage
 const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
-  padding: 1.6rem 1rem 2.6rem;
+  padding: 1.5rem 1rem 2.6rem;
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 `
 
 const HeaderCard = styled.section`
   display: grid;
   gap: 0.95rem;
-  padding: 0.3rem 0 0.95rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: transparent;
+  padding: 1.05rem 1.1rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 16px;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
 
   h1 {
     margin: 0;
@@ -760,9 +762,9 @@ const HeaderActions = styled.div`
 `
 
 const BaseButton = styled.button`
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
   font-size: 0.92rem;
@@ -811,9 +813,9 @@ const LinkButton = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
@@ -833,9 +835,10 @@ const ProfileGrid = styled.section`
 `
 
 const PanelCard = styled.section`
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
   padding: 1rem;
 `
 
@@ -914,8 +917,8 @@ const MetaItem = styled.div`
   display: grid;
   gap: 0.32rem;
   min-width: 0;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray1};
   padding: 0.62rem 0.72rem;
 

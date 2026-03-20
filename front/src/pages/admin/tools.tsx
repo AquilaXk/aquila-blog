@@ -1149,17 +1149,19 @@ const Main = styled.main`
   width: 100%;
   min-width: 0;
   margin: 0 auto;
-  padding: 1.6rem 1rem 2.6rem;
+  padding: 1.5rem 1rem 2.6rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
 `
 
 const HeaderCard = styled.section`
   display: grid;
   gap: 0.95rem;
-  padding: 0.3rem 0 0.95rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: transparent;
+  padding: 1.05rem 1.1rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 16px;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
 
   h1 {
     margin: 0;
@@ -1196,8 +1198,8 @@ const GuideCard = styled.article`
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.8rem;
-  border-radius: 10px;
-  border: 0;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray3};
   padding: 0.72rem 0.82rem;
 
@@ -1247,9 +1249,9 @@ const HeaderActions = styled.div`
 `
 
 const BaseButton = styled.button`
-  border-radius: 8px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.72rem 1rem;
   min-height: 40px;
@@ -1259,13 +1261,14 @@ const BaseButton = styled.button`
 
   &:hover:not(:disabled) {
     color: ${({ theme }) => theme.colors.gray12};
-    background: ${({ theme }) => theme.colors.gray3};
+    border-color: ${({ theme }) => theme.colors.gray8};
+    background: ${({ theme }) => theme.colors.gray2};
   }
 
   &:disabled {
     opacity: 1;
     cursor: not-allowed;
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
   }
 `
@@ -1284,9 +1287,9 @@ const NavLink = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
   padding: 0.72rem 1rem;
@@ -1302,9 +1305,10 @@ const Grid = styled.section`
 
 const SectionCard = styled.section`
   min-width: 0;
-  border-radius: 12px;
-  border: 0;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
   padding: 1rem;
 `
 

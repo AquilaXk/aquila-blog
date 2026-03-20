@@ -3941,21 +3941,24 @@ export default AdminPage
 const Main = styled.main`
   max-width: 1360px;
   margin: 0 auto;
-  padding: 1.6rem 1rem 2.8rem;
+  padding: 1.5rem 1rem 2.8rem;
 `
 
 const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
   gap: 1rem;
-  border-radius: 0;
-  background: transparent;
-  padding: 0 0 1rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  padding: 1rem 1.05rem;
   margin-bottom: 1.1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
+    border-radius: 16px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   }
 `
 
@@ -4013,7 +4016,7 @@ const AnchorButton = styled.a`
   padding: 0 0.86rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   font-weight: 650;
   line-height: 1;
@@ -4049,10 +4052,10 @@ const MetricGrid = styled.div`
 `
 
 const MetricCard = styled.div`
-  border-radius: 0;
-  border: 0;
-  background: transparent;
-  padding: 0.2rem 0;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray1};
+  padding: 0.62rem 0.72rem;
 
   span {
     display: block;
@@ -4084,11 +4087,12 @@ const WorkspaceMain = styled.div`
 `
 
 const Section = styled.section`
-  border: none;
-  border-radius: 0;
-  padding: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 14px;
+  padding: 0.9rem;
   margin-bottom: 1.2rem;
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
 
   h2 {
     margin: 0;
@@ -4144,9 +4148,9 @@ const ContentStudioLeft = styled.div`
 `
 
 const QueryPanel = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.82rem;
   margin: 0;
 `
@@ -5490,9 +5494,9 @@ const EditorGrid = styled.div`
 
 const ListPanel = styled.div`
   grid-area: list;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.82rem;
   margin: 0;
   min-width: 0;

@@ -11,21 +11,29 @@ const hasAuthCookie = (req: IncomingMessage) => {
   return rawCookie.includes("apiKey=") || rawCookie.includes("accessToken=")
 }
 
-export const fetchServerAuthSession = async (req: IncomingMessage): Promise<AuthMember | null> => {
+export const fetchServerAuthSession = async (req: IncomingMessage): Promise<AuthMember | null | undefined> => {
   if (!hasAuthCookie(req)) return null
 
   try {
     const response = await serverApiFetch(req, "/member/api/v1/auth/me")
-    if (response.status === 401) return null
-    if (!response.ok) return null
+    if (response.status === 401) {
+      // 쿠키가 있는데 SSR auth/me가 401이면 도메인/세션 경계 이슈일 수 있어
+      // anonymous로 확정하지 않고 unknown으로 남겨 클라이언트에서 최종 판별한다.
+      return undefined
+    }
+    if (!response.ok) return undefined
     return (await response.json()) as AuthMember
   } catch {
-    return null
+    // 쿠키는 있으나 SSR 시점 인증 확인이 실패한 경우(백엔드 일시 장애 등)에는
+    // anonymous(null)로 확정하지 않고 unknown(undefined)으로 남겨 클라이언트에서 재검증한다.
+    return undefined
   }
 }
 
 export const hydrateServerAuthSession = async (queryClient: QueryClient, req: IncomingMessage) => {
   const authMember = await fetchServerAuthSession(req)
-  queryClient.setQueryData(queryKey.authMe(), authMember)
+  if (authMember !== undefined) {
+    queryClient.setQueryData(queryKey.authMe(), authMember)
+  }
   return authMember
 }

@@ -1,18 +1,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useState } from "react"
 import { ApiError, apiFetch } from "src/apis/backend/client"
 import { queryKey } from "src/constants/queryKey"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 
-const isClient = typeof window !== "undefined"
-
 const clearCookie = (name: string, domain?: string) => {
-  if (!isClient) return
+  if (typeof window === "undefined") return
   const domainPart = domain ? `; domain=${domain}` : ""
   document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax${domainPart}`
 }
 
 const clearStaleAuthCookies = () => {
-  if (!isClient) return
+  if (typeof window === "undefined") return
 
   clearCookie("apiKey")
   clearCookie("accessToken")
@@ -47,14 +46,19 @@ export type AuthMember = {
 }
 
 const useAuthSession = () => {
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
   const queryClient = useQueryClient()
   const cachedSnapshot = queryClient.getQueryData<AuthMember | null | undefined>(queryKey.authMe())
   const hasCachedSnapshot = cachedSnapshot !== undefined
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
-  // auth 쿠키는 HttpOnly라 document.cookie에서 감지할 수 없으므로,
-  // 첫 진입에서는 항상 auth/me를 1회 조회해 실제 로그인 상태를 판별한다.
-  const shouldFetchAuthMe = !hasCachedSnapshot || hasCachedMemberSnapshot
+  // SSR hydration 직후에는 anonymous(null) 스냅샷도 클라이언트에서 재검증해
+  // HttpOnly 쿠키/도메인 경계 차이로 누락된 세션을 복원한다.
+  const shouldFetchAuthMe = !hasCachedSnapshot || hasCachedMemberSnapshot || hasCachedAnonymousSnapshot
   const shouldRefetchOnMount = shouldFetchAuthMe && (!hasCachedSnapshot || hasCachedAnonymousSnapshot)
   const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 5 * 60_000 : 0
   const query = useQuery({
@@ -71,8 +75,8 @@ const useAuthSession = () => {
         throw error
       }
     },
-    enabled: isClient && shouldFetchAuthMe,
-    // 로그인된 사용자 스냅샷만 짧게 재사용하고, anonymous(null) 스냅샷은 즉시 재검증한다.
+    enabled: isMounted && shouldFetchAuthMe,
+    // 로그인 스냅샷은 짧게 재사용하고, anonymous(null) 스냅샷은 mount 시 재검증한다.
     staleTime,
     retry: false,
     refetchOnMount: shouldRefetchOnMount ? "always" : false,

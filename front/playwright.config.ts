@@ -43,6 +43,11 @@ export default defineConfig({
         command: "yarn start -p 3000",
         url: baseURL,
         cwd: __dirname,
+        env: {
+          ...process.env,
+          NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:3000",
+          BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:1",
+        },
         timeout: 120_000,
         reuseExistingServer: true,
       }

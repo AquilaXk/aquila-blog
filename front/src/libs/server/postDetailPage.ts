@@ -54,7 +54,7 @@ export const buildCanonicalPostDetailPage = async (
 
   res.setHeader(
     "Cache-Control",
-    authMember || shouldClientRecover
+    authMember !== null || shouldClientRecover
       ? "private, no-store"
       : "public, s-maxage=120, stale-while-revalidate=600"
   )

@@ -23,7 +23,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
 
   res.setHeader(
     "Cache-Control",
-    !authMember && initialAdminProfile
+    authMember === null && initialAdminProfile
       ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )

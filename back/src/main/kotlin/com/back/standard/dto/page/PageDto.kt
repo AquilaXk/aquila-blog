@@ -3,8 +3,8 @@ package com.back.standard.dto.page
 import org.springframework.data.domain.Page
 
 data class PageDto<T : Any>(
-    val content: List<T>,
-    val pageable: PageableDto,
+    var content: List<T> = emptyList(),
+    var pageable: PageableDto = PageableDto(),
 ) {
     constructor(page: Page<T>) : this(
         content = page.content,

@@ -1,6 +1,6 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
-import React, { useMemo } from "react"
+import React, { memo, startTransition, useCallback } from "react"
 import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
@@ -12,44 +12,43 @@ const TagList: React.FC<Props> = () => {
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
   const totalPostCount = usePostsTotalCountQuery()
-  const data = useTagsQuery()
-  const tagEntries = useMemo(
-    () =>
-      Object.entries(data).sort((a, b) => {
-        if (b[1] !== a[1]) return b[1] - a[1]
-        return a[0].localeCompare(b[0], "ko")
-      }),
-    [data]
-  )
-  const totalCount = useMemo(
-    () => tagEntries.reduce((sum, [, count]) => sum + count, 0),
-    [tagEntries]
-  )
+  const { tagEntries, totalCount } = useTagsQuery()
   const allCount = totalPostCount ?? totalCount
 
-  const navigateWithTag = (value?: string) => {
+  const navigateWithTag = useCallback((value?: string) => {
     const { category: _deprecatedCategory, ...restQuery } = router.query
-    replaceShallowRoutePreservingScroll(router, {
-      pathname: "/",
-      query: {
-        ...restQuery,
-        tag: value,
-      },
+    startTransition(() => {
+      void replaceShallowRoutePreservingScroll(router, {
+        pathname: "/",
+        query: {
+          ...restQuery,
+          tag: value,
+        },
+      })
     })
-  }
+  }, [router])
 
-  const handleClickAll = () => {
+  const handleClickAll = useCallback(() => {
     if (!currentTag) return
     navigateWithTag(undefined)
-  }
+  }, [currentTag, navigateWithTag])
 
-  const handleClickTag = (value: string) => {
+  const handleClickTag = useCallback((value: string) => {
     if (currentTag === value) {
       navigateWithTag(undefined)
       return
     }
     navigateWithTag(value)
-  }
+  }, [currentTag, navigateWithTag])
+
+  const handleClickTagButton = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const value = event.currentTarget.dataset.tag
+      if (!value) return
+      handleClickTag(value)
+    },
+    [handleClickTag]
+  )
 
   return (
     <StyledWrapper>
@@ -72,10 +71,11 @@ const TagList: React.FC<Props> = () => {
             <li key={key}>
               <button
                 type="button"
+                data-tag={key}
                 data-active={key === currentTag}
                 aria-pressed={key === currentTag}
                 aria-label={`Filter by tag: ${key}`}
-                onClick={() => handleClickTag(key)}
+                onClick={handleClickTagButton}
               >
                 <span className="name">{key}</span>
                 <span className="count">({count})</span>
@@ -100,10 +100,11 @@ const TagList: React.FC<Props> = () => {
           <button
             type="button"
             key={key}
+            data-tag={key}
             data-active={key === currentTag}
             aria-pressed={key === currentTag}
             aria-label={`Filter by tag: ${key}`}
-            onClick={() => handleClickTag(key)}
+            onClick={handleClickTagButton}
           >
             <span className="name">{key}</span>
             <span className="count">({count})</span>
@@ -114,7 +115,7 @@ const TagList: React.FC<Props> = () => {
   )
 }
 
-export default TagList
+export default memo(TagList)
 
 const StyledWrapper = styled.div`
   min-width: 0;

@@ -144,10 +144,42 @@ type ReplaceShallowRouteOptions = {
   query: ShallowRouteQuery
 }
 
+const normalizeShallowRouteQuery = (query: ShallowRouteQuery): string => {
+  const params = new URLSearchParams()
+
+  Object.keys(query)
+    .sort()
+    .forEach((key) => {
+      const value = query[key]
+      if (typeof value === "undefined") return
+
+      if (Array.isArray(value)) {
+        value
+          .slice()
+          .sort((a, b) => a.localeCompare(b))
+          .forEach((item) => {
+          params.append(key, item)
+          })
+        return
+      }
+
+      params.set(key, value)
+    })
+
+  return params.toString()
+}
+
 export const replaceShallowRoutePreservingScroll = async (
   router: NextRouter,
   { pathname = router.pathname, query }: ReplaceShallowRouteOptions
 ) => {
+  if (
+    pathname === router.pathname &&
+    normalizeShallowRouteQuery(router.query as ShallowRouteQuery) === normalizeShallowRouteQuery(query)
+  ) {
+    return
+  }
+
   const scrollX = typeof window !== "undefined" ? window.scrollX : 0
   const scrollY = typeof window !== "undefined" ? window.scrollY : 0
 

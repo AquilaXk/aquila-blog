@@ -1,5 +1,5 @@
 import PostCard from "src/routes/Feed/PostList/PostCard"
-import React from "react"
+import React, { memo } from "react"
 import styled from "@emotion/styled"
 import { TPost } from "src/types"
 
@@ -17,14 +17,27 @@ const PinnedPosts: React.FC<Props> = ({ posts }) => {
       </div>
       <div className="my-2">
         {posts.map((post) => (
-          <PostCard key={post.slug} data={post} />
+          <PostCard key={post.id} data={post} />
         ))}
       </div>
     </StyledWrapper>
   )
 }
 
-export default PinnedPosts
+const arePinnedPostsEqual = (prev: Props, next: Props) => {
+  if (prev.posts.length !== next.posts.length) return false
+  for (let i = 0; i < prev.posts.length; i += 1) {
+    const prevPost = prev.posts[i]
+    const nextPost = next.posts[i]
+    if (prevPost.id !== nextPost.id) return false
+    if (prevPost.modifiedTime !== nextPost.modifiedTime) return false
+    if (prevPost.likesCount !== nextPost.likesCount) return false
+    if (prevPost.commentsCount !== nextPost.commentsCount) return false
+  }
+  return true
+}
+
+export default memo(PinnedPosts, arePinnedPostsEqual)
 
 const StyledWrapper = styled.div`
   position: relative;

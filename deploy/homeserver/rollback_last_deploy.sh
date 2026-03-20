@@ -139,8 +139,9 @@ reload_caddy() {
 
 current_caddy_upstream_host() {
   awk '
-    $1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {
+    $1 == "reverse_proxy" && $2 ~ /^back[-_](blue|green):8080$/ {
       split($2, a, ":")
+      gsub("-", "_", a[1])
       print a[1]
       exit
     }
@@ -148,7 +149,7 @@ current_caddy_upstream_host() {
 }
 
 current_caddy_mounted_upstream_host() {
-  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1
+  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[-_](blue|green):8080$/ {split(\$2, a, \":\"); gsub(\"-\", \"_\", a[1]); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1
 }
 
 caddy_mounted_has_legacy_back_active() {
@@ -208,10 +209,10 @@ latest_backup() {
 backend_http_host() {
   local backend="$1"
   if [[ "${backend}" == "back_blue" ]]; then
-    echo "back-blue"
+    echo "back_blue"
     return
   fi
-  echo "back-green"
+  echo "back_green"
 }
 
 other_backend() {
@@ -317,7 +318,7 @@ fi
 
 # normalize legacy upstream tokens before rollback target is chosen
 if [[ -f "${CADDY_FILE}" ]]; then
-  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back-blue:8080/g" "${CADDY_FILE}")"
+  normalized="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/back_blue:8080/g" "${CADDY_FILE}")"
   printf '%s\n' "${normalized}" > "${CADDY_FILE}"
 fi
 

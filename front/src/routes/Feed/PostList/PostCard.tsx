@@ -6,6 +6,8 @@ import Image from "next/image"
 import styled from "@emotion/styled"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
+import { memo, useCallback, useEffect, useMemo, useRef } from "react"
+import Router from "next/router"
 import {
   parseThumbnailFocusXFromUrl,
   parseThumbnailFocusYFromUrl,
@@ -17,8 +19,204 @@ type Props = {
   data: TPost
 }
 
+type NavigatorConnectionLike = {
+  saveData?: boolean
+  effectiveType?: string
+  addEventListener?: (type: "change", listener: () => void) => void
+  removeEventListener?: (type: "change", listener: () => void) => void
+  onchange?: (() => void) | null
+}
+
+const PREFETCH_CONCURRENCY = 1
+const PREFETCH_CONCURRENCY_FAST_NETWORK = 2
+const MAX_PREFETCH_QUEUE_SIZE = 16
+const MAX_PREFETCH_QUEUE_SIZE_MID_MEMORY = 12
+const MAX_PREFETCH_QUEUE_SIZE_LOW_MEMORY = 8
+const MAX_PREFETCHED_PATHS = 256
+const POST_CARD_THUMBNAIL_SIZES =
+  "(min-width: 1400px) 420px, (min-width: 1201px) 32vw, (min-width: 860px) 46vw, 94vw"
+const prefetchedPostPathLRU = new Map<string, true>()
+const queuedPrefetchListeners = new Map<string, Array<(success: boolean) => void>>()
+const pendingPrefetchPaths: string[] = []
+let prefetchInFlightCount = 0
+
+const getNavigatorConnection = (): NavigatorConnectionLike | undefined => {
+  if (typeof navigator === "undefined") return undefined
+  return (navigator as Navigator & { connection?: NavigatorConnectionLike }).connection
+}
+
+const isNavigatorOnline = () => {
+  if (typeof navigator === "undefined") return true
+  return navigator.onLine !== false
+}
+
+const getNavigatorDeviceMemory = () => {
+  if (typeof navigator === "undefined") return undefined
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+  return typeof memory === "number" && Number.isFinite(memory) ? memory : undefined
+}
+
+const hasPrefetchedPostPath = (path: string) => prefetchedPostPathLRU.has(path)
+
+const markPrefetchedPostPath = (path: string) => {
+  if (prefetchedPostPathLRU.has(path)) {
+    prefetchedPostPathLRU.delete(path)
+  }
+  prefetchedPostPathLRU.set(path, true)
+
+  if (prefetchedPostPathLRU.size <= MAX_PREFETCHED_PATHS) return
+
+  const oldestPath = prefetchedPostPathLRU.keys().next().value
+  if (!oldestPath) return
+  prefetchedPostPathLRU.delete(oldestPath)
+}
+
+const notifyPrefetchListeners = (path: string, success: boolean) => {
+  const listeners = queuedPrefetchListeners.get(path)
+  queuedPrefetchListeners.delete(path)
+  if (!listeners || listeners.length === 0) return
+  listeners.forEach((listener) => listener(success))
+}
+
+const isQueuedForPrefetch = (path: string) => queuedPrefetchListeners.has(path)
+
+const resolvePrefetchConcurrency = () => {
+  if (typeof navigator === "undefined") return PREFETCH_CONCURRENCY
+  const deviceMemory = getNavigatorDeviceMemory()
+  if (typeof deviceMemory === "number" && deviceMemory <= 2) return PREFETCH_CONCURRENCY
+
+  const connection = getNavigatorConnection()
+  if (!connection || connection.saveData) return PREFETCH_CONCURRENCY
+  if (connection.effectiveType === "4g") {
+    if (typeof deviceMemory === "number" && deviceMemory < 8) return PREFETCH_CONCURRENCY
+    return PREFETCH_CONCURRENCY_FAST_NETWORK
+  }
+  return PREFETCH_CONCURRENCY
+}
+
+const resolvePrefetchQueueLimit = () => {
+  const deviceMemory = getNavigatorDeviceMemory()
+  if (typeof deviceMemory !== "number") return MAX_PREFETCH_QUEUE_SIZE
+  if (deviceMemory <= 2) return MAX_PREFETCH_QUEUE_SIZE_LOW_MEMORY
+  if (deviceMemory <= 4) return MAX_PREFETCH_QUEUE_SIZE_MID_MEMORY
+  return MAX_PREFETCH_QUEUE_SIZE
+}
+
+const dropOldestPendingPrefetch = () => {
+  const droppedPath = pendingPrefetchPaths.shift()
+  if (!droppedPath) return
+  notifyPrefetchListeners(droppedPath, false)
+}
+
+const trimPendingPrefetchQueueToCurrentLimit = () => {
+  const limit = resolvePrefetchQueueLimit()
+  while (pendingPrefetchPaths.length > limit) {
+    dropOldestPendingPrefetch()
+  }
+}
+
+const flushPrefetchQueue = () => {
+  if (!isNavigatorOnline()) return
+
+  while (prefetchInFlightCount < resolvePrefetchConcurrency() && pendingPrefetchPaths.length > 0) {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return
+
+    const path = pendingPrefetchPaths.shift()
+    if (!path) break
+
+    if (hasPrefetchedPostPath(path)) {
+      notifyPrefetchListeners(path, true)
+      continue
+    }
+
+    prefetchInFlightCount += 1
+    Router.prefetch(path)
+      .then(() => {
+        markPrefetchedPostPath(path)
+        notifyPrefetchListeners(path, true)
+      })
+      .catch(() => {
+        notifyPrefetchListeners(path, false)
+      })
+      .finally(() => {
+        prefetchInFlightCount -= 1
+        flushPrefetchQueue()
+      })
+  }
+}
+
+const enqueuePostPrefetch = (path: string, listener: (success: boolean) => void) => {
+  if (hasPrefetchedPostPath(path)) {
+    listener(true)
+    return
+  }
+
+  const queuedListeners = queuedPrefetchListeners.get(path)
+  if (queuedListeners) {
+    queuedListeners.push(listener)
+    return
+  }
+
+  if (pendingPrefetchPaths.length >= resolvePrefetchQueueLimit()) {
+    dropOldestPendingPrefetch()
+  }
+
+  queuedPrefetchListeners.set(path, [listener])
+  pendingPrefetchPaths.push(path)
+  flushPrefetchQueue()
+}
+
+let hasRegisteredVisibilityListener = false
+let hasRegisteredConnectionListener = false
+let hasRegisteredOnlineListener = false
+
+const registerPrefetchVisibilityListener = () => {
+  if (hasRegisteredVisibilityListener) return
+  if (typeof document === "undefined") return
+  hasRegisteredVisibilityListener = true
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return
+    flushPrefetchQueue()
+  })
+}
+
+const registerPrefetchConnectionListener = () => {
+  if (hasRegisteredConnectionListener) return
+  const connection = getNavigatorConnection()
+  if (!connection) return
+  hasRegisteredConnectionListener = true
+
+  const handleConnectionChange = () => {
+    trimPendingPrefetchQueueToCurrentLimit()
+    flushPrefetchQueue()
+  }
+
+  if (typeof connection.addEventListener === "function") {
+    connection.addEventListener("change", handleConnectionChange)
+    return
+  }
+
+  connection.onchange = handleConnectionChange
+}
+
+const registerPrefetchOnlineListener = () => {
+  if (hasRegisteredOnlineListener) return
+  if (typeof window === "undefined") return
+  hasRegisteredOnlineListener = true
+
+  const handleOnline = () => {
+    trimPendingPrefetchQueueToCurrentLimit()
+    flushPrefetchQueue()
+  }
+
+  window.addEventListener("online", handleOnline)
+}
+
 const PostCard: React.FC<Props> = ({ data }) => {
   const author = data.author?.[0]
+  const postPath = toCanonicalPostPath(data.id)
+  const prefetchTimeoutRef = useRef<number | null>(null)
+  const hasPrefetchedRef = useRef(false)
   const createdAtText = formatDate(
     data?.date?.start_date || data.createdTime,
     CONFIG.lang
@@ -26,13 +224,74 @@ const PostCard: React.FC<Props> = ({ data }) => {
   const summary = data.summary?.trim() || "아직 등록된 요약이 없습니다."
   const commentsCount = data.commentsCount ?? 0
   const likesCount = data.likesCount ?? 0
-  const thumbnailSrc = data.thumbnail ? stripThumbnailFocusFromUrl(data.thumbnail) : ""
-  const thumbnailFocusX = parseThumbnailFocusXFromUrl(data.thumbnail || "")
-  const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
-  const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
+  const { thumbnailSrc, thumbnailFocusX, thumbnailFocusY, thumbnailZoom } = useMemo(() => {
+    const rawThumbnail = data.thumbnail || ""
+    return {
+      thumbnailSrc: rawThumbnail ? stripThumbnailFocusFromUrl(rawThumbnail) : "",
+      thumbnailFocusX: parseThumbnailFocusXFromUrl(rawThumbnail),
+      thumbnailFocusY: parseThumbnailFocusYFromUrl(rawThumbnail),
+      thumbnailZoom: parseThumbnailZoomFromUrl(rawThumbnail),
+    }
+  }, [data.thumbnail])
+
+  const clearPrefetchTimer = useCallback(() => {
+    if (!prefetchTimeoutRef.current) return
+    window.clearTimeout(prefetchTimeoutRef.current)
+    prefetchTimeoutRef.current = null
+  }, [])
+
+  const prefetchPost = useCallback(() => {
+    if (hasPrefetchedRef.current) return
+    hasPrefetchedRef.current = true
+    enqueuePostPrefetch(postPath, (success) => {
+      if (success) return
+      hasPrefetchedRef.current = false
+    })
+  }, [postPath])
+
+  const canPrefetchOnCurrentNetwork = useCallback(() => {
+    if (!isNavigatorOnline()) return false
+    if (typeof navigator === "undefined") return true
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return false
+    const connection = getNavigatorConnection()
+    if (!connection) return true
+    if (connection.saveData) return false
+    if (connection.effectiveType === "slow-2g" || connection.effectiveType === "2g") return false
+    return true
+  }, [])
+
+  const handleMouseEnter = useCallback(() => {
+    if (hasPrefetchedRef.current) return
+    if (hasPrefetchedPostPath(postPath)) {
+      hasPrefetchedRef.current = true
+      return
+    }
+    if (isQueuedForPrefetch(postPath)) return
+    if (!canPrefetchOnCurrentNetwork()) return
+    clearPrefetchTimer()
+    prefetchTimeoutRef.current = window.setTimeout(prefetchPost, 1800)
+  }, [canPrefetchOnCurrentNetwork, clearPrefetchTimer, postPath, prefetchPost])
+
+  const handleMouseLeave = useCallback(() => {
+    clearPrefetchTimer()
+  }, [clearPrefetchTimer])
+
+  useEffect(() => {
+    registerPrefetchVisibilityListener()
+    registerPrefetchConnectionListener()
+    registerPrefetchOnlineListener()
+    return () => clearPrefetchTimer()
+  }, [clearPrefetchTimer])
 
   return (
-    <StyledWrapper href={toCanonicalPostPath(data.id)}>
+    <StyledWrapper
+      href={postPath}
+      prefetch={false}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocus={handleMouseEnter}
+      onBlur={handleMouseLeave}
+    >
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
@@ -40,7 +299,7 @@ const PostCard: React.FC<Props> = ({ data }) => {
               src={thumbnailSrc}
               fill
               alt={data.title}
-              sizes="(min-width: 1024px) 46vw, 96vw"
+              sizes={POST_CARD_THUMBNAIL_SIZES}
               priority={false}
               css={{
                 objectFit: "cover",
@@ -90,13 +349,31 @@ const PostCard: React.FC<Props> = ({ data }) => {
   )
 }
 
-export default PostCard
+const arePostCardPropsEqual = (prev: Props, next: Props) => {
+  const prevAuthor = prev.data.author?.[0]
+  const nextAuthor = next.data.author?.[0]
+
+  return (
+    prev.data.id === next.data.id &&
+    prev.data.title === next.data.title &&
+    prev.data.summary === next.data.summary &&
+    prev.data.thumbnail === next.data.thumbnail &&
+    prev.data.modifiedTime === next.data.modifiedTime &&
+    prev.data.createdTime === next.data.createdTime &&
+    prev.data.commentsCount === next.data.commentsCount &&
+    prev.data.likesCount === next.data.likesCount &&
+    prevAuthor?.name === nextAuthor?.name &&
+    prevAuthor?.profile_photo === nextAuthor?.profile_photo
+  )
+}
+
+export default memo(PostCard, arePostCardPropsEqual)
 
 const StyledWrapper = styled(Link)`
   display: block;
   text-decoration: none;
-  --post-card-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-  --post-card-shadow-hover: 0 18px 38px rgba(0, 0, 0, 0.34);
+  --post-card-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.04);
+  --post-card-shadow-hover: 0 12px 20px 0 rgba(0, 0, 0, 0.08);
   --post-card-translate-y: -8px;
 
   &:focus-visible {
@@ -107,16 +384,14 @@ const StyledWrapper = styled(Link)`
     overflow: hidden;
     position: relative;
     height: 100%;
+    content-visibility: auto;
+    contain-intrinsic-size: 420px;
     display: flex;
     flex-direction: column;
     border-radius: 15px;
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     background: ${({ theme }) => theme.colors.gray2};
     box-shadow: var(--post-card-shadow);
-    transition:
-      transform 0.22s ease,
-      box-shadow 0.22s ease,
-      border-color 0.22s ease;
 
     > .thumbnail {
       position: relative;
@@ -139,10 +414,6 @@ const StyledWrapper = styled(Link)`
         pointer-events: none;
       }
 
-      img {
-        transition: filter 0.22s ease;
-      }
-
     }
 
     > .content {
@@ -162,6 +433,7 @@ const StyledWrapper = styled(Link)`
           font-weight: 760;
           letter-spacing: -0.02em;
           word-break: keep-all;
+          overflow-wrap: anywhere;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
@@ -171,7 +443,7 @@ const StyledWrapper = styled(Link)`
 
       > .summary {
         margin-top: 0.62rem;
-        min-height: 0;
+        height: 4.75rem;
 
         p {
           margin: 0;
@@ -180,6 +452,7 @@ const StyledWrapper = styled(Link)`
           line-height: 1.58;
           letter-spacing: -0.01em;
           word-break: keep-all;
+          overflow-wrap: anywhere;
           display: -webkit-box;
           -webkit-line-clamp: 3;
           -webkit-box-orient: vertical;
@@ -286,21 +559,21 @@ const StyledWrapper = styled(Link)`
   }
 
   @media (hover: hover) and (pointer: fine) {
+    article {
+      transition:
+        transform 0.25s ease-in,
+        box-shadow 0.25s ease-in;
+    }
+
     &:hover article,
     &:focus-visible article {
       transform: translateY(var(--post-card-translate-y));
       box-shadow: var(--post-card-shadow-hover);
-      border-color: ${({ theme }) => theme.colors.gray6};
-    }
 
-    &:hover article > .thumbnail img,
-    &:focus-visible article > .thumbnail img {
-      filter: brightness(0.96);
+      @media screen and (max-width: 1024px) {
+        transform: none;
+      }
     }
-  }
-
-  &:active article {
-    transform: translateY(-3px);
   }
 
   @media (max-width: 640px) {
@@ -316,6 +589,10 @@ const StyledWrapper = styled(Link)`
 
         > .summary p {
           -webkit-line-clamp: 3;
+        }
+
+        > .summary {
+          height: 4.2rem;
         }
 
         > .footer {

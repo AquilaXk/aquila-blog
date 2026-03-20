@@ -1,11 +1,11 @@
 package com.back.standard.dto.page
 
 data class PageableDto(
-    val pageNumber: Int,
-    val pageSize: Int,
-    val offset: Long,
-    val totalElements: Long,
-    val totalPages: Int,
-    val numberOfElements: Int,
-    val paged: Boolean,
+    var pageNumber: Int = 1,
+    var pageSize: Int = 30,
+    var offset: Long = 0,
+    var totalElements: Long = 0,
+    var totalPages: Int = 0,
+    var numberOfElements: Int = 0,
+    var paged: Boolean = true,
 )

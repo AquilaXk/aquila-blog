@@ -11,6 +11,7 @@ import { AdminProfile } from "src/hooks/useAdminProfile"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
 import type { TPost } from "src/types"
+import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
   const queryClient = createQueryClient()
@@ -21,7 +22,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     kw: "",
     tag: currentTag,
     page: 1,
-    pageSize: 30,
+    pageSize: FEED_EXPLORE_PAGE_SIZE,
   })
     .then(({ posts, totalCount }) => ({
       posts,
@@ -60,15 +61,21 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   }
   if (postsLoaded) {
     queryClient.setQueryData(
-      queryKey.postsExplore({
+      queryKey.postsExploreInfinite({
         kw: "",
         tag: currentTag || undefined,
-        page: 1,
-        pageSize: 30,
+        pageSize: FEED_EXPLORE_PAGE_SIZE,
       }),
-      posts
+      {
+        pages: [
+          {
+            posts,
+            totalCount,
+          },
+        ],
+        pageParams: [1],
+      }
     )
-    queryClient.setQueryData(queryKey.posts(), posts)
   }
 
   // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.

@@ -172,11 +172,11 @@ for svc in back_blue back_green caddy cloudflared autoheal; do
 done
 
 print_section "Caddy Upstream"
-grep -nE 'reverse_proxy back-(blue|green|active):8080' "${CADDY_HOST_FILE}" || true
+grep -nE 'reverse_proxy back[-_](blue|green|active):8080' "${CADDY_HOST_FILE}" || true
 
 print_section "Caddy Mount Sync"
-host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${CADDY_HOST_FILE}" || true)"
-mounted_upstream="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back-(blue|green):8080$/ {split(\$2, a, \":\"); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1 || true)"
+host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back[-_](blue|green):8080$/ {split($2, a, ":"); gsub("-", "_", a[1]); print a[1]; exit}' "${CADDY_HOST_FILE}" || true)"
+mounted_upstream="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[-_](blue|green):8080$/ {split(\$2, a, \":\"); gsub(\"-\", \"_\", a[1]); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1 || true)"
 legacy_back_active="false"
 if compose exec -T caddy sh -lc "grep -Eq 'back[-_]active:8080' ${CADDY_CONTAINER_FILE}" >/dev/null 2>&1; then
   legacy_back_active="true"

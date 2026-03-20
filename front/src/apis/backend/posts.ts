@@ -290,11 +290,14 @@ export type ExplorePostsParams = {
   order?: "asc" | "desc"
   page?: number
   pageSize?: number
+  signal?: AbortSignal
 }
 
 export type ExplorePostsPage = {
   posts: TPost[]
   totalCount: number
+  pageNumber: number
+  pageSize: number
 }
 
 const toSortParam = (order: "asc" | "desc") => (order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT")
@@ -309,7 +312,13 @@ const toValidPageSize = (pageSize: number | undefined) => {
   return Math.min(30, Math.max(1, Math.trunc(pageSize || PAGE_SIZE)))
 }
 
-const buildExplorePath = ({ kw = "", tag = "", order = "desc", page = 1, pageSize = PAGE_SIZE }: ExplorePostsParams) => {
+const buildExplorePath = ({
+  kw = "",
+  tag = "",
+  order = "desc",
+  page = 1,
+  pageSize = PAGE_SIZE,
+}: ExplorePostsParams) => {
   const params = new URLSearchParams()
   params.set("kw", kw.trim())
   params.set("tag", tag.trim())
@@ -340,8 +349,16 @@ export const getExplorePosts = async ({
   order = "desc",
   page = 1,
   pageSize = PAGE_SIZE,
+  signal,
 }: ExplorePostsParams = {}): Promise<TPost[]> => {
-  const { posts } = await getExplorePostsPage({ kw, tag, order, page, pageSize })
+  const { posts } = await getExplorePostsPage({
+    kw,
+    tag,
+    order,
+    page,
+    pageSize,
+    signal,
+  })
   return posts
 }
 
@@ -351,7 +368,10 @@ export const getExplorePostsPage = async ({
   order = "desc",
   page = 1,
   pageSize = PAGE_SIZE,
+  signal,
 }: ExplorePostsParams = {}): Promise<ExplorePostsPage> => {
+  const fallbackPageNumber = toValidPage(page)
+  const fallbackPageSize = toValidPageSize(pageSize)
   const response = await apiFetch<PageDto<ApiPostDto>>(
     buildExplorePath({
       kw,
@@ -359,7 +379,10 @@ export const getExplorePostsPage = async ({
       order,
       page,
       pageSize,
-    })
+    }),
+    {
+      signal,
+    }
   )
   return {
     posts: response.content.map(mapPostDto),
@@ -367,6 +390,14 @@ export const getExplorePostsPage = async ({
       typeof response?.pageable?.totalElements === "number" && Number.isFinite(response.pageable.totalElements)
         ? response.pageable.totalElements
         : response.content.length,
+    pageNumber:
+      typeof response?.pageable?.pageNumber === "number" && Number.isFinite(response.pageable.pageNumber)
+        ? Math.max(1, Math.trunc(response.pageable.pageNumber))
+        : fallbackPageNumber,
+    pageSize:
+      typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
+        ? Math.max(1, Math.trunc(response.pageable.pageSize))
+        : fallbackPageSize,
   }
 }
 

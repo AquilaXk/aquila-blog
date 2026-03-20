@@ -75,6 +75,15 @@ class CustomAuthenticationFilter(
             }
             filterChain.doFilter(request, response)
         } catch (e: AppException) {
+            if (response.isCommitted) {
+                log.warn(
+                    "authentication_app_exception_response_committed path={} code={}",
+                    request.requestURI,
+                    e.rsData.resultCode,
+                    e,
+                )
+                return
+            }
             val rsData: RsData<Void> = e.rsData
 
             response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page, type Route } from "@playwright/test"
 
 const clsBudget = Number(process.env.CLS_BUDGET || 0.1)
 const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
@@ -6,7 +6,31 @@ const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/profile", "/admin/posts/new", "/admin/tools"]
 
-const mockFeedEndpoints = async (page: Page) => {
+const buildMockExploreItem = (id: number) => ({
+  id,
+  createdAt: "2026-03-17T00:00:00Z",
+  modifiedAt: "2026-03-17T00:00:00Z",
+  authorId: 1,
+  authorName: "관리자",
+  authorUsername: "aquila",
+  authorProfileImgUrl: "/avatar.png",
+  title: `CLS 예산 점검 ${id}`,
+  summary: "layout shift regression gate",
+  tags: ["perf"],
+  category: ["backend"],
+  published: true,
+  listed: true,
+  likesCount: 0,
+  commentsCount: 0,
+  hitCount: 0,
+})
+
+const mockFeedEndpoints = async (
+  page: Page,
+  options?: {
+    exploreHandler?: (route: Route) => Promise<void>
+  }
+) => {
   const pixelPng = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBAp6pW2kAAAAASUVORK5CYII=",
     "base64"
@@ -32,30 +56,16 @@ const mockFeedEndpoints = async (page: Page) => {
   })
 
   await page.route("**/post/api/v1/posts/explore**", async (route) => {
+    if (options?.exploreHandler) {
+      await options.exploreHandler(route)
+      return
+    }
+
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        content: [
-          {
-            id: 1001,
-            createdAt: "2026-03-17T00:00:00Z",
-            modifiedAt: "2026-03-17T00:00:00Z",
-            authorId: 1,
-            authorName: "관리자",
-            authorUsername: "aquila",
-            authorProfileImgUrl: "/avatar.png",
-            title: "CLS 예산 점검",
-            summary: "layout shift regression gate",
-            tags: ["perf"],
-            category: ["backend"],
-            published: true,
-            listed: true,
-            likesCount: 0,
-            commentsCount: 0,
-            hitCount: 0,
-          },
-        ],
+        content: [buildMockExploreItem(1001)],
         pageable: {
           pageNumber: 0,
           pageSize: 30,
@@ -191,4 +201,125 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
     expect(jitterPx).toBeLessThanOrEqual(jitterBudgetPx)
     expect(cls).toBeLessThanOrEqual(clsBudget + clsAssertionEpsilon)
   }
+})
+
+test("홈 피드 무한스크롤은 연속 트리거에서도 explore 호출이 폭주하지 않는다", async ({ page }) => {
+  const exploreCalls: number[] = []
+  const totalElements = 6
+  const pageMap: Record<number, number[]> = {
+    1: [1001, 1002],
+    2: [1003, 1004],
+    3: [1005, 1006],
+  }
+
+  await mockFeedEndpoints(page, {
+    exploreHandler: async (route) => {
+      const url = new URL(route.request().url())
+      const page = Number(url.searchParams.get("page") || "1")
+      const pageSize = Number(url.searchParams.get("pageSize") || "24")
+      const ids = pageMap[page] ?? []
+      exploreCalls.push(page)
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: ids.map(buildMockExploreItem),
+          pageable: {
+            pageNumber: Math.max(page - 1, 0),
+            pageSize,
+            totalElements,
+            totalPages: 3,
+          },
+        }),
+      })
+    },
+  })
+
+  await page.goto("/")
+  await page.waitForLoadState("networkidle")
+
+  for (let i = 0; i < 8; i += 1) {
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" })
+    })
+    await page.waitForTimeout(250)
+  }
+  await page.waitForTimeout(1200)
+
+  const uniqueCalls = Array.from(new Set(exploreCalls))
+  const callCounts = exploreCalls.reduce<Record<number, number>>((acc, value) => {
+    acc[value] = (acc[value] ?? 0) + 1
+    return acc
+  }, {})
+  const duplicatedPages = Object.entries(callCounts).filter(([, count]) => count > 1)
+  console.log(
+    `[infinite-load-guard] calls=${JSON.stringify(exploreCalls)} unique=${JSON.stringify(uniqueCalls)}`
+  )
+  expect(uniqueCalls[0]).toBe(1)
+  expect(uniqueCalls.every((value) => [1, 2, 3].includes(value))).toBe(true)
+  expect(duplicatedPages).toHaveLength(0)
+  expect(exploreCalls.length).toBeLessThanOrEqual(3)
+})
+
+test("홈 피드 긴 목록에서도 동일 page를 중복 요청하지 않는다", async ({ page }) => {
+  const exploreCalls: number[] = []
+  const pageMap: Record<number, number[]> = {
+    1: [2001, 2002],
+    2: [2003, 2004],
+    3: [2005, 2006],
+    4: [2007, 2008],
+    5: [2009, 2010],
+    6: [2011, 2012],
+  }
+  const totalElements = 12
+
+  await mockFeedEndpoints(page, {
+    exploreHandler: async (route) => {
+      const url = new URL(route.request().url())
+      const page = Number(url.searchParams.get("page") || "1")
+      const pageSize = Number(url.searchParams.get("pageSize") || "24")
+      const ids = pageMap[page] ?? []
+      exploreCalls.push(page)
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: ids.map(buildMockExploreItem),
+          pageable: {
+            pageNumber: Math.max(page - 1, 0),
+            pageSize,
+            totalElements,
+            totalPages: 6,
+          },
+        }),
+      })
+    },
+  })
+
+  await page.goto("/")
+  await page.waitForLoadState("networkidle")
+
+  for (let i = 0; i < 28; i += 1) {
+    await page.evaluate(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" })
+    })
+    await page.waitForTimeout(220)
+  }
+  await page.waitForTimeout(1200)
+
+  const callCounts = exploreCalls.reduce<Record<number, number>>((acc, value) => {
+    acc[value] = (acc[value] ?? 0) + 1
+    return acc
+  }, {})
+  const duplicatedPages = Object.entries(callCounts).filter(([, count]) => count > 1)
+  const maxRequestedPage = exploreCalls.length ? Math.max(...exploreCalls) : 0
+
+  console.log(
+    `[infinite-long-list] calls=${JSON.stringify(exploreCalls)} duplicated=${JSON.stringify(duplicatedPages)}`
+  )
+  expect(exploreCalls[0]).toBe(1)
+  expect(maxRequestedPage).toBeLessThanOrEqual(6)
+  expect(duplicatedPages).toHaveLength(0)
 })

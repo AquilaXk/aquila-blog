@@ -99,6 +99,9 @@ class SecurityConfig(
             exceptionHandling {
                 authenticationEntryPoint =
                     AuthenticationEntryPoint { _, response, _ ->
+                        if (response.isCommitted) {
+                            return@AuthenticationEntryPoint
+                        }
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 401
                         response.writer.write(objectMapper.writeValueAsString(RsData<Void>("401-1", "로그인 후 이용해주세요.")))
@@ -106,6 +109,9 @@ class SecurityConfig(
 
                 accessDeniedHandler =
                     AccessDeniedHandler { _, response, _ ->
+                        if (response.isCommitted) {
+                            return@AccessDeniedHandler
+                        }
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 403
                         response.writer.write(objectMapper.writeValueAsString(RsData<Void>("403-1", "권한이 없습니다.")))

@@ -9,7 +9,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User
  * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
  */
 class SecurityUser(
-    val id: Int,
+    val id: Long,
     username: String,
     password: String,
     val nickname: String,

@@ -16,7 +16,7 @@ class CurrentMemberProfileQueryService(
     private val memberProfileHydrator: MemberProfileHydrator,
 ) : CurrentMemberProfileQueryUseCase {
     @Transactional(readOnly = true)
-    override fun getById(id: Int): MemberWithUsernameDto {
+    override fun getById(id: Long): MemberWithUsernameDto {
         val member = memberRepository.findById(id).orElseThrow()
 
         return MemberWithUsernameDto(memberProfileHydrator.hydrate(member))

@@ -1,26 +1,24 @@
 import { FormEvent } from "react"
-import AppIcon from "src/components/icons/AppIcon"
+import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 
 type Props = {
   signupEmail: string
   signupError: string
   signupLoading: boolean
-  kakaoAuthUrl: string
+  socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSignupEmailChange: (value: string) => void
   onSwitchToLogin: () => void
-  onKakaoAuth: () => void
 }
 
 const AuthEntrySignupPanel = ({
   signupEmail,
   signupError,
   signupLoading,
-  kakaoAuthUrl,
+  socialItems,
   onSubmit,
   onSignupEmailChange,
   onSwitchToLogin,
-  onKakaoAuth,
 }: Props) => {
   return (
     <>
@@ -47,16 +45,7 @@ const AuthEntrySignupPanel = ({
       <div className="socialSection">
         <span>소셜 계정으로 계속하기</span>
         <div className="socialButtonRow">
-          <button
-            type="button"
-            className="kakaoIconButton"
-            onClick={onKakaoAuth}
-            aria-label="카카오로 로그인"
-            title="카카오로 로그인"
-            disabled={!kakaoAuthUrl}
-          >
-            <AppIcon name="kakao" aria-hidden="true" />
-          </button>
+          <SocialAuthButtons size="compact" items={socialItems} />
         </div>
       </div>
 

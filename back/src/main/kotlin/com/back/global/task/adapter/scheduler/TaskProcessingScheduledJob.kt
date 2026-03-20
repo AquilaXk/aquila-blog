@@ -52,7 +52,7 @@ class TaskProcessingScheduledJob(
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
 
     private data class TaskExecutionContext(
-        val taskId: Int,
+        val taskId: Long,
         val taskType: String,
         val payload: String,
     )
@@ -120,7 +120,7 @@ class TaskProcessingScheduledJob(
         }
     }
 
-    private fun executeTask(taskId: Int) =
+    private fun executeTask(taskId: Long) =
         run {
             val context = loadTaskExecutionContext(taskId) ?: return
             val entry = taskHandlerRegistry.getEntry(context.taskType)
@@ -150,7 +150,7 @@ class TaskProcessingScheduledJob(
             }
         }
 
-    private fun loadTaskExecutionContext(taskId: Int): TaskExecutionContext? =
+    private fun loadTaskExecutionContext(taskId: Long): TaskExecutionContext? =
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute null
             if (task.status != TaskStatus.PROCESSING) return@execute null
@@ -161,7 +161,7 @@ class TaskProcessingScheduledJob(
      * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
-    private fun markTaskCompleted(taskId: Int) {
+    private fun markTaskCompleted(taskId: Long) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (task.status != TaskStatus.PROCESSING) return@execute
@@ -175,7 +175,7 @@ class TaskProcessingScheduledJob(
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
     private fun markTaskFailed(
-        taskId: Int,
+        taskId: Long,
         taskType: String,
         errorMessage: String?,
     ) {
@@ -191,7 +191,7 @@ class TaskProcessingScheduledJob(
      * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
-    private fun revertTaskToPending(taskId: Int) {
+    private fun revertTaskToPending(taskId: Long) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (task.status != TaskStatus.PROCESSING) return@execute
@@ -204,7 +204,7 @@ class TaskProcessingScheduledJob(
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
     private fun invokeHandlerWithTimeout(
-        taskId: Int,
+        taskId: Long,
         taskType: String,
         entry: TaskHandlerEntry,
         payload: TaskPayload,

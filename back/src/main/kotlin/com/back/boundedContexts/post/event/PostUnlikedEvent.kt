@@ -16,13 +16,13 @@ data class PostUnlikedEvent
     constructor(
         override val uid: UUID,
         override val aggregateType: String,
-        override val aggregateId: Int,
-        val postId: Int,
-        val postAuthorId: Int,
-        val likeId: Int,
+        override val aggregateId: Long,
+        val postId: Long,
+        val postAuthorId: Long,
+        val likeId: Long,
         val actorDto: MemberDto,
     ) : EventPayload {
-        constructor(uid: UUID, postId: Int, postAuthorId: Int, likeId: Int, actorDto: MemberDto) : this(
+        constructor(uid: UUID, postId: Long, postAuthorId: Long, likeId: Long, actorDto: MemberDto) : this(
             uid,
             Post::class.simpleName!!,
             postId,

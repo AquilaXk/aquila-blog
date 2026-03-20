@@ -87,7 +87,7 @@ class ApiV1AdmPostController(
     @Transactional
     @Operation(summary = "관리자용 soft delete 글 복구")
     fun restoreDeletedItem(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): RsData<PostDto> {
         val restoredPost = postUseCase.restoreDeletedByIdForAdmin(id)
         return RsData("200-1", "${id}번 삭제 글을 복구했습니다.", PostDto(restoredPost))
@@ -97,7 +97,7 @@ class ApiV1AdmPostController(
     @Transactional
     @Operation(summary = "관리자용 soft delete 글 영구삭제")
     fun hardDeleteDeletedItem(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): RsData<Void> {
         postUseCase.hardDeleteDeletedByIdForAdmin(id)
         return RsData("200-1", "${id}번 삭제 글을 영구삭제했습니다.")
@@ -111,7 +111,7 @@ class ApiV1AdmPostController(
     @Transactional(readOnly = true)
     @Operation(summary = "관리자용 글 상세 (숨김글 포함)")
     fun getItem(
-        @PathVariable id: Int,
+        @PathVariable id: Long,
     ): PostWithContentDto = PostWithContentDto(postUseCase.findById(id).getOrThrow())
 
     data class GeneratePreviewSummaryRequest(
@@ -137,7 +137,6 @@ class ApiV1AdmPostController(
      * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
      */
     @PostMapping("/preview-summary")
-    @Transactional(readOnly = true)
     @Operation(summary = "관리자용 미리보기 요약 생성")
     fun generatePreviewSummary(
         @Valid @RequestBody reqBody: GeneratePreviewSummaryRequest,

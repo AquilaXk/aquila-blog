@@ -69,7 +69,7 @@ class UploadedFile(
     @field:Id
     @field:SequenceGenerator(name = "uploaded_file_seq_gen", sequenceName = "uploaded_file_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "uploaded_file_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:Column(nullable = false, unique = true, length = 1000)
     val objectKey: String,
     @field:Column(nullable = false, length = 120)
@@ -88,7 +88,7 @@ class UploadedFile(
     @field:Column(length = 40)
     var ownerType: UploadedFileOwnerType? = null,
     @field:Column
-    var ownerId: Int? = null,
+    var ownerId: Long? = null,
     @field:Enumerated(EnumType.STRING)
     @field:Column(length = 40)
     var retentionReason: UploadedFileRetentionReason? = UploadedFileRetentionReason.TEMP_UPLOAD,
@@ -110,7 +110,7 @@ class UploadedFile(
         deletedAt = null
     }
 
-    fun attachToPost(postId: Int) {
+    fun attachToPost(postId: Long) {
         purpose = UploadedFilePurpose.POST_IMAGE
         status = UploadedFileStatus.ACTIVE
         ownerType = UploadedFileOwnerType.POST
@@ -120,7 +120,7 @@ class UploadedFile(
         deletedAt = null
     }
 
-    fun attachToMemberProfile(memberId: Int) {
+    fun attachToMemberProfile(memberId: Long) {
         purpose = UploadedFilePurpose.PROFILE_IMAGE
         status = UploadedFileStatus.ACTIVE
         ownerType = UploadedFileOwnerType.MEMBER_PROFILE

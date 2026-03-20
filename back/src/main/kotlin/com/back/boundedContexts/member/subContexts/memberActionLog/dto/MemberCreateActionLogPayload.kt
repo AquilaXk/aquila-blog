@@ -20,6 +20,6 @@ import java.util.*
 class MemberCreateActionLogPayload(
     override val uid: UUID,
     override val aggregateType: String,
-    override val aggregateId: Int,
+    override val aggregateId: Long,
     val event: EventPayload,
 ) : TaskPayload

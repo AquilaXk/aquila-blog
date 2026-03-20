@@ -17,7 +17,7 @@ class PostLikeRepositoryAdapter(
     override fun insertIfAbsent(
         liker: Member,
         post: Post,
-    ): Int? = postLikeRepository.insertIfAbsent(liker, post)
+    ): Long? = postLikeRepository.insertIfAbsent(liker, post)
 
     override fun save(postLike: PostLike): PostLike = postLikeRepository.save(postLike)
 

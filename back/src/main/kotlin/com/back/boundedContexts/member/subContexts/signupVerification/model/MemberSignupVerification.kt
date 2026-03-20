@@ -30,7 +30,7 @@ class MemberSignupVerification(
         allocationSize = 20,
     )
     @field:GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "member_signup_verification_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:Column(nullable = false)
     val email: String,
     @field:Column(unique = true, nullable = false, length = 120)

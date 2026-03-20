@@ -13,7 +13,7 @@ import java.time.Instant
  * 저장소 조회/저장 로직을 도메인 요구사항에 맞게 캡슐화합니다.
  */
 interface TaskRepository :
-    JpaRepository<Task, Int>,
+    JpaRepository<Task, Long>,
     TaskQueueRepositoryPort {
     @Query(
         value = """

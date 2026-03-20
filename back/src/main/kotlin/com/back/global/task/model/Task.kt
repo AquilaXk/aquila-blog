@@ -36,11 +36,11 @@ class Task(
     @field:Id
     @field:SequenceGenerator(name = "task_seq_gen", sequenceName = "task_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "task_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:Column(unique = true)
     val uid: UUID,
     val aggregateType: String,
-    val aggregateId: Int,
+    val aggregateId: Long,
     val taskType: String,
     @field:Column(columnDefinition = "TEXT")
     val payload: String,
@@ -55,7 +55,7 @@ class Task(
     constructor(
         uid: UUID,
         aggregateType: String,
-        aggregateId: Int,
+        aggregateId: Long,
         taskType: String,
         payload: String,
         maxRetries: Int,

@@ -5,5 +5,5 @@ import java.util.UUID
 interface Payload {
     val uid: UUID
     val aggregateType: String
-    val aggregateId: Int
+    val aggregateId: Long
 }

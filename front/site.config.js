@@ -1,4 +1,12 @@
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.aquilaxk.site").replace(/\/+$/, "")
+/**
+ * @param {string | undefined} value
+ * @param {boolean} [defaultValue]
+ */
+const parseBoolean = (value, defaultValue = false) => {
+  if (typeof value !== "string") return defaultValue
+  return value.toLowerCase() === "true"
+}
 
 const CONFIG = {
   // profile setting (required)
@@ -23,6 +31,14 @@ const CONFIG = {
     title: "aquilaXk's Blog",
     description: "welcome to my backend dev log!",
     scheme: "dark", // 'light' | 'dark' | 'system'
+  },
+
+  auth: {
+    socialProviders: {
+      kakao: { enabled: true },
+      google: { enabled: parseBoolean(process.env.NEXT_PUBLIC_AUTH_SOCIAL_GOOGLE_ENABLED, false) },
+      github: { enabled: parseBoolean(process.env.NEXT_PUBLIC_AUTH_SOCIAL_GITHUB_ENABLED, false) },
+    },
   },
 
   // CONFIG configration (required)

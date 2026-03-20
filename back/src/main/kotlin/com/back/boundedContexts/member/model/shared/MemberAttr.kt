@@ -23,7 +23,7 @@ class MemberAttr private constructor(
     @field:Id
     @field:SequenceGenerator(name = "member_attr_seq_gen", sequenceName = "member_attr_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_attr_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:NaturalId
     @field:ManyToOne(fetch = LAZY)
     @field:JoinColumn(nullable = false)
@@ -37,6 +37,6 @@ class MemberAttr private constructor(
     override var strValue: String? = null,
 ) : BaseTime(),
     EntityAttr {
-    constructor(id: Int, subject: Member, name: String, value: Int) : this(id, subject, name, intValue = value)
-    constructor(id: Int, subject: Member, name: String, value: String) : this(id, subject, name, strValue = value)
+    constructor(id: Long, subject: Member, name: String, value: Int) : this(id, subject, name, intValue = value)
+    constructor(id: Long, subject: Member, name: String, value: String) : this(id, subject, name, strValue = value)
 }

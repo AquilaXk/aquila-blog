@@ -15,7 +15,7 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
 
     override fun findActiveSubtreeByPostAndRootCommentId(
         post: Post,
-        rootCommentId: Int,
+        rootCommentId: Long,
     ): List<PostComment> {
         val ids =
             entityManager
@@ -41,7 +41,7 @@ class PostCommentRepositoryImpl : PostCommentRepositoryCustom {
                 ).setParameter("postId", post.id)
                 .setParameter("rootCommentId", rootCommentId)
                 .resultList
-                .map { (it as Number).toInt() }
+                .map { (it as Number).toLong() }
 
         if (ids.isEmpty()) return emptyList()
 

@@ -12,10 +12,10 @@ import java.time.Instant
 data class PostDto
     @JsonCreator
     constructor(
-        val id: Int,
+        val id: Long,
         val createdAt: Instant,
         val modifiedAt: Instant,
-        val authorId: Int,
+        val authorId: Long,
         val authorName: String,
         val authorUsername: String,
         val authorProfileImgUrl: String,

@@ -82,7 +82,7 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
             .singleResult == true
 
     override fun existsBySubjectIdAndNameAndStrValueContaining(
-        subjectId: Int,
+        subjectId: Long,
         name: String,
         valueFragment: String,
     ): Boolean =
@@ -150,7 +150,7 @@ class MemberAttrRepositoryImpl : MemberAttrRepositoryCustom {
      * IntValue 항목을 수정한다.
      */
     private fun updateIntValue(
-        subjectId: Int,
+        subjectId: Long,
         name: String,
         delta: Int,
     ): List<Int> =

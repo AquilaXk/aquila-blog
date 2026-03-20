@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component
 class PostDeletedQueryRepository(
     private val jdbcTemplate: JdbcTemplate,
 ) {
-    fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto? =
+    fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto? =
         jdbcTemplate
             .query(
                 """
@@ -27,10 +27,10 @@ class PostDeletedQueryRepository(
                 """.trimIndent(),
                 { rs, _ ->
                     AdmDeletedPostSnapshotDto(
-                        id = rs.getInt("id"),
+                        id = rs.getLong("id"),
                         title = rs.getString("title"),
                         content = rs.getString("content"),
-                        authorId = rs.getInt("author_id"),
+                        authorId = rs.getLong("author_id"),
                     )
                 },
                 id,
@@ -106,9 +106,9 @@ class PostDeletedQueryRepository(
                 listSql,
                 { rs, _ ->
                     AdmDeletedPostDto(
-                        id = rs.getInt("id"),
+                        id = rs.getLong("id"),
                         title = rs.getString("title"),
-                        authorId = rs.getInt("author_id"),
+                        authorId = rs.getLong("author_id"),
                         authorName = rs.getString("author_name"),
                         published = rs.getBoolean("published"),
                         listed = rs.getBoolean("listed"),
@@ -126,7 +126,7 @@ class PostDeletedQueryRepository(
         return PageImpl(rows, pageable, total)
     }
 
-    fun softDeleteById(id: Int): Boolean {
+    fun softDeleteById(id: Long): Boolean {
         val updatedRows =
             jdbcTemplate.update(
                 """
@@ -141,7 +141,7 @@ class PostDeletedQueryRepository(
         return updatedRows > 0
     }
 
-    fun restoreDeletedById(id: Int): Boolean {
+    fun restoreDeletedById(id: Long): Boolean {
         val updatedRows =
             jdbcTemplate.update(
                 """
@@ -156,7 +156,7 @@ class PostDeletedQueryRepository(
         return updatedRows > 0
     }
 
-    fun hardDeleteDeletedById(id: Int): Boolean {
+    fun hardDeleteDeletedById(id: Long): Boolean {
         val markedRows =
             jdbcTemplate.update(
                 """

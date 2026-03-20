@@ -1,6 +1,5 @@
-import Link from "next/link"
 import { FormEvent } from "react"
-import AppIcon from "src/components/icons/AppIcon"
+import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 
 type Props = {
   username: string
@@ -8,14 +7,12 @@ type Props = {
   showPassword: boolean
   error: string
   loading: boolean
-  loginHref: string
-  kakaoAuthUrl: string
+  socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onUsernameChange: (value: string) => void
   onPasswordChange: (value: string) => void
   onTogglePassword: () => void
   onSwitchToSignup: () => void
-  onKakaoAuth: () => void
 }
 
 const AuthEntryLoginPanel = ({
@@ -24,14 +21,12 @@ const AuthEntryLoginPanel = ({
   showPassword,
   error,
   loading,
-  loginHref,
-  kakaoAuthUrl,
+  socialItems,
   onSubmit,
   onUsernameChange,
   onPasswordChange,
   onTogglePassword,
   onSwitchToSignup,
-  onKakaoAuth,
 }: Props) => {
   return (
     <>
@@ -78,16 +73,7 @@ const AuthEntryLoginPanel = ({
       <div className="socialSection">
         <span>소셜 계정으로 로그인</span>
         <div className="socialButtonRow">
-          <button
-            type="button"
-            className="kakaoIconButton"
-            onClick={onKakaoAuth}
-            aria-label="카카오로 로그인"
-            title="카카오로 로그인"
-            disabled={!kakaoAuthUrl}
-          >
-            <AppIcon name="kakao" aria-hidden="true" />
-          </button>
+          <SocialAuthButtons size="compact" items={socialItems} />
         </div>
       </div>
 
@@ -97,10 +83,6 @@ const AuthEntryLoginPanel = ({
           회원가입
         </button>
       </div>
-
-      <Link href={loginHref} className="fullPageLink">
-        전체 로그인 페이지로 이동
-      </Link>
     </>
   )
 }

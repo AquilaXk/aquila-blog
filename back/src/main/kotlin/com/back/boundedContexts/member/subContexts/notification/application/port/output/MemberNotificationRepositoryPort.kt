@@ -11,24 +11,24 @@ import java.time.Instant
 interface MemberNotificationRepositoryPort {
     fun save(notification: MemberNotification): MemberNotification
 
-    fun findLatestByReceiverId(receiverId: Int): List<MemberNotification>
+    fun findLatestByReceiverId(receiverId: Long): List<MemberNotification>
 
     fun findByReceiverIdAndIdGreaterThan(
-        receiverId: Int,
-        lastNotificationId: Int,
+        receiverId: Long,
+        lastNotificationId: Long,
         limit: Int,
     ): List<MemberNotification>
 
-    fun countUnreadByReceiverId(receiverId: Int): Long
+    fun countUnreadByReceiverId(receiverId: Long): Long
 
     fun markAllRead(
-        receiverId: Int,
+        receiverId: Long,
         readAt: Instant,
     ): Int
 
     fun markRead(
-        id: Int,
-        receiverId: Int,
+        id: Long,
+        receiverId: Long,
         readAt: Instant,
     ): Int
 }

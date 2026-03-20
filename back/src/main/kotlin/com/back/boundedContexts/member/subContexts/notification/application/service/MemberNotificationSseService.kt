@@ -40,11 +40,11 @@ class MemberNotificationSseService(
         private const val MAX_REPLAY_NOTIFICATIONS = 100
     }
 
-    private val emittersByMemberId = ConcurrentHashMap<Int, MutableSet<SseEmitter>>()
+    private val emittersByMemberId = ConcurrentHashMap<Long, MutableSet<SseEmitter>>()
     private val heartbeatTasks = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
-    private val emitterOwners = ConcurrentHashMap<SseEmitter, Int>()
+    private val emitterOwners = ConcurrentHashMap<SseEmitter, Long>()
     private val emitterConnectedAtEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
-    private val emitterLastNotificationId = ConcurrentHashMap<SseEmitter, Int>()
+    private val emitterLastNotificationId = ConcurrentHashMap<SseEmitter, Long>()
     private val emitterLastReplayEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
     private val heartbeatScheduler =
         Executors.newSingleThreadScheduledExecutor { runnable ->
@@ -58,7 +58,7 @@ class MemberNotificationSseService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     fun subscribe(
-        memberId: Int,
+        memberId: Long,
         lastEventIdRaw: String?,
     ): SseEmitter {
         val emitter = SseEmitter(0L)
@@ -73,7 +73,7 @@ class MemberNotificationSseService(
         emitter.onTimeout { remove(memberId, emitter) }
         emitter.onError { remove(memberId, emitter) }
 
-        val replayFrom = parseLastNotificationId(lastEventIdRaw) ?: 0
+        val replayFrom = parseLastNotificationId(lastEventIdRaw) ?: 0L
         val replayedLastId =
             replayMissedNotificationEvents(
                 memberId = memberId,
@@ -94,7 +94,7 @@ class MemberNotificationSseService(
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
     fun publish(
-        memberId: Int,
+        memberId: Long,
         notification: MemberNotificationDto,
         unreadCount: Int,
     ) {
@@ -130,7 +130,7 @@ class MemberNotificationSseService(
      */
     private fun send(
         emitter: SseEmitter,
-        memberId: Int?,
+        memberId: Long?,
         eventId: String,
         eventName: String,
         data: Any,
@@ -152,7 +152,7 @@ class MemberNotificationSseService(
     }
 
     private fun sendHeartbeat(
-        memberId: Int,
+        memberId: Long,
         emitter: SseEmitter,
     ) {
         val heartbeatAt = Instant.now()
@@ -170,7 +170,7 @@ class MemberNotificationSseService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     private fun registerHeartbeat(
-        memberId: Int,
+        memberId: Long,
         emitter: SseEmitter,
     ) {
         val fixedDelaySeconds = heartbeatSeconds.coerceAtLeast(3)
@@ -182,7 +182,7 @@ class MemberNotificationSseService(
                         replayMissedNotificationEvents(
                             memberId = memberId,
                             emitter = emitter,
-                            lastNotificationId = emitterLastNotificationId[emitter] ?: 0,
+                            lastNotificationId = emitterLastNotificationId[emitter] ?: 0L,
                         )
                     }
                 },
@@ -195,7 +195,7 @@ class MemberNotificationSseService(
     }
 
     private fun remove(
-        memberId: Int,
+        memberId: Long,
         emitter: SseEmitter,
     ) {
         heartbeatTasks.remove(emitter)?.cancel(true)
@@ -223,7 +223,7 @@ class MemberNotificationSseService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     private fun enforceMemberEmitterLimit(
-        memberId: Int,
+        memberId: Long,
         emitters: MutableSet<SseEmitter>,
     ) {
         val safeLimit = maxEmittersPerMember.coerceAtLeast(1)
@@ -261,10 +261,10 @@ class MemberNotificationSseService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     private fun replayMissedNotificationEvents(
-        memberId: Int,
+        memberId: Long,
         emitter: SseEmitter,
-        lastNotificationId: Int,
-    ): Int {
+        lastNotificationId: Long,
+    ): Long {
         val safeLimit = replayBatchSize.coerceIn(1, MAX_REPLAY_NOTIFICATIONS)
         val notifications =
             memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
@@ -324,14 +324,14 @@ class MemberNotificationSseService(
      * 원본 입력에서 필요한 값을 안전하게 추출합니다.
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
-    private fun parseLastNotificationId(lastEventIdRaw: String?): Int? {
+    private fun parseLastNotificationId(lastEventIdRaw: String?): Long? {
         val raw = lastEventIdRaw?.trim().orEmpty()
         if (raw.isBlank()) return null
-        if (raw.startsWith("notification-")) return raw.removePrefix("notification-").toIntOrNull()
-        return raw.toIntOrNull()
+        if (raw.startsWith("notification-")) return raw.removePrefix("notification-").toLongOrNull()
+        return raw.toLongOrNull()
     }
 
-    private fun notificationEventId(notificationId: Int): String = "notification-$notificationId"
+    private fun notificationEventId(notificationId: Long): String = "notification-$notificationId"
 
     @PreDestroy
     fun shutdownHeartbeatScheduler() {

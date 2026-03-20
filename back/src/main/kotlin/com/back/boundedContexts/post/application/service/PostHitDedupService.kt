@@ -42,7 +42,7 @@ class PostHitDedupService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     override fun shouldCountHit(
-        postId: Int,
+        postId: Long,
         viewerKey: String,
     ): Boolean {
         val safeViewerKey = viewerKey.trim()

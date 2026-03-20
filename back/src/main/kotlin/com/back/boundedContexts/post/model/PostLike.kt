@@ -21,7 +21,7 @@ class PostLike(
     @field:Id
     @field:SequenceGenerator(name = "post_like_seq_gen", sequenceName = "post_like_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "post_like_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val liker: Member,

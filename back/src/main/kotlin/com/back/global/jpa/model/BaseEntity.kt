@@ -12,8 +12,8 @@ import org.springframework.data.domain.Persistable
  * 불변조건을 유지하며 상태 전이를 메서드 단위로 캡슐화합니다.
  */
 @MappedSuperclass
-abstract class BaseEntity : Persistable<Int> {
-    abstract val id: Int
+abstract class BaseEntity : Persistable<Long> {
+    abstract val id: Long
 
     @Transient
     // Spring Data Persistable 규약: true면 insert, false면 update 경로로 처리된다.
@@ -23,7 +23,7 @@ abstract class BaseEntity : Persistable<Int> {
     // 동일 요청 내에서 계산/조회한 파생 속성을 캐시해 중복 연산을 줄인다.
     private val attrCache: MutableMap<String, Any> = mutableMapOf()
 
-    override fun getId(): Int = id
+    override fun getId(): Long? = id
 
     override fun isNew(): Boolean = isNewEntity
 
@@ -47,14 +47,14 @@ abstract class BaseEntity : Persistable<Int> {
         if (other === this) return true
         if (other !is BaseEntity) return false
 
-        if (id == 0 || other.id == 0) return false
+        if (id == 0L || other.id == 0L) return false
         if (identityClass(this) != identityClass(other)) return false
 
         return id == other.id
     }
 
     override fun hashCode(): Int =
-        if (id == 0) {
+        if (id == 0L) {
             identityClass(this).hashCode()
         } else {
             31 * identityClass(this).hashCode() + id.hashCode()

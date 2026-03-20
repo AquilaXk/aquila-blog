@@ -42,7 +42,7 @@ class MemberNotification(
         allocationSize = 50,
     )
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_notification_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(nullable = false)
     val receiver: Member,
@@ -53,9 +53,9 @@ class MemberNotification(
     @field:Column(nullable = false, length = 40)
     val type: MemberNotificationType,
     @field:Column(nullable = false)
-    val postId: Int,
+    val postId: Long,
     @field:Column(nullable = false)
-    val commentId: Int,
+    val commentId: Long,
     @field:Column(nullable = false, length = 160)
     val postTitle: String,
     @field:Column(nullable = false, length = 240)

@@ -503,8 +503,6 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
         nextPath={nextPath}
         title="로그인"
         description="댓글을 작성하려면 계정 로그인이 필요합니다."
-        visualTitle="환영합니다!"
-        visualDescription="로그인하면 지금 보고 있는 글로 바로 돌아와 댓글과 답글을 자연스럽게 이어서 작성할 수 있습니다."
       />
     </StyledWrapper>
   )

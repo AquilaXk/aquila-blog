@@ -25,7 +25,7 @@ interface MemberUseCase {
 
     fun findByUsername(username: String): Member?
 
-    fun findById(id: Int): Optional<Member>
+    fun findById(id: Long): Optional<Member>
 
     fun checkPassword(
         member: Member,

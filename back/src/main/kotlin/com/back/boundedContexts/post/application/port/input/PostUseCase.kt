@@ -29,7 +29,7 @@ interface PostUseCase {
         contentHtml: String? = null,
     ): Post
 
-    fun findById(id: Int): Post?
+    fun findById(id: Long): Post?
 
     fun findLatest(): Post?
 
@@ -97,7 +97,7 @@ interface PostUseCase {
 
     fun findCommentById(
         post: Post,
-        id: Int,
+        id: Long,
     ): PostComment?
 
     fun isLiked(
@@ -108,7 +108,7 @@ interface PostUseCase {
     fun findLikedPostIds(
         liker: Member?,
         posts: List<Post>,
-    ): Set<Int>
+    ): Set<Long>
 
     fun findPagedByKw(
         kw: String,
@@ -130,9 +130,9 @@ interface PostUseCase {
         pageSize: Int,
     ): PagedResult<AdmDeletedPostDto>
 
-    fun restoreDeletedByIdForAdmin(id: Int): Post
+    fun restoreDeletedByIdForAdmin(id: Long): Post
 
-    fun hardDeleteDeletedByIdForAdmin(id: Int)
+    fun hardDeleteDeletedByIdForAdmin(id: Long)
 
     fun findPagedByAuthor(
         author: Member,

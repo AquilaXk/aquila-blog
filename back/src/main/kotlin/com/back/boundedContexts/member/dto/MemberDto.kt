@@ -13,7 +13,7 @@ import java.time.Instant
 data class MemberDto
     @JsonCreator
     constructor(
-        val id: Int,
+        val id: Long,
         val createdAt: Instant,
         val modifiedAt: Instant,
         @JsonProperty("isAdmin")

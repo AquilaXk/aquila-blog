@@ -153,7 +153,7 @@ class PostApplicationService(
         return createdPost
     }
 
-    fun findById(id: Int): Post? =
+    fun findById(id: Long): Post? =
         postRepository
             .findById(id)
             .getOrNull()
@@ -469,7 +469,7 @@ class PostApplicationService(
                 syncLikesCount(post)
                 return PostLikeToggleResult(
                     isLiked = postLikeRepository.existsByLikerAndPost(persistenceActor, post),
-                    likeId = 0,
+                    likeId = 0L,
                 )
             }
 
@@ -534,7 +534,7 @@ class PostApplicationService(
             }
         }
 
-        return PostLikeToggleResult(false, existingLikeId ?: 0)
+        return PostLikeToggleResult(false, existingLikeId ?: 0L)
     }
 
     @Transactional
@@ -548,7 +548,7 @@ class PostApplicationService(
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         return PostLikeToggleResult(
             isLiked = existingLike != null,
-            likeId = existingLike?.id ?: 0,
+            likeId = existingLike?.id ?: 0L,
         )
     }
 
@@ -562,7 +562,7 @@ class PostApplicationService(
         val existingLike = postLikeRepository.findByLikerAndPost(persistenceActor, post)
         return PostLikeToggleResult(
             isLiked = existingLike != null,
-            likeId = existingLike?.id ?: 0,
+            likeId = existingLike?.id ?: 0L,
         )
     }
 
@@ -590,7 +590,7 @@ class PostApplicationService(
      */
     fun findCommentById(
         post: Post,
-        id: Int,
+        id: Long,
     ): PostComment? = postCommentRepository.findByPostAndId(post, id)
 
     /**
@@ -612,7 +612,7 @@ class PostApplicationService(
     fun findLikedPostIds(
         liker: Member?,
         posts: List<Post>,
-    ): Set<Int> {
+    ): Set<Long> {
         if (liker == null || posts.isEmpty()) return emptySet()
         return postLikeRepository
             .findByLikerAndPostIn(toPersistenceMember(liker), posts)
@@ -686,7 +686,7 @@ class PostApplicationService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     @Transactional
-    fun restoreDeletedByIdForAdmin(id: Int): Post {
+    fun restoreDeletedByIdForAdmin(id: Long): Post {
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
@@ -726,7 +726,7 @@ class PostApplicationService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     @Transactional
-    fun hardDeleteDeletedByIdForAdmin(id: Int) {
+    fun hardDeleteDeletedByIdForAdmin(id: Long) {
         val snapshot =
             postRepository.findDeletedSnapshotById(id)
                 ?: throw AppException("404-1", "해당 글을 찾을 수 없습니다.")
@@ -998,7 +998,7 @@ class PostApplicationService(
     // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.
     private fun toPersistenceMember(member: Member): Member = if (member is MemberProxy) member.persistenceMember else member
 
-    private fun clearReadCaches(postId: Int? = null) {
+    private fun clearReadCaches(postId: Long? = null) {
         publicTagCountsCache = null
         cacheManager.getCache(PostQueryCacheNames.FEED)?.clear()
         cacheManager.getCache(PostQueryCacheNames.EXPLORE)?.clear()

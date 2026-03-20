@@ -23,7 +23,7 @@ class PostAttr private constructor(
     @field:Id
     @field:SequenceGenerator(name = "post_attr_seq_gen", sequenceName = "post_attr_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "post_attr_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:NaturalId
     @field:ManyToOne(fetch = LAZY)
     @field:JoinColumn(nullable = false)
@@ -36,6 +36,6 @@ class PostAttr private constructor(
     override var strValue: String? = null,
 ) : BaseTime(),
     EntityAttr {
-    constructor(id: Int, subject: Post, name: String, value: Int) : this(id, subject, name, intValue = value)
-    constructor(id: Int, subject: Post, name: String, value: String) : this(id, subject, name, strValue = value)
+    constructor(id: Long, subject: Post, name: String, value: Int) : this(id, subject, name, intValue = value)
+    constructor(id: Long, subject: Post, name: String, value: String) : this(id, subject, name, strValue = value)
 }

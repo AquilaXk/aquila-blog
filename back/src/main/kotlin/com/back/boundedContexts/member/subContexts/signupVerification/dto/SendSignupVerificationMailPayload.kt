@@ -21,7 +21,7 @@ import java.util.UUID
 data class SendSignupVerificationMailPayload(
     override val uid: UUID,
     override val aggregateType: String,
-    override val aggregateId: Int,
+    override val aggregateId: Long,
     val toEmail: String,
     val verificationLink: String,
     val expiresAt: Instant,

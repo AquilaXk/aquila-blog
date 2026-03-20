@@ -17,7 +17,7 @@ class PostLikeRepositoryImpl : PostLikeRepositoryCustom {
     override fun insertIfAbsent(
         liker: Member,
         post: Post,
-    ): Int? {
+    ): Long? {
         findExistingLikeId(liker.id, post.id)?.let { return null }
 
         val result =
@@ -48,13 +48,13 @@ class PostLikeRepositoryImpl : PostLikeRepositoryCustom {
                 throw exception
             }
 
-        return (result as? Number)?.toInt()
+        return (result as? Number)?.toLong()
     }
 
     private fun findExistingLikeId(
-        likerId: Int,
-        postId: Int,
-    ): Int? =
+        likerId: Long,
+        postId: Long,
+    ): Long? =
         entityManager
             .createNativeQuery(
                 """
@@ -69,5 +69,5 @@ class PostLikeRepositoryImpl : PostLikeRepositoryCustom {
             .setParameter("postId", postId)
             .resultList
             .firstOrNull()
-            ?.let { (it as Number).toInt() }
+            ?.let { (it as Number).toLong() }
 }

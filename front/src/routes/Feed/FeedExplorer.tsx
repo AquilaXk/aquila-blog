@@ -111,7 +111,7 @@ const FeedBody = styled.section`
   @media (min-width: 1201px) {
     .tagColumn {
       position: absolute;
-      left: calc(-1 * min(188px, max(24px, (100vw - 1200px) * 0.5)));
+      left: -188px;
       top: 0;
       width: 156px;
       min-width: 156px;

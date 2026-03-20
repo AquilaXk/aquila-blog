@@ -19,7 +19,7 @@ data class PostModifiedEvent
     constructor(
         override val uid: UUID,
         override val aggregateType: String,
-        override val aggregateId: Int,
+        override val aggregateId: Long,
         @param:JsonProperty("postDto")
         @get:JsonIgnore
         val postDto: PostDto,

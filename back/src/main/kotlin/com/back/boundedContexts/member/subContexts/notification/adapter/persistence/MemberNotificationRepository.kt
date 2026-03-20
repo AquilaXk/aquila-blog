@@ -13,7 +13,7 @@ import java.time.Instant
  * - 역할: 계층 간 계약(포트/스펙) 정의를 담당합니다.
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
-interface MemberNotificationRepository : JpaRepository<MemberNotification, Int> {
+interface MemberNotificationRepository : JpaRepository<MemberNotification, Long> {
     @Query(
         """
         SELECT notification
@@ -24,7 +24,7 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Int> 
         """,
     )
     fun findLatestByReceiverId(
-        @Param("receiverId") receiverId: Int,
+        @Param("receiverId") receiverId: Long,
         pageable: Pageable,
     ): List<MemberNotification>
 
@@ -39,12 +39,12 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Int> 
         """,
     )
     fun findByReceiverIdAndIdGreaterThan(
-        @Param("receiverId") receiverId: Int,
-        @Param("id") id: Int,
+        @Param("receiverId") receiverId: Long,
+        @Param("id") id: Long,
         pageable: Pageable,
     ): List<MemberNotification>
 
-    fun countByReceiverIdAndReadAtIsNull(receiverId: Int): Long
+    fun countByReceiverIdAndReadAtIsNull(receiverId: Long): Long
 
     @Modifying(clearAutomatically = false, flushAutomatically = true)
     @Query(
@@ -56,7 +56,7 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Int> 
         """,
     )
     fun markAllRead(
-        @Param("receiverId") receiverId: Int,
+        @Param("receiverId") receiverId: Long,
         @Param("readAt") readAt: Instant,
     ): Int
 
@@ -71,8 +71,8 @@ interface MemberNotificationRepository : JpaRepository<MemberNotification, Int> 
         """,
     )
     fun markRead(
-        @Param("id") id: Int,
-        @Param("receiverId") receiverId: Int,
+        @Param("id") id: Long,
+        @Param("receiverId") receiverId: Long,
         @Param("readAt") readAt: Instant,
     ): Int
 }

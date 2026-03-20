@@ -127,7 +127,7 @@ class ApiV1PostController(
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
     fun getItem(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): PostWithContentDto {
         if (rq.actorOrNull == null) {
             return postPublicReadQueryUseCase.getPublicPostDetail(id)
@@ -187,7 +187,7 @@ class ApiV1PostController(
     )
 
     data class PostWriteResultDto(
-        val id: Int,
+        val id: Long,
         val title: String,
         val version: Long,
         val published: Boolean,
@@ -210,7 +210,7 @@ class ApiV1PostController(
     @PutMapping("/{id}")
     @Transactional
     fun modify(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
         @Valid @RequestBody reqBody: PostModifyRequest,
     ): RsData<PostWriteResultDto> {
         val post = postUseCase.findById(id).getOrThrow()
@@ -231,7 +231,7 @@ class ApiV1PostController(
     @DeleteMapping("/{id}")
     @Transactional
     fun delete(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): RsData<Void> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanDelete(rq.actor)
@@ -250,7 +250,7 @@ class ApiV1PostController(
     @PostMapping("/{id}/hit")
     @Transactional
     fun incrementHit(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): RsData<PostHitResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
@@ -276,7 +276,7 @@ class ApiV1PostController(
     @PutMapping("/{id}/like")
     @Transactional
     fun like(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
@@ -298,7 +298,7 @@ class ApiV1PostController(
     @DeleteMapping("/{id}/like")
     @Transactional
     fun unlike(
-        @PathVariable @Positive id: Int,
+        @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)

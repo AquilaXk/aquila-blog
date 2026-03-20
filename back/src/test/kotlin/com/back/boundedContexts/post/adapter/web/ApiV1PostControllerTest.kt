@@ -354,7 +354,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostController::class.java))
                     match(handler().methodName("explore"))
-                    jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
+                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItems("성능", "피드")) }
                     jsonPath("$.content[?(@.id == ${post.id})].category[*]") { value(Matchers.hasItem("백엔드")) }
                 }
@@ -388,7 +388,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     status { isOk() }
                     match(handler().handlerType(ApiV1PostController::class.java))
                     match(handler().methodName("explore"))
-                    jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
+                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                     jsonPath("$.content[?(@.id == ${post.id})].tags[*]") { value(Matchers.hasItem("SSE")) }
                 }
         }
@@ -798,8 +798,8 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     param("kw", "검색")
                 }.andExpect {
                     status { isOk() }
-                    jsonPath("$.content[*].id") { value(Matchers.hasItem(targetPost.id)) }
-                    jsonPath("$.content[*].authorId") { value(Matchers.hasItem(actor.id)) }
+                    jsonPath("$.content[?(@.id == ${targetPost.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
+                    jsonPath("$.content[?(@.authorId == ${actor.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                 }
         }
 
@@ -946,7 +946,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     param("pageSize", "30")
                 }.andExpect {
                     status { isOk() }
-                    jsonPath("$.content[*].id") { value(Matchers.hasItem(post.id)) }
+                    jsonPath("$.content[?(@.id == ${post.id})]") { value(Matchers.not(Matchers.empty<Any>())) }
                 }
 
             mvc

@@ -10,7 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface PostAttrRepository :
-    JpaRepository<PostAttr, Int>,
+    JpaRepository<PostAttr, Long>,
     PostAttrRepositoryCustom {
     fun deleteBySubject(subject: Post)
 }

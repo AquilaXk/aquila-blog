@@ -30,7 +30,7 @@ interface MemberAttrRepositoryCustom {
     ): Boolean
 
     fun existsBySubjectIdAndNameAndStrValueContaining(
-        subjectId: Int,
+        subjectId: Long,
         name: String,
         valueFragment: String,
     ): Boolean

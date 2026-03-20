@@ -35,11 +35,11 @@ data class TaskTypeDiagnostics(
  * 트랜잭션 경계, 예외 처리, 후속 동기화(캐시/이벤트/큐)를 함께 관리합니다.
  */
 data class TaskExecutionSample(
-    val taskId: Int,
+    val taskId: Long,
     val taskType: String,
     val label: String,
     val aggregateType: String,
-    val aggregateId: Int,
+    val aggregateId: Long,
     val status: TaskStatus,
     val retryCount: Int,
     val maxRetries: Int,

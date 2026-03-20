@@ -51,7 +51,7 @@ class RevalidateEventListener(
      */
     private fun enqueueHomeRevalidate(
         aggregateType: String,
-        aggregateId: Int,
+        aggregateId: Long,
     ) {
         runCatching {
             taskFacade.addToQueue(

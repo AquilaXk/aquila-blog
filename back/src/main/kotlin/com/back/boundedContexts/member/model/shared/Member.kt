@@ -44,7 +44,7 @@ class Member(
     @field:Id
     @field:SequenceGenerator(name = "member_seq_gen", sequenceName = "member_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:NaturalId
     @field:Column(unique = true, nullable = false)
     val username: String,
@@ -61,7 +61,7 @@ class Member(
     MemberHasProfileImgUrl,
     MemberHasProfileCard {
     constructor(
-        id: Int,
+        id: Long,
         username: String,
         password: String?,
         nickname: String,
@@ -76,7 +76,7 @@ class Member(
     )
 
     constructor(
-        id: Int,
+        id: Long,
         username: String,
         password: String?,
         nickname: String,
@@ -88,7 +88,7 @@ class Member(
         null,
     )
 
-    internal constructor(id: Int) : this(id, "", null, "", null, "")
+    internal constructor(id: Long) : this(id, "", null, "", null, "")
 
     @field:Column
     var deletedAt: Instant? = null

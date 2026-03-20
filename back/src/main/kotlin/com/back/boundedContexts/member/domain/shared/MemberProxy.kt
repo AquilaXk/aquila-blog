@@ -9,7 +9,7 @@ package com.back.boundedContexts.member.domain.shared
  */
 class MemberProxy(
     private val real: Member,
-    id: Int,
+    id: Long,
     username: String,
     nickname: String,
 ) : Member(id, username, null, nickname) {

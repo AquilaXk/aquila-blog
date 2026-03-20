@@ -21,13 +21,13 @@ interface PostCommentRepositoryPort {
 
     fun findActiveSubtreeByPostAndRootCommentId(
         post: Post,
-        rootCommentId: Int,
+        rootCommentId: Long,
     ): List<PostComment>
 
     fun findByPostAndId(
         post: Post,
-        id: Int,
+        id: Long,
     ): PostComment?
 
-    fun findById(id: Int): Optional<PostComment>
+    fun findById(id: Long): Optional<PostComment>
 }

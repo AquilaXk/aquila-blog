@@ -14,7 +14,7 @@ CREATE SEQUENCE IF NOT EXISTS uploaded_file_seq INCREMENT BY 50 START WITH 1 MIN
 CREATE SEQUENCE IF NOT EXISTS task_seq INCREMENT BY 50 START WITH 1 MINVALUE 1;
 
 CREATE TABLE IF NOT EXISTS member (
-    id INT NOT NULL DEFAULT nextval('member_seq'),
+    id BIGINT NOT NULL DEFAULT nextval('member_seq'),
     username VARCHAR(255) NOT NULL,
     password VARCHAR(255),
     nickname VARCHAR(255) NOT NULL,
@@ -42,8 +42,8 @@ CREATE TABLE IF NOT EXISTS member (
 );
 
 CREATE TABLE IF NOT EXISTS post (
-    id INT NOT NULL DEFAULT nextval('post_seq'),
-    author_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('post_seq'),
+    author_id BIGINT NOT NULL,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
     version BIGINT,
@@ -51,9 +51,9 @@ CREATE TABLE IF NOT EXISTS post (
     listed BOOLEAN NOT NULL DEFAULT false,
     content_html TEXT,
     deleted_at TIMESTAMPTZ,
-    likes_count_attr_id INT UNIQUE,
-    comments_count_attr_id INT UNIQUE,
-    hit_count_attr_id INT UNIQUE,
+    likes_count_attr_id BIGINT UNIQUE,
+    comments_count_attr_id BIGINT UNIQUE,
+    hit_count_attr_id BIGINT UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_post PRIMARY KEY (id),
@@ -61,8 +61,8 @@ CREATE TABLE IF NOT EXISTS post (
 );
 
 CREATE TABLE IF NOT EXISTS member_attr (
-    id INT NOT NULL DEFAULT nextval('member_attr_seq'),
-    subject_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('member_attr_seq'),
+    subject_id BIGINT NOT NULL,
     name VARCHAR(255) NOT NULL,
     int_value INT,
     str_value TEXT,
@@ -74,8 +74,8 @@ CREATE TABLE IF NOT EXISTS member_attr (
 );
 
 CREATE TABLE IF NOT EXISTS post_attr (
-    id INT NOT NULL DEFAULT nextval('post_attr_seq'),
-    subject_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('post_attr_seq'),
+    subject_id BIGINT NOT NULL,
     name VARCHAR(255) NOT NULL,
     int_value INT,
     str_value TEXT,
@@ -87,11 +87,11 @@ CREATE TABLE IF NOT EXISTS post_attr (
 );
 
 CREATE TABLE IF NOT EXISTS post_comment (
-    id INT NOT NULL DEFAULT nextval('post_comment_seq'),
-    author_id INT NOT NULL,
-    post_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('post_comment_seq'),
+    author_id BIGINT NOT NULL,
+    post_id BIGINT NOT NULL,
     content VARCHAR(255) NOT NULL,
-    parent_comment_id INT,
+    parent_comment_id BIGINT,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -102,9 +102,9 @@ CREATE TABLE IF NOT EXISTS post_comment (
 );
 
 CREATE TABLE IF NOT EXISTS post_like (
-    id INT NOT NULL DEFAULT nextval('post_like_seq'),
-    liker_id INT NOT NULL,
-    post_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('post_like_seq'),
+    liker_id BIGINT NOT NULL,
+    post_id BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_post_like PRIMARY KEY (id),
@@ -114,10 +114,10 @@ CREATE TABLE IF NOT EXISTS post_like (
 );
 
 CREATE TABLE IF NOT EXISTS post_write_request_idempotency (
-    id INT NOT NULL DEFAULT nextval('post_write_request_idempotency_seq'),
-    actor_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('post_write_request_idempotency_seq'),
+    actor_id BIGINT NOT NULL,
     request_key VARCHAR(120) NOT NULL,
-    post_id INT,
+    post_id BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_post_write_request_idempotency PRIMARY KEY (id),
@@ -126,15 +126,15 @@ CREATE TABLE IF NOT EXISTS post_write_request_idempotency (
 );
 
 CREATE TABLE IF NOT EXISTS member_action_log (
-    id INT NOT NULL DEFAULT nextval('member_action_log_seq'),
+    id BIGINT NOT NULL DEFAULT nextval('member_action_log_seq'),
     type VARCHAR(255) NOT NULL,
     primary_type VARCHAR(255) NOT NULL,
-    primary_id INT NOT NULL,
-    primary_owner_id INT NOT NULL,
+    primary_id BIGINT NOT NULL,
+    primary_owner_id BIGINT NOT NULL,
     secondary_type VARCHAR(255) NOT NULL,
-    secondary_id INT NOT NULL,
-    secondary_owner_id INT NOT NULL,
-    actor_id INT NOT NULL,
+    secondary_id BIGINT NOT NULL,
+    secondary_owner_id BIGINT NOT NULL,
+    actor_id BIGINT NOT NULL,
     data TEXT NOT NULL,
     CONSTRAINT pk_member_action_log PRIMARY KEY (id),
     CONSTRAINT fk_member_action_log_primary_owner FOREIGN KEY (primary_owner_id) REFERENCES member (id),
@@ -143,12 +143,12 @@ CREATE TABLE IF NOT EXISTS member_action_log (
 );
 
 CREATE TABLE IF NOT EXISTS member_notification (
-    id INT NOT NULL DEFAULT nextval('member_notification_seq'),
-    receiver_id INT NOT NULL,
-    actor_id INT NOT NULL,
+    id BIGINT NOT NULL DEFAULT nextval('member_notification_seq'),
+    receiver_id BIGINT NOT NULL,
+    actor_id BIGINT NOT NULL,
     type VARCHAR(40) NOT NULL,
-    post_id INT NOT NULL,
-    comment_id INT NOT NULL,
+    post_id BIGINT NOT NULL,
+    comment_id BIGINT NOT NULL,
     post_title VARCHAR(160) NOT NULL,
     comment_preview VARCHAR(240) NOT NULL,
     read_at TIMESTAMPTZ,
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS member_notification (
 );
 
 CREATE TABLE IF NOT EXISTS member_signup_verification (
-    id INT NOT NULL DEFAULT nextval('member_signup_verification_seq'),
+    id BIGINT NOT NULL DEFAULT nextval('member_signup_verification_seq'),
     email VARCHAR(255) NOT NULL,
     email_verification_token VARCHAR(120) NOT NULL,
     email_verification_expires_at TIMESTAMPTZ NOT NULL,
@@ -177,7 +177,7 @@ CREATE TABLE IF NOT EXISTS member_signup_verification (
 );
 
 CREATE TABLE IF NOT EXISTS uploaded_file (
-    id INT NOT NULL DEFAULT nextval('uploaded_file_seq'),
+    id BIGINT NOT NULL DEFAULT nextval('uploaded_file_seq'),
     object_key VARCHAR(1000) NOT NULL,
     bucket VARCHAR(120) NOT NULL,
     content_type VARCHAR(120) NOT NULL,
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
     purpose VARCHAR(40) NOT NULL,
     status VARCHAR(40) NOT NULL,
     owner_type VARCHAR(40),
-    owner_id INT,
+    owner_id BIGINT,
     retention_reason VARCHAR(40),
     purge_after TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
@@ -196,10 +196,10 @@ CREATE TABLE IF NOT EXISTS uploaded_file (
 );
 
 CREATE TABLE IF NOT EXISTS task (
-    id INT NOT NULL DEFAULT nextval('task_seq'),
+    id BIGINT NOT NULL DEFAULT nextval('task_seq'),
     uid UUID UNIQUE,
     aggregate_type VARCHAR(255) NOT NULL,
-    aggregate_id INT NOT NULL,
+    aggregate_id BIGINT NOT NULL,
     task_type VARCHAR(255) NOT NULL,
     payload TEXT NOT NULL,
     status VARCHAR(255) NOT NULL,

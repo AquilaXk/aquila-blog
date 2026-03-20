@@ -118,7 +118,7 @@ class ApiV1AdmMemberController(
     fun getItem(
         @PathVariable
         @Positive
-        id: Int,
+        id: Long,
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
 
@@ -134,7 +134,7 @@ class ApiV1AdmMemberController(
     fun updateProfileImg(
         @PathVariable
         @Positive
-        id: Int,
+        id: Long,
         @RequestBody @Valid reqBody: UpdateProfileImgRequest,
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
@@ -153,7 +153,7 @@ class ApiV1AdmMemberController(
     fun uploadProfileImageFile(
         @PathVariable
         @Positive
-        id: Int,
+        id: Long,
         @RequestPart("file") file: MultipartFile,
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
@@ -190,7 +190,7 @@ class ApiV1AdmMemberController(
     fun updateProfileCard(
         @PathVariable
         @Positive
-        id: Int,
+        id: Long,
         @RequestBody @Valid reqBody: UpdateProfileCardRequest,
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()

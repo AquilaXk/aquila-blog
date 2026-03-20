@@ -13,7 +13,7 @@ interface PostLikeRepositoryPort {
     fun insertIfAbsent(
         liker: Member,
         post: Post,
-    ): Int?
+    ): Long?
 
     fun save(postLike: PostLike): PostLike
 

@@ -8,5 +8,5 @@ import com.back.boundedContexts.member.dto.MemberWithUsernameDto
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface CurrentMemberProfileQueryUseCase {
-    fun getById(id: Int): MemberWithUsernameDto
+    fun getById(id: Long): MemberWithUsernameDto
 }

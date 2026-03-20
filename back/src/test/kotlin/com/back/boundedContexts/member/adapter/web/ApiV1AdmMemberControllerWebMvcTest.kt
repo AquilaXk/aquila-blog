@@ -280,7 +280,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
     }
 
     private fun sampleMember(
-        id: Int,
+        id: Long,
         username: String,
         nickname: String,
         isAdmin: Boolean = false,

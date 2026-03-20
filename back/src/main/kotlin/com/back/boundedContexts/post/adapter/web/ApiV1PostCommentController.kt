@@ -42,7 +42,7 @@ class ApiV1PostCommentController(
     @GetMapping
     @Transactional(readOnly = true)
     fun getItems(
-        @PathVariable postId: Int,
+        @PathVariable postId: Long,
         @org.springframework.web.bind.annotation.RequestParam(defaultValue = "200") limit: Int,
     ): List<PostCommentDto> {
         val post = postUseCase.findById(postId).getOrThrow()
@@ -54,8 +54,8 @@ class ApiV1PostCommentController(
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
     fun getItem(
-        @PathVariable postId: Int,
-        @PathVariable id: Int,
+        @PathVariable postId: Long,
+        @PathVariable id: Long,
     ): PostCommentDto {
         val post = postUseCase.findById(postId).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)
@@ -67,7 +67,7 @@ class ApiV1PostCommentController(
         @field:NotBlank
         @field:Size(min = 2, max = 100)
         val content: String,
-        val parentCommentId: Int? = null,
+        val parentCommentId: Long? = null,
     )
 
     /**
@@ -78,7 +78,7 @@ class ApiV1PostCommentController(
     @ResponseStatus(HttpStatus.CREATED)
     @Transactional
     fun write(
-        @PathVariable postId: Int,
+        @PathVariable postId: Long,
         @Valid @RequestBody reqBody: PostCommentWriteRequest,
     ): RsData<PostCommentDto> {
         val post = postUseCase.findById(postId).getOrThrow()
@@ -106,8 +106,8 @@ class ApiV1PostCommentController(
     @PutMapping("/{id}")
     @Transactional
     fun modify(
-        @PathVariable postId: Int,
-        @PathVariable id: Int,
+        @PathVariable postId: Long,
+        @PathVariable id: Long,
         @Valid @RequestBody reqBody: PostCommentModifyRequest,
     ): RsData<Void> {
         val post = postUseCase.findById(postId).getOrThrow()
@@ -121,8 +121,8 @@ class ApiV1PostCommentController(
     @DeleteMapping("/{id}")
     @Transactional
     fun delete(
-        @PathVariable postId: Int,
-        @PathVariable id: Int,
+        @PathVariable postId: Long,
+        @PathVariable id: Long,
     ): RsData<Void> {
         val post = postUseCase.findById(postId).getOrThrow()
         post.checkActorCanRead(rq.actorOrNull)

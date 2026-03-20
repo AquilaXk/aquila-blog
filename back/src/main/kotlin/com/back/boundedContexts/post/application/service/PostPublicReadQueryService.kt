@@ -82,7 +82,7 @@ class PostPublicReadQueryService(
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = [PostQueryCacheNames.DETAIL_PUBLIC], key = "#id", sync = true)
-    override fun getPublicPostDetail(id: Int): PostWithContentDto =
+    override fun getPublicPostDetail(id: Long): PostWithContentDto =
         runReadQuery("detail", "id=$id") {
             postReadBulkheadService.withDetailPermit {
                 val post = postUseCase.findById(id).getOrThrow()

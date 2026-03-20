@@ -7,6 +7,7 @@ import com.back.global.exception.application.AppException
 import com.back.global.security.domain.SecurityUser
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.ResponseCookie
 import org.springframework.security.core.context.SecurityContextHolder
@@ -23,10 +24,22 @@ class Rq(
     private val resp: HttpServletResponse,
     private val actorApplicationService: ActorApplicationService,
 ) {
+    private val logger = LoggerFactory.getLogger(Rq::class.java)
+
     val actorOrNull: Member?
         get() =
             (SecurityContextHolder.getContext()?.authentication?.principal as? SecurityUser)
-                ?.let { actorApplicationService.memberOf(it) }
+                ?.let { securityUser ->
+                    runCatching { actorApplicationService.memberOf(securityUser) }
+                        .onFailure { exception ->
+                            logger.warn(
+                                "actor_resolution_fallback actorId={} reason={}",
+                                securityUser.id,
+                                exception::class.java.simpleName,
+                                exception,
+                            )
+                        }.getOrNull()
+                }
 
     val actor: Member
         get() = actorOrNull ?: throw AppException("401-1", "로그인 후 이용해주세요.")

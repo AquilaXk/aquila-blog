@@ -15,5 +15,5 @@ interface PostLikeRepositoryCustom {
     fun insertIfAbsent(
         liker: Member,
         post: Post,
-    ): Int?
+    ): Long?
 }

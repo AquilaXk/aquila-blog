@@ -11,6 +11,6 @@ import com.back.boundedContexts.post.domain.PostComment
 interface PostCommentRepositoryCustom {
     fun findActiveSubtreeByPostAndRootCommentId(
         post: Post,
-        rootCommentId: Int,
+        rootCommentId: Long,
     ): List<PostComment>
 }

@@ -13,7 +13,7 @@ import java.util.Optional
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface PostCommentRepository :
-    JpaRepository<PostComment, Int>,
+    JpaRepository<PostComment, Long>,
     PostCommentRepositoryCustom {
     /**
      * 댓글 목록 DTO 매핑 시 author / parentComment lazy-load로 인한 N+1을 피한다.
@@ -30,11 +30,11 @@ interface PostCommentRepository :
     @EntityGraph(attributePaths = ["author", "parentComment"])
     fun findByPostAndId(
         post: Post,
-        id: Int,
+        id: Long,
     ): PostComment?
 
     @EntityGraph(attributePaths = ["author"])
-    override fun findById(id: Int): Optional<PostComment>
+    override fun findById(id: Long): Optional<PostComment>
 
     fun deleteByPost(post: Post)
 }

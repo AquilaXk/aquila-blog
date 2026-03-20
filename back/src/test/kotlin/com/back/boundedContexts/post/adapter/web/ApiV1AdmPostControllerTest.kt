@@ -336,7 +336,7 @@ class ApiV1AdmPostControllerTest {
     }
 
     private fun samplePost(
-        id: Int,
+        id: Long,
         title: String,
         content: String,
         published: Boolean,

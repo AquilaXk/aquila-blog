@@ -2,10 +2,11 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
-import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
-import AppIcon from "src/components/icons/AppIcon"
+import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
+import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 
@@ -43,10 +44,8 @@ const LoginPage = () => {
     setUsername(usernamePrefill)
   }, [usernamePrefill])
 
-  const kakaoAuthUrl = useMemo(() => {
-    if (typeof window === "undefined") return ""
-    const redirectUrl = `${window.location.origin}${next}`
-    return `${getApiBaseUrl()}/oauth2/authorization/kakao?redirectUrl=${encodeURIComponent(redirectUrl)}`
+  const socialItems = useMemo(() => {
+    return buildSocialAuthItems(next)
   }, [next])
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -156,18 +155,9 @@ const LoginPage = () => {
         <SocialSection>
           <span>소셜 계정으로 로그인</span>
           <SocialButtonRow>
-            <SocialIconButton
-              type="button"
-              disabled={!kakaoAuthUrl}
-              onClick={() => {
-                if (!kakaoAuthUrl) return
-                window.location.href = kakaoAuthUrl
-              }}
-              aria-label="카카오로 로그인"
-              title="카카오로 로그인"
-            >
-              <AppIcon name="kakao" aria-hidden="true" />
-            </SocialIconButton>
+            <SocialAuthButtons
+              items={socialItems}
+            />
           </SocialButtonRow>
         </SocialSection>
       </form>
@@ -320,28 +310,5 @@ const SocialSection = styled.div`
 const SocialButtonRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 1rem;
-`
-
-const SocialIconButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  border: 1px solid rgba(230, 194, 0, 0.62);
-  background: #fee500;
-  color: #241b00;
-  cursor: pointer;
-  box-shadow: none;
-
-  svg {
-    font-size: 1.6rem;
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
+  gap: 0.75rem;
 `

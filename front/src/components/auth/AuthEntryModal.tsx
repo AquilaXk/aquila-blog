@@ -2,11 +2,12 @@ import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
-import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
-import { normalizeNextPath, toLoginPath } from "src/libs/router"
+import { normalizeNextPath } from "src/libs/router"
+import { buildSocialAuthItems } from "./socialAuth"
 
 type RsData<T> = {
   resultCode: string
@@ -24,8 +25,6 @@ type Props = {
   nextPath: string
   title?: string
   description?: string
-  visualTitle?: string
-  visualDescription?: string
 }
 
 type AuthModalView = "login" | "signup" | "signup-sent"
@@ -78,8 +77,6 @@ const AuthEntryModal: React.FC<Props> = ({
   nextPath,
   title = "로그인",
   description = "로그인 후 현재 보던 흐름으로 바로 돌아옵니다.",
-  visualTitle = "환영합니다!",
-  visualDescription = "로그인하면 현재 보고 있는 화면으로 다시 돌아와 이어서 작업할 수 있습니다.",
 }) => {
   const { refresh, setMe } = useAuthSession()
   const [view, setView] = useState<AuthModalView>("login")
@@ -97,11 +94,8 @@ const AuthEntryModal: React.FC<Props> = ({
     return normalizeNextPath(nextPath)
   }, [nextPath])
 
-  const loginHref = useMemo(() => toLoginPath(normalizedNextPath), [normalizedNextPath])
-  const kakaoAuthUrl = useMemo(() => {
-    if (typeof window === "undefined") return ""
-    const redirectUrl = `${window.location.origin}${normalizedNextPath}`
-    return `${getApiBaseUrl()}/oauth2/authorization/kakao?redirectUrl=${encodeURIComponent(redirectUrl)}`
+  const socialItems = useMemo(() => {
+    return buildSocialAuthItems(normalizedNextPath)
   }, [normalizedNextPath])
 
   useEffect(() => {
@@ -202,29 +196,17 @@ const AuthEntryModal: React.FC<Props> = ({
   const currentContent =
     view === "login"
       ? {
-          eyebrow: "Login",
           heading: title,
           body: description,
-          visualIcon: <AppIcon name="message" aria-hidden="true" />,
-          visualTitle,
-          visualDescription,
         }
       : view === "signup"
         ? {
-            eyebrow: "Signup",
             heading: "회원가입",
             body: "먼저 이메일을 확인한 뒤 아이디와 비밀번호를 등록합니다.",
-            visualIcon: <AppIcon name="mail" aria-hidden="true" />,
-            visualTitle: "이메일 인증",
-            visualDescription: "가입 링크를 메일로 보내드릴게요. 메일 안의 링크를 통해 마지막 가입 단계로 이어집니다.",
           }
         : {
-            eyebrow: "Sent",
             heading: "메일을 보냈어요",
             body: "받은편지함에서 회원가입 메일을 확인한 뒤 계속 진행해주세요.",
-            visualIcon: <AppIcon name="check-circle" aria-hidden="true" />,
-            visualTitle: "거의 다 됐어요",
-            visualDescription: "메일에 들어 있는 링크를 누르면 이메일이 검증되고, 마지막 가입 폼으로 바로 이어집니다.",
           }
 
   const modalNode = (
@@ -235,18 +217,11 @@ const AuthEntryModal: React.FC<Props> = ({
         aria-labelledby="auth-entry-modal-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="visualPane">
-          <div className="visualArtwork">{currentContent.visualIcon}</div>
-          <strong>{currentContent.visualTitle}</strong>
-          <p>{currentContent.visualDescription}</p>
-        </div>
-
         <div className="formPane">
           <button type="button" className="closeButton" onClick={onClose} aria-label="닫기">
             <AppIcon name="close" aria-hidden="true" />
           </button>
 
-          <span className="eyebrow">{currentContent.eyebrow}</span>
           <h4 id="auth-entry-modal-title">{currentContent.heading}</h4>
           <p className="formDescription">{currentContent.body}</p>
 
@@ -257,17 +232,12 @@ const AuthEntryModal: React.FC<Props> = ({
               showPassword={showPassword}
               error={error}
               loading={loading}
-              loginHref={loginHref}
-              kakaoAuthUrl={kakaoAuthUrl}
+              socialItems={socialItems}
               onSubmit={handleLogin}
               onUsernameChange={setUsername}
               onPasswordChange={setPassword}
               onTogglePassword={() => setShowPassword((value) => !value)}
               onSwitchToSignup={() => setView("signup")}
-              onKakaoAuth={() => {
-                if (!kakaoAuthUrl) return
-                window.location.href = kakaoAuthUrl
-              }}
             />
           )}
 
@@ -276,14 +246,10 @@ const AuthEntryModal: React.FC<Props> = ({
               signupEmail={signupEmail}
               signupError={signupError}
               signupLoading={signupLoading}
-              kakaoAuthUrl={kakaoAuthUrl}
+              socialItems={socialItems}
               onSubmit={handleSignupEmailStart}
               onSignupEmailChange={setSignupEmail}
               onSwitchToLogin={() => setView("login")}
-              onKakaoAuth={() => {
-                if (!kakaoAuthUrl) return
-                window.location.href = kakaoAuthUrl
-              }}
             />
           )}
 
@@ -313,138 +279,76 @@ const Backdrop = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.2rem;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(6px);
+  padding: 1rem;
+  background: rgba(9, 11, 14, 0.72);
+  backdrop-filter: blur(3px);
 `
 
 const Modal = styled.div`
   position: relative;
-  width: min(100%, 760px);
-  display: grid;
-  grid-template-columns: minmax(220px, 0.84fr) minmax(0, 1.16fr);
-  border-radius: 24px;
+  width: min(100%, 560px);
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(18, 21, 28, 0.98), rgba(12, 14, 18, 0.98));
+  background: ${({ theme }) => theme.colors.gray2};
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42);
-
-  .visualPane {
-    padding: 2rem 1.45rem 1.7rem;
-    background:
-      radial-gradient(circle at top, rgba(49, 196, 141, 0.12), transparent 58%),
-      linear-gradient(180deg, rgba(26, 31, 40, 0.96), rgba(18, 22, 30, 0.96));
-    border-right: 1px solid rgba(148, 163, 184, 0.12);
-    color: ${({ theme }) => theme.colors.gray12};
-    display: grid;
-    align-content: center;
-    justify-items: center;
-    text-align: center;
-    gap: 1rem;
-  }
-
-  .visualArtwork {
-    display: grid;
-    place-items: center;
-    width: 124px;
-    height: 124px;
-    border-radius: 28px;
-    background:
-      radial-gradient(circle at top, rgba(52, 211, 153, 0.16), transparent 58%),
-      linear-gradient(180deg, rgba(28, 36, 48, 0.95), rgba(20, 26, 36, 0.98));
-    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.16);
-
-    svg {
-      font-size: 3rem;
-      color: #34d399;
-    }
-  }
-
-  .visualPane strong {
-    font-size: 1.95rem;
-    line-height: 1.12;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .visualPane p {
-    margin: 0;
-    max-width: 18rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.95rem;
-    line-height: 1.75;
-  }
 
   .formPane {
     position: relative;
-    padding: 1.6rem 1.45rem 1.3rem;
-    background:
-      linear-gradient(180deg, rgba(14, 17, 23, 0.98), rgba(10, 12, 16, 0.98));
+    padding: 1.6rem 1.5rem 1.4rem;
+    background: ${({ theme }) => theme.colors.gray2};
   }
 
   .closeButton {
     position: absolute;
-    top: 0.95rem;
-    right: 0.95rem;
-    min-width: 38px;
-    width: 38px;
-    height: 38px;
+    top: 0.85rem;
+    right: 0.85rem;
+    min-width: 34px;
+    width: 34px;
+    height: 34px;
     padding: 0;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: rgba(255, 255, 255, 0.02);
-    color: ${({ theme }) => theme.colors.gray11};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray10};
     transition: filter 0.16s ease, opacity 0.16s ease;
 
-    &:hover {
+    &:hover:not(:disabled) {
       filter: brightness(1.08);
     }
   }
 
   .closeButton svg {
-    font-size: 1rem;
-  }
-
-  .eyebrow {
-    display: inline-flex;
-    margin-bottom: 0.85rem;
-    border-radius: 999px;
-    padding: 0.36rem 0.78rem;
-    border: 1px solid rgba(59, 130, 246, 0.38);
-    background: rgba(18, 63, 126, 0.22);
-    color: #60a5fa;
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.94rem;
   }
 
   h4 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.75rem;
-    line-height: 1.35;
+    font-size: 1.95rem;
+    line-height: 1.25;
+    font-weight: 800;
+    letter-spacing: -0.01em;
   }
 
   .formDescription {
-    margin: 0.68rem 0 1.15rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.65;
-    font-size: 0.92rem;
-    max-width: 28rem;
+    margin: 0.62rem 0 1.05rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    line-height: 1.55;
+    font-size: 0.9rem;
   }
 
   .loginForm {
     display: grid;
-    gap: 0.68rem;
+    gap: 0.62rem;
     margin-bottom: 1rem;
 
     label {
-      color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.82rem;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.83rem;
       font-weight: 700;
     }
   }
@@ -457,16 +361,16 @@ const Modal = styled.div`
 
   .panelFallback .line,
   .panelFallback .button {
-    border-radius: 16px;
-    background: linear-gradient(90deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.16));
+    border-radius: 12px;
+    background: linear-gradient(90deg, rgba(148, 163, 184, 0.1), rgba(148, 163, 184, 0.18));
   }
 
   .panelFallback .line {
-    height: 50px;
+    height: 46px;
   }
 
   .panelFallback .line.large {
-    height: 82px;
+    height: 74px;
   }
 
   .panelFallback .line.short {
@@ -483,8 +387,8 @@ const Modal = styled.div`
     display: grid;
     grid-template-columns: 1fr;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    background: ${({ theme }) => theme.colors.gray3};
     overflow: hidden;
   }
 
@@ -497,8 +401,13 @@ const Modal = styled.div`
     border: 0;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
-    padding: 0.96rem 1rem;
-    font-size: 0.94rem;
+    padding: 0.9rem 0.92rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+
+    &::placeholder {
+      color: ${({ theme }) => theme.colors.gray10};
+    }
 
     &:focus {
       outline: none;
@@ -506,19 +415,19 @@ const Modal = styled.div`
   }
 
   .passwordField input {
-    padding-right: 4.9rem;
+    padding-right: 4.2rem;
   }
 
   .passwordToggle {
     position: absolute;
     top: 50%;
-    right: 0.72rem;
+    right: 0.55rem;
     transform: translateY(-50%);
     min-width: auto;
-    border: 0;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
     border-radius: 999px;
-    padding: 0.38rem 0.68rem;
-    background: rgba(148, 163, 184, 0.1);
+    padding: 0.3rem 0.56rem;
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.76rem;
     font-weight: 700;
@@ -537,12 +446,12 @@ const Modal = styled.div`
 
   .inlineError {
     margin: 0;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
     color: ${({ theme }) => theme.colors.red11};
-    padding: 0.72rem 0.8rem;
-    font-size: 0.85rem;
+    padding: 0.66rem 0.76rem;
+    font-size: 0.84rem;
     line-height: 1.5;
   }
 
@@ -552,15 +461,15 @@ const Modal = styled.div`
     align-items: center;
     justify-content: center;
     width: 100%;
-    min-height: 48px;
-    border-radius: 14px;
-    font-size: 0.92rem;
-    font-weight: 800;
+    min-height: 46px;
+    border-radius: 10px;
+    font-size: 0.93rem;
+    font-weight: 700;
   }
 
   .primaryAction {
-    border: 1px solid rgba(52, 211, 153, 0.44);
-    background: linear-gradient(135deg, #149d71, #2abf8c);
+    border: 0;
+    background: #12b886;
     color: #fff;
     transition: filter 0.16s ease;
 
@@ -570,61 +479,33 @@ const Modal = styled.div`
   }
 
   .secondaryAction {
-    border: 1px solid ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   .primaryAction:disabled,
   .secondaryAction:disabled {
-    filter: saturate(0.62) brightness(0.94);
+    opacity: 0.62;
     cursor: not-allowed;
   }
 
   .socialSection {
     display: grid;
-    gap: 0.58rem;
+    gap: 0.5rem;
     margin-bottom: 0.9rem;
 
     span {
-      color: ${({ theme }) => theme.colors.gray11};
+      color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.82rem;
-      font-weight: 700;
+      font-weight: 600;
     }
   }
 
   .socialButtonRow {
     display: flex;
     align-items: center;
-    gap: 1rem;
-  }
-
-  .kakaoIconButton {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 72px;
-    height: 72px;
-    min-height: 72px;
-    border-radius: 50%;
-    border: 1px solid rgba(230, 194, 0, 0.72);
-    background: linear-gradient(180deg, #fee500, #facc15);
-    color: #241b00;
-    box-shadow: 0 10px 22px rgba(250, 204, 21, 0.14);
-    transition: filter 0.16s ease;
-
-    svg {
-      font-size: 1.95rem;
-    }
-
-    &:hover:not(:disabled) {
-      filter: brightness(1.05);
-    }
-
-    &:disabled {
-      filter: grayscale(0.22) brightness(0.92);
-      cursor: not-allowed;
-    }
+    gap: 0.7rem;
   }
 
   .signupRow {
@@ -632,13 +513,12 @@ const Modal = styled.div`
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.86rem;
-    margin-bottom: 0.8rem;
+    margin-bottom: 0;
   }
 
-  .inlineLinkButton,
-  .fullPageLink {
+  .inlineLinkButton {
     border: 0;
     background: transparent;
     min-height: auto;
@@ -646,8 +526,12 @@ const Modal = styled.div`
     color: ${({ theme }) => theme.colors.blue10};
     font-size: 0.86rem;
     font-weight: 700;
-    text-decoration: underline;
-    text-underline-offset: 3px;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
   }
 
   .sentState {
@@ -689,29 +573,18 @@ const Modal = styled.div`
   }
 
   @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-
-    .visualPane {
-      padding: 1.15rem 1rem 1rem;
-      border-right: 0;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-    }
-
-    .visualArtwork {
-      width: 84px;
-      height: 84px;
-
-      svg {
-        font-size: 2.2rem;
-      }
-    }
-
-    .visualPane strong {
-      font-size: 1.45rem;
-    }
+    width: min(100%, 500px);
 
     .formPane {
-      padding: 1.2rem 1rem 1rem;
+      padding: 1.2rem 1rem 1.05rem;
+    }
+
+    h4 {
+      font-size: 1.65rem;
+    }
+
+    .formDescription {
+      margin-bottom: 0.95rem;
     }
   }
 `

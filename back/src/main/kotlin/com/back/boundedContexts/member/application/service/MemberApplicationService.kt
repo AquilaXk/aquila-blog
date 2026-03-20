@@ -95,7 +95,7 @@ class MemberApplicationService(
             ?.let(memberProfileHydrator::hydrate)
 
     @Transactional(readOnly = true)
-    fun findById(id: Int): Optional<Member> =
+    fun findById(id: Long): Optional<Member> =
         memberRepository
             .findById(id)
             .map { member ->

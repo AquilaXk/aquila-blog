@@ -12,16 +12,16 @@ import java.time.Instant
 data class PostCommentDto
     @JsonCreator
     constructor(
-        val id: Int,
+        val id: Long,
         val createdAt: Instant,
         val modifiedAt: Instant,
-        val authorId: Int,
+        val authorId: Long,
         val authorName: String,
         val authorUsername: String,
         val authorProfileImageUrl: String,
         val authorProfileImageDirectUrl: String,
-        val postId: Int,
-        val parentCommentId: Int?,
+        val postId: Long,
+        val parentCommentId: Long?,
         val content: String,
         var actorCanModify: Boolean = false,
         var actorCanDelete: Boolean = false,

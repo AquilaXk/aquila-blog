@@ -29,7 +29,7 @@ class PostRepositoryAdapter(
 
     override fun flush() = postRepository.flush()
 
-    override fun findById(id: Int): Optional<Post> = postRepository.findById(id)
+    override fun findById(id: Long): Optional<Post> = postRepository.findById(id)
 
     override fun findFirstByOrderByIdDesc(): Post? = postRepository.findFirstByOrderByIdDesc()
 
@@ -61,13 +61,13 @@ class PostRepositoryAdapter(
         return PostRepositoryPort.PagedResult(content = page.content, totalElements = page.totalElements)
     }
 
-    override fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto? = postDeletedQueryRepository.findDeletedSnapshotById(id)
+    override fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto? = postDeletedQueryRepository.findDeletedSnapshotById(id)
 
-    override fun softDeleteById(id: Int): Boolean = postDeletedQueryRepository.softDeleteById(id)
+    override fun softDeleteById(id: Long): Boolean = postDeletedQueryRepository.softDeleteById(id)
 
-    override fun restoreDeletedById(id: Int): Boolean = postDeletedQueryRepository.restoreDeletedById(id)
+    override fun restoreDeletedById(id: Long): Boolean = postDeletedQueryRepository.restoreDeletedById(id)
 
-    override fun hardDeleteDeletedById(id: Int): Boolean = postDeletedQueryRepository.hardDeleteDeletedById(id)
+    override fun hardDeleteDeletedById(id: Long): Boolean = postDeletedQueryRepository.hardDeleteDeletedById(id)
 
     override fun findQPagedByAuthorAndKw(
         author: Member,
@@ -90,7 +90,7 @@ class PostRepositoryAdapter(
         postRepository.findAllPublicListedTagIndexes(tagIndexAttrName)
 
     override fun existsByIdAndContentContaining(
-        id: Int,
+        id: Long,
         contentFragment: String,
     ): Boolean = postRepository.existsByIdAndContentContaining(id, contentFragment)
 

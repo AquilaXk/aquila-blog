@@ -12,7 +12,7 @@ private const val LIKES_COUNT_DEFAULT_VALUE = 0
  */
 data class PostLikeToggleResult(
     val isLiked: Boolean,
-    val likeId: Int,
+    val likeId: Long,
 )
 
 /**

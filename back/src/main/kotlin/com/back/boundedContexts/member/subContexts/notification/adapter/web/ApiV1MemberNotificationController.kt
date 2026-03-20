@@ -122,7 +122,7 @@ class ApiV1MemberNotificationController(
     @PostMapping("/{id}/read")
     @Transactional
     fun markRead(
-        @PathVariable id: Int,
+        @PathVariable id: Long,
     ): RsData<Map<String, Boolean>> {
         val updated = memberNotificationApplicationService.markRead(rq.actor, id)
         return RsData("200-2", "알림을 읽음 처리했습니다.", mapOf("updated" to updated))

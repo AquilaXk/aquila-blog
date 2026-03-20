@@ -74,7 +74,7 @@ class UploadedFileRetentionService(
      */
     @Transactional
     fun syncPostContent(
-        postId: Int,
+        postId: Long,
         previousContent: String?,
         currentContent: String,
     ) {
@@ -129,7 +129,7 @@ class UploadedFileRetentionService(
      */
     @Transactional
     fun syncProfileImage(
-        memberId: Int,
+        memberId: Long,
         previousProfileImgUrl: String?,
         currentProfileImgUrl: String?,
     ) {

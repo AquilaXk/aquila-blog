@@ -29,7 +29,7 @@ class MemberUseCaseAdapter(
 
     override fun findByUsername(username: String): Member? = memberApplicationService.findByUsername(username)
 
-    override fun findById(id: Int): Optional<Member> = memberApplicationService.findById(id)
+    override fun findById(id: Long): Optional<Member> = memberApplicationService.findById(id)
 
     override fun checkPassword(
         member: Member,

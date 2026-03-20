@@ -41,14 +41,14 @@ class BaseEntityTest {
     }
 
     private open class TestEntity(
-        override val id: Int,
+        override val id: Long,
     ) : BaseEntity()
 
     private class AnotherTestEntity(
-        override val id: Int,
+        override val id: Long,
     ) : BaseEntity()
 
     private class TestEntityProxy(
-        id: Int,
+        id: Long,
     ) : TestEntity(id)
 }

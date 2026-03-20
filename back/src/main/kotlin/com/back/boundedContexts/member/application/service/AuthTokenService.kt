@@ -56,7 +56,7 @@ class AuthTokenService(
             }.getOrNull() ?: return null
 
         return AccessTokenPayload(
-            id = (payload["id"] as? Number)?.toInt() ?: return null,
+            id = (payload["id"] as? Number)?.toLong() ?: return null,
             username = payload["username"] as? String ?: return null,
             name = payload["name"] as? String ?: return null,
         )

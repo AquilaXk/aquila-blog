@@ -34,7 +34,7 @@ class MemberAttrPersistenceAdapter(
     ): Boolean = memberAttrRepository.existsByNameAndStrValueContaining(name, valueFragment)
 
     override fun existsBySubjectIdAndNameAndStrValueContaining(
-        subjectId: Int,
+        subjectId: Long,
         name: String,
         valueFragment: String,
     ): Boolean = memberAttrRepository.existsBySubjectIdAndNameAndStrValueContaining(subjectId, name, valueFragment)

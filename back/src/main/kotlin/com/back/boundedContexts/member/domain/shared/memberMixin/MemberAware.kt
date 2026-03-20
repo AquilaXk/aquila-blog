@@ -8,7 +8,7 @@ import com.back.boundedContexts.member.domain.shared.Member
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 interface MemberAware {
-    val id: Int
+    val id: Long
     val name: String
     val member: Member
 }

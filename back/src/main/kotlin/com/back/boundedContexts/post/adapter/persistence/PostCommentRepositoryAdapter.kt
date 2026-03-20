@@ -27,13 +27,13 @@ class PostCommentRepositoryAdapter(
 
     override fun findActiveSubtreeByPostAndRootCommentId(
         post: Post,
-        rootCommentId: Int,
+        rootCommentId: Long,
     ): List<PostComment> = postCommentRepository.findActiveSubtreeByPostAndRootCommentId(post, rootCommentId)
 
     override fun findByPostAndId(
         post: Post,
-        id: Int,
+        id: Long,
     ): PostComment? = postCommentRepository.findByPostAndId(post, id)
 
-    override fun findById(id: Int): Optional<PostComment> = postCommentRepository.findById(id)
+    override fun findById(id: Long): Optional<PostComment> = postCommentRepository.findById(id)
 }

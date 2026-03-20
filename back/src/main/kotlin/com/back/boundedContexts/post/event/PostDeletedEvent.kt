@@ -19,7 +19,7 @@ data class PostDeletedEvent
     constructor(
         override val uid: UUID,
         override val aggregateType: String,
-        override val aggregateId: Int,
+        override val aggregateId: Long,
         @field:JsonIgnore
         @field:JsonProperty("postDto")
         val postDto: PostDto,

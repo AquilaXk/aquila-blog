@@ -14,7 +14,7 @@ import java.time.Instant
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener::class)
 abstract class BaseTime(
-    id: Int = 0,
+    id: Long = 0,
 ) : BaseEntity() {
     @CreatedDate
     lateinit var createdAt: Instant

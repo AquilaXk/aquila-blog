@@ -9,6 +9,7 @@ export type IconName =
   | "sun"
   | "service"
   | "github"
+  | "google"
   | "instagram"
   | "mail"
   | "linkedin"
@@ -90,6 +91,15 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       return (
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" className={className} aria-hidden="true" {...props}>
           <path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.1-1.1-1.4-1.1-1.4-.9-.6 0-.6 0-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 2.9.9.1-.7.4-1.1.7-1.4-2.2-.2-4.6-1.1-4.6-5A3.9 3.9 0 0 1 7 8.3c-.1-.2-.4-1.3.1-2.8 0 0 .8-.3 2.9 1A10 10 0 0 1 12 6.2c.7 0 1.4.1 2 .3 2.1-1.3 2.9-1 2.9-1 .5 1.5.2 2.6.1 2.8a4 4 0 0 1 1 2.8c0 3.8-2.3 4.7-4.6 5 .4.3.8 1 .8 2v2.9c0 .3.2.6.7.5A10 10 0 0 0 12 2Z" />
+        </svg>
+      )
+    case "google":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" className={className} aria-hidden="true" {...props}>
+          <path fill="#4285F4" d="M21.6 12.3c0-.73-.06-1.41-.2-2.08H12v3.95h5.38a4.56 4.56 0 0 1-1.98 2.98v2.59h3.22c1.88-1.73 2.98-4.3 2.98-7.47Z" />
+          <path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.43l-3.22-2.59c-.9.6-2.04.97-3.39.97-2.61 0-4.83-1.77-5.62-4.14H3.07v2.67A9.98 9.98 0 0 0 12 22Z" />
+          <path fill="#FBBC05" d="M6.38 13.81a5.9 5.9 0 0 1 0-3.62V7.52H3.07a9.97 9.97 0 0 0 0 8.96l3.31-2.67Z" />
+          <path fill="#EA4335" d="M12 6.05c1.47 0 2.8.5 3.84 1.48l2.86-2.86C16.95 3.03 14.69 2 12 2A9.98 9.98 0 0 0 3.07 7.52l3.31 2.67C7.17 7.82 9.39 6.05 12 6.05Z" />
         </svg>
       )
     case "instagram":
@@ -192,7 +202,7 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
     case "kakao":
       return (
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" className={className} aria-hidden="true" {...props}>
-          <path d="M12 4.5c-4.5 0-8.2 2.8-8.2 6.4 0 2.3 1.5 4.3 3.9 5.4l-.8 3.2c-.1.4.3.7.7.5l3.9-2.6c.2 0 .3 0 .5 0 4.5 0 8.2-2.8 8.2-6.5S16.5 4.5 12 4.5Z" />
+          <path d="M12 4c-4.94 0-8.95 3.06-8.95 6.82 0 2.41 1.62 4.52 4.07 5.71l-.85 3.09a.4.4 0 0 0 .6.44l3.73-2.47c.46.07.92.1 1.4.1 4.94 0 8.95-3.06 8.95-6.83C20.95 7.06 16.94 4 12 4Z" />
         </svg>
       )
     case "linkedin":

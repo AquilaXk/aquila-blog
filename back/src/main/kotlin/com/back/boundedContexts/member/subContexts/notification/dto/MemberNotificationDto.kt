@@ -10,14 +10,14 @@ import java.time.Instant
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 data class MemberNotificationDto(
-    val id: Int,
+    val id: Long,
     val type: MemberNotificationType,
     val createdAt: Instant,
-    val actorId: Int,
+    val actorId: Long,
     val actorName: String,
     val actorProfileImageUrl: String,
-    val postId: Int,
-    val commentId: Int,
+    val postId: Long,
+    val commentId: Long,
     val postTitle: String,
     val commentPreview: String,
     val message: String,

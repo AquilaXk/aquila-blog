@@ -29,9 +29,9 @@ class MemberRepositoryAdapter(
 
     override fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)
 
-    override fun findById(id: Int): Optional<Member> = memberRepository.findById(id)
+    override fun findById(id: Long): Optional<Member> = memberRepository.findById(id)
 
-    override fun getReferenceById(id: Int): Member = memberRepository.getReferenceById(id)
+    override fun getReferenceById(id: Long): Member = memberRepository.getReferenceById(id)
 
     override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> {
         val pageable =

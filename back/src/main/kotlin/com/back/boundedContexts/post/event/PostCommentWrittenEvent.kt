@@ -20,7 +20,7 @@ data class PostCommentWrittenEvent
     constructor(
         override val uid: UUID,
         override val aggregateType: String,
-        override val aggregateId: Int,
+        override val aggregateId: Long,
         @field:JsonIgnore
         @JsonProperty("postCommentDto")
         val postCommentDto: PostCommentDto,

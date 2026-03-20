@@ -21,7 +21,7 @@ interface PostPublicReadQueryUseCase {
         sort: PostSearchSortType1,
     ): PageDto<FeedPostDto>
 
-    fun getPublicPostDetail(id: Int): PostWithContentDto
+    fun getPublicPostDetail(id: Long): PostWithContentDto
 
     fun getPublicTagCounts(): List<TagCountDto>
 }

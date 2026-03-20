@@ -35,7 +35,7 @@ class ActorApplicationService(
     fun payload(accessToken: String) = authTokenService.payload(accessToken)
 
     @Transactional(readOnly = true)
-    fun findById(id: Int): Member? = memberRepository.findById(id).getOrNull()
+    fun findById(id: Long): Member? = memberRepository.findById(id).getOrNull()
 
-    fun getReferenceById(id: Int): Member = memberRepository.getReferenceById(id)
+    fun getReferenceById(id: Long): Member = memberRepository.getReferenceById(id)
 }

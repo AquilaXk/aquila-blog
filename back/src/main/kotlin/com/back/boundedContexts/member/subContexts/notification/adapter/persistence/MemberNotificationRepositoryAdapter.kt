@@ -16,12 +16,12 @@ class MemberNotificationRepositoryAdapter(
 ) : MemberNotificationRepositoryPort {
     override fun save(notification: MemberNotification): MemberNotification = memberNotificationRepository.save(notification)
 
-    override fun findLatestByReceiverId(receiverId: Int): List<MemberNotification> =
+    override fun findLatestByReceiverId(receiverId: Long): List<MemberNotification> =
         memberNotificationRepository.findLatestByReceiverId(receiverId, PageRequest.of(0, 20))
 
     override fun findByReceiverIdAndIdGreaterThan(
-        receiverId: Int,
-        lastNotificationId: Int,
+        receiverId: Long,
+        lastNotificationId: Long,
         limit: Int,
     ): List<MemberNotification> =
         memberNotificationRepository.findByReceiverIdAndIdGreaterThan(
@@ -30,16 +30,16 @@ class MemberNotificationRepositoryAdapter(
             PageRequest.of(0, limit),
         )
 
-    override fun countUnreadByReceiverId(receiverId: Int): Long = memberNotificationRepository.countByReceiverIdAndReadAtIsNull(receiverId)
+    override fun countUnreadByReceiverId(receiverId: Long): Long = memberNotificationRepository.countByReceiverIdAndReadAtIsNull(receiverId)
 
     override fun markAllRead(
-        receiverId: Int,
+        receiverId: Long,
         readAt: Instant,
     ): Int = memberNotificationRepository.markAllRead(receiverId, readAt)
 
     override fun markRead(
-        id: Int,
-        receiverId: Int,
+        id: Long,
+        receiverId: Long,
         readAt: Instant,
     ): Int = memberNotificationRepository.markRead(id, receiverId, readAt)
 }

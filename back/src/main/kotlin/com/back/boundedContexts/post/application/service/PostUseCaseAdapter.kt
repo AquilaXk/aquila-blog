@@ -33,7 +33,7 @@ class PostUseCaseAdapter(
         contentHtml: String?,
     ): Post = postApplicationService.write(author, title, content, published, listed, idempotencyKey, contentHtml)
 
-    override fun findById(id: Int): Post? = postApplicationService.findById(id)
+    override fun findById(id: Long): Post? = postApplicationService.findById(id)
 
     override fun findLatest(): Post? = postApplicationService.findLatest()
 
@@ -101,7 +101,7 @@ class PostUseCaseAdapter(
 
     override fun findCommentById(
         post: Post,
-        id: Int,
+        id: Long,
     ): PostComment? = postApplicationService.findCommentById(post, id)
 
     override fun isLiked(
@@ -112,7 +112,7 @@ class PostUseCaseAdapter(
     override fun findLikedPostIds(
         liker: Member?,
         posts: List<Post>,
-    ): Set<Int> = postApplicationService.findLikedPostIds(liker, posts)
+    ): Set<Long> = postApplicationService.findLikedPostIds(liker, posts)
 
     override fun findPagedByKw(
         kw: String,
@@ -134,9 +134,9 @@ class PostUseCaseAdapter(
         pageSize: Int,
     ): PagedResult<AdmDeletedPostDto> = postApplicationService.findDeletedPagedByKwForAdmin(kw, page, pageSize)
 
-    override fun restoreDeletedByIdForAdmin(id: Int): Post = postApplicationService.restoreDeletedByIdForAdmin(id)
+    override fun restoreDeletedByIdForAdmin(id: Long): Post = postApplicationService.restoreDeletedByIdForAdmin(id)
 
-    override fun hardDeleteDeletedByIdForAdmin(id: Int) = postApplicationService.hardDeleteDeletedByIdForAdmin(id)
+    override fun hardDeleteDeletedByIdForAdmin(id: Long) = postApplicationService.hardDeleteDeletedByIdForAdmin(id)
 
     override fun findPagedByAuthor(
         author: Member,

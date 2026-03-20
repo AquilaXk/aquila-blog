@@ -63,7 +63,7 @@ class ApiV1MemberController(
     @ResponseStatus(HttpStatus.FOUND)
     @Transactional(readOnly = true)
     fun redirectToProfileImg(
-        @PathVariable id: Int,
+        @PathVariable id: Long,
     ): ResponseEntity<Void> {
         val member = memberUseCase.findById(id).orElseThrow()
 

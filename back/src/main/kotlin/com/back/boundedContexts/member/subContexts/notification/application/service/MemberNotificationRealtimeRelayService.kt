@@ -25,7 +25,7 @@ class MemberNotificationRealtimeRelayService(
 ) : MessageListener {
     data class Payload(
         val originNodeId: String,
-        val memberId: Int,
+        val memberId: Long,
         val notification: MemberNotificationDto,
         val unreadCount: Int,
     )
@@ -35,7 +35,7 @@ class MemberNotificationRealtimeRelayService(
      * 애플리케이션 서비스 계층에서 예외 처리와 트랜잭션 경계, 후속 작업을 함께 관리합니다.
      */
     fun publish(
-        memberId: Int,
+        memberId: Long,
         notification: MemberNotificationDto,
         unreadCount: Int,
     ) {

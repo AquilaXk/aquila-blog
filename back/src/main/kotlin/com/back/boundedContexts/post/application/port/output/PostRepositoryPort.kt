@@ -50,7 +50,7 @@ interface PostRepositoryPort {
 
     fun flush()
 
-    fun findById(id: Int): Optional<Post>
+    fun findById(id: Long): Optional<Post>
 
     fun findFirstByOrderByIdDesc(): Post?
 
@@ -70,13 +70,13 @@ interface PostRepositoryPort {
 
     fun findDeletedPagedByKw(query: DeletedPagedQuery): PagedResult<AdmDeletedPostDto>
 
-    fun findDeletedSnapshotById(id: Int): AdmDeletedPostSnapshotDto?
+    fun findDeletedSnapshotById(id: Long): AdmDeletedPostSnapshotDto?
 
-    fun softDeleteById(id: Int): Boolean
+    fun softDeleteById(id: Long): Boolean
 
-    fun restoreDeletedById(id: Int): Boolean
+    fun restoreDeletedById(id: Long): Boolean
 
-    fun hardDeleteDeletedById(id: Int): Boolean
+    fun hardDeleteDeletedById(id: Long): Boolean
 
     fun findQPagedByAuthorAndKw(
         author: Member,
@@ -90,7 +90,7 @@ interface PostRepositoryPort {
     fun findAllPublicListedTagIndexes(tagIndexAttrName: String): List<String>
 
     fun existsByIdAndContentContaining(
-        id: Int,
+        id: Long,
         contentFragment: String,
     ): Boolean
 

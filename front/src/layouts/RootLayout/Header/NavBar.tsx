@@ -102,8 +102,6 @@ const NavBar: React.FC = () => {
         nextPath={nextPath}
         title="로그인"
         description="로그인 후 지금 보고 있는 화면으로 바로 돌아옵니다."
-        visualTitle="환영합니다!"
-        visualDescription="로그인하면 댓글 작성, 관리자 화면, 개인 기능을 같은 흐름 안에서 바로 이어서 사용할 수 있습니다."
       />
     </StyledWrapper>
   )

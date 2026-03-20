@@ -16,13 +16,13 @@ class MemberActionLog(
     @field:Id
     @field:SequenceGenerator(name = "member_action_log_seq_gen", sequenceName = "member_action_log_seq", allocationSize = 50)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_action_log_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     val type: String,
     val primaryType: String,
-    val primaryId: Int,
+    val primaryId: Long,
     @field:ManyToOne(fetch = FetchType.LAZY) val primaryOwner: Member,
     val secondaryType: String,
-    val secondaryId: Int,
+    val secondaryId: Long,
     @field:ManyToOne(fetch = FetchType.LAZY) val secondaryOwner: Member,
     @field:ManyToOne(fetch = FetchType.LAZY) val actor: Member,
     @field:Column(columnDefinition = "TEXT") val data: String,

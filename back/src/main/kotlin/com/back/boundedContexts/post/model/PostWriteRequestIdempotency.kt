@@ -36,12 +36,12 @@ class PostWriteRequestIdempotency(
         allocationSize = 50,
     )
     @field:GeneratedValue(strategy = SEQUENCE, generator = "post_write_request_idempotency_seq_gen")
-    override val id: Int = 0,
+    override val id: Long = 0,
     @field:ManyToOne(fetch = FetchType.LAZY)
     @field:JoinColumn(name = "actor_id", nullable = false)
     val actor: Member,
     @field:Column(name = "request_key", nullable = false, length = 120)
     val requestKey: String,
     @field:Column(name = "post_id")
-    var postId: Int? = null,
+    var postId: Long? = null,
 ) : BaseTime(id)

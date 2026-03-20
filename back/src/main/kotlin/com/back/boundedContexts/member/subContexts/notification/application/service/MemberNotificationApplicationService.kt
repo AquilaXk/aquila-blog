@@ -122,7 +122,7 @@ class MemberNotificationApplicationService(
     @Transactional
     fun markRead(
         member: Member,
-        id: Int,
+        id: Long,
     ): Boolean = memberNotificationRepository.markRead(id, member.id, java.time.Instant.now()) > 0
 
     /**
@@ -148,7 +148,7 @@ class MemberNotificationApplicationService(
             .take(240)
 
     private data class ReceiverInfo(
-        val receiverId: Int,
+        val receiverId: Long,
         val type: MemberNotificationType,
     )
 }

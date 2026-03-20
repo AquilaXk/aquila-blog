@@ -133,9 +133,9 @@ class ActorApplicationServiceTest {
 
         override fun findByApiKey(apiKey: String): Member? = member.takeIf { it.apiKey == apiKey }
 
-        override fun findById(id: Int): Optional<Member> = Optional.ofNullable(member.takeIf { it.id == id })
+        override fun findById(id: Long): Optional<Member> = Optional.ofNullable(member.takeIf { it.id == id })
 
-        override fun getReferenceById(id: Int): Member = member.takeIf { it.id == id } ?: error("member not found")
+        override fun getReferenceById(id: Long): Member = member.takeIf { it.id == id } ?: error("member not found")
 
         override fun findQPagedByKw(query: MemberRepositoryPort.PagedQuery): MemberRepositoryPort.PagedResult<Member> =
             error("not used in this test")

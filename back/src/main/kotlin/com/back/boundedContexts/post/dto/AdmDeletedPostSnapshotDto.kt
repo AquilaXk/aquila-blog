@@ -6,8 +6,8 @@ package com.back.boundedContexts.post.dto
  * - 주의: 변경 시 호출 경계와 데이터 흐름 영향을 함께 검토합니다.
  */
 data class AdmDeletedPostSnapshotDto(
-    val id: Int,
+    val id: Long,
     val title: String,
     val content: String,
-    val authorId: Int,
+    val authorId: Long,
 )

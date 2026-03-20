@@ -41,7 +41,7 @@ class PostNotProdInitDataTest {
     }
 
     private fun sampleMember(
-        id: Int,
+        id: Long,
         username: String,
         nickname: String,
     ): Member = Member(id, username, null, nickname)

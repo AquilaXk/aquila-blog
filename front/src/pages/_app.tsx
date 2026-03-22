@@ -1,8 +1,10 @@
 import { AppPropsWithLayout } from "../types"
 import { CacheProvider } from "@emotion/react"
 import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query"
+import type { NextWebVitalsMetric } from "next/app"
 import { RootLayout } from "src/layouts"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
+import { reportWebVital } from "src/libs/rum/reportWebVital"
 import { createQueryClient } from "src/libs/react-query"
 import { useState } from "react"
 
@@ -24,3 +26,7 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
 }
 
 export default App
+
+export const reportWebVitals = (metric: NextWebVitalsMetric) => {
+  reportWebVital(metric)
+}

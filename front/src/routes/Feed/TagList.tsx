@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { FEED_CHIP_GAP_PX } from "@shared/ui-tokens"
 import { useRouter } from "next/router"
 import React, { memo, startTransition, useCallback } from "react"
 import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
@@ -178,7 +179,7 @@ const StyledWrapper = styled.div`
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.35rem;
+    gap: ${FEED_CHIP_GAP_PX}px;
     text-align: left;
     color: ${({ theme }) => theme.colors.gray11};
     cursor: pointer;

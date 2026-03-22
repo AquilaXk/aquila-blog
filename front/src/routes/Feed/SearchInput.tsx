@@ -1,5 +1,8 @@
 import styled from "@emotion/styled"
-import { MOBILE_TOUCH_TARGET_MIN_PX } from "@shared/ui-tokens"
+import {
+  FEED_SEARCH_FIELD_MIN_HEIGHT_PX,
+  MOBILE_TOUCH_TARGET_MIN_PX,
+} from "@shared/ui-tokens"
 import React, { InputHTMLAttributes, Ref } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 
@@ -54,7 +57,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: 0.5rem;
     min-width: 0;
-    min-height: ${({ theme }) => `${theme.variables.ui.button.minHeightSm}px`};
+    min-height: ${FEED_SEARCH_FIELD_MIN_HEIGHT_PX}px;
     padding: 0 0.625rem;
     border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
     border: 1px solid ${({ theme }) => theme.colors.gray6};

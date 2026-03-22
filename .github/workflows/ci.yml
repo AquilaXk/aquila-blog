@@ -56,6 +56,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     uses: ./.github/workflows/reusable-frontend-verify.yml
+    with:
+      openapi_source_url: ${{ vars.CI_OPENAPI_SOURCE_URL || '' }}
+      openapi_fetch_strict: false
 
   no-op:
     runs-on: ubuntu-latest

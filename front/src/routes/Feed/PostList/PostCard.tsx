@@ -3,6 +3,12 @@ import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
 import styled from "@emotion/styled"
+import {
+  FEED_CARD_META_FONT_SIZE_REM,
+  FEED_CARD_SUMMARY_LINE_HEIGHT,
+  FEED_CARD_SUMMARY_LINES,
+  FEED_CARD_TITLE_LINE_HEIGHT,
+} from "@shared/ui-tokens"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
@@ -397,7 +403,7 @@ const StyledWrapper = styled(Link)`
   text-decoration: none;
   --post-card-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
   --post-card-shadow-hover: ${({ theme }) => theme.variables.ui.card.shadowHover};
-  --post-card-translate-y: -8px;
+  --post-card-translate-y: -6px;
 
   &:focus-visible {
     outline: 0;
@@ -451,8 +457,8 @@ const StyledWrapper = styled(Link)`
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: 1rem;
-          line-height: 1.5;
+          font-size: 1.03rem;
+          line-height: ${FEED_CARD_TITLE_LINE_HEIGHT};
           font-weight: 760;
           letter-spacing: -0.01em;
           word-break: keep-all;
@@ -472,12 +478,12 @@ const StyledWrapper = styled(Link)`
           margin: 0;
           color: ${({ theme }) => theme.colors.gray11};
           font-size: 0.875rem;
-          line-height: 1.5;
+          line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
           display: -webkit-box;
-          -webkit-line-clamp: 3;
+          -webkit-line-clamp: ${FEED_CARD_SUMMARY_LINES};
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
@@ -490,7 +496,7 @@ const StyledWrapper = styled(Link)`
         align-items: center;
         margin-top: 0.75rem;
         color: ${({ theme }) => theme.colors.gray10};
-        font-size: 0.75rem;
+        font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.5;
         letter-spacing: -0.01em;
 

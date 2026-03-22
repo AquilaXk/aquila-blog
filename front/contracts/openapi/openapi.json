@@ -1,19 +1,126 @@
 {
-  "openapi": "3.1.0",
-  "info": {
-    "title": "Aquila Blog Frontend Contract Snapshot",
-    "version": "0.1.0"
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "API 서버",
+    "description" : "API 서버 문서입니다.",
+    "version" : "beta"
   },
-  "paths": {
-    "/post/api/v1/posts/feed": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+  "servers" : [ {
+    "url" : "http://localhost",
+    "description" : "Generated server url"
+  } ],
+  "tags" : [ {
+    "name" : "ApiV1AdmPostController",
+    "description" : "관리자용 API 글 컨트롤러"
+  }, {
+    "name" : "HomeController",
+    "description" : "홈 컨트롤러"
+  } ],
+  "paths" : {
+    "/post/api/v1/posts/{postId}/comments/{id}" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-comment-controller" ],
+        "operationId" : "getItem",
+        "parameters" : [ {
+          "name" : "postId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PostCommentDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "api-v-1-post-comment-controller" ],
+        "operationId" : "modify",
+        "parameters" : [ {
+          "name" : "postId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PostCommentModifyRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "api-v-1-post-comment-controller" ],
+        "operationId" : "delete",
+        "parameters" : [ {
+          "name" : "postId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
                 }
               }
             }
@@ -21,15 +128,89 @@
         }
       }
     },
-    "/post/api/v1/posts/feed/cursor": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts/{id}" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getItem_1",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PostWithContentDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "modify_1",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PostModifyRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostWriteResultDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "delete_1",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
                 }
               }
             }
@@ -37,15 +218,53 @@
         }
       }
     },
-    "/post/api/v1/posts/explore": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts/{id}/like" : {
+      "put" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "like",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostLikeToggleResBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "unlike",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostLikeToggleResBody"
                 }
               }
             }
@@ -53,15 +272,27 @@
         }
       }
     },
-    "/post/api/v1/posts/explore/cursor": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/system/api/v1/adm/mail/signup/test" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "sendSignupTestMail",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignupMailTestRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMapStringString"
                 }
               }
             }
@@ -69,15 +300,87 @@
         }
       }
     },
-    "/post/api/v1/posts/search": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getItems",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoPostDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "write",
+        "parameters" : [ {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PostWriteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostDto"
                 }
               }
             }
@@ -85,15 +388,73 @@
         }
       }
     },
-    "/post/api/v1/posts/tags": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts/{postId}/comments" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-comment-controller" ],
+        "operationId" : "getItems_1",
+        "parameters" : [ {
+          "name" : "postId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 200
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PostCommentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "api-v-1-post-comment-controller" ],
+        "operationId" : "write_1",
+        "parameters" : [ {
+          "name" : "postId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PostCommentWriteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostCommentDto"
                 }
               }
             }
@@ -101,15 +462,27 @@
         }
       }
     },
-    "/member/api/v1/notifications": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts/{id}/hit" : {
+      "post" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "incrementHit",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostHitResBody"
                 }
               }
             }
@@ -117,15 +490,17 @@
         }
       }
     },
-    "/member/api/v1/notifications/snapshot": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts/temp" : {
+      "post" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getOrCreateTemp",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostWithContentDto"
                 }
               }
             }
@@ -133,15 +508,33 @@
         }
       }
     },
-    "/member/api/v1/notifications/unread-count": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/posts/images" : {
+      "post" : {
+        "tags" : [ "api-v-1-post-image-controller" ],
+        "operationId" : "uploadPostImage",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataUploadPostImageResBody"
                 }
               }
             }
@@ -149,15 +542,91 @@
         }
       }
     },
-    "/member/api/v1/notifications/read-all": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+    "/post/api/v1/adm/posts/{id}/restore" : {
+      "post" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자용 soft delete 글 복구",
+        "operationId" : "restoreDeletedItem",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataPostDto"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/post/api/v1/adm/posts/recommend-tags" : {
+      "post" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자용 AI 태그 추천",
+        "operationId" : "recommendTags",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RecommendTagsRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataRecommendTagsResBody"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/member/api/v1/signup/email/start" : {
+      "post" : {
+        "tags" : [ "api-v-1-signup-verification-controller" ],
+        "operationId" : "start",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignupEmailStartRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "202" : {
+            "description" : "Accepted",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataSignupEmailStartResult"
                 }
               }
             }
@@ -165,18 +634,2761 @@
         }
       }
     },
-    "/member/api/v1/notifications/stream": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "SSE",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
+    "/member/api/v1/signup/complete" : {
+      "post" : {
+        "tags" : [ "api-v-1-signup-verification-controller" ],
+        "operationId" : "complete",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignupCompleteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMemberDto"
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/member/api/v1/notifications/{id}/read" : {
+      "post" : {
+        "tags" : [ "api-v-1-member-notification-controller" ],
+        "operationId" : "markRead",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMapStringBoolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/notifications/read-all" : {
+      "post" : {
+        "tags" : [ "api-v-1-member-notification-controller" ],
+        "operationId" : "markAllRead",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMapStringInteger"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/members" : {
+      "post" : {
+        "tags" : [ "api-v-1-member-controller" ],
+        "operationId" : "join",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MemberJoinRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMemberDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/auth/login" : {
+      "post" : {
+        "tags" : [ "api-v-1-auth-controller" ],
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MemberLoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataMemberLoginResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/{id}/profileImageFile" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "uploadProfileImageFile",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/{id}/profileImgUrl" : {
+      "patch" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "updateProfileImg",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateProfileImgRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/{id}/profileCard" : {
+      "patch" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "updateProfileCard",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateProfileCardRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/tasks" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "taskQueueDiagnostics",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TaskQueueDiagnostics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/storage/cleanup" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "uploadedFileCleanupDiagnostics",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UploadedFileCleanupDiagnostics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/mail/signup" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "signupMailDiagnostics",
+        "parameters" : [ {
+          "name" : "checkConnection",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SignupMailDiagnostics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/health" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "health",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HealthResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/session" : {
+      "get" : {
+        "tags" : [ "HomeController" ],
+        "summary" : "세션 확인",
+        "operationId" : "session",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/tags" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getTags",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/TagCountDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/search" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "search",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoFeedPostDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/mine" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getMine",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoPostDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/feed" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getFeed",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoFeedPostDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/feed/cursor" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getFeedByCursor",
+        "parameters" : [ {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CursorFeedPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/explore" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "explore",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "tag",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoFeedPostDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/posts/explore/cursor" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "exploreByCursor",
+        "parameters" : [ {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "tag",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CursorFeedPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/images/**" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-image-controller" ],
+        "operationId" : "getPostImage",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/adm/posts" : {
+      "get" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자용 전체 글 목록 (숨김글 포함)",
+        "operationId" : "getItems_2",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoPostDto"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/post/api/v1/adm/posts/{id}" : {
+      "get" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자용 글 상세 (숨김글 포함)",
+        "operationId" : "getItem_2",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PostWithContentDto"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/post/api/v1/adm/posts/deleted" : {
+      "get" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자용 soft delete 글 목록",
+        "operationId" : "getDeletedItems",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoAdmDeletedPostDto"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/post/api/v1/adm/posts/count" : {
+      "get" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "전체 글 개수",
+        "operationId" : "count",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdmPostCountResBody"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/member/api/v1/signup/email/verify" : {
+      "get" : {
+        "tags" : [ "api-v-1-signup-verification-controller" ],
+        "operationId" : "verify",
+        "parameters" : [ {
+          "name" : "token",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataSignupEmailVerifyResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/notifications" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-notification-controller" ],
+        "operationId" : "getItems_3",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/MemberNotificationDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/notifications/unread-count" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-notification-controller" ],
+        "operationId" : "unreadCount",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UnreadCountResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/notifications/stream" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-notification-controller" ],
+        "operationId" : "stream",
+        "parameters" : [ {
+          "name" : "Last-Event-ID",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "lastEventId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/notifications/snapshot" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-notification-controller" ],
+        "operationId" : "getSnapshot",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SnapshotResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/members/{id}/redirectToProfileImg" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-controller" ],
+        "operationId" : "redirectToProfileImg",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "302" : {
+            "description" : "Found"
+          }
+        }
+      }
+    },
+    "/member/api/v1/members/randomSecureTip" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-controller" ],
+        "operationId" : "randomSecureTip",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/members/adminProfile" : {
+      "get" : {
+        "tags" : [ "api-v-1-member-controller" ],
+        "operationId" : "getAdminProfile",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/auth/me" : {
+      "get" : {
+        "tags" : [ "api-v-1-auth-controller" ],
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "getItems_4",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 1,
+            "minimum" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30,
+            "maximum" : 30,
+            "minimum" : 1
+          }
+        }, {
+          "name" : "kw",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "USERNAME", "USERNAME_ASC", "NICKNAME", "NICKNAME_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageDtoMemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/{id}" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "getItem_3",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberWithUsernameDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/" : {
+      "get" : {
+        "tags" : [ "HomeController" ],
+        "summary" : "메인 페이지",
+        "operationId" : "main",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/adm/posts/{id}/hard" : {
+      "delete" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자용 soft delete 글 영구삭제",
+        "operationId" : "hardDeleteDeletedItem",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/member/api/v1/auth/logout" : {
+      "delete" : {
+        "tags" : [ "api-v-1-auth-controller" ],
+        "operationId" : "logout",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataVoid"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "PostCommentModifyRequest" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 2
+          }
+        },
+        "required" : [ "content" ]
+      },
+      "RsDataVoid" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : { }
+        }
+      },
+      "PostModifyRequest" : {
+        "type" : "object",
+        "properties" : {
+          "title" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 2
+          },
+          "content" : {
+            "type" : "string",
+            "maxLength" : 2147483647,
+            "minLength" : 2
+          },
+          "contentHtml" : {
+            "type" : "string"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "content", "title" ]
+      },
+      "PostWriteResultDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataPostWriteResultDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PostWriteResultDto"
+          }
+        }
+      },
+      "PostLikeToggleResBody" : {
+        "type" : "object",
+        "properties" : {
+          "liked" : {
+            "type" : "boolean"
+          },
+          "likesCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "RsDataPostLikeToggleResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PostLikeToggleResBody"
+          }
+        }
+      },
+      "SignupMailTestRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string",
+            "format" : "email",
+            "minLength" : 1
+          }
+        },
+        "required" : [ "email" ]
+      },
+      "RsDataMapStringString" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "PostWriteRequest" : {
+        "type" : "object",
+        "properties" : {
+          "title" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 2
+          },
+          "content" : {
+            "type" : "string",
+            "maxLength" : 2147483647,
+            "minLength" : 2
+          },
+          "contentHtml" : {
+            "type" : "string"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "content", "title" ]
+      },
+      "PostDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "authorId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "authorName" : {
+            "type" : "string"
+          },
+          "authorUsername" : {
+            "type" : "string"
+          },
+          "authorProfileImgUrl" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "thumbnail" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          },
+          "likesCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commentsCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "actorHasLiked" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataPostDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PostDto"
+          }
+        }
+      },
+      "PostCommentWriteRequest" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 2
+          },
+          "parentCommentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "content" ]
+      },
+      "PostCommentDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "authorId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "authorName" : {
+            "type" : "string"
+          },
+          "authorUsername" : {
+            "type" : "string"
+          },
+          "authorProfileImageUrl" : {
+            "type" : "string"
+          },
+          "authorProfileImageDirectUrl" : {
+            "type" : "string"
+          },
+          "postId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "parentCommentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "actorCanModify" : {
+            "type" : "boolean"
+          },
+          "actorCanDelete" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataPostCommentDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PostCommentDto"
+          }
+        }
+      },
+      "PostHitResBody" : {
+        "type" : "object",
+        "properties" : {
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "RsDataPostHitResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PostHitResBody"
+          }
+        }
+      },
+      "PostWithContentDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "authorId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "authorName" : {
+            "type" : "string"
+          },
+          "authorUsername" : {
+            "type" : "string"
+          },
+          "authorProfileImageUrl" : {
+            "type" : "string"
+          },
+          "authorProfileImageDirectUrl" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "content" : {
+            "type" : "string"
+          },
+          "contentHtml" : {
+            "type" : "string"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          },
+          "likesCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commentsCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "actorHasLiked" : {
+            "type" : "boolean"
+          },
+          "actorCanModify" : {
+            "type" : "boolean"
+          },
+          "actorCanDelete" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataPostWithContentDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/PostWithContentDto"
+          }
+        }
+      },
+      "RsDataUploadPostImageResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/UploadPostImageResBody"
+          }
+        }
+      },
+      "UploadPostImageResBody" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          },
+          "markdown" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RecommendTagsRequest" : {
+        "type" : "object",
+        "properties" : {
+          "title" : {
+            "type" : "string",
+            "maxLength" : 300,
+            "minLength" : 0
+          },
+          "content" : {
+            "type" : "string",
+            "maxLength" : 50000,
+            "minLength" : 0
+          },
+          "existingTags" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "maxTags" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 10,
+            "minimum" : 3
+          }
+        },
+        "required" : [ "content" ]
+      },
+      "RecommendTagsResBody" : {
+        "type" : "object",
+        "properties" : {
+          "tags" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "traceId" : {
+            "type" : "string"
+          },
+          "degraded" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataRecommendTagsResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/RecommendTagsResBody"
+          }
+        }
+      },
+      "SignupEmailStartRequest" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string",
+            "format" : "email",
+            "minLength" : 1
+          },
+          "nextPath" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "email" ]
+      },
+      "RsDataSignupEmailStartResult" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/SignupEmailStartResult"
+          }
+        }
+      },
+      "SignupEmailStartResult" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          }
+        }
+      },
+      "SignupCompleteRequest" : {
+        "type" : "object",
+        "properties" : {
+          "signupToken" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "username" : {
+            "type" : "string",
+            "maxLength" : 30,
+            "minLength" : 2
+          },
+          "password" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 8,
+            "pattern" : "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,64}$"
+          },
+          "nickname" : {
+            "type" : "string",
+            "maxLength" : 30,
+            "minLength" : 2
+          }
+        },
+        "required" : [ "nickname", "password", "signupToken", "username" ]
+      },
+      "MemberDto" : {
+        "type" : "object",
+        "properties" : {
+          "isAdmin" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "profileImageUrl" : {
+            "type" : "string"
+          },
+          "admin" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataMemberDto" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/MemberDto"
+          }
+        }
+      },
+      "RsDataMapStringBoolean" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "boolean"
+            }
+          }
+        }
+      },
+      "RsDataMapStringInteger" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          }
+        }
+      },
+      "MemberJoinRequest" : {
+        "type" : "object",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "maxLength" : 30,
+            "minLength" : 2
+          },
+          "password" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 8,
+            "pattern" : "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,64}$"
+          },
+          "nickname" : {
+            "type" : "string",
+            "maxLength" : 30,
+            "minLength" : 2
+          }
+        },
+        "required" : [ "nickname", "password", "username" ]
+      },
+      "MemberLoginRequest" : {
+        "type" : "object",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "maxLength" : 30,
+            "minLength" : 2
+          },
+          "password" : {
+            "type" : "string",
+            "maxLength" : 128,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "password", "username" ]
+      },
+      "MemberLoginResBody" : {
+        "type" : "object",
+        "properties" : {
+          "item" : {
+            "$ref" : "#/components/schemas/MemberDto"
+          }
+        }
+      },
+      "RsDataMemberLoginResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/MemberLoginResBody"
+          }
+        }
+      },
+      "MemberProfileLinkItemDto" : {
+        "type" : "object",
+        "properties" : {
+          "icon" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "href" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MemberWithUsernameDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "profileImageUrl" : {
+            "type" : "string"
+          },
+          "profileImageDirectUrl" : {
+            "type" : "string"
+          },
+          "profileRole" : {
+            "type" : "string"
+          },
+          "profileBio" : {
+            "type" : "string"
+          },
+          "homeIntroTitle" : {
+            "type" : "string"
+          },
+          "homeIntroDescription" : {
+            "type" : "string"
+          },
+          "serviceLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileLinkItemDto"
+            }
+          },
+          "contactLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileLinkItemDto"
+            }
+          },
+          "admin" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "UpdateProfileImgRequest" : {
+        "type" : "object",
+        "properties" : {
+          "profileImgUrl" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "profileImgUrl" ]
+      },
+      "ProfileCardLinkItemRequest" : {
+        "type" : "object",
+        "properties" : {
+          "icon" : {
+            "type" : "string",
+            "maxLength" : 40,
+            "minLength" : 0
+          },
+          "label" : {
+            "type" : "string",
+            "maxLength" : 80,
+            "minLength" : 0
+          },
+          "href" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "href", "label" ]
+      },
+      "UpdateProfileCardRequest" : {
+        "type" : "object",
+        "properties" : {
+          "role" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "bio" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          },
+          "homeIntroTitle" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "homeIntroDescription" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          },
+          "serviceLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileCardLinkItemRequest"
+            },
+            "maxItems" : 30,
+            "minItems" : 0
+          },
+          "contactLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileCardLinkItemRequest"
+            },
+            "maxItems" : 30,
+            "minItems" : 0
+          }
+        }
+      },
+      "TaskExecutionSample" : {
+        "type" : "object",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskType" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "aggregateType" : {
+            "type" : "string"
+          },
+          "aggregateId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "PROCESSING", "COMPLETED", "FAILED" ]
+          },
+          "retryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "maxRetries" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "nextRetryAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "errorMessage" : {
+            "type" : "string"
+          }
+        }
+      },
+      "TaskQueueDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "pendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "readyPendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "delayedPendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "processingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "completedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "staleProcessingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "oldestReadyPendingAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "oldestProcessingAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "oldestReadyPendingAgeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "oldestProcessingAgeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "processingTimeoutSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskTypes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TaskTypeDiagnostics"
+            }
+          },
+          "recentFailures" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TaskExecutionSample"
+            }
+          },
+          "staleProcessingSamples" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TaskExecutionSample"
+            }
+          }
+        }
+      },
+      "TaskRetryPolicy" : {
+        "type" : "object",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "maxRetries" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "baseDelaySeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "backoffMultiplier" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "maxDelaySeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "TaskTypeDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "taskType" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "pendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "readyPendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "delayedPendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "processingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "staleProcessingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "oldestReadyPendingAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "oldestReadyPendingAgeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "latestFailureAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "latestFailureMessage" : {
+            "type" : "string"
+          },
+          "retryPolicy" : {
+            "$ref" : "#/components/schemas/TaskRetryPolicy"
+          }
+        }
+      },
+      "UploadedFileCleanupDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "tempCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "activeCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "pendingDeleteCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "deletedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "eligibleForPurgeCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cleanupSafetyThreshold" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "blockedBySafetyThreshold" : {
+            "type" : "boolean"
+          },
+          "oldestEligiblePurgeAfter" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "sampleEligibleObjectKeys" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "SignupMailDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "adapter" : {
+            "type" : "string"
+          },
+          "host" : {
+            "type" : "string"
+          },
+          "port" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "mailFrom" : {
+            "type" : "string"
+          },
+          "usernameConfigured" : {
+            "type" : "boolean"
+          },
+          "passwordConfigured" : {
+            "type" : "boolean"
+          },
+          "smtpAuth" : {
+            "type" : "boolean"
+          },
+          "startTlsEnabled" : {
+            "type" : "boolean"
+          },
+          "missing" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "canConnect" : {
+            "type" : "boolean"
+          },
+          "connectionError" : {
+            "type" : "string"
+          },
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "verifyPath" : {
+            "type" : "string"
+          },
+          "taskQueue" : {
+            "$ref" : "#/components/schemas/TaskTypeDiagnostics"
+          }
+        }
+      },
+      "HealthChecks" : {
+        "type" : "object",
+        "properties" : {
+          "db" : {
+            "type" : "string"
+          },
+          "redis" : {
+            "type" : "string"
+          },
+          "signupMail" : {
+            "type" : "string"
+          }
+        }
+      },
+      "HealthResBody" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "serverTime" : {
+            "type" : "string"
+          },
+          "uptimeMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "version" : {
+            "type" : "string"
+          },
+          "checks" : {
+            "$ref" : "#/components/schemas/HealthChecks"
+          }
+        }
+      },
+      "PageDtoPostDto" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PostDto"
+            }
+          },
+          "pageable" : {
+            "$ref" : "#/components/schemas/PageableDto"
+          }
+        }
+      },
+      "PageableDto" : {
+        "type" : "object",
+        "properties" : {
+          "pageNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "pageSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "offset" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalElements" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "numberOfElements" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "paged" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "TagCountDto" : {
+        "type" : "object",
+        "properties" : {
+          "tag" : {
+            "type" : "string"
+          },
+          "count" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "FeedPostDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "authorId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "authorName" : {
+            "type" : "string"
+          },
+          "authorUsername" : {
+            "type" : "string"
+          },
+          "authorProfileImgUrl" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "thumbnail" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "tags" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "category" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          },
+          "likesCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commentsCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "PageDtoFeedPostDto" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FeedPostDto"
+            }
+          },
+          "pageable" : {
+            "$ref" : "#/components/schemas/PageableDto"
+          }
+        }
+      },
+      "CursorFeedPageDto" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FeedPostDto"
+            }
+          },
+          "pageSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hasNext" : {
+            "type" : "boolean"
+          },
+          "nextCursor" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AdmDeletedPostDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "authorId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "authorName" : {
+            "type" : "string"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "listed" : {
+            "type" : "boolean"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "modifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "deletedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "PageDtoAdmDeletedPostDto" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AdmDeletedPostDto"
+            }
+          },
+          "pageable" : {
+            "$ref" : "#/components/schemas/PageableDto"
+          }
+        }
+      },
+      "AdmPostCountResBody" : {
+        "type" : "object",
+        "properties" : {
+          "all" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "secureTip" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RsDataSignupEmailVerifyResult" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/SignupEmailVerifyResult"
+          }
+        }
+      },
+      "SignupEmailVerifyResult" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "signupToken" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "MemberNotificationDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "COMMENT_REPLY", "POST_COMMENT" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "actorId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "actorName" : {
+            "type" : "string"
+          },
+          "actorProfileImageUrl" : {
+            "type" : "string"
+          },
+          "postId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "commentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "postTitle" : {
+            "type" : "string"
+          },
+          "commentPreview" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "read" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "UnreadCountResBody" : {
+        "type" : "object",
+        "properties" : {
+          "unreadCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "SseEmitter" : {
+        "type" : "object",
+        "properties" : {
+          "timeout" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "SnapshotResBody" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberNotificationDto"
+            }
+          },
+          "unreadCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "PageDtoMemberWithUsernameDto" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberWithUsernameDto"
+            }
+          },
+          "pageable" : {
+            "$ref" : "#/components/schemas/PageableDto"
           }
         }
       }

@@ -87,7 +87,9 @@ const normalizeTag = (raw: string): string => {
   const cleaned = raw.replace(/[\r\n]/g, " ").replace(/#/g, "").replace(whitespaceRegex, " ").trim()
   if (!cleaned) return ""
   if (cleaned.length < 2 || cleaned.length > MAX_TAG_LENGTH) return ""
+  if (!/[\p{L}\p{N}]/u.test(cleaned)) return ""
   if (cleaned.includes("http://") || cleaned.includes("https://")) return ""
+  if (cleaned.toLowerCase() === "aside") return ""
   return cleaned
 }
 

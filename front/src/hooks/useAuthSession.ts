@@ -26,6 +26,49 @@ const clearStaleAuthCookies = () => {
   clearCookie("accessToken", `.${apexDomain}`)
 }
 
+const AUTH_ME_ANON_SUPPRESS_UNTIL_KEY = "auth:me:anon-probe-suppress-until:v1"
+const AUTH_ME_ANON_SUPPRESS_TTL_MS = 5 * 60_000
+
+const readAnonymousProbeSuppressed = () => {
+  if (typeof window === "undefined") return false
+
+  try {
+    const raw = window.sessionStorage.getItem(AUTH_ME_ANON_SUPPRESS_UNTIL_KEY)
+    if (!raw) return false
+
+    const until = Number.parseInt(raw, 10)
+    if (!Number.isFinite(until) || until <= Date.now()) {
+      window.sessionStorage.removeItem(AUTH_ME_ANON_SUPPRESS_UNTIL_KEY)
+      return false
+    }
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+const suppressAnonymousProbe = () => {
+  if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(
+      AUTH_ME_ANON_SUPPRESS_UNTIL_KEY,
+      String(Date.now() + AUTH_ME_ANON_SUPPRESS_TTL_MS)
+    )
+  } catch {
+    // ignore storage permission/quota errors
+  }
+}
+
+const clearAnonymousProbeSuppression = () => {
+  if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.removeItem(AUTH_ME_ANON_SUPPRESS_UNTIL_KEY)
+  } catch {
+    // ignore storage permission/quota errors
+  }
+}
+
 export type AuthSessionStatus = "loading" | "authenticated" | "anonymous" | "unavailable"
 
 export type AuthMember = {
@@ -54,7 +97,7 @@ const useAuthSession = () => {
   const queryClient = useQueryClient()
   const cachedSnapshot = queryClient.getQueryData<AuthMember | null | undefined>(queryKey.authMe())
   const cachedAnonymousProbePolicy = queryClient.getQueryData<boolean | undefined>(queryKey.authMeProbe())
-  const shouldProbeAnonymousSnapshot = cachedAnonymousProbePolicy ?? true
+  const shouldProbeAnonymousSnapshot = cachedAnonymousProbePolicy ?? !readAnonymousProbeSuppressed()
   const hasCachedSnapshot = cachedSnapshot !== undefined
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
@@ -74,6 +117,7 @@ const useAuthSession = () => {
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           clearStaleAuthCookies()
+          suppressAnonymousProbe()
           return null
         }
 
@@ -87,14 +131,22 @@ const useAuthSession = () => {
     retry: false,
     refetchOnMount: shouldRefetchOnMount ? "always" : false,
     refetchOnWindowFocus: false,
-    onSuccess: (member) => {
-      queryClient.setQueryData(queryKey.authMeProbe(), member !== null)
-    },
   })
+
+  useEffect(() => {
+    if (query.data === undefined) return
+    queryClient.setQueryData(queryKey.authMeProbe(), query.data !== null)
+    if (query.data) {
+      clearAnonymousProbeSuppression()
+    }
+  }, [query.data, queryClient])
 
   const setMe = (member: AuthMember | null) => {
     queryClient.setQueryData(queryKey.authMe(), member)
     queryClient.setQueryData(queryKey.authMeProbe(), member !== null)
+    if (member) {
+      clearAnonymousProbeSuppression()
+    }
   }
 
   const me =

@@ -285,9 +285,11 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
 const PAGE_SIZE = 30
 const POSTS_CACHE_TTL_MS = 90_000
 const isServerRuntime = typeof window === "undefined"
+const PUBLIC_CURSOR_DISABLED_SESSION_KEY = "posts:public-cursor-disabled:v1"
 let postsCache: TPost[] | null = null
 let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
+let isPublicCursorDisabledCache: boolean | null = null
 
 type GetPostsOptions = {
   throwOnError?: boolean
@@ -309,7 +311,35 @@ export type ExplorePostsPage = {
   pageSize: number
   hasNext?: boolean
   nextCursor?: string | null
+  paginationMode?: "cursor" | "page"
 }
+
+const readPublicCursorDisabled = () => {
+  if (isServerRuntime) return false
+  if (isPublicCursorDisabledCache !== null) return isPublicCursorDisabledCache
+
+  try {
+    isPublicCursorDisabledCache = window.sessionStorage.getItem(PUBLIC_CURSOR_DISABLED_SESSION_KEY) === "1"
+  } catch {
+    isPublicCursorDisabledCache = false
+  }
+
+  return isPublicCursorDisabledCache
+}
+
+const markPublicCursorDisabled = () => {
+  isPublicCursorDisabledCache = true
+  if (isServerRuntime) return
+
+  try {
+    window.sessionStorage.setItem(PUBLIC_CURSOR_DISABLED_SESSION_KEY, "1")
+  } catch {
+    // ignore storage permission/quota errors
+  }
+}
+
+const isAuthRequiredError = (error: unknown) =>
+  error instanceof ApiError && (error.status === 401 || error.status === 403)
 
 const toSortParam = (order: "asc" | "desc") => (order === "asc" ? "CREATED_AT_ASC" : "CREATED_AT")
 
@@ -476,6 +506,7 @@ export const getExplorePostsPage = async ({
       typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
         ? Math.max(1, Math.trunc(response.pageable.pageSize))
         : fallbackPageSize,
+    paginationMode: "page",
   }
 }
 
@@ -512,6 +543,7 @@ export const getFeedPostsPage = async ({
       typeof response?.pageable?.pageSize === "number" && Number.isFinite(response.pageable.pageSize)
         ? Math.max(1, Math.trunc(response.pageable.pageSize))
         : fallbackPageSize,
+    paginationMode: "page",
   }
 }
 
@@ -528,6 +560,16 @@ export const getFeedPostsCursorPage = async ({
 }): Promise<ExplorePostsPage> => {
   const safePageSize = toValidPageSize(pageSize)
   const normalizedCursor = typeof cursor === "string" && cursor.trim() ? cursor.trim() : undefined
+  if (!normalizedCursor && readPublicCursorDisabled()) {
+    const fallback = await getFeedPostsPage({ order, page: 1, pageSize: safePageSize, signal })
+    return {
+      ...fallback,
+      hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
+      nextCursor: null,
+      paginationMode: "page",
+    }
+  }
+
   try {
     const response = await apiFetch<CursorPageDto<ApiPostDto>>(
       buildFeedCursorPath({
@@ -548,15 +590,21 @@ export const getFeedPostsCursorPage = async ({
       pageSize: safePageSize,
       hasNext: response.hasNext === true,
       nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+      paginationMode: "cursor",
     }
   } catch (error) {
+    if (isAuthRequiredError(error)) {
+      markPublicCursorDisabled()
+    }
+
     // 커서 모드가 불안정할 때 홈 첫 진입이 깨지지 않도록 1페이지 API로 복구한다.
     if (!normalizedCursor) {
       const fallback = await getFeedPostsPage({ order, page: 1, pageSize: safePageSize, signal })
       return {
         ...fallback,
-        hasNext: false,
+        hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
         nextCursor: null,
+        paginationMode: "page",
       }
     }
 
@@ -570,6 +618,7 @@ export const getFeedPostsCursorPage = async ({
       pageSize: safePageSize,
       hasNext: false,
       nextCursor: null,
+      paginationMode: "cursor",
     }
   }
 }
@@ -589,6 +638,16 @@ export const getExplorePostsCursorPage = async ({
 }): Promise<ExplorePostsPage> => {
   const safePageSize = toValidPageSize(pageSize)
   const normalizedCursor = typeof cursor === "string" && cursor.trim() ? cursor.trim() : undefined
+  if (!normalizedCursor && readPublicCursorDisabled()) {
+    const fallback = await getExplorePostsPage({ kw: "", tag, order, page: 1, pageSize: safePageSize, signal })
+    return {
+      ...fallback,
+      hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
+      nextCursor: null,
+      paginationMode: "page",
+    }
+  }
+
   try {
     const response = await apiFetch<CursorPageDto<ApiPostDto>>(
       buildExploreCursorPath({
@@ -610,15 +669,21 @@ export const getExplorePostsCursorPage = async ({
       pageSize: safePageSize,
       hasNext: response.hasNext === true,
       nextCursor: typeof response.nextCursor === "string" ? response.nextCursor : null,
+      paginationMode: "cursor",
     }
   } catch (error) {
+    if (isAuthRequiredError(error)) {
+      markPublicCursorDisabled()
+    }
+
     // 태그 탐색도 첫 진입 시 page API로 복구해 UX 단절을 막는다.
     if (!normalizedCursor) {
       const fallback = await getExplorePostsPage({ kw: "", tag, order, page: 1, pageSize: safePageSize, signal })
       return {
         ...fallback,
-        hasNext: false,
+        hasNext: fallback.pageNumber * fallback.pageSize < fallback.totalCount,
         nextCursor: null,
+        paginationMode: "page",
       }
     }
 
@@ -632,6 +697,7 @@ export const getExplorePostsCursorPage = async ({
       pageSize: safePageSize,
       hasNext: false,
       nextCursor: null,
+      paginationMode: "cursor",
     }
   }
 }

@@ -3,6 +3,7 @@ import {
   getExplorePostsCursorPage,
   getExplorePostsPage,
   getFeedPostsCursorPage,
+  getFeedPostsPage,
   getSearchPostsPage,
 } from "src/apis/backend/posts"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
@@ -18,6 +19,9 @@ type Params = {
 }
 
 const EMPTY_POSTS: TPost[] = []
+const CURSOR_INITIAL_PAGE_PARAM: null = null
+const OFFSET_INITIAL_PAGE_PARAM = 1
+type ExplorePageParam = string | number | null
 
 const useExplorePostsQuery = ({
   kw,
@@ -49,16 +53,39 @@ const useExplorePostsQuery = ({
             pageSize,
             order,
           }),
-    queryFn: ({ pageParam, signal }) => {
+    queryFn: ({ pageParam, signal }: { pageParam: ExplorePageParam; signal?: AbortSignal }) => {
       const pageNumber = typeof pageParam === "number" ? pageParam : 1
-      const cursor = typeof pageParam === "string" ? pageParam : undefined
+      const cursor =
+        typeof pageParam === "string" && pageParam.trim().length > 0
+          ? pageParam
+          : undefined
 
       if (cursorMode) {
         if (feedMode) {
+          if (typeof pageParam === "number") {
+            return getFeedPostsPage({
+              order,
+              page: pageNumber,
+              pageSize,
+              signal: signal ?? undefined,
+            })
+          }
+
           return getFeedPostsCursorPage({
             order,
             pageSize,
             cursor,
+            signal: signal ?? undefined,
+          })
+        }
+
+        if (typeof pageParam === "number") {
+          return getExplorePostsPage({
+            kw: "",
+            tag: normalizedTag,
+            order,
+            page: pageNumber,
+            pageSize,
             signal: signal ?? undefined,
           })
         }
@@ -93,8 +120,15 @@ const useExplorePostsQuery = ({
     staleTime: 300_000,
     retry: 1,
     refetchOnWindowFocus: false,
+    initialPageParam: cursorMode ? CURSOR_INITIAL_PAGE_PARAM : OFFSET_INITIAL_PAGE_PARAM,
     getNextPageParam: (lastPage) => {
       if (cursorMode) {
+        if (lastPage.paginationMode === "page") {
+          if (lastPage.posts.length === 0) return undefined
+          if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
+          return lastPage.pageNumber + 1
+        }
+
         if (!lastPage.hasNext) return undefined
         const nextCursor =
           typeof lastPage.nextCursor === "string" && lastPage.nextCursor.trim()

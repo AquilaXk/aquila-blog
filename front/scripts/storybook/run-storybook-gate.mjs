@@ -77,6 +77,7 @@ const result = spawnSync(process.platform === "win32" ? "storybook.cmd" : "story
     CI: process.env.CI || "1",
     STORYBOOK_DISABLE_TELEMETRY: process.env.STORYBOOK_DISABLE_TELEMETRY || "1",
     STORYBOOK_DISABLE_UPDATE_CHECK: process.env.STORYBOOK_DISABLE_UPDATE_CHECK || "1",
+    __NEXT_PRIVATE_RENDER_WORKER: process.env.__NEXT_PRIVATE_RENDER_WORKER || "defined",
   },
 })
 

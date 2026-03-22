@@ -35,9 +35,9 @@
   - `Feed/PostCard`
 - 실행:
   - `cd front && yarn storybook`
-  - `cd front && yarn storybook:build`
+  - `cd front && yarn storybook:build` (raw build)
+  - `cd front && yarn storybook:gate` (CI 게이트와 동일한 검증 래퍼)
   - `cd front && yarn storybook:test`
 - 리뷰 포인트:
   - 393x852(iPhone 15 Pro)와 1440x900 기준에서 오버플로우/가독성/상태 대비 확인
   - focus-visible 링, hover 상태, 빈 썸네일 fallback 확인
-

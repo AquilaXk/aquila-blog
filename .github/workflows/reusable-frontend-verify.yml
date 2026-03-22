@@ -127,6 +127,31 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Check Storybook regression gate
+        working-directory: front
+        env:
+          STORYBOOK_GATE_ENFORCEMENT: strict
+          STORYBOOK_GATE_REPORT_DIR: test-results/storybook
+        run: yarn storybook:gate
+
+      - name: Upload Storybook gate report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: front-storybook-gate-report
+          path: front/test-results/storybook
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload Storybook static build
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: front-storybook-static
+          path: front/storybook-static
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Install Playwright browser
         working-directory: front
         run: npx playwright install --with-deps chromium

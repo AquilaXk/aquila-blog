@@ -234,29 +234,20 @@ custom:
       coalesceWindowMs: ${CUSTOM__CDN__PURGE__COALESCE_WINDOW_MS:1200}
       coalesceMaxTags: ${CUSTOM__CDN__PURGE__COALESCE_MAX_TAGS:2048}
   ai:
-    summary:
-      enabled: ${CUSTOM__AI__SUMMARY__ENABLED:false}
-      timeoutSeconds: ${CUSTOM__AI__SUMMARY__TIMEOUT_SECONDS:7}
-      maxRequestsPerMinute: ${CUSTOM__AI__SUMMARY__MAX_REQUESTS_PER_MINUTE:20}
-      maxRequestsPerDay: ${CUSTOM__AI__SUMMARY__MAX_REQUESTS_PER_DAY:500}
-      cacheTtlSeconds: ${CUSTOM__AI__SUMMARY__CACHE_TTL_SECONDS:300}
-      fallbackCacheTtlSeconds: ${CUSTOM__AI__SUMMARY__FALLBACK_CACHE_TTL_SECONDS:45}
-      quotaFallbackCacheTtlSeconds: ${CUSTOM__AI__SUMMARY__QUOTA_FALLBACK_CACHE_TTL_SECONDS:300}
-      retryMaxAttempts: ${CUSTOM__AI__SUMMARY__RETRY_MAX_ATTEMPTS:2}
-      retryBaseDelayMs: ${CUSTOM__AI__SUMMARY__RETRY_BASE_DELAY_MS:350}
-      retryMaxDelayMs: ${CUSTOM__AI__SUMMARY__RETRY_MAX_DELAY_MS:2500}
-      circuitFailureThreshold: ${CUSTOM__AI__SUMMARY__CIRCUIT_FAILURE_THRESHOLD:5}
-      circuitOpenSeconds: ${CUSTOM__AI__SUMMARY__CIRCUIT_OPEN_SECONDS:90}
-      quotaCircuitOpenSeconds: ${CUSTOM__AI__SUMMARY__QUOTA_CIRCUIT_OPEN_SECONDS:600}
-      failureSignatureThreshold: ${CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_THRESHOLD:2}
-      failureSignatureTtlSeconds: ${CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_TTL_SECONDS:900}
-      failureSignatureOpenSeconds: ${CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_OPEN_SECONDS:300}
-      adaptiveRelaxedFirstContentLength: ${CUSTOM__AI__SUMMARY__ADAPTIVE_RELAXED_FIRST_CONTENT_LENGTH:9000}
-      adaptiveRelaxedFirstCodeFenceCount: ${CUSTOM__AI__SUMMARY__ADAPTIVE_RELAXED_FIRST_CODE_FENCE_COUNT:3}
+    tag:
+      enabled: ${CUSTOM__AI__TAG__ENABLED:true}
+      timeoutSeconds: ${CUSTOM__AI__TAG__TIMEOUT_SECONDS:6}
+      maxRequestsPerMinute: ${CUSTOM__AI__TAG__MAX_REQUESTS_PER_MINUTE:30}
+      maxRequestsPerDay: ${CUSTOM__AI__TAG__MAX_REQUESTS_PER_DAY:1000}
+      cacheTtlSeconds: ${CUSTOM__AI__TAG__CACHE_TTL_SECONDS:300}
+      fallbackCacheTtlSeconds: ${CUSTOM__AI__TAG__FALLBACK_CACHE_TTL_SECONDS:45}
+      retryMaxAttempts: ${CUSTOM__AI__TAG__RETRY_MAX_ATTEMPTS:1}
+      retryDelayMs: ${CUSTOM__AI__TAG__RETRY_DELAY_MS:250}
+      maxTagLength: ${CUSTOM__AI__TAG__MAX_TAG_LENGTH:24}
       gemini:
-        apiKey: "${CUSTOM__AI__SUMMARY__GEMINI__API_KEY:}"
-        model: "${CUSTOM__AI__SUMMARY__GEMINI__MODEL:gemini-2.5-flash}"
-        baseUrl: "${CUSTOM__AI__SUMMARY__GEMINI__BASE_URL:https://generativelanguage.googleapis.com/v1beta}"
+        apiKey: "${CUSTOM__AI__TAG__GEMINI__API_KEY:${CUSTOM__AI__SUMMARY__GEMINI__API_KEY:}}"
+        model: "${CUSTOM__AI__TAG__GEMINI__MODEL:${CUSTOM__AI__SUMMARY__GEMINI__MODEL:gemini-2.5-flash}}"
+        baseUrl: "${CUSTOM__AI__TAG__GEMINI__BASE_URL:${CUSTOM__AI__SUMMARY__GEMINI__BASE_URL:https://generativelanguage.googleapis.com/v1beta}}"
   storage:
     enabled: ${CUSTOM_STORAGE_ENABLED:false}
     endpoint: ${CUSTOM_STORAGE_ENDPOINT:http://localhost:9000}

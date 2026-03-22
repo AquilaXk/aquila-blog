@@ -93,25 +93,13 @@ type PostWriteResult = {
   listed: boolean
 }
 
-type GeneratePreviewSummaryPayload = {
-  summary?: string
+type RecommendTagsPayload = {
+  tags?: string[]
   provider?: string
   model?: string | null
   reason?: string | null
   degraded?: boolean
   traceId?: string | null
-  debug?: {
-    cacheStatus?: string | null
-    promptLength?: number | null
-    promptPreview?: string | null
-    strictResponseStatus?: number | null
-    strictResponsePreview?: string | null
-    relaxedRetried?: boolean | null
-    relaxedResponseStatus?: number | null
-    relaxedResponsePreview?: string | null
-    parsedSummaryLength?: number | null
-    parsedSummaryPreview?: string | null
-  } | null
 }
 
 type AdminPostListItem = {
@@ -415,17 +403,25 @@ const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LEN
   return `${fallbackSummary.slice(0, maxLength).trim()}...`
 }
 
-const normalizeGeneratedPreviewSummary = (value: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
-  const normalized = value.replace(/\s+/g, " ").trim()
-  if (!normalized) return ""
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength).trim()}...`
+const normalizeRecommendedTags = (value: unknown, maxTags: number) => {
+  if (!Array.isArray(value)) return []
+  const map = new Map<string, string>()
+  value.forEach((item) => {
+    if (typeof item !== "string") return
+    const normalized = item.replace(/[\r\n]/g, " ").replace(/#/g, "").replace(/\s+/g, " ").trim()
+    if (!normalized) return
+    if (normalized.length < 2 || normalized.length > 24) return
+    const key = normalized.toLowerCase()
+    if (map.has(key) || map.size >= maxTags) return
+    map.set(key, normalized)
+  })
+  return Array.from(map.values())
 }
 
-const resolvePreviewSummaryErrorMessage = (error: unknown) => {
+const resolveTagRecommendationErrorMessage = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)
   const normalized = message.trim()
-  if (!normalized) return "요약 생성 요청 처리 중 오류가 발생했습니다."
+  if (!normalized) return "태그 추천 요청 처리 중 오류가 발생했습니다."
 
   const lowered = normalized.toLowerCase()
   if (lowered.includes("failed to fetch")) {
@@ -433,25 +429,26 @@ const resolvePreviewSummaryErrorMessage = (error: unknown) => {
   }
 
   if (lowered.includes("abort") || lowered.includes("timeout")) {
-    return "요약 생성 응답 대기 시간이 초과되었습니다."
+    return "태그 추천 응답 대기 시간이 초과되었습니다."
   }
 
   return normalized
 }
 
-const fetchPreviewSummary = async (
+const fetchRecommendedTags = async (
   payload: {
     title: string
     content: string
-    maxLength: number
+    existingTags: string[]
+    maxTags: number
   }
-): Promise<RsData<GeneratePreviewSummaryPayload>> => {
+): Promise<RsData<RecommendTagsPayload>> => {
   const controller = new AbortController()
-  const timeoutMs = 16_000
+  const timeoutMs = 12_000
   const timeoutId = setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), timeoutMs)
 
   try {
-    const response = await fetch("/api/post/preview-summary", {
+    const response = await fetch("/api/post/recommend-tags", {
       method: "POST",
       credentials: "include",
       headers: {
@@ -476,10 +473,10 @@ const fetchPreviewSummary = async (
       throw new Error(`status=${response.status}`)
     }
 
-    return (await response.json()) as RsData<GeneratePreviewSummaryPayload>
+    return (await response.json()) as RsData<RecommendTagsPayload>
   } catch (error) {
     if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
-      throw new Error("요약 생성 응답 대기 시간이 초과되었습니다.")
+      throw new Error("태그 추천 응답 대기 시간이 초과되었습니다.")
     }
     throw error
   } finally {
@@ -487,33 +484,30 @@ const fetchPreviewSummary = async (
   }
 }
 
-const formatPreviewSummaryReason = (rawReason?: string | null) => {
+const formatTagRecommendationReason = (rawReason?: string | null) => {
   const reason = (rawReason || "").trim()
   switch (reason) {
     case "ai-disabled":
-      return "AI 요약이 비활성화됨"
+      return "AI 태그 추천이 비활성화됨"
     case "api-key-missing":
       return "Gemini API 키 누락"
-    case "rate-limited-or-circuit-open":
-      return "요청 제한 또는 회로 차단"
-    case "repeated-failure-signature":
-      return "동일 입력 반복 실패로 임시 AI 우회"
+    case "rate-limited":
+      return "요청 제한으로 규칙 추천 사용"
     case "quota-exhausted":
       return "AI API 사용 한도 초과"
-    case "transport":
+    case "status-503":
+    case "status-504":
       return "AI API 통신 실패"
+    case "transport":
+      return "AI API 전송 실패"
     case "parse-error":
-      return "AI 응답 파싱 실패"
-    case "empty-summary":
-      return "AI 응답이 비어 있음"
-    case "unsafe-summary":
-      return "AI 응답에 금지 패턴 포함"
-    case "low-quality-summary":
-      return "AI 응답 품질 부족"
+      return "AI 태그 응답 파싱 실패"
+    case "empty-tags":
+      return "AI가 태그를 반환하지 않음"
     case "internal-error":
       return "서버 내부 처리 실패"
     case "proxy-transport":
-      return "프록시 통신 실패(규칙 요약 대체)"
+      return "프록시 통신 실패(규칙 추천 대체)"
     default:
       if (reason.startsWith("proxy-upstream-")) {
         return `프록시 업스트림 오류(${reason.slice("proxy-upstream-".length)})`
@@ -521,40 +515,6 @@ const formatPreviewSummaryReason = (rawReason?: string | null) => {
       if (reason.startsWith("status-")) return `AI API 상태코드 ${reason.slice("status-".length)}`
       return reason
   }
-}
-
-const trimDebugPreview = (value?: string | null, maxLength = 180) => {
-  const normalized = (value || "").replace(/\s+/g, " ").trim()
-  if (!normalized) return ""
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, maxLength).trim()}...`
-}
-
-const formatPreviewSummaryDebug = (payload?: GeneratePreviewSummaryPayload) => {
-  const traceId = (payload?.traceId || "").trim()
-  const debug = payload?.debug
-  if (!traceId && !debug) return ""
-
-  const lines: string[] = []
-  if (traceId) lines.push(`traceId: ${traceId}`)
-  if (debug?.cacheStatus) lines.push(`cache: ${debug.cacheStatus}`)
-  if (typeof debug?.promptLength === "number") lines.push(`promptLength: ${debug.promptLength}`)
-  if (typeof debug?.strictResponseStatus === "number") lines.push(`strictStatus: ${debug.strictResponseStatus}`)
-  if (typeof debug?.relaxedRetried === "boolean") lines.push(`relaxedRetried: ${debug.relaxedRetried ? "yes" : "no"}`)
-  if (typeof debug?.relaxedResponseStatus === "number") lines.push(`relaxedStatus: ${debug.relaxedResponseStatus}`)
-  if (typeof debug?.parsedSummaryLength === "number") lines.push(`parsedSummaryLength: ${debug.parsedSummaryLength}`)
-
-  const promptPreview = trimDebugPreview(debug?.promptPreview)
-  const strictRawPreview = trimDebugPreview(debug?.strictResponsePreview)
-  const relaxedRawPreview = trimDebugPreview(debug?.relaxedResponsePreview)
-  const parsedPreview = trimDebugPreview(debug?.parsedSummaryPreview)
-
-  if (promptPreview) lines.push(`promptPreview: ${promptPreview}`)
-  if (strictRawPreview) lines.push(`strictRaw: ${strictRawPreview}`)
-  if (relaxedRawPreview) lines.push(`relaxedRaw: ${relaxedRawPreview}`)
-  if (parsedPreview) lines.push(`parsedSummary: ${parsedPreview}`)
-
-  return lines.join("\n")
 }
 
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
@@ -968,11 +928,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     tone: "idle",
     text: "발행 전 설정을 점검한 뒤 실행하면 결과가 여기에 표시됩니다.",
   })
-  const [previewSummaryNotice, setPreviewSummaryNotice] = useState<NoticeState>({
+  const [tagRecommendationNotice, setTagRecommendationNotice] = useState<NoticeState>({
     tone: "idle",
-    text: "AI 요약 상태가 여기에 표시됩니다.",
+    text: "AI 태그 추천 상태가 여기에 표시됩니다.",
   })
-  const [previewSummaryDebug, setPreviewSummaryDebug] = useState("")
   const [globalNotice, setGlobalNotice] = useState<NoticeState>({
     tone: "idle",
     text: "운영 작업 상태가 여기에 표시됩니다.",
@@ -1491,74 +1450,71 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }, [applyLoadedPostContext, postId, syncEditorMeta])
 
-  const handleGeneratePreviewSummary = useCallback(async () => {
+  const handleRecommendTags = useCallback(async () => {
     const content = postContent.trim()
     if (!content) {
-      setPreviewSummaryNotice({ tone: "error", text: "본문을 먼저 입력한 뒤 요약을 생성해주세요." })
-      setPreviewSummaryDebug("")
+      setTagRecommendationNotice({ tone: "error", text: "본문을 먼저 입력한 뒤 태그 추천을 실행해주세요." })
       return
     }
     if (content.length > PREVIEW_SUMMARY_MAX_CONTENT_LENGTH) {
-      const message = `요약 생성용 본문은 최대 ${PREVIEW_SUMMARY_MAX_CONTENT_LENGTH.toLocaleString()}자까지 지원됩니다.`
-      setPreviewSummaryNotice({ tone: "error", text: message })
-      setPreviewSummaryDebug("")
+      const message = `태그 추천용 본문은 최대 ${PREVIEW_SUMMARY_MAX_CONTENT_LENGTH.toLocaleString()}자까지 지원됩니다.`
+      setTagRecommendationNotice({ tone: "error", text: message })
       return
     }
-    const fallbackSummary = makePreviewSummary(postContent)
 
     try {
-      setLoadingKey("generatePreviewSummary")
-      setPreviewSummaryNotice({ tone: "loading", text: "AI 요약 생성 중입니다..." })
-      setPreviewSummaryDebug("")
+      setLoadingKey("recommendTags")
+      setTagRecommendationNotice({ tone: "loading", text: "AI 태그 추천 생성 중입니다..." })
 
-      const response = await fetchPreviewSummary({
+      const response = await fetchRecommendedTags({
         title: postTitle,
         content: postContent,
-        maxLength: PREVIEW_SUMMARY_MAX_LENGTH,
+        existingTags: postTags,
+        maxTags: 6,
       })
-      const debugText = formatPreviewSummaryDebug(response?.data)
-      setPreviewSummaryDebug(debugText)
 
-      const generated = normalizeGeneratedPreviewSummary(response?.data?.summary || "")
-      if (!generated) {
-        throw new Error("요약 생성 결과가 비어 있습니다.")
+      const recommended = normalizeRecommendedTags(response?.data?.tags, 6)
+      if (recommended.length === 0) {
+        throw new Error("태그 추천 결과가 비어 있습니다.")
+      }
+
+      const currentTagSet = new Set(postTags.map((tag) => tag.toLowerCase()))
+      const tagsToAdd = recommended.filter((tag) => !currentTagSet.has(tag.toLowerCase()))
+      if (tagsToAdd.length > 0) {
+        setPostTags((prev) => dedupeStrings([...prev, ...tagsToAdd]))
+        setKnownTags((prev) => dedupeStrings([...prev, ...tagsToAdd]).sort((a, b) => a.localeCompare(b)))
+        setCustomTagCatalog((prev) => dedupeStrings([...prev, ...tagsToAdd]).sort((a, b) => a.localeCompare(b)))
       }
 
       const isRuleFallback = response?.data?.provider === "rule"
-      const providerLabel =
-        response?.data?.provider === "gemini"
-          ? `Gemini${response?.data?.model ? ` (${response.data.model})` : ""}`
-          : "규칙 기반"
       const traceHint = response?.data?.traceId ? ` · trace=${response.data.traceId}` : ""
       const reasonHint =
-        response?.data?.provider === "rule" ? formatPreviewSummaryReason(response?.data?.reason) : ""
-
-      setPostSummary(generated)
+        response?.data?.provider === "rule" ? formatTagRecommendationReason(response?.data?.reason) : ""
 
       if (isRuleFallback) {
-        const fallbackNoticeText = `규칙 기반 요약 반영 (${reasonHint || "AI 요약 실패"})${traceHint}`
-        setPreviewSummaryNotice({ tone: "error", text: fallbackNoticeText })
+        const fallbackNoticeText = `규칙 기반 태그 추천 반영 (${reasonHint || "AI 태그 추천 실패"})${traceHint}`
+        setTagRecommendationNotice({ tone: "error", text: fallbackNoticeText })
         return
       }
 
-      const summaryNoticeText = `요약 반영 완료 (${providerLabel})${traceHint}`
-      setPreviewSummaryNotice({ tone: "success", text: summaryNoticeText })
+      if (tagsToAdd.length === 0) {
+        setTagRecommendationNotice({
+          tone: "success",
+          text: `AI 추천 태그가 이미 모두 적용된 상태입니다.${traceHint}`,
+        })
+        return
+      }
+
+      const tagNoticeText = `태그 ${tagsToAdd.length}개를 추천 반영했습니다.${traceHint}`
+      setTagRecommendationNotice({ tone: "success", text: tagNoticeText })
     } catch (error) {
-      const errorMessage = resolvePreviewSummaryErrorMessage(error)
-      setPreviewSummaryDebug(`client-error: ${errorMessage}`)
-      if (fallbackSummary) {
-        setPostSummary(fallbackSummary)
-        const fallbackMessage = `AI 요약 실패로 규칙 기반 요약을 반영했습니다. (${errorMessage})`
-        setPreviewSummaryNotice({ tone: "error", text: fallbackMessage })
-        return
-      }
-
-      const failMessage = `요약 생성 실패: ${errorMessage}`
-      setPreviewSummaryNotice({ tone: "error", text: failMessage })
+      const errorMessage = resolveTagRecommendationErrorMessage(error)
+      const failMessage = `태그 추천 실패: ${errorMessage}`
+      setTagRecommendationNotice({ tone: "error", text: failMessage })
     } finally {
       setLoadingKey("")
     }
-  }, [postContent, postTitle])
+  }, [postContent, postTags, postTitle])
 
   const handleWritePost = async (): Promise<boolean> => {
     if (editorMode === "edit" || postId.trim()) {
@@ -2727,9 +2683,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       tone: "idle",
       text: publishModalHintByAction(actionType),
     })
-    setPreviewSummaryNotice({
+    setTagRecommendationNotice({
       tone: "idle",
-      text: "AI 요약 상태가 여기에 표시됩니다.",
+      text: "AI 태그 추천 상태가 여기에 표시됩니다.",
     })
     setIsPublishModalOpen(true)
   }
@@ -2754,15 +2710,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       loadingKey === "writePost" ||
       loadingKey === "modifyPost" ||
       loadingKey === "publishTempPost" ||
-      loadingKey === "generatePreviewSummary"
+      loadingKey === "recommendTags"
     ) return
     setPublishModalNotice({
       tone: "idle",
       text: publishModalHintByAction(publishActionType),
     })
-    setPreviewSummaryNotice({
+    setTagRecommendationNotice({
       tone: "idle",
-      text: "AI 요약 상태가 여기에 표시됩니다.",
+      text: "AI 태그 추천 상태가 여기에 표시됩니다.",
     })
     setIsPublishModalOpen(false)
   }
@@ -3692,6 +3648,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     />
                   </InlineTagList>
                   <FieldHelp>쉼표 또는 Enter로 태그를 추가하고, 태그를 눌러 삭제할 수 있습니다.</FieldHelp>
+                  <MetaActionRow>
+                    <Button
+                      type="button"
+                      disabled={disabled("recommendTags") || !postContent.trim()}
+                      onClick={() => void handleRecommendTags()}
+                    >
+                      {loadingKey === "recommendTags" ? "AI 태그 추천 중..." : "AI 태그 추천"}
+                    </Button>
+                  </MetaActionRow>
+                  <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
+                    {tagRecommendationNotice.text}
+                  </SummaryActionStatus>
                 </InlineTagComposer>
                 <WriterMetaActions>
                   <MetaActionRow>
@@ -4177,28 +4145,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <MetaActionRow>
                     <Button
                       type="button"
-                      disabled={disabled("generatePreviewSummary") || !postContent.trim()}
-                      onClick={() => void handleGeneratePreviewSummary()}
+                      onClick={() => setPostSummary(makePreviewSummary(postContent))}
+                      disabled={!postContent.trim()}
                     >
-                      {loadingKey === "generatePreviewSummary" ? "AI 요약 생성 중..." : "AI 요약 생성"}
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={disabled("generatePreviewSummary") || !postContent.trim()}
-                      onClick={() => {
-                        setPostSummary(makePreviewSummary(postContent))
-                        setPreviewSummaryNotice({
-                          tone: "success",
-                          text: "규칙 기반 요약을 입력창에 반영했습니다.",
-                        })
-                        setPreviewSummaryDebug("")
-                      }}
-                    >
-                      규칙 요약 채우기
+                      본문 기반 요약 채우기
                     </Button>
                   </MetaActionRow>
-                  <SummaryActionStatus data-tone={previewSummaryNotice.tone}>{previewSummaryNotice.text}</SummaryActionStatus>
-                  {previewSummaryDebug ? <SummaryDebugPanel>{previewSummaryDebug}</SummaryDebugPanel> : null}
                   <FieldHelp>아래 블록은 목록 카드에 실제로 노출될 제목/요약 미리보기입니다.</FieldHelp>
                   <PreviewCardSnapshot>
                     <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
@@ -4215,7 +4167,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     loadingKey === "writePost" ||
                     loadingKey === "modifyPost" ||
                     loadingKey === "publishTempPost" ||
-                    loadingKey === "generatePreviewSummary"
+                    loadingKey === "recommendTags"
                   }
                   onClick={closePublishModal}
                 >
@@ -5454,20 +5406,6 @@ const SummaryActionStatus = styled.div`
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
   }
-`
-
-const SummaryDebugPanel = styled.pre`
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  padding: 0.58rem 0.62rem;
-  border-radius: 8px;
-  border: 1px dashed ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.74rem;
-  line-height: 1.55;
 `
 
 const ZoomControlRow = styled.div`

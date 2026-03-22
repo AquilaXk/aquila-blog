@@ -1,6 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
-import com.back.boundedContexts.post.application.port.input.PostPreviewSummaryUseCase
+import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
@@ -18,14 +18,12 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
@@ -40,9 +38,7 @@ import org.springframework.web.bind.annotation.RestController
 @SecurityRequirement(name = "bearerAuth")
 class ApiV1AdmPostController(
     private val postUseCase: PostUseCase,
-    private val postPreviewSummaryUseCase: PostPreviewSummaryUseCase,
-    @param:Value("\${custom.ai.summary.debug.expose:false}")
-    private val aiSummaryDebugExpose: Boolean,
+    private val postTagRecommendationUseCase: PostTagRecommendationUseCase,
 ) {
     data class AdmPostCountResBody(
         val all: Long,
@@ -118,93 +114,57 @@ class ApiV1AdmPostController(
         @PathVariable id: Long,
     ): PostWithContentDto = PostWithContentDto(postUseCase.findById(id).getOrThrow())
 
-    data class GeneratePreviewSummaryRequest(
+    data class RecommendTagsRequest(
         @field:Size(max = 300)
         val title: String = "",
         @field:NotBlank
         @field:Size(max = 50_000)
         val content: String,
-        @field:Min(80)
-        @field:Max(220)
-        val maxLength: Int? = null,
+        val existingTags: List<String> = emptyList(),
+        @field:Min(3)
+        @field:Max(10)
+        val maxTags: Int? = null,
     )
 
-    data class GeneratePreviewSummaryResBody(
-        val summary: String,
+    data class RecommendTagsResBody(
+        val tags: List<String>,
         val provider: String,
         val model: String?,
         val reason: String? = null,
         val traceId: String? = null,
-        val debug: GeneratePreviewSummaryDebugResBody? = null,
-    )
-
-    data class GeneratePreviewSummaryDebugResBody(
-        val cacheStatus: String? = null,
-        val promptLength: Int? = null,
-        val promptPreview: String? = null,
-        val strictResponseStatus: Int? = null,
-        val strictResponsePreview: String? = null,
-        val relaxedRetried: Boolean? = null,
-        val relaxedResponseStatus: Int? = null,
-        val relaxedResponsePreview: String? = null,
-        val parsedSummaryLength: Int? = null,
-        val parsedSummaryPreview: String? = null,
+        val degraded: Boolean = provider == "rule",
     )
 
     /**
      * 생성 로직을 실행하고 실패 시 대체 경로를 적용합니다.
      * 컨트롤러 계층에서 요청 DTO를 검증한 뒤 서비스 호출 결과를 응답 규격으로 변환합니다.
      */
-    @PostMapping("/preview-summary")
-    @Operation(summary = "관리자용 미리보기 요약 생성")
-    fun generatePreviewSummary(
-        @Valid @RequestBody reqBody: GeneratePreviewSummaryRequest,
-        @RequestHeader(name = "X-Debug-Preview-Summary", required = false) debugHeader: String?,
-    ): RsData<GeneratePreviewSummaryResBody> {
+    @PostMapping("/recommend-tags")
+    @Operation(summary = "관리자용 AI 태그 추천")
+    fun recommendTags(
+        @Valid @RequestBody reqBody: RecommendTagsRequest,
+    ): RsData<RecommendTagsResBody> {
         val result =
-            postPreviewSummaryUseCase.generate(
+            postTagRecommendationUseCase.recommend(
                 title = reqBody.title,
                 content = reqBody.content,
-                maxLength = reqBody.maxLength ?: 150,
+                existingTags = reqBody.existingTags,
+                maxTags = reqBody.maxTags ?: 6,
             )
 
         val providerLabel = if (result.provider == "gemini") "AI" else "규칙 기반"
-        val includeDebug = aiSummaryDebugExpose && isDebugHeaderEnabled(debugHeader)
 
         return RsData(
             "200-1",
-            "$providerLabel 요약을 생성했습니다.",
-            GeneratePreviewSummaryResBody(
-                summary = result.summary,
+            "$providerLabel 태그 추천을 생성했습니다.",
+            RecommendTagsResBody(
+                tags = result.tags,
                 provider = result.provider,
                 model = result.model,
                 reason = result.reason,
                 traceId = result.traceId,
-                debug =
-                    if (includeDebug) {
-                        result.debug?.let { debug ->
-                            GeneratePreviewSummaryDebugResBody(
-                                cacheStatus = debug.cacheStatus,
-                                promptLength = debug.promptLength,
-                                promptPreview = debug.promptPreview,
-                                strictResponseStatus = debug.strictResponseStatus,
-                                strictResponsePreview = debug.strictResponsePreview,
-                                relaxedRetried = debug.relaxedRetried,
-                                relaxedResponseStatus = debug.relaxedResponseStatus,
-                                relaxedResponsePreview = debug.relaxedResponsePreview,
-                                parsedSummaryLength = debug.parsedSummaryLength,
-                                parsedSummaryPreview = debug.parsedSummaryPreview,
-                            )
-                        }
-                    } else {
-                        null
-                    },
+                degraded = result.provider == "rule",
             ),
         )
-    }
-
-    private fun isDebugHeaderEnabled(rawHeader: String?): Boolean {
-        val value = rawHeader?.trim()?.lowercase().orEmpty()
-        return value == "1" || value == "true" || value == "yes"
     }
 }

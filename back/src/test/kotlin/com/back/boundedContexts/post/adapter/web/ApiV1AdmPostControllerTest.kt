@@ -1,11 +1,11 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.post.application.port.input.PostPreviewSummaryUseCase
+import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
-import com.back.boundedContexts.post.dto.PostPreviewSummaryResult
+import com.back.boundedContexts.post.dto.PostTagRecommendationResult
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.standard.dto.page.PagedResult
@@ -56,7 +56,7 @@ class ApiV1AdmPostControllerTest {
     private lateinit var postUseCase: PostUseCase
 
     @MockitoBean
-    private lateinit var postPreviewSummaryUseCase: PostPreviewSummaryUseCase
+    private lateinit var postTagRecommendationUseCase: PostTagRecommendationUseCase
 
     @MockitoBean(name = "jpaMappingContext")
     private lateinit var jpaMappingContext: JpaMetamodelMappingContext
@@ -178,16 +178,17 @@ class ApiV1AdmPostControllerTest {
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
-    fun `관리자는 AI 미리보기 요약을 생성할 수 있다`() {
+    fun `관리자는 AI 태그 추천을 생성할 수 있다`() {
         given(
-            postPreviewSummaryUseCase.generate(
-                title = "요약 테스트 제목",
-                content = "요약 테스트 본문입니다.",
-                maxLength = 150,
+            postTagRecommendationUseCase.recommend(
+                title = "태그 추천 테스트 제목",
+                content = "태그 추천 테스트 본문입니다.",
+                existingTags = listOf("spring"),
+                maxTags = 6,
             ),
         ).willReturn(
-            PostPreviewSummaryResult(
-                summary = "요약 결과",
+            PostTagRecommendationResult(
+                tags = listOf("kotlin", "spring", "hexagonal-architecture"),
                 provider = "gemini",
                 model = "gemini-2.5-flash",
                 reason = null,
@@ -195,38 +196,43 @@ class ApiV1AdmPostControllerTest {
         )
 
         mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
+            .post("/post/api/v1/adm/posts/recommend-tags") {
                 contentType = org.springframework.http.MediaType.APPLICATION_JSON
                 content =
                     """
                     {
-                      "title": "요약 테스트 제목",
-                      "content": "요약 테스트 본문입니다."
+                      "title": "태그 추천 테스트 제목",
+                      "content": "태그 추천 테스트 본문입니다.",
+                      "existingTags": ["spring"],
+                      "maxTags": 6
                     }
                     """.trimIndent()
             }.andExpect {
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
-                jsonPath("$.data.summary") { value("요약 결과") }
+                jsonPath("$.data.tags.length()") { value(3) }
+                jsonPath("$.data.tags[0]") { value("kotlin") }
                 jsonPath("$.data.provider") { value("gemini") }
                 jsonPath("$.data.model") { value("gemini-2.5-flash") }
             }
 
-        then(postPreviewSummaryUseCase).should().generate("요약 테스트 제목", "요약 테스트 본문입니다.", 150)
+        then(postTagRecommendationUseCase)
+            .should()
+            .recommend("태그 추천 테스트 제목", "태그 추천 테스트 본문입니다.", listOf("spring"), 6)
     }
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
-    fun `요약 본문 길이가 너무 크면 400으로 차단된다`() {
+    fun `태그 추천 본문 길이가 너무 크면 400으로 차단된다`() {
         val oversizedContent = "a".repeat(50_001)
 
         mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
+            .post("/post/api/v1/adm/posts/recommend-tags") {
                 contentType = org.springframework.http.MediaType.APPLICATION_JSON
                 content =
                     """
                     {
-                      "title": "요약 길이 제한",
+                      "title": "태그 추천 길이 제한",
                       "content": "$oversizedContent"
                     }
                     """.trimIndent()
@@ -237,17 +243,17 @@ class ApiV1AdmPostControllerTest {
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
-    fun `요약 제목 길이가 너무 크면 400으로 차단된다`() {
+    fun `태그 추천 제목 길이가 너무 크면 400으로 차단된다`() {
         val oversizedTitle = "t".repeat(301)
 
         mvc
-            .post("/post/api/v1/adm/posts/preview-summary") {
+            .post("/post/api/v1/adm/posts/recommend-tags") {
                 contentType = org.springframework.http.MediaType.APPLICATION_JSON
                 content =
                     """
                     {
                       "title": "$oversizedTitle",
-                      "content": "요약 테스트 본문"
+                      "content": "태그 추천 테스트 본문"
                     }
                     """.trimIndent()
             }.andExpect {

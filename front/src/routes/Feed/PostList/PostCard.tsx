@@ -2,7 +2,6 @@ import Link from "next/link"
 import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
-import Image from "next/image"
 import styled from "@emotion/styled"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
@@ -302,13 +301,17 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
-            <Image
+            <img
               src={thumbnailSrc}
-              fill
               alt={data.title}
+              loading="lazy"
+              decoding="async"
               sizes={POST_CARD_THUMBNAIL_SIZES}
-              priority={false}
-              css={{
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
                 objectFit: "cover",
                 objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
                 transform: `scale(${thumbnailZoom})`,
@@ -337,7 +340,19 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
             <div className="author">
               <span className="avatar" aria-hidden="true">
                 {author?.profile_photo ? (
-                  <Image src={author.profile_photo} alt="" fill sizes="34px" css={{ objectFit: "cover" }} />
+                  <img
+                    src={author.profile_photo}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
                 ) : (
                   <span className="initial">{(author?.name || "A").slice(0, 1).toUpperCase()}</span>
                 )}

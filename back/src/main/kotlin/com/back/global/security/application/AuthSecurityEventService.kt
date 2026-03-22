@@ -82,9 +82,7 @@ class AuthSecurityEventService(
     }
 
     @Transactional(readOnly = true)
-    fun getRecent(limit: Int): List<AuthSecurityEventDto> {
-        return authSecurityEventStore.findRecent(limit).map { it.toDto() }
-    }
+    fun getRecent(limit: Int): List<AuthSecurityEventDto> = authSecurityEventStore.findRecent(limit).map { it.toDto() }
 
     private fun AuthSecurityEvent.toDto(): AuthSecurityEventDto =
         AuthSecurityEventDto(

@@ -26,4 +26,3 @@ class AuthSecurityEventPersistenceAdapter(
         return authSecurityEventRepository.findAll(pageable).content
     }
 }
-

@@ -11,4 +11,3 @@ interface AuthSecurityEventStore {
 
     fun findRecent(limit: Int): List<AuthSecurityEvent>
 }
-

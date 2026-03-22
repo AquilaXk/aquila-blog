@@ -203,6 +203,13 @@ const normalizeStringArray = (value?: string[]) => {
 const normalizeCategoryArray = (value?: string[]) =>
   normalizeStringArray(value).map(normalizeCategoryValue)
 
+const toSafeLogText = (value: unknown, maxLength = 240) =>
+  String(value ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[<>]/g, "")
+    .trim()
+    .slice(0, maxLength)
+
 const pickPreferredImageUrl = (...candidates: Array<string | undefined>) => {
   for (const candidate of candidates) {
     if (typeof candidate !== "string") continue
@@ -849,7 +856,13 @@ export const getPosts = async (
     }
 
     if (process.env.NODE_ENV !== "production") {
-      console.error("[getPosts] backend request failed:", error)
+      const safeErrorDetail =
+        error instanceof ApiError
+          ? `ApiError(status=${error.status}, url=${toSafeLogText(error.url, 120)})`
+          : error instanceof Error
+            ? `${toSafeLogText(error.name, 40)}: ${toSafeLogText(error.message)}`
+            : toSafeLogText(error)
+      console.error(`[getPosts] backend request failed: ${safeErrorDetail}`)
     }
     if (throwOnError) throw error
     return []

@@ -12,6 +12,7 @@ import {
 } from "src/libs/markdown/rendering"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
+import useResponsiveTableEffect from "src/libs/markdown/hooks/useResponsiveTableEffect"
 import useInlineColorEffect from "src/libs/markdown/hooks/useInlineColorEffect"
 import usePrismEffect from "src/libs/markdown/hooks/usePrismEffect"
 import PrettyCodeBlock from "src/libs/markdown/components/PrettyCodeBlock"
@@ -57,6 +58,7 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
   )
 
   useMermaidEffect(rootRef, renderKey)
+  useResponsiveTableEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
   usePrismEffect(rootRef, renderKey, true)
 

@@ -50,6 +50,98 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
       return message.includes("attribute width") && message.includes("negative value")
     }
 
+    let mermaidOverlayCleanup: (() => void) | null = null
+
+    const openMermaidOverlay = (svgMarkup: string) => {
+      if (typeof document === "undefined") return
+
+      mermaidOverlayCleanup?.()
+
+      const overlay = document.createElement("div")
+      overlay.setAttribute("data-aq-mermaid-overlay", "true")
+      overlay.style.position = "fixed"
+      overlay.style.inset = "0"
+      overlay.style.zIndex = "180"
+      overlay.style.background = "rgba(2, 6, 23, 0.7)"
+      overlay.style.display = "grid"
+      overlay.style.alignItems = "center"
+      overlay.style.justifyItems = "center"
+      overlay.style.padding = "max(0.9rem, env(safe-area-inset-top, 0px)) max(0.9rem, env(safe-area-inset-right, 0px)) max(0.9rem, env(safe-area-inset-bottom, 0px)) max(0.9rem, env(safe-area-inset-left, 0px))"
+
+      const panel = document.createElement("div")
+      panel.style.width = "min(96vw, 980px)"
+      panel.style.maxHeight = "min(88dvh, 760px)"
+      panel.style.overflow = "auto"
+      panel.style.borderRadius = "14px"
+      panel.style.border = "1px solid rgba(255, 255, 255, 0.14)"
+      panel.style.background = "rgba(11, 16, 23, 0.98)"
+      panel.style.padding = "0.75rem"
+
+      const closeButton = document.createElement("button")
+      closeButton.type = "button"
+      closeButton.textContent = "닫기"
+      closeButton.style.display = "inline-flex"
+      closeButton.style.alignItems = "center"
+      closeButton.style.justifyContent = "center"
+      closeButton.style.minHeight = "34px"
+      closeButton.style.padding = "0 0.8rem"
+      closeButton.style.borderRadius = "999px"
+      closeButton.style.border = "1px solid rgba(255, 255, 255, 0.2)"
+      closeButton.style.background = "rgba(15, 23, 42, 0.7)"
+      closeButton.style.color = "#f3f4f6"
+      closeButton.style.fontSize = "0.82rem"
+      closeButton.style.fontWeight = "700"
+      closeButton.style.marginLeft = "auto"
+      closeButton.style.marginBottom = "0.56rem"
+      closeButton.style.cursor = "pointer"
+
+      const stage = document.createElement("div")
+      stage.style.overflow = "auto"
+      stage.style.setProperty("-webkit-overflow-scrolling", "touch")
+      stage.innerHTML = svgMarkup
+      const stageSvg = stage.querySelector("svg")
+      if (stageSvg) {
+        stageSvg.removeAttribute("width")
+        stageSvg.removeAttribute("height")
+        stageSvg.style.maxWidth = "none"
+        stageSvg.style.width = "max-content"
+        stageSvg.style.height = "auto"
+        stageSvg.style.display = "block"
+      }
+
+      panel.appendChild(closeButton)
+      panel.appendChild(stage)
+      overlay.appendChild(panel)
+      document.body.appendChild(overlay)
+
+      const previousOverflow = document.body.style.overflow
+      document.body.style.overflow = "hidden"
+
+      const closeOverlay = () => {
+        document.body.style.overflow = previousOverflow
+        overlay.remove()
+        document.removeEventListener("keydown", handleEscape)
+        mermaidOverlayCleanup = null
+      }
+
+      const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          closeOverlay()
+        }
+      }
+
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) {
+          closeOverlay()
+        }
+      })
+      closeButton.addEventListener("click", closeOverlay)
+      document.addEventListener("keydown", handleEscape)
+
+      mermaidOverlayCleanup = closeOverlay
+    }
+
     const renderMermaidBlocks = async () => {
       const codeBlocks = Array.from(
         root.querySelectorAll<HTMLElement>(
@@ -223,7 +315,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             : Math.min(900, Math.floor(window.innerHeight * 0.78))
 
           let scale = 1
-          if (intrinsicWidth > containerWidth) {
+          if (!isMobileViewport && intrinsicWidth > containerWidth) {
             scale = Math.min(scale, containerWidth / intrinsicWidth)
           }
           if (intrinsicHeight * scale > maxReadableHeight) {
@@ -235,21 +327,37 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
-          stage.style.width = `${containerWidth}px`
+          const stageWidth = isMobileViewport ? Math.max(containerWidth, roundedWidth) : containerWidth
+          stage.style.width = `${stageWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
           stage.style.display = "flex"
-          stage.style.justifyContent = "center"
+          stage.style.justifyContent = isMobileViewport ? "flex-start" : "center"
+          stage.style.overflowX = isMobileViewport ? "auto" : "hidden"
+          block.style.overflowX = isMobileViewport ? "auto" : "hidden"
+          stage.style.setProperty("-webkit-overflow-scrolling", isMobileViewport ? "touch" : "auto")
+          block.style.setProperty("-webkit-overflow-scrolling", isMobileViewport ? "touch" : "auto")
 
           svgElement.setAttribute("preserveAspectRatio", "xMidYMin meet")
           svgElement.style.width = `${roundedWidth}px`
           svgElement.style.height = `${roundedHeight}px`
-          svgElement.style.maxWidth = "100%"
+          svgElement.style.maxWidth = isMobileViewport ? "none" : "100%"
           svgElement.style.maxHeight = "none"
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
-          svgElement.style.margin = "0 auto"
+          svgElement.style.margin = isMobileViewport ? "0" : "0 auto"
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
+
+          if (isMobileViewport && roundedWidth > containerWidth + 12) {
+            const expandButton = document.createElement("button")
+            expandButton.type = "button"
+            expandButton.className = "aq-mermaid-expand-btn"
+            expandButton.textContent = "확대 보기"
+            expandButton.addEventListener("click", () => {
+              openMermaidOverlay(svgElement.outerHTML)
+            })
+            block.appendChild(expandButton)
+          }
 
           // 렌더 완료 이후에만 높이 고정을 해제해 새로고침 시 레이아웃 점프를 줄인다.
           block.style.minHeight = ""
@@ -395,6 +503,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
     return () => {
       disposed = true
+      mermaidOverlayCleanup?.()
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))

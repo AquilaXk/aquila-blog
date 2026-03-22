@@ -310,6 +310,8 @@ const POSTS_FEED_API_PATH = asOpenApiPath("/post/api/v1/posts/feed")
 const POSTS_FEED_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/feed/cursor")
 const POSTS_EXPLORE_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/explore/cursor")
 const POSTS_TAGS_API_PATH = asOpenApiPath("/post/api/v1/posts/tags")
+const POSTS_ENDPOINT_TRACE_KEY = "posts:runtime-endpoints:v1"
+const POSTS_ENDPOINT_TRACE_MAX = 60
 let postsCache: TPost[] | null = null
 let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
@@ -359,6 +361,29 @@ const markPublicCursorDisabled = () => {
     window.sessionStorage.setItem(PUBLIC_CURSOR_DISABLED_SESSION_KEY, "1")
   } catch {
     // ignore storage permission/quota errors
+  }
+}
+
+const recordRuntimeEndpoint = (path: string, paginationMode: "page" | "cursor") => {
+  if (isServerRuntime) return
+  const now = new Date().toISOString()
+  const entry = `${now} ${paginationMode.toUpperCase()} ${path}`
+  const traceWindow = window as Window & {
+    __aqPostEndpointTrace?: string[]
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(POSTS_ENDPOINT_TRACE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as string[]) : []
+    const next = [...parsed, entry].slice(-POSTS_ENDPOINT_TRACE_MAX)
+    window.sessionStorage.setItem(POSTS_ENDPOINT_TRACE_KEY, JSON.stringify(next))
+    traceWindow.__aqPostEndpointTrace = next
+  } catch {
+    // ignore trace storage failures
+  }
+
+  if (paginationMode === "cursor") {
+    console.info("[posts-runtime-endpoint] cursor endpoint detected", path)
   }
 }
 
@@ -505,13 +530,17 @@ export const getExplorePostsPage = async ({
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
   const response = await apiFetch<PageDto<ApiPostDto>>(
-    buildExplorePath({
-      kw,
-      tag,
-      order,
-      page,
-      pageSize,
-    }),
+    (() => {
+      const endpoint = buildExplorePath({
+        kw,
+        tag,
+        order,
+        page,
+        pageSize,
+      })
+      recordRuntimeEndpoint(endpoint, "page")
+      return endpoint
+    })(),
     {
       signal,
     }
@@ -543,11 +572,15 @@ export const getFeedPostsPage = async ({
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
   const response = await apiFetch<PageDto<ApiPostDto>>(
-    buildFeedPath({
-      order,
-      page,
-      pageSize,
-    }),
+    (() => {
+      const endpoint = buildFeedPath({
+        order,
+        page,
+        pageSize,
+      })
+      recordRuntimeEndpoint(endpoint, "page")
+      return endpoint
+    })(),
     {
       signal,
     }
@@ -596,11 +629,15 @@ export const getFeedPostsCursorPage = async ({
 
   try {
     const response = await apiFetch<CursorPageDto<ApiPostDto>>(
-      buildFeedCursorPath({
-        order,
-        pageSize: safePageSize,
-        cursor: normalizedCursor,
-      }),
+      (() => {
+        const endpoint = buildFeedCursorPath({
+          order,
+          pageSize: safePageSize,
+          cursor: normalizedCursor,
+        })
+        recordRuntimeEndpoint(endpoint, "cursor")
+        return endpoint
+      })(),
       {
         signal,
       }
@@ -674,12 +711,16 @@ export const getExplorePostsCursorPage = async ({
 
   try {
     const response = await apiFetch<CursorPageDto<ApiPostDto>>(
-      buildExploreCursorPath({
-        tag,
-        order,
-        pageSize: safePageSize,
-        cursor: normalizedCursor,
-      }),
+      (() => {
+        const endpoint = buildExploreCursorPath({
+          tag,
+          order,
+          pageSize: safePageSize,
+          cursor: normalizedCursor,
+        })
+        recordRuntimeEndpoint(endpoint, "cursor")
+        return endpoint
+      })(),
       {
         signal,
       }
@@ -736,12 +777,16 @@ export const getSearchPostsPage = async ({
   const fallbackPageNumber = toValidPage(page)
   const fallbackPageSize = toValidPageSize(pageSize)
   const response = await apiFetch<PageDto<ApiPostDto>>(
-    buildSearchPath({
-      kw,
-      order,
-      page,
-      pageSize,
-    }),
+    (() => {
+      const endpoint = buildSearchPath({
+        kw,
+        order,
+        page,
+        pageSize,
+      })
+      recordRuntimeEndpoint(endpoint, "page")
+      return endpoint
+    })(),
     {
       signal,
     }

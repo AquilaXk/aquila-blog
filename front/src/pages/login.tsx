@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { GetServerSideProps } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
@@ -8,12 +9,18 @@ import AuthShell from "src/components/auth/AuthShell"
 import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import useAuthSession from "src/hooks/useAuthSession"
+import type { AuthMember } from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
+import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 
 type RsData<T> = {
   resultCode: string
   msg: string
   data: T
+}
+
+export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
+  return await getGuestPageProps(req)
 }
 
 const LoginPage = () => {
@@ -64,16 +71,33 @@ const LoginPage = () => {
         body: JSON.stringify({ username, password }),
       })
 
-      // 로그인 응답의 Set-Cookie를 받은 직후 현재 세션을 한 번 동기화해서,
-      // 다음 페이지가 stale anonymous 캐시를 보는 일을 막는다.
+      // 로그인 응답의 Set-Cookie를 받은 직후 현재 세션을 강제로 동기화해,
+      // SSR anonymous 스냅샷에서도 즉시 인증 헤더 상태가 반영되도록 한다.
       try {
-        const refreshed = await refresh()
-        setMe(refreshed.data ?? null)
+        const currentMember = await apiFetch<AuthMember>("/member/api/v1/auth/me")
+        setMe(currentMember)
       } catch {
-        // 세션 재조회 실패 시에도 이동은 계속한다.
+        // 세션 재조회 실패 시 refresh()로 한 번 더 재시도한다.
+        try {
+          const refreshed = await refresh()
+          setMe(refreshed.data ?? null)
+        } catch {
+          setMe(null)
+        }
       }
 
-      if (router.asPath !== next) {
+      const normalizePathname = (value: string) => {
+        if (!value) return "/"
+        if (value === "/") return "/"
+        const normalized = value.replace(/\/+$/, "")
+        return normalized || "/"
+      }
+
+      const currentPathname = normalizePathname(router.asPath.split("?")[0] || router.pathname)
+      const nextPathname = normalizePathname(next.split("?")[0] || "/")
+      const shouldNavigate = nextPathname !== currentPathname
+
+      if (shouldNavigate && router.asPath !== next) {
         await replaceRoute(router, next)
       }
     } catch (error) {

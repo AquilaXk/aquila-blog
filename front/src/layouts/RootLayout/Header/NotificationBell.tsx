@@ -539,7 +539,14 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
             onClick={() => setOpen(false)}
             tabIndex={-1}
           />
-          <div ref={panelRef} className="panel" role="dialog" aria-modal="false" aria-label="알림 목록" tabIndex={-1}>
+          <div
+            ref={panelRef}
+            className="panel"
+            role="dialog"
+            aria-modal={isMobileViewport ? "true" : "false"}
+            aria-label="알림 목록"
+            tabIndex={-1}
+          >
             <div className="panelHead">
               <div>
                 <strong>알림</strong>
@@ -890,7 +897,7 @@ const StyledWrapper = styled.div`
       padding: 0;
       margin: 0;
       background: rgba(2, 6, 23, 0.42);
-      z-index: 26;
+      z-index: 35;
       cursor: default;
     }
 
@@ -909,19 +916,17 @@ const StyledWrapper = styled.div`
 
     .panel {
       position: fixed;
-      top: calc(var(--app-header-height, 56px) + 0.56rem + env(safe-area-inset-top, 0px));
-      left: max(0.5rem, env(safe-area-inset-left, 0px));
-      right: max(0.5rem, env(safe-area-inset-right, 0px));
+      left: max(0.48rem, env(safe-area-inset-left, 0px));
+      right: max(0.48rem, env(safe-area-inset-right, 0px));
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 0.48rem);
+      top: auto;
       width: auto;
-      max-height: calc(
-        100dvh - var(--app-header-height, 56px) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-          1.02rem
-      );
+      max-height: min(72dvh, 34rem);
       padding: 0.62rem;
-      border-radius: 14px;
+      border-radius: 16px;
       animation-name: panelInMobile;
-      transform-origin: top center;
-      z-index: 27;
+      transform-origin: bottom center;
+      z-index: 36;
     }
 
     .panelHead {
@@ -977,7 +982,7 @@ const StyledWrapper = styled.div`
   @keyframes panelInMobile {
     from {
       opacity: 0;
-      transform: translateY(-8px) scale(0.99);
+      transform: translateY(12px) scale(0.992);
     }
     to {
       opacity: 1;

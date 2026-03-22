@@ -221,6 +221,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
   const [taskQueuePanelOpen, setTaskQueuePanelOpen] = useState(false)
   const [cleanupPanelOpen, setCleanupPanelOpen] = useState(false)
+  const [isMobileLayout, setIsMobileLayout] = useState(false)
+  const [advancedPanelsOpen, setAdvancedPanelsOpen] = useState(true)
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
     tone: "warning",
@@ -380,6 +382,30 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     window.addEventListener("error", onWindowError)
     return () => window.removeEventListener("error", onWindowError)
   }, [dashboardOpen])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const media = window.matchMedia("(max-width: 960px)")
+
+    const sync = () => {
+      const mobile = media.matches
+      setIsMobileLayout(mobile)
+      if (mobile) {
+        setAdvancedPanelsOpen(false)
+      } else {
+        setAdvancedPanelsOpen(true)
+      }
+    }
+
+    sync()
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync)
+      return () => media.removeEventListener("change", sync)
+    }
+
+    media.addListener(sync)
+    return () => media.removeListener(sync)
+  }, [])
 
   const fetchTaskQueueDiagnostics = async () => {
     try {
@@ -610,6 +636,32 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
   ]
 
+  const prioritizedActions: Array<{
+    key: string
+    label: string
+    onClick: () => Promise<void>
+    tone: ActionCardTone
+  }> = [
+    {
+      key: "systemHealth",
+      label: "서버 상태 새로고침",
+      tone: "infra",
+      onClick: async () => void run("systemHealth", () => fetchSystemHealthCached()),
+    },
+    {
+      key: "mailStatus",
+      label: "메일 준비 상태",
+      tone: "infra",
+      onClick: async () => void fetchSignupMailDiagnostics(false),
+    },
+    {
+      key: "taskQueueStatus",
+      label: "Task Queue 진단",
+      tone: "infra",
+      onClick: async () => void fetchTaskQueueDiagnostics(),
+    },
+  ]
+
   return (
     <Main>
       <HeaderCard>
@@ -628,17 +680,29 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </HeaderActions>
       </HeaderCard>
 
-      <GuideGrid>
-        {QUICK_GUIDES.map((guide) => (
-          <GuideCard key={guide.title}>
-            <GuideIcon aria-hidden="true">{guide.icon}</GuideIcon>
-            <div>
-              <h3>{guide.title}</h3>
-              <p>{guide.description}</p>
-            </div>
-          </GuideCard>
-        ))}
-      </GuideGrid>
+      {isMobileLayout ? (
+        <AdvancedToggle
+          type="button"
+          aria-expanded={advancedPanelsOpen}
+          onClick={() => setAdvancedPanelsOpen((prev) => !prev)}
+        >
+          {advancedPanelsOpen ? "고급 진단 영역 접기" : "고급 진단 영역 펼치기"}
+        </AdvancedToggle>
+      ) : null}
+
+      {(!isMobileLayout || advancedPanelsOpen) && (
+        <GuideGrid>
+          {QUICK_GUIDES.map((guide) => (
+            <GuideCard key={guide.title}>
+              <GuideIcon aria-hidden="true">{guide.icon}</GuideIcon>
+              <div>
+                <h3>{guide.title}</h3>
+                <p>{guide.description}</p>
+              </div>
+            </GuideCard>
+          ))}
+        </GuideGrid>
+      )}
 
       <OverviewCard>
         <SectionTop>
@@ -674,6 +738,33 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </OverviewItem>
         </OverviewGrid>
       </OverviewCard>
+
+      <QuickActionsCard>
+        <SectionTop>
+          <div>
+            <SectionEyebrow>Quick Actions</SectionEyebrow>
+            <SectionTitleRow>
+              <SectionIcon aria-hidden="true">⚡</SectionIcon>
+              <h2>자주 쓰는 운영 액션</h2>
+            </SectionTitleRow>
+            <SectionDescription>모바일/데스크톱 공통으로 가장 자주 쓰는 점검 액션만 우선 배치했습니다.</SectionDescription>
+          </div>
+        </SectionTop>
+        <QuickActionRow>
+          {prioritizedActions.map((action) => (
+            <ConsoleQuickActionButton
+              key={action.key}
+              type="button"
+              disabled={isBusy}
+              data-tone={action.tone}
+              onClick={() => void action.onClick()}
+            >
+              <span className="title">{action.label}</span>
+              <span className="chip">실행</span>
+            </ConsoleQuickActionButton>
+          ))}
+        </QuickActionRow>
+      </QuickActionsCard>
 
       <Grid>
         <SectionCard>
@@ -1129,6 +1220,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </SectionCard>
       </Grid>
 
+      {(!isMobileLayout || advancedPanelsOpen) && (
       <ConsoleCard>
         <ConsoleHeader>
           <div>
@@ -1155,6 +1247,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </ConsoleQuickActions>
         <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
       </ConsoleCard>
+      )}
     </Main>
   )
 }
@@ -1265,6 +1358,24 @@ const HeaderActions = styled.div`
   gap: 0.6rem;
 `
 
+const AdvancedToggle = styled.button`
+  min-height: 36px;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0 0.82rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray7};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+`
+
 const BaseButton = styled.button`
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -1325,8 +1436,22 @@ const SectionCard = styled.section`
   border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.14);
   padding: 1rem;
+`
+
+const QuickActionsCard = styled(SectionCard)`
+  padding: 0.92rem 1rem;
+`
+
+const QuickActionRow = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+
+  @media (max-width: 960px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const SectionTop = styled.div`
@@ -1465,8 +1590,8 @@ const ActionCardGrid = styled.div`
 
 const ActionCardButton = styled.button`
   border-radius: 8px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.8rem 0.88rem;
   text-align: left;
@@ -1481,7 +1606,8 @@ const ActionCardButton = styled.button`
   &:hover {
     transform: none;
     box-shadow: none;
-    background: ${({ theme }) => theme.colors.gray3};
+    background: ${({ theme }) => theme.colors.gray2};
+    border-color: ${({ theme }) => theme.colors.gray7};
   }
 
   &:disabled {
@@ -1492,13 +1618,7 @@ const ActionCardButton = styled.button`
   }
 
   &[data-tone="danger"] {
-    background: ${({ theme }) => theme.colors.red2};
-    color: ${({ theme }) => theme.colors.red11};
-  }
-
-  &[data-tone="write"] {
-    background: ${({ theme }) => theme.colors.green2};
-    color: ${({ theme }) => theme.colors.green11};
+    border-color: ${({ theme }) => theme.colors.red7};
   }
 `
 

@@ -428,7 +428,7 @@ const MarkdownRendererRoot = styled.div`
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    overflow-x: hidden;
+    overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     white-space: normal;
     padding: 0.2rem 0;
@@ -454,7 +454,8 @@ const MarkdownRendererRoot = styled.div`
     max-width: 100%;
     justify-content: center;
     align-items: flex-start;
-    overflow-x: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .aq-mermaid-stage > svg {
@@ -470,6 +471,19 @@ const MarkdownRendererRoot = styled.div`
   .aq-mermaid-stage > svg .nodeLabel p,
   .aq-mermaid-stage > svg .edgeLabel p {
     margin: 0;
+  }
+
+  .aq-mermaid-expand-btn {
+    margin: 0.45rem 0 0;
+    min-height: 32px;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    padding: 0 0.75rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   pre code .token.comment,
@@ -618,6 +632,63 @@ const MarkdownRendererRoot = styled.div`
     .aq-code-copy-bottom.is-copied {
       min-width: 3rem;
       padding: 0 0.52rem;
+    }
+
+    .aq-mermaid {
+      padding-bottom: 0.24rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    table.aq-table-responsive {
+      display: block;
+      border: 0;
+      margin: 0.9rem 0;
+      background: transparent;
+    }
+
+    table.aq-table-responsive > thead {
+      display: none !important;
+    }
+
+    table.aq-table-responsive > tbody {
+      display: grid;
+      gap: 0.62rem;
+      width: 100%;
+    }
+
+    table.aq-table-responsive > tbody > tr {
+      display: block;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border-radius: 10px;
+      overflow: hidden;
+      background: ${({ theme }) => theme.colors.gray2};
+    }
+
+    table.aq-table-responsive > tbody > tr > td {
+      display: grid;
+      grid-template-columns: minmax(5.2rem, 35%) minmax(0, 1fr);
+      gap: 0.56rem;
+      align-items: start;
+      border-right: 0;
+      border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+      padding: 0.62rem 0.68rem;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    table.aq-table-responsive > tbody > tr > td:last-child {
+      border-bottom: 0;
+    }
+
+    table.aq-table-responsive > tbody > tr > td::before {
+      content: attr(data-label);
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.74rem;
+      font-weight: 700;
+      line-height: 1.45;
     }
   }
 

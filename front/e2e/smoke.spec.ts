@@ -130,6 +130,63 @@ test("상단 내비 컨트롤은 공통 높이 토큰을 유지한다", async ({
   expect(uniqueHeights[0]).toBeLessThanOrEqual(40)
 })
 
+test("로그인 정책 토글값은 요청 바디에 반영되고 재진입 시 복원된다", async ({ page }) => {
+  const loginBodies: Array<{ rememberMe?: boolean; ipSecurity?: boolean }> = []
+
+  await page.route("**/member/api/v1/auth/login", async (route) => {
+    const body = route.request().postData()
+    if (body) loginBodies.push(JSON.parse(body))
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: {},
+      }),
+    })
+  })
+
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 1,
+        username: "aquila",
+        nickname: "aquila",
+        profileImageUrl: "/avatar.png",
+        profileImageDirectUrl: "/avatar.png",
+        role: "ROLE_ADMIN",
+      }),
+    })
+  })
+
+  await page.goto("/login?next=%2Flogin")
+
+  await page.locator("#email").fill("qa-login@example.com")
+  await page.locator("#password").fill("Abcd1234!")
+
+  await page.getByRole("button", { name: "로그인 상태 유지" }).click()
+  await page.locator("button", { hasText: "IP보안" }).first().click()
+  await page.getByRole("button", { name: "로그인", exact: true }).click()
+
+  await expect.poll(() => loginBodies.length).toBe(1)
+  expect(loginBodies[0]?.rememberMe).toBe(false)
+  expect(loginBodies[0]?.ipSecurity).toBe(true)
+
+  await page.reload()
+
+  await page.locator("#email").fill("qa-login@example.com")
+  await page.locator("#password").fill("Abcd1234!")
+  await page.getByRole("button", { name: "로그인", exact: true }).click()
+
+  await expect.poll(() => loginBodies.length).toBe(2)
+  expect(loginBodies[1]?.rememberMe).toBe(false)
+  expect(loginBodies[1]?.ipSecurity).toBe(true)
+})
+
 test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색으로 동작한다", async ({ page }) => {
   const capturedKw: string[] = []
 

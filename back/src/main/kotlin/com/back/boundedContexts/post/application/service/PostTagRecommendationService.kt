@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.node.JsonNodeType
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -356,7 +357,7 @@ class PostTagRecommendationService(
         val modelVersion =
             modelVersionNode
                 .takeIf { !it.isMissingNode && !it.isNull }
-                ?.asText()
+                ?.let(::readJsonText)
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
         val textCandidates = extractTextCandidates(root)
@@ -373,7 +374,7 @@ class PostTagRecommendationService(
         val candidates = mutableListOf<String>()
         root.path("candidates").forEach { candidate ->
             candidate.path("content").path("parts").forEach { part ->
-                val text = part.path("text").asText("").trim()
+                val text = readJsonText(part.path("text")).trim()
                 if (text.isNotBlank()) {
                     candidates += text
                 }
@@ -402,8 +403,8 @@ class PostTagRecommendationService(
         if (node.isArray) {
             return node.mapNotNull { child ->
                 child
-                    .takeIf { it.isTextual }
-                    ?.asText()
+                    .takeIf { it.nodeType == JsonNodeType.STRING }
+                    ?.let(::readJsonText)
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
             }
@@ -414,8 +415,8 @@ class PostTagRecommendationService(
         if (direct.isArray) {
             return direct.mapNotNull { child ->
                 child
-                    .takeIf { it.isTextual }
-                    ?.asText()
+                    .takeIf { it.nodeType == JsonNodeType.STRING }
+                    ?.let(::readJsonText)
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
             }
@@ -425,14 +426,19 @@ class PostTagRecommendationService(
         if (nested.isArray) {
             return nested.mapNotNull { child ->
                 child
-                    .takeIf { it.isTextual }
-                    ?.asText()
+                    .takeIf { it.nodeType == JsonNodeType.STRING }
+                    ?.let(::readJsonText)
                     ?.trim()
                     ?.takeIf { it.isNotEmpty() }
             }
         }
 
         return emptyList()
+    }
+
+    private fun readJsonText(node: JsonNode): String {
+        if (node.isMissingNode || node.isNull || node.nodeType != JsonNodeType.STRING) return ""
+        return runCatching { objectMapper.treeToValue(node, String::class.java) }.getOrDefault("")
     }
 
     private fun buildRuleTags(

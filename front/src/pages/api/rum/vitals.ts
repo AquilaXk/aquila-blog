@@ -62,17 +62,25 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const normalizedRating = ALLOWED_RATINGS.has(rating) ? rating : "unknown"
   if (!LOG_SLOW_ONLY || normalizedRating !== "good") {
+    const logName = (name || "n/a").replace(/\r|\n/g, " ")
+    const logRating = normalizedRating.replace(/\r|\n/g, " ")
+    const logPath = (path || "/").replace(/\r|\n/g, " ")
+    const logNavigationType = (navigationType || "unknown").replace(/\r|\n/g, " ")
+    const logMetricId = (metricId || "n/a").replace(/\r|\n/g, " ")
+    const logAttributionTarget = (attributionTarget || "n/a").replace(/\r|\n/g, " ")
+    const logAttributionEventType = (attributionEventType || "n/a").replace(/\r|\n/g, " ")
+    const logAttributionResourceUrl = (attributionResourceUrl || "n/a").replace(/\r|\n/g, " ")
     const attributionFragment =
       attributionTarget || attributionEventType || attributionResourceUrl
-        ? ` attrTarget="${attributionTarget || "n/a"}" attrEvent=${attributionEventType || "n/a"} attrUrl="${
-            attributionResourceUrl || "n/a"
+        ? ` attrTarget="${logAttributionTarget}" attrEvent=${logAttributionEventType} attrUrl="${
+            logAttributionResourceUrl
           }"`
         : ""
 
     console.info(
-      `[rum:vitals] name=${name} rating=${normalizedRating} value=${value.toFixed(4)} delta=${
+      `[rum:vitals] name=${logName} rating=${logRating} value=${value.toFixed(4)} delta=${
         delta !== null ? delta.toFixed(4) : "n/a"
-      } path="${path || "/"}" nav=${navigationType || "unknown"} id=${metricId || "n/a"}${attributionFragment}`
+      } path="${logPath}" nav=${logNavigationType} id=${logMetricId}${attributionFragment}`
     )
   }
 

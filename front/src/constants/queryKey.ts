@@ -1,6 +1,7 @@
 export const queryKey = {
   scheme: () => ["scheme"] as const,
   authMe: () => ["auth", "me"] as const,
+  authMeProbe: () => ["auth", "me", "probe"] as const,
   adminProfile: () => ["member", "adminProfile"] as const,
   postsExplore: (params: {
     kw: string

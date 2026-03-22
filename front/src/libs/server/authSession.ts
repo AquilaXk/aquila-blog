@@ -32,6 +32,9 @@ export const fetchServerAuthSession = async (req: IncomingMessage): Promise<Auth
 
 export const hydrateServerAuthSession = async (queryClient: QueryClient, req: IncomingMessage) => {
   const authMember = await fetchServerAuthSession(req)
+  const shouldProbeOnClient = authMember !== null
+
+  queryClient.setQueryData(queryKey.authMeProbe(), shouldProbeOnClient)
   if (authMember !== undefined) {
     queryClient.setQueryData(queryKey.authMe(), authMember)
   }

@@ -31,6 +31,7 @@ class CustomAuthenticationFilter(
     private val authCookieService: AuthCookieService,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
+    private val apiCorsPolicy: ApiCorsPolicy,
     private val rq: Rq,
 ) : OncePerRequestFilter() {
     private val log = org.slf4j.LoggerFactory.getLogger(CustomAuthenticationFilter::class.java)
@@ -88,6 +89,7 @@ class CustomAuthenticationFilter(
             }
             val rsData: RsData<Void> = e.rsData
 
+            apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
             response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
             response.status = rsData.statusCode
             response.writer.write(objectMapper.writeValueAsString(rsData))

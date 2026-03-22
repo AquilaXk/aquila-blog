@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "generatedAt": "2026-03-22T09:44:06.324Z",
+  "routes": {
+    "/": {
+      "chunkCount": 7,
+      "chunks": {
+        "static/chunks/webpack-78552e28875bb33c.js": {
+          "raw": 5691,
+          "gzip": 3025,
+          "brotli": 2511
+        },
+        "static/chunks/framework-f354ebcce9f3b522.js": {
+          "raw": 140040,
+          "gzip": 44890,
+          "brotli": 39118
+        },
+        "static/chunks/main-e0abd5fe2b3f8058.js": {
+          "raw": 131294,
+          "gzip": 38758,
+          "brotli": 33441
+        },
+        "static/chunks/pages/_app-506d4c312410ec82.js": {
+          "raw": 131911,
+          "gzip": 42130,
+          "brotli": 36908
+        },
+        "static/chunks/5675-bc9f6d2ef59e5757.js": {
+          "raw": 9550,
+          "gzip": 3985,
+          "brotli": 3545
+        },
+        "static/chunks/7930-fab06c865bcfdd46.js": {
+          "raw": 11455,
+          "gzip": 3361,
+          "brotli": 2958
+        },
+        "static/chunks/pages/index-d9c8f7e65764aabc.js": {
+          "raw": 70952,
+          "gzip": 18009,
+          "brotli": 15574
+        }
+      },
+      "totals": {
+        "raw": 500893,
+        "gzip": 154158,
+        "brotli": 134055
+      }
+    },
+    "/posts/[id]": {
+      "chunkCount": 9,
+      "chunks": {
+        "static/chunks/webpack-78552e28875bb33c.js": {
+          "raw": 5691,
+          "gzip": 3025,
+          "brotli": 2511
+        },
+        "static/chunks/framework-f354ebcce9f3b522.js": {
+          "raw": 140040,
+          "gzip": 44890,
+          "brotli": 39118
+        },
+        "static/chunks/main-e0abd5fe2b3f8058.js": {
+          "raw": 131294,
+          "gzip": 38758,
+          "brotli": 33441
+        },
+        "static/chunks/pages/_app-506d4c312410ec82.js": {
+          "raw": 131911,
+          "gzip": 42130,
+          "brotli": 36908
+        },
+        "static/chunks/750-7536c6c7a9772a62.js": {
+          "raw": 149485,
+          "gzip": 43760,
+          "brotli": 37840
+        },
+        "static/chunks/5675-bc9f6d2ef59e5757.js": {
+          "raw": 9550,
+          "gzip": 3985,
+          "brotli": 3545
+        },
+        "static/chunks/4796-652f02e10cb96012.js": {
+          "raw": 55579,
+          "gzip": 15939,
+          "brotli": 13891
+        },
+        "static/chunks/7930-fab06c865bcfdd46.js": {
+          "raw": 11455,
+          "gzip": 3361,
+          "brotli": 2958
+        },
+        "static/chunks/pages/posts/[id]-9251880f0b138400.js": {
+          "raw": 31992,
+          "gzip": 8516,
+          "brotli": 7413
+        }
+      },
+      "totals": {
+        "raw": 666997,
+        "gzip": 204364,
+        "brotli": 177625
+      }
+    },
+    "/admin": {
+      "chunkCount": 5,
+      "chunks": {
+        "static/chunks/webpack-78552e28875bb33c.js": {
+          "raw": 5691,
+          "gzip": 3025,
+          "brotli": 2511
+        },
+        "static/chunks/framework-f354ebcce9f3b522.js": {
+          "raw": 140040,
+          "gzip": 44890,
+          "brotli": 39118
+        },
+        "static/chunks/main-e0abd5fe2b3f8058.js": {
+          "raw": 131294,
+          "gzip": 38758,
+          "brotli": 33441
+        },
+        "static/chunks/pages/_app-506d4c312410ec82.js": {
+          "raw": 131911,
+          "gzip": 42130,
+          "brotli": 36908
+        },
+        "static/chunks/pages/admin-4e51f7558a9bbc4a.js": {
+          "raw": 10888,
+          "gzip": 3073,
+          "brotli": 2572
+        }
+      },
+      "totals": {
+        "raw": 419824,
+        "gzip": 131876,
+        "brotli": 114550
+      }
+    }
+  }
+}

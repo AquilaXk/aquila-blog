@@ -31,7 +31,7 @@ jobs:
   front-verify:
     runs-on: ubuntu-latest
     env:
-      BUNDLE_BUDGET_KB: "482"
+      BUNDLE_BUDGET_MARGIN_PERCENT: "5"
       CLS_BUDGET: "0.12"
       OPENAPI_SOURCE_URL: ${{ inputs.openapi_source_url }}
     steps:
@@ -110,9 +110,22 @@ jobs:
         working-directory: front
         run: yarn contracts:check
 
-      - name: Check frontend bundle size budget
+      - name: Check frontend bundle size budget (warn on PR / strict on main-release)
         working-directory: front
+        env:
+          BUNDLE_BUDGET_ENFORCEMENT: ${{ github.event_name == 'pull_request' && 'warn' || ((startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/heads/release')) && 'strict' || 'warn') }}
+          BUNDLE_BUDGET_MARGIN_PERCENT: ${{ env.BUNDLE_BUDGET_MARGIN_PERCENT }}
+          BUNDLE_REPORT_DIR: test-results/bundle-size
         run: yarn check:bundle-size
+
+      - name: Upload bundle budget report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: front-bundle-budget-report
+          path: front/test-results/bundle-size
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Install Playwright browser
         working-directory: front

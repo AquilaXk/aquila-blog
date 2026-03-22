@@ -49,6 +49,13 @@ const NavBar: React.FC = () => {
     await replaceRoute(router, target, { preferHardNavigation: true })
   }
 
+  const openLoginModal = () => {
+    preloadAuthEntryModal()
+    setAuthModalOpen(true)
+  }
+
+  const showImmediateLoginAction = authStatus === "loading" || authStatus === "anonymous"
+
   return (
     <StyledWrapper>
       <ul className="primaryLinks">
@@ -59,19 +66,14 @@ const NavBar: React.FC = () => {
         ))}
       </ul>
       <div className="authArea" data-auth-state={authState}>
-        {authStatus === "loading" && (
-          <div className="authLoadingShell" aria-hidden="true">
-            <span className="authSkeleton medium" />
-          </div>
-        )}
-        {authStatus === "anonymous" && (
+        {showImmediateLoginAction && (
           <button
             type="button"
             className="navPill"
             data-ui="nav-control"
             onMouseEnter={preloadAuthEntryModal}
             onFocus={preloadAuthEntryModal}
-            onClick={() => setAuthModalOpen(true)}
+            onClick={openLoginModal}
           >
             Login
           </button>
@@ -188,14 +190,6 @@ const StyledWrapper = styled.div`
     min-width: 0;
   }
 
-  .authLoadingShell {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 0.45rem;
-    width: auto;
-  }
-
   .navPill,
   .logoutBtn {
     display: inline-flex;
@@ -221,30 +215,11 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .authSkeleton {
-    display: inline-flex;
-    height: 14px;
-    border-radius: 6px;
-    background: ${({ theme }) => theme.colors.gray4};
-    opacity: 0.75;
-  }
-
-  .authSkeleton.icon {
-    width: 18px;
-    height: 18px;
-    border-radius: 999px;
-  }
-
-  .authSkeleton.short {
-    width: 52px;
-  }
-
-  .authSkeleton.medium {
-    width: 3.8rem;
-    height: 14px;
-  }
-
   .authArea[data-auth-state="anonymous"] .navPill {
+    min-width: 3.8rem;
+  }
+
+  .authArea[data-auth-state="loading"] .navPill {
     min-width: 3.8rem;
   }
 
@@ -324,19 +299,5 @@ const StyledWrapper = styled.div`
       padding: 0 0.34rem;
     }
 
-    .authSkeleton.short {
-      width: 44px;
-      height: 12px;
-    }
-
-    .authSkeleton.icon {
-      width: 15px;
-      height: 15px;
-    }
-
-    .authSkeleton.medium {
-      width: 62px;
-      height: 12px;
-    }
   }
 `

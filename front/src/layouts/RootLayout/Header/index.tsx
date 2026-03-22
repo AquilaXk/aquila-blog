@@ -206,14 +206,9 @@ const StyledWrapper = styled.div`
 
       .nav {
         gap: 0.18rem;
-        max-width: calc(100vw - 8.8rem);
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-      }
-
-      .nav::-webkit-scrollbar {
-        display: none;
+        max-width: calc(100vw - 7.8rem);
+        overflow: hidden;
+        justify-content: flex-end;
       }
     }
   }

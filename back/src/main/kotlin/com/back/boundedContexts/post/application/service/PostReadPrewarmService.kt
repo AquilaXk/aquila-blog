@@ -41,14 +41,14 @@ class PostReadPrewarmService(
                 .toList()
 
         val failureReasons = mutableListOf<String>()
-        var successCount = 0
+        var attemptedSteps = 0
 
         fun runStep(
             stepName: String,
             block: () -> Unit,
         ) {
+            attemptedSteps++
             runCatching(block)
-                .onSuccess { successCount++ }
                 .onFailure { exception ->
                     failureReasons += stepName
                     logger.warn(
@@ -95,7 +95,7 @@ class PostReadPrewarmService(
             }
         }
 
-        if (successCount == 0) {
+        if (attemptedSteps > 0 && failureReasons.size == attemptedSteps) {
             throw IllegalStateException(
                 "post_read_prewarm_all_failed postId=$postId tags=${normalizedTags.size} steps=${failureReasons.joinToString(",")}",
             )
@@ -104,7 +104,7 @@ class PostReadPrewarmService(
         logger.debug(
             "post_read_prewarm_done postId={} success={} failures={}",
             postId,
-            successCount,
+            attemptedSteps - failureReasons.size,
             failureReasons.size,
         )
     }

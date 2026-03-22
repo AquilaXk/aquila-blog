@@ -10,7 +10,7 @@ import { useRouter } from "next/router"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
-import type { ExplorePostsPage } from "src/apis/backend/posts"
+import { getFeedPostsPage, type ExplorePostsPage } from "src/apis/backend/posts"
 import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
@@ -24,7 +24,6 @@ const FEED_EXPLORER_SNAPSHOT_MAX_PAGES = 4
 const FEED_EXPLORER_SNAPSHOT_MAX_BYTES = 260_000
 const FEED_EXPLORER_RESTORE_MAX_KEYS = 4
 const FEED_EXPLORER_IDLE_REVALIDATE_TIMEOUT_MS = 1200
-const FEED_EXPLORER_IDLE_REVALIDATE_MIN_AGE_MS = 10_000
 
 type FeedExplorerRestoreState = {
   q: string
@@ -380,6 +379,7 @@ const FeedExplorer = () => {
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
   const hasHydratedQuerySnapshotRef = useRef(false)
   const hasScheduledIdleRevalidateRef = useRef(false)
+  const hasForcedFeedProbeRef = useRef(false)
   const restoreTargetPagesRef = useRef(1)
   const hasInitializedRestoreRef = useRef(false)
   const hasRestoredScrollRef = useRef(false)
@@ -465,9 +465,6 @@ const FeedExplorer = () => {
       restoreQueryPagesRef.current = restoredSnapshot.pages.slice(0, resolveSnapshotPageCap())
     }
 
-    if (!q && restored.q) {
-      setQ(restored.q)
-    }
   }, [currentTag, q, restoreSnapshotStorageKey, restoreStorageKey, router.isReady])
 
   useEffect(() => {
@@ -506,7 +503,6 @@ const FeedExplorer = () => {
 
     const restored = restoreStateRef.current
     if (!restored) return
-    if (Date.now() - restored.savedAt < FEED_EXPLORER_IDLE_REVALIDATE_MIN_AGE_MS) return
 
     const activeTag = currentTag || ""
     if (restored.tag !== activeTag) return
@@ -528,6 +524,24 @@ const FeedExplorer = () => {
       })
     })
   }, [currentTag, normalizedQuery, queryClient])
+
+  useEffect(() => {
+    if (normalizedQuery || currentTag) {
+      hasForcedFeedProbeRef.current = false
+      return
+    }
+    if (hasForcedFeedProbeRef.current) return
+    hasForcedFeedProbeRef.current = true
+
+    // SSR hydration 캐시만으로 고정되지 않도록 홈 첫 진입에서 page 기반 피드를 한 번 동기화한다.
+    void getFeedPostsPage({
+      order: FEED_EXPLORER_ORDER,
+      page: 1,
+      pageSize: FEED_EXPLORE_PAGE_SIZE,
+    }).catch(() => {
+      hasForcedFeedProbeRef.current = false
+    })
+  }, [currentTag, normalizedQuery])
 
   const persistFeedExplorerState = useCallback(() => {
     if (typeof window === "undefined") return

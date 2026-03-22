@@ -520,6 +520,24 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `검색 목록 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", "알림")
+                    param("page", "1")
+                    param("pageSize", "24")
+                    param("sort", "CREATED_AT")
+                    cookie(Cookie("apiKey", "invalid-api-key"))
+                    cookie(Cookie("accessToken", "invalid-access-token"))
+                    header(HttpHeaders.AUTHORIZATION, "Bearer invalid-api-key invalid-access-token")
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1PostController::class.java))
+                    match(handler().methodName("search"))
+                }
+        }
+
+        @Test
         fun `검색 목록 조회는 제목-태그-본문 가중치 순서로 정렬된다`() {
             val actor = actorApplicationService.findByUsername("user1").getOrThrow()
             val keyword = "rank-${System.currentTimeMillis()}"

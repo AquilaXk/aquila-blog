@@ -6927,10 +6927,13 @@ const WriterFooterActions = styled.div`
 
   @media (max-width: 720px) {
     width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
     justify-content: stretch;
 
     > button {
-      flex: 1 1 0;
+      width: 100%;
+      min-height: 38px;
       justify-content: center;
     }
   }

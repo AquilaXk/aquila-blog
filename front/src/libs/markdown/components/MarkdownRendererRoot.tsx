@@ -534,7 +534,7 @@ const MarkdownRendererRoot = styled.div`
 
   @media (max-width: 768px) {
     font-size: 1rem;
-    line-height: 1.8;
+    line-height: 1.74;
 
     h1 {
       font-size: clamp(1.62rem, 7.4vw, 1.98rem);
@@ -551,18 +551,29 @@ const MarkdownRendererRoot = styled.div`
     p,
     li {
       font-size: 1rem;
-      line-height: 1.76;
+      line-height: 1.72;
     }
 
     .aq-code code,
     pre code {
-      font-size: 0.875rem;
-      line-height: 1.5;
+      font-size: 0.9rem;
+      line-height: 1.56;
     }
 
     table {
+      display: block;
       width: 100%;
       max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      table-layout: auto;
+      border-radius: 12px;
+    }
+
+    table thead,
+    table tbody {
+      display: table;
+      width: 100%;
       table-layout: fixed;
     }
 
@@ -574,6 +585,7 @@ const MarkdownRendererRoot = styled.div`
       font-size: 0.95rem;
       line-height: 1.58;
       padding: 0.66rem 0.72rem;
+      min-width: 0;
     }
 
     .aq-code-toolbar {

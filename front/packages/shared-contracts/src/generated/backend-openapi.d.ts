@@ -52,6 +52,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/tasks/replay-failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["replayFailedTasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/search/pipeline/force-control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["setSearchPipelineForceControl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/search-engine/mirror/force-disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["setSearchEngineMirrorForceDisable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/mail/signup/test": {
         parameters: {
             query?: never;
@@ -358,6 +406,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/search/runtime-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSearchRuntimeFlags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/mail/signup": {
         parameters: {
             query?: never;
@@ -382,6 +446,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/api/v1/adm/auth/security-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authSecurityEvents"];
         put?: never;
         post?: never;
         delete?: never;
@@ -874,6 +954,42 @@ export interface components {
             msg?: string;
             data?: components["schemas"]["PostLikeToggleResBody"];
         };
+        TaskDlqReplayRequest: {
+            taskType?: string;
+            /** Format: int32 */
+            limit?: number;
+            resetRetryCount?: boolean;
+        };
+        RsDataTaskDlqReplayResult: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["TaskDlqReplayResult"];
+        };
+        TaskDlqReplayResult: {
+            taskType?: string;
+            /** Format: int32 */
+            requestedLimit?: number;
+            /** Format: int32 */
+            replayedCount?: number;
+            resetRetryCount?: boolean;
+            replayedTaskIds?: number[];
+        };
+        SearchPipelineForceControlRequest: {
+            forceControl?: boolean;
+        };
+        RsDataSearchRuntimeFlags: {
+            resultCode?: string;
+            msg?: string;
+            data?: components["schemas"]["SearchRuntimeFlags"];
+        };
+        SearchRuntimeFlags: {
+            searchPipelineForceControlEnabled?: boolean;
+            searchPipelineRuntimeOverride?: boolean;
+            searchEngineMirrorForceDisabled?: boolean;
+        };
+        SearchEngineMirrorForceDisableRequest: {
+            forceDisabled?: boolean;
+        };
         SignupMailTestRequest: {
             /** Format: email */
             email: string;
@@ -1044,7 +1160,7 @@ export interface components {
         };
         SignupCompleteRequest: {
             signupToken: string;
-            username: string;
+            username?: string;
             password: string;
             nickname: string;
         };
@@ -1085,8 +1201,10 @@ export interface components {
             nickname: string;
         };
         MemberLoginRequest: {
-            username: string;
+            email?: string;
             password: string;
+            rememberMe?: boolean;
+            ipSecurity?: boolean;
         };
         MemberLoginResBody: {
             item?: components["schemas"]["MemberDto"];
@@ -1270,6 +1388,21 @@ export interface components {
             uptimeMs?: number;
             version?: string;
             checks?: components["schemas"]["HealthChecks"];
+        };
+        AuthSecurityEventDto: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            eventType?: string;
+            /** Format: int64 */
+            memberId?: number;
+            loginIdentifier?: string;
+            rememberLoginEnabled?: boolean;
+            ipSecurityEnabled?: boolean;
+            clientIpFingerprint?: string;
+            requestPath?: string;
+            reason?: string;
         };
         PageDtoPostDto: {
             content?: components["schemas"]["PostDto"][];
@@ -1597,6 +1730,78 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataPostLikeToggleResBody"];
+                };
+            };
+        };
+    };
+    replayFailedTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskDlqReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataTaskDlqReplayResult"];
+                };
+            };
+        };
+    };
+    setSearchPipelineForceControl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchPipelineForceControlRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataSearchRuntimeFlags"];
+                };
+            };
+        };
+    };
+    setSearchEngineMirrorForceDisable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchEngineMirrorForceDisableRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["RsDataSearchRuntimeFlags"];
                 };
             };
         };
@@ -2100,6 +2305,26 @@ export interface operations {
             };
         };
     };
+    getSearchRuntimeFlags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SearchRuntimeFlags"];
+                };
+            };
+        };
+    };
     signupMailDiagnostics: {
         parameters: {
             query?: {
@@ -2138,6 +2363,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["HealthResBody"];
+                };
+            };
+        };
+    };
+    authSecurityEvents: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AuthSecurityEventDto"][];
                 };
             };
         };

@@ -272,6 +272,90 @@
         }
       }
     },
+    "/system/api/v1/adm/tasks/replay-failed" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "replayFailedTasks",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TaskDlqReplayRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataTaskDlqReplayResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/search/pipeline/force-control" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "setSearchPipelineForceControl",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SearchPipelineForceControlRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataSearchRuntimeFlags"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/search-engine/mirror/force-disable" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "setSearchEngineMirrorForceDisable",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SearchEngineMirrorForceDisableRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataSearchRuntimeFlags"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/mail/signup/test" : {
       "post" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -919,6 +1003,24 @@
         }
       }
     },
+    "/system/api/v1/adm/search/runtime-flags" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "getSearchRuntimeFlags",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SearchRuntimeFlags"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/mail/signup" : {
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -957,6 +1059,37 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/HealthResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system/api/v1/adm/auth/security-events" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "authSecurityEvents",
+        "parameters" : [ {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/AuthSecurityEventDto"
+                  }
                 }
               }
             }
@@ -1957,6 +2090,105 @@
           }
         }
       },
+      "TaskDlqReplayRequest" : {
+        "type" : "object",
+        "properties" : {
+          "taskType" : {
+            "type" : "string"
+          },
+          "limit" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "resetRetryCount" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataTaskDlqReplayResult" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/TaskDlqReplayResult"
+          }
+        }
+      },
+      "TaskDlqReplayResult" : {
+        "type" : "object",
+        "properties" : {
+          "taskType" : {
+            "type" : "string"
+          },
+          "requestedLimit" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "replayedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "resetRetryCount" : {
+            "type" : "boolean"
+          },
+          "replayedTaskIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          }
+        }
+      },
+      "SearchPipelineForceControlRequest" : {
+        "type" : "object",
+        "properties" : {
+          "forceControl" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "RsDataSearchRuntimeFlags" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/SearchRuntimeFlags"
+          }
+        }
+      },
+      "SearchRuntimeFlags" : {
+        "type" : "object",
+        "properties" : {
+          "searchPipelineForceControlEnabled" : {
+            "type" : "boolean"
+          },
+          "searchPipelineRuntimeOverride" : {
+            "type" : "boolean"
+          },
+          "searchEngineMirrorForceDisabled" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "SearchEngineMirrorForceDisableRequest" : {
+        "type" : "object",
+        "properties" : {
+          "forceDisabled" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "SignupMailTestRequest" : {
         "type" : "object",
         "properties" : {
@@ -2433,7 +2665,7 @@
             "minLength" : 2
           }
         },
-        "required" : [ "nickname", "password", "signupToken", "username" ]
+        "required" : [ "nickname", "password", "signupToken" ]
       },
       "MemberDto" : {
         "type" : "object",
@@ -2538,18 +2770,24 @@
       "MemberLoginRequest" : {
         "type" : "object",
         "properties" : {
-          "username" : {
+          "email" : {
             "type" : "string",
-            "maxLength" : 30,
+            "maxLength" : 320,
             "minLength" : 2
           },
           "password" : {
             "type" : "string",
             "maxLength" : 128,
             "minLength" : 0
+          },
+          "rememberMe" : {
+            "type" : "boolean"
+          },
+          "ipSecurity" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "password", "username" ]
+        "required" : [ "password" ]
       },
       "MemberLoginResBody" : {
         "type" : "object",
@@ -3041,6 +3279,44 @@
           },
           "checks" : {
             "$ref" : "#/components/schemas/HealthChecks"
+          }
+        }
+      },
+      "AuthSecurityEventDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "memberId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "loginIdentifier" : {
+            "type" : "string"
+          },
+          "rememberLoginEnabled" : {
+            "type" : "boolean"
+          },
+          "ipSecurityEnabled" : {
+            "type" : "boolean"
+          },
+          "clientIpFingerprint" : {
+            "type" : "string"
+          },
+          "requestPath" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
           }
         }
       },

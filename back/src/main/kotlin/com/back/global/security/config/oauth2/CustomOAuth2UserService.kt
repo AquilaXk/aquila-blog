@@ -62,12 +62,13 @@ class CustomOAuth2UserService(
         val password = ""
 
         val member =
-            memberUseCase.modifyOrJoin(
-                username,
-                password,
-                profilePayload.nickname,
-                profilePayload.profileImgUrl,
-            ).data
+            memberUseCase
+                .modifyOrJoin(
+                    username,
+                    password,
+                    profilePayload.nickname,
+                    profilePayload.profileImgUrl,
+                ).data
 
         return SecurityUser(
             member.id,
@@ -138,7 +139,8 @@ internal object OAuth2ProfileExtractor {
 }
 
 private fun Any?.asMap(): Map<String, Any?>? =
-    (this as? Map<*, *>)?.entries
+    (this as? Map<*, *>)
+        ?.entries
         ?.mapNotNull { (key, value) ->
             (key as? String)?.let { it to value }
         }?.toMap()

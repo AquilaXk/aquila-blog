@@ -11,6 +11,7 @@ import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import useAuthSession from "src/hooks/useAuthSession"
 import type { AuthMember } from "src/hooks/useAuthSession"
+import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 
@@ -60,6 +61,16 @@ const LoginPage = () => {
     if (!loginIdPrefill) return
     setEmail(loginIdPrefill)
   }, [loginIdPrefill])
+
+  useEffect(() => {
+    const prefs = loadAuthLoginPolicyPrefs()
+    setKeepSignedIn(prefs.keepSignedIn)
+    setIpSecurityOn(prefs.ipSecurityOn)
+  }, [])
+
+  useEffect(() => {
+    saveAuthLoginPolicyPrefs({ keepSignedIn, ipSecurityOn })
+  }, [keepSignedIn, ipSecurityOn])
 
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)

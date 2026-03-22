@@ -309,8 +309,10 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
           <div className="thumbnail">
             <img
               src={thumbnailSrc}
-              alt={data.title}
-              loading="lazy"
+              alt=""
+              aria-hidden="true"
+              loading={layout === "pinned" ? "eager" : "lazy"}
+              fetchPriority={layout === "pinned" ? "high" : "auto"}
               decoding="async"
               sizes={POST_CARD_THUMBNAIL_SIZES}
               style={{
@@ -352,8 +354,6 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
                     loading="lazy"
                     decoding="async"
                     style={{
-                      position: "absolute",
-                      inset: 0,
                       width: "100%",
                       height: "100%",
                       objectFit: "cover",

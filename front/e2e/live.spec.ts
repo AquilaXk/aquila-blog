@@ -9,6 +9,7 @@ const liveApiProbeAttempts = Number.parseInt(process.env.E2E_LIVE_API_PROBE_ATTE
 const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS || "3", 10)
 const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
 const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
+const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -39,6 +40,13 @@ const isRetriableNetworkError = (error: unknown) => {
 
 const isWebKitCorsAccessControlNoise = (message: string) =>
   /due to access control checks\./i.test(message) && /\/api\.[\w.-]+\//i.test(message)
+
+const isRetriableLoginStatus = (status: number) => [502, 503, 504, 520, 522, 524, 530].includes(status)
+
+const hasAuthCookie = async (page: Page) => {
+  const cookies = await page.context().cookies()
+  return cookies.some((cookie) => cookie.name === "apiKey" || cookie.name === "accessToken")
+}
 
 const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
   const probePaths = ["/actuator/health", "/member/api/v1/auth/me"]
@@ -104,12 +112,64 @@ const loginWithRetry = async (
 }
 
 const loginThroughUi = async (page: Page, loginId: string, password: string) => {
-  await page.goto("/login?next=%2Fadmin")
-  await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
-  await page.getByLabel("이메일").fill(loginId)
-  await page.locator("#password").fill(password)
-  await page.getByRole("button", { name: "로그인", exact: true }).click()
-  await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })
+  let lastFailure = "unknown"
+
+  for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
+    await page.goto("/login?next=%2Fadmin")
+    await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
+    await page.getByLabel("이메일").fill(loginId)
+    await page.locator("#password").fill(password)
+
+    const loginResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response.url().includes("/member/api/v1/auth/login"),
+      { timeout: liveLoginTimeoutMs }
+    )
+
+    await page.getByRole("button", { name: "로그인", exact: true }).click()
+    const loginResponse = await loginResponsePromise
+    const status = loginResponse.status()
+
+    if (!loginResponse.ok()) {
+      const bodyPreview = (await loginResponse.text().catch(() => "")).slice(0, 240)
+      lastFailure = `status=${status} body=${bodyPreview}`
+      if (isRetriableLoginStatus(status) && attempt < liveLoginAttempts) {
+        await sleep(liveRetryBaseDelayMs * attempt)
+        continue
+      }
+      throw new Error(`UI login request failed. ${lastFailure}`)
+    }
+
+    const currentUrl = page.url()
+    if (/\/admin(\/|$)/.test(currentUrl)) return
+
+    // 성공 쿠키가 있는데 리다이렉트가 지연되는 경우 /admin 재진입으로 판정한다.
+    if (await hasAuthCookie(page)) {
+      await page.goto("/admin")
+      await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
+      return
+    }
+
+    const loginError = page
+      .locator("main")
+      .getByText(/로그인에 실패|이메일\(또는 아이디\)|로그인 시도가 너무 많습니다|서버 오류/i)
+      .first()
+
+    if (await loginError.isVisible().catch(() => false)) {
+      const errorText = (await loginError.textContent())?.trim() || "unknown error"
+      lastFailure = `status=${status} error=${errorText}`
+      throw new Error(`UI login did not establish session. ${lastFailure}`)
+    }
+
+    lastFailure = `status=${status} url=${currentUrl}`
+    if (attempt < liveLoginAttempts) {
+      await sleep(liveRetryBaseDelayMs * attempt)
+      continue
+    }
+  }
+
+  throw new Error(`UI login failed after retries. last=${lastFailure}`)
 }
 
 test.describe("live production e2e", () => {

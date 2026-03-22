@@ -6,7 +6,6 @@ import { TPost } from "../../../types"
 import styled from "@emotion/styled"
 import {
   FEED_CARD_META_FONT_SIZE_REM,
-  FEED_CARD_SUMMARY_LINE_HEIGHT,
   FEED_CARD_SUMMARY_LINES,
   FEED_CARD_TITLE_LINE_HEIGHT,
 } from "@shared/ui-tokens"

@@ -10,7 +10,7 @@ import { useRouter } from "next/router"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
-import { getFeedPostsPage, type ExplorePostsPage } from "src/apis/backend/posts"
+import { type ExplorePostsPage } from "src/apis/backend/posts"
 import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
@@ -378,8 +378,8 @@ const FeedExplorer = () => {
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
   const hasHydratedQuerySnapshotRef = useRef(false)
+  const hasAppliedRestoreSnapshotRef = useRef(false)
   const hasScheduledIdleRevalidateRef = useRef(false)
-  const hasForcedFeedProbeRef = useRef(false)
   const restoreTargetPagesRef = useRef(1)
   const hasInitializedRestoreRef = useRef(false)
   const hasRestoredScrollRef = useRef(false)
@@ -414,6 +414,7 @@ const FeedExplorer = () => {
     tag: currentTag,
     pageSize: FEED_EXPLORE_PAGE_SIZE,
     order: FEED_EXPLORER_ORDER,
+    enabled: router.isReady,
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
   const lastLoadMoreAtRef = useRef(0)
@@ -496,10 +497,12 @@ const FeedExplorer = () => {
       pageParams: restoredPages.map((page) => page.pageNumber),
     })
     hasHydratedQuerySnapshotRef.current = true
+    hasAppliedRestoreSnapshotRef.current = true
   }, [currentTag, normalizedQuery, queryClient])
 
   useEffect(() => {
     if (hasScheduledIdleRevalidateRef.current) return
+    if (!hasAppliedRestoreSnapshotRef.current) return
 
     const restored = restoreStateRef.current
     if (!restored) return
@@ -524,24 +527,6 @@ const FeedExplorer = () => {
       })
     })
   }, [currentTag, normalizedQuery, queryClient])
-
-  useEffect(() => {
-    if (normalizedQuery || currentTag) {
-      hasForcedFeedProbeRef.current = false
-      return
-    }
-    if (hasForcedFeedProbeRef.current) return
-    hasForcedFeedProbeRef.current = true
-
-    // SSR hydration 캐시만으로 고정되지 않도록 홈 첫 진입에서 page 기반 피드를 한 번 동기화한다.
-    void getFeedPostsPage({
-      order: FEED_EXPLORER_ORDER,
-      page: 1,
-      pageSize: FEED_EXPLORE_PAGE_SIZE,
-    }).catch(() => {
-      hasForcedFeedProbeRef.current = false
-    })
-  }, [currentTag, normalizedQuery])
 
   const persistFeedExplorerState = useCallback(() => {
     if (typeof window === "undefined") return

@@ -8,13 +8,14 @@ import {
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { TPost } from "src/types"
-import { useEffect, useMemo, useRef } from "react"
+import { useMemo } from "react"
 
 type Params = {
   kw: string
   tag?: string
   pageSize?: number
   order?: "asc" | "desc"
+  enabled?: boolean
 }
 
 const EMPTY_POSTS: TPost[] = []
@@ -68,6 +69,7 @@ const useExplorePostsQuery = ({
   tag,
   pageSize = FEED_EXPLORE_PAGE_SIZE,
   order = "desc",
+  enabled = true,
 }: Params) => {
   const normalizedKw = kw.trim()
   const normalizedTag = typeof tag === "string" ? tag.trim() || undefined : undefined
@@ -75,6 +77,7 @@ const useExplorePostsQuery = ({
   const feedMode = normalizedKw.length === 0 && !normalizedTag
 
   const query = useInfiniteQuery({
+    enabled,
     queryKey: feedMode
       ? queryKey.postsFeedInfinite({
           pageSize,
@@ -122,10 +125,11 @@ const useExplorePostsQuery = ({
         signal: signal ?? undefined,
       })
     },
-    staleTime: feedMode ? 0 : 300_000,
+    staleTime: 300_000,
     retry: 1,
-    refetchOnMount: feedMode ? true : false,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     initialPageParam: OFFSET_INITIAL_PAGE_PARAM,
     getNextPageParam: (lastPage) => {
       if (lastPage.posts.length === 0) return undefined
@@ -133,18 +137,6 @@ const useExplorePostsQuery = ({
       return lastPage.pageNumber + 1
     },
   })
-
-  const hasForcedFeedRefetchRef = useRef(false)
-
-  useEffect(() => {
-    if (!feedMode) {
-      hasForcedFeedRefetchRef.current = false
-      return
-    }
-    if (hasForcedFeedRefetchRef.current) return
-    hasForcedFeedRefetchRef.current = true
-    void query.refetch()
-  }, [feedMode, query])
 
   const { pinnedPosts, regularPosts } = useMemo(() => {
     const pages = query.data?.pages

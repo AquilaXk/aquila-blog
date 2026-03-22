@@ -5,6 +5,10 @@ const DEFAULT_API_FETCH_TIMEOUT_MS = 12_000
 const DEFAULT_REVALIDATE_CACHE_TTL_MS = 15_000
 const REVALIDATE_CACHE_MAX_TTL_MS = 300_000
 const REVALIDATE_CACHE_MAX_ENTRIES = 200
+const DEFAULT_GET_TRANSIENT_RETRY_COUNT = 1
+const DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS = 120
+const GET_RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
+const STALE_IF_ERROR_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 
 export type ApiFetchOptions = RequestInit & {
   timeoutMs?: number
@@ -91,6 +95,8 @@ const resolveStatusMessage = (status: number) => {
   if (status >= 500) return "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
   return "요청 처리 중 오류가 발생했습니다."
 }
+
+const sleep = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs))
 
 const resolveTimeoutMs = (path: string, init: ApiFetchOptions) => {
   if (typeof init.timeoutMs === "number" && Number.isFinite(init.timeoutMs) && init.timeoutMs > 0) {
@@ -225,26 +231,68 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
 
   const executeRequest = async (): Promise<T> => {
     const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
-    const { signal, cleanup } = createTimedSignal(requestInit.signal, resolvedTimeoutMs)
+    const canRetryTransientGet =
+      method === "GET" &&
+      !requestInit.signal &&
+      !isServer
+    const maxAttempts = canRetryTransientGet ? DEFAULT_GET_TRANSIENT_RETRY_COUNT + 1 : 1
+    let response: Response | null = null
 
-    let response: Response
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const { signal, cleanup } = createTimedSignal(requestInit.signal, resolvedTimeoutMs)
 
-    try {
-      response = await fetch(url, {
-        credentials: "include",
-        ...requestInit,
-        headers,
-        signal,
-      })
-    } catch (error) {
-      cleanup()
-      if (error instanceof DOMException && error.name === "TimeoutError") {
-        throw new ApiTimeoutError(url, resolvedTimeoutMs)
+      try {
+        response = await fetch(url, {
+          credentials: "include",
+          ...requestInit,
+          headers,
+          signal,
+        })
+        cleanup()
+      } catch (error) {
+        cleanup()
+
+        if (requestInit.signal?.aborted) {
+          throw error
+        }
+
+        const timedOut = error instanceof DOMException && error.name === "TimeoutError"
+        const transientTransportError =
+          error instanceof DOMException || error instanceof TypeError
+        const hasNextAttempt = attempt < maxAttempts - 1
+
+        if (canRetryTransientGet && transientTransportError && hasNextAttempt) {
+          await sleep(DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS * (attempt + 1))
+          continue
+        }
+
+        if (canUseRevalidateCache && revalidateCacheEntry) {
+          // stale-if-error: 전송 장애/타임아웃 시 최근 정상 payload로 즉시 복구
+          refreshRevalidateCacheEntry(url, revalidateCacheEntry, null, null)
+          return revalidateCacheEntry.payload as T
+        }
+
+        if (timedOut) {
+          throw new ApiTimeoutError(url, resolvedTimeoutMs)
+        }
+
+        throw error
       }
-      throw error
+
+      if (response.ok || !canRetryTransientGet || attempt >= maxAttempts - 1) {
+        break
+      }
+
+      if (!GET_RETRYABLE_STATUS_CODES.has(response.status)) {
+        break
+      }
+
+      await sleep(DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS * (attempt + 1))
     }
 
-    cleanup()
+    if (!response) {
+      throw new Error(`apiFetch: missing response for ${url}`)
+    }
 
     if (response.status === 304 && canUseRevalidateCache && revalidateCacheEntry) {
       refreshRevalidateCacheEntry(
@@ -257,6 +305,17 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
     }
 
     if (!response.ok) {
+      if (canUseRevalidateCache && revalidateCacheEntry && STALE_IF_ERROR_STATUS_CODES.has(response.status)) {
+        // upstream 5xx/429 구간에서도 사용자에게 마지막 정상 스냅샷을 우선 제공
+        refreshRevalidateCacheEntry(
+          url,
+          revalidateCacheEntry,
+          response.headers.get("etag"),
+          response.headers.get("cache-control"),
+        )
+        return revalidateCacheEntry.payload as T
+      }
+
       const body = await response.text().catch(() => "")
       throw new ApiError(response.status, url, body)
     }

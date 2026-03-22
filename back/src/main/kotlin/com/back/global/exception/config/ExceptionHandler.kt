@@ -135,9 +135,16 @@ class ExceptionHandler(
             )
         }
 
-        return ResponseEntity
-            .status(ex.rsData.statusCode)
-            .body(ex.rsData)
+        val response =
+            ResponseEntity
+                .status(ex.rsData.statusCode)
+                .apply {
+                    if (ex.rsData.statusCode == HttpStatus.SERVICE_UNAVAILABLE.value()) {
+                        header("Retry-After", "1")
+                    }
+                }
+
+        return response.body(ex.rsData)
     }
 
     /**

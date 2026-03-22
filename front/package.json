@@ -15,7 +15,7 @@
     "contracts:generate": "openapi-typescript contracts/openapi/openapi.json -o packages/shared-contracts/src/generated/backend-openapi.d.ts",
     "contracts:update": "yarn contracts:fetch && yarn contracts:generate",
     "contracts:verify-live": "yarn contracts:fetch && yarn contracts:check",
-    "contracts:check": "yarn contracts:generate && git diff --exit-code -- packages/shared-contracts/src/generated/backend-openapi.d.ts",
+    "contracts:check": "node scripts/openapi/check-contract-drift.mjs",
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts",
     "test:e2e:perf": "playwright test e2e/perf.spec.ts",

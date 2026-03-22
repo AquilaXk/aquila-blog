@@ -1,4 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query"
+import { isNonEmptyString, toSafeInt } from "@shared/utils"
 import {
   getExplorePostsCursorPage,
   getExplorePostsPage,
@@ -54,11 +55,8 @@ const useExplorePostsQuery = ({
             order,
           }),
     queryFn: ({ pageParam, signal }: { pageParam: ExplorePageParam; signal?: AbortSignal }) => {
-      const pageNumber = typeof pageParam === "number" ? pageParam : 1
-      const cursor =
-        typeof pageParam === "string" && pageParam.trim().length > 0
-          ? pageParam
-          : undefined
+      const pageNumber = toSafeInt(pageParam, 1)
+      const cursor = isNonEmptyString(pageParam) ? pageParam : undefined
 
       if (cursorMode) {
         if (feedMode) {

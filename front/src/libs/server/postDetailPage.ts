@@ -47,7 +47,10 @@ export const buildCanonicalPostDetailPage = async (
   if (!postDetail && !shouldClientRecover) return { notFound: true }
 
   if (postDetail) {
-    await queryClient.prefetchQuery(queryKey.post(postDetail.id), () => postDetail)
+    await queryClient.prefetchQuery({
+      queryKey: queryKey.post(postDetail.id),
+      queryFn: () => postDetail,
+    })
   }
   const initialComments =
     postDetail && postDetail.type[0] === "Post" ? await fetchInitialComments(req, postDetail.id) : []

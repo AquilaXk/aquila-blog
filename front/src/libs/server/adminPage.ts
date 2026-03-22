@@ -26,7 +26,10 @@ export const getAdminPageProps = async (
     }
   }
 
-  await queryClient.prefetchQuery(queryKey.authMe(), () => guardResult.member)
+  await queryClient.prefetchQuery({
+    queryKey: queryKey.authMe(),
+    queryFn: () => guardResult.member,
+  })
 
   return {
     props: {

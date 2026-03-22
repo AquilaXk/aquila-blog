@@ -94,8 +94,11 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
             </figure>
           )
         },
-        code({ className, children, inline, ...props }) {
-          if (inline) {
+        code({ className, children, ...props }) {
+          const raw = typeof children === "string" ? children : String(children ?? "")
+          const isInlineCode = !className && !raw.includes("\n")
+
+          if (isInlineCode) {
             return (
               <code className="aq-inline-code" {...props}>
                 {children}

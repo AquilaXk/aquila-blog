@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { MOBILE_TOUCH_TARGET_MIN_PX } from "@shared/ui-tokens"
 import React, { InputHTMLAttributes, Ref } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 
@@ -139,7 +140,7 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 768px) {
     > .field {
-      min-height: 34px;
+      min-height: ${MOBILE_TOUCH_TARGET_MIN_PX}px;
       padding: 0 0.5rem;
       border-radius: ${({ theme }) => `${Math.max(theme.variables.ui.button.radius - 1, 6)}px`};
     }

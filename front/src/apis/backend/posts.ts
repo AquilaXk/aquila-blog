@@ -1,6 +1,7 @@
 import { PostDetail, TPost } from "src/types"
 import { normalizeCategoryValue } from "src/libs/utils"
 import { ApiError, apiFetch } from "./client"
+import { asOpenApiPath } from "./openapiContract"
 
 type PageDto<T> = {
   content: T[]
@@ -286,6 +287,12 @@ const PAGE_SIZE = 30
 const POSTS_CACHE_TTL_MS = 90_000
 const isServerRuntime = typeof window === "undefined"
 const PUBLIC_CURSOR_DISABLED_SESSION_KEY = "posts:public-cursor-disabled:v1"
+const POSTS_EXPLORE_API_PATH = asOpenApiPath("/post/api/v1/posts/explore")
+const POSTS_SEARCH_API_PATH = asOpenApiPath("/post/api/v1/posts/search")
+const POSTS_FEED_API_PATH = asOpenApiPath("/post/api/v1/posts/feed")
+const POSTS_FEED_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/feed/cursor")
+const POSTS_EXPLORE_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/explore/cursor")
+const POSTS_TAGS_API_PATH = asOpenApiPath("/post/api/v1/posts/tags")
 let postsCache: TPost[] | null = null
 let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
@@ -366,7 +373,7 @@ const buildExplorePath = ({
   params.set("sort", toSortParam(order))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
-  return `/post/api/v1/posts/explore?${params.toString()}`
+  return `${POSTS_EXPLORE_API_PATH}?${params.toString()}`
 }
 
 const buildSearchPath = ({
@@ -380,7 +387,7 @@ const buildSearchPath = ({
   params.set("sort", toSortParam(order))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
-  return `/post/api/v1/posts/search?${params.toString()}`
+  return `${POSTS_SEARCH_API_PATH}?${params.toString()}`
 }
 
 const buildFeedPath = ({
@@ -392,7 +399,7 @@ const buildFeedPath = ({
   params.set("sort", toSortParam(order))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
-  return `/post/api/v1/posts/feed?${params.toString()}`
+  return `${POSTS_FEED_API_PATH}?${params.toString()}`
 }
 
 const buildFeedCursorPath = ({
@@ -410,7 +417,7 @@ const buildFeedCursorPath = ({
   if (cursor && cursor.trim()) {
     params.set("cursor", cursor.trim())
   }
-  return `/post/api/v1/posts/feed/cursor?${params.toString()}`
+  return `${POSTS_FEED_CURSOR_API_PATH}?${params.toString()}`
 }
 
 const buildExploreCursorPath = ({
@@ -431,7 +438,7 @@ const buildExploreCursorPath = ({
   if (cursor && cursor.trim()) {
     params.set("cursor", cursor.trim())
   }
-  return `/post/api/v1/posts/explore/cursor?${params.toString()}`
+  return `${POSTS_EXPLORE_CURSOR_API_PATH}?${params.toString()}`
 }
 
 export const getFeedPosts = async ({
@@ -740,7 +747,7 @@ export const getSearchPostsPage = async ({
 }
 
 export const getTagCounts = async (): Promise<Record<string, number>> => {
-  const rows = await apiFetch<ApiTagCountDto[]>("/post/api/v1/posts/tags")
+  const rows = await apiFetch<ApiTagCountDto[]>(POSTS_TAGS_API_PATH)
   return rows.reduce<Record<string, number>>((acc, row) => {
     const normalizedTag = typeof row.tag === "string" ? row.tag.trim() : ""
     if (!normalizedTag) return acc

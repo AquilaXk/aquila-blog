@@ -1,5 +1,6 @@
 import { apiFetch } from "src/apis/backend/client"
 import { TMemberNotification } from "src/types"
+import { asOpenApiPath } from "./openapiContract"
 
 type NotificationSnapshotResponse = {
   items: TMemberNotification[]
@@ -19,13 +20,19 @@ type ReadMutationResponse = {
   }
 }
 
-export const getNotifications = () => apiFetch<TMemberNotification[]>("/member/api/v1/notifications")
+const NOTIFICATIONS_API_PATH = asOpenApiPath("/member/api/v1/notifications")
+const NOTIFICATIONS_SNAPSHOT_API_PATH = asOpenApiPath("/member/api/v1/notifications/snapshot")
+const NOTIFICATIONS_UNREAD_COUNT_API_PATH = asOpenApiPath("/member/api/v1/notifications/unread-count")
+const NOTIFICATIONS_READ_ALL_API_PATH = asOpenApiPath("/member/api/v1/notifications/read-all")
+const NOTIFICATIONS_STREAM_API_PATH = asOpenApiPath("/member/api/v1/notifications/stream")
+
+export const getNotifications = () => apiFetch<TMemberNotification[]>(NOTIFICATIONS_API_PATH)
 
 export const getNotificationSnapshot = () =>
-  apiFetch<NotificationSnapshotResponse>("/member/api/v1/notifications/snapshot")
+  apiFetch<NotificationSnapshotResponse>(NOTIFICATIONS_SNAPSHOT_API_PATH)
 
 export const getUnreadNotificationCount = async () => {
-  const response = await apiFetch<UnreadCountResponse>("/member/api/v1/notifications/unread-count")
+  const response = await apiFetch<UnreadCountResponse>(NOTIFICATIONS_UNREAD_COUNT_API_PATH)
   return response.unreadCount
 }
 
@@ -35,9 +42,9 @@ export const markNotificationRead = (id: number) =>
   })
 
 export const markAllNotificationsRead = () =>
-  apiFetch<ReadMutationResponse>("/member/api/v1/notifications/read-all", {
+  apiFetch<ReadMutationResponse>(NOTIFICATIONS_READ_ALL_API_PATH, {
     method: "POST",
   })
 
 export const buildNotificationStreamUrl = () =>
-  "/member/api/v1/notifications/stream"
+  NOTIFICATIONS_STREAM_API_PATH

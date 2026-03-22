@@ -115,7 +115,8 @@ NEXT_PUBLIC_UPTIME_KUMA_URL=/status/<slug>
 
 GitHub Actions 기준 필수값:
 
-- `TS_AUTHKEY`
+- `TS_OAUTH_CLIENT_ID`
+- `TS_OAUTH_SECRET`
 - `HOME_SSH_USER`
 - `HOME_APP_DIR`
 - `HOME_TAILSCALE_HOST` 또는 `HOME_TS_HOST` 또는 `HOME_SSH_HOST`
@@ -157,7 +158,8 @@ GitHub Actions 기준 필수값:
 | `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` / `ci.yml` test job | Gradle이 자동으로 올리는 test infra와 Spring test profile 비밀번호 정합성 유지 |
 | `E2E_LIVE_ADMIN_USERNAME`, `E2E_LIVE_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 라이브 E2E 전용 계정 자격증명(최우선 사용) |
 | `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 배포 후 운영 도메인 실연동 smoke 검증 |
-| `TS_AUTHKEY` | GitHub Actions | Tailscale 연결 |
+| `TS_OAUTH_CLIENT_ID` | GitHub Actions | Tailscale OAuth client ID |
+| `TS_OAUTH_SECRET` | GitHub Actions | Tailscale OAuth secret |
 | `HOME_SSH_KEY` | GitHub Actions | 서버 SSH 접속 |
 | `HOME_APP_DIR` | GitHub Actions -> SSH 원격 실행 | 서버 Git 저장소 경로 |
 | `HOME_GHCR_USERNAME`, `HOME_GHCR_TOKEN` | 홈서버 GHCR login | private image pull |

@@ -6,6 +6,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
+import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
 import { normalizeNextPath } from "src/libs/router"
 import { buildSocialAuthItems } from "./socialAuth"
 
@@ -114,8 +115,9 @@ const AuthEntryModal: React.FC<Props> = ({
     setEmail("")
     setPassword("")
     setShowPassword(false)
-    setKeepSignedIn(true)
-    setIpSecurityOn(false)
+    const prefs = loadAuthLoginPolicyPrefs()
+    setKeepSignedIn(prefs.keepSignedIn)
+    setIpSecurityOn(prefs.ipSecurityOn)
     setSignupEmail("")
     setSentEmail("")
 
@@ -129,6 +131,10 @@ const AuthEntryModal: React.FC<Props> = ({
 
     preloadAuthEntryPanels(view)
   }, [open, view])
+
+  useEffect(() => {
+    saveAuthLoginPolicyPrefs({ keepSignedIn, ipSecurityOn })
+  }, [keepSignedIn, ipSecurityOn])
 
   if (!open) return null
 

@@ -411,6 +411,8 @@ const normalizeRecommendedTags = (value: unknown, maxTags: number) => {
     const normalized = item.replace(/[\r\n]/g, " ").replace(/#/g, "").replace(/\s+/g, " ").trim()
     if (!normalized) return
     if (normalized.length < 2 || normalized.length > 24) return
+    if (!/[\p{L}\p{N}]/u.test(normalized)) return
+    if (normalized.toLowerCase() === "aside") return
     const key = normalized.toLowerCase()
     if (map.has(key) || map.size >= maxTags) return
     map.set(key, normalized)

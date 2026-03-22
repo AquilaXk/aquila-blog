@@ -521,7 +521,9 @@ class PostTagRecommendationService(
         if (cleaned.isBlank()) return ""
         if (cleaned.length < 2) return ""
         if (cleaned.length > normalizedMaxTagLength) return ""
+        if (!cleaned.any { it.isLetterOrDigit() }) return ""
         if (cleaned.contains("http://", true) || cleaned.contains("https://", true)) return ""
+        if (NOISE_TAGS.contains(cleaned.lowercase())) return ""
         return cleaned
     }
 
@@ -558,11 +560,14 @@ class PostTagRecommendationService(
         cacheKey: String,
         nowMillis: Long,
     ): PostTagRecommendationResult? {
-        if (redisKeyValuePort.isAvailable()) {
+        if (isRedisAvailableSafely("cache-read-available-check")) {
             redisKeyValuePort
                 .get(cacheKey)
                 ?.let { payload ->
-                    runCatching { objectMapper.readValue(payload, PostTagRecommendationResult::class.java) }.getOrNull()
+                    runCatching { objectMapper.readValue(payload, PostTagRecommendationResult::class.java) }
+                        .onFailure { exception ->
+                            log.warn("tag_recommend redis cache parse fallback: {}", exception.message)
+                        }.getOrNull()
                 }?.let { return it }
         }
 
@@ -583,10 +588,12 @@ class PostTagRecommendationService(
         nowMillis: Long,
     ) {
         val clampedTtlSeconds = ttlSeconds.coerceIn(5, 3_600)
-        if (redisKeyValuePort.isAvailable()) {
+        if (isRedisAvailableSafely("cache-write-available-check")) {
             runCatching {
                 val serialized = objectMapper.writeValueAsString(result)
                 redisKeyValuePort.set(cacheKey, serialized, Duration.ofSeconds(clampedTtlSeconds))
+            }.onFailure { exception ->
+                log.warn("tag_recommend redis cache write fallback: {}", exception.message)
             }
         }
 
@@ -617,12 +624,18 @@ class PostTagRecommendationService(
     }
 
     private fun allowRequest(nowMillis: Long): Boolean {
-        if (redisKeyValuePort.isAvailable()) {
+        if (isRedisAvailableSafely("rate-limit-available-check")) {
             val allowedByRedis = allowRequestByRedis(nowMillis)
             if (allowedByRedis != null) return allowedByRedis
         }
         return allowRequestByInMemory(nowMillis)
     }
+
+    private fun isRedisAvailableSafely(scope: String): Boolean =
+        runCatching { redisKeyValuePort.isAvailable() }
+            .onFailure { exception ->
+                log.warn("tag_recommend redis {} fallback: {}", scope, exception.message)
+            }.getOrDefault(false)
 
     private fun allowRequestByRedis(nowMillis: Long): Boolean? {
         val dateKey = DateTimeFormatter.BASIC_ISO_DATE.format(Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate())
@@ -756,6 +769,17 @@ class PostTagRecommendationService(
                 "테스트",
                 "코드",
                 "기능",
+            )
+        private val NOISE_TAGS =
+            setOf(
+                "aside",
+                "blockquote",
+                "section",
+                "article",
+                "header",
+                "footer",
+                "html",
+                "body",
             )
 
         private val SHARED_HTTP_CLIENT: HttpClient =

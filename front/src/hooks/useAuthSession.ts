@@ -53,13 +53,18 @@ const useAuthSession = () => {
 
   const queryClient = useQueryClient()
   const cachedSnapshot = queryClient.getQueryData<AuthMember | null | undefined>(queryKey.authMe())
+  const cachedAnonymousProbePolicy = queryClient.getQueryData<boolean | undefined>(queryKey.authMeProbe())
+  const shouldProbeAnonymousSnapshot = cachedAnonymousProbePolicy ?? true
   const hasCachedSnapshot = cachedSnapshot !== undefined
   const hasCachedMemberSnapshot = cachedSnapshot != null
   const hasCachedAnonymousSnapshot = cachedSnapshot === null
-  // SSR hydration 직후에는 anonymous(null) 스냅샷도 클라이언트에서 재검증해
-  // HttpOnly 쿠키/도메인 경계 차이로 누락된 세션을 복원한다.
-  const shouldFetchAuthMe = !hasCachedSnapshot || hasCachedMemberSnapshot || hasCachedAnonymousSnapshot
-  const shouldRefetchOnMount = shouldFetchAuthMe && (!hasCachedSnapshot || hasCachedAnonymousSnapshot)
+  // SSR에서 "쿠키 없음"이 확정된 anonymous(null)은 재검증을 건너뛰어
+  // 비로그인 사용자의 불필요한 401(auth/me) 반복을 줄인다.
+  // 단, SSR 검증 실패(undefined)로 들어온 경우에는 클라이언트에서 재검증한다.
+  const shouldFetchAuthMe =
+    !hasCachedSnapshot || hasCachedMemberSnapshot || (hasCachedAnonymousSnapshot && shouldProbeAnonymousSnapshot)
+  const shouldRefetchOnMount =
+    shouldFetchAuthMe && (!hasCachedSnapshot || (hasCachedAnonymousSnapshot && shouldProbeAnonymousSnapshot))
   const staleTime = hasCachedMemberSnapshot ? 60_000 : hasCachedAnonymousSnapshot ? 5 * 60_000 : 0
   const query = useQuery({
     queryKey: queryKey.authMe(),
@@ -76,15 +81,20 @@ const useAuthSession = () => {
       }
     },
     enabled: isMounted && shouldFetchAuthMe,
-    // 로그인 스냅샷은 짧게 재사용하고, anonymous(null) 스냅샷은 mount 시 재검증한다.
+    // 로그인 스냅샷은 짧게 재사용한다.
+    // anonymous(null) 스냅샷은 probe 정책(true)일 때만 mount 재검증한다.
     staleTime,
     retry: false,
     refetchOnMount: shouldRefetchOnMount ? "always" : false,
     refetchOnWindowFocus: false,
+    onSuccess: (member) => {
+      queryClient.setQueryData(queryKey.authMeProbe(), member !== null)
+    },
   })
 
   const setMe = (member: AuthMember | null) => {
     queryClient.setQueryData(queryKey.authMe(), member)
+    queryClient.setQueryData(queryKey.authMeProbe(), member !== null)
   }
 
   const me =

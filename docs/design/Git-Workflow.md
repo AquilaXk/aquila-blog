@@ -16,7 +16,7 @@ Last updated: 2026-03-12
 
 - 배포 트리거 브랜치는 `main`
 - `main` push 시 GitHub Actions가 테스트, 이미지 빌드, 홈서버 배포, 릴리즈 생성까지 수행
-- 배포 이력은 `deploy-<runId>-<shortSha>` 형식의 release tag로 남음
+- 배포 이력은 `prod-vYYYY.MM.DD.<runNumber>-<shortSha>` 형식의 release tag로 남음
 
 ```mermaid
 flowchart LR

@@ -108,6 +108,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const lastEventIdRef = useRef<string | null>(initialLastEventId)
   const [streamMode, setStreamMode] = useState<"sse" | "poll">(preferPolling ? "poll" : "sse")
   const [open, setOpen] = useState(false)
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
   const [items, setItems] = useState<TMemberNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isReady, setIsReady] = useState(false)
@@ -168,6 +169,36 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     document.addEventListener("visibilitychange", handleVisibilityChange)
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const media = window.matchMedia("(max-width: 720px)")
+    const sync = () => {
+      setIsMobileViewport(media.matches)
+    }
+
+    sync()
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync)
+      return () => media.removeEventListener("change", sync)
+    }
+
+    media.addListener(sync)
+    return () => media.removeListener(sync)
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (!open || !isMobileViewport) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isMobileViewport, open])
 
   useEffect(() => {
     if (!enabled) {
@@ -500,55 +531,64 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         {hasUnread && <span className="badge">{unreadBadge}</span>}
       </button>
       {open && (
-        <div ref={panelRef} className="panel" role="dialog" aria-modal="false" aria-label="알림 목록" tabIndex={-1}>
-          <div className="panelHead">
-            <div>
-              <strong>알림</strong>
-              <span>{isSnapshotFallback ? "연결이 불안정해 마지막 알림 스냅샷을 표시 중입니다." : "답글과 댓글 알림을 확인할 수 있습니다."}</span>
+        <>
+          <button
+            type="button"
+            className="mobileBackdrop"
+            aria-label="알림 닫기"
+            onClick={() => setOpen(false)}
+            tabIndex={-1}
+          />
+          <div ref={panelRef} className="panel" role="dialog" aria-modal="false" aria-label="알림 목록" tabIndex={-1}>
+            <div className="panelHead">
+              <div>
+                <strong>알림</strong>
+                <span>{isSnapshotFallback ? "연결이 불안정해 마지막 알림 스냅샷을 표시 중입니다." : "답글과 댓글 알림을 확인할 수 있습니다."}</span>
+              </div>
+              <button type="button" className="readAllBtn" onClick={() => void handleMarkAllRead()} disabled={!hasUnread}>
+                모두 읽음
+              </button>
             </div>
-            <button type="button" className="readAllBtn" onClick={() => void handleMarkAllRead()} disabled={!hasUnread}>
-              모두 읽음
-            </button>
-          </div>
-          {items.length > 0 ? (
-            <ul className="list">
-              {items.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className="itemBtn"
-                    data-read={item.isRead}
-                    onClick={() => void handleMoveToNotification(item)}
-                  >
-                    <div className="avatar">
-                      <ProfileImage
-                        src={item.actorProfileImageUrl}
-                        alt={`${item.actorName} avatar`}
-                        fillContainer
-                        width={40}
-                        height={40}
-                      />
-                    </div>
-                    <div className="copy">
-                      <div className="headLine">
-                        <strong>{item.actorName}</strong>
-                        <span>{formatShortDateTime(item.createdAt, "ko")}</span>
+            {items.length > 0 ? (
+              <ul className="list">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="itemBtn"
+                      data-read={item.isRead}
+                      onClick={() => void handleMoveToNotification(item)}
+                    >
+                      <div className="avatar">
+                        <ProfileImage
+                          src={item.actorProfileImageUrl}
+                          alt={`${item.actorName} avatar`}
+                          fillContainer
+                          width={40}
+                          height={40}
+                        />
                       </div>
-                      <p>{item.message}</p>
-                      <small>{item.postTitle}</small>
-                    </div>
-                    {!item.isRead && <span className="dot" aria-hidden="true" />}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="empty">
-              <strong>새 알림이 없습니다.</strong>
-              <span>누군가 댓글이나 답글을 남기면 여기에 표시됩니다.</span>
-            </div>
-          )}
-        </div>
+                      <div className="copy">
+                        <div className="headLine">
+                          <strong>{item.actorName}</strong>
+                          <span>{formatShortDateTime(item.createdAt, "ko")}</span>
+                        </div>
+                        <p>{item.message}</p>
+                        <small>{item.postTitle}</small>
+                      </div>
+                      {!item.isRead && <span className="dot" aria-hidden="true" />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="empty">
+                <strong>새 알림이 없습니다.</strong>
+                <span>누군가 댓글이나 답글을 남기면 여기에 표시됩니다.</span>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </StyledWrapper>
   )
@@ -568,26 +608,26 @@ const StyledWrapper = styled.div`
     justify-content: center;
     min-width: ${({ theme }) => theme.variables.navControl.height}px;
     min-height: ${({ theme }) => theme.variables.navControl.height}px;
-    width: ${({ theme }) => theme.variables.navControl.height}px;
+    width: auto;
     height: ${({ theme }) => theme.variables.navControl.height}px;
-    padding: 0;
-    border-radius: 999px;
-    border: 1px solid transparent;
+    padding: 0 0.34rem;
+    border-radius: 8px;
+    border: none;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
-    transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+    transition: color 0.16s ease, text-decoration-color 0.16s ease;
 
     &:hover,
     &[data-open="true"] {
       color: ${({ theme }) => theme.colors.gray12};
-      border-color: transparent;
-      background: transparent;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
     }
 
     &:focus-visible {
       outline: none;
-      border-color: ${({ theme }) => theme.colors.blue8};
       box-shadow: 0 0 0 2px ${({ theme }) => theme.colors.blue4};
     }
 
@@ -639,6 +679,10 @@ const StyledWrapper = styled.div`
         0 0 0 2px ${({ theme }) => theme.colors.blue4},
         0 20px 42px rgba(0, 0, 0, 0.44);
     }
+  }
+
+  .mobileBackdrop {
+    display: none;
   }
 
   @keyframes panelIn {
@@ -838,11 +882,24 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 720px) {
+    .mobileBackdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      background: rgba(2, 6, 23, 0.42);
+      z-index: 26;
+      cursor: default;
+    }
+
     .trigger {
       min-width: 36px;
       min-height: 36px;
-      width: 36px;
+      width: auto;
       height: 36px;
+      padding: 0 0.34rem;
 
       svg {
         width: 18px;
@@ -864,6 +921,7 @@ const StyledWrapper = styled.div`
       border-radius: 14px;
       animation-name: panelInMobile;
       transform-origin: top center;
+      z-index: 27;
     }
 
     .panelHead {

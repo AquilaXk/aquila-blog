@@ -2,7 +2,7 @@ import styled from "@emotion/styled"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
 
@@ -25,13 +25,50 @@ const NavBar: React.FC = () => {
   const router = useRouter()
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
   const isAuthenticated = Boolean(me) && (authStatus === "authenticated" || authStatus === "unavailable")
+  const isAdmin = Boolean(isAuthenticated && me?.isAdmin)
   const authState = isAuthenticated ? "authenticated" : authStatus
 
-  const primaryLinks = [{ id: 1, name: "About", to: "/about" }]
+  const primaryLinks = useMemo(
+    () => [
+      { id: "about", name: "About", to: "/about" },
+      ...(isAdmin ? [{ id: "admin", name: "Admin", to: "/admin" }] : []),
+    ],
+    [isAdmin]
+  )
+
   const nextPath = useMemo(() => {
     return normalizeNextPath(router.asPath)
   }, [router.asPath])
+
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [router.asPath])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setMobileMenuOpen(false)
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setMobileMenuOpen(false)
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleEscape)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleEscape)
+    }
+  }, [mobileMenuOpen])
 
   const handleLogout = async () => {
     await logout()
@@ -55,16 +92,20 @@ const NavBar: React.FC = () => {
   }
 
   const showImmediateLoginAction = authStatus === "loading" || authStatus === "anonymous"
+  const showUnavailableAuthAction = authStatus === "unavailable" && !me
 
   return (
-    <StyledWrapper>
+    <StyledWrapper ref={rootRef}>
       <ul className="primaryLinks">
         {primaryLinks.map((link) => (
           <li key={link.id}>
-            <Link href={link.to} data-ui="nav-control">{link.name}</Link>
+            <Link href={link.to} data-ui="nav-control">
+              {link.name}
+            </Link>
           </li>
         ))}
       </ul>
+
       <div className="authArea" data-auth-state={authState}>
         {showImmediateLoginAction && (
           <button
@@ -78,7 +119,8 @@ const NavBar: React.FC = () => {
             Login
           </button>
         )}
-        {authStatus === "unavailable" && !me && (
+
+        {showUnavailableAuthAction && (
           <>
             <button
               type="button"
@@ -91,21 +133,67 @@ const NavBar: React.FC = () => {
             <span className="authNotice">Auth check failed</span>
           </>
         )}
+
         {isAuthenticated && <NotificationBell enabled />}
-        {isAuthenticated && me?.isAdmin && (
-          <Link href="/admin" className="navPill" data-ui="nav-control">
-            Admin
-          </Link>
+
+        {isAuthenticated && (
+          <button type="button" onClick={handleLogout} className="logoutBtn" data-ui="nav-control">
+            Logout
+          </button>
         )}
-        {isAuthenticated && me && (
-          <>
-            <span className="identity">{me.nickname || me.username}</span>
-            <button type="button" onClick={handleLogout} className="logoutBtn" data-ui="nav-control">
+
+        <button
+          type="button"
+          className="mobileMenuTrigger"
+          aria-label="헤더 메뉴 열기"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen((value) => !value)}
+        >
+          <span />
+          <span />
+        </button>
+      </div>
+
+      {mobileMenuOpen && (
+        <div className="mobileMenu" role="menu" aria-label="모바일 네비게이션">
+          {primaryLinks.map((link) => (
+            <Link key={link.id} href={link.to} role="menuitem">
+              {link.name}
+            </Link>
+          ))}
+
+          {(showImmediateLoginAction || showUnavailableAuthAction) && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                if (showUnavailableAuthAction) {
+                  void handleUnavailableAuthLogin()
+                } else {
+                  openLoginModal()
+                }
+              }}
+            >
+              Login
+            </button>
+          )}
+
+          {isAuthenticated && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMobileMenuOpen(false)
+                void handleLogout()
+              }}
+            >
               Logout
             </button>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
       <AuthEntryModal
         open={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
@@ -120,6 +208,7 @@ const NavBar: React.FC = () => {
 export default NavBar
 
 const StyledWrapper = styled.div`
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.46rem;
@@ -178,18 +267,6 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .authArea[data-auth-state="loading"] {
-    min-width: 3.8rem;
-  }
-
-  .authArea[data-auth-state="anonymous"] {
-    min-width: 3.8rem;
-  }
-
-  .authArea[data-auth-state="authenticated"] {
-    min-width: 0;
-  }
-
   .navPill,
   .logoutBtn {
     display: inline-flex;
@@ -215,32 +292,105 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .authArea[data-auth-state="anonymous"] .navPill {
-    min-width: 3.8rem;
-  }
-
-  .authArea[data-auth-state="loading"] .navPill {
-    min-width: 3.8rem;
-  }
-
-  .identity {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
-    font-weight: 620;
-    max-width: 104px;
-    margin: 0 0.1rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .authNotice {
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.76rem;
     white-space: nowrap;
   }
 
+  .navPill--warning {
+    color: ${({ theme }) => theme.colors.blue10};
+  }
+
+  .mobileMenuTrigger {
+    display: none;
+    min-width: 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0;
+
+    span {
+      width: 11px;
+      height: 1.5px;
+      border-radius: 999px;
+      background: currentColor;
+      display: block;
+    }
+
+    &:hover {
+      color: ${({ theme }) => theme.colors.gray12};
+      border-color: ${({ theme }) => theme.colors.gray7};
+    }
+  }
+
+  .mobileMenu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.46rem);
+    min-width: 9.5rem;
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.42rem;
+    border-radius: 12px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
+    z-index: 30;
+
+    a,
+    button {
+      border: none;
+      background: transparent;
+      color: ${({ theme }) => theme.colors.gray11};
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 34px;
+      border-radius: 8px;
+      padding: 0 0.6rem;
+      font-size: 0.84rem;
+      font-weight: 620;
+      text-decoration: none;
+
+      &:hover {
+        color: ${({ theme }) => theme.colors.gray12};
+        background: ${({ theme }) => theme.colors.gray3};
+      }
+    }
+  }
+
   @media (max-width: 980px) {
+    .authNotice {
+      display: none;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .primaryLinks,
+    .navPill,
+    .logoutBtn {
+      display: none;
+    }
+
+    .authArea {
+      gap: 0.28rem;
+    }
+
+    .mobileMenuTrigger {
+      display: inline-flex;
+    }
+  }
+
+  @media (max-width: 720px) {
+    gap: 0.22rem;
+
     .authArea {
       width: auto;
       min-width: 0;
@@ -248,56 +398,9 @@ const StyledWrapper = styled.div`
       overflow: visible;
     }
 
-    .authNotice {
-      display: none;
+    .mobileMenu {
+      right: max(0px, env(safe-area-inset-right, 0px));
+      min-width: 9.25rem;
     }
-  }
-
-  @media (max-width: 860px) {
-    .authArea {
-      gap: 0.32rem;
-    }
-
-    .identity {
-      display: none;
-    }
-  }
-
-  .navPill--warning {
-    color: ${({ theme }) => theme.colors.blue10};
-  }
-
-  @media (max-width: 720px) {
-    gap: 0.22rem;
-
-    .primaryLinks {
-      gap: 0;
-
-      a {
-        min-height: 34px;
-        min-width: 52px;
-        padding: 0 0.34rem;
-        font-size: 0.82rem;
-      }
-    }
-
-    .authArea {
-      min-width: 0;
-      width: auto;
-      gap: 0.26rem;
-    }
-
-    .authNotice {
-      font-size: 0.74rem;
-    }
-
-    .navPill,
-    .logoutBtn {
-      min-width: 0;
-      min-height: 34px;
-      font-size: 0.82rem;
-      padding: 0 0.34rem;
-    }
-
   }
 `

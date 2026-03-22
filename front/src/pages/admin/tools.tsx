@@ -219,6 +219,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [taskQueueDiagnosticsError, setTaskQueueDiagnosticsError] = useState("")
   const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(null)
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
+  const [taskQueuePanelOpen, setTaskQueuePanelOpen] = useState(false)
+  const [cleanupPanelOpen, setCleanupPanelOpen] = useState(false)
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
     tone: "warning",
@@ -898,175 +900,182 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </SectionTitleRow>
               <SectionDescription>revalidate, 회원가입 메일 같은 비동기 작업 적체와 stale processing 상태를 봅니다.</SectionDescription>
             </div>
+            <SectionToggleButton type="button" onClick={() => setTaskQueuePanelOpen((prev) => !prev)}>
+              {taskQueuePanelOpen ? "패널 접기" : "패널 펼치기"}
+            </SectionToggleButton>
           </SectionTop>
-          <InlineNotice data-tone={taskQueueDiagnostics?.staleProcessingCount ? "warning" : "success"}>
-            {queueHealthMessage}
-          </InlineNotice>
+          {taskQueuePanelOpen && (
+            <>
+              <InlineNotice data-tone={taskQueueDiagnostics?.staleProcessingCount ? "warning" : "success"}>
+                {queueHealthMessage}
+              </InlineNotice>
 
-          <MetaGrid>
-            <MetaBox>
-              <small>대기 작업</small>
-              <strong>{taskQueueDiagnostics?.pendingCount ?? "-"}</strong>
-            </MetaBox>
-            <MetaBox>
-              <small>즉시 실행 가능</small>
-              <strong>{taskQueueDiagnostics?.readyPendingCount ?? "-"}</strong>
-            </MetaBox>
-            <MetaBox>
-              <small>처리 중</small>
-              <strong>{taskQueueDiagnostics?.processingCount ?? "-"}</strong>
-            </MetaBox>
-            <MetaBox>
-              <small>stale processing</small>
-              <strong>{taskQueueDiagnostics?.staleProcessingCount ?? "-"}</strong>
-            </MetaBox>
-          </MetaGrid>
+              <MetaGrid>
+                <MetaBox>
+                  <small>대기 작업</small>
+                  <strong>{taskQueueDiagnostics?.pendingCount ?? "-"}</strong>
+                </MetaBox>
+                <MetaBox>
+                  <small>즉시 실행 가능</small>
+                  <strong>{taskQueueDiagnostics?.readyPendingCount ?? "-"}</strong>
+                </MetaBox>
+                <MetaBox>
+                  <small>처리 중</small>
+                  <strong>{taskQueueDiagnostics?.processingCount ?? "-"}</strong>
+                </MetaBox>
+                <MetaBox>
+                  <small>stale processing</small>
+                  <strong>{taskQueueDiagnostics?.staleProcessingCount ?? "-"}</strong>
+                </MetaBox>
+              </MetaGrid>
 
-          {!!taskQueueDiagnosticsError && <InlineNotice data-tone="danger">{taskQueueDiagnosticsError}</InlineNotice>}
+              {!!taskQueueDiagnosticsError && <InlineNotice data-tone="danger">{taskQueueDiagnosticsError}</InlineNotice>}
 
-          {!!taskQueueDiagnostics && (
-            <TaskSummaryStrip>
-              <TaskSummaryLine>
-                <span>가장 오래 대기 중인 ready task</span>
-                <strong>{formatAge(taskQueueDiagnostics.oldestReadyPendingAgeSeconds)}</strong>
-              </TaskSummaryLine>
-              <TaskSummaryLine>
-                <span>가장 오래 처리 중인 task</span>
-                <strong>{formatAge(taskQueueDiagnostics.oldestProcessingAgeSeconds)}</strong>
-              </TaskSummaryLine>
-              <TaskSummaryLine>
-                <span>processing timeout</span>
-                <strong>{taskQueueDiagnostics.processingTimeoutSeconds}초</strong>
-              </TaskSummaryLine>
-            </TaskSummaryStrip>
-          )}
+              {!!taskQueueDiagnostics && (
+                <TaskSummaryStrip>
+                  <TaskSummaryLine>
+                    <span>가장 오래 대기 중인 ready task</span>
+                    <strong>{formatAge(taskQueueDiagnostics.oldestReadyPendingAgeSeconds)}</strong>
+                  </TaskSummaryLine>
+                  <TaskSummaryLine>
+                    <span>가장 오래 처리 중인 task</span>
+                    <strong>{formatAge(taskQueueDiagnostics.oldestProcessingAgeSeconds)}</strong>
+                  </TaskSummaryLine>
+                  <TaskSummaryLine>
+                    <span>processing timeout</span>
+                    <strong>{taskQueueDiagnostics.processingTimeoutSeconds}초</strong>
+                  </TaskSummaryLine>
+                </TaskSummaryStrip>
+              )}
 
-          {!!taskQueueDiagnostics?.taskTypes.length && (
-            <TaskTypeGrid>
-              {taskQueueDiagnostics.taskTypes.map((taskType) => (
-                <TaskTypeCard key={taskType.taskType}>
-                  <TaskTypeHeader>
-                    <div>
-                      <strong>{taskType.label}</strong>
-                      <small>{taskType.taskType}</small>
-                    </div>
-                    <TaskStatePill data-tone={taskType.staleProcessingCount > 0 || taskType.failedCount > 0 ? "warning" : "neutral"}>
-                      {taskType.staleProcessingCount > 0
-                        ? `stale ${taskType.staleProcessingCount}`
-                        : taskType.failedCount > 0
-                          ? `failed ${taskType.failedCount}`
-                          : "정상"}
-                    </TaskStatePill>
-                  </TaskTypeHeader>
-                  <TaskMetricGrid>
-                    <TaskMetric>
-                      <span>ready</span>
-                      <strong>{taskType.readyPendingCount}</strong>
-                    </TaskMetric>
-                    <TaskMetric>
-                      <span>delayed</span>
-                      <strong>{taskType.delayedPendingCount}</strong>
-                    </TaskMetric>
-                    <TaskMetric>
-                      <span>processing</span>
-                      <strong>{taskType.processingCount}</strong>
-                    </TaskMetric>
-                    <TaskMetric>
-                      <span>failed</span>
-                      <strong>{taskType.failedCount}</strong>
-                    </TaskMetric>
-                  </TaskMetricGrid>
-                  <TaskMetaLine>
-                    <span>retry 정책</span>
-                    <strong>{formatRetryPolicy(taskType.retryPolicy)}</strong>
-                  </TaskMetaLine>
-                  <TaskMetaLine>
-                    <span>가장 오래 대기 중</span>
-                    <strong>
-                      {formatAge(taskType.oldestReadyPendingAgeSeconds)}
-                      {taskType.oldestReadyPendingAt ? ` · ${formatInstant(taskType.oldestReadyPendingAt)}` : ""}
-                    </strong>
-                  </TaskMetaLine>
-                  <TaskMetaLine>
-                    <span>최근 실패</span>
-                    <strong>
-                      {taskType.latestFailureAt ? formatInstant(taskType.latestFailureAt) : "-"}
-                    </strong>
-                  </TaskMetaLine>
-                  {!!taskType.latestFailureMessage && (
-                    <TaskErrorSnippet>{taskType.latestFailureMessage}</TaskErrorSnippet>
-                  )}
-                </TaskTypeCard>
-              ))}
-            </TaskTypeGrid>
-          )}
+              {!!taskQueueDiagnostics?.taskTypes.length && (
+                <TaskTypeGrid>
+                  {taskQueueDiagnostics.taskTypes.map((taskType) => (
+                    <TaskTypeCard key={taskType.taskType}>
+                      <TaskTypeHeader>
+                        <div>
+                          <strong>{taskType.label}</strong>
+                          <small>{taskType.taskType}</small>
+                        </div>
+                        <TaskStatePill data-tone={taskType.staleProcessingCount > 0 || taskType.failedCount > 0 ? "warning" : "neutral"}>
+                          {taskType.staleProcessingCount > 0
+                            ? `stale ${taskType.staleProcessingCount}`
+                            : taskType.failedCount > 0
+                              ? `failed ${taskType.failedCount}`
+                              : "정상"}
+                        </TaskStatePill>
+                      </TaskTypeHeader>
+                      <TaskMetricGrid>
+                        <TaskMetric>
+                          <span>ready</span>
+                          <strong>{taskType.readyPendingCount}</strong>
+                        </TaskMetric>
+                        <TaskMetric>
+                          <span>delayed</span>
+                          <strong>{taskType.delayedPendingCount}</strong>
+                        </TaskMetric>
+                        <TaskMetric>
+                          <span>processing</span>
+                          <strong>{taskType.processingCount}</strong>
+                        </TaskMetric>
+                        <TaskMetric>
+                          <span>failed</span>
+                          <strong>{taskType.failedCount}</strong>
+                        </TaskMetric>
+                      </TaskMetricGrid>
+                      <TaskMetaLine>
+                        <span>retry 정책</span>
+                        <strong>{formatRetryPolicy(taskType.retryPolicy)}</strong>
+                      </TaskMetaLine>
+                      <TaskMetaLine>
+                        <span>가장 오래 대기 중</span>
+                        <strong>
+                          {formatAge(taskType.oldestReadyPendingAgeSeconds)}
+                          {taskType.oldestReadyPendingAt ? ` · ${formatInstant(taskType.oldestReadyPendingAt)}` : ""}
+                        </strong>
+                      </TaskMetaLine>
+                      <TaskMetaLine>
+                        <span>최근 실패</span>
+                        <strong>
+                          {taskType.latestFailureAt ? formatInstant(taskType.latestFailureAt) : "-"}
+                        </strong>
+                      </TaskMetaLine>
+                      {!!taskType.latestFailureMessage && (
+                        <TaskErrorSnippet>{taskType.latestFailureMessage}</TaskErrorSnippet>
+                      )}
+                    </TaskTypeCard>
+                  ))}
+                </TaskTypeGrid>
+              )}
 
-          {!!taskQueueDiagnostics?.recentFailures.length && (
-            <TaskSamplesSection>
-              <TaskSamplesHeader>
-                <h3>최근 실패 작업</h3>
-                <span>{taskQueueDiagnostics.recentFailures.length}건</span>
-              </TaskSamplesHeader>
-              <TaskSampleList>
-                {taskQueueDiagnostics.recentFailures.map((sample) => (
-                  <TaskSampleItem key={`failed-${sample.taskId}`}>
-                    <TaskSampleTop>
-                      <div>
-                        <strong>{sample.label}</strong>
-                        <small>
-                          #{sample.taskId} · {sample.taskType}
-                        </small>
-                      </div>
-                      <TaskStatePill data-tone="warning">{sample.status}</TaskStatePill>
-                    </TaskSampleTop>
-                    <TaskSampleMeta>
-                      <span>
-                        {sample.aggregateType}:{sample.aggregateId}
-                      </span>
-                      <span>
-                        retry {sample.retryCount}/{sample.maxRetries}
-                      </span>
-                      <span>{formatInstant(sample.modifiedAt)}</span>
-                    </TaskSampleMeta>
-                    {!!sample.errorMessage && <TaskErrorSnippet>{sample.errorMessage}</TaskErrorSnippet>}
-                  </TaskSampleItem>
-                ))}
-              </TaskSampleList>
-            </TaskSamplesSection>
-          )}
+              {!!taskQueueDiagnostics?.recentFailures.length && (
+                <TaskSamplesSection>
+                  <TaskSamplesHeader>
+                    <h3>최근 실패 작업</h3>
+                    <span>{taskQueueDiagnostics.recentFailures.length}건</span>
+                  </TaskSamplesHeader>
+                  <TaskSampleList>
+                    {taskQueueDiagnostics.recentFailures.map((sample) => (
+                      <TaskSampleItem key={`failed-${sample.taskId}`}>
+                        <TaskSampleTop>
+                          <div>
+                            <strong>{sample.label}</strong>
+                            <small>
+                              #{sample.taskId} · {sample.taskType}
+                            </small>
+                          </div>
+                          <TaskStatePill data-tone="warning">{sample.status}</TaskStatePill>
+                        </TaskSampleTop>
+                        <TaskSampleMeta>
+                          <span>
+                            {sample.aggregateType}:{sample.aggregateId}
+                          </span>
+                          <span>
+                            retry {sample.retryCount}/{sample.maxRetries}
+                          </span>
+                          <span>{formatInstant(sample.modifiedAt)}</span>
+                        </TaskSampleMeta>
+                        {!!sample.errorMessage && <TaskErrorSnippet>{sample.errorMessage}</TaskErrorSnippet>}
+                      </TaskSampleItem>
+                    ))}
+                  </TaskSampleList>
+                </TaskSamplesSection>
+              )}
 
-          {!!taskQueueDiagnostics?.staleProcessingSamples.length && (
-            <TaskSamplesSection>
-              <TaskSamplesHeader>
-                <h3>stale processing 샘플</h3>
-                <span>{taskQueueDiagnostics.staleProcessingSamples.length}건</span>
-              </TaskSamplesHeader>
-              <TaskSampleList>
-                {taskQueueDiagnostics.staleProcessingSamples.map((sample) => (
-                  <TaskSampleItem key={`stale-${sample.taskId}`}>
-                    <TaskSampleTop>
-                      <div>
-                        <strong>{sample.label}</strong>
-                        <small>
-                          #{sample.taskId} · {sample.taskType}
-                        </small>
-                      </div>
-                      <TaskStatePill data-tone="warning">stale</TaskStatePill>
-                    </TaskSampleTop>
-                    <TaskSampleMeta>
-                      <span>
-                        {sample.aggregateType}:{sample.aggregateId}
-                      </span>
-                      <span>
-                        retry {sample.retryCount}/{sample.maxRetries}
-                      </span>
-                      <span>다음 시도 {formatInstant(sample.nextRetryAt)}</span>
-                    </TaskSampleMeta>
-                    {!!sample.errorMessage && <TaskErrorSnippet>{sample.errorMessage}</TaskErrorSnippet>}
-                  </TaskSampleItem>
-                ))}
-              </TaskSampleList>
-            </TaskSamplesSection>
+              {!!taskQueueDiagnostics?.staleProcessingSamples.length && (
+                <TaskSamplesSection>
+                  <TaskSamplesHeader>
+                    <h3>stale processing 샘플</h3>
+                    <span>{taskQueueDiagnostics.staleProcessingSamples.length}건</span>
+                  </TaskSamplesHeader>
+                  <TaskSampleList>
+                    {taskQueueDiagnostics.staleProcessingSamples.map((sample) => (
+                      <TaskSampleItem key={`stale-${sample.taskId}`}>
+                        <TaskSampleTop>
+                          <div>
+                            <strong>{sample.label}</strong>
+                            <small>
+                              #{sample.taskId} · {sample.taskType}
+                            </small>
+                          </div>
+                          <TaskStatePill data-tone="warning">stale</TaskStatePill>
+                        </TaskSampleTop>
+                        <TaskSampleMeta>
+                          <span>
+                            {sample.aggregateType}:{sample.aggregateId}
+                          </span>
+                          <span>
+                            retry {sample.retryCount}/{sample.maxRetries}
+                          </span>
+                          <span>다음 시도 {formatInstant(sample.nextRetryAt)}</span>
+                        </TaskSampleMeta>
+                        {!!sample.errorMessage && <TaskErrorSnippet>{sample.errorMessage}</TaskErrorSnippet>}
+                      </TaskSampleItem>
+                    ))}
+                  </TaskSampleList>
+                </TaskSamplesSection>
+              )}
+            </>
           )}
         </SectionCard>
 
@@ -1080,35 +1089,42 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </SectionTitleRow>
               <SectionDescription>TEMP/PENDING_DELETE 파일의 purge 대상 수와 safety threshold를 확인합니다.</SectionDescription>
             </div>
+            <SectionToggleButton type="button" onClick={() => setCleanupPanelOpen((prev) => !prev)}>
+              {cleanupPanelOpen ? "패널 접기" : "패널 펼치기"}
+            </SectionToggleButton>
           </SectionTop>
-          <InlineNotice data-tone={cleanupDiagnostics?.blockedBySafetyThreshold ? "warning" : "success"}>
-            {cleanupHealthMessage}
-          </InlineNotice>
+          {cleanupPanelOpen && (
+            <>
+              <InlineNotice data-tone={cleanupDiagnostics?.blockedBySafetyThreshold ? "warning" : "success"}>
+                {cleanupHealthMessage}
+              </InlineNotice>
 
-          <MetaGrid>
-            <MetaBox>
-              <small>TEMP</small>
-              <strong>{cleanupDiagnostics?.tempCount ?? "-"}</strong>
-            </MetaBox>
-            <MetaBox>
-              <small>PENDING_DELETE</small>
-              <strong>{cleanupDiagnostics?.pendingDeleteCount ?? "-"}</strong>
-            </MetaBox>
-            <MetaBox>
-              <small>purge 후보</small>
-              <strong>{cleanupDiagnostics?.eligibleForPurgeCount ?? "-"}</strong>
-            </MetaBox>
-            <MetaBox>
-              <small>safety threshold</small>
-              <strong>{cleanupDiagnostics?.cleanupSafetyThreshold ?? "-"}</strong>
-            </MetaBox>
-          </MetaGrid>
+              <MetaGrid>
+                <MetaBox>
+                  <small>TEMP</small>
+                  <strong>{cleanupDiagnostics?.tempCount ?? "-"}</strong>
+                </MetaBox>
+                <MetaBox>
+                  <small>PENDING_DELETE</small>
+                  <strong>{cleanupDiagnostics?.pendingDeleteCount ?? "-"}</strong>
+                </MetaBox>
+                <MetaBox>
+                  <small>purge 후보</small>
+                  <strong>{cleanupDiagnostics?.eligibleForPurgeCount ?? "-"}</strong>
+                </MetaBox>
+                <MetaBox>
+                  <small>safety threshold</small>
+                  <strong>{cleanupDiagnostics?.cleanupSafetyThreshold ?? "-"}</strong>
+                </MetaBox>
+              </MetaGrid>
 
-          {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
-          {!!cleanupDiagnostics?.sampleEligibleObjectKeys.length && (
-            <InlineNotice>
-              샘플 object key: {cleanupDiagnostics.sampleEligibleObjectKeys.join(", ")}
-            </InlineNotice>
+              {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
+              {!!cleanupDiagnostics?.sampleEligibleObjectKeys.length && (
+                <InlineNotice>
+                  샘플 object key: {cleanupDiagnostics.sampleEligibleObjectKeys.join(", ")}
+                </InlineNotice>
+              )}
+            </>
           )}
         </SectionCard>
       </Grid>
@@ -1331,6 +1347,25 @@ const SectionTop = styled.div`
 
   @media (max-width: 760px) {
     flex-direction: column;
+  }
+`
+
+const SectionToggleButton = styled.button`
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  min-height: 32px;
+  padding: 0 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.gray12};
+    border-color: ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray3};
   }
 `
 

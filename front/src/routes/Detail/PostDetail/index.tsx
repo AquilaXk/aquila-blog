@@ -103,6 +103,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [tocItems, setTocItems] = useState<TocItem[]>([])
   const [activeTocId, setActiveTocId] = useState<string>("")
+  const [showDetailedToc, setShowDetailedToc] = useState(false)
   const [engagement, setEngagement] = useState(() => ({
     likesCount: data?.likesCount ?? 0,
     hitCount: data?.hitCount ?? 0,
@@ -116,7 +117,12 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const canModifyPost = Boolean(me?.isAdmin || data?.actorCanModify)
   const canDeletePost = Boolean(me?.isAdmin || data?.actorCanDelete)
   const showFloatingLike = data?.type[0] === "Post"
-  const showStickyToc = tocItems.length >= 2
+  const hasDepth4Toc = useMemo(() => tocItems.some((item) => item.level === 4), [tocItems])
+  const visibleTocItems = useMemo(
+    () => (showDetailedToc ? tocItems : tocItems.filter((item) => item.level <= 3)),
+    [showDetailedToc, tocItems]
+  )
+  const showStickyToc = visibleTocItems.length >= 2
   const relatedTag = useMemo(
     () =>
       data?.tags
@@ -224,16 +230,17 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
     const collected = collectTocFromArticle(article)
     setTocItems(collected)
+    setShowDetailedToc(false)
     setActiveTocId(collected[0]?.id ?? "")
   }, [data?.content, data?.id])
 
   useEffect(() => {
-    if (!tocItems.length) return
+    if (!tocItems.length || !visibleTocItems.length) return
 
-    const updateActiveToc = () => {
-      let current = tocItems[0]?.id || ""
-      for (let index = tocItems.length - 1; index >= 0; index -= 1) {
-        const item = tocItems[index]
+    const resolveActiveId = (items: TocItem[]) => {
+      let current = items[0]?.id || ""
+      for (let index = items.length - 1; index >= 0; index -= 1) {
+        const item = items[index]
         const node = document.getElementById(item.id)
         if (!node) continue
         const rect = node.getBoundingClientRect()
@@ -241,6 +248,15 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           current = item.id
           break
         }
+      }
+      return current
+    }
+
+    const updateActiveToc = () => {
+      const visibleIdSet = new Set(visibleTocItems.map((item) => item.id))
+      let current = resolveActiveId(tocItems)
+      if (!visibleIdSet.has(current)) {
+        current = resolveActiveId(visibleTocItems)
       }
 
       setActiveTocId((prev) => (prev === current ? prev : current))
@@ -253,7 +269,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       window.removeEventListener("scroll", updateActiveToc)
       window.removeEventListener("resize", updateActiveToc)
     }
-  }, [tocItems])
+  }, [tocItems, visibleTocItems])
 
   useEffect(() => {
     if (!detailId) return
@@ -521,9 +537,21 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         <aside className="rightRail" aria-hidden={!showStickyToc}>
           {showStickyToc ? (
             <nav className="rightRailInner" aria-label="목차">
-              <h2 className="rightRailTitle">목차</h2>
+              <div className="rightRailHead">
+                <h2 className="rightRailTitle">목차</h2>
+                {hasDepth4Toc && (
+                  <button
+                    type="button"
+                    className="tocDepthToggle"
+                    onClick={() => setShowDetailedToc((value) => !value)}
+                    aria-pressed={showDetailedToc}
+                  >
+                    {showDetailedToc ? "h4 접기" : "h4 보기"}
+                  </button>
+                )}
+              </div>
               <ol>
-                {tocItems.map((item) => (
+                {visibleTocItems.map((item) => (
                   <li key={item.id} data-level={item.level}>
                     <button
                       type="button"
@@ -634,6 +662,14 @@ const StyledWrapper = styled.div`
     padding: 0.18rem 0 0.18rem 0.82rem;
     background: transparent;
 
+    .rightRailHead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      margin-bottom: 0.28rem;
+    }
+
     .rightRailTitle {
       position: absolute;
       width: 1px;
@@ -644,6 +680,24 @@ const StyledWrapper = styled.div`
       overflow: hidden;
       clip: rect(0, 0, 0, 0);
       white-space: nowrap;
+    }
+
+    .tocDepthToggle {
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.71rem;
+      font-weight: 700;
+      line-height: 1;
+      padding: 0.18rem 0.36rem;
+      cursor: pointer;
+
+      &:hover {
+        color: ${({ theme }) => theme.colors.gray12};
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
     }
 
     ol {
@@ -662,13 +716,13 @@ const StyledWrapper = styled.div`
     }
 
     li[data-level="3"] button {
-      padding-left: 0.7rem;
-      font-size: 0.83rem;
+      padding-left: 0.62rem;
+      font-size: 0.82rem;
     }
 
     li[data-level="4"] button {
-      padding-left: 1.2rem;
-      font-size: 0.81rem;
+      padding-left: 1.02rem;
+      font-size: 0.79rem;
     }
 
     button {

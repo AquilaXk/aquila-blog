@@ -280,13 +280,13 @@ const Backdrop = styled.div`
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(9, 11, 14, 0.72);
-  backdrop-filter: blur(3px);
+  background: rgba(7, 9, 12, 0.74);
+  backdrop-filter: blur(4px);
 `
 
 const Modal = styled.div`
   position: relative;
-  width: min(100%, 560px);
+  width: min(100%, 520px);
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   overflow: hidden;
@@ -328,7 +328,7 @@ const Modal = styled.div`
   h4 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.95rem;
+    font-size: 1.68rem;
     line-height: 1.25;
     font-weight: 800;
     letter-spacing: -0.01em;
@@ -338,7 +338,8 @@ const Modal = styled.div`
     margin: 0.62rem 0 1.05rem;
     color: ${({ theme }) => theme.colors.gray10};
     line-height: 1.55;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
+    max-width: 34rem;
   }
 
   .loginForm {
@@ -495,6 +496,8 @@ const Modal = styled.div`
     display: grid;
     gap: 0.5rem;
     margin-bottom: 0.9rem;
+    padding-top: 0.72rem;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
 
     span {
       color: ${({ theme }) => theme.colors.gray10};
@@ -581,11 +584,12 @@ const Modal = styled.div`
     }
 
     h4 {
-      font-size: 1.65rem;
+      font-size: 1.48rem;
     }
 
     .formDescription {
       margin-bottom: 0.95rem;
+      font-size: 0.84rem;
     }
   }
 `

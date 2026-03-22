@@ -1,16 +1,14 @@
 import { useInfiniteQuery } from "@tanstack/react-query"
-import { isNonEmptyString, toSafeInt } from "@shared/utils"
+import { toSafeInt } from "@shared/utils"
 import {
-  getExplorePostsCursorPage,
   getExplorePostsPage,
-  getFeedPostsCursorPage,
   getFeedPostsPage,
   getSearchPostsPage,
 } from "src/apis/backend/posts"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { TPost } from "src/types"
-import { useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 
 type Params = {
   kw: string
@@ -20,9 +18,8 @@ type Params = {
 }
 
 const EMPTY_POSTS: TPost[] = []
-const CURSOR_INITIAL_PAGE_PARAM: null = null
 const OFFSET_INITIAL_PAGE_PARAM = 1
-type ExplorePageParam = string | number | null
+type ExplorePageParam = number
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const tokenizeSearchKeyword = (value: string) =>
@@ -74,9 +71,8 @@ const useExplorePostsQuery = ({
 }: Params) => {
   const normalizedKw = kw.trim()
   const normalizedTag = typeof tag === "string" ? tag.trim() || undefined : undefined
-  const cursorMode = normalizedKw.length === 0
   const searchMode = normalizedKw.length > 0 && !normalizedTag
-  const feedMode = cursorMode && !normalizedTag
+  const feedMode = normalizedKw.length === 0 && !normalizedTag
 
   const query = useInfiniteQuery({
     queryKey: feedMode
@@ -98,43 +94,12 @@ const useExplorePostsQuery = ({
           }),
     queryFn: ({ pageParam, signal }: { pageParam: ExplorePageParam; signal?: AbortSignal }) => {
       const pageNumber = toSafeInt(pageParam, 1)
-      const cursor = isNonEmptyString(pageParam) ? pageParam : undefined
 
-      if (cursorMode) {
-        if (feedMode) {
-          if (typeof pageParam === "number") {
-            return getFeedPostsPage({
-              order,
-              page: pageNumber,
-              pageSize,
-              signal: signal ?? undefined,
-            })
-          }
-
-          return getFeedPostsCursorPage({
-            order,
-            pageSize,
-            cursor,
-            signal: signal ?? undefined,
-          })
-        }
-
-        if (typeof pageParam === "number") {
-          return getExplorePostsPage({
-            kw: "",
-            tag: normalizedTag,
-            order,
-            page: pageNumber,
-            pageSize,
-            signal: signal ?? undefined,
-          })
-        }
-
-        return getExplorePostsCursorPage({
-          tag: normalizedTag,
+      if (feedMode) {
+        return getFeedPostsPage({
           order,
+          page: pageNumber,
           pageSize,
-          cursor,
           signal: signal ?? undefined,
         })
       }
@@ -157,31 +122,29 @@ const useExplorePostsQuery = ({
         signal: signal ?? undefined,
       })
     },
-    staleTime: 300_000,
+    staleTime: feedMode ? 0 : 300_000,
     retry: 1,
+    refetchOnMount: feedMode ? true : false,
     refetchOnWindowFocus: false,
-    initialPageParam: cursorMode ? CURSOR_INITIAL_PAGE_PARAM : OFFSET_INITIAL_PAGE_PARAM,
+    initialPageParam: OFFSET_INITIAL_PAGE_PARAM,
     getNextPageParam: (lastPage) => {
-      if (cursorMode) {
-        if (lastPage.paginationMode === "page") {
-          if (lastPage.posts.length === 0) return undefined
-          if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
-          return lastPage.pageNumber + 1
-        }
-
-        if (!lastPage.hasNext) return undefined
-        const nextCursor =
-          typeof lastPage.nextCursor === "string" && lastPage.nextCursor.trim()
-            ? lastPage.nextCursor
-            : null
-        return nextCursor ?? undefined
-      }
-
       if (lastPage.posts.length === 0) return undefined
       if (lastPage.pageNumber * lastPage.pageSize >= lastPage.totalCount) return undefined
       return lastPage.pageNumber + 1
     },
   })
+
+  const hasForcedFeedRefetchRef = useRef(false)
+
+  useEffect(() => {
+    if (!feedMode) {
+      hasForcedFeedRefetchRef.current = false
+      return
+    }
+    if (hasForcedFeedRefetchRef.current) return
+    hasForcedFeedRefetchRef.current = true
+    void query.refetch()
+  }, [feedMode, query])
 
   const { pinnedPosts, regularPosts } = useMemo(() => {
     const pages = query.data?.pages

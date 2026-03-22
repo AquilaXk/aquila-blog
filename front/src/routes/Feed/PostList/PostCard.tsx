@@ -425,6 +425,10 @@ const StyledWrapper = styled(Link)`
       overflow: hidden;
       isolation: isolate;
 
+      img {
+        transition: transform 0.28s ease-in;
+      }
+
       &.placeholder {
         background: ${({ theme }) => theme.colors.gray3};
       }
@@ -440,11 +444,11 @@ const StyledWrapper = styled(Link)`
 
     }
 
-    > .content {
-      display: grid;
-      grid-template-rows: auto auto auto auto;
-      align-content: start;
-      min-height: 0;
+      > .content {
+        display: grid;
+        grid-template-rows: auto auto auto auto;
+        align-content: start;
+        min-height: 0;
       padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
       gap: 0;
 
@@ -452,9 +456,9 @@ const StyledWrapper = styled(Link)`
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: 1.03rem;
+          font-size: 1.06rem;
           line-height: ${FEED_CARD_TITLE_LINE_HEIGHT};
-          font-weight: 760;
+          font-weight: 750;
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -466,14 +470,14 @@ const StyledWrapper = styled(Link)`
       }
 
       > .summary {
-        margin-top: 0.25rem;
+        margin-top: 0.34rem;
         height: 3.9375rem;
 
         p {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray11};
           font-size: 0.875rem;
-          line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
+          line-height: 1.58;
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -489,7 +493,7 @@ const StyledWrapper = styled(Link)`
         flex-wrap: wrap;
         gap: 0.42rem;
         align-items: center;
-        margin-top: 0.75rem;
+        margin-top: 0.66rem;
         color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.5;
@@ -514,7 +518,7 @@ const StyledWrapper = styled(Link)`
 
       > .footer {
         margin-top: auto;
-        padding-top: 0.625rem;
+        padding-top: 0.58rem;
         border-top: 1px solid ${({ theme }) => theme.colors.gray4};
         display: flex;
         align-items: center;
@@ -593,6 +597,10 @@ const StyledWrapper = styled(Link)`
     &:focus-visible article {
       transform: translateY(var(--post-card-translate-y));
       box-shadow: var(--post-card-shadow-hover);
+
+      > .thumbnail img {
+        transform: scale(1.025);
+      }
 
       @media screen and (max-width: 1024px) {
         transform: none;

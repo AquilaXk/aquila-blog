@@ -9,12 +9,12 @@ import MarkdownRenderer from "../components/MarkdownRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { ApiError, apiFetch } from "src/apis/backend/client"
-import { getExplorePostsPage } from "src/apis/backend/posts"
+import { getExplorePostsPage, getFeedPostsPage } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute, toLoginPath } from "src/libs/router"
 import { formatDate } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
-import { PostDetail as PostDetailType, TPostComment } from "src/types"
+import { PostDetail as PostDetailType, TPost, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
 import AppIcon from "src/components/icons/AppIcon"
 
@@ -36,6 +36,8 @@ type TocItem = {
 
 const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
+const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
+const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
 
 const normalizeHeadingText = (value: string): string =>
   value
@@ -122,7 +124,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         .find((tag) => tag && tag.toLowerCase() !== "pinned") || "",
     [data?.tags]
   )
-  const relatedPostsQuery = useQuery({
+  const authorId = useMemo(() => data?.author?.[0]?.id || "", [data?.author])
+
+  const relatedByTagQuery = useQuery({
     queryKey: queryKey.postsExplore({
       kw: "",
       tag: relatedTag || undefined,
@@ -142,12 +146,64 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     staleTime: 300_000,
     retry: 1,
   })
-  const relatedPosts = useMemo(() => {
+
+  const relatedByAuthorQuery = useQuery({
+    queryKey: queryKey.postsExplore({
+      kw: `author:${authorId || "none"}`,
+      tag: undefined,
+      order: "desc",
+      page: 1,
+      pageSize: RELATED_AUTHOR_FETCH_PAGE_SIZE,
+    }),
+    queryFn: async () => {
+      const currentPostId = String(data?.id || "")
+      const authorIdValue = String(authorId || "")
+      const dedupe = new Set<string>()
+      const collected: TPost[] = []
+
+      for (let page = 1; page <= RELATED_AUTHOR_FETCH_MAX_PAGES; page += 1) {
+        const pageResult = await getFeedPostsPage({
+          order: "desc",
+          page,
+          pageSize: RELATED_AUTHOR_FETCH_PAGE_SIZE,
+        })
+
+        for (const post of pageResult.posts) {
+          const postAuthorId = String(post.author?.[0]?.id || "")
+          if (!postAuthorId || postAuthorId !== authorIdValue) continue
+          const postId = String(post.id || "")
+          if (!postId || postId === currentPostId || dedupe.has(postId)) continue
+
+          dedupe.add(postId)
+          collected.push(post)
+
+          if (collected.length >= RELATED_POSTS_LIMIT) {
+            return collected
+          }
+        }
+
+        const reachedLastPage = pageResult.pageNumber * pageResult.pageSize >= pageResult.totalCount
+        if (reachedLastPage) break
+      }
+
+      return collected
+    },
+    enabled: Boolean(authorId && data?.id),
+    staleTime: 300_000,
+    retry: 1,
+  })
+
+  const relatedByTagPosts = useMemo(() => {
     const currentPostId = String(data?.id || "")
-    return (relatedPostsQuery.data?.posts || [])
+    return (relatedByTagQuery.data?.posts || [])
       .filter((post) => String(post.id) !== currentPostId)
       .slice(0, RELATED_POSTS_LIMIT)
-  }, [data?.id, relatedPostsQuery.data?.posts])
+  }, [data?.id, relatedByTagQuery.data?.posts])
+
+  const relatedByAuthorPosts = useMemo(
+    () => (relatedByAuthorQuery.data || []).slice(0, RELATED_POSTS_LIMIT),
+    [relatedByAuthorQuery.data]
+  )
 
   useEffect(() => {
     if (!data) return
@@ -412,16 +468,37 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           <BodySection>
             <MarkdownRenderer content={data.content} />
           </BodySection>
-          {data.type[0] === "Post" && relatedPosts.length > 0 && (
+          {data.type[0] === "Post" && relatedByTagPosts.length > 0 && (
             <RelatedSection aria-label="연관 글">
               <header>
-                <h2>연관 글</h2>
+                <h2>같은 태그 글</h2>
                 <Link href={relatedTag ? `/?tag=${encodeURIComponent(relatedTag)}` : "/"}>
                   더 보기
                 </Link>
               </header>
               <ul>
-                {relatedPosts.map((post) => (
+                {relatedByTagPosts.map((post) => (
+                  <li key={post.id}>
+                    <Link href={toCanonicalPostPath(post.id)}>
+                      <strong>{post.title}</strong>
+                      {post.summary && <p>{post.summary}</p>}
+                      <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </RelatedSection>
+          )}
+          {data.type[0] === "Post" && relatedByAuthorPosts.length > 0 && (
+            <RelatedSection aria-label="같은 작성자 글">
+              <header>
+                <h2>같은 작성자 글</h2>
+                <Link href="/">
+                  더 보기
+                </Link>
+              </header>
+              <ul>
+                {relatedByAuthorPosts.map((post) => (
                   <li key={post.id}>
                     <Link href={toCanonicalPostPath(post.id)}>
                       <strong>{post.title}</strong>

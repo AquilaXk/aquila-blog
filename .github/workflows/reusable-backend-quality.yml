@@ -62,6 +62,15 @@ jobs:
         working-directory: back
         run: ./gradlew test --rerun-tasks
 
+      - name: Upload backend OpenAPI artifact
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-openapi-contract
+          path: back/build/openapi/openapi.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload backend reports on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

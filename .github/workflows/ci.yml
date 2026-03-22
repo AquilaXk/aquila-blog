@@ -53,10 +53,17 @@ jobs:
       CI_REDIS_PASSWORD: ${{ secrets.CI_REDIS_PASSWORD }}
 
   front-verify:
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    needs:
+      - changes
+      - backend-quality
+    if: >
+      always() &&
+      needs.changes.outputs.frontend == 'true' &&
+      (needs.changes.outputs.backend != 'true' || needs.backend-quality.result == 'success')
     uses: ./.github/workflows/reusable-frontend-verify.yml
     with:
+      openapi_artifact_name: backend-openapi-contract
+      openapi_artifact_required: ${{ needs.changes.outputs.backend == 'true' }}
       openapi_source_url: ${{ vars.CI_OPENAPI_SOURCE_URL || '' }}
       openapi_fetch_strict: false
 

@@ -205,6 +205,14 @@ const getLayoutSnapshot = async (page: Page) =>
     }
   })
 
+const waitForStableHeaderAuthState = async (page: Page) => {
+  await page
+    .waitForSelector('.authArea:not([data-auth-state="loading"])', {
+      timeout: 1200,
+    })
+    .catch(() => {})
+}
+
 const getMaxHorizontalJitter = (
   before: Awaited<ReturnType<typeof getLayoutSnapshot>>,
   after: Awaited<ReturnType<typeof getLayoutSnapshot>>
@@ -238,6 +246,7 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
   for (const route of refreshCheckRoutes) {
     await page.goto(route)
     await page.waitForLoadState("networkidle")
+    await waitForStableHeaderAuthState(page)
     await page.waitForTimeout(300)
     const before = await getLayoutSnapshot(page)
     await page.evaluate(() => {
@@ -245,6 +254,7 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
     })
 
     await page.reload({ waitUntil: "networkidle" })
+    await waitForStableHeaderAuthState(page)
     await page.waitForTimeout(1000)
     const after = await getLayoutSnapshot(page)
 

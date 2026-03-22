@@ -10,6 +10,11 @@ type RumMetricPayload = {
   delta: number
   navigationType?: string
   path: string
+  attribution?: {
+    target?: string
+    eventType?: string
+    resourceUrl?: string
+  }
 }
 
 const RUM_ENDPOINT = "/api/rum/vitals"
@@ -77,7 +82,39 @@ export const reportWebVital = (metric: NextWebVitalsMetric) => {
     rating?: "good" | "needs-improvement" | "poor"
     delta?: number
     navigationType?: string
+    attribution?: {
+      element?: string
+      interactionTarget?: string
+      eventType?: string
+      interactionType?: string
+      url?: string
+      lcpResourceUrl?: string
+    }
   }
+  const rawAttribution = metricWithDetail.attribution
+  const attribution =
+    rawAttribution && typeof rawAttribution === "object"
+      ? {
+          target:
+            typeof rawAttribution.interactionTarget === "string"
+              ? rawAttribution.interactionTarget
+              : typeof rawAttribution.element === "string"
+                ? rawAttribution.element
+                : undefined,
+          eventType:
+            typeof rawAttribution.eventType === "string"
+              ? rawAttribution.eventType
+              : typeof rawAttribution.interactionType === "string"
+                ? rawAttribution.interactionType
+                : undefined,
+          resourceUrl:
+            typeof rawAttribution.url === "string"
+              ? rawAttribution.url
+              : typeof rawAttribution.lcpResourceUrl === "string"
+                ? rawAttribution.lcpResourceUrl
+                : undefined,
+        }
+      : undefined
 
   const payload: RumMetricPayload = {
     name: metric.name,
@@ -87,6 +124,7 @@ export const reportWebVital = (metric: NextWebVitalsMetric) => {
     delta: typeof metricWithDetail.delta === "number" ? metricWithDetail.delta : metric.value,
     navigationType: metricWithDetail.navigationType,
     path: window.location.pathname,
+    attribution,
   }
 
   sendToApi(payload)

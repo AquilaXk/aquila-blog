@@ -4,7 +4,6 @@ import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query"
 import type { NextWebVitalsMetric } from "next/app"
 import { RootLayout } from "src/layouts"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
-import { reportWebVital } from "src/libs/rum/reportWebVital"
 import { createQueryClient } from "src/libs/react-query"
 import { useState } from "react"
 
@@ -28,5 +27,11 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
 export default App
 
 export const reportWebVitals = (metric: NextWebVitalsMetric) => {
-  reportWebVital(metric)
+  void import("src/libs/rum/reportWebVital")
+    .then(({ reportWebVital }) => {
+      reportWebVital(metric)
+    })
+    .catch(() => {
+      // RUM 전송 실패는 사용자 흐름에 영향을 주지 않도록 무시한다.
+    })
 }

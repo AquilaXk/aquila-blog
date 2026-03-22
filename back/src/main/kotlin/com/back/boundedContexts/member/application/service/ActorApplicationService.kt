@@ -7,6 +7,7 @@ import com.back.boundedContexts.member.domain.shared.MemberProxy
 import com.back.global.security.domain.SecurityUser
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.util.Locale
 import kotlin.jvm.optionals.getOrNull
 
 /**
@@ -26,6 +27,14 @@ class ActorApplicationService(
 
     @Transactional(readOnly = true)
     override fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)
+
+    @Transactional(readOnly = true)
+    override fun findByEmail(email: String): Member? =
+        memberRepository.findByEmail(
+            email
+                .trim()
+                .lowercase(Locale.ROOT),
+        )
 
     @Transactional(readOnly = true)
     fun findByApiKey(apiKey: String): Member? = memberRepository.findByApiKey(apiKey)

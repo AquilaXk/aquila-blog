@@ -27,3 +27,78 @@ groups:
         annotations:
           summary: "API p95 latency is high"
           description: "p95 > 1s for 10m. Check DB/Redis/task queue pressure."
+
+      - alert: AquilaTaskDlqRateHigh
+        expr: sum(rate(task_processor_result_total{status="dlq"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task DLQ rate is above zero"
+          description: "DLQ tasks are accumulating. Check failed handlers and replay policy."
+
+      - alert: AquilaPostSearchIndexLagP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(post_search_index_task_lag_seconds_bucket[10m]))) > 120
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search index async sync lag p95 is high"
+          description: "post.search_index.task.lag p95 > 120s for 10m."
+
+      - alert: AquilaPostSearchIndexFailureBudgetBurn
+        expr: |
+          (
+            sum(rate(post_search_index_task_result_total{status="failed"}[15m]))
+            /
+            clamp_min(sum(rate(post_search_index_task_result_total[15m])), 0.001)
+          ) > 0.02
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Search index sync failure budget burn"
+          description: "post.search_index.task failed ratio > 2% for 15m."
+
+      - alert: AquilaPostSearchIndexSlaBreachDetected
+        expr: sum(increase(post_search_index_task_sla_breach_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Search index sync SLA breach detected"
+          description: "post.search_index.task.sla_breach increased in the last 15m."
+
+  - name: aquila-cdn-purge
+    rules:
+      - alert: AquilaCdnPurgeP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(cdn_purge_duration_seconds_bucket{status="success"}[10m]))) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CDN purge p95 latency is high"
+          description: "cdn.purge.duration p95 > 0.8s for 10m."
+
+      - alert: AquilaCdnPurgeP99High
+        expr: histogram_quantile(0.99, sum by (le) (rate(cdn_purge_duration_seconds_bucket{status="success"}[10m]))) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CDN purge p99 latency is high"
+          description: "cdn.purge.duration p99 > 1.5s for 10m."
+
+      - alert: AquilaCdnPurgeFailureRateByReasonHigh
+        expr: |
+          (
+            sum by (reason) (rate(cdn_purge_result_total{status=~"failed|non_success"}[10m]))
+            /
+            clamp_min(sum by (reason) (rate(cdn_purge_result_total[10m])), 0.001)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CDN purge failure rate is high by reason"
+          description: "cdn.purge.result failure ratio > 5% for 10m (reason label split)."

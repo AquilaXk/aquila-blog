@@ -61,7 +61,7 @@ services:
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       CUSTOM__RUNTIME__WORKER_ENABLED: "false"
-      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE:-all}
+      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE_BLUE:-${CUSTOM__RUNTIME__API_MODE:-all}}
       DEPLOY_COLOR: blue
     depends_on:
       - db_1
@@ -92,7 +92,7 @@ services:
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       CUSTOM__RUNTIME__WORKER_ENABLED: "false"
-      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE:-all}
+      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE_GREEN:-${CUSTOM__RUNTIME__API_MODE:-all}}
       DEPLOY_COLOR: green
     depends_on:
       - db_1
@@ -102,6 +102,70 @@ services:
       default:
         aliases:
           - back-green
+
+  back_read:
+    profiles: ["runtime-split"]
+    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    restart: unless-stopped
+    mem_limit: ${BACK_READ_MEM_LIMIT:-768m}
+    mem_reservation: ${BACK_READ_MEM_RESERVATION:-256m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    env_file:
+      - ./.env.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
+      CUSTOM__RUNTIME__API_MODE: read
+      DEPLOY_COLOR: read
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    networks:
+      default:
+        aliases:
+          - back-read
+
+  back_admin:
+    profiles: ["runtime-split"]
+    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    restart: unless-stopped
+    mem_limit: ${BACK_ADMIN_MEM_LIMIT:-768m}
+    mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
+    labels:
+      autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    env_file:
+      - ./.env.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
+      CUSTOM__RUNTIME__API_MODE: admin
+      DEPLOY_COLOR: admin
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
+    networks:
+      default:
+        aliases:
+          - back-admin
 
   back_worker:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
@@ -115,7 +179,7 @@ services:
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
       CUSTOM__RUNTIME__WORKER_ENABLED: "true"
-      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE:-all}
+      CUSTOM__RUNTIME__API_MODE: ${CUSTOM__RUNTIME__API_MODE_WORKER:-${CUSTOM__RUNTIME__API_MODE:-all}}
       DEPLOY_COLOR: worker
     depends_on:
       - db_1

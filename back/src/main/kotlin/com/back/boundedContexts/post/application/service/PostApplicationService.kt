@@ -50,12 +50,10 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.jvm.optionals.getOrNull
-import kotlin.math.ln
 
 /**
  * PostApplicationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
@@ -74,16 +72,11 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val cacheManager: CacheManager,
+    private val postRecommendRankingService: PostRecommendRankingService,
+    private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
+    private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
     @param:Value("\${custom.post.read.tags-local-cache-ttl-seconds:180}")
     private val tagsLocalCacheTtlSeconds: Long,
-    @param:Value("\${custom.post.recommend.enabled:true}")
-    private val recommendRankingEnabled: Boolean,
-    @param:Value("\${custom.post.recommend.candidatePoolSize:240}")
-    recommendCandidatePoolSize: Int,
-    @param:Value("\${custom.post.recommend.maxRerankPages:4}")
-    recommendMaxRerankPages: Int,
-    @param:Value("\${custom.post.recommend.hotTagsLimit:24}")
-    recommendHotTagsLimit: Int,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
 
@@ -99,14 +92,6 @@ class PostApplicationService(
     private val hotPageSizes = listOf(30, 24, 18, 12)
     private val hotSorts = listOf(PostSearchSortType1.CREATED_AT, PostSearchSortType1.CREATED_AT_ASC)
     private val maxTagCacheEvict = 12
-    private val recommendCandidatePoolSize = recommendCandidatePoolSize.coerceIn(60, 600)
-    private val recommendMaxRerankPages = recommendMaxRerankPages.coerceIn(1, 12)
-    private val recommendHotTagsLimit = recommendHotTagsLimit.coerceIn(5, 64)
-
-    private data class RankedPost(
-        val post: Post,
-        val score: Double,
-    )
 
     fun count(): Long = postRepository.count()
 
@@ -140,7 +125,22 @@ class PostApplicationService(
                     listed = listed,
                     contentHtml = contentHtml,
                 )
-            clearReadCaches(postId = created.id, afterTags = extractNormalizedTags(created.content))
+            val createdTags = extractNormalizedTags(created.content)
+            val isPublic = isPubliclyListed(created)
+            clearReadCaches(
+                postId = created.id,
+                afterTags = createdTags,
+                evictHotReadPages = isPublic,
+                evictSearchFirstPage = isPublic,
+                evictImpactedTagPages = isPublic,
+                evictTagsPublic = isPublic,
+                evictDetail = isPublic,
+            )
+            if (isPublic) {
+                postRecommendFeatureStoreService.refresh(created)
+            } else {
+                postRecommendFeatureStoreService.evict(created.id)
+            }
             return created
         }
 
@@ -175,7 +175,22 @@ class PostApplicationService(
 
         requestSlot.postId = createdPost.id
         postWriteRequestIdempotencyRepository.save(requestSlot)
-        clearReadCaches(postId = createdPost.id, afterTags = extractNormalizedTags(createdPost.content))
+        val createdTags = extractNormalizedTags(createdPost.content)
+        val isPublic = isPubliclyListed(createdPost)
+        clearReadCaches(
+            postId = createdPost.id,
+            afterTags = createdTags,
+            evictHotReadPages = isPublic,
+            evictSearchFirstPage = isPublic,
+            evictImpactedTagPages = isPublic,
+            evictTagsPublic = isPublic,
+            evictDetail = isPublic,
+        )
+        if (isPublic) {
+            postRecommendFeatureStoreService.refresh(createdPost)
+        } else {
+            postRecommendFeatureStoreService.evict(createdPost.id)
+        }
 
         return createdPost
     }
@@ -222,7 +237,9 @@ class PostApplicationService(
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
 
+        val previousTitle = post.title
         val previousContent = post.content
+        val wasPublic = isPubliclyListed(post)
         val previousTags = extractNormalizedTags(previousContent)
         try {
             val sanitizedContentHtml =
@@ -243,7 +260,27 @@ class PostApplicationService(
             logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
         }
         val afterTags = extractNormalizedTags(post.content)
-        clearReadCaches(postId = post.id, beforeTags = previousTags, afterTags = afterTags)
+        val isPublic = isPubliclyListed(post)
+        val listingVisibilityChanged = wasPublic != isPublic
+        val contentChanged = previousContent != post.content
+        val titleChanged = previousTitle != post.title
+        val tagChanged = previousTags != afterTags
+        val affectsPublicRead = wasPublic || isPublic
+        clearReadCaches(
+            postId = post.id,
+            beforeTags = previousTags,
+            afterTags = afterTags,
+            evictHotReadPages = affectsPublicRead,
+            evictSearchFirstPage = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged || tagChanged),
+            evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
+            evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
+            evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
+        )
+        if (isPublic) {
+            postRecommendFeatureStoreService.refresh(post)
+        } else {
+            postRecommendFeatureStoreService.evict(post.id)
+        }
 
         runCatching {
             eventPublisher.publish(
@@ -349,13 +386,24 @@ class PostApplicationService(
         actor: Member,
     ) {
         val deletedPostContent = post.content
+        val wasPublic = isPubliclyListed(post)
         val beforeTags = extractNormalizedTags(deletedPostContent)
 
         val softDeleted = postRepository.softDeleteById(post.id)
         if (!softDeleted) {
             throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
         }
-        clearReadCaches(postId = post.id, beforeTags = beforeTags, afterTags = emptyList())
+        clearReadCaches(
+            postId = post.id,
+            beforeTags = beforeTags,
+            afterTags = emptyList(),
+            evictHotReadPages = wasPublic,
+            evictSearchFirstPage = wasPublic,
+            evictImpactedTagPages = wasPublic,
+            evictTagsPublic = wasPublic,
+            evictDetail = wasPublic,
+        )
+        postRecommendFeatureStoreService.evict(post.id)
 
         // 카운터 보정 실패는 삭제 실패로 전파하지 않는다. 실패 시 실제 개수 재동기화를 시도한다.
         runCatching {
@@ -415,6 +463,7 @@ class PostApplicationService(
             )
         incrementCommentsCount(post)
         incrementMemberPostCommentsCount(persistenceAuthor)
+        refreshRecommendFeatureStoreForPublicPost(post)
 
         runCatching {
             eventPublisher.publish(
@@ -500,6 +549,7 @@ class PostApplicationService(
 
         savePostAttr(post.commentsCountAttr)
         postRepository.flush()
+        refreshRecommendFeatureStoreForPublicPost(post)
     }
 
     /**
@@ -534,6 +584,7 @@ class PostApplicationService(
 
             incrementLikesCount(post)
             postRepository.flush()
+            refreshRecommendFeatureStoreForPublicPost(post)
             runCatching {
                 eventPublisher.publish(
                     PostLikedEvent(UUID.randomUUID(), post.id, post.author.id, recoveredLikeId, MemberDto(actor)),
@@ -546,6 +597,7 @@ class PostApplicationService(
 
         incrementLikesCount(post)
         postRepository.flush()
+        refreshRecommendFeatureStoreForPublicPost(post)
 
         runCatching {
             eventPublisher.publish(
@@ -582,6 +634,7 @@ class PostApplicationService(
             ensureLikesCountLoaded(post)
         }
         postRepository.flush()
+        refreshRecommendFeatureStoreForPublicPost(post)
 
         if (deletedCount > 0 && existingLikeId != null) {
             runCatching {
@@ -684,18 +737,47 @@ class PostApplicationService(
         sort: PostSearchSortType1,
         page: Int,
         pageSize: Int,
-    ): PagedResult<Post> =
-        findAndHydratePagedPosts(page, pageSize) {
-            postRepository.findQPagedByKw(
-                PostRepositoryPort.PagedQuery(
-                    kw = kw,
-                    zeroBasedPage = page - 1,
-                    pageSize = pageSize,
-                    sortProperty = sort.property,
-                    sortAscending = sort.isAsc,
-                ),
-            )
+    ): PagedResult<Post> {
+        val normalizedKw = kw.trim()
+        val safePage = page.coerceAtLeast(1)
+        val safePageSize = pageSize.coerceIn(1, 100)
+
+        if (!postKeywordSearchPipelineService.shouldApply(normalizedKw, sort, safePage)) {
+            return findAndHydratePagedPosts(safePage, safePageSize) {
+                postRepository.findQPagedByKw(
+                    PostRepositoryPort.PagedQuery(
+                        kw = normalizedKw,
+                        zeroBasedPage = safePage - 1,
+                        pageSize = safePageSize,
+                        sortProperty = sort.property,
+                        sortAscending = sort.isAsc,
+                    ),
+                )
+            }
         }
+
+        val candidatePoolSize = postKeywordSearchPipelineService.resolveCandidatePoolSize(safePageSize)
+        val candidateResult =
+            findAndHydratePagedPosts(page = 1, pageSize = candidatePoolSize) {
+                postRepository.findQPagedByKw(
+                    PostRepositoryPort.PagedQuery(
+                        kw = normalizedKw,
+                        zeroBasedPage = 0,
+                        pageSize = candidatePoolSize,
+                        sortProperty = sort.property,
+                        sortAscending = sort.isAsc,
+                    ),
+                )
+            }
+
+        return postKeywordSearchPipelineService.rerank(
+            keyword = normalizedKw,
+            candidates = candidateResult.content,
+            page = safePage,
+            pageSize = safePageSize,
+            candidateTotalElements = candidateResult.totalElements,
+        )
+    }
 
     fun findRecommendedExplorePage(
         page: Int,
@@ -704,11 +786,11 @@ class PostApplicationService(
         val safePage = page.coerceAtLeast(1)
         val safePageSize = pageSize.coerceIn(1, 100)
 
-        if (!recommendRankingEnabled || safePage > recommendMaxRerankPages) {
+        if (!postRecommendRankingService.isEnabledForPage(safePage)) {
             return findPagedByKw("", PostSearchSortType1.CREATED_AT, safePage, safePageSize)
         }
 
-        val poolSize = maxOf(recommendCandidatePoolSize, safePageSize * recommendMaxRerankPages).coerceIn(safePageSize, 600)
+        val poolSize = postRecommendRankingService.resolveCandidatePoolSize(safePageSize)
         val candidateResult =
             findAndHydratePagedPosts(page = 1, pageSize = poolSize) {
                 postRepository.findQPagedByKw(
@@ -730,28 +812,12 @@ class PostApplicationService(
             )
         }
 
-        val tagWeights = buildHotTagWeights(getPublicTagCounts())
-        val ranked =
-            candidateResult.content
-                .asSequence()
-                .map { post -> RankedPost(post, scoreRecommendedPost(post, tagWeights)) }
-                .sortedWith(
-                    compareByDescending<RankedPost> { it.score }
-                        .thenByDescending { it.post.createdAt }
-                        .thenByDescending { it.post.id },
-                ).map { it.post }
-                .toList()
-
-        val fromIndex = ((safePage - 1) * safePageSize).coerceAtLeast(0)
-        val toIndex = minOf(fromIndex + safePageSize, ranked.size)
-        val content = if (fromIndex >= ranked.size) emptyList() else ranked.subList(fromIndex, toIndex)
-        val totalElements = maxOf(candidateResult.totalElements, ranked.size.toLong())
-
-        return PagedResult(
-            content = content,
+        return postRecommendRankingService.rerank(
+            candidates = candidateResult.content,
+            tagCounts = getPublicTagCounts(),
             page = safePage,
             pageSize = safePageSize,
-            totalElements = totalElements,
+            candidateTotalElements = candidateResult.totalElements,
         )
     }
 
@@ -832,10 +898,27 @@ class PostApplicationService(
             logger.warn("Failed to restore attachments for restored post id={}", id, exception)
         }
 
-        clearReadCaches(postId = id, afterTags = extractNormalizedTags(snapshot.content))
+        val restoredPost =
+            postRepository.findById(id).getOrNull()
+                ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
+        val restoredTags = extractNormalizedTags(restoredPost.content)
+        val isPublic = isPubliclyListed(restoredPost)
+        clearReadCaches(
+            postId = id,
+            afterTags = restoredTags,
+            evictHotReadPages = isPublic,
+            evictSearchFirstPage = isPublic,
+            evictImpactedTagPages = isPublic,
+            evictTagsPublic = isPublic,
+            evictDetail = isPublic,
+        )
+        if (isPublic) {
+            postRecommendFeatureStoreService.refresh(restoredPost)
+        } else {
+            postRecommendFeatureStoreService.evict(restoredPost.id)
+        }
 
-        return postRepository.findById(id).getOrNull()
-            ?: throw AppException("404-1", "복구된 글을 확인할 수 없습니다.")
+        return restoredPost
     }
 
     /**
@@ -859,7 +942,17 @@ class PostApplicationService(
             throw AppException("404-1", "이미 영구삭제되었거나 존재하지 않는 글입니다.")
         }
 
-        clearReadCaches(postId = id, beforeTags = extractNormalizedTags(snapshot.content), afterTags = emptyList())
+        clearReadCaches(
+            postId = id,
+            beforeTags = extractNormalizedTags(snapshot.content),
+            afterTags = emptyList(),
+            evictHotReadPages = true,
+            evictSearchFirstPage = true,
+            evictImpactedTagPages = true,
+            evictTagsPublic = true,
+            evictDetail = true,
+        )
+        postRecommendFeatureStoreService.evict(id)
     }
 
     fun findPagedByAuthor(
@@ -1155,8 +1248,15 @@ class PostApplicationService(
         postId: Long? = null,
         beforeTags: Collection<String> = emptyList(),
         afterTags: Collection<String> = emptyList(),
+        evictHotReadPages: Boolean = true,
+        evictSearchFirstPage: Boolean = true,
+        evictImpactedTagPages: Boolean = true,
+        evictTagsPublic: Boolean = true,
+        evictDetail: Boolean = true,
     ) {
-        publicTagCountsCache = null
+        if (evictTagsPublic) {
+            publicTagCountsCache = null
+        }
         val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
         val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
         val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
@@ -1164,45 +1264,68 @@ class PostApplicationService(
         val searchCache = cacheManager.getCache(PostQueryCacheNames.SEARCH)
         val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
 
-        hotPageSizes.forEach { pageSize ->
-            hotSorts.forEach { sort ->
-                val sortName = sort.name
-                feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
-                exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
-                searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
-                feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
-                exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
-            }
-        }
-
-        val impactedTagTokens =
-            buildList(beforeTags.size + afterTags.size) {
-                addAll(beforeTags)
-                addAll(afterTags)
-            }.asSequence()
-                .map(String::trim)
-                .filter(String::isNotBlank)
-                .map(PostPublicReadQueryService::toCacheKeyToken)
-                .distinct()
-                .take(maxTagCacheEvict)
-                .toList()
-
-        impactedTagTokens.forEach { token ->
+        if (evictHotReadPages || evictSearchFirstPage) {
             hotPageSizes.forEach { pageSize ->
                 hotSorts.forEach { sort ->
                     val sortName = sort.name
-                    exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
-                    exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
+                    if (evictHotReadPages) {
+                        feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
+                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
+                        feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
+                    }
+                    if (evictSearchFirstPage) {
+                        searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                    }
                 }
             }
         }
 
-        tagsCache?.evict("public")
-        val detailCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)
-        if (postId == null) {
-            detailCache?.clear()
-        } else {
-            detailCache?.evict(postId)
+        if (evictImpactedTagPages) {
+            val impactedTagTokens =
+                buildList(beforeTags.size + afterTags.size) {
+                    addAll(beforeTags)
+                    addAll(afterTags)
+                }.asSequence()
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .map(PostPublicReadQueryService::toCacheKeyToken)
+                    .distinct()
+                    .take(maxTagCacheEvict)
+                    .toList()
+
+            impactedTagTokens.forEach { token ->
+                hotPageSizes.forEach { pageSize ->
+                    hotSorts.forEach { sort ->
+                        val sortName = sort.name
+                        exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
+                        exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
+                    }
+                }
+            }
+        }
+
+        if (evictTagsPublic) {
+            tagsCache?.evict("public")
+        }
+        if (evictDetail) {
+            val detailCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)
+            if (postId == null) {
+                detailCache?.clear()
+            } else {
+                detailCache?.evict(postId)
+            }
+        }
+    }
+
+    private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed
+
+    private fun refreshRecommendFeatureStoreForPublicPost(post: Post) {
+        if (!isPubliclyListed(post)) return
+        runCatching {
+            postRecommendFeatureStoreService.refresh(post)
+        }.onFailure { exception ->
+            logger.warn("recommend_feature_store_refresh_failed postId={}", post.id, exception)
         }
     }
 
@@ -1253,64 +1376,6 @@ class PostApplicationService(
             .entries
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
             .map { TagCountDto(it.key, it.value) }
-    }
-
-    private fun buildHotTagWeights(tagCounts: List<TagCountDto>): Map<String, Double> {
-        if (tagCounts.isEmpty()) return emptyMap()
-
-        val topTags = tagCounts.take(recommendHotTagsLimit)
-        if (topTags.isEmpty()) return emptyMap()
-
-        val maxCount = topTags.maxOfOrNull { it.count }?.toDouble()?.coerceAtLeast(1.0) ?: 1.0
-        val total = topTags.size.coerceAtLeast(1)
-
-        return topTags
-            .mapIndexed { index, dto ->
-                val normalizedTag = normalizeTag(dto.tag).lowercase()
-                val rankWeight = ((total - index).toDouble() / total).coerceIn(0.0, 1.0)
-                val volumeWeight = (dto.count.toDouble() / maxCount).coerceIn(0.0, 1.0)
-                normalizedTag to (rankWeight * 0.65 + volumeWeight * 0.35)
-            }.toMap()
-    }
-
-    private fun scoreRecommendedPost(
-        post: Post,
-        tagWeights: Map<String, Double>,
-    ): Double {
-        val now = Instant.now()
-        val ageHours = Duration.between(post.createdAt, now).toHours().coerceAtLeast(0)
-        val freshnessScore =
-            when {
-                ageHours <= 6 -> 120.0
-                ageHours <= 24 -> 98.0
-                ageHours <= 72 -> 75.0
-                ageHours <= 168 -> 48.0
-                ageHours <= 336 -> 24.0
-                else -> 10.0
-            }
-
-        val clickScore = ln(post.hitCount.coerceAtLeast(0).toDouble() + 1.0) * 22.0
-        val engagementSignal = (post.likesCount.coerceAtLeast(0) * 2) + (post.commentsCount.coerceAtLeast(0) * 3)
-        val engagementScore = ln(engagementSignal.toDouble() + 1.0) * 18.0
-        val dwellProxySeconds = estimateDwellProxySeconds(post.content)
-        val dwellScore = ln(dwellProxySeconds + 1.0) * 9.0
-
-        val normalizedPostTags = extractNormalizedTags(post.content).map { it.lowercase() }
-        val matchedWeight = normalizedPostTags.sumOf { tagWeights[it] ?: 0.0 }
-        val tagSimilarityScore =
-            if (normalizedPostTags.isEmpty() || matchedWeight <= 0.0) {
-                0.0
-            } else {
-                (matchedWeight / normalizedPostTags.size.toDouble()) * 65.0
-            }
-
-        return freshnessScore + clickScore + engagementScore + dwellScore + tagSimilarityScore
-    }
-
-    private fun estimateDwellProxySeconds(content: String): Double {
-        val normalizedLength = content.length.coerceAtLeast(0)
-        if (normalizedLength == 0) return 20.0
-        return (normalizedLength.toDouble() / 22.0).coerceIn(20.0, 420.0)
     }
 
     private fun normalizeTag(tag: String): String = tag.trim()

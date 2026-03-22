@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.transaction.annotation.Transactional
+import java.util.Locale
 
 /**
  * MemberProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
@@ -47,11 +48,18 @@ class MemberProdInitData(
     @Transactional
     fun ensureConfiguredAdminMember() {
         val adminUsername = AppConfig.adminUsernameOrBlank.trim()
+        val adminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
         val adminPassword = AppConfig.adminPasswordOrBlank
 
-        if (adminUsername.isBlank()) return
+        if (adminUsername.isBlank() && adminEmail.isBlank()) return
         if (adminPassword.isBlank()) return
-        val existingAdmin = memberUseCase.findByUsername(adminUsername)
+        val existingAdmin =
+            adminEmail
+                .takeIf { it.isNotBlank() }
+                ?.let(memberUseCase::findByEmail)
+                ?: adminUsername
+                    .takeIf { it.isNotBlank() }
+                    ?.let(memberUseCase::findByUsername)
         if (existingAdmin != null) {
             val hasPassword = !existingAdmin.password.isNullOrBlank()
             val passwordMatchesConfigured = hasPassword && passwordEncoder.matches(adminPassword, existingAdmin.password)
@@ -70,16 +78,36 @@ class MemberProdInitData(
             if (existingAdmin.apiKey.isBlank() || existingAdmin.apiKey == existingAdmin.username) {
                 existingAdmin.modifyApiKey(MemberPolicy.genApiKey())
             }
+            if (adminEmail.isNotBlank()) {
+                val owner = memberUseCase.findByEmail(adminEmail)
+                if (owner == null || owner.id == existingAdmin.id) {
+                    existingAdmin.email = adminEmail
+                } else {
+                    logger.warn(
+                        "Admin email bootstrap skipped because configured email is already used by memberId={}",
+                        owner.id,
+                    )
+                }
+            }
             return
         }
 
         val member =
-            memberUseCase.join(
-                username = adminUsername,
-                password = adminPassword,
-                nickname = "관리자",
-                profileImgUrl = null,
-            )
+            if (adminEmail.isNotBlank()) {
+                memberUseCase.joinWithVerifiedEmail(
+                    email = adminEmail,
+                    password = adminPassword,
+                    nickname = "관리자",
+                    profileImgUrl = null,
+                )
+            } else {
+                memberUseCase.join(
+                    username = adminUsername,
+                    password = adminPassword,
+                    nickname = "관리자",
+                    profileImgUrl = null,
+                )
+            }
 
         if (member.apiKey.isBlank() || member.apiKey == member.username) {
             member.modifyApiKey(MemberPolicy.genApiKey())

@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
 
-const adminUsername = process.env.E2E_ADMIN_USERNAME?.trim() || ""
+const adminIdentifier =
+  process.env.E2E_ADMIN_EMAIL?.trim() || process.env.E2E_ADMIN_USERNAME?.trim() || ""
 const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
-const hasLiveCredentials = Boolean(adminUsername && adminPassword)
+const hasLiveCredentials = Boolean(adminIdentifier && adminPassword)
 const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
 const liveApiProbeAttempts = Number.parseInt(process.env.E2E_LIVE_API_PROBE_ATTEMPTS || "4", 10)
 const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS || "3", 10)
@@ -67,7 +68,7 @@ const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
 const loginWithRetry = async (
   page: Page,
   apiBaseUrl: string,
-  username: string,
+  loginId: string,
   password: string
 ) => {
   let lastFailure = "unknown"
@@ -75,7 +76,7 @@ const loginWithRetry = async (
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
     try {
       const response = await page.request.post(`${apiBaseUrl}/member/api/v1/auth/login`, {
-        data: { username, password },
+        data: { email: loginId, password },
         timeout: liveLoginTimeoutMs,
       })
 
@@ -102,17 +103,17 @@ const loginWithRetry = async (
   throw new Error(`Login API failed after retries. base=${apiBaseUrl} last=${lastFailure}`)
 }
 
-const loginThroughUi = async (page: Page, username: string, password: string) => {
+const loginThroughUi = async (page: Page, loginId: string, password: string) => {
   await page.goto("/login?next=%2Fadmin")
   await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
-  await page.getByLabel("아이디").fill(username)
+  await page.getByLabel("이메일").fill(loginId)
   await page.locator("#password").fill(password)
   await page.getByRole("button", { name: "로그인", exact: true }).click()
   await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })
 }
 
 test.describe("live production e2e", () => {
-  test.skip(!hasLiveCredentials, "E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD is required")
+  test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL(or E2E_ADMIN_USERNAME) / E2E_ADMIN_PASSWORD is required")
   test.setTimeout(120_000)
 
   test("비로그인 사용자는 /admin 접근 시 로그인 페이지로 이동한다", async ({ page }) => {
@@ -125,7 +126,7 @@ test.describe("live production e2e", () => {
     await page.goto("/login")
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    await loginThroughUi(page, adminUsername, adminPassword)
+    await loginThroughUi(page, adminIdentifier, adminPassword)
     await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
@@ -144,7 +145,7 @@ test.describe("live production e2e", () => {
 
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    await loginWithRetry(page, apiBaseUrl, adminUsername, adminPassword)
+    await loginWithRetry(page, apiBaseUrl, adminIdentifier, adminPassword)
 
     await page.goto("/admin")
     await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })

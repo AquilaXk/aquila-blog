@@ -167,8 +167,10 @@ class CdnCachePurgeService(
             httpClient.send(request, HttpResponse.BodyHandlers.discarding())
         }.onSuccess { response ->
             val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
-            meterRegistry?.timer("cdn.purge.duration")?.record(elapsedMs, TimeUnit.MILLISECONDS)
             if (response.statusCode() >= 400) {
+                meterRegistry
+                    ?.timer("cdn.purge.duration", "status", "non_success", "reason", reasonBucket)
+                    ?.record(elapsedMs, TimeUnit.MILLISECONDS)
                 meterRegistry?.counter("cdn.purge.result", "status", "non_success", "reason", reasonBucket)?.increment()
                 log.warn(
                     "cdn_cache_purge_non_success reason={} status={} tags={}",
@@ -177,6 +179,9 @@ class CdnCachePurgeService(
                     normalizedTags.joinToString(","),
                 )
             } else {
+                meterRegistry
+                    ?.timer("cdn.purge.duration", "status", "success", "reason", reasonBucket)
+                    ?.record(elapsedMs, TimeUnit.MILLISECONDS)
                 meterRegistry?.counter("cdn.purge.result", "status", "success", "reason", reasonBucket)?.increment()
                 log.info(
                     "cdn_cache_purge_ok reason={} status={} tags={}",
@@ -187,7 +192,9 @@ class CdnCachePurgeService(
             }
         }.onFailure { exception ->
             val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
-            meterRegistry?.timer("cdn.purge.duration")?.record(elapsedMs, TimeUnit.MILLISECONDS)
+            meterRegistry
+                ?.timer("cdn.purge.duration", "status", "failed", "reason", reasonBucket)
+                ?.record(elapsedMs, TimeUnit.MILLISECONDS)
             meterRegistry?.counter("cdn.purge.result", "status", "failed", "reason", reasonBucket)?.increment()
             log.warn(
                 "cdn_cache_purge_failed reason={} tags={}",

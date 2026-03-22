@@ -13,7 +13,8 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.util.*
+import java.util.Locale
+import java.util.Optional
 
 /**
  * MemberApplicationService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
@@ -27,6 +28,15 @@ class MemberApplicationService(
     private val passwordEncoder: PasswordEncoder,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    companion object {
+        private const val USERNAME_MAX_LENGTH = 30
+        private const val AUTO_USERNAME_BASE_MAX_LENGTH = 24
+        private const val AUTO_USERNAME_MAX_RETRY = 100
+        private const val FALLBACK_AUTO_USERNAME_PREFIX = "user"
+        private val INVALID_USERNAME_CHAR_REGEX = Regex("[^a-z0-9._-]")
+        private val DUPLICATED_DOT_REGEX = Regex("\\.{2,}")
+    }
+
     @Transactional(readOnly = true)
     fun count(): Long = memberRepository.count()
 
@@ -42,11 +52,7 @@ class MemberApplicationService(
         profileImgUrl: String?,
         email: String? = null,
     ): Member {
-        val normalizedEmail =
-            email
-                ?.trim()
-                ?.lowercase(Locale.ROOT)
-                ?.takeIf(String::isNotBlank)
+        val normalizedEmail = normalizeEmailOrNull(email)
 
         memberRepository.findByUsername(username)?.let {
             throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
@@ -88,10 +94,54 @@ class MemberApplicationService(
         return member
     }
 
+    /**
+     * 이메일 인증 기반 회원가입에서 내부 username을 자동 생성해 가입을 완료합니다.
+     * 기존 username 필드를 유지하되, 사용자 입력 대신 이메일 기반 규칙으로 생성해 식별자 체계를 통일합니다.
+     */
+    @Transactional
+    fun joinWithVerifiedEmail(
+        email: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): Member {
+        val normalizedEmail =
+            normalizeEmailOrNull(email)
+                ?: throw AppException("400-2", "이메일을 입력해주세요.")
+
+        val usernameBase = buildAutoUsernameBase(normalizedEmail)
+
+        repeat(AUTO_USERNAME_MAX_RETRY) { attempt ->
+            val candidateUsername = buildAutoUsernameCandidate(usernameBase, attempt)
+
+            try {
+                return join(
+                    username = candidateUsername,
+                    password = password,
+                    nickname = nickname,
+                    profileImgUrl = profileImgUrl,
+                    email = normalizedEmail,
+                )
+            } catch (exception: AppException) {
+                if (exception.rsData.resultCode != "409-1") {
+                    throw exception
+                }
+            }
+        }
+
+        throw AppException("500-2", "회원가입 사용자 식별자 생성에 실패했습니다.")
+    }
+
     @Transactional(readOnly = true)
     fun findByUsername(username: String): Member? =
         memberRepository
             .findByUsername(username)
+            ?.let(memberProfileHydrator::hydrate)
+
+    @Transactional(readOnly = true)
+    fun findByEmail(email: String): Member? =
+        normalizeEmailOrNull(email)
+            ?.let(memberRepository::findByEmail)
             ?.let(memberProfileHydrator::hydrate)
 
     @Transactional(readOnly = true)
@@ -261,5 +311,42 @@ class MemberApplicationService(
 
     private fun saveContactLinksAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitContactLinksAttr())
+    }
+
+    private fun normalizeEmailOrNull(email: String?): String? =
+        email
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            ?.takeIf(String::isNotBlank)
+
+    private fun buildAutoUsernameBase(normalizedEmail: String): String {
+        val localPart = normalizedEmail.substringBefore("@", missingDelimiterValue = normalizedEmail)
+        val sanitized =
+            localPart
+                .lowercase(Locale.ROOT)
+                .replace(INVALID_USERNAME_CHAR_REGEX, "-")
+                .replace(DUPLICATED_DOT_REGEX, ".")
+                .trim('-', '_', '.')
+
+        val normalizedBase =
+            sanitized
+                .ifBlank { FALLBACK_AUTO_USERNAME_PREFIX }
+                .take(AUTO_USERNAME_BASE_MAX_LENGTH)
+                .ifBlank { FALLBACK_AUTO_USERNAME_PREFIX }
+
+        return if (normalizedBase.length >= 2) normalizedBase else "$normalizedBase$FALLBACK_AUTO_USERNAME_PREFIX"
+    }
+
+    private fun buildAutoUsernameCandidate(
+        base: String,
+        attempt: Int,
+    ): String {
+        if (attempt == 0) {
+            return base.take(USERNAME_MAX_LENGTH)
+        }
+
+        val suffix = "-$attempt"
+        val maxBaseLength = (USERNAME_MAX_LENGTH - suffix.length).coerceAtLeast(2)
+        return "${base.take(maxBaseLength)}$suffix"
     }
 }

@@ -34,22 +34,27 @@ const LoginPage = () => {
     const value = Array.isArray(raw) ? raw[0] : raw
     return value === "done"
   }, [router.query.signup])
-  const usernamePrefill = useMemo(() => {
-    const raw = router.query.username
-    const value = Array.isArray(raw) ? raw[0] : raw
-    return value?.trim() || ""
-  }, [router.query.username])
+  const loginIdPrefill = useMemo(() => {
+    const emailRaw = router.query.email
+    const emailValue = Array.isArray(emailRaw) ? emailRaw[0] : emailRaw
+    if (emailValue?.trim()) return emailValue.trim()
 
-  const [username, setUsername] = useState("")
+    // 무중단 전환: 과거 signup redirect(`username`) 파라미터도 임시 수용한다.
+    const usernameRaw = router.query.username
+    const usernameValue = Array.isArray(usernameRaw) ? usernameRaw[0] : usernameRaw
+    return usernameValue?.trim() || ""
+  }, [router.query.email, router.query.username])
+
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!usernamePrefill) return
-    setUsername(usernamePrefill)
-  }, [usernamePrefill])
+    if (!loginIdPrefill) return
+    setEmail(loginIdPrefill)
+  }, [loginIdPrefill])
 
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)
@@ -57,8 +62,8 @@ const LoginPage = () => {
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!username.trim() || !password.trim()) {
-      setError("아이디와 비밀번호를 입력해주세요.")
+    if (!email.trim() || !password.trim()) {
+      setError("이메일과 비밀번호를 입력해주세요.")
       return
     }
 
@@ -68,7 +73,7 @@ const LoginPage = () => {
     try {
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       })
 
       // 로그인 응답의 Set-Cookie를 받은 직후 현재 세션을 강제로 동기화해,
@@ -126,15 +131,15 @@ const LoginPage = () => {
       <form onSubmit={onSubmit}>
         <Field>
           <FieldTop>
-            <Label htmlFor="username">아이디</Label>
+            <Label htmlFor="email">이메일</Label>
             <FieldHint>로그인 식별자</FieldHint>
           </FieldTop>
           <Input
-            id="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="아이디를 입력하세요"
-            autoComplete="username"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="이메일을 입력하세요"
+            autoComplete="email"
           />
         </Field>
 
@@ -166,7 +171,7 @@ const LoginPage = () => {
           <ErrorText>{error}</ErrorText>
         ) : signupDone ? (
           <SuccessText>
-            회원가입이 완료되었습니다. <strong>{usernamePrefill || "방금 만든 아이디"}</strong>로 로그인하면 됩니다.
+            회원가입이 완료되었습니다. <strong>{loginIdPrefill || "인증한 이메일"}</strong>로 로그인하면 됩니다.
           </SuccessText>
         ) : (
           <InfoText>로그인 후 이전에 보던 화면으로 바로 이동합니다.</InfoText>

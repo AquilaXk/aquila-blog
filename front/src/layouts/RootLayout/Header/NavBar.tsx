@@ -171,12 +171,12 @@ const NavBar: React.FC = () => {
           ref={menuTriggerRef}
           type="button"
           className="mobileMenuTrigger"
+          data-ui="nav-control"
           aria-label="헤더 메뉴 열기"
           aria-expanded={mobileMenuOpen}
           onClick={() => setMobileMenuOpen((value) => !value)}
         >
-          <span />
-          <span />
+          Menu
         </button>
       </div>
 
@@ -336,29 +336,23 @@ const StyledWrapper = styled.div`
 
   .mobileMenuTrigger {
     display: none;
-    min-width: 34px;
-    width: 34px;
-    height: 34px;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    min-height: ${({ theme }) => theme.variables.navControl.height}px;
+    padding: 0 0.52rem;
+    border-radius: ${({ theme }) => theme.variables.navControl.radius}px;
+    border: none;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    padding: 0;
-
-    span {
-      width: 11px;
-      height: 1.5px;
-      border-radius: 999px;
-      background: currentColor;
-      display: block;
-    }
+    font-size: ${({ theme }) => theme.variables.navControl.fontSize}rem;
+    font-weight: 630;
+    line-height: 1;
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      border-color: ${({ theme }) => theme.colors.gray7};
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
     }
   }
 

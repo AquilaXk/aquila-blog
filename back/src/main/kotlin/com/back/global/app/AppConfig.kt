@@ -18,6 +18,8 @@ class AppConfig(
     siteFrontUrl: String,
     @Value("\${custom.admin.username:}")
     adminUsername: String,
+    @Value("\${custom.admin.email:}")
+    adminEmail: String,
     @Value("\${custom.admin.password:}")
     adminPassword: String,
 ) {
@@ -25,6 +27,7 @@ class AppConfig(
         Companion.siteBackUrl = siteBackUrl
         Companion.siteFrontUrl = siteFrontUrl
         Companion.adminUsername = adminUsername
+        Companion.adminEmail = adminEmail
         Companion.adminPassword = adminPassword
     }
 
@@ -38,6 +41,8 @@ class AppConfig(
             private set
         lateinit var adminUsername: String
             private set
+        lateinit var adminEmail: String
+            private set
         lateinit var adminPassword: String
             private set
 
@@ -46,5 +51,8 @@ class AppConfig(
 
         val adminPasswordOrBlank: String
             get() = if (::adminPassword.isInitialized) adminPassword else ""
+
+        val adminEmailOrBlank: String
+            get() = if (::adminEmail.isInitialized) adminEmail else ""
     }
 }

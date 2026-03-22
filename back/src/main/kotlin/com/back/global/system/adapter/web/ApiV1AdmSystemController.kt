@@ -2,9 +2,13 @@ package com.back.global.system.adapter.web
 
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
+import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
+import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.application.TaskDlqReplayResult
+import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskQueueDiagnostics
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import jakarta.validation.Valid
@@ -36,7 +40,10 @@ class ApiV1AdmSystemController(
     private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
     private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
+    private val taskDlqReplayService: TaskDlqReplayService,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
+    private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
+    private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
 ) {
     data class HealthChecks(
         val db: String,
@@ -56,6 +63,26 @@ class ApiV1AdmSystemController(
         @field:Email
         @field:NotBlank
         val email: String,
+    )
+
+    data class TaskDlqReplayRequest(
+        val taskType: String? = null,
+        val limit: Int = 50,
+        val resetRetryCount: Boolean = true,
+    )
+
+    data class SearchPipelineForceControlRequest(
+        val forceControl: Boolean? = null,
+    )
+
+    data class SearchEngineMirrorForceDisableRequest(
+        val forceDisabled: Boolean = false,
+    )
+
+    data class SearchRuntimeFlags(
+        val searchPipelineForceControlEnabled: Boolean,
+        val searchPipelineRuntimeOverride: Boolean,
+        val searchEngineMirrorForceDisabled: Boolean,
     )
 
     /**
@@ -99,6 +126,60 @@ class ApiV1AdmSystemController(
     @GetMapping("/tasks")
     @Transactional(readOnly = true)
     fun taskQueueDiagnostics(): TaskQueueDiagnostics = taskQueueDiagnosticsService.diagnoseQueue()
+
+    @PostMapping("/tasks/replay-failed")
+    @Transactional
+    fun replayFailedTasks(
+        @RequestBody reqBody: TaskDlqReplayRequest,
+    ): RsData<TaskDlqReplayResult> {
+        val result =
+            taskDlqReplayService.replayFailedTasks(
+                taskType = reqBody.taskType,
+                limit = reqBody.limit,
+                resetRetryCount = reqBody.resetRetryCount,
+            )
+
+        return RsData(
+            "200-10",
+            "DLQ 재실행 요청을 처리했습니다.",
+            result,
+        )
+    }
+
+    @GetMapping("/search/runtime-flags")
+    @Transactional(readOnly = true)
+    fun getSearchRuntimeFlags(): SearchRuntimeFlags =
+        SearchRuntimeFlags(
+            searchPipelineForceControlEnabled = postKeywordSearchPipelineService.isForceControlEnabled(),
+            searchPipelineRuntimeOverride = postKeywordSearchPipelineService.isForceControlRuntimeOverridden(),
+            searchEngineMirrorForceDisabled = postSearchEngineMirrorService.isRuntimeForceDisabled(),
+        )
+
+    @PostMapping("/search/pipeline/force-control")
+    @Transactional
+    fun setSearchPipelineForceControl(
+        @RequestBody reqBody: SearchPipelineForceControlRequest,
+    ): RsData<SearchRuntimeFlags> {
+        postKeywordSearchPipelineService.setForceControlRuntime(reqBody.forceControl)
+        return RsData(
+            "200-11",
+            "검색 파이프라인 force-control 플래그를 갱신했습니다.",
+            getSearchRuntimeFlags(),
+        )
+    }
+
+    @PostMapping("/search-engine/mirror/force-disable")
+    @Transactional
+    fun setSearchEngineMirrorForceDisable(
+        @RequestBody reqBody: SearchEngineMirrorForceDisableRequest,
+    ): RsData<SearchRuntimeFlags> {
+        postSearchEngineMirrorService.setRuntimeForceDisabled(reqBody.forceDisabled)
+        return RsData(
+            "200-12",
+            "검색엔진 미러 force-disable 플래그를 갱신했습니다.",
+            getSearchRuntimeFlags(),
+        )
+    }
 
     @GetMapping("/storage/cleanup")
     @Transactional(readOnly = true)

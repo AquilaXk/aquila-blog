@@ -143,7 +143,6 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
                         """
                         {
                             "signupToken": "$signupToken",
-                            "username": "verified-user",
                             "password": "Abcd1234!",
                             "nickname": "이메일인증회원"
                         }
@@ -156,7 +155,7 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.data.name") { value("이메일인증회원") }
                 }
 
-            val joinedMember = memberApplicationService.findByUsername("verified-user")
+            val joinedMember = memberApplicationService.findByEmail(email)
             checkNotNull(joinedMember)
             assertThat(joinedMember.email).isEqualTo(email)
         }
@@ -179,6 +178,56 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-2") }
                 }
+        }
+
+        @Test
+        fun `레거시 클라이언트가 username을 보내도 최종 가입을 완료할 수 있다`() {
+            val email = "legacy-signup@example.com"
+
+            mvc.post("/member/api/v1/signup/email/start") {
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """
+                    {
+                        "email": "$email"
+                    }
+                    """.trimIndent()
+            }
+
+            val verification =
+                memberSignupVerificationRepository.findTopByEmailOrderByCreatedAtDesc(email)
+                    ?: error("verification row not created")
+
+            mvc.get("/member/api/v1/signup/email/verify") {
+                param("token", verification.emailVerificationToken)
+            }
+
+            val signupToken =
+                memberSignupVerificationRepository
+                    .findTopByEmailOrderByCreatedAtDesc(email)
+                    ?.signupSessionToken
+                    ?: error("signup token not issued")
+
+            mvc
+                .post("/member/api/v1/signup/complete") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "signupToken": "$signupToken",
+                            "username": "legacy-signup-user",
+                            "password": "Abcd1234!",
+                            "nickname": "레거시회원"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isCreated() }
+                    jsonPath("$.resultCode") { value("201-2") }
+                }
+
+            val joinedMember = memberApplicationService.findByUsername("legacy-signup-user")
+            checkNotNull(joinedMember)
+            assertThat(joinedMember.email).isEqualTo(email)
         }
     }
 }

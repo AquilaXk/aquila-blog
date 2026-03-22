@@ -30,7 +30,6 @@ const SignupVerifyPage = () => {
   const [verification, setVerification] = useState<SignupVerifyResult | null>(null)
   const [loadingVerification, setLoadingVerification] = useState(true)
   const [verificationError, setVerificationError] = useState("")
-  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [passwordConfirm, setPasswordConfirm] = useState("")
   const [nickname, setNickname] = useState("")
@@ -93,8 +92,8 @@ const SignupVerifyPage = () => {
       return
     }
 
-    if (!username.trim() || !password.trim() || !passwordConfirm.trim() || !nickname.trim()) {
-      setSubmitError("아이디, 비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.")
+    if (!password.trim() || !passwordConfirm.trim() || !nickname.trim()) {
+      setSubmitError("비밀번호, 비밀번호 확인, 닉네임을 모두 입력해주세요.")
       return
     }
 
@@ -116,7 +115,6 @@ const SignupVerifyPage = () => {
         method: "POST",
         body: JSON.stringify({
           signupToken: verification.signupToken,
-          username: username.trim(),
           password,
           nickname: nickname.trim(),
         }),
@@ -124,7 +122,7 @@ const SignupVerifyPage = () => {
 
       await replaceRoute(
         router,
-        `/login?signup=done&username=${encodeURIComponent(username.trim())}&next=${encodeURIComponent(next)}`
+        `/login?signup=done&email=${encodeURIComponent(verification.email)}&next=${encodeURIComponent(next)}`
       )
     } catch (error) {
       setSubmitError(toAuthErrorMessage("signupComplete", error, "회원가입에 실패했습니다."))
@@ -140,7 +138,7 @@ const SignupVerifyPage = () => {
       subtitle="이메일 확인이 끝났습니다. 이제 기본 계정 정보를 등록해주세요."
       eyebrow="Verified Email"
       heroTitle="환영합니다!"
-      heroDescription="이메일은 확인 완료 상태로 잠겨 있습니다. 이제 로그인에 사용할 아이디와 비밀번호를 설정하면 됩니다."
+      heroDescription="이메일은 확인 완료 상태로 잠겨 있습니다. 이제 닉네임과 비밀번호를 설정하면 됩니다."
       footer={
         <FooterText>
           다시 시작하려면 <Link href={toSignupPath(next)}>회원가입 처음으로</Link>
@@ -161,20 +159,6 @@ const SignupVerifyPage = () => {
               <FieldHint>인증 완료</FieldHint>
             </FieldTop>
             <ReadOnlyField id="verified-email">{verification.email}</ReadOnlyField>
-          </Field>
-
-          <Field>
-            <FieldTop>
-              <Label htmlFor="signup-username">사용자 ID</Label>
-              <FieldHint>로그인 식별자</FieldHint>
-            </FieldTop>
-            <Input
-              id="signup-username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="사용자 ID를 입력하세요."
-              autoComplete="username"
-            />
           </Field>
 
           <Field>
@@ -234,7 +218,7 @@ const SignupVerifyPage = () => {
           {submitError ? (
             <ErrorText>{submitError}</ErrorText>
           ) : (
-            <InfoText>가입이 끝나면 로그인 화면으로 이동합니다. 이후부터는 아이디와 비밀번호로 로그인하면 됩니다.</InfoText>
+            <InfoText>가입이 끝나면 로그인 화면으로 이동합니다. 이후부터는 이메일과 비밀번호로 로그인하면 됩니다.</InfoText>
           )}
 
           <ActionRow>

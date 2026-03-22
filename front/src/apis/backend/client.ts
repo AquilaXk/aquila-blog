@@ -50,13 +50,42 @@ const GET_REQUEST_POLICY_REGISTRY: Array<{
     policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
   },
   {
-    matcher: /^\/post\/api\/v1\/posts\/(feed|explore|search|tags|[0-9]+)(\/|$)/i,
+    matcher: /^\/system\/api\/v1\/adm\//i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
+  },
+  {
+    matcher: /^\/post\/api\/v1\/posts\/mine(\/|$)/i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
+  },
+  {
+    matcher: /^\/post\/api\/v1\/posts\/[0-9]+\/comments(\/|$)/i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
+  },
+  {
+    matcher: /^\/post\/api\/v1\/posts\/(feed|explore|search|tags)(\/|$)/i,
     policy: {
       cacheMode: "revalidate",
       retryCount: DEFAULT_GET_TRANSIENT_RETRY_COUNT,
       staleIfError: true,
       timeoutMs: 8_000,
     },
+  },
+  {
+    matcher: /^\/post\/api\/v1\/posts\/[0-9]+(\/|$)/i,
+    policy: {
+      cacheMode: "revalidate",
+      retryCount: DEFAULT_GET_TRANSIENT_RETRY_COUNT,
+      staleIfError: true,
+      timeoutMs: 8_000,
+    },
+  },
+  {
+    matcher: /^\/(member|post|system)\/api\/v1\//i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
+  },
+  {
+    matcher: /^\/signup(\/|$)/i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
   },
 ]
 
@@ -168,7 +197,8 @@ const resolveTimeoutMs = (path: string, init: ApiFetchOptions) => {
 
   const normalizedPath = path.toLowerCase()
   const method = (init.method || "GET").toUpperCase()
-  if (method === "GET") {
+  const isReadMethod = method === "GET" || method === "HEAD"
+  if (isReadMethod) {
     const getPolicy = resolveGetRequestPolicy(path)
     if (
       typeof getPolicy.timeoutMs === "number" &&
@@ -188,7 +218,7 @@ const resolveTimeoutMs = (path: string, init: ApiFetchOptions) => {
     return 90_000
   }
 
-  if (method === "GET") {
+  if (isReadMethod) {
     return 8_000
   }
 
@@ -278,7 +308,8 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
   const isFormLikeBody =
     typeof FormData !== "undefined" && requestInit.body instanceof FormData
   const method = (requestInit.method || "GET").toUpperCase()
-  const getRequestPolicy = method === "GET" ? resolveGetRequestPolicy(safePath) : null
+  const isReadMethod = method === "GET" || method === "HEAD"
+  const getRequestPolicy = isReadMethod ? resolveGetRequestPolicy(safePath) : null
   const canUseRevalidateCache =
     !isServer &&
     method === "GET" &&
@@ -307,12 +338,12 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
   const executeRequest = async (): Promise<T> => {
     const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
     const getRetryCount = getRequestPolicy?.retryCount ?? 0
-    const canRetryTransientGet =
-      method === "GET" &&
+    const canRetryTransientRead =
+      isReadMethod &&
       !requestInit.signal &&
       getRetryCount > 0 &&
       !isServer
-    const maxAttempts = canRetryTransientGet ? getRetryCount + 1 : 1
+    const maxAttempts = canRetryTransientRead ? getRetryCount + 1 : 1
     let response: Response | null = null
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -338,7 +369,7 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
           error instanceof DOMException || error instanceof TypeError
         const hasNextAttempt = attempt < maxAttempts - 1
 
-        if (canRetryTransientGet && transientTransportError && hasNextAttempt) {
+        if (canRetryTransientRead && transientTransportError && hasNextAttempt) {
           await sleep(DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS * (attempt + 1))
           continue
         }
@@ -356,7 +387,7 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
         throw error
       }
 
-      if (response.ok || !canRetryTransientGet || attempt >= maxAttempts - 1) {
+      if (response.ok || !canRetryTransientRead || attempt >= maxAttempts - 1) {
         break
       }
 

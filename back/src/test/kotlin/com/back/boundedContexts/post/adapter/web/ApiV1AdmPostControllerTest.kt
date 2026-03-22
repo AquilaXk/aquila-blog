@@ -69,6 +69,7 @@ class ApiV1AdmPostControllerTest {
                 siteBackUrl = "http://localhost:8080",
                 siteFrontUrl = "http://localhost:3000",
                 adminUsername = "admin",
+                adminEmail = "",
                 adminPassword = "test-password",
             )
         }

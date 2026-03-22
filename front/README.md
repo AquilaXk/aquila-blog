@@ -1,144 +1,92 @@
-# morethan-log
+# Aquila Blog Frontend
 
-<img width="1715" alt="image" src="https://user-images.githubusercontent.com/72514247/209824600-ca9c8acc-6d2d-4041-9931-43e34b8a9a5f.png">
+`front/`는 Next.js Pages Router 기반 사용자/관리자 UI 애플리케이션입니다.
 
-Next.js static blog using Notion as a Content Management System (CMS). Supports both Blog format Post as well as Page format for Resume. Deployed using Vercel.
+## Stack
 
-[Demo Blog](https://morethan-log.vercel.app) | [Demo Resume](https://morethan-log.vercel.app/resume)
+- Next.js 14 (Pages Router)
+- React 18 + TypeScript
+- TanStack Query (SSR hydrate + client cache)
+- Emotion
+- Playwright (smoke/perf/live E2E)
 
-## Features
+## 주요 화면
 
-**📒 Writing posts using notion**
+- `/` 메인 피드 (feed/explore/search + cursor 기반 무한 스크롤)
+- `/posts/[id]` 글 상세
+- `/about` 소개 페이지
+- `/admin` 운영 허브
+- `/admin/profile` 관리자 프로필 관리
+- `/admin/posts/new` 글 작성/수정 (AI 태그 추천 포함)
+- `/admin/tools` 시스템 운영 도구
 
-- No need of commiting to Github for posting anything to your website.
-- Posts made on Notion are automaticaly updated on your site.
+## 실행
 
-**📄 Use as a page as resume**
+```bash
+cd front
+yarn
+yarn dev
+```
 
-- Useful for generating full page sites using Notion.
-- Can be used for Resume, Portfolios etc.
+## 필수 환경변수
 
-**👀 SEO friendly**
+| 이름 | 용도 |
+| --- | --- |
+| `NEXT_PUBLIC_BACKEND_URL` | 브라우저 런타임 API base URL |
+| `BACKEND_INTERNAL_URL` | SSR/server-side API base URL |
 
-- Dynamically generates OG IMAGEs (thumbnails!) for posts. ([og-image-korean](https://github.com/morethanmin/og-image-korean)).
-- Dynamically creates sitemap for posts.
+## 선택 환경변수
 
-**🤖 Customisable and Supports various plugin through CONFIG**
+| 이름 | 용도 |
+| --- | --- |
+| `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH` | 관리자 도구의 상태 페이지 임베드 경로 |
+| `UPTIME_KUMA_PROXY_ORIGIN` | `/status/*` rewrite 대상 오리진 |
+| `PLAYWRIGHT_BASE_URL` | live E2E 대상 URL |
+| `BUNDLE_BUDGET_MARGIN_PERCENT` | 번들 예산 허용 오차(%) |
+| `BUNDLE_BUDGET_ENFORCEMENT` | `strict` 또는 `warn` |
 
-- Your profile information can be updated through Config. (`site.config.js`)
-- Plugins support includes, Google Analytics, Search Console and also Commenting using Github Issues(Utterances) or Cusdis.
+## 인증/세션 동작 요약
 
-## Getting Started
+- 로그인 상태 조회는 `/member/api/v1/auth/me` 기반.
+- SSR에서 auth 스냅샷(`authMeProbe`)을 주입하고, 비로그인 확정 상태에서는 클라이언트 재검증 호출을 생략.
+- 비로그인 새로고침 시 `auth/me 401` 콘솔 노이즈를 줄이기 위한 억제 로직이 포함되어 있음.
 
-1. Star this repo.
-2. [Fork](https://github.com/morethanmin/morethan-log/fork) the repo to your Profile.
-3. Duplicate [this Notion template](https://morethanmin.notion.site/12c38b5f459d4eb9a759f92fba6cea36?v=2e7962408e3842b2a1a801bf3546edda), and Share to Web.
-4. Copy the Web Link and keep note of the Notion Page Id from the Link which will be in this format [username.notion.site/`NOTION_PAGE_ID`?v=`VERSION_ID`]. 
-5. Clone your forked repo and then customize `site.config.js` based on your preference.
-6. Deploy on Vercel, with the following environment variables.
+관련 코드:
 
-   - `NOTION_PAGE_ID` (Required): The Notion page Id got from the Share to Web URL. This is not the entire URL, but just the NOTION_PAGE_ID part as shown above.
-   - `NEXT_PUBLIC_GOOGLE_MEASUREMENT_ID` : For Google analytics Plugin.
-   - `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` : For Google search console Plugin.
-   - `NEXT_PUBLIC_NAVER_SITE_VERIFICATION` : For Naver search advisor Plugin.
-   - `NEXT_PUBLIC_UTTERANCES_REPO` : For Utterances Plugin.
+- `src/hooks/useAuthSession.ts`
+- `src/libs/server/authSession.ts`
 
-## 10 Steps to build your own morethan-log (by 23.06.23)
+## OpenAPI 계약 동기화
 
-<details>
-   <summary> Click to see guide </summary>
-   
-   0. Prepare Notion, Vercel account.
+프론트는 백엔드 OpenAPI 스냅샷을 타입으로 변환해 계약 드리프트를 검증합니다.
 
-   1. ⭐ `Star` and `Fork` this repo.
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/b0421776-2bfe-42bc-ae31-d90206fd5789' width = '500'>
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/185a8e4c-4ae2-4a38-b6f4-dc2a06a45c28' width = '500'>
+```bash
+cd front
+yarn contracts:fetch
+yarn contracts:generate
+yarn contracts:check
+```
 
-   2. As you `click` the [Notion template](https://quasar-season-ed5.notion.site/12c38b5f459d4eb9a759f92fba6cea36?v=2e7962408e3842b2a1a801bf3546edda), you will see this notion page in your browser. Click `Duplicate` button(복제 in image) in right top.
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/a5375429-28f0-4bba-a355-0d391cad58db' width = '500'>
+## 검증 명령
 
-   3. And you will see `notion page in notion app` in your account.
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/09af5533-43d9-48e5-95eb-dcac84c97c1f' width = '500'>
+```bash
+cd front
+yarn lint
+yarn build
+yarn test:e2e:smoke
+yarn test:e2e:perf
+yarn test:e2e:live
+yarn check:bundle-size
+```
 
-   4. Click `Share` and `Publish` in right top, and check web link. (Copy web link)
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/886fe4a2-79ca-4dbc-b1e1-93984e7e3f44' width = '500'>
-   
-   5. `Modify` **site.config.js** file in **your** forked repo.
-   > 💡 NOTE. I changed **2 RED PART**
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/3d9c0da5-92bc-4372-8752-7bfc810b4986' width = '500'>
+## 번들 예산
 
-   6. Move and `login` to vercel.
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/07742ad0-4766-43b0-9ebd-5311f9711bc2' width = '500'>
+- 경로별 baseline + margin 정책으로 관리합니다.
+- 기본 검사 대상 경로: `/`, `/posts/[id]`, `/admin`
+- raw/gzip/brotli를 함께 측정하고 리포트를 `test-results/bundle-size`에 생성합니다.
 
-   7. `Build` new project using **Add New...**
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/517d46be-c9bf-4181-aaa5-e9bd2fcdc822' width = '500'>
+## 문서
 
-   8. `Import` **your forked morethan-log repository**
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/07742ad0-4766-43b0-9ebd-5311f9711bc2' width = '500'>
-
-   9. `Add` **Environment variabes** to vercel project
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/703b50a3-3a90-4915-ab73-1baca4c285f8' width = '500'>
-
-   10. `Wait` for the deployment to complete. After the deployment is successful, you should see an image like the one below.
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/a7d72caa-4354-4f81-9577-c773faeed7c6' width = '500'>
-
-   🥳 Congratulations. Now check out your blog
-   
-   <img src='https://github.com/jhk0530/morethan-log/assets/6457691/3876a273-a270-47ef-a2ad-663519d9e537' width = '500'>
-
-</details>
-
-## FAQ
-
-<details>
-   <summary> Click to see FAQ </summary>
-   Q1: If you finish making avatar.svg, How to make favicon.ico and apple-touch-icon.png?
-   
-   A1: check out https://www.favicon-generator.org/
-   
-   Q2: Is it necessary to set up a sitemap file?   
-   A2: The system will dynamically create a sitemap.xml, so there is no need for manual setup.
-
-   Q3: Why don’t Notion posts update automatically?   
-   A3: Please set the revalidateTime in site.config.js and observe how long it takes to update.
-   
-   Q4: What should be entered for NEXT_PUBLIC_GOOGLE_MEASUREMENT_ID and NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION in site.config.js?
-   A4: You can check https://github.com/morethanmin/morethan-log/issues/203. Please note that updates may take some time to take effect after setting.
-
-If you encounter any other issues, please feel free to add them to the GitHub README to assist future users. We look forward to your contributions!
-
-</details>
-
-## Contributing
-
-Check out the [Contributing Guide](.github/CONTRIBUTING.md).
-
-### Contributors
-
-<!--
-Contributors template:
-<a href="https://github.com/{username}"><img src="{src}" width="50px" alt="{username}" /></a>&nbsp;&nbsp;
--->
-
-<a href="https://github.com/morethanmin/morethan-log/graphs/contributors">
-<img src="https://contrib.rocks/image?repo=morethanmin/morethan-log" />
-</a>
-
-## Support
-
-morethan-log is an MIT-licensed open source project. It can grow thanks to the sponsors and support from the amazing backers.
-
-### Sponsors
-
-<!--
-Sponsors template:
-<a href="https://github.com/{uesrname}"><img src="{src}" width="50px" alt="{username}" /></a>&nbsp;&nbsp;
--->
-
-<p>
-<a href="https://github.com/siyeons"><img src="https://avatars.githubusercontent.com/u/35549653?v=4" width="50px" alt="siyeons" /></a>&nbsp;&nbsp;
-</p>
-
-## License
-
-The [MIT License](LICENSE).
+- 사람용 인덱스: [`../docs/README.md`](../docs/README.md)
+- 프론트 작업 기준: [`../docs/design/Frontend-Working-Guide.md`](../docs/design/Frontend-Working-Guide.md)
+- 성능 기준: [`../docs/design/Frontend-Performance-Guide.md`](../docs/design/Frontend-Performance-Guide.md)

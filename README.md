@@ -149,10 +149,11 @@ sequenceDiagram
 
 ## Current Runtime Status (2026-03)
 
-- 공개 읽기 경로를 `feed/explore/detail`로 분리하고 캐시 실패 시 원본 조회 fallback을 적용했다.
+- 공개 읽기 경로는 `feed/explore/search + cursor`를 기준으로 운영하며, read-model prewarm으로 cold start 지연을 줄인다.
 - Markdown 렌더 파이프라인을 `front/src/libs/markdown`으로 분리해 머메이드/코드블록 회귀를 줄였다.
-- 검색 품질은 `title > tags > content` 가중치 정렬로 고정했다.
-- 주요 장애 대응 내역은 트러블슈팅 인덱스와 종합 회고에 최신화해 유지한다.
+- 관리자 글쓰기에는 AI 요약 대신 `AI 태그 추천`을 사용한다. (`POST /post/api/v1/adm/posts/recommend-tags`)
+- 비로그인 상태 auth 확인은 SSR 스냅샷(`authMeProbe`) 기반으로 재검증을 줄여 `auth/me 401` 콘솔 노이즈를 억제한다.
+- 프론트 계약 검증은 OpenAPI 드리프트 체크(`yarn contracts:check`)와 번들 예산 체크(`yarn check:bundle-size`)를 함께 사용한다.
 
 ## Documentation Map
 
@@ -162,9 +163,9 @@ sequenceDiagram
 2. [System Architecture](docs/design/System-Architecture.md)
 3. [Domain Design](docs/design/Domain-Design.md)
 4. [Infrastructure Architecture](docs/design/Infrastructure-Architecture.md)
-5. [트러블슈팅 인덱스](docs/troubleshooting/00-INDEX.md)
-6. [좋아요/조회수 동시성·멱등성 개선기](docs/troubleshooting/02-like-hit-idempotency-concurrency.md)
-7. [운영 트러블슈팅 종합 회고](docs/troubleshooting/13-operations-troubleshooting-retrospective.md)
+5. [DevOps](docs/design/DevOps.md)
+6. [Session Handoff](docs/session-handoff.md)
+7. [Package Structure](docs/design/package-structure.md)
 
 ## Repository Structure
 
@@ -173,7 +174,7 @@ sequenceDiagram
 ├── back          # Spring Boot + Kotlin API
 ├── front         # Next.js frontend
 ├── deploy        # home server deployment scripts
-├── docs          # architecture / operations / troubleshooting
+├── docs          # architecture / operations / design guides
 └── .github       # CI/CD workflows
 ```
 

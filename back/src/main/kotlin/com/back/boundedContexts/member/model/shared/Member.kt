@@ -13,6 +13,7 @@ import org.hibernate.annotations.DynamicUpdate
 import org.hibernate.annotations.NaturalId
 import org.hibernate.annotations.SQLRestriction
 import java.time.Instant
+import java.util.Locale
 
 /**
  * Member는 비즈니스 상태와 규칙을 캡슐화하는 도메인 모델입니다.
@@ -110,7 +111,13 @@ class Member(
         get() = nickname
 
     val isAdmin: Boolean
-        get() = username == AppConfig.adminUsernameOrBlank
+        get() {
+            val configuredAdminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
+            val memberEmail = email?.trim()?.lowercase(Locale.ROOT)
+            if (configuredAdminEmail.isNotBlank() && memberEmail == configuredAdminEmail) return true
+
+            return username == AppConfig.adminUsernameOrBlank
+        }
 
     fun modify(
         nickname: String,

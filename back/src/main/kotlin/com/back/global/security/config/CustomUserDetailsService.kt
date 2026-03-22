@@ -7,6 +7,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.stereotype.Service
+import java.util.Locale
 
 /**
  * CustomUserDetailsService는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
@@ -22,8 +23,14 @@ class CustomUserDetailsService(
      * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
      */
     override fun loadUserByUsername(username: String): UserDetails {
+        val normalizedIdentifier = username.trim()
         val member =
-            actorApplicationService.findByUsername(username)
+            if (normalizedIdentifier.contains("@")) {
+                actorApplicationService.findByEmail(normalizedIdentifier.lowercase(Locale.ROOT))
+                    ?: actorApplicationService.findByUsername(normalizedIdentifier)
+            } else {
+                actorApplicationService.findByUsername(normalizedIdentifier)
+            }
                 ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다.")
 
         return SecurityUser(

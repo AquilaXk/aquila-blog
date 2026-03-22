@@ -35,6 +35,11 @@ class PostApplicationServiceDeleteResilienceTest {
     private val eventPublisher: EventPublisher = mock(EventPublisher::class.java)
     private val uploadedFileRetentionService: UploadedFileRetentionService = mock(UploadedFileRetentionService::class.java)
     private val cacheManager: CacheManager = mock(CacheManager::class.java)
+    private val postRecommendRankingService: PostRecommendRankingService = mock(PostRecommendRankingService::class.java)
+    private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService =
+        mock(PostRecommendFeatureStoreService::class.java)
+    private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService =
+        mock(PostKeywordSearchPipelineService::class.java)
 
     private val service =
         PostApplicationService(
@@ -49,11 +54,10 @@ class PostApplicationServiceDeleteResilienceTest {
             eventPublisher = eventPublisher,
             uploadedFileRetentionService = uploadedFileRetentionService,
             cacheManager = cacheManager,
+            postRecommendRankingService = postRecommendRankingService,
+            postRecommendFeatureStoreService = postRecommendFeatureStoreService,
+            postKeywordSearchPipelineService = postKeywordSearchPipelineService,
             tagsLocalCacheTtlSeconds = 180,
-            recommendRankingEnabled = true,
-            recommendCandidatePoolSize = 240,
-            recommendMaxRerankPages = 4,
-            recommendHotTagsLimit = 24,
         )
 
     @Test

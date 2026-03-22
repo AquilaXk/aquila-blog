@@ -2,9 +2,13 @@ package com.back.global.system.adapter.web
 
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
+import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
+import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.task.application.TaskDlqReplayResult
+import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskExecutionSample
 import com.back.global.task.application.TaskQueueDiagnostics
 import com.back.global.task.application.TaskQueueDiagnosticsService
@@ -65,7 +69,16 @@ class ApiV1AdmSystemControllerTest {
     private lateinit var taskQueueDiagnosticsService: TaskQueueDiagnosticsService
 
     @MockitoBean
+    private lateinit var taskDlqReplayService: TaskDlqReplayService
+
+    @MockitoBean
     private lateinit var uploadedFileRetentionService: UploadedFileRetentionService
+
+    @MockitoBean
+    private lateinit var postKeywordSearchPipelineService: PostKeywordSearchPipelineService
+
+    @MockitoBean
+    private lateinit var postSearchEngineMirrorService: PostSearchEngineMirrorService
 
     @MockitoBean(name = "jpaMappingContext")
     private lateinit var jpaMappingContext: JpaMetamodelMappingContext
@@ -144,6 +157,32 @@ class ApiV1AdmSystemControllerTest {
 
     @Test
     @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 FAILED task를 replay할 수 있다`() {
+        given(taskDlqReplayService.replayFailedTasks(null, 50, true))
+            .willReturn(
+                TaskDlqReplayResult(
+                    taskType = null,
+                    requestedLimit = 50,
+                    replayedCount = 2,
+                    resetRetryCount = true,
+                    replayedTaskIds = listOf(101, 102),
+                ),
+            )
+
+        mvc
+            .post("/system/api/v1/adm/tasks/replay-failed") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"taskType":null,"limit":50,"resetRetryCount":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-10") }
+                jsonPath("$.data.replayedCount") { value(2) }
+                jsonPath("$.data.replayedTaskIds[0]") { value(101) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 업로드 파일 cleanup 진단 상태를 조회할 수 있다`() {
         given(uploadedFileRetentionService.diagnoseCleanup()).willReturn(uploadedFileCleanupDiagnostics())
 
@@ -155,6 +194,57 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.cleanupSafetyThreshold") { isNumber() }
             jsonPath("$.sampleEligibleObjectKeys") { isArray() }
         }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 검색 런타임 플래그를 조회할 수 있다`() {
+        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
+        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
+        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+
+        mvc.get("/system/api/v1/adm/search/runtime-flags").andExpect {
+            status { isOk() }
+            jsonPath("$.searchPipelineForceControlEnabled") { value(true) }
+            jsonPath("$.searchPipelineRuntimeOverride") { value(true) }
+            jsonPath("$.searchEngineMirrorForceDisabled") { value(false) }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 검색 파이프라인 force-control 플래그를 갱신할 수 있다`() {
+        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
+        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
+        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+
+        mvc
+            .post("/system/api/v1/adm/search/pipeline/force-control") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"forceControl":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-11") }
+                jsonPath("$.data.searchPipelineForceControlEnabled") { value(true) }
+            }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 검색엔진 미러 force-disable 플래그를 갱신할 수 있다`() {
+        given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(false)
+        given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(false)
+        given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(true)
+
+        mvc
+            .post("/system/api/v1/adm/search-engine/mirror/force-disable") {
+                contentType = org.springframework.http.MediaType.APPLICATION_JSON
+                content = """{"forceDisabled":true}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-12") }
+                jsonPath("$.data.searchEngineMirrorForceDisabled") { value(true) }
+            }
     }
 
     @Test

@@ -42,14 +42,20 @@ class ApiV1MemberController(
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {
-        // 운영에서 "관리자 1명" 규칙을 보장하기 위해 id가 아닌 고정 username으로 조회한다.
         val adminUsername = AppConfig.adminUsernameOrBlank.trim()
-        if (adminUsername.isBlank()) {
+        val adminEmail = AppConfig.adminEmailOrBlank.trim()
+
+        if (adminUsername.isBlank() && adminEmail.isBlank()) {
             throw AppException("404-1", "관리자 프로필이 설정되지 않았습니다.")
         }
 
         val adminMember =
-            memberUseCase.findByUsername(adminUsername)
+            adminEmail
+                .takeIf { it.isNotBlank() }
+                ?.let(memberUseCase::findByEmail)
+                ?: adminUsername
+                    .takeIf { it.isNotBlank() }
+                    ?.let(memberUseCase::findByUsername)
                 ?: throw AppException("404-1", "관리자 프로필을 찾을 수 없습니다.")
 
         return MemberWithUsernameDto(adminMember)

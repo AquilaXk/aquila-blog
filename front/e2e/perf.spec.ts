@@ -205,6 +205,22 @@ const getLayoutSnapshot = async (page: Page) =>
     }
   })
 
+const getWidthLockSnapshot = async (page: Page) =>
+  page.evaluate(() => {
+    const main = document.querySelector("#__next > main")
+    const headerContainer =
+      document.querySelector(".container[data-full-width]") ?? document.querySelector("[data-full-width]")
+
+    const readWidth = (element: Element | null) =>
+      element ? Math.round((element as HTMLElement).getBoundingClientRect().width) : 0
+
+    return {
+      viewport: window.innerWidth,
+      mainWidth: readWidth(main),
+      headerWidth: readWidth(headerContainer),
+    }
+  })
+
 const waitForStableHeaderAuthState = async (page: Page) => {
   await page
     .waitForSelector('.authArea:not([data-auth-state="loading"])', {
@@ -267,6 +283,38 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
     expect(jitterPx).toBeLessThanOrEqual(jitterBudgetPx)
     expect(cls).toBeLessThanOrEqual(clsBudget + clsAssertionEpsilon)
   }
+})
+
+test("메인 레이아웃은 desktop width-lock 구간(1057~1440)에서 1024px 레일을 유지한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  const checkpoints = [
+    { viewport: 1300, expectedLocked: 1024 },
+    { viewport: 1100, expectedLocked: 1024 },
+    { viewport: 1060, expectedLocked: 1024 },
+  ]
+
+  for (const checkpoint of checkpoints) {
+    await page.setViewportSize({ width: checkpoint.viewport, height: 900 })
+    await page.goto("/")
+    await page.waitForLoadState("networkidle")
+    await waitForStableHeaderAuthState(page)
+
+    const snapshot = await getWidthLockSnapshot(page)
+    expect(snapshot.mainWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
+    expect(snapshot.headerWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
+  }
+
+  await page.setViewportSize({ width: 1056, height: 900 })
+  await page.goto("/")
+  await page.waitForLoadState("networkidle")
+  await waitForStableHeaderAuthState(page)
+
+  const fluidSnapshot = await getWidthLockSnapshot(page)
+  expect(fluidSnapshot.mainWidth).toBeGreaterThan(1024)
+  expect(fluidSnapshot.headerWidth).toBeGreaterThan(1024)
+  expect(fluidSnapshot.mainWidth).toBeCloseTo(fluidSnapshot.viewport, 0)
+  expect(fluidSnapshot.headerWidth).toBeCloseTo(fluidSnapshot.viewport, 0)
 })
 
 test("홈 피드 무한스크롤은 연속 트리거에서도 feed 호출이 폭주하지 않는다", async ({ page }) => {

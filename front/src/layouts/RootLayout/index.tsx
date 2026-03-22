@@ -7,6 +7,13 @@ import Scripts from "src/layouts/RootLayout/Scripts"
 import useGtagEffect from "./useGtagEffect"
 import { useRouter } from "next/router"
 import { isNavigationCancelledError } from "src/libs/router"
+import {
+  CONTENT_MAX_WIDTH_PX,
+  DESKTOP_LOCK_MAX_PX,
+  DESKTOP_LOCK_MIN_PX,
+  DESKTOP_LOCK_WIDTH_PX,
+  FLUID_LAYOUT_MAX_PX,
+} from "./layoutTiers"
 
 type Props = {
   children: ReactNode
@@ -116,15 +123,15 @@ export default RootLayout
 const StyledMain = styled.main`
   margin: 0 auto;
   box-sizing: border-box;
-  width: min(100%, 1180px);
+  width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
   padding: 0 clamp(0.85rem, 1.6vw, 1.2rem);
 
   /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
-  @media (max-width: 1440px) and (min-width: 1057px) {
-    width: 1024px;
+  @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
+    width: ${DESKTOP_LOCK_WIDTH_PX}px;
   }
 
-  @media (max-width: 1056px) {
+  @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
     width: 100%;
     padding-left: 1rem;
     padding-right: 1rem;

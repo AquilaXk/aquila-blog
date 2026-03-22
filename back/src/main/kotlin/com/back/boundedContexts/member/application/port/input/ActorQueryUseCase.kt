@@ -4,4 +4,6 @@ import com.back.boundedContexts.member.domain.shared.Member
 
 interface ActorQueryUseCase {
     fun findByUsername(username: String): Member?
+
+    fun findByEmail(email: String): Member?
 }

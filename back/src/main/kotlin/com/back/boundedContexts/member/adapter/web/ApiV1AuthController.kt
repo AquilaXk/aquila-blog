@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import java.util.Locale
 
 /**
  * ApiV1AuthController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
@@ -41,12 +42,23 @@ class ApiV1AuthController(
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
 ) {
     data class MemberLoginRequest(
-        @field:NotBlank
+        @field:Size(min = 2, max = 320)
+        val email: String? = null,
         @field:Size(min = 2, max = 30)
-        val username: String,
+        val username: String? = null,
         @field:NotBlank
         @field:Size(max = 128)
         val password: String,
+    )
+
+    private enum class LoginIdentifierType {
+        EMAIL,
+        USERNAME,
+    }
+
+    private data class LoginIdentifier(
+        val type: LoginIdentifierType,
+        val value: String,
     )
 
     data class MemberLoginResBody(
@@ -63,21 +75,22 @@ class ApiV1AuthController(
         request: HttpServletRequest,
         @RequestBody @Valid reqBody: MemberLoginRequest,
     ): RsData<MemberLoginResBody> {
-        val username = reqBody.username.trim()
+        val loginIdentifier = resolveLoginIdentifier(reqBody)
+        val loginAttemptKey = loginIdentifier.value
         val clientIp = extractClientIp(request)
 
-        if (loginAttemptPolicyUseCase.isBlocked(username, clientIp)) {
+        if (loginAttemptPolicyUseCase.isBlocked(loginAttemptKey, clientIp)) {
             throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
         }
 
         val authCandidate =
             actorQueryUseCase
-                .findByUsername(username)
+                .findByLoginIdentifier(loginIdentifier)
                 ?.takeIf { isPasswordValid(it, reqBody.password) }
                 ?: run {
-                    val blocked = loginAttemptPolicyUseCase.recordFailure(username, clientIp)
+                    val blocked = loginAttemptPolicyUseCase.recordFailure(loginAttemptKey, clientIp)
                     if (blocked) throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
-                    throw AppException("401-1", "아이디 또는 비밀번호가 올바르지 않습니다.")
+                    throw AppException("401-1", "이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.")
                 }
 
         val member =
@@ -85,7 +98,7 @@ class ApiV1AuthController(
                 .findById(authCandidate.id)
                 .orElseThrow { AppException("404-1", "회원을 찾을 수 없습니다.") }
 
-        loginAttemptPolicyUseCase.clear(username, clientIp)
+        loginAttemptPolicyUseCase.clear(loginAttemptKey, clientIp)
 
         // 로그인 성공 시 장기 인증 식별자(apiKey)를 회전해 탈취된 기존 키 재사용 위험을 줄인다.
         member.modifyApiKey(MemberPolicy.genApiKey())
@@ -127,4 +140,39 @@ class ApiV1AuthController(
         // reverse proxy가 이미 정규화한 remoteAddr를 기준으로 식별한다.
         return request.remoteAddr.orEmpty()
     }
+
+    private fun resolveLoginIdentifier(reqBody: MemberLoginRequest): LoginIdentifier {
+        val trimmedEmail = reqBody.email?.trim().orEmpty()
+        val trimmedUsername = reqBody.username?.trim().orEmpty()
+
+        if (trimmedEmail.isNotBlank() && trimmedEmail.contains("@")) {
+            return LoginIdentifier(
+                type = LoginIdentifierType.EMAIL,
+                value = trimmedEmail.lowercase(Locale.ROOT),
+            )
+        }
+
+        if (trimmedUsername.isNotBlank()) {
+            return LoginIdentifier(
+                type = LoginIdentifierType.USERNAME,
+                value = trimmedUsername,
+            )
+        }
+
+        // 전환기 호환: 구 클라이언트가 email 필드에 username을 보낼 수 있다.
+        if (trimmedEmail.isNotBlank()) {
+            return LoginIdentifier(
+                type = LoginIdentifierType.USERNAME,
+                value = trimmedEmail,
+            )
+        }
+
+        throw AppException("400-1", "이메일(또는 아이디)을 입력해주세요.")
+    }
+
+    private fun ActorQueryUseCase.findByLoginIdentifier(loginIdentifier: LoginIdentifier): Member? =
+        when (loginIdentifier.type) {
+            LoginIdentifierType.EMAIL -> findByEmail(loginIdentifier.value)
+            LoginIdentifierType.USERNAME -> findByUsername(loginIdentifier.value)
+        }
 }

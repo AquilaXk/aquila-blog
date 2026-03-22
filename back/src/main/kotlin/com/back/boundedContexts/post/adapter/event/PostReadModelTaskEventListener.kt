@@ -93,6 +93,7 @@ class PostReadModelTaskEventListener(
                 lagMs,
                 searchIndexMaxLagSeconds,
             )
+            meterRegistry?.counter("post.search_index.task.sla_breach")?.increment()
         }
 
         val startedAtNanos = System.nanoTime()
@@ -140,10 +141,10 @@ class PostReadModelTaskEventListener(
         forceClearSearchIndex: Boolean,
         warmDetail: Boolean,
     ) {
-        val mergedTags = mergeTags(beforeTags, afterTags)
+        val normalizedAfterTags = normalizeTags(afterTags)
 
         if (asyncSearchIndexSyncEnabled) {
-            runCatching {
+            enqueueTask("post.search-index.sync", aggregateType, postId) {
                 taskFacade.addToQueue(
                     PostSearchIndexSyncPayload(
                         uid = UUID.randomUUID(),
@@ -155,13 +156,11 @@ class PostReadModelTaskEventListener(
                         enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),
                 )
-            }.onFailure { exception ->
-                log.warn("Failed to enqueue post search-index sync task: aggregate={}:{}", aggregateType, postId, exception)
             }
         }
 
         if (searchEngineMirrorEnabled) {
-            runCatching {
+            enqueueTask("post.search-engine.mirror", aggregateType, postId) {
                 taskFacade.addToQueue(
                     PostSearchEngineMirrorPayload(
                         uid = UUID.randomUUID(),
@@ -173,37 +172,43 @@ class PostReadModelTaskEventListener(
                         enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),
                 )
-            }.onFailure { exception ->
-                log.warn("Failed to enqueue search-engine mirror task: aggregate={}:{}", aggregateType, postId, exception)
             }
         }
 
-        if (prewarmEnabled) {
-            runCatching {
+        if (prewarmEnabled && warmDetail) {
+            enqueueTask("post.read.prewarm", aggregateType, postId) {
                 taskFacade.addToQueue(
                     PostReadPrewarmPayload(
                         uid = UUID.randomUUID(),
                         aggregateType = aggregateType,
                         aggregateId = postId,
                         postId = postId,
-                        tags = mergedTags,
+                        tags = normalizedAfterTags,
                         warmDetail = warmDetail,
                     ),
                 )
-            }.onFailure { exception ->
-                log.warn("Failed to enqueue post read prewarm task: aggregate={}:{}", aggregateType, postId, exception)
             }
         }
     }
 
-    private fun mergeTags(
-        beforeTags: List<String>,
-        afterTags: List<String>,
-    ): List<String> =
-        buildList(beforeTags.size + afterTags.size) {
-            addAll(beforeTags)
-            addAll(afterTags)
-        }.asSequence()
+    private fun enqueueTask(
+        taskType: String,
+        aggregateType: String,
+        postId: Long,
+        enqueueAction: () -> Unit,
+    ) {
+        runCatching(enqueueAction)
+            .onSuccess {
+                meterRegistry?.counter("task.processor.enqueue.result", "taskType", taskType, "status", "success")?.increment()
+            }.onFailure { exception ->
+                meterRegistry?.counter("task.processor.enqueue.result", "taskType", taskType, "status", "failed")?.increment()
+                log.warn("Failed to enqueue task: taskType={} aggregate={}:{}", taskType, aggregateType, postId, exception)
+            }
+    }
+
+    private fun normalizeTags(tags: List<String>): List<String> =
+        tags
+            .asSequence()
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()

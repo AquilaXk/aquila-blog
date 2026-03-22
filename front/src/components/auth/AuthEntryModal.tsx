@@ -80,7 +80,7 @@ const AuthEntryModal: React.FC<Props> = ({
 }) => {
   const { refresh, setMe } = useAuthSession()
   const [view, setView] = useState<AuthModalView>("login")
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -109,7 +109,7 @@ const AuthEntryModal: React.FC<Props> = ({
     setSignupError("")
     setSignupLoading(false)
     setLoading(false)
-    setUsername("")
+    setEmail("")
     setPassword("")
     setShowPassword(false)
     setSignupEmail("")
@@ -131,8 +131,8 @@ const AuthEntryModal: React.FC<Props> = ({
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!username.trim() || !password.trim()) {
-      setError("아이디와 비밀번호를 입력해주세요.")
+    if (!email.trim() || !password.trim()) {
+      setError("이메일과 비밀번호를 입력해주세요.")
       return
     }
 
@@ -143,7 +143,7 @@ const AuthEntryModal: React.FC<Props> = ({
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          username: username.trim(),
+          email: email.trim(),
           password,
         }),
       })
@@ -202,7 +202,7 @@ const AuthEntryModal: React.FC<Props> = ({
       : view === "signup"
         ? {
             heading: "회원가입",
-            body: "먼저 이메일을 확인한 뒤 아이디와 비밀번호를 등록합니다.",
+            body: "먼저 이메일을 확인한 뒤 닉네임과 비밀번호를 등록합니다.",
           }
         : {
             heading: "메일을 보냈어요",
@@ -227,14 +227,14 @@ const AuthEntryModal: React.FC<Props> = ({
 
           {view === "login" && (
             <LoginPanel
-              username={username}
+              email={email}
               password={password}
               showPassword={showPassword}
               error={error}
               loading={loading}
               socialItems={socialItems}
               onSubmit={handleLogin}
-              onUsernameChange={setUsername}
+              onEmailChange={setEmail}
               onPasswordChange={setPassword}
               onTogglePassword={() => setShowPassword((value) => !value)}
               onSwitchToSignup={() => setView("signup")}

@@ -40,9 +40,8 @@ class ApiV1SignupVerificationController(
     data class SignupCompleteRequest(
         @field:NotBlank
         val signupToken: String,
-        @field:NotBlank
         @field:Size(min = 2, max = 30)
-        val username: String,
+        val username: String? = null,
         @field:NotBlank
         @field:Size(min = 8, max = 64)
         @field:Pattern(
@@ -109,7 +108,7 @@ class ApiV1SignupVerificationController(
         val member =
             memberSignupVerificationService.completeSignup(
                 signupToken = reqBody.signupToken,
-                username = reqBody.username,
+                legacyUsername = reqBody.username,
                 password = reqBody.password,
                 nickname = reqBody.nickname,
             )

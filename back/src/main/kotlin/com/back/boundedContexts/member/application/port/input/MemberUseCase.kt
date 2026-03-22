@@ -23,7 +23,16 @@ interface MemberUseCase {
         email: String? = null,
     ): Member
 
+    fun joinWithVerifiedEmail(
+        email: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): Member
+
     fun findByUsername(username: String): Member?
+
+    fun findByEmail(email: String): Member?
 
     fun findById(id: Long): Optional<Member>
 

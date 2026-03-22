@@ -1,6 +1,6 @@
 # System Architecture
 
-Last updated: 2026-03-13
+Last updated: 2026-03-22
 
 ## 3줄 요약
 
@@ -109,10 +109,12 @@ sequenceDiagram
 | 로그인 | `/login` | `/member/api/v1/auth/login` | 쿠키 발급 |
 | 회원가입 | `/signup`, `/signup/verify` | `/member/api/v1/members`, `/member/api/v1/signup/*` | 일반 가입 + 이메일 인증 가입, 메일 발송은 task queue |
 | 관리자 작성 | `/admin/posts/new` | `/post/api/v1/posts`(Idempotency-Key), `/post/api/v1/adm/posts` | 발행/검색/수정 |
+| 관리자 AI 태그 추천 | `/admin/posts/new` | `/api/post/recommend-tags` -> `/post/api/v1/adm/posts/recommend-tags` | 제목/본문 기반 태그 추천 + fallback |
 
 추가 규칙:
 
 - 기존 `/:slug` 경로는 legacy 링크 호환을 위해 유지하지만, 실제 렌더는 `/posts/:id` canonical 경로로 리다이렉트한다.
+- 인증 세션은 SSR auth 스냅샷(`authMeProbe`)을 우선 사용해 비로그인 상태에서 `/auth/me` 재검증 호출을 줄인다.
 
 ## 관리자 구조
 

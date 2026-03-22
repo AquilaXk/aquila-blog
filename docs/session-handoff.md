@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated: 2026-03-13
+Last updated: 2026-03-22
 
 ## 3줄 요약
 
@@ -31,9 +31,11 @@ flowchart LR
 ## 최근 반영된 큰 변화
 
 - 관리자 화면을 `/admin` 허브, `/admin/profile`, `/admin/posts/new`, `/admin/tools`로 분리했다.
+- 관리자 글쓰기 AI 기능은 요약 생성이 아니라 `AI 태그 추천`(`POST /api/post/recommend-tags` -> `/post/api/v1/adm/posts/recommend-tags`)으로 운영한다.
 - 게시글 상세 canonical URL을 `/posts/:id`로 고정했고, 기존 `/:slug` 경로는 리다이렉트만 담당한다.
 - 좋아요는 `PUT /like`, `DELETE /like` 멱등 경로를 우선 사용하고, 조회수는 dedupe + 원자 증가 방식으로 보강했다.
 - 프로필 이미지는 direct URL + version 파라미터 기준으로 렌더하고, 메인/About/상세는 SSR 초기값을 먼저 사용한다.
+- 인증 상태 확인은 SSR 스냅샷(`authMeProbe`)을 우선 사용해 비로그인 상태의 `auth/me 401` 재호출 노이즈를 줄였다.
 - Kakao OAuth callback URL은 `${custom.site.backUrl}/login/oauth2/code/{registrationId}`로 고정했고, 프록시에서는 `X-Forwarded-Proto=https`를 명시한다.
 - 백엔드는 `adapter/application/domain` 구조로 정리됐고, 입력 채널은 `adapter/web|event|scheduler`처럼 목적형 이름으로 구분한다.
 

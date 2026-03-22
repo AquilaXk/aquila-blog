@@ -44,6 +44,57 @@ k6 run perf/k6/post-read-chaos-smoke.js
 
 - `CHAOS_FAILURE_PATH`는 일부러 실패를 유도할 경로를 지정하고, 주 read 경로 성공률이 유지되는지 확인합니다.
 
+## 1-2) Chaos suite 자동 실행(실무 운영형)
+
+```bash
+./perf/k6/run-chaos-suite.sh
+```
+
+- 실행 항목:
+  - `baseline` (장애 미주입)
+  - `chaos_1..N` (실패 유도 경로 순차 주입)
+  - `chaos_redis_disconnect` (Redis 단절 주입)
+  - `chaos_db_delay` (DB 지연/단절 주입)
+  - `chaos_api_5xx_burst` (API 컨테이너 단절 기반 5xx burst 주입)
+- 결과:
+  - `perf/k6/results/chaos-<timestamp>/report.txt`
+  - 케이스별 `*.summary.json`, `*.log`
+- 판정 기준:
+  - `successRate>=0.95`
+  - `feed/explore/detail` p95 임계치 충족
+
+옵션 예시:
+
+```bash
+BASE_URL="https://api.aquilaxk.site" \
+DETAIL_ID="503" \
+CHAOS_FAILURE_PATHS="/post/api/v1/posts/999999999,/post/api/v1/posts/feed?page=99999&pageSize=1000" \
+./perf/k6/run-chaos-suite.sh
+```
+
+기본 주입 방식:
+
+- Redis/DB는 `docker pause/unpause`로 짧게 단절시켜 복원력을 확인합니다.
+- 컨테이너명이 자동 탐지되지 않으면 `CHAOS_REDIS_CONTAINER`, `CHAOS_DB_CONTAINER`로 명시할 수 있습니다.
+
+운영 주입 명령 커스터마이징(권장):
+
+```bash
+CHAOS_REDIS_INJECT_CMD="docker pause blog_home-redis_1-1" \
+CHAOS_REDIS_RECOVER_CMD="docker unpause blog_home-redis_1-1" \
+CHAOS_DB_INJECT_CMD="docker pause blog_home-db_1-1" \
+CHAOS_DB_RECOVER_CMD="docker unpause blog_home-db_1-1" \
+./perf/k6/run-chaos-suite.sh
+```
+
+5xx burst 주입 대상을 명시해야 할 때:
+
+```bash
+CHAOS_API_CONTAINER="blog_home-back_blue-1" \
+CHAOS_API_PAUSE_SECONDS=10 \
+./perf/k6/run-chaos-suite.sh
+```
+
 ## 2) 확인할 핵심 지표
 
 - `post_feed_duration_ms` p95

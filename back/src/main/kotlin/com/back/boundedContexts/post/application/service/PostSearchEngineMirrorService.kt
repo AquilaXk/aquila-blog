@@ -13,6 +13,9 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * PostSearchEngineMirrorService는 게시글 태그 인덱스를 외부 검색엔진(OpenSearch/ES)에 미러링한다.
@@ -32,13 +35,28 @@ class PostSearchEngineMirrorService(
     private val requestTimeoutMs: Long,
     @param:Value("\${custom.post.search-engine.mirror.maxTags:32}")
     maxTags: Int,
+    @param:Value("\${custom.post.search-engine.mirror.circuit.failureThreshold:5}")
+    failureThreshold: Int,
+    @param:Value("\${custom.post.search-engine.mirror.circuit.openSeconds:60}")
+    circuitOpenSeconds: Long,
     private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry? = null,
 ) {
     private val logger = LoggerFactory.getLogger(PostSearchEngineMirrorService::class.java)
     private val safeMaxTags = maxTags.coerceIn(1, 128)
     private val normalizedConnectTimeoutMs = connectTimeoutMs.coerceIn(100, 10_000)
+    private val safeFailureThreshold = failureThreshold.coerceIn(1, 100)
+    private val safeCircuitOpenMillis = circuitOpenSeconds.coerceIn(1, 3_600) * 1_000
     private val httpClient = sharedHttpClient(normalizedConnectTimeoutMs)
+    private val consecutiveFailureCount = AtomicInteger(0)
+    private val circuitOpenUntilEpochMs = AtomicLong(0L)
+    private val runtimeForceDisabled = AtomicBoolean(false)
+
+    fun setRuntimeForceDisabled(forceDisabled: Boolean) {
+        runtimeForceDisabled.set(forceDisabled)
+    }
+
+    fun isRuntimeForceDisabled(): Boolean = runtimeForceDisabled.get()
 
     fun mirror(
         postId: Long,
@@ -47,6 +65,19 @@ class PostSearchEngineMirrorService(
     ) {
         if (!enabled) return
         if (endpoint.isBlank()) return
+        if (isRuntimeForceDisabled()) {
+            meterRegistry?.counter("post.search_engine.mirror.result", "status", "skipped_force_disabled")?.increment()
+            return
+        }
+        if (isCircuitOpen()) {
+            meterRegistry?.counter("post.search_engine.mirror.result", "status", "skipped_circuit_open")?.increment()
+            logger.warn(
+                "post_search_engine_mirror_skipped_circuit_open postId={} openUntilEpochMs={}",
+                postId,
+                circuitOpenUntilEpochMs.get(),
+            )
+            return
+        }
 
         val normalizedTags =
             tags
@@ -85,6 +116,7 @@ class PostSearchEngineMirrorService(
                 val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
                 meterRegistry?.timer("post.search_engine.mirror.duration")?.record(elapsedMs, TimeUnit.MILLISECONDS)
                 meterRegistry?.counter("post.search_engine.mirror.result", "status", "failed")?.increment()
+                recordFailureAndOpenCircuitIfNeeded(postId, "transport")
                 throw IllegalStateException("search_engine_mirror_transport_failed", exception)
             }.getOrThrow()
 
@@ -93,6 +125,7 @@ class PostSearchEngineMirrorService(
 
         if (response.statusCode() !in 200..299) {
             meterRegistry?.counter("post.search_engine.mirror.result", "status", "non_success")?.increment()
+            recordFailureAndOpenCircuitIfNeeded(postId, "status-${response.statusCode()}")
             logger.warn(
                 "post_search_engine_mirror_non_success postId={} status={} body={}",
                 postId,
@@ -102,7 +135,34 @@ class PostSearchEngineMirrorService(
             throw IllegalStateException("search_engine_mirror_status_${response.statusCode()}")
         }
 
+        consecutiveFailureCount.set(0)
         meterRegistry?.counter("post.search_engine.mirror.result", "status", "success")?.increment()
+    }
+
+    private fun isCircuitOpen(): Boolean {
+        val now = System.currentTimeMillis()
+        val openUntil = circuitOpenUntilEpochMs.get()
+        return openUntil > now
+    }
+
+    private fun recordFailureAndOpenCircuitIfNeeded(
+        postId: Long,
+        reason: String,
+    ) {
+        val failures = consecutiveFailureCount.incrementAndGet()
+        if (failures < safeFailureThreshold) return
+
+        val nextOpenUntil = System.currentTimeMillis() + safeCircuitOpenMillis
+        circuitOpenUntilEpochMs.getAndUpdate { previous -> maxOf(previous, nextOpenUntil) }
+        meterRegistry?.counter("post.search_engine.mirror.circuit", "state", "opened", "reason", reason)?.increment()
+        logger.warn(
+            "post_search_engine_mirror_circuit_opened postId={} reason={} failures={} threshold={} openUntilEpochMs={}",
+            postId,
+            reason,
+            failures,
+            safeFailureThreshold,
+            circuitOpenUntilEpochMs.get(),
+        )
     }
 
     companion object {

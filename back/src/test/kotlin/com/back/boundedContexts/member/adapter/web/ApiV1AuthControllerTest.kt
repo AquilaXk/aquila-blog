@@ -96,6 +96,34 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `로그인 요청은 이메일 식별자도 수용한다`() {
+            val member =
+                memberFacade.join(
+                    username = "email-login-user",
+                    password = "Abcd1234!",
+                    nickname = "이메일로그인",
+                    profileImgUrl = null,
+                    email = "email-login-user@example.com",
+                )
+
+            mvc
+                .post("/member/api/v1/auth/login") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "email-login-user@example.com",
+                            "password": "Abcd1234!"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.item.id") { value(member.id) }
+                    jsonPath("$.data.item.name") { value(member.nickname) }
+                }
+        }
+
+        @Test
         fun `로그인 요청에서 비밀번호가 틀리면 401을 반환한다`() {
             mvc
                 .post("/member/api/v1/auth/login") {
@@ -112,7 +140,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("login"))
                     jsonPath("$.resultCode") { value("401-1") }
-                    jsonPath("$.msg") { value("아이디 또는 비밀번호가 올바르지 않습니다.") }
+                    jsonPath("$.msg") { value("이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.") }
                 }
         }
 
@@ -133,7 +161,25 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("login"))
                     jsonPath("$.resultCode") { value("401-1") }
-                    jsonPath("$.msg") { value("아이디 또는 비밀번호가 올바르지 않습니다.") }
+                    jsonPath("$.msg") { value("이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.") }
+                }
+        }
+
+        @Test
+        fun `로그인 요청에서 식별자가 비어 있으면 400을 반환한다`() {
+            mvc
+                .post("/member/api/v1/auth/login") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "password": "1234"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-1") }
+                    jsonPath("$.msg") { value("이메일(또는 아이디)을 입력해주세요.") }
                 }
         }
 

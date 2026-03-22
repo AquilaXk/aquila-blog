@@ -5,6 +5,13 @@ import styled from "@emotion/styled"
 import { zIndexes } from "src/styles/zIndexes"
 import { useRouter } from "next/router"
 import { useEffect, useRef, useState } from "react"
+import {
+  CONTENT_MAX_WIDTH_PX,
+  DESKTOP_LOCK_MAX_PX,
+  DESKTOP_LOCK_MIN_PX,
+  DESKTOP_LOCK_WIDTH_PX,
+  FLUID_LAYOUT_MAX_PX,
+} from "../layoutTiers"
 
 type Props = {
   fullWidth: boolean
@@ -160,15 +167,15 @@ const StyledWrapper = styled.div`
     gap: 0.75rem;
     justify-content: space-between;
     align-items: center;
-    width: min(100%, 1180px);
+    width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
     min-height: 3.45rem;
     margin: 0 auto;
 
-    @media (max-width: 1440px) and (min-width: 1057px) {
-      width: 1024px;
+    @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
+      width: ${DESKTOP_LOCK_WIDTH_PX}px;
     }
 
-    @media (max-width: 1056px) {
+    @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
       width: 100%;
       padding-left: 1rem;
       padding-right: 1rem;

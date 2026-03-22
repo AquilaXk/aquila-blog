@@ -2,28 +2,28 @@ import { FormEvent } from "react"
 import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 
 type Props = {
-  username: string
+  email: string
   password: string
   showPassword: boolean
   error: string
   loading: boolean
   socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
-  onUsernameChange: (value: string) => void
+  onEmailChange: (value: string) => void
   onPasswordChange: (value: string) => void
   onTogglePassword: () => void
   onSwitchToSignup: () => void
 }
 
 const AuthEntryLoginPanel = ({
-  username,
+  email,
   password,
   showPassword,
   error,
   loading,
   socialItems,
   onSubmit,
-  onUsernameChange,
+  onEmailChange,
   onPasswordChange,
   onTogglePassword,
   onSwitchToSignup,
@@ -31,14 +31,14 @@ const AuthEntryLoginPanel = ({
   return (
     <>
       <form className="loginForm" onSubmit={onSubmit}>
-        <label htmlFor="auth-entry-username">아이디로 로그인</label>
+        <label htmlFor="auth-entry-email">이메일로 로그인</label>
         <div className="inlineField">
           <input
-            id="auth-entry-username"
-            value={username}
-            onChange={(event) => onUsernameChange(event.target.value)}
-            placeholder="아이디를 입력하세요."
-            autoComplete="username"
+            id="auth-entry-email"
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            placeholder="이메일을 입력하세요."
+            autoComplete="email"
             disabled={loading}
           />
         </div>

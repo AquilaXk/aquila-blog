@@ -146,7 +146,7 @@ class MemberSignupVerificationService(
     @Transactional
     fun completeSignup(
         signupToken: String,
-        username: String,
+        legacyUsername: String?,
         password: String,
         nickname: String,
     ): Member {
@@ -167,13 +167,25 @@ class MemberSignupVerificationService(
         }
 
         val member =
-            memberApplicationService.join(
-                username = username,
-                password = password,
-                nickname = nickname,
-                profileImgUrl = null,
-                email = verification.email,
-            )
+            legacyUsername
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { username ->
+                    // 무중단 전환: 구 클라이언트가 username을 보내도 가입 실패 없이 수용한다.
+                    memberApplicationService.join(
+                        username = username,
+                        password = password,
+                        nickname = nickname,
+                        profileImgUrl = null,
+                        email = verification.email,
+                    )
+                }
+                ?: memberApplicationService.joinWithVerifiedEmail(
+                    email = verification.email,
+                    password = password,
+                    nickname = nickname,
+                    profileImgUrl = null,
+                )
 
         verification.consume(now)
 

@@ -63,7 +63,7 @@ http://{$API_DOMAIN} {
       Cache-Control "public, max-age=60, stale-while-revalidate=300"
     }
 
-    reverse_proxy back_blue:8080 {
+    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
       header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
@@ -76,7 +76,35 @@ http://{$API_DOMAIN} {
       Cache-Control "public, max-age=30, stale-while-revalidate=120"
     }
 
-    reverse_proxy back_blue:8080 {
+    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
+      header_up Host {host}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+    }
+  }
+
+  # read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
+  @publicReadFallback {
+    path /post/api/v1/posts/search /post/api/v1/posts/tags /post/api/v1/posts/feed/cursor /post/api/v1/posts/explore/cursor /post/api/v1/posts/*
+    method GET HEAD
+    not header Cookie *
+  }
+  handle @publicReadFallback {
+    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
+      header_up Host {host}
+      header_up X-Forwarded-Host {host}
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+    }
+  }
+
+  # 점진 분리: admin API는 별도 upstream으로 라우팅 가능(기본 back_blue 유지).
+  @adminApi {
+    path /post/api/v1/adm/* /member/api/v1/adm/* /system/api/v1/adm/*
+  }
+  handle @adminApi {
+    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
       header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https

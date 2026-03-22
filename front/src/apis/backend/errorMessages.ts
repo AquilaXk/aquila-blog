@@ -4,7 +4,7 @@ type AuthAction = "login" | "signupStart" | "signupVerify" | "signupComplete"
 
 const authStatusMessages: Record<AuthAction, Partial<Record<number, string>>> = {
   login: {
-    401: "아이디 또는 비밀번호가 올바르지 않습니다.",
+    401: "이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.",
     429: "로그인 시도가 많습니다. 잠시 후 다시 시도해주세요.",
     500: "로그인 처리 중 서버 오류가 발생했습니다.",
   },
@@ -22,7 +22,7 @@ const authStatusMessages: Record<AuthAction, Partial<Record<number, string>>> = 
   },
   signupComplete: {
     400: "입력값을 다시 확인해주세요.",
-    409: "이미 사용 중인 아이디 또는 닉네임입니다.",
+    409: "이미 사용 중인 정보입니다.",
     500: "회원가입 처리 중 서버 오류가 발생했습니다.",
   },
 }

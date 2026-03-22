@@ -114,16 +114,22 @@ management:
         post.search_index.task.lag: true
         post.search_engine.mirror.duration: true
         post.search_engine.mirror.task.lag: true
+        post.search.pipeline.shadow.external.duration: true
+        post.search.pipeline.shadow.delta: true
         cdn.purge.duration: true
         task.processor.handler.duration: true
+        task.processor.fetch.limit: true
       percentiles:
         http.server.requests: 0.95,0.99
         post.search_index.task.duration: 0.95,0.99
         post.search_index.task.lag: 0.95,0.99
         post.search_engine.mirror.duration: 0.95,0.99
         post.search_engine.mirror.task.lag: 0.95,0.99
+        post.search.pipeline.shadow.external.duration: 0.95,0.99
+        post.search.pipeline.shadow.delta: 0.95,0.99
         cdn.purge.duration: 0.95,0.99
         task.processor.handler.duration: 0.95,0.99
+        task.processor.fetch.limit: 0.95,0.99
 custom:
   dbBaseName: blog
   dev:
@@ -193,6 +199,7 @@ custom:
         replayBatchSize: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_BATCH_SIZE:50}
   admin:
     username: "${CUSTOM__ADMIN__USERNAME:}"
+    email: "${CUSTOM__ADMIN__EMAIL:}"
     password: "${CUSTOM__ADMIN__PASSWORD:}"
     bootstrap:
       rotatePasswordOnStartup: ${CUSTOM__ADMIN__BOOTSTRAP__ROTATE_PASSWORD_ON_STARTUP:false}
@@ -220,7 +227,16 @@ custom:
       dynamicConcurrencyEnabled: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_CONCURRENCY_ENABLED:true}
       dynamicMinConcurrent: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_MIN_CONCURRENT:2}
       dynamicBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BACKLOG_PER_SLOT:25}
+      dynamicBatchSizeEnabled: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_SIZE_ENABLED:true}
+      dynamicBatchMinSize: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_MIN_SIZE:4}
+      dynamicBatchBacklogPerStep: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_BACKLOG_PER_STEP:120}
+      dynamicBatchTargetHandlerDurationMs: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_TARGET_HANDLER_DURATION_MS:900}
+      dynamicBatchMaxPrefetchMultiplier: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_MAX_PREFETCH_MULTIPLIER:2}
       perTypeMaxConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_MAX_CONCURRENT:post.search-index.sync=4,post.read.prewarm=3,post.search-engine.mirror=2}
+      perTypeAutoTuneEnabled: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_ENABLED:true}
+      perTypeAutoTuneMinConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_MIN_CONCURRENT:1}
+      perTypeAutoTuneBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_BACKLOG_PER_SLOT:20}
+      perTypeAutoTuneRefreshMs: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_REFRESH_MS:15000}
       inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:
       cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:3}
@@ -288,6 +304,40 @@ custom:
       candidatePoolSize: ${CUSTOM__POST__RECOMMEND__CANDIDATE_POOL_SIZE:240}
       maxRerankPages: ${CUSTOM__POST__RECOMMEND__MAX_RERANK_PAGES:4}
       hotTagsLimit: ${CUSTOM__POST__RECOMMEND__HOT_TAGS_LIMIT:24}
+      feature-store:
+        enabled: ${CUSTOM__POST__RECOMMEND__FEATURE_STORE__ENABLED:true}
+        stale-seconds: ${CUSTOM__POST__RECOMMEND__FEATURE_STORE__STALE_SECONDS:900}
+        local-cache-ttl-seconds: ${CUSTOM__POST__RECOMMEND__FEATURE_STORE__LOCAL_CACHE_TTL_SECONDS:120}
+    search:
+      pipeline:
+        enabled: ${CUSTOM__POST__SEARCH__PIPELINE__ENABLED:true}
+        candidatePoolSize: ${CUSTOM__POST__SEARCH__PIPELINE__CANDIDATE_POOL_SIZE:260}
+        maxRerankPages: ${CUSTOM__POST__SEARCH__PIPELINE__MAX_RERANK_PAGES:6}
+        rollback:
+          forceControl: ${CUSTOM__POST__SEARCH__PIPELINE__ROLLBACK__FORCE_CONTROL:false}
+        ab:
+          enabled: ${CUSTOM__POST__SEARCH__PIPELINE__AB__ENABLED:true}
+          variantTrafficPercent: ${CUSTOM__POST__SEARCH__PIPELINE__AB__VARIANT_TRAFFIC_PERCENT:25}
+        control:
+          titleWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__TITLE_WEIGHT:300}
+          tagWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__TAG_WEIGHT:120}
+          contentWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__CONTENT_WEIGHT:40}
+          freshnessWeight: ${CUSTOM__POST__SEARCH__PIPELINE__CONTROL__FRESHNESS_WEIGHT:1.0}
+        variant:
+          titleWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__TITLE_WEIGHT:260}
+          tagWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__TAG_WEIGHT:180}
+          contentWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__CONTENT_WEIGHT:70}
+          freshnessWeight: ${CUSTOM__POST__SEARCH__PIPELINE__VARIANT__FRESHNESS_WEIGHT:1.1}
+        shadow-read:
+          enabled: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__ENABLED:true}
+          compareTopN: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__COMPARE_TOP_N:20}
+          warnDeltaThreshold: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__WARN_DELTA_THRESHOLD:0.45}
+          external:
+            enabled: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__ENABLED:false}
+            endpoint: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__ENDPOINT:}
+            apiKey: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__API_KEY:}
+            connectTimeoutMs: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__CONNECT_TIMEOUT_MS:300}
+            requestTimeoutMs: ${CUSTOM__POST__SEARCH__PIPELINE__SHADOW_READ__EXTERNAL__REQUEST_TIMEOUT_MS:800}
     search-index:
       async-sync-enabled: ${CUSTOM__POST__SEARCH_INDEX__ASYNC_SYNC_ENABLED:true}
       max-tags: ${CUSTOM__POST__SEARCH_INDEX__MAX_TAGS:32}
@@ -301,6 +351,9 @@ custom:
         connectTimeoutMs: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CONNECT_TIMEOUT_MS:1200}
         requestTimeoutMs: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__REQUEST_TIMEOUT_MS:2500}
         maxTags: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__MAX_TAGS:32}
+        circuit:
+          failureThreshold: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CIRCUIT__FAILURE_THRESHOLD:5}
+          openSeconds: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CIRCUIT__OPEN_SECONDS:60}
     read:
       cursor-signing-secret: ${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
       prewarm:

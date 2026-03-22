@@ -1,0 +1,5 @@
+export const CONTENT_MAX_WIDTH_PX = 1180
+export const DESKTOP_LOCK_MIN_PX = 1057
+export const DESKTOP_LOCK_MAX_PX = 1440
+export const DESKTOP_LOCK_WIDTH_PX = 1024
+export const FLUID_LAYOUT_MAX_PX = 1056

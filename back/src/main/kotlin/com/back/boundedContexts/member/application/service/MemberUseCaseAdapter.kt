@@ -27,7 +27,16 @@ class MemberUseCaseAdapter(
         email: String?,
     ): Member = memberApplicationService.join(username, password, nickname, profileImgUrl, email)
 
+    override fun joinWithVerifiedEmail(
+        email: String,
+        password: String?,
+        nickname: String,
+        profileImgUrl: String?,
+    ): Member = memberApplicationService.joinWithVerifiedEmail(email, password, nickname, profileImgUrl)
+
     override fun findByUsername(username: String): Member? = memberApplicationService.findByUsername(username)
+
+    override fun findByEmail(email: String): Member? = memberApplicationService.findByEmail(email)
 
     override fun findById(id: Long): Optional<Member> = memberApplicationService.findById(id)
 

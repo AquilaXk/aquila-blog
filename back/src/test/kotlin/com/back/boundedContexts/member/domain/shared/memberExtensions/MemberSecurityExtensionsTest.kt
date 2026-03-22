@@ -14,6 +14,7 @@ class MemberSecurityExtensionsTest {
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
             adminUsername = "admin",
+            adminEmail = "admin@example.com",
             adminPassword = "1234",
         )
 
@@ -36,6 +37,7 @@ class MemberSecurityExtensionsTest {
             siteBackUrl = "https://api.aquilaxk.site",
             siteFrontUrl = "https://www.aquilaxk.site",
             adminUsername = "admin",
+            adminEmail = "admin@example.com",
             adminPassword = "1234",
         )
 

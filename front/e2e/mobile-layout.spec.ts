@@ -193,6 +193,7 @@ test("iPhone 15 Pro 메인 피드는 카드 overflow 없이 viewport 내부에 �
 
   await page.goto("/")
   await expect(page.getByLabel("Search posts by keyword")).toBeVisible()
+  await expect(page.getByRole("button", { name: "헤더 메뉴 열기" })).toBeVisible()
 
   const firstSnapshot = await captureLayoutSnapshot(page)
   expect(firstSnapshot.htmlScrollWidth).toBeLessThanOrEqual(firstSnapshot.viewportWidth)

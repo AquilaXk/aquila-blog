@@ -50,6 +50,10 @@ class PostApplicationServiceDeleteResilienceTest {
             uploadedFileRetentionService = uploadedFileRetentionService,
             cacheManager = cacheManager,
             tagsLocalCacheTtlSeconds = 180,
+            recommendRankingEnabled = true,
+            recommendCandidatePoolSize = 240,
+            recommendMaxRerankPages = 4,
+            recommendHotTagsLimit = 24,
         )
 
     @Test

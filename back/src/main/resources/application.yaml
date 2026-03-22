@@ -110,8 +110,20 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+        post.search_index.task.duration: true
+        post.search_index.task.lag: true
+        post.search_engine.mirror.duration: true
+        post.search_engine.mirror.task.lag: true
+        cdn.purge.duration: true
+        task.processor.handler.duration: true
       percentiles:
         http.server.requests: 0.95,0.99
+        post.search_index.task.duration: 0.95,0.99
+        post.search_index.task.lag: 0.95,0.99
+        post.search_engine.mirror.duration: 0.95,0.99
+        post.search_engine.mirror.task.lag: 0.95,0.99
+        cdn.purge.duration: 0.95,0.99
+        task.processor.handler.duration: 0.95,0.99
 custom:
   dbBaseName: blog
   dev:
@@ -205,11 +217,16 @@ custom:
       processingTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__PROCESSING_TIMEOUT_SECONDS:900}
       maxConcurrent: ${CUSTOM__TASK__PROCESSOR__MAX_CONCURRENT:8}
       handlerTimeoutSeconds: ${CUSTOM__TASK__PROCESSOR__HANDLER_TIMEOUT_SECONDS:120}
+      dynamicConcurrencyEnabled: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_CONCURRENCY_ENABLED:true}
+      dynamicMinConcurrent: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_MIN_CONCURRENT:2}
+      dynamicBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BACKLOG_PER_SLOT:25}
+      perTypeMaxConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_MAX_CONCURRENT:post.search-index.sync=4,post.read.prewarm=3,post.search-engine.mirror=2}
       inlineWhenNotProd: ${CUSTOM__TASK__PROCESSOR__INLINE_WHEN_NOT_PROD:false}
     diagnostics:
       cacheSeconds: ${CUSTOM__TASK__DIAGNOSTICS__CACHE_SECONDS:3}
   runtime:
     workerEnabled: ${CUSTOM__RUNTIME__WORKER_ENABLED:true}
+    apiMode: ${CUSTOM__RUNTIME__API_MODE:all}
   cache:
     ttl-seconds: 3600
     ttl-overrides:
@@ -266,9 +283,24 @@ custom:
       cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
       cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
   post:
+    recommend:
+      enabled: ${CUSTOM__POST__RECOMMEND__ENABLED:true}
+      candidatePoolSize: ${CUSTOM__POST__RECOMMEND__CANDIDATE_POOL_SIZE:240}
+      maxRerankPages: ${CUSTOM__POST__RECOMMEND__MAX_RERANK_PAGES:4}
+      hotTagsLimit: ${CUSTOM__POST__RECOMMEND__HOT_TAGS_LIMIT:24}
     search-index:
       async-sync-enabled: ${CUSTOM__POST__SEARCH_INDEX__ASYNC_SYNC_ENABLED:true}
       max-tags: ${CUSTOM__POST__SEARCH_INDEX__MAX_TAGS:32}
+      sla:
+        maxLagSeconds: ${CUSTOM__POST__SEARCH_INDEX__SLA__MAX_LAG_SECONDS:120}
+    search-engine:
+      mirror:
+        enabled: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__ENABLED:false}
+        endpoint: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__ENDPOINT:}
+        apiKey: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__API_KEY:}
+        connectTimeoutMs: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__CONNECT_TIMEOUT_MS:1200}
+        requestTimeoutMs: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__REQUEST_TIMEOUT_MS:2500}
+        maxTags: ${CUSTOM__POST__SEARCH_ENGINE__MIRROR__MAX_TAGS:32}
     read:
       cursor-signing-secret: ${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
       prewarm:

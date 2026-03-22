@@ -5,6 +5,7 @@ import com.back.global.task.application.TaskHandlerEntry
 import com.back.global.task.application.TaskHandlerRegistry
 import com.back.global.task.domain.TaskStatus
 import com.back.standard.dto.TaskPayload
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PreDestroy
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock
 import org.slf4j.LoggerFactory
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import kotlin.math.ceil
 
 /**
  * TaskProcessingScheduledJob는 주기 작업을 트리거하는 스케줄러 어댑터입니다.
@@ -45,16 +47,35 @@ class TaskProcessingScheduledJob(
     private val maxConcurrent: Int,
     @param:Value("\${custom.task.processor.handlerTimeoutSeconds:120}")
     private val handlerTimeoutSeconds: Long,
+    @param:Value("\${custom.task.processor.dynamicConcurrencyEnabled:true}")
+    private val dynamicConcurrencyEnabled: Boolean,
+    @param:Value("\${custom.task.processor.dynamicMinConcurrent:2}")
+    private val dynamicMinConcurrent: Int,
+    @param:Value("\${custom.task.processor.dynamicBacklogPerSlot:25}")
+    private val dynamicBacklogPerSlot: Int,
+    @param:Value("\${custom.task.processor.perTypeMaxConcurrent:}")
+    perTypeMaxConcurrentRaw: String,
+    private val meterRegistry: MeterRegistry? = null,
 ) {
     private val logger = LoggerFactory.getLogger(TaskProcessingScheduledJob::class.java)
     private val workerConcurrency = maxConcurrent.coerceIn(1, 256)
     private val concurrencyGate = Semaphore(workerConcurrency)
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
+    private val perTypeMaxConcurrent = parsePerTypeMaxConcurrent(perTypeMaxConcurrentRaw)
+    private val perTypeGates =
+        perTypeMaxConcurrent
+            .mapValues { (_, limit) -> Semaphore(limit.coerceAtLeast(1)) }
+            .toMutableMap()
 
     private data class TaskExecutionContext(
         val taskId: Long,
         val taskType: String,
         val payload: String,
+    )
+
+    private data class TaskDispatchSlot(
+        val taskId: Long,
+        val taskType: String,
     )
 
     /**
@@ -67,35 +88,82 @@ class TaskProcessingScheduledJob(
         val safeBatchSize = batchSize.coerceIn(1, 500)
         recoverStaleProcessingTasks(safeBatchSize)
 
-        val availableWorkerSlots = concurrencyGate.availablePermits()
+        val availableWorkerSlots = resolveAvailableWorkerSlots()
         if (availableWorkerSlots <= 0) {
             logger.debug("Skip polling tasks because no worker slot is available")
             return
         }
 
         val fetchLimit = minOf(safeBatchSize, availableWorkerSlots)
-        val taskIds =
+        val dispatchSlots =
             transactionTemplate.execute {
                 val pendingTasks = taskRepository.findPendingTasksWithLock(fetchLimit)
                 pendingTasks.forEach { it.markAsProcessing() }
-                pendingTasks.map { it.id }
-            }
+                pendingTasks.map { TaskDispatchSlot(it.id, it.taskType) }
+            } ?: emptyList()
 
-        taskIds.orEmpty().forEach { taskId ->
+        dispatchSlots.forEach { slot ->
             if (!concurrencyGate.tryAcquire()) {
-                revertTaskToPending(taskId)
+                revertTaskToPending(slot.taskId)
+                return@forEach
+            }
+            if (!tryAcquirePerTypePermit(slot.taskType)) {
+                concurrencyGate.release()
+                revertTaskToPending(slot.taskId)
                 return@forEach
             }
 
             executor.submit {
                 try {
-                    executeTask(taskId)
+                    executeTask(slot.taskId)
                 } finally {
+                    releasePerTypePermit(slot.taskType)
                     concurrencyGate.release()
                 }
             }
         }
     }
+
+    private fun resolveAvailableWorkerSlots(): Int {
+        val activeWorkers = (workerConcurrency - concurrencyGate.availablePermits()).coerceAtLeast(0)
+        val targetConcurrency =
+            if (!dynamicConcurrencyEnabled) {
+                workerConcurrency
+            } else {
+                val readyPending = taskRepository.countByStatusAndNextRetryAtLessThanEqual(TaskStatus.PENDING, Instant.now())
+                val backlogPerSlot = dynamicBacklogPerSlot.coerceAtLeast(1)
+                val scaled = ceil(readyPending.toDouble() / backlogPerSlot).toInt().coerceAtLeast(1)
+                val minConcurrency = dynamicMinConcurrent.coerceIn(1, workerConcurrency)
+                scaled.coerceIn(minConcurrency, workerConcurrency)
+            }
+
+        return (targetConcurrency - activeWorkers).coerceIn(0, workerConcurrency)
+    }
+
+    private fun tryAcquirePerTypePermit(taskType: String): Boolean {
+        val gate = perTypeGates[taskType] ?: return true
+        return gate.tryAcquire()
+    }
+
+    private fun releasePerTypePermit(taskType: String) {
+        val gate = perTypeGates[taskType] ?: return
+        gate.release()
+    }
+
+    private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> =
+        raw
+            .split(",")
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .mapNotNull { token ->
+                val parts = token.split("=", limit = 2)
+                if (parts.size != 2) return@mapNotNull null
+                val taskType = parts[0].trim()
+                val limit = parts[1].trim().toIntOrNull()?.coerceIn(1, workerConcurrency) ?: return@mapNotNull null
+                if (taskType.isBlank()) return@mapNotNull null
+                taskType to limit
+            }.toMap()
 
     /**
      * 만료/중단 상태를 정리해 리소스와 큐 정합성을 유지합니다.
@@ -124,6 +192,7 @@ class TaskProcessingScheduledJob(
         run {
             val context = loadTaskExecutionContext(taskId) ?: return
             val entry = taskHandlerRegistry.getEntry(context.taskType)
+            val startedAtNanos = System.nanoTime()
 
             if (entry == null) {
                 logger.warn("No handler found for task type: {}", context.taskType)
@@ -134,7 +203,8 @@ class TaskProcessingScheduledJob(
             try {
                 val payload = objectMapper.readValue(context.payload, entry.payloadClass) as TaskPayload
                 invokeHandlerWithTimeout(context.taskId, context.taskType, entry, payload)
-                markTaskCompleted(taskId)
+                markTaskCompleted(taskId, context.taskType)
+                recordTaskDuration(context.taskType, startedAtNanos)
             } catch (exception: TimeoutException) {
                 logger.error(
                     "Task handler timeout: {} (type={}, timeoutSeconds={})",
@@ -143,10 +213,12 @@ class TaskProcessingScheduledJob(
                     handlerTimeoutSeconds,
                 )
                 markTaskFailed(taskId, context.taskType, "Task handler timed out after ${handlerTimeoutSeconds}s")
+                recordTaskDuration(context.taskType, startedAtNanos)
             } catch (exception: Exception) {
                 val rootCause = exception.cause ?: exception
                 logger.error("Task failed: {} (type={})", taskId, context.taskType, rootCause)
                 markTaskFailed(taskId, context.taskType, rootCause.message ?: rootCause::class.simpleName)
+                recordTaskDuration(context.taskType, startedAtNanos)
             }
         }
 
@@ -161,13 +233,17 @@ class TaskProcessingScheduledJob(
      * 작업 상태를 전이하고 실패 시 복구 가능한 상태로 보정합니다.
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
-    private fun markTaskCompleted(taskId: Long) {
+    private fun markTaskCompleted(
+        taskId: Long,
+        taskType: String,
+    ) {
         transactionTemplate.execute {
             val task = taskRepository.findById(taskId).orElse(null) ?: return@execute
             if (task.status != TaskStatus.PROCESSING) return@execute
             task.markAsCompleted()
             task.errorMessage = null
         }
+        recordTaskResult(taskType, "success")
     }
 
     /**
@@ -184,7 +260,35 @@ class TaskProcessingScheduledJob(
             if (task.status != TaskStatus.PROCESSING) return@execute
             task.errorMessage = errorMessage
             task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType))
+            if (task.status == TaskStatus.FAILED) {
+                logger.error("task_dead_lettered taskId={} taskType={} retryCount={} maxRetries={}", task.id, taskType, task.retryCount, task.maxRetries)
+            }
+            recordTaskResult(taskType, if (task.status == TaskStatus.FAILED) "dlq" else "retry")
         }
+    }
+
+    private fun recordTaskResult(
+        taskType: String,
+        status: String,
+    ) {
+        meterRegistry
+            ?.counter("task.processor.result", "taskType", safeTagValue(taskType), "status", status)
+            ?.increment()
+    }
+
+    private fun recordTaskDuration(
+        taskType: String,
+        startedAtNanos: Long,
+    ) {
+        val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
+        meterRegistry
+            ?.timer("task.processor.handler.duration", "taskType", safeTagValue(taskType))
+            ?.record(elapsedMs, TimeUnit.MILLISECONDS)
+    }
+
+    private fun safeTagValue(raw: String): String {
+        val sanitized = raw.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        return sanitized.take(80).ifBlank { "unknown" }
     }
 
     /**

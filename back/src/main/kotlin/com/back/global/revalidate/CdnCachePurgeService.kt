@@ -1,6 +1,7 @@
 package com.back.global.revalidate
 
 import com.back.boundedContexts.post.application.support.PostCacheTags
+import io.micrometer.core.instrument.MeterRegistry
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -37,6 +38,7 @@ class CdnCachePurgeService(
     @Value("\${custom.cdn.purge.coalesceMaxTags:2048}")
     private val coalesceMaxTags: Int,
     private val objectMapper: ObjectMapper,
+    private val meterRegistry: MeterRegistry? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val normalizedConnectTimeoutMs = connectTimeoutMs.coerceIn(100, 10_000)
@@ -148,6 +150,8 @@ class CdnCachePurgeService(
         normalizedTags: List<String>,
         reason: String,
     ) {
+        val startedAtNanos = System.nanoTime()
+        val reasonBucket = reason.substringBefore(':').take(24).ifBlank { "unknown" }
         val reqBody = objectMapper.writeValueAsString(mapOf("tags" to normalizedTags))
         val request =
             HttpRequest
@@ -162,7 +166,10 @@ class CdnCachePurgeService(
         runCatching {
             httpClient.send(request, HttpResponse.BodyHandlers.discarding())
         }.onSuccess { response ->
+            val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
+            meterRegistry?.timer("cdn.purge.duration")?.record(elapsedMs, TimeUnit.MILLISECONDS)
             if (response.statusCode() >= 400) {
+                meterRegistry?.counter("cdn.purge.result", "status", "non_success", "reason", reasonBucket)?.increment()
                 log.warn(
                     "cdn_cache_purge_non_success reason={} status={} tags={}",
                     reason,
@@ -170,6 +177,7 @@ class CdnCachePurgeService(
                     normalizedTags.joinToString(","),
                 )
             } else {
+                meterRegistry?.counter("cdn.purge.result", "status", "success", "reason", reasonBucket)?.increment()
                 log.info(
                     "cdn_cache_purge_ok reason={} status={} tags={}",
                     reason,
@@ -178,6 +186,9 @@ class CdnCachePurgeService(
                 )
             }
         }.onFailure { exception ->
+            val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
+            meterRegistry?.timer("cdn.purge.duration")?.record(elapsedMs, TimeUnit.MILLISECONDS)
+            meterRegistry?.counter("cdn.purge.result", "status", "failed", "reason", reasonBucket)?.increment()
             log.warn(
                 "cdn_cache_purge_failed reason={} tags={}",
                 reason,

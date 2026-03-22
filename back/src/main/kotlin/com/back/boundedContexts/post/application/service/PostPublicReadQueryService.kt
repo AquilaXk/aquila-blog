@@ -120,12 +120,17 @@ class PostPublicReadQueryService(
             "page=$page size=$pageSize sort=${sort.name} kw=${kw.trim().take(80)} tag=${tag.trim().take(80)}",
         ) {
             postReadBulkheadService.withExplorePermit {
+                val normalizedKw = kw.trim()
                 val normalizedTag = tag.trim()
                 val postPage =
                     if (normalizedTag.isBlank()) {
-                        postUseCase.findPagedByKw(kw, sort, page, pageSize)
+                        if (normalizedKw.isBlank() && sort == PostSearchSortType1.CREATED_AT) {
+                            postUseCase.findRecommendedExplorePage(page, pageSize)
+                        } else {
+                            postUseCase.findPagedByKw(normalizedKw, sort, page, pageSize)
+                        }
                     } else {
-                        postUseCase.findPagedByKwAndTag(kw, normalizedTag, sort, page, pageSize)
+                        postUseCase.findPagedByKwAndTag(normalizedKw, normalizedTag, sort, page, pageSize)
                     }
                 toFeedPostDtoPage(postPage)
             }

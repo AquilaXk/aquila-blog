@@ -24,6 +24,26 @@ BASE_URL="https://staging-api.example.com" k6 run perf/k6/post-read-load.js
 
 현재 스크립트는 scenario별 stage를 코드에 고정한 형태라, 부하 강도 조정 시 stage 값을 직접 수정하는 방식을 권장합니다.
 
+## 1-1) Chaos smoke (장애 주입 시 read 경로 회복력 점검)
+
+```bash
+k6 run perf/k6/post-read-chaos-smoke.js
+```
+
+- 기본 대상: `https://api.aquilaxk.site`
+- 핵심 검증:
+  - `feed/explore/detail` 2xx/3xx 성공률
+  - 경로별 p95(`feed/explore<2.5s`, `detail<1.8s`)
+- 선택 장애 주입:
+
+```bash
+BASE_URL="https://api.aquilaxk.site" \
+CHAOS_FAILURE_PATH="/post/api/v1/posts/feed?page=99999&pageSize=1000" \
+k6 run perf/k6/post-read-chaos-smoke.js
+```
+
+- `CHAOS_FAILURE_PATH`는 일부러 실패를 유도할 경로를 지정하고, 주 read 경로 성공률이 유지되는지 확인합니다.
+
 ## 2) 확인할 핵심 지표
 
 - `post_feed_duration_ms` p95

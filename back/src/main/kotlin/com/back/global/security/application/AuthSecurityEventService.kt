@@ -1,11 +1,9 @@
 package com.back.global.security.application
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.global.security.adapter.persistence.AuthSecurityEventRepository
+import com.back.global.security.application.port.output.AuthSecurityEventStore
 import com.back.global.security.domain.AuthSecurityEventType
 import com.back.global.security.model.AuthSecurityEvent
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
@@ -29,7 +27,7 @@ data class AuthSecurityEventDto(
  */
 @Service
 class AuthSecurityEventService(
-    private val authSecurityEventRepository: AuthSecurityEventRepository,
+    private val authSecurityEventStore: AuthSecurityEventStore,
 ) {
     /**
      * 로그인 성공 시 적용된 정책값을 운영 관측용 이벤트로 남깁니다.
@@ -41,7 +39,7 @@ class AuthSecurityEventService(
         loginIdentifier: String,
         requestPath: String,
     ) {
-        authSecurityEventRepository.save(
+        authSecurityEventStore.save(
             AuthSecurityEvent(
                 eventType = AuthSecurityEventType.LOGIN_POLICY_APPLIED,
                 memberId = member.id,
@@ -69,7 +67,7 @@ class AuthSecurityEventService(
         requestPath: String,
         reason: String,
     ) {
-        authSecurityEventRepository.save(
+        authSecurityEventStore.save(
             AuthSecurityEvent(
                 eventType = AuthSecurityEventType.IP_SECURITY_MISMATCH_BLOCKED,
                 memberId = memberId,
@@ -85,15 +83,7 @@ class AuthSecurityEventService(
 
     @Transactional(readOnly = true)
     fun getRecent(limit: Int): List<AuthSecurityEventDto> {
-        val normalizedLimit = limit.coerceIn(1, 100)
-        val pageable =
-            PageRequest.of(
-                0,
-                normalizedLimit,
-                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")),
-            )
-
-        return authSecurityEventRepository.findAll(pageable).content.map { it.toDto() }
+        return authSecurityEventStore.findRecent(limit).map { it.toDto() }
     }
 
     private fun AuthSecurityEvent.toDto(): AuthSecurityEventDto =

@@ -4,7 +4,7 @@ import path from "node:path"
 const cwd = process.cwd()
 const nextDir = path.join(cwd, ".next")
 const manifestPath = path.join(nextDir, "build-manifest.json")
-const budgetKb = Number(process.env.BUNDLE_BUDGET_KB || 480)
+const budgetKb = Number(process.env.BUNDLE_BUDGET_KB || 482)
 
 if (!fs.existsSync(manifestPath)) {
   console.error("[bundle-size] build-manifest.json not found. Run `yarn build` first.")

@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 
-const adminIdentifier =
-  process.env.E2E_ADMIN_EMAIL?.trim() || process.env.E2E_ADMIN_USERNAME?.trim() || ""
+const adminIdentifier = process.env.E2E_ADMIN_EMAIL?.trim() || ""
 const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
 const hasLiveCredentials = Boolean(adminIdentifier && adminPassword)
 const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
@@ -153,7 +152,7 @@ const loginThroughUi = async (page: Page, loginId: string, password: string) => 
 
     const loginError = page
       .locator("main")
-      .getByText(/로그인에 실패|이메일\(또는 아이디\)|로그인 시도가 너무 많습니다|서버 오류/i)
+      .getByText(/로그인에 실패|이메일 또는 비밀번호|로그인 시도가 너무 많습니다|서버 오류/i)
       .first()
 
     if (await loginError.isVisible().catch(() => false)) {
@@ -173,7 +172,7 @@ const loginThroughUi = async (page: Page, loginId: string, password: string) => 
 }
 
 test.describe("live production e2e", () => {
-  test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL(or E2E_ADMIN_USERNAME) / E2E_ADMIN_PASSWORD is required")
+  test.skip(!hasLiveCredentials, "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD is required")
   test.setTimeout(120_000)
 
   test("비로그인 사용자는 /admin 접근 시 로그인 페이지로 이동한다", async ({ page }) => {

@@ -16,7 +16,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
   const imageSrc =
     adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
-  const displayName = adminProfile?.username || CONFIG.profile.name
+  const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
 

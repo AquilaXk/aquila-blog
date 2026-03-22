@@ -243,7 +243,7 @@ const mapPostDto = (post: ApiPostDto): TPost => {
     author: [
       {
         id: String(post.authorId),
-        name: post.authorUsername || post.authorName,
+        name: post.authorName || post.authorUsername || "익명",
         profile_photo: authorProfileImage,
       },
     ],

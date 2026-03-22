@@ -124,7 +124,7 @@ GitHub Actions 기준 필수값:
 - `HOME_SERVER_ENV`
 - `CI_DB_PASSWORD`
 - `CI_REDIS_PASSWORD`
-- `E2E_ADMIN_USERNAME`
+- `E2E_ADMIN_EMAIL`
 - `E2E_ADMIN_PASSWORD`
 
 선택값:
@@ -133,7 +133,7 @@ GitHub Actions 기준 필수값:
 - `HOME_KNOWN_HOSTS`
 - `HOME_GHCR_USERNAME`
 - `HOME_GHCR_TOKEN`
-- `E2E_LIVE_ADMIN_USERNAME`
+- `E2E_LIVE_ADMIN_EMAIL`
 - `E2E_LIVE_ADMIN_PASSWORD`
 
 회원가입 이메일 인증을 실제로 쓰려면 아래 값도 필요하다.
@@ -156,8 +156,8 @@ GitHub Actions 기준 필수값:
 | --- | --- | --- |
 | `HOME_SERVER_ENV` | 홈서버 `.env.prod` 생성 | 운영 환경변수 단일 원본 |
 | `CI_DB_PASSWORD`, `CI_REDIS_PASSWORD` | `deploy.yml` / `ci.yml` test job | Gradle이 자동으로 올리는 test infra와 Spring test profile 비밀번호 정합성 유지 |
-| `E2E_LIVE_ADMIN_USERNAME`, `E2E_LIVE_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 라이브 E2E 전용 계정 자격증명(최우선 사용) |
-| `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 배포 후 운영 도메인 실연동 smoke 검증 |
+| `E2E_LIVE_ADMIN_EMAIL`, `E2E_LIVE_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 라이브 E2E 전용 계정 자격증명(최우선 사용) |
+| `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD` | `deploy.yml` frontLiveE2E | 배포 후 운영 도메인 실연동 smoke 검증 |
 | `TS_OAUTH_CLIENT_ID` | GitHub Actions | Tailscale OAuth client ID |
 | `TS_OAUTH_SECRET` | GitHub Actions | Tailscale OAuth secret |
 | `HOME_SSH_KEY` | GitHub Actions | 서버 SSH 접속 |
@@ -167,7 +167,7 @@ GitHub Actions 기준 필수값:
 ## Live E2E 계정/데이터 리셋 정책
 
 - 라이브 E2E는 운영 관리자 개인 계정 대신 전용 계정(`E2E_LIVE_ADMIN_*`)을 기본값으로 사용한다.
-- 전용 계정이 비어 있으면 `CUSTOM__E2E__ADMIN__*` → `CUSTOM__ADMIN__*` → `E2E_ADMIN_*` 순서로 fallback 한다.
+- 전용 계정이 비어 있으면 `CUSTOM__E2E__ADMIN__*` → `CUSTOM__ADMIN__*` → `E2E_ADMIN_*` 순서로 fallback 한다. (`EMAIL` 기준)
 - 라이브 E2E 시나리오는 최소 1개 UI 로그인 경로를 유지하고, 나머지 운영 플로우 검증은 API 로그인 기반으로 안정성을 확보한다.
 - 라이브 E2E 브라우저 매트릭스는 최소 `Chromium + WebKit` 2종을 유지한다.
 - 전용 계정 데이터는 테스트 전용 식별값(예: 제목 prefix, 태그 prefix)을 사용해 운영 데이터와 분리한다.

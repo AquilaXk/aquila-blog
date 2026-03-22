@@ -761,9 +761,9 @@ jobs:
       E2E_API_BASE_URL_OVERRIDE: ${{ secrets.CUSTOM_PROD_BACKURL || vars.CUSTOM_PROD_BACKURL || '' }}
       PLAYWRIGHT_USE_WEBSERVER: "false"
       HOME_SERVER_ENV: ${{ secrets.HOME_SERVER_ENV }}
-      E2E_LIVE_ADMIN_USERNAME: ${{ secrets.E2E_LIVE_ADMIN_USERNAME || '' }}
+      E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL || '' }}
       E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD || '' }}
-      E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME || '' }}
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL || '' }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD || '' }}
 
     steps:
@@ -882,32 +882,32 @@ jobs:
           echo "Resolved live e2e api base: ${api_base_url}"
 
           # 라이브 E2E 전용 계정을 우선 사용하고, 없으면 운영 관리자 계정으로 fallback 한다.
-          resolved_admin_username="${E2E_LIVE_ADMIN_USERNAME:-}"
+          resolved_admin_email="${E2E_LIVE_ADMIN_EMAIL:-}"
           resolved_admin_password="${E2E_LIVE_ADMIN_PASSWORD:-}"
 
-          if [ -z "${resolved_admin_username}" ]; then
-            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__USERNAME")"
+          if [ -z "${resolved_admin_email}" ]; then
+            resolved_admin_email="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__EMAIL")"
           fi
           if [ -z "${resolved_admin_password}" ]; then
             resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__E2E__ADMIN__PASSWORD")"
           fi
 
-          if [ -z "${resolved_admin_username}" ]; then
-            resolved_admin_username="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__USERNAME")"
+          if [ -z "${resolved_admin_email}" ]; then
+            resolved_admin_email="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__EMAIL")"
           fi
           if [ -z "${resolved_admin_password}" ]; then
             resolved_admin_password="$(extract_admin_from_home_server_env "CUSTOM__ADMIN__PASSWORD")"
           fi
 
-          if [ -z "${resolved_admin_username}" ]; then
-            resolved_admin_username="${E2E_ADMIN_USERNAME:-}"
+          if [ -z "${resolved_admin_email}" ]; then
+            resolved_admin_email="${E2E_ADMIN_EMAIL:-}"
           fi
           if [ -z "${resolved_admin_password}" ]; then
             resolved_admin_password="${E2E_ADMIN_PASSWORD:-}"
           fi
 
-          if [ -n "${resolved_admin_username}" ]; then
-            echo "E2E_ADMIN_USERNAME=${resolved_admin_username}" >> "$GITHUB_ENV"
+          if [ -n "${resolved_admin_email}" ]; then
+            echo "E2E_ADMIN_EMAIL=${resolved_admin_email}" >> "$GITHUB_ENV"
           fi
           if [ -n "${resolved_admin_password}" ]; then
             echo "E2E_ADMIN_PASSWORD=${resolved_admin_password}" >> "$GITHUB_ENV"
@@ -917,7 +917,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [ -n "${E2E_ADMIN_USERNAME}" ] || (echo "E2E_ADMIN_USERNAME is required" && exit 1)
+          [ -n "${E2E_ADMIN_EMAIL}" ] || (echo "E2E_ADMIN_EMAIL is required" && exit 1)
           [ -n "${E2E_ADMIN_PASSWORD}" ] || (echo "E2E_ADMIN_PASSWORD is required" && exit 1)
 
       - name: Live e2e preflight checks (fail-fast)
@@ -975,7 +975,7 @@ jobs:
                 -H 'Content-Type: application/json' \
                 -o /dev/null \
                 -w '%{http_code}' \
-                --data "{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" \
+                --data "{\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" \
                 "${api_base}/member/api/v1/auth/login" || true
             )"
             echo "[preflight] api-login attempt=${attempt} status=${code}"
@@ -1031,7 +1031,7 @@ jobs:
             echo "[preflight-diagnostic] curl headers /member/api/v1/auth/me"
             curl "${curl_args[@]}" -D - -o /dev/null "${api_base}/member/api/v1/auth/me" || true
             echo "[preflight-diagnostic] curl headers /member/api/v1/auth/login"
-            curl "${curl_args[@]}" -X POST -H 'Content-Type: application/json' -D - -o /dev/null --data "{\"username\":\"${E2E_ADMIN_USERNAME}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" "${api_base}/member/api/v1/auth/login" || true
+            curl "${curl_args[@]}" -X POST -H 'Content-Type: application/json' -D - -o /dev/null --data "{\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" "${api_base}/member/api/v1/auth/login" || true
             exit 1
           fi
 

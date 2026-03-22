@@ -19,8 +19,6 @@ class ProdConfigGuard(
     private val frontUrl: String,
     @param:Value("\${custom.site.backUrl:}")
     private val backUrl: String,
-    @param:Value("\${custom.admin.username:}")
-    private val adminUsername: String,
     @param:Value("\${custom.admin.email:}")
     private val adminEmail: String,
     @param:Value("\${custom.admin.password:}")
@@ -36,9 +34,7 @@ class ProdConfigGuard(
                 if (cookieDomain.isBlank()) add("custom.site.cookieDomain")
                 if (frontUrl.isBlank()) add("custom.site.frontUrl")
                 if (backUrl.isBlank()) add("custom.site.backUrl")
-                if (adminUsername.isBlank() && adminEmail.isBlank()) {
-                    add("custom.admin.username or custom.admin.email")
-                }
+                if (adminEmail.isBlank()) add("custom.admin.email")
                 if (adminPassword.isBlank()) add("custom.admin.password")
             }
 

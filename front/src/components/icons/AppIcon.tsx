@@ -22,6 +22,8 @@ export type IconName =
   | "message"
   | "check-circle"
   | "close"
+  | "eye"
+  | "eye-off"
   | "kakao"
   | "laptop"
   | "spark"
@@ -197,6 +199,20 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
       return (
         <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
           <path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" strokeLinecap="round" />
+        </svg>
+      )
+    case "eye":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M2.5 12s3.8-6 9.5-6 9.5 6 9.5 6-3.8 6-9.5 6-9.5-6-9.5-6Z" strokeLinejoin="round" />
+          <circle cx="12" cy="12" r="2.6" />
+        </svg>
+      )
+    case "eye-off":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <path d="M3.5 3.5 20.5 20.5" strokeLinecap="round" />
+          <path d="M10.9 6.1c.4-.06.73-.1 1.1-.1 5.7 0 9.5 6 9.5 6a16.3 16.3 0 0 1-3.7 4.1M14.6 14.6A3.7 3.7 0 0 1 9.4 9.4M6.3 17.1A16.3 16.3 0 0 1 2.5 12s1.4-2.2 3.8-4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case "kakao":

@@ -1,4 +1,5 @@
-import { FormEvent } from "react"
+import { FormEvent, useMemo, useState } from "react"
+import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 
 type Props = {
@@ -20,19 +21,38 @@ const AuthEntrySignupPanel = ({
   onSignupEmailChange,
   onSwitchToLogin,
 }: Props) => {
+  const [emailFocused, setEmailFocused] = useState(false)
+  const emailActive = useMemo(() => emailFocused || signupEmail.length > 0, [emailFocused, signupEmail])
+
   return (
     <>
       <form className="loginForm" onSubmit={onSubmit}>
-        <label htmlFor="auth-entry-signup-email">이메일로 회원가입</label>
-        <div className="inlineField">
+        <div className={`naverField ${emailActive ? "isActive" : ""}`}>
+          <label className="naverFieldLabel" htmlFor="auth-entry-signup-email">
+            이메일
+          </label>
           <input
+            className="naverFieldInput"
             id="auth-entry-signup-email"
             value={signupEmail}
             onChange={(event) => onSignupEmailChange(event.target.value)}
-            placeholder="이메일을 입력하세요."
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
+            placeholder={emailActive ? "" : "이메일"}
             autoComplete="email"
             disabled={signupLoading}
           />
+          {signupEmail.length > 0 && (
+            <button
+              type="button"
+              className="fieldGhostButton"
+              aria-label="이메일 입력 지우기"
+              onClick={() => onSignupEmailChange("")}
+              disabled={signupLoading}
+            >
+              <AppIcon name="close" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         {signupError && <p className="inlineError">{signupError}</p>}

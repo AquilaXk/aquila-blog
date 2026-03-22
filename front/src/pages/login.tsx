@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
+import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -50,6 +51,10 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [loginIdFocused, setLoginIdFocused] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
+  const [keepSignedIn, setKeepSignedIn] = useState(true)
+  const [ipSecurityOn, setIpSecurityOn] = useState(false)
 
   useEffect(() => {
     if (!loginIdPrefill) return
@@ -59,6 +64,8 @@ const LoginPage = () => {
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)
   }, [next])
+  const loginIdActive = useMemo(() => loginIdFocused || email.length > 0, [email, loginIdFocused])
+  const passwordActive = useMemo(() => passwordFocused || password.length > 0, [password, passwordFocused])
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -105,8 +112,8 @@ const LoginPage = () => {
       if (shouldNavigate && router.asPath !== next) {
         await replaceRoute(router, next)
       }
-    } catch (error) {
-      setError(toAuthErrorMessage("login", error, "로그인에 실패했습니다."))
+    } catch (authError) {
+      setError(toAuthErrorMessage("login", authError, "로그인에 실패했습니다."))
     } finally {
       setLoading(false)
     }
@@ -116,10 +123,10 @@ const LoginPage = () => {
     <AuthShell
       activeTab="login"
       title="로그인"
-      subtitle="계정 정보를 입력하세요."
+      subtitle="계정으로 계속하세요."
       eyebrow="Access Portal"
       heroTitle="로그인"
-      heroDescription={next !== "/" ? `로그인 후 ${next}로 돌아갑니다.` : "로그인 후 이전 흐름으로 돌아갑니다."}
+      heroDescription="이메일과 비밀번호를 입력해 접속하세요."
       footer={
         <FooterText>
           계정이 없으면 <Link href={toSignupPath(next)}>회원가입</Link>
@@ -129,43 +136,69 @@ const LoginPage = () => {
       signupHref={toSignupPath(next)}
     >
       <form onSubmit={onSubmit}>
-        <Field>
-          <FieldTop>
-            <Label htmlFor="email">이메일</Label>
-            <FieldHint>로그인 식별자</FieldHint>
-          </FieldTop>
-          <Input
+        <NaverField data-active={loginIdActive}>
+          <NaverFieldLabel htmlFor="email" data-active={loginIdActive ? "true" : "false"}>
+            이메일
+          </NaverFieldLabel>
+          <NaverInput
             id="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="이메일을 입력하세요"
+            onChange={(event) => setEmail(event.target.value)}
+            onFocus={() => setLoginIdFocused(true)}
+            onBlur={() => setLoginIdFocused(false)}
+            placeholder=""
             autoComplete="email"
           />
-        </Field>
+          {email.length > 0 && (
+            <GhostIconButton type="button" aria-label="아이디 입력 지우기" onClick={() => setEmail("")}>
+              <AppIcon name="close" />
+            </GhostIconButton>
+          )}
+        </NaverField>
 
-        <Field>
-          <FieldTop>
-            <Label htmlFor="password">비밀번호</Label>
-            <FieldHint>계정 비밀번호</FieldHint>
-          </FieldTop>
-          <PasswordRow>
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호를 입력하세요"
-              autoComplete="current-password"
-            />
-            <GhostButton
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label="비밀번호 표시 전환"
-            >
-              {showPassword ? "숨기기" : "표시"}
-            </GhostButton>
-          </PasswordRow>
-        </Field>
+        <NaverField data-active={passwordActive}>
+          <NaverFieldLabel htmlFor="password" data-active={passwordActive ? "true" : "false"}>
+            비밀번호
+          </NaverFieldLabel>
+          <NaverInput
+            id="password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+            placeholder=""
+            autoComplete="current-password"
+            data-password="true"
+          />
+          <PasswordActions>
+            {password.length > 0 && (
+              <GhostIconButton type="button" aria-label="비밀번호 입력 지우기" onClick={() => setPassword("")}>
+                <AppIcon name="close" />
+              </GhostIconButton>
+            )}
+            <GhostIconButton className="visibilityToggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label="비밀번호 표시 전환">
+              <AppIcon name={showPassword ? "eye-off" : "eye"} />
+            </GhostIconButton>
+          </PasswordActions>
+        </NaverField>
+
+        <LoginStateRow>
+          <KeepSignedInButton type="button" data-on={keepSignedIn} onClick={() => setKeepSignedIn((value) => !value)}>
+            <span className="checkIcon" aria-hidden="true">
+              <AppIcon name="check-circle" />
+            </span>
+            <span>로그인 상태 유지</span>
+          </KeepSignedInButton>
+
+          <IpSecurityToggle type="button" data-on={ipSecurityOn} onClick={() => setIpSecurityOn((value) => !value)}>
+            <span className="label">IP보안</span>
+            <span className="switch" aria-hidden="true">
+              <span className="thumb" />
+            </span>
+            <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
+          </IpSecurityToggle>
+        </LoginStateRow>
 
         {error ? (
           <ErrorText>{error}</ErrorText>
@@ -173,9 +206,7 @@ const LoginPage = () => {
           <SuccessText>
             회원가입이 완료되었습니다. <strong>{loginIdPrefill || "인증한 이메일"}</strong>로 로그인하면 됩니다.
           </SuccessText>
-        ) : (
-          <InfoText>로그인 후 이전에 보던 화면으로 바로 이동합니다.</InfoText>
-        )}
+        ) : null}
 
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}
@@ -184,9 +215,7 @@ const LoginPage = () => {
         <SocialSection>
           <span>소셜 계정으로 로그인</span>
           <SocialButtonRow>
-            <SocialAuthButtons
-              items={socialItems}
-            />
+            <SocialAuthButtons items={socialItems} />
           </SocialButtonRow>
         </SocialSection>
       </form>
@@ -196,85 +225,236 @@ const LoginPage = () => {
 
 export default LoginPage
 
-const Field = styled.div`
-  display: grid;
-  gap: 0.42rem;
-`
+const NaverField = styled.div`
+  position: relative;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  min-height: 76px;
+  padding: 1.55rem 0.92rem 0.48rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
-const FieldTop = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-
-  @media (max-width: 640px) {
-    display: grid;
-    gap: 0.16rem;
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.gray7};
+    box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.1);
   }
 `
 
-const Label = styled.label`
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: ${({ theme }) => theme.colors.gray12};
+const NaverFieldLabel = styled.label`
+  position: absolute;
+  left: 0.92rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  transition: top 0.2s ease, transform 0.2s ease, font-size 0.2s ease, color 0.2s ease;
+
+  &[data-active="true"] {
+    top: 0.82rem;
+    transform: translateY(0);
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
 `
 
-const FieldHint = styled.span`
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-`
-
-const PasswordRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.5rem;
-`
-
-const Input = styled.input`
+const NaverInput = styled.input`
   width: 100%;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 12px;
-  padding: 0.78rem 0.84rem;
-  background: ${({ theme }) => theme.colors.gray1};
+  border: 0;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  min-height: 42px;
+  padding: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.3;
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.96rem;
+    font-weight: 500;
+  }
 
   &:focus {
     outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue3};
+  }
+
+  &[data-password="true"] {
+    padding-right: 5.9rem;
+  }
+`
+
+const PasswordActions = styled.div`
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+`
+
+const GhostIconButton = styled.button`
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.16s ease;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+  }
+
+  &.visibilityToggle {
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    width: 32px;
+    min-width: 32px;
+  }
+
+  svg {
+    font-size: 0.74rem;
+  }
+
+  &.visibilityToggle svg {
+    font-size: 1.12rem;
+  }
+`
+
+const LoginStateRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  margin-top: 0.12rem;
+  margin-bottom: 0.06rem;
+
+  @media (max-width: 640px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.42rem;
+  }
+`
+
+const KeepSignedInButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.46rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.9rem;
+  font-weight: 650;
+  min-height: 30px;
+
+  .checkIcon {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: ${({ theme }) => theme.colors.gray9};
+    transition: color 0.2s ease, transform 0.2s ease;
+  }
+
+  .checkIcon svg {
+    font-size: 1.45rem;
+  }
+
+  &[data-on="true"] .checkIcon {
+    color: ${({ theme }) => theme.colors.gray11};
+    transform: scale(1.03);
+  }
+`
+
+const IpSecurityToggle = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.9rem;
+  font-weight: 700;
+  min-height: 30px;
+
+  @media (max-width: 640px) {
+    align-self: flex-end;
+  }
+
+  .switch {
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray5};
+    padding: 2px;
+    display: inline-flex;
+    align-items: center;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray1};
+    transition: transform 0.22s ease;
+    transform: translateX(0);
+  }
+
+  .state {
+    width: 24px;
+    text-align: right;
+    color: ${({ theme }) => theme.colors.gray10};
+    transition: color 0.2s ease;
+  }
+
+  &[data-on="true"] .switch {
+    background: rgba(18, 184, 134, 0.44);
+    border-color: rgba(18, 184, 134, 0.76);
+  }
+
+  &[data-on="true"] .thumb {
+    transform: translateX(18px);
+  }
+
+  &[data-on="true"] .state {
+    color: ${({ theme }) => theme.colors.green10};
   }
 `
 
 const PrimaryButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.blue8};
+  border: 0;
   border-radius: 12px;
   padding: 0.84rem 1rem;
-  background: ${({ theme }) => theme.colors.blue9};
+  background: #12b886;
   color: #fff;
   font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
+  transition: filter 0.16s ease;
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.blue10};
-    background: ${({ theme }) => theme.colors.blue10};
+    filter: brightness(1.06);
   }
 
   &:disabled {
     opacity: 0.68;
     cursor: not-allowed;
   }
-`
-
-const GhostButton = styled.button`
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 12px;
-  padding: 0.78rem 0.84rem;
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
-  cursor: pointer;
-  white-space: nowrap;
 `
 
 const ErrorText = styled.p`
@@ -285,17 +465,6 @@ const ErrorText = styled.p`
   color: ${({ theme }) => theme.colors.red11};
   padding: 0.82rem 0.9rem;
   font-size: 0.9rem;
-  line-height: 1.55;
-`
-
-const InfoText = styled.p`
-  margin: 0;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.82rem 0.9rem;
-  font-size: 0.87rem;
   line-height: 1.55;
 `
 

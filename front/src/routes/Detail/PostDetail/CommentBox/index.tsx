@@ -317,7 +317,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   }
 
   const renderComment = (comment: CommentNode, isReply = false) => {
-    const displayName = comment.authorName || comment.authorUsername || "익명"
+    const displayName = comment.authorName || "익명"
     const createdLabel = formatShortDateTime(comment.createdAt, CONFIG.lang)
     const edited = comment.modifiedAt !== comment.createdAt
     const isOwner = me?.id === comment.authorId

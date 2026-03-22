@@ -1,6 +1,7 @@
 package com.back.perf
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.application.service.MemberApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.support.SeededSpringBootTestSupport
 import jakarta.persistence.EntityManagerFactory
@@ -38,6 +39,9 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
 
     @Autowired
     private lateinit var actorApplicationService: ActorApplicationService
+
+    @Autowired
+    private lateinit var memberApplicationService: MemberApplicationService
 
     @Autowired
     private lateinit var postFacade: PostApplicationService
@@ -119,6 +123,13 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
 
     @Test
     fun `auth login query count sanity`() {
+        memberApplicationService.join(
+            username = "perf-login-user",
+            password = "Abcd1234!",
+            nickname = "퍼프로그인",
+            profileImgUrl = null,
+            email = "perf-login-user@example.com",
+        )
         statistics.clear()
 
         mvc
@@ -127,8 +138,8 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
                 content =
                     """
                     {
-                        "username": "user1",
-                        "password": "1234"
+                        "email": "perf-login-user@example.com",
+                        "password": "Abcd1234!"
                     }
                     """.trimIndent()
             }.andExpect {

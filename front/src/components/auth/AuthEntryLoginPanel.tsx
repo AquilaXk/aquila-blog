@@ -1,4 +1,5 @@
-import { FormEvent } from "react"
+import { FormEvent, useMemo, useState } from "react"
+import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
 
 type Props = {
@@ -28,38 +29,110 @@ const AuthEntryLoginPanel = ({
   onTogglePassword,
   onSwitchToSignup,
 }: Props) => {
+  const [emailFocused, setEmailFocused] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
+  const [keepSignedIn, setKeepSignedIn] = useState(true)
+  const [ipSecurityOn, setIpSecurityOn] = useState(false)
+
+  const emailActive = useMemo(() => emailFocused || email.length > 0, [email, emailFocused])
+  const passwordActive = useMemo(() => passwordFocused || password.length > 0, [password, passwordFocused])
+
   return (
     <>
       <form className="loginForm" onSubmit={onSubmit}>
-        <label htmlFor="auth-entry-email">이메일로 로그인</label>
-        <div className="inlineField">
+        <div className={`naverField ${emailActive ? "isActive" : ""}`}>
+          <label className="naverFieldLabel" htmlFor="auth-entry-email">
+            이메일
+          </label>
           <input
+            className="naverFieldInput"
             id="auth-entry-email"
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
-            placeholder="이메일을 입력하세요."
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
+            placeholder={emailActive ? "" : "이메일"}
             autoComplete="email"
             disabled={loading}
           />
+          {email.length > 0 && (
+            <button
+              type="button"
+              className="fieldGhostButton"
+              aria-label="아이디 입력 지우기"
+              onClick={() => onEmailChange("")}
+              disabled={loading}
+            >
+              <AppIcon name="close" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
-        <div className="inlineField passwordField">
+        <div className={`naverField passwordField ${passwordActive ? "isActive" : ""}`}>
+          <label className="naverFieldLabel" htmlFor="auth-entry-password">
+            비밀번호
+          </label>
           <input
+            className="naverFieldInput"
             id="auth-entry-password"
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(event) => onPasswordChange(event.target.value)}
-            placeholder="비밀번호를 입력하세요."
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+            placeholder={passwordActive ? "" : "비밀번호"}
             autoComplete="current-password"
             disabled={loading}
           />
+
+          <div className="passwordActions">
+            {password.length > 0 && (
+              <button
+                type="button"
+                className="fieldGhostButton"
+                aria-label="비밀번호 입력 지우기"
+                onClick={() => onPasswordChange("")}
+                disabled={loading}
+              >
+                <AppIcon name="close" aria-hidden="true" />
+              </button>
+            )}
+            <button
+              type="button"
+              className="fieldGhostButton visibilityToggle"
+              onClick={onTogglePassword}
+              aria-label="비밀번호 표시 전환"
+              disabled={loading}
+            >
+              <AppIcon name={showPassword ? "eye-off" : "eye"} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="loginStateRow">
           <button
             type="button"
-            className="passwordToggle"
-            onClick={onTogglePassword}
-            disabled={loading}
+            className={`keepSignedInButton ${keepSignedIn ? "isOn" : ""}`}
+            onClick={() => setKeepSignedIn((value) => !value)}
+            aria-pressed={keepSignedIn}
           >
-            {showPassword ? "숨기기" : "보기"}
+            <span className="checkBadge" aria-hidden="true">
+              <AppIcon name="check-circle" />
+            </span>
+            <span>로그인 상태 유지</span>
+          </button>
+
+          <button
+            type="button"
+            className={`ipSecurityToggle ${ipSecurityOn ? "isOn" : ""}`}
+            onClick={() => setIpSecurityOn((value) => !value)}
+            aria-pressed={ipSecurityOn}
+          >
+            <span className="label">IP보안</span>
+            <span className="switch" aria-hidden="true">
+              <span className="thumb" />
+            </span>
+            <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
           </button>
         </div>
 

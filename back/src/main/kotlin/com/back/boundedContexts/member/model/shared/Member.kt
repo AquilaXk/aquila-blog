@@ -114,9 +114,10 @@ class Member(
         get() {
             val configuredAdminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
             val memberEmail = email?.trim()?.lowercase(Locale.ROOT)
-            if (configuredAdminEmail.isNotBlank() && memberEmail == configuredAdminEmail) return true
+            if (configuredAdminEmail.isNotBlank()) return memberEmail == configuredAdminEmail
 
-            return username == AppConfig.adminUsernameOrBlank
+            val configuredAdminUsername = AppConfig.adminUsernameOrBlank.trim()
+            return configuredAdminUsername.isNotBlank() && username == configuredAdminUsername
         }
 
     fun modify(

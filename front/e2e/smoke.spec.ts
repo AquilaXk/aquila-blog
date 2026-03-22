@@ -519,7 +519,7 @@ test("로그인 실패 메시지가 상태코드 기준으로 표준화된다", 
   await page.locator("#password").fill("wrong-password")
   await page.getByRole("button", { name: "로그인", exact: true }).click()
 
-  await expect(page.getByText("이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.")).toBeVisible()
+  await expect(page.getByText("이메일 또는 비밀번호가 올바르지 않습니다.")).toBeVisible()
 })
 
 test("회원가입 메일 시작 실패 메시지가 표준화된다", async ({ page }) => {

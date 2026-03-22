@@ -76,7 +76,7 @@ const AuthEntryModal: React.FC<Props> = ({
   onClose,
   nextPath,
   title = "로그인",
-  description = "로그인 후 현재 보던 흐름으로 바로 돌아옵니다.",
+  description = "",
 }) => {
   const { refresh, setMe } = useAuthSession()
   const [view, setView] = useState<AuthModalView>("login")
@@ -202,7 +202,7 @@ const AuthEntryModal: React.FC<Props> = ({
       : view === "signup"
         ? {
             heading: "회원가입",
-            body: "먼저 이메일을 확인한 뒤 닉네임과 비밀번호를 등록합니다.",
+            body: "",
           }
         : {
             heading: "메일을 보냈어요",
@@ -223,7 +223,7 @@ const AuthEntryModal: React.FC<Props> = ({
           </button>
 
           <h4 id="auth-entry-modal-title">{currentContent.heading}</h4>
-          <p className="formDescription">{currentContent.body}</p>
+          {currentContent.body ? <p className="formDescription">{currentContent.body}</p> : null}
 
           {view === "login" && (
             <LoginPanel
@@ -344,14 +344,8 @@ const Modal = styled.div`
 
   .loginForm {
     display: grid;
-    gap: 0.62rem;
+    gap: 0.72rem;
     margin-bottom: 1rem;
-
-    label {
-      color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.83rem;
-      font-weight: 700;
-    }
   }
 
   .panelFallback {
@@ -383,32 +377,56 @@ const Modal = styled.div`
     margin-top: 0.2rem;
   }
 
-  .inlineField,
-  .passwordField {
-    display: grid;
-    grid-template-columns: 1fr;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: ${({ theme }) => `${theme.variables.ui.field.radius}px`};
-    background: ${({ theme }) => theme.colors.gray3};
-    overflow: hidden;
-  }
-
-  .passwordField {
+  .naverField {
     position: relative;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 14px;
+    background: ${({ theme }) => theme.colors.gray2};
+    min-height: 76px;
+    padding: 1.55rem 0.92rem 0.48rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
-  input {
+  .naverField.isActive {
+    border-color: ${({ theme }) => theme.colors.gray7};
+    box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.1);
+  }
+
+  .naverFieldLabel {
+    position: absolute;
+    left: 0.92rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    pointer-events: none;
+    transition: top 0.2s ease, transform 0.2s ease, font-size 0.2s ease, color 0.2s ease;
+  }
+
+  .naverField.isActive .naverFieldLabel {
+    top: 0.82rem;
+    transform: translateY(0);
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+
+  .naverFieldInput {
     width: 100%;
     border: 0;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
-    min-height: ${({ theme }) => `${theme.variables.ui.field.minHeight}px`};
-    padding: 0.84rem 0.92rem;
-    font-size: ${({ theme }) => `${theme.variables.ui.field.fontSize}rem`};
-    line-height: 1.45;
+    min-height: 42px;
+    padding: 0;
+    font-size: 1.05rem;
+    font-weight: 650;
+    line-height: 1.3;
 
     &::placeholder {
       color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.96rem;
+      font-weight: 500;
     }
 
     &:focus {
@@ -416,24 +434,29 @@ const Modal = styled.div`
     }
   }
 
-  .passwordField input {
-    padding-right: 4.2rem;
+  .passwordField .naverFieldInput {
+    padding-right: 5.9rem;
   }
 
-  .passwordToggle {
+  .fieldGhostButton {
     position: absolute;
     top: 50%;
-    right: 0.55rem;
+    right: 0.5rem;
     transform: translateY(-50%);
-    min-width: auto;
+    min-width: 30px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
-    padding: 0.3rem 0.56rem;
+    border-radius: 999px;
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-    font-weight: 700;
+    font-size: 0.72rem;
+    font-weight: 600;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: filter 0.16s ease;
 
     &:hover:not(:disabled) {
@@ -443,6 +466,122 @@ const Modal = styled.div`
     &:disabled {
       opacity: 0.62;
       cursor: not-allowed;
+    }
+  }
+
+  .fieldGhostButton svg {
+    font-size: 0.74rem;
+  }
+
+  .fieldGhostButton.visibilityToggle {
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    width: 32px;
+    min-width: 32px;
+  }
+
+  .fieldGhostButton.visibilityToggle svg {
+    font-size: 1.12rem;
+  }
+
+  .passwordActions {
+    position: absolute;
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .loginStateRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.9rem;
+    margin-top: 0.12rem;
+    margin-bottom: 0.06rem;
+  }
+
+  .keepSignedInButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.46rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.9rem;
+    font-weight: 650;
+    min-height: 30px;
+
+    .checkBadge {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: ${({ theme }) => theme.colors.gray9};
+      transition: color 0.2s ease, transform 0.2s ease;
+    }
+
+    .checkBadge svg {
+      font-size: 1.45rem;
+    }
+
+    &.isOn .checkBadge {
+      color: ${({ theme }) => theme.colors.gray11};
+      transform: scale(1.03);
+    }
+  }
+
+  .ipSecurityToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.9rem;
+    font-weight: 700;
+    min-height: 30px;
+
+    .switch {
+      width: 42px;
+      height: 24px;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray7};
+      background: ${({ theme }) => theme.colors.gray5};
+      padding: 2px;
+      display: inline-flex;
+      align-items: center;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: ${({ theme }) => theme.colors.gray1};
+      transition: transform 0.22s ease;
+      transform: translateX(0);
+    }
+
+    .state {
+      width: 24px;
+      text-align: right;
+      color: ${({ theme }) => theme.colors.gray10};
+      transition: color 0.2s ease;
+    }
+
+    &.isOn .switch {
+      background: rgba(18, 184, 134, 0.44);
+      border-color: rgba(18, 184, 134, 0.76);
+    }
+
+    &.isOn .thumb {
+      transform: translateX(18px);
+    }
+
+    &.isOn .state {
+      color: ${({ theme }) => theme.colors.green10};
     }
   }
 
@@ -590,6 +729,16 @@ const Modal = styled.div`
     .formDescription {
       margin-bottom: 0.95rem;
       font-size: 0.84rem;
+    }
+
+    .loginStateRow {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.42rem;
+    }
+
+    .ipSecurityToggle {
+      align-self: flex-end;
     }
   }
 `

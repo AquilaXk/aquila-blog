@@ -44,21 +44,9 @@ class ApiV1AuthController(
     data class MemberLoginRequest(
         @field:Size(min = 2, max = 320)
         val email: String? = null,
-        @field:Size(min = 2, max = 30)
-        val username: String? = null,
         @field:NotBlank
         @field:Size(max = 128)
         val password: String,
-    )
-
-    private enum class LoginIdentifierType {
-        EMAIL,
-        USERNAME,
-    }
-
-    private data class LoginIdentifier(
-        val type: LoginIdentifierType,
-        val value: String,
     )
 
     data class MemberLoginResBody(
@@ -75,8 +63,8 @@ class ApiV1AuthController(
         request: HttpServletRequest,
         @RequestBody @Valid reqBody: MemberLoginRequest,
     ): RsData<MemberLoginResBody> {
-        val loginIdentifier = resolveLoginIdentifier(reqBody)
-        val loginAttemptKey = loginIdentifier.value
+        val loginIdentifier = resolveLoginEmail(reqBody)
+        val loginAttemptKey = loginIdentifier
         val clientIp = extractClientIp(request)
 
         if (loginAttemptPolicyUseCase.isBlocked(loginAttemptKey, clientIp)) {
@@ -85,12 +73,12 @@ class ApiV1AuthController(
 
         val authCandidate =
             actorQueryUseCase
-                .findByLoginIdentifier(loginIdentifier)
+                .findByEmail(loginIdentifier)
                 ?.takeIf { isPasswordValid(it, reqBody.password) }
                 ?: run {
                     val blocked = loginAttemptPolicyUseCase.recordFailure(loginAttemptKey, clientIp)
                     if (blocked) throw AppException("429-1", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.")
-                    throw AppException("401-1", "이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.")
+                    throw AppException("401-1", "이메일 또는 비밀번호가 올바르지 않습니다.")
                 }
 
         val member =
@@ -141,38 +129,12 @@ class ApiV1AuthController(
         return request.remoteAddr.orEmpty()
     }
 
-    private fun resolveLoginIdentifier(reqBody: MemberLoginRequest): LoginIdentifier {
+    private fun resolveLoginEmail(reqBody: MemberLoginRequest): String {
         val trimmedEmail = reqBody.email?.trim().orEmpty()
-        val trimmedUsername = reqBody.username?.trim().orEmpty()
 
-        if (trimmedEmail.isNotBlank() && trimmedEmail.contains("@")) {
-            return LoginIdentifier(
-                type = LoginIdentifierType.EMAIL,
-                value = trimmedEmail.lowercase(Locale.ROOT),
-            )
-        }
+        if (trimmedEmail.isBlank()) throw AppException("400-1", "이메일을 입력해주세요.")
+        if (!trimmedEmail.contains("@")) throw AppException("400-2", "이메일 형식을 확인해주세요.")
 
-        if (trimmedUsername.isNotBlank()) {
-            return LoginIdentifier(
-                type = LoginIdentifierType.USERNAME,
-                value = trimmedUsername,
-            )
-        }
-
-        // 전환기 호환: 구 클라이언트가 email 필드에 username을 보낼 수 있다.
-        if (trimmedEmail.isNotBlank()) {
-            return LoginIdentifier(
-                type = LoginIdentifierType.USERNAME,
-                value = trimmedEmail,
-            )
-        }
-
-        throw AppException("400-1", "이메일(또는 아이디)을 입력해주세요.")
+        return trimmedEmail.lowercase(Locale.ROOT)
     }
-
-    private fun ActorQueryUseCase.findByLoginIdentifier(loginIdentifier: LoginIdentifier): Member? =
-        when (loginIdentifier.type) {
-            LoginIdentifierType.EMAIL -> findByEmail(loginIdentifier.value)
-            LoginIdentifierType.USERNAME -> findByUsername(loginIdentifier.value)
-        }
 }

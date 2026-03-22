@@ -50,19 +50,26 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
     inner class Login {
         @Test
         fun `로그인 요청이 성공하면 회원 정보와 인증 쿠키를 반환한다`() {
+            val member =
+                memberFacade.join(
+                    username = "login-success-user",
+                    password = "Abcd1234!",
+                    nickname = "로그인성공",
+                    profileImgUrl = null,
+                    email = "login-success-user@example.com",
+                )
+
             val resultActions =
                 mvc.post("/member/api/v1/auth/login") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
                         """
                         {
-                            "username": "user1",
-                            "password": "1234"
+                            "email": "login-success-user@example.com",
+                            "password": "Abcd1234!"
                         }
                         """.trimIndent()
                 }
-
-            val member = memberFacade.findByUsername("user1")!!
 
             resultActions.andExpect {
                 status { isOk() }
@@ -125,13 +132,21 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `로그인 요청에서 비밀번호가 틀리면 401을 반환한다`() {
+            memberFacade.join(
+                username = "wrong-password-user",
+                password = "Abcd1234!",
+                nickname = "잘못된비번",
+                profileImgUrl = null,
+                email = "wrong-password-user@example.com",
+            )
+
             mvc
                 .post("/member/api/v1/auth/login") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
                         """
                         {
-                            "username": "user1",
+                            "email": "wrong-password-user@example.com",
                             "password": "wrong-password"
                         }
                         """.trimIndent()
@@ -140,19 +155,19 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("login"))
                     jsonPath("$.resultCode") { value("401-1") }
-                    jsonPath("$.msg") { value("이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.") }
+                    jsonPath("$.msg") { value("이메일 또는 비밀번호가 올바르지 않습니다.") }
                 }
         }
 
         @Test
-        fun `로그인 요청에서 존재하지 않는 username 을 보내면 401을 반환한다`() {
+        fun `로그인 요청에서 존재하지 않는 이메일을 보내면 401을 반환한다`() {
             mvc
                 .post("/member/api/v1/auth/login") {
                     contentType = MediaType.APPLICATION_JSON
                     content =
                         """
                         {
-                            "username": "nonexistent",
+                            "email": "nonexistent@example.com",
                             "password": "1234"
                         }
                         """.trimIndent()
@@ -161,7 +176,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("login"))
                     jsonPath("$.resultCode") { value("401-1") }
-                    jsonPath("$.msg") { value("이메일(또는 아이디) 또는 비밀번호가 올바르지 않습니다.") }
+                    jsonPath("$.msg") { value("이메일 또는 비밀번호가 올바르지 않습니다.") }
                 }
         }
 
@@ -179,12 +194,39 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                 }.andExpect {
                     status { isBadRequest() }
                     jsonPath("$.resultCode") { value("400-1") }
-                    jsonPath("$.msg") { value("이메일(또는 아이디)을 입력해주세요.") }
+                    jsonPath("$.msg") { value("이메일을 입력해주세요.") }
+                }
+        }
+
+        @Test
+        fun `로그인 요청에서 이메일 형식이 아니면 400을 반환한다`() {
+            mvc
+                .post("/member/api/v1/auth/login") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "email": "admin",
+                            "password": "1234"
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isBadRequest() }
+                    jsonPath("$.resultCode") { value("400-2") }
+                    jsonPath("$.msg") { value("이메일 형식을 확인해주세요.") }
                 }
         }
 
         @Test
         fun `로그인 실패가 누적되면 429를 반환한다`() {
+            memberFacade.join(
+                username = "rate-limit-user",
+                password = "Abcd1234!",
+                nickname = "레이트리밋",
+                profileImgUrl = null,
+                email = "rate-limit-user@example.com",
+            )
+
             repeat(4) {
                 mvc
                     .post("/member/api/v1/auth/login") {
@@ -192,7 +234,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                         content =
                             """
                             {
-                                "username": "rate_limit_user",
+                                "email": "rate-limit-user@example.com",
                                 "password": "wrong-password"
                             }
                             """.trimIndent()
@@ -208,7 +250,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     content =
                         """
                         {
-                            "username": "rate_limit_user",
+                            "email": "rate-limit-user@example.com",
                             "password": "wrong-password"
                         }
                         """.trimIndent()

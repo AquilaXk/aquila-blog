@@ -231,7 +231,6 @@ const NavBar: React.FC = () => {
         onClose={() => setAuthModalOpen(false)}
         nextPath={nextPath}
         title="로그인"
-        description="로그인 후 지금 보고 있는 화면으로 바로 돌아옵니다."
       />
     </StyledWrapper>
   )

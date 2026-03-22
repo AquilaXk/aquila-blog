@@ -47,19 +47,15 @@ class MemberProdInitData(
      */
     @Transactional
     fun ensureConfiguredAdminMember() {
-        val adminUsername = AppConfig.adminUsernameOrBlank.trim()
+        val adminNickname = AppConfig.adminUsernameOrBlank.trim().ifBlank { "관리자" }
         val adminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
         val adminPassword = AppConfig.adminPasswordOrBlank
 
-        if (adminUsername.isBlank() && adminEmail.isBlank()) return
+        if (adminEmail.isBlank()) return
         if (adminPassword.isBlank()) return
+        logger.info("Configured admin nickname from custom.admin.username: {}", adminNickname)
         val existingAdmin =
-            adminEmail
-                .takeIf { it.isNotBlank() }
-                ?.let(memberUseCase::findByEmail)
-                ?: adminUsername
-                    .takeIf { it.isNotBlank() }
-                    ?.let(memberUseCase::findByUsername)
+            memberUseCase.findByEmail(adminEmail)
         if (existingAdmin != null) {
             val hasPassword = !existingAdmin.password.isNullOrBlank()
             val passwordMatchesConfigured = hasPassword && passwordEncoder.matches(adminPassword, existingAdmin.password)
@@ -89,25 +85,19 @@ class MemberProdInitData(
                     )
                 }
             }
+            if (existingAdmin.nickname != adminNickname) {
+                existingAdmin.nickname = adminNickname
+            }
             return
         }
 
         val member =
-            if (adminEmail.isNotBlank()) {
-                memberUseCase.joinWithVerifiedEmail(
-                    email = adminEmail,
-                    password = adminPassword,
-                    nickname = "관리자",
-                    profileImgUrl = null,
-                )
-            } else {
-                memberUseCase.join(
-                    username = adminUsername,
-                    password = adminPassword,
-                    nickname = "관리자",
-                    profileImgUrl = null,
-                )
-            }
+            memberUseCase.joinWithVerifiedEmail(
+                email = adminEmail,
+                password = adminPassword,
+                nickname = adminNickname,
+                profileImgUrl = null,
+            )
 
         if (member.apiKey.isBlank() || member.apiKey == member.username) {
             member.modifyApiKey(MemberPolicy.genApiKey())

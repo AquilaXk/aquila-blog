@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "next/router"
+import Link from "next/link"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import styled from "@emotion/styled"
@@ -8,8 +9,10 @@ import MarkdownRenderer from "../components/MarkdownRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { ApiError, apiFetch } from "src/apis/backend/client"
+import { getExplorePostsPage } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute, toLoginPath } from "src/libs/router"
+import { formatDate } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
@@ -32,6 +35,7 @@ type TocItem = {
 }
 
 const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
+const RELATED_POSTS_LIMIT = 4
 
 const normalizeHeadingText = (value: string): string =>
   value
@@ -111,6 +115,39 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const canDeletePost = Boolean(me?.isAdmin || data?.actorCanDelete)
   const showFloatingLike = data?.type[0] === "Post"
   const showStickyToc = tocItems.length >= 2
+  const relatedTag = useMemo(
+    () =>
+      data?.tags
+        ?.map((tag) => tag.trim())
+        .find((tag) => tag && tag.toLowerCase() !== "pinned") || "",
+    [data?.tags]
+  )
+  const relatedPostsQuery = useQuery({
+    queryKey: queryKey.postsExplore({
+      kw: "",
+      tag: relatedTag || undefined,
+      order: "desc",
+      page: 1,
+      pageSize: 10,
+    }),
+    queryFn: () =>
+      getExplorePostsPage({
+        kw: "",
+        tag: relatedTag,
+        order: "desc",
+        page: 1,
+        pageSize: 10,
+      }),
+    enabled: Boolean(relatedTag && data?.id),
+    staleTime: 300_000,
+    retry: 1,
+  })
+  const relatedPosts = useMemo(() => {
+    const currentPostId = String(data?.id || "")
+    return (relatedPostsQuery.data?.posts || [])
+      .filter((post) => String(post.id) !== currentPostId)
+      .slice(0, RELATED_POSTS_LIMIT)
+  }, [data?.id, relatedPostsQuery.data?.posts])
 
   useEffect(() => {
     if (!data) return
@@ -375,6 +412,27 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           <BodySection>
             <MarkdownRenderer content={data.content} />
           </BodySection>
+          {data.type[0] === "Post" && relatedPosts.length > 0 && (
+            <RelatedSection aria-label="연관 글">
+              <header>
+                <h2>연관 글</h2>
+                <Link href={relatedTag ? `/?tag=${encodeURIComponent(relatedTag)}` : "/"}>
+                  더 보기
+                </Link>
+              </header>
+              <ul>
+                {relatedPosts.map((post) => (
+                  <li key={post.id}>
+                    <Link href={toCanonicalPostPath(post.id)}>
+                      <strong>{post.title}</strong>
+                      {post.summary && <p>{post.summary}</p>}
+                      <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </RelatedSection>
+          )}
           {data.type[0] === "Post" && (
             <>
               <Footer />
@@ -615,5 +673,104 @@ const BodySection = styled.div`
   @media (max-width: 768px) {
     margin-top: 0.55rem;
     padding-top: 0.85rem;
+  }
+`
+
+const RelatedSection = styled.section`
+  margin-top: 0.52rem;
+  padding-top: 0.88rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  display: grid;
+  gap: 0.72rem;
+
+  > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 760;
+    line-height: 1.35;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  > header a {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-decoration: none;
+
+    &:hover {
+      color: ${({ theme }) => theme.colors.gray12};
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.48rem;
+  }
+
+  li {
+    min-width: 0;
+  }
+
+  li a {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+    padding: 0.68rem 0.74rem;
+    border-radius: 10px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    text-decoration: none;
+    transition: border-color 0.14s ease-in, background-color 0.14s ease-in;
+
+    &:hover {
+      border-color: ${({ theme }) => theme.colors.gray8};
+      background: ${({ theme }) => theme.colors.gray3};
+    }
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    line-height: 1.42;
+    font-weight: 720;
+    letter-spacing: -0.01em;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.52;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray9};
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 768px) {
+    margin-top: 0.38rem;
+    padding-top: 0.74rem;
   }
 `

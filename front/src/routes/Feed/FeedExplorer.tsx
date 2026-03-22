@@ -668,6 +668,9 @@ const FeedExplorer = () => {
   }, [])
 
   const hasFilter = Boolean(normalizedQuery || currentTag)
+  const resultCount = pinnedPosts.length + regularPosts.length
+  const hasQueryFilter = normalizedQuery.length > 0
+  const hasTagFilter = Boolean(currentTag)
 
   const handleClearFilters = useCallback(() => {
     setQ("")
@@ -701,6 +704,19 @@ const FeedExplorer = () => {
           <TagList />
         </aside>
         <section className="postColumn">
+          <FilterContextBar data-visible={hasFilter}>
+            <div className="contextMain">
+              <span className="contextLabel">피드</span>
+              <strong className="contextCount">{resultCount}개</strong>
+              {hasQueryFilter && <span className="chip">검색: {normalizedQuery}</span>}
+              {hasTagFilter && <span className="chip">태그: {currentTag}</span>}
+            </div>
+            {hasFilter && (
+              <button type="button" className="resetButton" onClick={handleClearFilters}>
+                조건 초기화
+              </button>
+            )}
+          </FilterContextBar>
           <PostList
             posts={regularPosts}
             hasFilter={hasFilter}
@@ -761,6 +777,90 @@ const FeedBody = styled.section`
       left: -216px;
       width: 184px;
       min-width: 184px;
+    }
+  }
+`
+
+const FilterContextBar = styled.div`
+  min-height: 2rem;
+  margin: 0.18rem 0 0.26rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: ${({ theme }) => theme.colors.gray10};
+
+  .contextMain {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  .contextLabel {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: ${({ theme }) => theme.colors.gray9};
+  }
+
+  .contextCount {
+    font-size: 0.84rem;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 700;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.6rem;
+    padding: 0 0.56rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 620;
+    line-height: 1;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .resetButton {
+    flex: 0 0 auto;
+    min-height: 1.9rem;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color 0.125s ease-in, color 0.125s ease-in, background-color 0.125s ease-in;
+
+    &:hover {
+      border-color: ${({ theme }) => theme.colors.gray8};
+      background: ${({ theme }) => theme.colors.gray2};
+      color: ${({ theme }) => theme.colors.gray12};
+    }
+  }
+
+  @media (max-width: 768px) {
+    margin-top: 0.14rem;
+    margin-bottom: 0.24rem;
+
+    .contextCount {
+      font-size: 0.8rem;
+    }
+
+    .chip {
+      font-size: 0.72rem;
+      min-height: 1.52rem;
     }
   }
 `

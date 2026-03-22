@@ -2,6 +2,17 @@ name: Reusable Frontend Verify
 
 on:
   workflow_call:
+    inputs:
+      openapi_source_url:
+        description: "Live backend OpenAPI endpoint URL (optional)"
+        required: false
+        type: string
+        default: ""
+      openapi_fetch_strict:
+        description: "Fail workflow when live OpenAPI fetch fails"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,6 +23,7 @@ jobs:
     env:
       BUNDLE_BUDGET_KB: "480"
       CLS_BUDGET: "0.12"
+      OPENAPI_SOURCE_URL: ${{ inputs.openapi_source_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -35,6 +47,22 @@ jobs:
         working-directory: front
         run: yarn build
 
+      - name: Fetch live OpenAPI contract (strict)
+        if: inputs.openapi_source_url != '' && inputs.openapi_fetch_strict
+        working-directory: front
+        run: yarn contracts:fetch
+
+      - name: Fetch live OpenAPI contract (best-effort)
+        id: openapi_fetch_optional
+        if: inputs.openapi_source_url != '' && !inputs.openapi_fetch_strict
+        continue-on-error: true
+        working-directory: front
+        run: yarn contracts:fetch
+
+      - name: OpenAPI fetch fallback notice
+        if: steps.openapi_fetch_optional.outcome == 'failure'
+        run: echo "::warning::live OpenAPI fetch failed. Falling back to snapshot contracts/openapi/openapi.json"
+
       - name: Verify OpenAPI contract-generated types
         working-directory: front
         run: yarn contracts:check
@@ -54,6 +82,10 @@ jobs:
       - name: Run CLS perf e2e
         working-directory: front
         run: yarn test:e2e:perf
+
+      - name: Run accessibility e2e
+        working-directory: front
+        run: yarn test:e2e:a11y
 
       - name: Upload frontend reports on failure
         if: failure()

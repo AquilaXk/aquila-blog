@@ -8,6 +8,13 @@ type RumBody = {
   delta?: unknown
   navigationType?: unknown
   path?: unknown
+  attribution?: unknown
+}
+
+type RumAttribution = {
+  target?: unknown
+  eventType?: unknown
+  resourceUrl?: unknown
 }
 
 const MAX_PATH_LENGTH = 260
@@ -44,6 +51,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const value = toSafeNumber(body.value)
   const delta = toSafeNumber(body.delta)
   const navigationType = toSafeString(body.navigationType, 40)
+  const rawAttribution = (body.attribution || {}) as RumAttribution
+  const attributionTarget = toSafeString(rawAttribution.target, 160)
+  const attributionEventType = toSafeString(rawAttribution.eventType, 48)
+  const attributionResourceUrl = toSafeString(rawAttribution.resourceUrl, 240)
 
   if (!ALLOWED_METRICS.has(name) || value === null) {
     return res.status(204).end()
@@ -51,13 +62,19 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const normalizedRating = ALLOWED_RATINGS.has(rating) ? rating : "unknown"
   if (!LOG_SLOW_ONLY || normalizedRating !== "good") {
+    const attributionFragment =
+      attributionTarget || attributionEventType || attributionResourceUrl
+        ? ` attrTarget="${attributionTarget || "n/a"}" attrEvent=${attributionEventType || "n/a"} attrUrl="${
+            attributionResourceUrl || "n/a"
+          }"`
+        : ""
+
     console.info(
       `[rum:vitals] name=${name} rating=${normalizedRating} value=${value.toFixed(4)} delta=${
         delta !== null ? delta.toFixed(4) : "n/a"
-      } path="${path || "/"}" nav=${navigationType || "unknown"} id=${metricId || "n/a"}`
+      } path="${path || "/"}" nav=${navigationType || "unknown"} id=${metricId || "n/a"}${attributionFragment}`
     )
   }
 
   return res.status(204).end()
 }
-

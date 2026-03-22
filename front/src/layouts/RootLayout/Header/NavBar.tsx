@@ -61,8 +61,6 @@ const NavBar: React.FC = () => {
       <div className="authArea" data-auth-state={authState}>
         {authStatus === "loading" && (
           <div className="authLoadingShell" aria-hidden="true">
-            <span className="authSkeleton icon" />
-            <span className="authSkeleton short" />
             <span className="authSkeleton medium" />
           </div>
         )}
@@ -179,7 +177,11 @@ const StyledWrapper = styled.div`
   }
 
   .authArea[data-auth-state="loading"] {
-    min-width: 6.4rem;
+    min-width: 3.8rem;
+  }
+
+  .authArea[data-auth-state="anonymous"] {
+    min-width: 3.8rem;
   }
 
   .authArea[data-auth-state="authenticated"] {
@@ -238,7 +240,12 @@ const StyledWrapper = styled.div`
   }
 
   .authSkeleton.medium {
-    width: 92px;
+    width: 3.8rem;
+    height: 14px;
+  }
+
+  .authArea[data-auth-state="anonymous"] .navPill {
+    min-width: 3.8rem;
   }
 
   .identity {

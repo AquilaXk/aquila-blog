@@ -19,7 +19,7 @@ export const pretendard = localFont({
     },
   ],
   display: 'swap',
-  preload: false,
+  preload: true,
   fallback: [
     '-apple-system',
     'BlinkMacSystemFont',

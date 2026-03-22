@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
@@ -307,19 +308,15 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
-            <img
+            <Image
               src={thumbnailSrc}
               alt=""
-              aria-hidden="true"
-              loading={layout === "pinned" ? "eager" : "lazy"}
-              fetchPriority={layout === "pinned" ? "high" : "auto"}
-              decoding="async"
+              aria-hidden
+              fill
+              priority={layout === "pinned"}
+              loading={layout === "pinned" ? undefined : "lazy"}
               sizes={POST_CARD_THUMBNAIL_SIZES}
               style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
                 objectFit: "cover",
                 objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
                 transform: `scale(${thumbnailZoom})`,
@@ -348,14 +345,12 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
             <div className="author">
               <span className="avatar" aria-hidden="true">
                 {author?.profile_photo ? (
-                  <img
+                  <Image
                     src={author.profile_photo}
                     alt=""
-                    loading="lazy"
-                    decoding="async"
+                    fill
+                    sizes="32px"
                     style={{
-                      width: "100%",
-                      height: "100%",
                       objectFit: "cover",
                     }}
                   />

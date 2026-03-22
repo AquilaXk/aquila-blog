@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { GetServerSideProps } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useEffect, useMemo, useState } from "react"
@@ -6,6 +7,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
+import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 
 type RsData<T> = {
   resultCode: string
@@ -17,6 +19,10 @@ type SignupVerifyResult = {
   email: string
   signupToken: string
   expiresAt: string
+}
+
+export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
+  return await getGuestPageProps(req)
 }
 
 const SignupVerifyPage = () => {

@@ -3,8 +3,10 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
+import { zIndexes } from "src/styles/zIndexes"
 
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
   ssr: false,
@@ -26,7 +28,10 @@ const NavBar: React.FC = () => {
   const { me, authStatus, logout } = useAuthSession()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isClientMounted, setIsClientMounted] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null)
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const isAuthenticated = Boolean(me) && (authStatus === "authenticated" || authStatus === "unavailable")
   const isAdmin = Boolean(isAuthenticated && me?.isAdmin)
@@ -49,10 +54,18 @@ const NavBar: React.FC = () => {
   }, [router.asPath])
 
   useEffect(() => {
+    setIsClientMounted(true)
+  }, [])
+
+  useEffect(() => {
     if (!mobileMenuOpen) return
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      const isInsideRoot = rootRef.current?.contains(target)
+      const isInsideMenu = mobileMenuRef.current?.contains(target)
+      const isInsideTrigger = menuTriggerRef.current?.contains(target)
+      if (!isInsideRoot && !isInsideMenu && !isInsideTrigger) {
         setMobileMenuOpen(false)
       }
     }
@@ -67,6 +80,18 @@ const NavBar: React.FC = () => {
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown)
       document.removeEventListener("keydown", handleEscape)
+    }
+  }, [mobileMenuOpen])
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    if (!mobileMenuOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.body.style.overflow = previousOverflow
     }
   }, [mobileMenuOpen])
 
@@ -143,6 +168,7 @@ const NavBar: React.FC = () => {
         )}
 
         <button
+          ref={menuTriggerRef}
           type="button"
           className="mobileMenuTrigger"
           aria-label="헤더 메뉴 열기"
@@ -154,45 +180,51 @@ const NavBar: React.FC = () => {
         </button>
       </div>
 
-      {mobileMenuOpen && (
-        <div className="mobileMenu" role="menu" aria-label="모바일 네비게이션">
-          {primaryLinks.map((link) => (
-            <Link key={link.id} href={link.to} role="menuitem">
-              {link.name}
-            </Link>
-          ))}
+      {isClientMounted && mobileMenuOpen
+        ? createPortal(
+            <>
+              <MobileMenuBackdrop type="button" aria-label="모바일 메뉴 닫기" onClick={() => setMobileMenuOpen(false)} />
+              <MobileMenuPortal ref={mobileMenuRef} role="menu" aria-label="모바일 네비게이션">
+                {primaryLinks.map((link) => (
+                  <Link key={link.id} href={link.to} role="menuitem" onClick={() => setMobileMenuOpen(false)}>
+                    {link.name}
+                  </Link>
+                ))}
 
-          {(showImmediateLoginAction || showUnavailableAuthAction) && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMobileMenuOpen(false)
-                if (showUnavailableAuthAction) {
-                  void handleUnavailableAuthLogin()
-                } else {
-                  openLoginModal()
-                }
-              }}
-            >
-              Login
-            </button>
-          )}
+                {(showImmediateLoginAction || showUnavailableAuthAction) && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      if (showUnavailableAuthAction) {
+                        void handleUnavailableAuthLogin()
+                      } else {
+                        openLoginModal()
+                      }
+                    }}
+                  >
+                    Login
+                  </button>
+                )}
 
-          {isAuthenticated && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMobileMenuOpen(false)
-                void handleLogout()
-              }}
-            >
-              Logout
-            </button>
-          )}
-        </div>
-      )}
+                {isAuthenticated && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      void handleLogout()
+                    }}
+                  >
+                    Logout
+                  </button>
+                )}
+              </MobileMenuPortal>
+            </>,
+            document.body
+          )
+        : null}
 
       <AuthEntryModal
         open={authModalOpen}
@@ -330,42 +362,6 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .mobileMenu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 0.46rem);
-    min-width: 9.5rem;
-    display: grid;
-    gap: 0.1rem;
-    padding: 0.42rem;
-    border-radius: 12px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
-    z-index: 30;
-
-    a,
-    button {
-      border: none;
-      background: transparent;
-      color: ${({ theme }) => theme.colors.gray11};
-      display: inline-flex;
-      align-items: center;
-      justify-content: flex-start;
-      min-height: 34px;
-      border-radius: 8px;
-      padding: 0 0.6rem;
-      font-size: 0.84rem;
-      font-weight: 620;
-      text-decoration: none;
-
-      &:hover {
-        color: ${({ theme }) => theme.colors.gray12};
-        background: ${({ theme }) => theme.colors.gray3};
-      }
-    }
-  }
-
   @media (max-width: 980px) {
     .authNotice {
       display: none;
@@ -398,9 +394,52 @@ const StyledWrapper = styled.div`
       overflow: visible;
     }
 
-    .mobileMenu {
-      right: max(0px, env(safe-area-inset-right, 0px));
-      min-width: 9.25rem;
+  }
+`
+
+const MobileMenuBackdrop = styled.button`
+  position: fixed;
+  inset: 0;
+  z-index: ${zIndexes.dropdownMenu + 2};
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(2, 6, 23, 0.5);
+  cursor: default;
+`
+
+const MobileMenuPortal = styled.div`
+  position: fixed;
+  top: calc(var(--app-header-height, 56px) + 0.5rem + env(safe-area-inset-top, 0px));
+  right: max(0.62rem, env(safe-area-inset-right, 0px));
+  min-width: 10rem;
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.45rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.46);
+  z-index: ${zIndexes.dropdownMenu + 3};
+
+  a,
+  button {
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 36px;
+    border-radius: 8px;
+    padding: 0 0.66rem;
+    font-size: 0.85rem;
+    font-weight: 620;
+    text-decoration: none;
+
+    &:hover {
+      color: ${({ theme }) => theme.colors.gray12};
+      background: ${({ theme }) => theme.colors.gray3};
     }
   }
 `

@@ -110,10 +110,10 @@ const useAuthSession = () => {
     }
   }
 
-  const me =
-    query.data ?? (query.isError && hasCachedMemberSnapshot ? (cachedSnapshot as AuthMember) : null)
+  const resolvedSnapshot = query.data !== undefined ? query.data : cachedSnapshot
+  const me = resolvedSnapshot ?? null
   const isIdleAnonymous = !query.isFetching && hasCachedAnonymousSnapshot
-  const hasResolvedSnapshot = query.status === "success" || query.data !== undefined || isIdleAnonymous
+  const hasResolvedSnapshot = query.status === "success" || resolvedSnapshot !== undefined || isIdleAnonymous
   const authStatus: AuthSessionStatus =
     me
         ? "authenticated"

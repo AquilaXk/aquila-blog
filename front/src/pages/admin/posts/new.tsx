@@ -148,6 +148,7 @@ type NoticeState = {
 }
 type EditorMode = "create" | "edit"
 type PublishActionType = "create" | "modify" | "temp"
+type MobileStudioStep = "query" | "list" | "edit" | "publish"
 type ParsedEditorMeta = {
   body: string
   tags: string[]
@@ -964,6 +965,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
   const [isPreviewThumbDragging, setIsPreviewThumbDragging] = useState(false)
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
+  const [mobileStudioStep, setMobileStudioStep] = useState<MobileStudioStep>("query")
+  const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -1051,6 +1054,29 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const disabled = (key: string) => loadingKey.length > 0 && loadingKey !== key
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const media = window.matchMedia("(max-width: 960px)")
+    const sync = () => {
+      const mobile = media.matches
+      setIsCompactMobileLayout(mobile)
+      if (!mobile) {
+        setMobileStudioStep("edit")
+      }
+    }
+
+    sync()
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync)
+      return () => media.removeEventListener("change", sync)
+    }
+
+    media.addListener(sync)
+    return () => media.removeListener(sync)
+  }, [])
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setListPage(sanitizeNumberInput(e.target.value))
@@ -1423,7 +1449,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       },
       "page"
     )
-  }, [setPublishStatus])
+    if (isCompactMobileLayout) {
+      setMobileStudioStep("edit")
+    }
+  }, [isCompactMobileLayout, setPublishStatus])
 
   const applyLoadedPostContext = useCallback((post: PostForEditor) => {
     setPostId(String(post.id))
@@ -1432,7 +1461,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setIsTempDraftMode(post.title.trim() === "임시글" && !post.published && !post.listed)
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
-  }, [])
+    if (isCompactMobileLayout) {
+      setMobileStudioStep("edit")
+    }
+  }, [isCompactMobileLayout])
 
   const loadPostForEditor = useCallback(async (targetPostId: string = postId) => {
     try {
@@ -1666,6 +1698,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         },
         "page"
       )
+      if (isCompactMobileLayout) {
+        setMobileStudioStep("edit")
+      }
       setResult(pretty(response as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1820,6 +1855,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "success",
         text: `목록 조회 완료: ${nextTotal}건`,
       })
+      if (isCompactMobileLayout) {
+        setMobileStudioStep("list")
+      }
       setResult(pretty(data as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1830,7 +1868,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }, [listKw, listPage, listPageSize, listScope, listSort])
+  }, [isCompactMobileLayout, listKw, listPage, listPageSize, listScope, listSort])
 
   const togglePostSelection = useCallback((id: number) => {
     if (listScope === "deleted") return
@@ -2690,6 +2728,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       text: "AI 태그 추천 상태가 여기에 표시됩니다.",
     })
     setIsPublishModalOpen(true)
+    if (isCompactMobileLayout) {
+      setMobileStudioStep("publish")
+    }
   }
 
   const handleClickCreatePost = () => {
@@ -2723,6 +2764,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       text: "AI 태그 추천 상태가 여기에 표시됩니다.",
     })
     setIsPublishModalOpen(false)
+    if (isCompactMobileLayout) {
+      setMobileStudioStep("edit")
+    }
   }
 
   const handleConfirmPublish = async () => {
@@ -2789,6 +2833,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       : publishActionType === "modify"
         ? editorMode !== "edit" || disabled("modifyPost")
         : editorMode !== "edit" || disabled("publishTempPost")
+  const mobilePrimaryActionLabel =
+    mobileStudioStep === "query"
+      ? "목록 조회"
+      : mobileStudioStep === "list"
+        ? "편집 단계로 이동"
+        : editorMode === "create"
+          ? "글 작성 설정 열기"
+          : isTempDraftMode
+            ? "임시글 발행 설정"
+            : "수정 설정 열기"
+  const mobilePrimaryActionDisabled =
+    mobileStudioStep === "query"
+      ? disabled("postList")
+      : mobileStudioStep === "list"
+        ? false
+        : editorMode === "create"
+          ? disabled("writePost")
+          : isTempDraftMode
+            ? disabled("publishTempPost")
+            : disabled("modifyPost")
   const closeToolbarMenus = () => {
     setIsCalloutMenuOpen(false)
     setIsColorMenuOpen(false)
@@ -3030,9 +3094,49 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </div>
             </SectionTop>
             <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
+            <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileStudioStep === "query"}
+                data-active={mobileStudioStep === "query"}
+                onClick={() => setMobileStudioStep("query")}
+              >
+                조회
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileStudioStep === "list"}
+                data-active={mobileStudioStep === "list"}
+                onClick={() => setMobileStudioStep("list")}
+              >
+                목록
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileStudioStep === "edit"}
+                data-active={mobileStudioStep === "edit"}
+                onClick={() => setMobileStudioStep("edit")}
+              >
+                편집
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mobileStudioStep === "publish"}
+                data-active={mobileStudioStep === "publish"}
+                onClick={() => setMobileStudioStep("publish")}
+              >
+                발행
+              </button>
+            </MobileStudioStepper>
             <ContentStudioGrid>
-              <ContentStudioLeft>
-                <QueryPanel>
+              <ContentStudioLeft
+                data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "query" || mobileStudioStep === "list"}
+              >
+                <QueryPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "query"}>
                   <QueryHeader>
                     <h3>글 목록 조회 조건</h3>
                     <p>
@@ -3166,7 +3270,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   )}
                 </QueryPanel>
 
-              <ListPanel>
+              <ListPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "list"}>
                 <ListHeader>
                   <h3>{listScope === "active" ? "관리자 글 리스트" : "삭제 글 리스트"}</h3>
                   <ListHeaderActions>
@@ -3429,7 +3533,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </ListPanel>
               </ContentStudioLeft>
 
-              <SelectedPostPanel>
+              <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "edit"}>
                 <SelectedPostHeader>
                   <div>
                     <h3>선택한 글 작업</h3>
@@ -3596,7 +3700,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </ConfirmModal>
           </ModalBackdrop>
         )}
-        <EditorSection>
+        <EditorSection data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "edit" || mobileStudioStep === "publish"}>
           <WriterHeader>
             <div className="titleField">
               <TitleInput
@@ -3992,6 +4096,28 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </WriterFooterBar>
         </EditorSection>
 
+        {isCompactMobileLayout && !isPublishModalOpen && (
+          <MobilePrimaryActionBar>
+            <PrimaryButton
+              type="button"
+              disabled={mobilePrimaryActionDisabled}
+              onClick={() => {
+                if (mobileStudioStep === "query") {
+                  void loadAdminPosts()
+                  return
+                }
+                if (mobileStudioStep === "list") {
+                  setMobileStudioStep("edit")
+                  return
+                }
+                openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+              }}
+            >
+              {mobilePrimaryActionLabel}
+            </PrimaryButton>
+          </MobilePrimaryActionBar>
+        )}
+
         {isPublishModalOpen && (
           <ModalBackdrop onClick={closePublishModal}>
             <PublishModal onClick={(e) => e.stopPropagation()}>
@@ -4345,11 +4471,15 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.5rem 1rem 2.8rem;
 
+  @media (max-width: 960px) {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+  }
+
   @media (max-width: 720px) {
     padding:
       1rem
       max(0.78rem, env(safe-area-inset-right))
-      calc(2rem + env(safe-area-inset-bottom))
+      calc(7rem + env(safe-area-inset-bottom, 0px))
       max(0.78rem, env(safe-area-inset-left));
   }
 `
@@ -4596,6 +4726,41 @@ const ContentStudioGrid = styled.div`
   align-items: start;
 `
 
+const MobileStudioStepper = styled.div`
+  display: none;
+
+  @media (max-width: 960px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 56px) + 0.32rem);
+    z-index: 12;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin: 0.2rem 0 0.4rem;
+    padding: 0.5rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 10px;
+    background: ${({ theme }) => theme.colors.gray2};
+
+    > button {
+      min-height: 36px;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: transparent;
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.77rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    > button[data-active="true"] {
+      border-color: ${({ theme }) => theme.colors.blue8};
+      color: ${({ theme }) => theme.colors.blue11};
+      background: ${({ theme }) => theme.colors.blue3};
+    }
+  }
+`
+
 const ContentStudioLeft = styled.div`
   display: grid;
   gap: 0.95rem;
@@ -4611,6 +4776,12 @@ const ContentStudioLeft = styled.div`
     padding: 0.72rem;
     gap: 0.8rem;
   }
+
+  @media (max-width: 960px) {
+    &[data-mobile-visible="false"] {
+      display: none;
+    }
+  }
 `
 
 const QueryPanel = styled.div`
@@ -4623,6 +4794,12 @@ const QueryPanel = styled.div`
 
   @media (max-width: 420px) {
     padding: 0.62rem 0.62rem 0.72rem;
+  }
+
+  @media (max-width: 960px) {
+    &[data-mobile-visible="false"] {
+      display: none;
+    }
   }
 `
 
@@ -4725,7 +4902,7 @@ const QueryActions = styled.div`
     min-width: 9.5rem;
   }
 
-  @media (max-width: 420px) {
+  @media (max-width: 960px) {
     display: grid;
     grid-template-columns: 1fr;
 
@@ -4978,7 +5155,7 @@ const ActionRow = styled.div`
     min-width: 8.8rem;
   }
 
-  @media (max-width: 420px) {
+  @media (max-width: 960px) {
     display: grid;
     grid-template-columns: 1fr;
 
@@ -5162,6 +5339,12 @@ const EditorSection = styled.div`
   @media (max-width: 720px) {
     padding: 0;
     margin-top: 0.92rem;
+  }
+
+  @media (max-width: 960px) {
+    &[data-mobile-visible="false"] {
+      display: none;
+    }
   }
 `
 
@@ -6064,6 +6247,12 @@ const ListPanel = styled.div`
   min-width: 0;
   display: grid;
   gap: 0.62rem;
+
+  @media (max-width: 960px) {
+    &[data-mobile-visible="false"] {
+      display: none;
+    }
+  }
 `
 
 const ListHeader = styled.div`
@@ -6183,6 +6372,12 @@ const SelectedPostPanel = styled.div`
   @media (max-width: 420px) {
     border-radius: 10px;
     padding: 0.68rem;
+  }
+
+  @media (max-width: 960px) {
+    &[data-mobile-visible="false"] {
+      display: none;
+    }
   }
 `
 
@@ -6937,6 +7132,31 @@ const WriterFooterActions = styled.div`
       width: 100%;
       min-height: 38px;
       justify-content: center;
+    }
+  }
+`
+
+const MobilePrimaryActionBar = styled.div`
+  display: none;
+
+  @media (max-width: 960px) {
+    position: fixed;
+    left: max(0.72rem, env(safe-area-inset-left, 0px));
+    right: max(0.72rem, env(safe-area-inset-right, 0px));
+    bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
+    z-index: 145;
+    display: grid;
+    gap: 0.5rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 12px;
+    background: ${({ theme }) => theme.colors.gray2};
+    padding: 0.62rem;
+    box-shadow: 0 18px 38px rgba(2, 6, 23, 0.38);
+
+    > button {
+      width: 100%;
+      justify-content: center;
+      min-height: 40px;
     }
   }
 `

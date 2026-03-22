@@ -22,14 +22,14 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   return (
     <StyledWrapper>
       <div className="mid">
-        <div className="mobileProfileCard">
-          <MobileProfileCard initialAdminProfile={initialAdminProfile} />
-        </div>
         <IntroCard>
           <h1>{introTitle}</h1>
           <p>{introDescription}</p>
         </IntroCard>
         <FeedExplorer />
+        <div className="mobileProfileCard">
+          <MobileProfileCard initialAdminProfile={initialAdminProfile} />
+        </div>
         <div className="footer">
           <Footer />
         </div>

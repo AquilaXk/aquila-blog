@@ -4,6 +4,7 @@ import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
+import { useState } from "react"
 
 type Props = {
   className?: string
@@ -11,6 +12,7 @@ type Props = {
 }
 
 const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
+  const [expanded, setExpanded] = useState(false)
   const adminProfile = useAdminProfile(initialAdminProfile)
   const imageSrc =
     adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
@@ -21,14 +23,19 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   return (
     <StyledWrapper>
       <div className="top">
-        <AppIcon name="laptop" className="titleIcon" /> Profile
+        <span className="title">
+          <AppIcon name="laptop" className="titleIcon" /> Profile
+        </span>
+        <button type="button" onClick={() => setExpanded((prev) => !prev)}>
+          {expanded ? "접기" : "보기"}
+        </button>
       </div>
-      <div className="mid">
+      <div className="mid" data-expanded={expanded}>
         <div className="wrapper">
           <ProfileImage
             src={imageSrc}
-            width={90}
-            height={90}
+            width={expanded ? 90 : 56}
+            height={expanded ? 90 : 56}
             priority
             css={{
               position: "relative",
@@ -41,7 +48,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
           <div className="wrapper">
             <div className="top">{displayName}</div>
             <div className="mid">{displayRole}</div>
-            <div className="btm">{displayBio}</div>
+            {expanded ? <div className="btm">{displayBio}</div> : null}
           </div>
         </div>
       </div>
@@ -59,8 +66,9 @@ const StyledWrapper = styled.div`
   }
 
   > .top {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.35rem;
     padding: 0.15rem 0.1rem;
     margin-bottom: 0.7rem;
@@ -68,13 +76,31 @@ const StyledWrapper = styled.div`
     font-size: 0.82rem;
     font-weight: 700;
 
+    .title {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
     .titleIcon {
       font-size: 0.96rem;
       flex: 0 0 auto;
     }
+
+    button {
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: transparent;
+      color: ${({ theme }) => theme.colors.gray11};
+      padding: 0 0.72rem;
+      font-size: 0.74rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
   }
   > .mid {
-    padding: 0.2rem 0 0.95rem;
+    padding: 0.12rem 0 0.86rem;
     margin-bottom: 1rem;
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
@@ -82,10 +108,10 @@ const StyledWrapper = styled.div`
       display: flex;
       gap: 0.85rem;
       align-items: center;
-      > .wrapper {
-        height: fit-content;
-        > .top {
-          font-size: 1.18rem;
+        > .wrapper {
+          height: fit-content;
+          > .top {
+            font-size: 1.18rem;
           line-height: 1.35;
           font-weight: 700;
           letter-spacing: -0.03em;
@@ -101,6 +127,22 @@ const StyledWrapper = styled.div`
           font-size: 0.875rem;
           line-height: 1.6;
           color: ${({ theme }) => theme.colors.gray11};
+        }
+      }
+    }
+
+    &[data-expanded="false"] {
+      > .wrapper {
+        > .wrapper {
+          > .top {
+            font-size: 1rem;
+            line-height: 1.25;
+          }
+
+          > .mid {
+            margin: 0.18rem 0 0;
+            font-size: 0.82rem;
+          }
         }
       }
     }

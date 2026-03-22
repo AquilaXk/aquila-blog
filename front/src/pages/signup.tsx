@@ -1,4 +1,5 @@
 import styled from "@emotion/styled"
+import { GetServerSideProps } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { FormEvent, useMemo, useState } from "react"
@@ -8,6 +9,7 @@ import AuthShell from "src/components/auth/AuthShell"
 import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
+import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 
 type RsData<T> = {
   resultCode: string
@@ -17,6 +19,10 @@ type RsData<T> = {
 
 type SignupEmailStartResult = {
   email: string
+}
+
+export const getServerSideProps: GetServerSideProps<GuestPageProps> = async ({ req }) => {
+  return await getGuestPageProps(req)
 }
 
 const SignupPage = () => {

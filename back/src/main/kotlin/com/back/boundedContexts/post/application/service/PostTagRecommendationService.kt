@@ -400,18 +400,36 @@ class PostTagRecommendationService(
 
     private fun parseTagsFromJsonNode(node: JsonNode): List<String> {
         if (node.isArray) {
-            return node.mapNotNull { child -> child.takeIf { it.isTextual }?.asText()?.trim()?.takeIf { it.isNotEmpty() } }
+            return node.mapNotNull { child ->
+                child
+                    .takeIf { it.isTextual }
+                    ?.asText()
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+            }
         }
         if (!node.isObject) return emptyList()
 
         val direct = node.path("tags")
         if (direct.isArray) {
-            return direct.mapNotNull { child -> child.takeIf { it.isTextual }?.asText()?.trim()?.takeIf { it.isNotEmpty() } }
+            return direct.mapNotNull { child ->
+                child
+                    .takeIf { it.isTextual }
+                    ?.asText()
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+            }
         }
 
         val nested = node.path("data").path("tags")
         if (nested.isArray) {
-            return nested.mapNotNull { child -> child.takeIf { it.isTextual }?.asText()?.trim()?.takeIf { it.isNotEmpty() } }
+            return nested.mapNotNull { child ->
+                child
+                    .takeIf { it.isTextual }
+                    ?.asText()
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+            }
         }
 
         return emptyList()

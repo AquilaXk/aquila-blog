@@ -100,7 +100,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
             nextCursor,
           },
         ],
-        pageParams: [null],
+        pageParams: [1],
       }
     )
   }

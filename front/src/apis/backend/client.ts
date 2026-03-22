@@ -10,6 +10,69 @@ const DEFAULT_GET_TRANSIENT_RETRY_DELAY_MS = 120
 const GET_RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 const STALE_IF_ERROR_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 
+type GetCacheMode = "revalidate" | "no-store"
+
+type GetRequestPolicy = {
+  cacheMode: GetCacheMode
+  retryCount: number
+  staleIfError: boolean
+  timeoutMs?: number
+}
+
+const DEFAULT_GET_REQUEST_POLICY: GetRequestPolicy = {
+  cacheMode: "no-store",
+  retryCount: 0,
+  staleIfError: false,
+}
+
+const GET_REQUEST_POLICY_REGISTRY: Array<{
+  matcher: RegExp
+  policy: Partial<GetRequestPolicy>
+}> = [
+  {
+    matcher: /^\/member\/api\/v1\/auth\/me$/i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 4_000 },
+  },
+  {
+    matcher: /^\/member\/api\/v1\/auth\//i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 5_000 },
+  },
+  {
+    matcher: /^\/member\/api\/v1\/notifications\/snapshot/i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 4_000 },
+  },
+  {
+    matcher: /^\/member\/api\/v1\/notifications(\/|$)/i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 5_000 },
+  },
+  {
+    matcher: /^\/(member|post)\/api\/v1\/adm\//i,
+    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
+  },
+  {
+    matcher: /^\/post\/api\/v1\/posts\/(feed|explore|search|tags|[0-9]+)(\/|$)/i,
+    policy: {
+      cacheMode: "revalidate",
+      retryCount: DEFAULT_GET_TRANSIENT_RETRY_COUNT,
+      staleIfError: true,
+      timeoutMs: 8_000,
+    },
+  },
+]
+
+const resolveGetRequestPolicy = (path: string): GetRequestPolicy => {
+  const normalizedPath = path.trim().toLowerCase()
+  const matched = GET_REQUEST_POLICY_REGISTRY.find((entry) => entry.matcher.test(normalizedPath))
+  if (!matched) return DEFAULT_GET_REQUEST_POLICY
+
+  return {
+    cacheMode: matched.policy.cacheMode ?? DEFAULT_GET_REQUEST_POLICY.cacheMode,
+    retryCount: matched.policy.retryCount ?? DEFAULT_GET_REQUEST_POLICY.retryCount,
+    staleIfError: matched.policy.staleIfError ?? DEFAULT_GET_REQUEST_POLICY.staleIfError,
+    timeoutMs: matched.policy.timeoutMs,
+  }
+}
+
 export type ApiFetchOptions = RequestInit & {
   timeoutMs?: number
 }
@@ -105,6 +168,16 @@ const resolveTimeoutMs = (path: string, init: ApiFetchOptions) => {
 
   const normalizedPath = path.toLowerCase()
   const method = (init.method || "GET").toUpperCase()
+  if (method === "GET") {
+    const getPolicy = resolveGetRequestPolicy(path)
+    if (
+      typeof getPolicy.timeoutMs === "number" &&
+      Number.isFinite(getPolicy.timeoutMs) &&
+      getPolicy.timeoutMs > 0
+    ) {
+      return getPolicy.timeoutMs
+    }
+  }
   const isFormLikeBody = typeof FormData !== "undefined" && init.body instanceof FormData
 
   if (normalizedPath.includes("/auth/login") || normalizedPath.includes("/signup/")) {
@@ -205,10 +278,12 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
   const isFormLikeBody =
     typeof FormData !== "undefined" && requestInit.body instanceof FormData
   const method = (requestInit.method || "GET").toUpperCase()
+  const getRequestPolicy = method === "GET" ? resolveGetRequestPolicy(safePath) : null
   const canUseRevalidateCache =
     !isServer &&
     method === "GET" &&
     !hasBody &&
+    getRequestPolicy?.cacheMode !== "no-store" &&
     requestInit.cache !== "no-store"
   const canUseInFlightDedupe =
     canUseRevalidateCache &&
@@ -231,11 +306,13 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
 
   const executeRequest = async (): Promise<T> => {
     const resolvedTimeoutMs = resolveTimeoutMs(safePath, init)
+    const getRetryCount = getRequestPolicy?.retryCount ?? 0
     const canRetryTransientGet =
       method === "GET" &&
       !requestInit.signal &&
+      getRetryCount > 0 &&
       !isServer
-    const maxAttempts = canRetryTransientGet ? DEFAULT_GET_TRANSIENT_RETRY_COUNT + 1 : 1
+    const maxAttempts = canRetryTransientGet ? getRetryCount + 1 : 1
     let response: Response | null = null
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -266,7 +343,7 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
           continue
         }
 
-        if (canUseRevalidateCache && revalidateCacheEntry) {
+        if (canUseRevalidateCache && revalidateCacheEntry && getRequestPolicy?.staleIfError !== false) {
           // stale-if-error: 전송 장애/타임아웃 시 최근 정상 payload로 즉시 복구
           refreshRevalidateCacheEntry(url, revalidateCacheEntry, null, null)
           return revalidateCacheEntry.payload as T
@@ -305,7 +382,12 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
     }
 
     if (!response.ok) {
-      if (canUseRevalidateCache && revalidateCacheEntry && STALE_IF_ERROR_STATUS_CODES.has(response.status)) {
+      if (
+        canUseRevalidateCache &&
+        revalidateCacheEntry &&
+        getRequestPolicy?.staleIfError !== false &&
+        STALE_IF_ERROR_STATUS_CODES.has(response.status)
+      ) {
         // upstream 5xx/429 구간에서도 사용자에게 마지막 정상 스냅샷을 우선 제공
         refreshRevalidateCacheEntry(
           url,

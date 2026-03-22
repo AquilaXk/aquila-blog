@@ -120,6 +120,11 @@ interface PostUseCase {
         pageSize: Int,
     ): PagedResult<Post>
 
+    fun findRecommendedExplorePage(
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Post>
+
     fun findPagedByKwForAdmin(
         kw: String,
         sort: PostSearchSortType1,

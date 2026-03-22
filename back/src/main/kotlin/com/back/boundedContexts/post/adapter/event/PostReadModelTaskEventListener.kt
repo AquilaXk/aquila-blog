@@ -1,7 +1,9 @@
 package com.back.boundedContexts.post.adapter.event
 
 import com.back.boundedContexts.post.application.service.PostReadPrewarmService
+import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.boundedContexts.post.application.service.PostSearchIndexSyncService
+import com.back.boundedContexts.post.dto.PostSearchEngineMirrorPayload
 import com.back.boundedContexts.post.dto.PostReadPrewarmPayload
 import com.back.boundedContexts.post.dto.PostSearchIndexSyncPayload
 import com.back.boundedContexts.post.event.PostDeletedEvent
@@ -9,12 +11,14 @@ import com.back.boundedContexts.post.event.PostModifiedEvent
 import com.back.boundedContexts.post.event.PostWrittenEvent
 import com.back.global.task.annotation.TaskHandler
 import com.back.global.task.application.TaskFacade
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.springframework.transaction.event.TransactionPhase
 import org.springframework.transaction.event.TransactionalEventListener
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * PostReadModelTaskEventListener는 게시글 쓰기 이벤트를 read-model 후속 작업 태스크로 비동기 분리합니다.
@@ -24,9 +28,15 @@ import java.util.UUID
 class PostReadModelTaskEventListener(
     private val taskFacade: TaskFacade,
     private val postSearchIndexSyncService: PostSearchIndexSyncService,
+    private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
     private val postReadPrewarmService: PostReadPrewarmService,
+    private val meterRegistry: MeterRegistry? = null,
     @Value("\${custom.post.search-index.async-sync-enabled:true}")
     private val asyncSearchIndexSyncEnabled: Boolean,
+    @Value("\${custom.post.search-index.sla.maxLagSeconds:120}")
+    private val searchIndexMaxLagSeconds: Long,
+    @Value("\${custom.post.search-engine.mirror.enabled:false}")
+    private val searchEngineMirrorEnabled: Boolean,
     @Value("\${custom.post.read.prewarm.enabled:true}")
     private val prewarmEnabled: Boolean,
 ) {
@@ -74,11 +84,32 @@ class PostReadModelTaskEventListener(
 
     @TaskHandler
     fun handle(payload: PostSearchIndexSyncPayload) {
-        postSearchIndexSyncService.sync(
-            postId = payload.postId,
-            fallbackTags = payload.fallbackTags,
-            forceClear = payload.forceClear,
-        )
+        val lagMs = (System.currentTimeMillis() - payload.enqueuedAtEpochMs).coerceAtLeast(0L)
+        meterRegistry?.timer("post.search_index.task.lag")?.record(lagMs, TimeUnit.MILLISECONDS)
+        if (lagMs > searchIndexMaxLagSeconds.coerceAtLeast(1) * 1_000) {
+            log.warn(
+                "post_search_index_sync_sla_breached postId={} lagMs={} thresholdSeconds={}",
+                payload.postId,
+                lagMs,
+                searchIndexMaxLagSeconds,
+            )
+        }
+
+        val startedAtNanos = System.nanoTime()
+        runCatching {
+            postSearchIndexSyncService.sync(
+                postId = payload.postId,
+                fallbackTags = payload.fallbackTags,
+                forceClear = payload.forceClear,
+            )
+        }.onSuccess {
+            meterRegistry?.counter("post.search_index.task.result", "status", "success")?.increment()
+            val elapsedMs = (System.nanoTime() - startedAtNanos).coerceAtLeast(0L) / 1_000_000
+            meterRegistry?.timer("post.search_index.task.duration")?.record(elapsedMs, TimeUnit.MILLISECONDS)
+        }.onFailure { exception ->
+            meterRegistry?.counter("post.search_index.task.result", "status", "failed")?.increment()
+            throw exception
+        }.getOrThrow()
     }
 
     @TaskHandler
@@ -87,6 +118,17 @@ class PostReadModelTaskEventListener(
             postId = payload.postId,
             tags = payload.tags,
             warmDetail = payload.warmDetail,
+        )
+    }
+
+    @TaskHandler
+    fun handle(payload: PostSearchEngineMirrorPayload) {
+        val lagMs = (System.currentTimeMillis() - payload.enqueuedAtEpochMs).coerceAtLeast(0L)
+        meterRegistry?.timer("post.search_engine.mirror.task.lag")?.record(lagMs, TimeUnit.MILLISECONDS)
+        postSearchEngineMirrorService.mirror(
+            postId = payload.postId,
+            tags = payload.tags,
+            deleted = payload.deleted,
         )
     }
 
@@ -110,10 +152,29 @@ class PostReadModelTaskEventListener(
                         postId = postId,
                         fallbackTags = afterTags,
                         forceClear = forceClearSearchIndex,
+                        enqueuedAtEpochMs = System.currentTimeMillis(),
                     ),
                 )
             }.onFailure { exception ->
                 log.warn("Failed to enqueue post search-index sync task: aggregate={}:{}", aggregateType, postId, exception)
+            }
+        }
+
+        if (searchEngineMirrorEnabled) {
+            runCatching {
+                taskFacade.addToQueue(
+                    PostSearchEngineMirrorPayload(
+                        uid = UUID.randomUUID(),
+                        aggregateType = aggregateType,
+                        aggregateId = postId,
+                        postId = postId,
+                        tags = if (forceClearSearchIndex) beforeTags else afterTags,
+                        deleted = forceClearSearchIndex,
+                        enqueuedAtEpochMs = System.currentTimeMillis(),
+                    ),
+                )
+            }.onFailure { exception ->
+                log.warn("Failed to enqueue search-engine mirror task: aggregate={}:{}", aggregateType, postId, exception)
             }
         }
 

@@ -124,6 +124,11 @@ class PostUseCaseAdapter(
         pageSize: Int,
     ): PagedResult<Post> = postApplicationService.findPagedByKw(kw, sort, page, pageSize)
 
+    override fun findRecommendedExplorePage(
+        page: Int,
+        pageSize: Int,
+    ): PagedResult<Post> = postApplicationService.findRecommendedExplorePage(page, pageSize)
+
     override fun findPagedByKwForAdmin(
         kw: String,
         sort: PostSearchSortType1,

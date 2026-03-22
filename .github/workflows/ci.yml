@@ -58,7 +58,7 @@ jobs:
       - backend-quality
     if: >
       always() &&
-      needs.changes.outputs.frontend == 'true' &&
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true') &&
       (needs.changes.outputs.backend != 'true' || needs.backend-quality.result == 'success')
     uses: ./.github/workflows/reusable-frontend-verify.yml
     with:

@@ -24,13 +24,22 @@ class AuthCookieService(
     fun issueAuthCookies(
         apiKey: String,
         accessToken: String,
+        rememberLoginEnabled: Boolean = true,
     ) {
-        issueCookie("apiKey", apiKey, apiKeyCookieMaxAgeSeconds)
-        issueCookie("accessToken", accessToken, accessTokenCookieMaxAgeSeconds)
+        issueCookie("apiKey", apiKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        issueCookie("accessToken", accessToken, accessTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
     }
 
-    fun issueAccessToken(accessToken: String) {
-        issueCookie("accessToken", accessToken, accessTokenCookieMaxAgeSeconds)
+    fun issueAccessToken(
+        accessToken: String,
+        rememberLoginEnabled: Boolean = true,
+    ) {
+        issueCookie(
+            "accessToken",
+            accessToken,
+            accessTokenCookieMaxAgeSeconds,
+            sessionOnly = !rememberLoginEnabled,
+        )
     }
 
     fun expireAuthCookies() {
@@ -42,11 +51,12 @@ class AuthCookieService(
         name: String,
         value: String,
         maxAgeSeconds: Int,
+        sessionOnly: Boolean = false,
     ) {
         // 이전 배포에서 남았을 수 있는 host-only 쿠키를 먼저 제거한 뒤,
         // 현재 표준인 domain cookie 한 종류만 유지한다.
         expireHostOnlyCookie(name)
-        rq.setCookie(name, value, maxAgeSeconds)
+        rq.setCookie(name, value, maxAgeSeconds, sessionOnly)
     }
 
     private fun expireCookie(name: String) {

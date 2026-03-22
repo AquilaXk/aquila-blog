@@ -80,7 +80,12 @@ const LoginPage = () => {
     try {
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          rememberMe: keepSignedIn,
+          ipSecurity: ipSecurityOn,
+        }),
       })
 
       // 로그인 응답의 Set-Cookie를 받은 직후 현재 세션을 강제로 동기화해,

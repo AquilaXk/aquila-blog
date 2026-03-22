@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.request.RequestPostProcessor
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import org.springframework.transaction.annotation.Transactional
 
@@ -128,6 +129,46 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.data.item.id") { value(member.id) }
                     jsonPath("$.data.item.name") { value(member.nickname) }
                 }
+        }
+
+        @Test
+        fun `로그인 요청에서 로그인 상태 유지를 끄면 세션 쿠키로 발급한다`() {
+            memberFacade.join(
+                username = "session-login-user",
+                password = "Abcd1234!",
+                nickname = "세션로그인",
+                profileImgUrl = null,
+                email = "session-login-user@example.com",
+            )
+
+            val result =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "session-login-user@example.com",
+                                "password": "Abcd1234!",
+                                "rememberMe": false
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+
+            val apiKeyCookie = result.response.getCookie("apiKey")
+            val issuedApiKeyCookie =
+                result.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            val issuedAccessTokenCookie =
+                result.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
+
+            assertThat(apiKeyCookie).isNotNull
+            assertThat(issuedApiKeyCookie).isNotNull
+            assertThat(issuedApiKeyCookie!!.maxAge).isEqualTo(-1)
+
+            assertThat(issuedAccessTokenCookie).isNotNull
+            assertThat(issuedAccessTokenCookie!!.maxAge).isEqualTo(-1)
         }
 
         @Test
@@ -422,5 +463,56 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                 }
         }
+
+        @Test
+        fun `아이피 보안이 켜진 세션에서 아이피가 바뀌면 401을 반환하고 인증 쿠키를 만료시킨다`() {
+            val member =
+                memberFacade.join(
+                    username = "ip-security-user",
+                    password = "Abcd1234!",
+                    nickname = "아이피보안유저",
+                    profileImgUrl = null,
+                    email = "ip-security-user@example.com",
+                )
+
+            val loginResponse =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!",
+                                "ipSecurity": true
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+
+            val apiKeyCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            assertThat(apiKeyCookie).isNotNull
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    cookie(apiKeyCookie!!)
+                    with(remoteAddr("10.0.0.77"))
+                }.andExpect {
+                    status { isUnauthorized() }
+                    jsonPath("$.resultCode") { value("401-7") }
+                    jsonPath("$.msg") { value("IP 보안 검증에 실패했습니다. 다시 로그인해주세요.") }
+                }.andExpect {
+                    cookie { maxAge("apiKey", 0) }
+                    cookie { maxAge("accessToken", 0) }
+                }
+        }
     }
+
+    private fun remoteAddr(ip: String): RequestPostProcessor =
+        RequestPostProcessor { request ->
+            request.remoteAddr = ip
+            request
+        }
 }

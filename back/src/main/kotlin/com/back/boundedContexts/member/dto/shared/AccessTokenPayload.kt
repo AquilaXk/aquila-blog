@@ -9,4 +9,7 @@ data class AccessTokenPayload(
     val id: Long,
     val username: String,
     val name: String,
+    val rememberLoginEnabled: Boolean = true,
+    val ipSecurityEnabled: Boolean = false,
+    val ipSecurityFingerprint: String? = null,
 )

@@ -1,6 +1,7 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServlet
@@ -23,6 +24,7 @@ class CustomAuthenticationFilterTest {
     @DisplayName("보호 API에서 인증 처리 중 예기치 못한 예외가 발생하면 500 대신 401-1로 응답한다")
     fun `protected api unexpected auth error returns 401`() {
         val actorApplicationService = mock(ActorApplicationService::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
@@ -40,6 +42,7 @@ class CustomAuthenticationFilterTest {
         val filter =
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
+                authIpSecurityService = authIpSecurityService,
                 authCookieService = authCookieService,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -60,6 +63,7 @@ class CustomAuthenticationFilterTest {
     @DisplayName("공개 API에서 인증 처리 중 예기치 못한 예외가 발생해도 익명으로 요청 처리를 계속한다")
     fun `public api unexpected auth error proceeds as anonymous`() {
         val actorApplicationService = mock(ActorApplicationService::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
@@ -76,6 +80,7 @@ class CustomAuthenticationFilterTest {
         val filter =
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
+                authIpSecurityService = authIpSecurityService,
                 authCookieService = authCookieService,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,

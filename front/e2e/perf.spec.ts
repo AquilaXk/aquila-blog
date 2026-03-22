@@ -216,6 +216,7 @@ const getWidthLockSnapshot = async (page: Page) =>
 
     return {
       viewport: window.innerWidth,
+      layoutViewport: document.documentElement.clientWidth,
       mainWidth: readWidth(main),
       headerWidth: readWidth(headerContainer),
     }
@@ -313,8 +314,8 @@ test("메인 레이아웃은 desktop width-lock 구간(1057~1440)에서 1024px �
   const fluidSnapshot = await getWidthLockSnapshot(page)
   expect(fluidSnapshot.mainWidth).toBeGreaterThan(1024)
   expect(fluidSnapshot.headerWidth).toBeGreaterThan(1024)
-  expect(fluidSnapshot.mainWidth).toBeCloseTo(fluidSnapshot.viewport, 0)
-  expect(fluidSnapshot.headerWidth).toBeCloseTo(fluidSnapshot.viewport, 0)
+  expect(fluidSnapshot.mainWidth).toBeCloseTo(fluidSnapshot.layoutViewport, 0)
+  expect(fluidSnapshot.headerWidth).toBeCloseTo(fluidSnapshot.layoutViewport, 0)
 })
 
 test("홈 피드 무한스크롤은 연속 트리거에서도 feed 호출이 폭주하지 않는다", async ({ page }) => {

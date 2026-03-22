@@ -1753,7 +1753,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     [adminPostViewRows, selectedPostIdSet]
   )
 
-  const loadAdminPosts = async () => {
+  const loadAdminPosts = useCallback(async () => {
     const safePage = sanitizeNumberInput(listPage || "1") || "1"
     const safePageSize = sanitizeNumberInput(listPageSize || "30") || "30"
     const safeSort =
@@ -1828,7 +1828,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }
+  }, [listKw, listPage, listPageSize, listScope, listSort])
 
   const togglePostSelection = useCallback((id: number) => {
     if (listScope === "deleted") return

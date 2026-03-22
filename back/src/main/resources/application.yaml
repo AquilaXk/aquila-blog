@@ -266,8 +266,15 @@ custom:
       cleanupBatchSize: ${CUSTOM__STORAGE__RETENTION__CLEANUP_BATCH_SIZE:100}
       cleanupSafetyThreshold: ${CUSTOM__STORAGE__RETENTION__CLEANUP_SAFETY_THRESHOLD:25}
   post:
+    search-index:
+      async-sync-enabled: ${CUSTOM__POST__SEARCH_INDEX__ASYNC_SYNC_ENABLED:true}
+      max-tags: ${CUSTOM__POST__SEARCH_INDEX__MAX_TAGS:32}
     read:
       cursor-signing-secret: ${CUSTOM__POST__READ__CURSOR_SIGNING_SECRET:}
+      prewarm:
+        enabled: ${CUSTOM__POST__READ__PREWARM__ENABLED:true}
+        page-size: ${CUSTOM__POST__READ__PREWARM__PAGE_SIZE:30}
+        max-tag-warmups: ${CUSTOM__POST__READ__PREWARM__MAX_TAG_WARMUPS:3}
       bulkhead:
         enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
         acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}

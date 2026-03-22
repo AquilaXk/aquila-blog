@@ -60,6 +60,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
       DEPLOY_COLOR: blue
     depends_on:
       - db_1
@@ -89,6 +90,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       CUSTOM_PROD_DBHOST: db_1
       CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "false"
       DEPLOY_COLOR: green
     depends_on:
       - db_1
@@ -98,6 +100,24 @@ services:
       default:
         aliases:
           - back-green
+
+  back_worker:
+    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    restart: unless-stopped
+    mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
+    mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-256m}
+    env_file:
+      - ./.env.prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CUSTOM_PROD_DBHOST: db_1
+      CUSTOM_PROD_REDISHOST: redis_1
+      CUSTOM__RUNTIME__WORKER_ENABLED: "true"
+      DEPLOY_COLOR: worker
+    depends_on:
+      - db_1
+      - redis_1
+      - minio_1
 
   db_1:
     image: ${DB_IMAGE}

@@ -35,6 +35,10 @@ jobs:
         working-directory: front
         run: yarn build
 
+      - name: Verify OpenAPI contract-generated types
+        working-directory: front
+        run: yarn contracts:check
+
       - name: Check frontend bundle size budget
         working-directory: front
         run: yarn check:bundle-size

@@ -241,20 +241,21 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
     })()
 
-  const systemHealthQuery = useQuery(
-    SYSTEM_HEALTH_QUERY_KEY,
-    async (): Promise<SystemHealthPayload> => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
-    {
-      enabled: Boolean(sessionMember?.isAdmin),
-      staleTime: HEALTH_CACHE_MS,
-      cacheTime: 60_000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    }
-  )
+  const systemHealthQuery = useQuery({
+    queryKey: SYSTEM_HEALTH_QUERY_KEY,
+    queryFn: async (): Promise<SystemHealthPayload> =>
+      apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
+    enabled: Boolean(sessionMember?.isAdmin),
+    staleTime: HEALTH_CACHE_MS,
+    gcTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
 
   const fetchSystemHealthCached = async () =>
-    queryClient.fetchQuery<SystemHealthPayload>(SYSTEM_HEALTH_QUERY_KEY, () => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"), {
+    queryClient.fetchQuery<SystemHealthPayload>({
+      queryKey: SYSTEM_HEALTH_QUERY_KEY,
+      queryFn: () => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
       staleTime: HEALTH_CACHE_MS,
     })
 

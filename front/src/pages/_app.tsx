@@ -1,6 +1,6 @@
 import { AppPropsWithLayout } from "../types"
 import { CacheProvider } from "@emotion/react"
-import { Hydrate, QueryClientProvider } from "@tanstack/react-query"
+import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query"
 import { RootLayout } from "src/layouts"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { createQueryClient } from "src/libs/react-query"
@@ -15,9 +15,9 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
   return (
     <CacheProvider value={emotionCache}>
       <QueryClientProvider client={queryClient}>
-        <Hydrate state={pageProps.dehydratedState}>
+        <HydrationBoundary state={pageProps.dehydratedState}>
           <RootLayout>{getLayout(<Component {...pageProps} />)}</RootLayout>
-        </Hydrate>
+        </HydrationBoundary>
       </QueryClientProvider>
     </CacheProvider>
   )

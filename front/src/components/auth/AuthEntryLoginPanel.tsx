@@ -57,7 +57,7 @@ const AuthEntryLoginPanel = ({
             onChange={(event) => onEmailChange(event.target.value)}
             onFocus={() => setEmailFocused(true)}
             onBlur={() => setEmailFocused(false)}
-            placeholder={emailActive ? "" : "이메일"}
+            placeholder=""
             autoComplete="email"
             disabled={loading}
           />
@@ -86,7 +86,7 @@ const AuthEntryLoginPanel = ({
             onChange={(event) => onPasswordChange(event.target.value)}
             onFocus={() => setPasswordFocused(true)}
             onBlur={() => setPasswordFocused(false)}
-            placeholder={passwordActive ? "" : "비밀번호"}
+            placeholder=""
             autoComplete="current-password"
             disabled={loading}
           />

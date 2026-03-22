@@ -2,6 +2,7 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.global.security.application.AuthIpSecurityService
+import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.web.application.AuthCookieService
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServlet
@@ -25,6 +26,7 @@ class CustomAuthenticationFilterTest {
     fun `protected api unexpected auth error returns 401`() {
         val actorApplicationService = mock(ActorApplicationService::class.java)
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
@@ -43,6 +45,7 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
@@ -64,6 +67,7 @@ class CustomAuthenticationFilterTest {
     fun `public api unexpected auth error proceeds as anonymous`() {
         val actorApplicationService = mock(ActorApplicationService::class.java)
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
@@ -81,6 +85,7 @@ class CustomAuthenticationFilterTest {
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
                 authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,

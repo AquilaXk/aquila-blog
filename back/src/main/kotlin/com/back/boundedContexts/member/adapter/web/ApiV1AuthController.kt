@@ -12,6 +12,7 @@ import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
+import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
 import jakarta.servlet.http.HttpServletRequest
@@ -40,6 +41,7 @@ class ApiV1AuthController(
     private val actorQueryUseCase: ActorQueryUseCase,
     private val authTokenIssueUseCase: AuthTokenIssueUseCase,
     private val authIpSecurityService: AuthIpSecurityService,
+    private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
 ) {
@@ -115,6 +117,13 @@ class ApiV1AuthController(
             accessToken = accessToken,
             rememberLoginEnabled = member.rememberLoginEnabled,
         )
+        runCatching {
+            authSecurityEventService.recordLoginPolicyApplied(
+                member = member,
+                loginIdentifier = loginIdentifier,
+                requestPath = request.requestURI,
+            )
+        }
 
         return RsData(
             "200-1",

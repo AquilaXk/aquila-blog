@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
+import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import com.back.global.web.application.AuthCookieService
@@ -30,6 +31,7 @@ import tools.jackson.databind.ObjectMapper
 class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
     private val authIpSecurityService: AuthIpSecurityService,
+    private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
@@ -117,6 +119,19 @@ class CustomAuthenticationFilter(
             if (payload.ipSecurityEnabled) {
                 val matched = authIpSecurityService.matches(payload.ipSecurityFingerprint, clientIp)
                 if (!matched) {
+                    runCatching {
+                        authSecurityEventService.recordIpSecurityMismatchBlocked(
+                            memberId = payload.id,
+                            loginIdentifier = payload.username,
+                            rememberLoginEnabled = payload.rememberLoginEnabled,
+                            ipSecurityEnabled = payload.ipSecurityEnabled,
+                            expectedIpFingerprint = payload.ipSecurityFingerprint,
+                            requestPath = request.requestURI,
+                            reason = "token-payload-ip-mismatch",
+                        )
+                    }.onFailure { exception ->
+                        log.warn("auth_security_event_record_failed reason=token-payload-ip-mismatch", exception)
+                    }
                     authCookieService.expireAuthCookies()
                     throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
                 }
@@ -133,6 +148,19 @@ class CustomAuthenticationFilter(
         if (member.ipSecurityEnabled) {
             val matched = authIpSecurityService.matches(member.ipSecurityFingerprint, clientIp)
             if (!matched) {
+                runCatching {
+                    authSecurityEventService.recordIpSecurityMismatchBlocked(
+                        memberId = member.id,
+                        loginIdentifier = member.username,
+                        rememberLoginEnabled = member.rememberLoginEnabled,
+                        ipSecurityEnabled = member.ipSecurityEnabled,
+                        expectedIpFingerprint = member.ipSecurityFingerprint,
+                        requestPath = request.requestURI,
+                        reason = "apikey-ip-mismatch",
+                    )
+                }.onFailure { exception ->
+                    log.warn("auth_security_event_record_failed reason=apikey-ip-mismatch", exception)
+                }
                 authCookieService.expireAuthCookies()
                 throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
             }

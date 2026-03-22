@@ -200,14 +200,25 @@ const LoginPage = () => {
         </NaverField>
 
         <LoginStateRow>
-          <KeepSignedInButton type="button" data-on={keepSignedIn} onClick={() => setKeepSignedIn((value) => !value)}>
+          <KeepSignedInButton
+            type="button"
+            data-on={keepSignedIn}
+            aria-pressed={keepSignedIn}
+            onClick={() => setKeepSignedIn((value) => !value)}
+          >
             <span className="checkIcon" aria-hidden="true">
               <AppIcon name="check-circle" />
             </span>
             <span>로그인 상태 유지</span>
           </KeepSignedInButton>
 
-          <IpSecurityToggle type="button" data-on={ipSecurityOn} onClick={() => setIpSecurityOn((value) => !value)}>
+          <IpSecurityToggle
+            type="button"
+            data-on={ipSecurityOn}
+            aria-pressed={ipSecurityOn}
+            aria-describedby="ip-security-hint"
+            onClick={() => setIpSecurityOn((value) => !value)}
+          >
             <span className="label">IP보안</span>
             <span className="switch" aria-hidden="true">
               <span className="thumb" />
@@ -215,6 +226,9 @@ const LoginPage = () => {
             <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
           </IpSecurityToggle>
         </LoginStateRow>
+        <IpSecurityHint id="ip-security-hint">
+          IP보안 ON 시 네트워크(IP) 변경 시 재로그인이 필요할 수 있습니다.
+        </IpSecurityHint>
 
         {error ? (
           <ErrorText>{error}</ErrorText>
@@ -451,6 +465,13 @@ const IpSecurityToggle = styled.button`
   &[data-on="true"] .state {
     color: ${({ theme }) => theme.colors.green10};
   }
+`
+
+const IpSecurityHint = styled.p`
+  margin: -0.18rem 0 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.8rem;
+  line-height: 1.45;
 `
 
 const PrimaryButton = styled.button`

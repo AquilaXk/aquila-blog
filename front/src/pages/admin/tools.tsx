@@ -102,6 +102,19 @@ type UploadedFileCleanupDiagnostics = {
   sampleEligibleObjectKeys: string[]
 }
 
+type AuthSecurityEvent = {
+  id: number
+  createdAt: string
+  eventType: "LOGIN_POLICY_APPLIED" | "IP_SECURITY_MISMATCH_BLOCKED" | string
+  memberId: number | null
+  loginIdentifier: string | null
+  rememberLoginEnabled: boolean
+  ipSecurityEnabled: boolean
+  clientIpFingerprint: string | null
+  requestPath: string | null
+  reason: string | null
+}
+
 type ApiRsData<T> = {
   resultCode: string
   msg: string
@@ -134,6 +147,7 @@ const ACTION_LABELS: Record<string, string> = {
   mailTest: "테스트 메일 발송",
   taskQueueStatus: "Task Queue 진단 새로고침",
   cleanupStatus: "파일 정리 진단 새로고침",
+  authSecurityEvents: "인증 보안 이벤트 새로고침",
 }
 
 const QUICK_GUIDES = [
@@ -156,6 +170,11 @@ const QUICK_GUIDES = [
     icon: "🧹",
     title: "스토리지 정리 상태",
     description: "purge 후보와 safety threshold를 확인해 과삭제 리스크를 빠르게 파악합니다.",
+  },
+  {
+    icon: "🔐",
+    title: "인증 보안 이벤트",
+    description: "로그인 정책 적용과 IP 보안 차단 이벤트를 최근 내역으로 확인합니다.",
   },
 ] as const
 
@@ -219,6 +238,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [taskQueueDiagnosticsError, setTaskQueueDiagnosticsError] = useState("")
   const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(null)
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
+  const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>([])
+  const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
   const [taskQueuePanelOpen, setTaskQueuePanelOpen] = useState(false)
   const [cleanupPanelOpen, setCleanupPanelOpen] = useState(false)
   const [isMobileLayout, setIsMobileLayout] = useState(false)
@@ -342,10 +363,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     void (async () => {
-      const [mailResult, taskResult, cleanupResult, publicPostsResult, adminPostsResult] = await Promise.allSettled([
+      const [mailResult, taskResult, cleanupResult, authEventsResult, publicPostsResult, adminPostsResult] = await Promise.allSettled([
         apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup"),
         apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"),
         apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"),
+        apiFetch<AuthSecurityEvent[]>("/system/api/v1/adm/auth/security-events?limit=30"),
         apiFetch<PageDto<{ id: number }>>("/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT"),
         apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
       ])
@@ -353,6 +375,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       if (mailResult.status === "fulfilled") setMailDiagnostics(mailResult.value)
       if (taskResult.status === "fulfilled") setTaskQueueDiagnostics(taskResult.value)
       if (cleanupResult.status === "fulfilled") setCleanupDiagnostics(cleanupResult.value)
+      if (authEventsResult.status === "fulfilled") setAuthSecurityEvents(authEventsResult.value)
       const firstPublicPostId =
         publicPostsResult.status === "fulfilled"
           ? publicPostsResult.value.content?.[0]?.id
@@ -441,6 +464,23 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  const fetchAuthSecurityEvents = async () => {
+    try {
+      setLoadingKey("authSecurityEvents")
+      setLastActionLabel(ACTION_LABELS.authSecurityEvents)
+      setAuthSecurityEventsError("")
+      const events = await apiFetch<AuthSecurityEvent[]>("/system/api/v1/adm/auth/security-events?limit=30")
+      setAuthSecurityEvents(events)
+      setResult(pretty(events))
+    } catch (error) {
+      const message = toFriendlyApiMessage(error, "인증 보안 이벤트 조회에 실패했습니다.")
+      setAuthSecurityEventsError(message)
+      setResult(pretty({ error: message }))
+    } finally {
+      setLoadingKey("")
+    }
+  }
+
   if (!sessionMember) return null
 
   const consoleStatus = loadingKey
@@ -485,6 +525,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     : cleanupDiagnostics
       ? "정상"
       : "미확인"
+  const authSecurityStatusLabel =
+    authSecurityEvents.length > 0
+      ? authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
+        ? "차단 이벤트 감지"
+        : "최근 이벤트 있음"
+      : "이벤트 없음"
+  const authSecurityHealthMessage =
+    authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
+      ? "최근 IP 보안 차단 이벤트가 감지되었습니다."
+      : "최근 인증 보안 이벤트를 확인하세요."
   const mailStatusLabel =
     mailDiagnostics?.status === "READY"
       ? "준비 완료"
@@ -634,6 +684,13 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       tone: "infra",
       onClick: async () => void fetchCleanupDiagnostics(),
     },
+    {
+      key: "authSecurityEvents",
+      title: "인증 보안 이벤트",
+      description: "로그인 정책/IP 보안 차단 이벤트 조회",
+      tone: "infra",
+      onClick: async () => void fetchAuthSecurityEvents(),
+    },
   ]
 
   const prioritizedActions: Array<{
@@ -659,6 +716,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       label: "Task Queue 진단",
       tone: "infra",
       onClick: async () => void fetchTaskQueueDiagnostics(),
+    },
+    {
+      key: "authSecurityEvents",
+      label: "인증 보안 이벤트",
+      tone: "infra",
+      onClick: async () => void fetchAuthSecurityEvents(),
     },
   ]
 
@@ -735,6 +798,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <small>파일 정리</small>
             <strong>{cleanupStatusLabel}</strong>
             <span>{cleanupHealthMessage}</span>
+          </OverviewItem>
+          <OverviewItem>
+            <small>인증 보안</small>
+            <strong>{authSecurityStatusLabel}</strong>
+            <span>{authSecurityHealthMessage}</span>
           </OverviewItem>
         </OverviewGrid>
       </OverviewCard>
@@ -1216,6 +1284,55 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </InlineNotice>
               )}
             </>
+          )}
+        </SectionCard>
+
+        <SectionCard>
+          <SectionTop>
+            <div>
+              <SectionEyebrow>Auth Security</SectionEyebrow>
+              <SectionTitleRow>
+                <SectionIcon aria-hidden="true">🔐</SectionIcon>
+                <h2>인증 보안 이벤트</h2>
+              </SectionTitleRow>
+              <SectionDescription>로그인 정책 적용/차단 이력을 최근 순으로 확인해 운영 이상 징후를 빠르게 파악합니다.</SectionDescription>
+            </div>
+            <BaseButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
+              이벤트 새로고침
+            </BaseButton>
+          </SectionTop>
+          <InlineNotice data-tone={authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED" ? "warning" : "success"}>
+            {authSecurityEvents.length > 0
+              ? `최근 이벤트: ${authSecurityEvents[0].eventType} · ${formatInstant(authSecurityEvents[0].createdAt)}`
+              : "아직 기록된 인증 보안 이벤트가 없습니다."}
+          </InlineNotice>
+
+          {!!authSecurityEventsError && <InlineNotice data-tone="danger">{authSecurityEventsError}</InlineNotice>}
+
+          {authSecurityEvents.length > 0 ? (
+            <AuthEventList>
+              {authSecurityEvents.map((event) => (
+                <AuthEventItem key={event.id}>
+                  <AuthEventHeader>
+                    <strong>{event.eventType}</strong>
+                    <small>{formatInstant(event.createdAt)}</small>
+                  </AuthEventHeader>
+                  <AuthEventMeta>
+                    <span>memberId: {event.memberId ?? "-"}</span>
+                    <span>identifier: {event.loginIdentifier || "-"}</span>
+                    <span>rememberMe: {event.rememberLoginEnabled ? "ON" : "OFF"}</span>
+                    <span>ipSecurity: {event.ipSecurityEnabled ? "ON" : "OFF"}</span>
+                  </AuthEventMeta>
+                  <AuthEventMeta>
+                    <span>path: {event.requestPath || "-"}</span>
+                    <span>fingerprint: {event.clientIpFingerprint || "-"}</span>
+                  </AuthEventMeta>
+                  {event.reason ? <AuthEventReason>{event.reason}</AuthEventReason> : null}
+                </AuthEventItem>
+              ))}
+            </AuthEventList>
+          ) : (
+            <InlineNotice>이벤트가 발생하면 이 영역에 표시됩니다.</InlineNotice>
           )}
         </SectionCard>
       </Grid>
@@ -2021,6 +2138,58 @@ const TaskSampleMeta = styled.div`
   span {
     overflow-wrap: anywhere;
   }
+`
+
+const AuthEventList = styled.div`
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.7rem;
+`
+
+const AuthEventItem = styled.article`
+  display: grid;
+  gap: 0.46rem;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  padding: 0.65rem 0;
+`
+
+const AuthEventHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+
+  strong {
+    font-size: 0.9rem;
+  }
+
+  small {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.78rem;
+  }
+`
+
+const AuthEventMeta = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+`
+
+const AuthEventReason = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  line-height: 1.5;
 `
 
 const MonitoringActions = styled.div`

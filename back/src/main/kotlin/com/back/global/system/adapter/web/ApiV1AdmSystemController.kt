@@ -5,6 +5,8 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
 import com.back.global.rsData.RsData
+import com.back.global.security.application.AuthSecurityEventDto
+import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.application.TaskDlqReplayResult
@@ -38,6 +40,7 @@ import java.time.Instant
 class ApiV1AdmSystemController(
     private val jdbcTemplate: JdbcTemplate,
     private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
+    private val authSecurityEventService: AuthSecurityEventService,
     private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
     private val taskDlqReplayService: TaskDlqReplayService,
@@ -126,6 +129,12 @@ class ApiV1AdmSystemController(
     @GetMapping("/tasks")
     @Transactional(readOnly = true)
     fun taskQueueDiagnostics(): TaskQueueDiagnostics = taskQueueDiagnosticsService.diagnoseQueue()
+
+    @GetMapping("/auth/security-events")
+    @Transactional(readOnly = true)
+    fun authSecurityEvents(
+        @RequestParam(defaultValue = "30") limit: Int,
+    ): List<AuthSecurityEventDto> = authSecurityEventService.getRecent(limit)
 
     @PostMapping("/tasks/replay-failed")
     @Transactional

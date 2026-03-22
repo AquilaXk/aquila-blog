@@ -4,6 +4,8 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
 import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorService
+import com.back.global.security.application.AuthSecurityEventDto
+import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -64,6 +66,9 @@ class ApiV1AdmSystemControllerTest {
 
     @MockitoBean
     private lateinit var signupMailDiagnosticsService: SignupMailDiagnosticsService
+
+    @MockitoBean
+    private lateinit var authSecurityEventService: AuthSecurityEventService
 
     @MockitoBean
     private lateinit var taskQueueDiagnosticsService: TaskQueueDiagnosticsService
@@ -152,6 +157,37 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.taskTypes[0].retryPolicy.baseDelaySeconds") { isNumber() }
             jsonPath("$.recentFailures") { isArray() }
             jsonPath("$.staleProcessingSamples") { isArray() }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 인증 보안 이벤트 목록을 조회할 수 있다`() {
+        given(authSecurityEventService.getRecent(30))
+            .willReturn(
+                listOf(
+                    AuthSecurityEventDto(
+                        id = 101,
+                        createdAt = Instant.parse("2026-03-23T00:00:00Z"),
+                        eventType = "LOGIN_POLICY_APPLIED",
+                        memberId = 1,
+                        loginIdentifier = "admin@example.com",
+                        rememberLoginEnabled = true,
+                        ipSecurityEnabled = true,
+                        clientIpFingerprint = "fingerprint-***",
+                        requestPath = "/member/api/v1/auth/login",
+                        reason = null,
+                    ),
+                ),
+            )
+
+        mvc.get("/system/api/v1/adm/auth/security-events").andExpect {
+            status { isOk() }
+            jsonPath("$[0].eventType") { value("LOGIN_POLICY_APPLIED") }
+            jsonPath("$[0].memberId") { value(1) }
+            jsonPath("$[0].loginIdentifier") { value("admin@example.com") }
+            jsonPath("$[0].ipSecurityEnabled") { value(true) }
+            jsonPath("$[0].requestPath") { value("/member/api/v1/auth/login") }
         }
     }
 

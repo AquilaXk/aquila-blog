@@ -38,7 +38,7 @@ const AuthEntrySignupPanel = ({
             onChange={(event) => onSignupEmailChange(event.target.value)}
             onFocus={() => setEmailFocused(true)}
             onBlur={() => setEmailFocused(false)}
-            placeholder={emailActive ? "" : "이메일"}
+            placeholder=""
             autoComplete="email"
             disabled={signupLoading}
           />

@@ -361,6 +361,7 @@ const Modal = styled.div`
   .loginForm {
     display: grid;
     gap: 0.72rem;
+    margin-top: 0.82rem;
     margin-bottom: 1rem;
   }
 

@@ -94,6 +94,15 @@ class Member(
     @field:Column
     var deletedAt: Instant? = null
 
+    @field:Column(nullable = false)
+    var rememberLoginEnabled: Boolean = true
+
+    @field:Column(nullable = false)
+    var ipSecurityEnabled: Boolean = false
+
+    @field:Column(length = 96)
+    var ipSecurityFingerprint: String? = null
+
     @Transient
     override var postsCountAttr: MemberAttr? = null
 
@@ -130,5 +139,23 @@ class Member(
 
     fun modifyApiKey(apiKey: String) {
         this.apiKey = apiKey
+    }
+
+    /**
+     * 로그인 시점의 세션 정책(로그인 유지/아이피 보안)을 현재 활성 키 기준으로 저장합니다.
+     */
+    fun applyLoginSecurityPolicy(
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+    ) {
+        this.rememberLoginEnabled = rememberLoginEnabled
+        this.ipSecurityEnabled = ipSecurityEnabled
+        this.ipSecurityFingerprint =
+            if (ipSecurityEnabled) {
+                ipSecurityFingerprint
+            } else {
+                null
+            }
     }
 }

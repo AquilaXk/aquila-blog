@@ -8,11 +8,15 @@ type Props = {
   showPassword: boolean
   error: string
   loading: boolean
+  keepSignedIn: boolean
+  ipSecurityOn: boolean
   socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onEmailChange: (value: string) => void
   onPasswordChange: (value: string) => void
   onTogglePassword: () => void
+  onToggleKeepSignedIn: () => void
+  onToggleIpSecurity: () => void
   onSwitchToSignup: () => void
 }
 
@@ -22,17 +26,19 @@ const AuthEntryLoginPanel = ({
   showPassword,
   error,
   loading,
+  keepSignedIn,
+  ipSecurityOn,
   socialItems,
   onSubmit,
   onEmailChange,
   onPasswordChange,
   onTogglePassword,
+  onToggleKeepSignedIn,
+  onToggleIpSecurity,
   onSwitchToSignup,
 }: Props) => {
   const [emailFocused, setEmailFocused] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
-  const [keepSignedIn, setKeepSignedIn] = useState(true)
-  const [ipSecurityOn, setIpSecurityOn] = useState(false)
 
   const emailActive = useMemo(() => emailFocused || email.length > 0, [email, emailFocused])
   const passwordActive = useMemo(() => passwordFocused || password.length > 0, [password, passwordFocused])
@@ -113,7 +119,7 @@ const AuthEntryLoginPanel = ({
           <button
             type="button"
             className={`keepSignedInButton ${keepSignedIn ? "isOn" : ""}`}
-            onClick={() => setKeepSignedIn((value) => !value)}
+            onClick={onToggleKeepSignedIn}
             aria-pressed={keepSignedIn}
           >
             <span className="checkBadge" aria-hidden="true">
@@ -125,7 +131,7 @@ const AuthEntryLoginPanel = ({
           <button
             type="button"
             className={`ipSecurityToggle ${ipSecurityOn ? "isOn" : ""}`}
-            onClick={() => setIpSecurityOn((value) => !value)}
+            onClick={onToggleIpSecurity}
             aria-pressed={ipSecurityOn}
           >
             <span className="label">IP보안</span>

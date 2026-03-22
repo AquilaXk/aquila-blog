@@ -11,6 +11,7 @@ import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
+import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
 import jakarta.servlet.http.HttpServletRequest
@@ -38,6 +39,7 @@ class ApiV1AuthController(
     private val memberUseCase: MemberUseCase,
     private val actorQueryUseCase: ActorQueryUseCase,
     private val authTokenIssueUseCase: AuthTokenIssueUseCase,
+    private val authIpSecurityService: AuthIpSecurityService,
     private val authCookieService: AuthCookieService,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
 ) {
@@ -47,6 +49,8 @@ class ApiV1AuthController(
         @field:NotBlank
         @field:Size(max = 128)
         val password: String,
+        val rememberMe: Boolean = true,
+        val ipSecurity: Boolean = false,
     )
 
     data class MemberLoginResBody(
@@ -88,11 +92,29 @@ class ApiV1AuthController(
 
         loginAttemptPolicyUseCase.clear(loginAttemptKey, clientIp)
 
+        val ipSecurityFingerprint =
+            if (reqBody.ipSecurity) {
+                authIpSecurityService.fingerprint(clientIp)
+                    ?: throw AppException("400-3", "IP 보안 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.")
+            } else {
+                null
+            }
+
+        member.applyLoginSecurityPolicy(
+            rememberLoginEnabled = reqBody.rememberMe,
+            ipSecurityEnabled = reqBody.ipSecurity,
+            ipSecurityFingerprint = ipSecurityFingerprint,
+        )
+
         // 로그인 성공 시 장기 인증 식별자(apiKey)를 회전해 탈취된 기존 키 재사용 위험을 줄인다.
         member.modifyApiKey(MemberPolicy.genApiKey())
         val accessToken = authTokenIssueUseCase.genAccessToken(member)
 
-        authCookieService.issueAuthCookies(member.apiKey, accessToken)
+        authCookieService.issueAuthCookies(
+            apiKey = member.apiKey,
+            accessToken = accessToken,
+            rememberLoginEnabled = member.rememberLoginEnabled,
+        )
 
         return RsData(
             "200-1",

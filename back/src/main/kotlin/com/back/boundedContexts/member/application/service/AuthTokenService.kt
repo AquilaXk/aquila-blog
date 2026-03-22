@@ -33,6 +33,9 @@ class AuthTokenService(
                     "id" to member.id,
                     "username" to member.username,
                     "name" to member.name,
+                    "rememberLoginEnabled" to member.rememberLoginEnabled,
+                    "ipSecurityEnabled" to member.ipSecurityEnabled,
+                    "ipSecurityFingerprint" to member.ipSecurityFingerprint,
                 ),
             ).issuedAt(Date())
             .expiration(Date(System.currentTimeMillis() + accessTokenExpirationSeconds * 1000L))
@@ -59,6 +62,9 @@ class AuthTokenService(
             id = (payload["id"] as? Number)?.toLong() ?: return null,
             username = payload["username"] as? String ?: return null,
             name = payload["name"] as? String ?: return null,
+            rememberLoginEnabled = payload["rememberLoginEnabled"] as? Boolean ?: true,
+            ipSecurityEnabled = payload["ipSecurityEnabled"] as? Boolean ?: false,
+            ipSecurityFingerprint = payload["ipSecurityFingerprint"] as? String,
         )
     }
 }

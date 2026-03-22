@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
+import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import com.back.global.web.application.AuthCookieService
@@ -28,6 +29,7 @@ import tools.jackson.databind.ObjectMapper
 @Component
 class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
+    private val authIpSecurityService: AuthIpSecurityService,
     private val authCookieService: AuthCookieService,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
@@ -105,16 +107,21 @@ class CustomAuthenticationFilter(
         response: HttpServletResponse,
     ) {
         val (apiKey, accessToken) = extractTokens()
+        val clientIp = request.remoteAddr.orEmpty()
 
         if (apiKey.isBlank() && accessToken.isBlank()) return
 
-        val payloadMember =
-            accessToken
-                .takeIf { it.isNotBlank() }
-                ?.let(actorApplicationService::payload)
-                ?.let { Member(it.id, it.username, null, it.name) }
+        val payload = accessToken.takeIf { it.isNotBlank() }?.let(actorApplicationService::payload)
 
-        if (payloadMember != null) {
+        if (payload != null) {
+            if (payload.ipSecurityEnabled) {
+                val matched = authIpSecurityService.matches(payload.ipSecurityFingerprint, clientIp)
+                if (!matched) {
+                    authCookieService.expireAuthCookies()
+                    throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
+                }
+            }
+            val payloadMember = Member(payload.id, payload.username, null, payload.name)
             authenticate(payloadMember)
             return
         }
@@ -123,8 +130,19 @@ class CustomAuthenticationFilter(
             actorApplicationService.findByApiKey(apiKey)
                 ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
+        if (member.ipSecurityEnabled) {
+            val matched = authIpSecurityService.matches(member.ipSecurityFingerprint, clientIp)
+            if (!matched) {
+                authCookieService.expireAuthCookies()
+                throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
+            }
+        }
+
         val newAccessToken = actorApplicationService.genAccessToken(member)
-        authCookieService.issueAccessToken(newAccessToken)
+        authCookieService.issueAccessToken(
+            accessToken = newAccessToken,
+            rememberLoginEnabled = member.rememberLoginEnabled,
+        )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
 
         authenticate(member)

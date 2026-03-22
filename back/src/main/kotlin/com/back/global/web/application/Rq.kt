@@ -81,6 +81,7 @@ class Rq(
         name: String,
         value: String?,
         maxAgeSeconds: Int = 60 * 60 * 24 * 365,
+        sessionOnly: Boolean = false,
     ) {
         val rawCookieDomain = AppFacade.siteCookieDomain.trim()
         val cookieDomain =
@@ -89,8 +90,6 @@ class Rq(
                 frontUrl = AppFacade.siteFrontUrl,
                 backUrl = AppFacade.siteBackUrl,
             )
-        val maxAge = if (value.isNullOrBlank()) 0 else maxAgeSeconds.coerceAtLeast(1)
-
         val builder =
             ResponseCookie
                 .from(name, value ?: "")
@@ -98,7 +97,11 @@ class Rq(
                 .httpOnly(true)
                 .secure(true)
                 .sameSite("Strict")
-                .maxAge(Duration.ofSeconds(maxAge.toLong()))
+
+        when {
+            value.isNullOrBlank() -> builder.maxAge(Duration.ZERO)
+            !sessionOnly -> builder.maxAge(Duration.ofSeconds(maxAgeSeconds.coerceAtLeast(1).toLong()))
+        }
 
         if (rawCookieDomain.isNotBlank() && rawCookieDomain != cookieDomain) {
             logger.warn(

@@ -85,6 +85,8 @@ const AuthEntryModal: React.FC<Props> = ({
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [keepSignedIn, setKeepSignedIn] = useState(true)
+  const [ipSecurityOn, setIpSecurityOn] = useState(false)
   const [signupEmail, setSignupEmail] = useState("")
   const [signupError, setSignupError] = useState("")
   const [signupLoading, setSignupLoading] = useState(false)
@@ -112,6 +114,8 @@ const AuthEntryModal: React.FC<Props> = ({
     setEmail("")
     setPassword("")
     setShowPassword(false)
+    setKeepSignedIn(true)
+    setIpSecurityOn(false)
     setSignupEmail("")
     setSentEmail("")
 
@@ -145,6 +149,8 @@ const AuthEntryModal: React.FC<Props> = ({
         body: JSON.stringify({
           email: email.trim(),
           password,
+          rememberMe: keepSignedIn,
+          ipSecurity: ipSecurityOn,
         }),
       })
 
@@ -232,11 +238,15 @@ const AuthEntryModal: React.FC<Props> = ({
               showPassword={showPassword}
               error={error}
               loading={loading}
+              keepSignedIn={keepSignedIn}
+              ipSecurityOn={ipSecurityOn}
               socialItems={socialItems}
               onSubmit={handleLogin}
               onEmailChange={setEmail}
               onPasswordChange={setPassword}
               onTogglePassword={() => setShowPassword((value) => !value)}
+              onToggleKeepSignedIn={() => setKeepSignedIn((value) => !value)}
+              onToggleIpSecurity={() => setIpSecurityOn((value) => !value)}
               onSwitchToSignup={() => setView("signup")}
             />
           )}

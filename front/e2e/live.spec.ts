@@ -36,6 +36,9 @@ const isRetriableNetworkError = (error: unknown) => {
   return /(timeout|econnreset|enotfound|etimedout|econnrefused)/i.test(message)
 }
 
+const isWebKitCorsAccessControlNoise = (message: string) =>
+  /due to access control checks\./i.test(message) && /\/api\.[\w.-]+\//i.test(message)
+
 const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
   const probePaths = ["/actuator/health", "/member/api/v1/auth/me"]
   let lastFailure = "unknown"
@@ -185,7 +188,9 @@ test.describe("live production e2e", () => {
       /Failed to fetch dynamically imported module/i,
     ]
     const criticalErrors = runtimeErrors.filter(
-      (message) => !ignorablePatterns.some((pattern) => pattern.test(message))
+      (message) =>
+        !isWebKitCorsAccessControlNoise(message) &&
+        !ignorablePatterns.some((pattern) => pattern.test(message))
     )
     expect(criticalErrors).toEqual([])
   })

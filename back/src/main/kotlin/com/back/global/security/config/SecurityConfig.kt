@@ -3,7 +3,6 @@ package com.back.global.security.config
 import com.back.boundedContexts.member.config.MemberSecurityConfigurer
 import com.back.boundedContexts.member.config.shared.AuthSecurityConfigurer
 import com.back.boundedContexts.post.config.PostSecurityConfigurer
-import com.back.global.app.AppConfig
 import com.back.global.app.application.AppFacade
 import com.back.global.rsData.RsData
 import com.back.global.security.config.oauth2.CustomOAuth2AuthorizationRequestResolver
@@ -13,6 +12,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
@@ -21,7 +21,6 @@ import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
-import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 import tools.jackson.databind.ObjectMapper
 
@@ -39,6 +38,7 @@ class SecurityConfig(
     private val authSecurityConfigurer: AuthSecurityConfigurer,
     private val memberSecurityConfigurer: MemberSecurityConfigurer,
     private val postSecurityConfigurer: PostSecurityConfigurer,
+    private val apiCorsPolicy: ApiCorsPolicy,
     private val objectMapper: ObjectMapper,
 ) {
     /**
@@ -49,6 +49,7 @@ class SecurityConfig(
     fun filterChain(http: HttpSecurity): SecurityFilterChain {
         http {
             authorizeHttpRequests {
+                authorize(HttpMethod.OPTIONS, "/**", permitAll)
                 authSecurityConfigurer.configure(this)
                 memberSecurityConfigurer.configure(this)
                 postSecurityConfigurer.configure(this)
@@ -105,10 +106,11 @@ class SecurityConfig(
 
             exceptionHandling {
                 authenticationEntryPoint =
-                    AuthenticationEntryPoint { _, response, _ ->
+                    AuthenticationEntryPoint { request, response, _ ->
                         if (response.isCommitted) {
                             return@AuthenticationEntryPoint
                         }
+                        apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
                         applyNoStoreHeaders(response)
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 401
@@ -116,10 +118,11 @@ class SecurityConfig(
                     }
 
                 accessDeniedHandler =
-                    AccessDeniedHandler { _, response, _ ->
+                    AccessDeniedHandler { request, response, _ ->
                         if (response.isCommitted) {
                             return@AccessDeniedHandler
                         }
+                        apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
                         applyNoStoreHeaders(response)
                         response.contentType = "$APPLICATION_JSON_VALUE; charset=UTF-8"
                         response.status = 403
@@ -136,39 +139,10 @@ class SecurityConfig(
      * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
      */
     @Bean
-    fun corsConfigurationSource(): UrlBasedCorsConfigurationSource {
-        val cookieDomain = AppFacade.siteCookieDomain.trim()
-        val siteOriginPatterns =
-            buildList {
-                if (AppConfig.siteFrontUrl.isNotBlank()) {
-                    add(AppConfig.siteFrontUrl)
-                }
-                if (cookieDomain.isNotBlank()) {
-                    add("https://$cookieDomain")
-                    add("https://www.$cookieDomain")
-                }
-            }
-        val localOriginPatterns =
-            if (AppFacade.isProd) {
-                emptyList()
-            } else {
-                listOf("http://localhost:*", "http://127.0.0.1:*")
-            }
-
-        val configuration =
-            CorsConfiguration().apply {
-                allowedOriginPatterns =
-                    (siteOriginPatterns + localOriginPatterns)
-                        .distinct()
-                allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                allowCredentials = true
-                allowedHeaders = listOf("*")
-            }
-
-        return UrlBasedCorsConfigurationSource().apply {
-            registerCorsConfiguration("/*/api/**", configuration)
+    fun corsConfigurationSource(): UrlBasedCorsConfigurationSource =
+        UrlBasedCorsConfigurationSource().apply {
+            registerCorsConfiguration("/**", apiCorsPolicy.corsConfiguration())
         }
-    }
 
     private fun applyNoStoreHeaders(response: HttpServletResponse) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")

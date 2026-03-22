@@ -25,9 +25,11 @@ class CustomAuthenticationFilterTest {
         val actorApplicationService = mock(ActorApplicationService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq = mock(Rq::class.java)
         val objectMapper = ObjectMapper()
         val request = MockHttpServletRequest("GET", "/member/api/v1/notifications/snapshot")
+        request.addHeader(HttpHeaders.ORIGIN, "https://www.aquilaxk.site")
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
@@ -41,6 +43,7 @@ class CustomAuthenticationFilterTest {
                 authCookieService = authCookieService,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
                 rq = rq,
             )
 
@@ -59,6 +62,7 @@ class CustomAuthenticationFilterTest {
         val actorApplicationService = mock(ActorApplicationService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq = mock(Rq::class.java)
         val objectMapper = ObjectMapper()
         val request = MockHttpServletRequest("GET", "/post/api/v1/posts")
@@ -75,6 +79,7 @@ class CustomAuthenticationFilterTest {
                 authCookieService = authCookieService,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
                 rq = rq,
             )
 

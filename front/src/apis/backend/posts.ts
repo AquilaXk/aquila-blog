@@ -28,6 +28,8 @@ type ApiPostDto = {
   authorName: string
   authorUsername?: string
   authorProfileImgUrl: string
+  authorProfileImageUrl?: string
+  authorProfileImageDirectUrl?: string
   title: string
   thumbnail?: string
   summary?: string
@@ -201,13 +203,28 @@ const normalizeStringArray = (value?: string[]) => {
 const normalizeCategoryArray = (value?: string[]) =>
   normalizeStringArray(value).map(normalizeCategoryValue)
 
+const pickPreferredImageUrl = (...candidates: Array<string | undefined>) => {
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue
+    const normalized = candidate.trim()
+    if (normalized.length > 0) return normalized
+  }
+  return ""
+}
+
 const isAbortError = (error: unknown): boolean => error instanceof Error && error.name === "AbortError"
 
 const mapPostDto = (post: ApiPostDto): TPost => {
   const normalizedTags = normalizeStringArray(post.tags)
   const normalizedCategories = normalizeCategoryArray(post.category)
   const hasSummary = typeof post.summary === "string" && post.summary.trim().length > 0
-  const hasThumbnail = typeof post.thumbnail === "string" && post.thumbnail.trim().length > 0
+  const normalizedThumbnail = pickPreferredImageUrl(post.thumbnail)
+  const hasThumbnail = normalizedThumbnail.length > 0
+  const authorProfileImage = pickPreferredImageUrl(
+    post.authorProfileImageDirectUrl,
+    post.authorProfileImgUrl,
+    post.authorProfileImageUrl
+  )
   const hasActorHasLiked = typeof post.actorHasLiked === "boolean"
 
   return {
@@ -220,11 +237,11 @@ const mapPostDto = (post: ApiPostDto): TPost => {
       {
         id: String(post.authorId),
         name: post.authorUsername || post.authorName,
-        profile_photo: post.authorProfileImgUrl,
+        profile_photo: authorProfileImage,
       },
     ],
     title: post.title,
-    ...(hasThumbnail ? { thumbnail: post.thumbnail } : {}),
+    ...(hasThumbnail ? { thumbnail: normalizedThumbnail } : {}),
     ...(normalizedTags.length > 0 ? { tags: normalizedTags } : {}),
     ...(normalizedCategories.length > 0 ? { category: normalizedCategories } : {}),
     status: toStatus(post.published, post.listed),

@@ -202,7 +202,7 @@ class PostApplicationService(
         }
 
         val previousContent = post.content
-        val previousTags = PostMetaExtractor.extract(previousContent).tags
+        val previousTags = extractNormalizedTags(previousContent)
         try {
             val sanitizedContentHtml =
                 if (contentHtml == null) {
@@ -222,7 +222,7 @@ class PostApplicationService(
             logger.warn("Failed to sync post attachments on modify: postId={}", post.id, exception)
         }
         clearReadCaches(post.id)
-        val afterTags = PostMetaExtractor.extract(post.content).tags
+        val afterTags = extractNormalizedTags(post.content)
 
         runCatching {
             eventPublisher.publish(
@@ -271,7 +271,7 @@ class PostApplicationService(
             logger.warn("Failed to sync post attachments on write: postId={}", savedPost.id, exception)
         }
         incrementMemberPostsCount(persistenceAuthor)
-        val afterTags = PostMetaExtractor.extract(savedPost.content).tags
+        val afterTags = extractNormalizedTags(savedPost.content)
 
         runCatching {
             eventPublisher.publish(
@@ -356,7 +356,7 @@ class PostApplicationService(
 
         runCatching {
             val postDto = PostDto(post)
-            val beforeTags = PostMetaExtractor.extract(deletedPostContent).tags
+            val beforeTags = extractNormalizedTags(deletedPostContent)
             eventPublisher.publish(
                 PostDeletedEvent(
                     UUID.randomUUID(),
@@ -1093,13 +1093,7 @@ class PostApplicationService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     private fun syncMetaTagIndexAttr(post: Post) {
-        val normalizedTags =
-            PostMetaExtractor
-                .extract(post.content)
-                .tags
-                .map(::normalizeTag)
-                .filter(String::isNotBlank)
-                .distinct()
+        val normalizedTags = extractNormalizedTags(post.content)
 
         val indexValue =
             if (normalizedTags.isEmpty()) {
@@ -1144,6 +1138,14 @@ class PostApplicationService(
     }
 
     private fun normalizeTag(tag: String): String = tag.trim()
+
+    private fun extractNormalizedTags(content: String): List<String> =
+        PostMetaExtractor
+            .extract(content)
+            .tags
+            .map(::normalizeTag)
+            .filter(String::isNotBlank)
+            .distinct()
 
     private fun parseTagIndex(tagIndex: String): List<String> =
         tagIndex

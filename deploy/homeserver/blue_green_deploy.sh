@@ -769,7 +769,7 @@ echo "next backend: ${next_backend}"
 action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
-compose_up_with_retry db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal
+compose_up_with_retry db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal back_worker
 ensure_caddy_mount_sync
 check_cloudflared_runtime
 ensure_db_runtime_guards || true

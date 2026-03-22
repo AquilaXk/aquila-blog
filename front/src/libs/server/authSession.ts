@@ -17,9 +17,9 @@ export const fetchServerAuthSession = async (req: IncomingMessage): Promise<Auth
   try {
     const response = await serverApiFetch(req, "/member/api/v1/auth/me")
     if (response.status === 401) {
-      // 쿠키가 있는데 SSR auth/me가 401이면 도메인/세션 경계 이슈일 수 있어
-      // anonymous로 확정하지 않고 unknown으로 남겨 클라이언트에서 최종 판별한다.
-      return undefined
+      // 쿠키가 남아 있더라도 401이면 서버 기준 비로그인 상태로 확정한다.
+      // 클라이언트 재검증(auth/me)까지 이어지면 브라우저 콘솔에 401 노이즈가 반복될 수 있다.
+      return null
     }
     if (!response.ok) return undefined
     return (await response.json()) as AuthMember

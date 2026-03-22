@@ -261,7 +261,13 @@ class TaskProcessingScheduledJob(
             task.errorMessage = errorMessage
             task.scheduleRetry(taskHandlerRegistry.getRetryPolicy(taskType))
             if (task.status == TaskStatus.FAILED) {
-                logger.error("task_dead_lettered taskId={} taskType={} retryCount={} maxRetries={}", task.id, taskType, task.retryCount, task.maxRetries)
+                logger.error(
+                    "task_dead_lettered taskId={} taskType={} retryCount={} maxRetries={}",
+                    task.id,
+                    taskType,
+                    task.retryCount,
+                    task.maxRetries,
+                )
             }
             recordTaskResult(taskType, if (task.status == TaskStatus.FAILED) "dlq" else "retry")
         }

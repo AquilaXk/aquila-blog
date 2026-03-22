@@ -56,6 +56,7 @@ const useAuthSession = () => {
   }, [])
 
   const queryClient = useQueryClient()
+  const serverProbeSnapshot = queryClient.getQueryData<boolean | undefined>(queryKey.authMeProbe())
   const cachedSnapshot = queryClient.getQueryData<AuthMember | null | undefined>(queryKey.authMe())
   const hasCachedSnapshot = cachedSnapshot !== undefined
   const hasCachedMemberSnapshot = cachedSnapshot != null
@@ -63,8 +64,14 @@ const useAuthSession = () => {
   // SSR에서 "쿠키 없음"이 확정된 anonymous(null)은 재검증을 건너뛰어
   // 비로그인 사용자의 불필요한 401(auth/me) 반복을 줄인다.
   // 단, SSR 검증 실패(undefined)로 들어온 경우에는 클라이언트에서 재검증한다.
-  const shouldFetchAuthMe =
-    hasCachedMemberSnapshot || (!hasCachedSnapshot && !readAnonymousProbeSuppressed())
+  const shouldFetchAuthMe = (() => {
+    if (hasCachedMemberSnapshot) return true
+    if (hasCachedAnonymousSnapshot && serverProbeSnapshot !== true) return false
+    if (readAnonymousProbeSuppressed()) return false
+    if (serverProbeSnapshot === false) return false
+    if (serverProbeSnapshot === true) return true
+    return !hasCachedSnapshot
+  })()
   const query = useQuery({
     queryKey: queryKey.authMe(),
     queryFn: async () => {
@@ -87,12 +94,17 @@ const useAuthSession = () => {
   })
 
   useEffect(() => {
-    if (!query.data) return
-    clearAnonymousProbeSuppression()
-  }, [query.data])
+    if (!query.isSuccess) return
+
+    queryClient.setQueryData(queryKey.authMeProbe(), query.data != null)
+    if (query.data) {
+      clearAnonymousProbeSuppression()
+    }
+  }, [query.isSuccess, query.data, queryClient])
 
   const setMe = (member: AuthMember | null) => {
     queryClient.setQueryData(queryKey.authMe(), member)
+    queryClient.setQueryData(queryKey.authMeProbe(), member != null)
     if (member) {
       clearAnonymousProbeSuppression()
     }

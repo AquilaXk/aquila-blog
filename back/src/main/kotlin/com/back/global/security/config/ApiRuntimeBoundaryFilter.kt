@@ -63,8 +63,7 @@ class ApiRuntimeBoundaryFilter(
         }
     }
 
-    private fun isPublicReadPath(path: String): Boolean =
-        PUBLIC_READ_PATHS.any { it.matches(path) } || PUBLIC_DETAIL_PATH.matches(path)
+    private fun isPublicReadPath(path: String): Boolean = PUBLIC_READ_PATHS.any { it.matches(path) } || PUBLIC_DETAIL_PATH.matches(path)
 
     private fun requestPath(request: HttpServletRequest): String {
         val contextPath = request.contextPath.orEmpty()

@@ -115,14 +115,28 @@ const StyledWrapper = styled.div`
     width: 100%;
     min-width: 0;
     min-height: 16px;
+    padding: 0.125rem 0;
     font-size: 0.875rem;
-    line-height: 16px;
+    line-height: 1.35;
     color: ${({ theme }) => theme.colors.gray12};
+    caret-color: ${({ theme }) => theme.colors.gray12};
     border: 0;
     outline: none;
     box-shadow: none;
     background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
     transition: all 0.125s ease-in;
+
+    &::placeholder {
+      color: ${({ theme }) => theme.colors.gray10};
+      opacity: 1;
+      transition: opacity 0.12s ease-in;
+    }
+
+    &:focus::placeholder {
+      opacity: 0;
+    }
 
     &::-webkit-search-decoration,
     &::-webkit-search-cancel-button,

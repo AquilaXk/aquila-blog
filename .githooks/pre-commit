@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+if [[ -z "${staged_files}" ]]; then
+  exit 0
+fi
+
+needs_contract_check="false"
+while IFS= read -r file; do
+  case "${file}" in
+    back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*)
+      needs_contract_check="true"
+      break
+      ;;
+    front/contracts/openapi/openapi.json|front/packages/shared-contracts/src/generated/backend-openapi.d.ts)
+      needs_contract_check="true"
+      break
+      ;;
+    .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/reusable-frontend-verify.yml)
+      needs_contract_check="true"
+      break
+      ;;
+  esac
+done <<< "${staged_files}"
+
+if [[ "${needs_contract_check}" != "true" ]]; then
+  exit 0
+fi
+
+if ! command -v yarn >/dev/null 2>&1; then
+  echo "[pre-commit] yarn 명령을 찾지 못해 OpenAPI 계약 검사(contracts:check)를 실행할 수 없습니다." >&2
+  exit 1
+fi
+
+echo "[pre-commit] OpenAPI 계약 드리프트 검사 실행: yarn contracts:check"
+(
+  cd front
+  yarn contracts:check
+)
+

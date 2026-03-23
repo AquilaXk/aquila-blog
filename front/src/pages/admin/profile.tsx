@@ -1368,6 +1368,7 @@ const ModalActions = styled.div`
 `
 
 const ModalEditorFrame = styled.div`
+  position: relative;
   width: min(100%, 360px);
   justify-self: center;
   aspect-ratio: 1 / 1;

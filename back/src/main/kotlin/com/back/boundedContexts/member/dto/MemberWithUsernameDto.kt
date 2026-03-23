@@ -48,7 +48,8 @@ data class MemberWithUsernameDto(
         createdAt = member.createdAt,
         modifiedAt = member.modifiedAt,
         isAdmin = member.isAdmin,
-        username = member.username,
+        // 내부 username은 외부 응답에 그대로 노출하지 않고 공개 표시용 닉네임으로 마스킹한다.
+        username = member.name,
         name = member.name,
         nickname = member.nickname,
         profileImageUrl = member.redirectToProfileImgUrlVersionedOrDefault,

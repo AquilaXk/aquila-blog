@@ -8,6 +8,8 @@ import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
 import { normalizeNextPath } from "src/libs/router"
+import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
+import IpSecurityInfoModal from "./IpSecurityInfoModal"
 import { buildSocialAuthItems } from "./socialAuth"
 
 type RsData<T> = {
@@ -88,6 +90,7 @@ const AuthEntryModal: React.FC<Props> = ({
   const [showPassword, setShowPassword] = useState(false)
   const [keepSignedIn, setKeepSignedIn] = useState(true)
   const [ipSecurityOn, setIpSecurityOn] = useState(false)
+  const [showIpSecurityInfo, setShowIpSecurityInfo] = useState(false)
   const [signupEmail, setSignupEmail] = useState("")
   const [signupError, setSignupError] = useState("")
   const [signupLoading, setSignupLoading] = useState(false)
@@ -115,6 +118,7 @@ const AuthEntryModal: React.FC<Props> = ({
     setEmail("")
     setPassword("")
     setShowPassword(false)
+    setShowIpSecurityInfo(false)
     const prefs = loadAuthLoginPolicyPrefs()
     setKeepSignedIn(prefs.keepSignedIn)
     setIpSecurityOn(prefs.ipSecurityOn)
@@ -140,9 +144,14 @@ const AuthEntryModal: React.FC<Props> = ({
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const normalizedEmail = normalizeAuthEmail(email)
 
-    if (!email.trim() || !password.trim()) {
+    if (!normalizedEmail || !password.trim()) {
       setError("이메일과 비밀번호를 입력해주세요.")
+      return
+    }
+    if (!isValidAuthEmail(normalizedEmail)) {
+      setError("이메일 형식을 확인해주세요.")
       return
     }
 
@@ -153,7 +162,7 @@ const AuthEntryModal: React.FC<Props> = ({
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          email: email.trim(),
+          email: normalizedEmail,
           password,
           rememberMe: keepSignedIn,
           ipSecurity: ipSecurityOn,
@@ -178,9 +187,14 @@ const AuthEntryModal: React.FC<Props> = ({
 
   const handleSignupEmailStart = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const normalizedEmail = normalizeAuthEmail(signupEmail)
 
-    if (!signupEmail.trim()) {
+    if (!normalizedEmail) {
       setSignupError("이메일을 입력해주세요.")
+      return
+    }
+    if (!isValidAuthEmail(normalizedEmail)) {
+      setSignupError("이메일 형식을 확인해주세요.")
       return
     }
 
@@ -191,7 +205,7 @@ const AuthEntryModal: React.FC<Props> = ({
       const response = await apiFetch<RsData<SignupEmailStartResult>>("/member/api/v1/signup/email/start", {
         method: "POST",
         body: JSON.stringify({
-          email: signupEmail.trim(),
+          email: normalizedEmail,
           nextPath: normalizedNextPath,
         }),
       })
@@ -253,6 +267,7 @@ const AuthEntryModal: React.FC<Props> = ({
               onTogglePassword={() => setShowPassword((value) => !value)}
               onToggleKeepSignedIn={() => setKeepSignedIn((value) => !value)}
               onToggleIpSecurity={() => setIpSecurityOn((value) => !value)}
+              onOpenIpSecurityInfo={() => setShowIpSecurityInfo(true)}
               onSwitchToSignup={() => setView("signup")}
             />
           )}
@@ -279,6 +294,7 @@ const AuthEntryModal: React.FC<Props> = ({
           )}
         </div>
       </Modal>
+      <IpSecurityInfoModal open={showIpSecurityInfo} onClose={() => setShowIpSecurityInfo(false)} />
     </Backdrop>
   )
 
@@ -602,6 +618,37 @@ const Modal = styled.div`
     }
   }
 
+  .ipSecurityControl {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.46rem;
+  }
+
+  .ipSecurityInfoButton {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: ${({ theme }) => theme.colors.gray7};
+    text-underline-offset: 2px;
+    cursor: pointer;
+
+    &:hover {
+      color: ${({ theme }) => theme.colors.blue10};
+      text-decoration-color: ${({ theme }) => theme.colors.blue8};
+    }
+  }
+
+  .ipSecurityHint {
+    margin: -0.18rem 0 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
   .inlineError {
     margin: 0;
     border-radius: 10px;
@@ -754,7 +801,7 @@ const Modal = styled.div`
       gap: 0.42rem;
     }
 
-    .ipSecurityToggle {
+    .ipSecurityControl {
       align-self: flex-end;
     }
   }

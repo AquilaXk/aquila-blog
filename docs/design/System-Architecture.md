@@ -140,8 +140,9 @@ Frontend:
 
 Backend:
 
-- `CUSTOM__ADMIN__USERNAME`
+- `CUSTOM__ADMIN__EMAIL`
 - `CUSTOM__ADMIN__PASSWORD`
+- `CUSTOM__ADMIN__USERNAME` (옵션, 관리자 계정 anchor 고정용 내부 식별자)
 - `CUSTOM__REVALIDATE__URL`
 - `CUSTOM__REVALIDATE__TOKEN`
 - `CUSTOM_STORAGE_*`
@@ -152,6 +153,7 @@ Backend:
 - `CUSTOM__REVALIDATE__*`는 즉시 반영 시간을 더 줄이기 위한 보조 장치이지, 데이터 정합성의 유일한 경로는 아니다.
 - 회원가입 메일 발송과 revalidate는 모두 task queue를 거쳐 write API latency와 분리된다.
 - 관리자 프로필 이미지 업로드도 MinIO(`CUSTOM_STORAGE_*`) 의존이다.
+- prod 부트스트랩은 `custom.admin.username`(닉네임), `custom.admin.email`, `custom.admin.password`를 같은 관리자 row에 강제 동기화한다.
 - OAuth callback URL은 프록시 추론이 아니라 `${custom.site.backUrl}` 기준으로 고정한다.
 - 댓글/답글 알림은 현재 서비스 규모 기준으로 WebSocket 대신 SSE를 사용한다. 댓글 작성은 기존 HTTP 요청을 유지하고, 새 알림만 push 받는다.
 

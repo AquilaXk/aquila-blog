@@ -49,8 +49,10 @@ flowchart LR
 
 핵심 규칙:
 
-- 관리자 여부는 `Member.username == custom.admin.username` 규칙으로 판별한다.
-- 관리자 비밀번호는 DB 비밀번호보다 환경변수 `custom.admin.password`를 우선 적용할 수 있다.
+- 관리자 여부는 운영(profile=prod)에서 `Member.email == custom.admin.email` 규칙으로 판별한다.
+- 관리자 계정은 부트스트랩 시 email 기준으로 고정 동기화하며, 내부 anchor(`custom.admin.username`)는 계정 식별 고정 용도로 사용한다.
+- 관리자 닉네임은 운영 부트스트랩에서 `custom.admin.username` 값으로 강제 동기화한다.
+- 관리자 비밀번호는 운영 부트스트랩에서 환경변수 `custom.admin.password`와 불일치 시 강제 동기화한다.
 - 일반 계정 비밀번호는 BCrypt 해시를 사용한다.
 - 로그인 시도 제한은 Redis 연결 시 공유 상태를 사용하고, 로컬/비상 상황에서는 메모리 fallback으로 동작한다.
 - 이메일 인증 시작은 verification row를 저장한 뒤, 메일 발송을 task queue로 넘겨 요청 응답과 분리한다.
@@ -109,7 +111,7 @@ flowchart LR
 | --- | --- | --- |
 | 비로그인 사용자 | 글 읽기, 공개 글 탐색 | 비공개 글 접근 불가 |
 | 일반 회원 | 로그인, 댓글, 좋아요 | 관리자 API 접근 불가 |
-| 관리자 | 글 발행/수정/삭제, 서버 상태 확인 | `username == custom.admin.username` 필요 |
+| 관리자 | 글 발행/수정/삭제, 서버 상태 확인 | `email == custom.admin.email` 필요 |
 | 시스템 작업자 | revalidate hook, background task 처리 | 장애가 본 기능을 막지 않도록 non-blocking 우선 |
 
 ## 이벤트 및 사이드이펙트
@@ -167,14 +169,14 @@ flowchart TD
 ## 현재 구조의 한계
 
 - 태그/카테고리 도메인이 아직 없다.
-- 관리자 권한 모델이 정교한 role table이 아니라 운영용 username 규칙 기반이다.
+- 관리자 권한 모델이 정교한 role table이 아니라 운영용 admin email 규칙 기반이다.
 - 이미지 파일 메타데이터가 정규화되어 있지 않다.
 
 ## 확장 방향 표
 
 | 영역 | 현재 상태 | 권장 방향 |
 | --- | --- | --- |
-| 권한 | username 기반 admin | role/permission 모델 |
+| 권한 | admin email 기반 단일 관리자 | role/permission 모델 |
 | 콘텐츠 분류 | 본문 메타 파싱 | tag/category aggregate |
 | 파일 관리 | object key만 사용 | file metadata aggregate |
 | 운영 액션 | 단순 health API | 운영 대시보드/알림 연동 |

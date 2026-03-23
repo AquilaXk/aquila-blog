@@ -45,6 +45,14 @@ class ApiV1AuthController(
     private val authCookieService: AuthCookieService,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
 ) {
+    companion object {
+        private const val MAX_EMAIL_LENGTH = 320
+        private val EMAIL_FORMAT_REGEX =
+            Regex(
+                "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+            )
+    }
+
     data class MemberLoginRequest(
         @field:Size(min = 2, max = 320)
         val email: String? = null,
@@ -164,8 +172,11 @@ class ApiV1AuthController(
         val trimmedEmail = reqBody.email?.trim().orEmpty()
 
         if (trimmedEmail.isBlank()) throw AppException("400-1", "이메일을 입력해주세요.")
-        if (!trimmedEmail.contains("@")) throw AppException("400-2", "이메일 형식을 확인해주세요.")
+        if (trimmedEmail.length > MAX_EMAIL_LENGTH) throw AppException("400-2", "이메일 형식을 확인해주세요.")
 
-        return trimmedEmail.lowercase(Locale.ROOT)
+        val normalized = trimmedEmail.lowercase(Locale.ROOT)
+        if (!EMAIL_FORMAT_REGEX.matches(normalized)) throw AppException("400-2", "이메일 형식을 확인해주세요.")
+
+        return normalized
     }
 }

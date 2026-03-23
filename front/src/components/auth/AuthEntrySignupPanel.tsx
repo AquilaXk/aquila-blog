@@ -34,6 +34,8 @@ const AuthEntrySignupPanel = ({
           <input
             className="naverFieldInput"
             id="auth-entry-signup-email"
+            type="email"
+            inputMode="email"
             value={signupEmail}
             onChange={(event) => onSignupEmailChange(event.target.value)}
             onFocus={() => setEmailFocused(true)}

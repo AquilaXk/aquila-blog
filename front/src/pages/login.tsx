@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
+import IpSecurityInfoModal from "src/components/auth/IpSecurityInfoModal"
 import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
@@ -14,6 +15,7 @@ import type { AuthMember } from "src/hooks/useAuthSession"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
+import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
 
 type RsData<T> = {
   resultCode: string
@@ -56,6 +58,7 @@ const LoginPage = () => {
   const [passwordFocused, setPasswordFocused] = useState(false)
   const [keepSignedIn, setKeepSignedIn] = useState(true)
   const [ipSecurityOn, setIpSecurityOn] = useState(false)
+  const [showIpSecurityInfo, setShowIpSecurityInfo] = useState(false)
 
   useEffect(() => {
     if (!loginIdPrefill) return
@@ -80,8 +83,14 @@ const LoginPage = () => {
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!email.trim() || !password.trim()) {
+    const normalizedEmail = normalizeAuthEmail(email)
+
+    if (!normalizedEmail || !password.trim()) {
       setError("이메일과 비밀번호를 입력해주세요.")
+      return
+    }
+    if (!isValidAuthEmail(normalizedEmail)) {
+      setError("이메일 형식을 확인해주세요.")
       return
     }
 
@@ -92,7 +101,7 @@ const LoginPage = () => {
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
-          email: email.trim(),
+          email: normalizedEmail,
           password,
           rememberMe: keepSignedIn,
           ipSecurity: ipSecurityOn,
@@ -158,6 +167,8 @@ const LoginPage = () => {
           </NaverFieldLabel>
           <NaverInput
             id="email"
+            type="email"
+            inputMode="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             onFocus={() => setLoginIdFocused(true)}
@@ -166,7 +177,7 @@ const LoginPage = () => {
             autoComplete="email"
           />
           {email.length > 0 && (
-            <GhostIconButton type="button" aria-label="아이디 입력 지우기" onClick={() => setEmail("")}>
+            <GhostIconButton type="button" aria-label="이메일 입력 지우기" onClick={() => setEmail("")}>
               <AppIcon name="close" />
             </GhostIconButton>
           )}
@@ -212,19 +223,29 @@ const LoginPage = () => {
             <span>로그인 상태 유지</span>
           </KeepSignedInButton>
 
-          <IpSecurityToggle
-            type="button"
-            data-on={ipSecurityOn}
-            aria-pressed={ipSecurityOn}
-            aria-describedby="ip-security-hint"
-            onClick={() => setIpSecurityOn((value) => !value)}
-          >
-            <span className="label">IP보안</span>
-            <span className="switch" aria-hidden="true">
-              <span className="thumb" />
-            </span>
-            <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
-          </IpSecurityToggle>
+          <IpSecurityControl>
+            <IpSecurityInfoButton
+              type="button"
+              onClick={() => setShowIpSecurityInfo(true)}
+              aria-haspopup="dialog"
+              aria-controls="ip-security-info-dialog"
+            >
+              IP보안
+            </IpSecurityInfoButton>
+            <IpSecurityToggle
+              type="button"
+              data-on={ipSecurityOn}
+              aria-pressed={ipSecurityOn}
+              aria-describedby="ip-security-hint"
+              aria-label="IP보안 ON/OFF"
+              onClick={() => setIpSecurityOn((value) => !value)}
+            >
+              <span className="switch" aria-hidden="true">
+                <span className="thumb" />
+              </span>
+              <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
+            </IpSecurityToggle>
+          </IpSecurityControl>
         </LoginStateRow>
         <IpSecurityHint id="ip-security-hint">
           IP보안 ON 시 네트워크(IP) 변경 시 재로그인이 필요할 수 있습니다.
@@ -249,6 +270,7 @@ const LoginPage = () => {
           </SocialButtonRow>
         </SocialSection>
       </form>
+      <IpSecurityInfoModal open={showIpSecurityInfo} onClose={() => setShowIpSecurityInfo(false)} />
     </AuthShell>
   )
 }
@@ -421,10 +443,6 @@ const IpSecurityToggle = styled.button`
   font-weight: 700;
   min-height: 30px;
 
-  @media (max-width: 640px) {
-    align-self: flex-end;
-  }
-
   .switch {
     width: 42px;
     height: 24px;
@@ -464,6 +482,34 @@ const IpSecurityToggle = styled.button`
 
   &[data-on="true"] .state {
     color: ${({ theme }) => theme.colors.green10};
+  }
+`
+
+const IpSecurityControl = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.46rem;
+
+  @media (max-width: 640px) {
+    align-self: flex-end;
+  }
+`
+
+const IpSecurityInfoButton = styled.button`
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: ${({ theme }) => theme.colors.gray7};
+  text-underline-offset: 2px;
+  cursor: pointer;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.blue10};
+    text-decoration-color: ${({ theme }) => theme.colors.blue8};
   }
 `
 

@@ -2878,6 +2878,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const member = sessionMember
+  const displayName = member.nickname || member.username || "관리자"
+  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
 
   return (
     <Main>
@@ -2901,7 +2903,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <MetricGrid>
             <MetricCard>
               <span>현재 계정</span>
-              <strong>{member.username}</strong>
+              <strong>{displayName}</strong>
             </MetricCard>
             <MetricCard>
               <span>작업 중 글</span>
@@ -2977,11 +2979,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       priority
                     />
                   ) : (
-                    <ProfileFallback>{member.username.slice(0, 2).toUpperCase()}</ProfileFallback>
+                    <ProfileFallback>{displayNameInitial}</ProfileFallback>
                   )}
                 </ProfilePreview>
                 <ProfileSummary>
-                  <strong>{member.username}</strong>
+                  <strong>{displayName}</strong>
                   <span>{profileRoleInput.trim() || "역할을 아직 입력하지 않았습니다."}</span>
                   <p>{profileBioInput.trim() || "소개 문구를 입력하면 메인 프로필 카드에 반영됩니다."}</p>
                 </ProfileSummary>

@@ -13,6 +13,8 @@ export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ r
 const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" ? initialMember : me
+  const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
+  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
 
   const profileSrc = useMemo(
     () => sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || "",
@@ -59,7 +61,7 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <StatusRow>
             <StatusItem>
               <span>현재 계정</span>
-              <strong>{sessionMember.username}</strong>
+              <strong>{displayName}</strong>
             </StatusItem>
             <StatusItem>
               <span>역할</span>
@@ -82,12 +84,12 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ProfilePanel>
           <ProfileFrame>
             {profileSrc ? (
-              <ProfileImage src={profileSrc} alt={sessionMember.username} width={96} height={96} priority />
+              <ProfileImage src={profileSrc} alt={displayName} width={96} height={96} priority />
             ) : (
-              <ProfileFallback>{sessionMember.username.slice(0, 2).toUpperCase()}</ProfileFallback>
+              <ProfileFallback>{displayNameInitial}</ProfileFallback>
             )}
           </ProfileFrame>
-          <strong>{sessionMember.username}</strong>
+          <strong>{displayName}</strong>
           <span>{sessionMember.profileRole || "관리자 역할 미설정"}</span>
           <p>{sessionMember.profileBio || "관리자 소개 문구가 아직 없습니다."}</p>
         </ProfilePanel>

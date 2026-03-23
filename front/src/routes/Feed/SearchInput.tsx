@@ -8,7 +8,7 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const FEED_SEARCH_FIELD_MIN_HEIGHT_PX = uiTokens.feed.searchFieldMinHeightPx
-const FEED_TAG_RAIL_CHIP_MAX_PX = 1200
+const FEED_TAG_RAIL_CHIP_MAX_PX = uiTokens.feed.rail.chipMaxWidthPx
 const MOBILE_TOUCH_TARGET_MIN_PX = uiTokens.touch.mobileMinTargetPx
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {

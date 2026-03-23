@@ -387,9 +387,6 @@ const mermaidFenceRegex = /```mermaid\b[\s\S]*?```/gi
 const inlineCodeRegex = /`([^`]+)`/g
 const markdownPunctuationRegex = /[#>*_~-]/g
 const whitespaceRegex = /\s+/g
-const markdownBlockHintRegex = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|:::[A-Za-z]|[|].*[|]|```)/m
-const codeLikeTextHintRegex =
-  /(?:\bdependencies\b|\bimplementation\b|\bcompileOnly\b|\bannotationProcessor\b|\bclass\b|\binterface\b|\bfunction\b|[{};])/i
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
@@ -1076,22 +1073,6 @@ const convertHtmlToMarkdown = (html: string): string => {
     .filter(Boolean)
 
   return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
-}
-
-const shouldPreferPlainTextPaste = (plainText: string, html: string): boolean => {
-  const trimmed = plainText.trim()
-  if (!html) return true
-  if (!trimmed) return false
-
-  // 코드/마크다운 성격이 명확하면 HTML 변환 대신 브라우저 기본 paste(text/plain)를 그대로 사용한다.
-  if (markdownBlockHintRegex.test(trimmed)) return true
-  if (trimmed.includes("\n") && codeLikeTextHintRegex.test(trimmed)) return true
-
-  // 외부 에디터/LLM 코드블록 복사 시 HTML이 과도하게 커져 메인스레드를 잠그는 케이스를 차단한다.
-  if (html.length >= 80_000) return true
-  if ((html.match(/</g) || []).length >= 2_200) return true
-
-  return false
 }
 
 const sanitizeNumberInput = (value: string) => value.replace(/[^\d]/g, "")
@@ -3143,9 +3124,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const handlePasteFromHtml = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const plainText = e.clipboardData.getData("text/plain")
     const html = e.clipboardData.getData("text/html")
-    if (shouldPreferPlainTextPaste(plainText, html)) return
     if (!html) return
 
     e.preventDefault()

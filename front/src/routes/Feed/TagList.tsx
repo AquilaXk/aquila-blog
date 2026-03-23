@@ -1,20 +1,18 @@
 import styled from "@emotion/styled"
 import { uiTokens } from "@shared/ui-tokens"
 import { useRouter } from "next/router"
-import React, { memo, startTransition, useCallback, useEffect, useState } from "react"
+import React, { memo, startTransition, useCallback } from "react"
 import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {}
 const FEED_CHIP_GAP_PX = uiTokens.feed.chipGapPx
-const FEED_TAG_RAIL_CHIP_MAX_PX = 1200
-// Keep chip rail as the single source of truth across breakpoints.
-const FEED_TAG_RAIL_DESKTOP_MIN_PX = 99999
+const FEED_TAG_RAIL_CHIP_MAX_PX = uiTokens.feed.rail.chipMaxWidthPx
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = uiTokens.feed.rail.desktopMinWidthPx
 
 const TagList: React.FC<Props> = () => {
   const router = useRouter()
-  const [isDesktopRailViewport, setIsDesktopRailViewport] = useState(false)
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
   const totalPostCount = usePostsTotalCountQuery()
@@ -56,24 +54,8 @@ const TagList: React.FC<Props> = () => {
     [handleClickTag]
   )
 
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const syncViewportTier = () => {
-      setIsDesktopRailViewport(window.innerWidth >= FEED_TAG_RAIL_DESKTOP_MIN_PX)
-    }
-
-    syncViewportTier()
-    window.addEventListener("resize", syncViewportTier, { passive: true })
-    window.addEventListener("orientationchange", syncViewportTier)
-    return () => {
-      window.removeEventListener("resize", syncViewportTier)
-      window.removeEventListener("orientationchange", syncViewportTier)
-    }
-  }, [])
-
   return (
-    <StyledWrapper data-desktop-rail={isDesktopRailViewport ? "true" : "false"}>
+    <StyledWrapper>
       <section className="desktopPanel" aria-label="태그 목록">
         <h2 className="panelTitle">태그 목록</h2>
         <ul className="desktopList">
@@ -141,16 +123,6 @@ export default memo(TagList)
 
 const StyledWrapper = styled.div`
   min-width: 0;
-
-  &[data-desktop-rail="true"] {
-    .desktopPanel {
-      display: block;
-    }
-
-    .chipRail {
-      display: none;
-    }
-  }
 
   .desktopPanel {
     display: none;

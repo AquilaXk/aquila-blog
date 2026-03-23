@@ -1,12 +1,14 @@
 import { RefObject, useEffect } from "react"
 
 type PrismLike = {
+  languages?: Record<string, unknown>
   highlightAllUnder: (container: Element) => void
   highlightElement: (element: Element) => void
 }
 
 let prismLoader: Promise<PrismLike> | null = null
 const loadedLoaders = new Set<string>()
+const failedLoaders = new Set<string>()
 
 const prismLanguageLoaders: Record<string, (() => Promise<unknown>)[]> = {
   markup: [() => import("prismjs/components/prism-markup.js")],
@@ -58,6 +60,8 @@ const prismLanguageLoaders: Record<string, (() => Promise<unknown>)[]> = {
   dockerfile: [() => import("prismjs/components/prism-docker.js")],
   git: [() => import("prismjs/components/prism-git.js")],
   go: [() => import("prismjs/components/prism-go.js")],
+  groovy: [() => import("prismjs/components/prism-groovy.js")],
+  gradle: [() => import("prismjs/components/prism-gradle.js")],
   graphql: [() => import("prismjs/components/prism-graphql.js")],
   handlebars: [
     () => import("prismjs/components/prism-markup-templating.js"),
@@ -154,8 +158,14 @@ const ensurePrismLanguages = async (languages: string[]) => {
     for (const load of loaders) {
       const cacheKey = `${language}:${load.toString()}`
       if (loadedLoaders.has(cacheKey)) continue
-      await load()
-      loadedLoaders.add(cacheKey)
+      if (failedLoaders.has(cacheKey)) continue
+      try {
+        await load()
+        loadedLoaders.add(cacheKey)
+      } catch (error) {
+        failedLoaders.add(cacheKey)
+        console.warn(`[prism] language loader failed: ${language}`, error)
+      }
     }
   }
 }
@@ -213,9 +223,16 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, ena
 
           const alreadyHighlighted =
             block.dataset.prismLanguage === language &&
-            block.dataset.prismSource === source &&
-            block.querySelector(".token") !== null
+            block.dataset.prismSource === source
           if (alreadyHighlighted) return
+
+          const hasGrammar = Boolean(Prism.languages?.[language])
+          if (!hasGrammar) {
+            block.dataset.prismLanguage = language
+            block.dataset.prismSource = source
+            block.setAttribute("data-language", language)
+            return
+          }
 
           Array.from(block.classList)
             .filter((className) => className.startsWith("language-"))

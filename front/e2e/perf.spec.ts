@@ -426,17 +426,17 @@ test("메인 레이아웃은 desktop width-lock 구간(1057~1440)에서 1024px �
   expect(fluidSnapshot.headerWidth).toBeCloseTo(expectedFluidWidth, 0)
 })
 
-test("메인 태그 레일은 1200/1201 전환에서 클리핑 없이 안전하게 전환된다", async ({ page }) => {
+test("메인 태그 레일은 1519/1520 전환에서 클리핑 없이 안전하게 전환된다", async ({ page }) => {
   await mockFeedEndpoints(page)
 
-  await page.setViewportSize({ width: 1200, height: 900 })
+  await page.setViewportSize({ width: 1519, height: 900 })
   await page.goto("/")
   await page.waitForLoadState("networkidle")
   await waitForStableHeaderAuthState(page)
   await expect(page.locator(".chipRail")).toBeVisible()
   await expect(page.locator(".desktopPanel")).toBeHidden()
 
-  await page.setViewportSize({ width: 1201, height: 900 })
+  await page.setViewportSize({ width: 1520, height: 900 })
   await page.reload({ waitUntil: "networkidle" })
   await waitForStableHeaderAuthState(page)
   await expect(page.locator(".desktopPanel")).toBeVisible()

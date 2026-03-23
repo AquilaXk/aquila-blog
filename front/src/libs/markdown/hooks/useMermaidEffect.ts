@@ -269,10 +269,26 @@ const useMermaidEffect = (
         if (alreadyRendered) return
 
         const blockRect = block.getBoundingClientRect()
+        const visibleWidth = Math.floor(blockRect.width)
+        if (visibleWidth <= 0) {
+          if (scheduleRetry(i, block)) return
+          block.dataset.mermaidRendered = "error"
+          block.classList.add("aq-mermaid-error")
+          block.innerHTML = `
+            <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
+              Mermaid 렌더링 실패: 다이어그램 영역 너비를 계산할 수 없습니다.
+            </div>
+            <code style="white-space:pre-wrap;display:block;">${source
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;")}</code>
+          `
+          return
+        }
 
         const renderSourceIntoBlock = async (sourceToRender: string) => {
           const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
-          const containerWidth = Math.max(280, Math.floor(blockRect.width))
+          const containerWidth = Math.max(280, visibleWidth)
           const reserveHeight = Math.max(120, Math.ceil(blockRect.height))
 
           const stage = document.createElement("div")

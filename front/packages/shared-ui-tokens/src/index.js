@@ -6,8 +6,8 @@ const uiTokens = {
     chipGapPx: 6,
     searchFieldMinHeightPx: 36,
     rail: {
-      chipMaxWidthPx: 1200,
-      desktopMinWidthPx: 1201,
+      chipMaxWidthPx: 1519,
+      desktopMinWidthPx: 1520,
       widthPx: 184,
       offsetMinPx: -216,
       offsetMaxPx: -56,

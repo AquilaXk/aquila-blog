@@ -8,6 +8,7 @@ import {
   useState,
 } from "react"
 import styled from "@emotion/styled"
+import { uiTokens } from "@shared/ui-tokens"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
 import SearchInput from "./SearchInput"
 import PinnedPosts from "./PostList/PinnedPosts"
@@ -23,12 +24,11 @@ import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-// Disable desktop side-rail in production to prevent feed-width intrusion and asymmetrical gutters.
-const FEED_TAG_RAIL_DESKTOP_MIN_PX = 99999
-const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = 584
-const FEED_TAG_RAIL_OFFSET_MAX_PX = -56
-const FEED_TAG_RAIL_OFFSET_MIN_PX = -216
-const FEED_TAG_RAIL_WIDTH_PX = 184
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = uiTokens.feed.rail.desktopMinWidthPx
+const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = uiTokens.feed.rail.offsetAnchorPx
+const FEED_TAG_RAIL_OFFSET_MAX_PX = uiTokens.feed.rail.offsetMaxPx
+const FEED_TAG_RAIL_OFFSET_MIN_PX = uiTokens.feed.rail.offsetMinPx
+const FEED_TAG_RAIL_WIDTH_PX = uiTokens.feed.rail.widthPx
 const FEED_TAG_RAIL_SAFE_GAP_PX = 12
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
@@ -705,9 +705,8 @@ const FeedExplorer = () => {
         0,
         Math.ceil(railRect.right - feedRect.left + FEED_TAG_RAIL_SAFE_GAP_PX)
       )
-      const shouldCollapseRail = overlap > 0
-      feedBody.dataset.railCollapsed = shouldCollapseRail ? "true" : "false"
-      feedBody.style.setProperty("--feed-tag-rail-overlap", shouldCollapseRail ? "0px" : `${overlap}px`)
+      feedBody.dataset.railCollapsed = "false"
+      feedBody.style.setProperty("--feed-tag-rail-overlap", `${overlap}px`)
     }
 
     const scheduleSync = () => {
@@ -873,7 +872,7 @@ const FeedBody = styled.section`
     .tagColumn {
       /*
        * Velog-like vertical rail exposure:
-       * - starts at the same break tier as velog desktop-side tags (>1200)
+       * - starts at the desktop wide tier (>=1520)
        * - keeps rail inside viewport without clipping on first visible range
        * - converges to fixed -216px offset on wider screens
        */
@@ -886,12 +885,8 @@ const FeedBody = styled.section`
       transition: opacity 0.14s ease-in;
     }
 
-    &[data-rail-collapsed="true"] {
-      .tagColumn {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-      }
+    .postColumn {
+      margin-left: var(--feed-tag-rail-overlap);
     }
   }
 `

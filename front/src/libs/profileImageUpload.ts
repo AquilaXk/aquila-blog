@@ -37,6 +37,11 @@ export type ProfileImageEditTransform = {
   outputSize?: number
 }
 
+export type ProfileImageSourceSize = {
+  width: number
+  height: number
+}
+
 const IMAGE_UPLOAD_POLICIES: Record<ImageUploadTarget, ImageUploadPolicy> = {
   profile: {
     // 실무 기준: 프로필 이미지는 2MB 이내 + 긴 변 1024px 제한.
@@ -75,6 +80,7 @@ export const PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X = 50
 export const PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y = 38
 export const PROFILE_IMAGE_EDIT_MIN_ZOOM = 1
 export const PROFILE_IMAGE_EDIT_MAX_ZOOM = 2.8
+export const PROFILE_IMAGE_EDIT_DEFAULT_OUTPUT_SIZE = 512
 
 const normalizeMimeType = (raw: string): string =>
   raw
@@ -100,6 +106,53 @@ export const clampProfileImageEditFocus = (value: number): number => {
 export const clampProfileImageEditZoom = (value: number): number => {
   if (!Number.isFinite(value)) return PROFILE_IMAGE_EDIT_MIN_ZOOM
   return Math.min(PROFILE_IMAGE_EDIT_MAX_ZOOM, Math.max(PROFILE_IMAGE_EDIT_MIN_ZOOM, value))
+}
+
+export const resolveProfileImageEditDrawRatios = (
+  sourceSize: ProfileImageSourceSize,
+  zoom: number
+): { drawWidth: number; drawHeight: number } => {
+  const safeZoom = clampProfileImageEditZoom(zoom)
+  const sourceWidth = Math.max(1, sourceSize.width)
+  const sourceHeight = Math.max(1, sourceSize.height)
+  const sourceAspect = sourceWidth / sourceHeight
+
+  const baseDrawWidth = sourceAspect >= 1 ? sourceAspect : 1
+  const baseDrawHeight = sourceAspect >= 1 ? 1 : 1 / sourceAspect
+
+  return {
+    drawWidth: baseDrawWidth * safeZoom,
+    drawHeight: baseDrawHeight * safeZoom,
+  }
+}
+
+export const clampProfileImageEditFocusBySource = ({
+  focusX,
+  focusY,
+  zoom,
+  sourceSize,
+}: {
+  focusX: number
+  focusY: number
+  zoom: number
+  sourceSize: ProfileImageSourceSize
+}): { focusX: number; focusY: number } => {
+  const { drawWidth, drawHeight } = resolveProfileImageEditDrawRatios(sourceSize, zoom)
+  const minCenterX = Math.max(0, 1 - drawWidth / 2)
+  const maxCenterX = Math.min(1, drawWidth / 2)
+  const minCenterY = Math.max(0, 1 - drawHeight / 2)
+  const maxCenterY = Math.min(1, drawHeight / 2)
+
+  const normalizedFocusX = clampProfileImageEditFocus(focusX) / 100
+  const normalizedFocusY = clampProfileImageEditFocus(focusY) / 100
+
+  const safeCenterX = minCenterX <= maxCenterX ? Math.min(maxCenterX, Math.max(minCenterX, normalizedFocusX)) : 0.5
+  const safeCenterY = minCenterY <= maxCenterY ? Math.min(maxCenterY, Math.max(minCenterY, normalizedFocusY)) : 0.5
+
+  return {
+    focusX: safeCenterX * 100,
+    focusY: safeCenterY * 100,
+  }
 }
 
 const ensureFileIsUploadable = (file: File, target: ImageUploadTarget): void => {
@@ -345,10 +398,8 @@ export const buildProfileImageEditedFile = async (
   ensureFileIsUploadable(sourceFile, "profile")
 
   const image = await loadImageFromFile(sourceFile)
-  const outputSize = Math.max(320, Math.round(transform.outputSize || 1024))
+  const outputSize = Math.max(256, Math.round(transform.outputSize || PROFILE_IMAGE_EDIT_DEFAULT_OUTPUT_SIZE))
   const zoom = clampProfileImageEditZoom(transform.zoom)
-  const focusX = clampProfileImageEditFocus(transform.focusX)
-  const focusY = clampProfileImageEditFocus(transform.focusY)
 
   const sourceWidth = image.naturalWidth || image.width
   const sourceHeight = image.naturalHeight || image.height
@@ -356,12 +407,19 @@ export const buildProfileImageEditedFile = async (
     throw new Error("프로필 편집에 사용할 이미지 해상도를 확인할 수 없습니다.")
   }
 
-  const sourceAspect = sourceWidth / sourceHeight
-  const baseDrawWidth = sourceAspect >= 1 ? outputSize * sourceAspect : outputSize
-  const baseDrawHeight = sourceAspect >= 1 ? outputSize : outputSize / sourceAspect
-  const drawWidth = baseDrawWidth * zoom
-  const drawHeight = baseDrawHeight * zoom
-
+  const sourceSize = { width: sourceWidth, height: sourceHeight }
+  const { focusX, focusY } = clampProfileImageEditFocusBySource({
+    focusX: transform.focusX,
+    focusY: transform.focusY,
+    zoom,
+    sourceSize,
+  })
+  const { drawWidth: drawWidthRatio, drawHeight: drawHeightRatio } = resolveProfileImageEditDrawRatios(
+    sourceSize,
+    zoom
+  )
+  const drawWidth = drawWidthRatio * outputSize
+  const drawHeight = drawHeightRatio * outputSize
   const centerX = (focusX / 100) * outputSize
   const centerY = (focusY / 100) * outputSize
   const offsetX = centerX - drawWidth / 2

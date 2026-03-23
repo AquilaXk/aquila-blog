@@ -309,13 +309,14 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
             Number.isFinite(viewBoxHeight) && viewBoxHeight > 0
               ? viewBoxHeight
               : Math.max(1, fallbackHeight)
+          const needsMobileExpandAction = isMobileViewport && intrinsicWidth > containerWidth + 12
 
           const maxReadableHeight = isMobileViewport
             ? Math.min(520, Math.floor(window.innerHeight * 0.68))
             : Math.min(900, Math.floor(window.innerHeight * 0.78))
 
           let scale = 1
-          if (!isMobileViewport && intrinsicWidth > containerWidth) {
+          if (intrinsicWidth > containerWidth) {
             scale = Math.min(scale, containerWidth / intrinsicWidth)
           }
           if (intrinsicHeight * scale > maxReadableHeight) {
@@ -327,34 +328,34 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
 
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
-          const stageWidth = isMobileViewport ? Math.max(containerWidth, roundedWidth) : containerWidth
+          const stageWidth = containerWidth
           stage.style.width = `${stageWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
           stage.style.display = "flex"
-          stage.style.justifyContent = isMobileViewport ? "flex-start" : "center"
-          stage.style.overflowX = isMobileViewport ? "auto" : "hidden"
-          block.style.overflowX = isMobileViewport ? "auto" : "hidden"
-          stage.style.setProperty("-webkit-overflow-scrolling", isMobileViewport ? "touch" : "auto")
-          block.style.setProperty("-webkit-overflow-scrolling", isMobileViewport ? "touch" : "auto")
+          stage.style.justifyContent = "center"
+          stage.style.overflowX = "hidden"
+          block.style.overflowX = "hidden"
+          stage.style.setProperty("-webkit-overflow-scrolling", "touch")
+          block.style.setProperty("-webkit-overflow-scrolling", "touch")
 
           svgElement.setAttribute("preserveAspectRatio", "xMidYMin meet")
           svgElement.style.width = `${roundedWidth}px`
           svgElement.style.height = `${roundedHeight}px`
-          svgElement.style.maxWidth = isMobileViewport ? "none" : "100%"
+          svgElement.style.maxWidth = "100%"
           svgElement.style.maxHeight = "none"
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
-          svgElement.style.margin = isMobileViewport ? "0" : "0 auto"
+          svgElement.style.margin = "0 auto"
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
 
-          if (isMobileViewport && roundedWidth > containerWidth + 12) {
+          if (needsMobileExpandAction) {
             const expandButton = document.createElement("button")
             expandButton.type = "button"
             expandButton.className = "aq-mermaid-expand-btn"
             expandButton.textContent = "확대 보기"
             expandButton.addEventListener("click", () => {
-              openMermaidOverlay(svgElement.outerHTML)
+              openMermaidOverlay(svg)
             })
             block.appendChild(expandButton)
           }

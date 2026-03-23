@@ -78,6 +78,7 @@ const LoginPage = () => {
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setError("")
     const normalizedEmail = normalizeAuthEmail(email)
 
     if (!normalizedEmail || !password.trim()) {
@@ -90,7 +91,6 @@ const LoginPage = () => {
     }
 
     setLoading(true)
-    setError("")
 
     try {
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
@@ -155,7 +155,7 @@ const LoginPage = () => {
       loginHref={toLoginPath(next)}
       signupHref={toSignupPath(next)}
     >
-      <form onSubmit={onSubmit}>
+      <form onSubmit={onSubmit} noValidate>
         <NaverField data-active={loginIdActive}>
           <NaverFieldLabel htmlFor="email" data-active={loginIdActive ? "true" : "false"}>
             이메일
@@ -325,7 +325,7 @@ const NaverInput = styled.input`
   }
 
   &[data-password="true"] {
-    padding-right: 5.9rem;
+    padding-right: 8.35rem;
   }
 `
 
@@ -340,9 +340,9 @@ const PasswordActions = styled.div`
 `
 
 const GhostIconButton = styled.button`
-  min-width: 30px;
-  width: 30px;
-  height: 30px;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 999px;
@@ -367,8 +367,8 @@ const GhostIconButton = styled.button`
     border: 0;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    width: 32px;
-    min-width: 32px;
+    width: 44px;
+    min-width: 44px;
   }
 
   svg {
@@ -402,11 +402,14 @@ const KeepSignedInButton = styled.button`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.9rem;
   font-weight: 650;
-  min-height: 30px;
+  min-height: 44px;
+  padding: 0.22rem 0.2rem;
+  border-radius: 10px;
+  touch-action: manipulation;
 
   .checkIcon {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
@@ -432,11 +435,13 @@ const IpSecurityToggle = styled.button`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.9rem;
   font-weight: 700;
-  min-height: 30px;
+  min-height: 44px;
+  padding: 0.22rem 0;
+  touch-action: manipulation;
 
   .switch {
-    width: 42px;
-    height: 24px;
+    width: 52px;
+    height: 30px;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray5};
@@ -447,8 +452,8 @@ const IpSecurityToggle = styled.button`
   }
 
   .thumb {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     border-radius: 999px;
     background: ${({ theme }) => theme.colors.gray1};
     transition: transform 0.22s ease;
@@ -456,7 +461,7 @@ const IpSecurityToggle = styled.button`
   }
 
   .state {
-    width: 24px;
+    width: 28px;
     text-align: right;
     color: ${({ theme }) => theme.colors.gray10};
     transition: color 0.2s ease;
@@ -468,7 +473,7 @@ const IpSecurityToggle = styled.button`
   }
 
   &[data-on="true"] .thumb {
-    transform: translateX(18px);
+    transform: translateX(20px);
   }
 
   &[data-on="true"] .state {
@@ -488,7 +493,8 @@ const IpSecurityControl = styled.div`
 
 const IpSecurityInfoButton = styled.button`
   border: 0;
-  padding: 0;
+  min-height: 44px;
+  padding: 0.15rem 0.3rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.9rem;

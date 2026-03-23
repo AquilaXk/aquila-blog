@@ -47,7 +47,7 @@ const AuthEntryLoginPanel = ({
 
   return (
     <>
-      <form className="loginForm" onSubmit={onSubmit}>
+      <form className="loginForm" onSubmit={onSubmit} noValidate>
         <div className={`naverField ${emailActive ? "isActive" : ""}`}>
           <label className="naverFieldLabel" htmlFor="auth-entry-email">
             이메일

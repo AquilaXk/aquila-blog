@@ -317,9 +317,9 @@ const StyledWrapper = styled.div`
 
   @media (min-width: 769px) and (max-width: 1200px) {
     .chipRail button {
-      min-height: 24px;
-      padding: 0 0.75rem;
-      border-radius: 12px;
+      min-height: 34px;
+      padding: 0.32rem 0.82rem;
+      border-radius: 999px;
     }
   }
 `

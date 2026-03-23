@@ -730,11 +730,12 @@ const StyledWrapper = styled.div`
       text-align: left;
       border: 0;
       border-radius: 0;
-      padding: 0.2rem 0;
+      min-height: 35px;
+      padding: 0.32rem 0;
       background: transparent;
       color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.92)" : theme.colors.gray10)};
       font-size: 0.84rem;
-      line-height: 1.5;
+      line-height: 1.45;
       cursor: pointer;
       white-space: normal;
       overflow-wrap: anywhere;

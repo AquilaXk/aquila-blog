@@ -144,6 +144,7 @@ const AuthEntryModal: React.FC<Props> = ({
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setError("")
     const normalizedEmail = normalizeAuthEmail(email)
 
     if (!normalizedEmail || !password.trim()) {
@@ -156,7 +157,6 @@ const AuthEntryModal: React.FC<Props> = ({
     }
 
     setLoading(true)
-    setError("")
 
     try {
       await apiFetch<RsData<unknown>>("/member/api/v1/auth/login", {
@@ -468,7 +468,7 @@ const Modal = styled.div`
   }
 
   .passwordField .naverFieldInput {
-    padding-right: 5.9rem;
+    padding-right: 8.35rem;
   }
 
   .fieldGhostButton {
@@ -476,9 +476,9 @@ const Modal = styled.div`
     top: 50%;
     right: 0.5rem;
     transform: translateY(-50%);
-    min-width: 30px;
-    width: 30px;
-    height: 30px;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     border-radius: 999px;
@@ -510,8 +510,8 @@ const Modal = styled.div`
     border: 0;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    width: 32px;
-    min-width: 32px;
+    width: 44px;
+    min-width: 44px;
   }
 
   .fieldGhostButton.visibilityToggle svg {
@@ -544,11 +544,14 @@ const Modal = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.9rem;
     font-weight: 650;
-    min-height: 30px;
+    min-height: 44px;
+    padding: 0.22rem 0.2rem;
+    border-radius: 10px;
+    touch-action: manipulation;
 
     .checkBadge {
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
@@ -574,11 +577,13 @@ const Modal = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.9rem;
     font-weight: 700;
-    min-height: 30px;
+    min-height: 44px;
+    padding: 0.22rem 0;
+    touch-action: manipulation;
 
     .switch {
-      width: 42px;
-      height: 24px;
+      width: 52px;
+      height: 30px;
       border-radius: 999px;
       border: 1px solid ${({ theme }) => theme.colors.gray7};
       background: ${({ theme }) => theme.colors.gray5};
@@ -589,8 +594,8 @@ const Modal = styled.div`
     }
 
     .thumb {
-      width: 18px;
-      height: 18px;
+      width: 24px;
+      height: 24px;
       border-radius: 999px;
       background: ${({ theme }) => theme.colors.gray1};
       transition: transform 0.22s ease;
@@ -598,7 +603,7 @@ const Modal = styled.div`
     }
 
     .state {
-      width: 24px;
+      width: 28px;
       text-align: right;
       color: ${({ theme }) => theme.colors.gray10};
       transition: color 0.2s ease;
@@ -610,7 +615,7 @@ const Modal = styled.div`
     }
 
     &.isOn .thumb {
-      transform: translateX(18px);
+      transform: translateX(20px);
     }
 
     &.isOn .state {
@@ -626,7 +631,8 @@ const Modal = styled.div`
 
   .ipSecurityInfoButton {
     border: 0;
-    padding: 0;
+    min-height: 44px;
+    padding: 0.15rem 0.3rem;
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.9rem;

@@ -1357,6 +1357,10 @@ const Main = styled.main`
   padding: 1.5rem 1rem 2.6rem;
   display: grid;
   gap: 1.1rem;
+
+  @media (max-width: 900px) {
+    padding-bottom: calc(9.2rem + env(safe-area-inset-bottom, 0px));
+  }
 `
 
 const HeaderCard = styled.section`
@@ -1404,6 +1408,16 @@ const HeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const BaseButton = styled.button`
@@ -1458,6 +1472,7 @@ const LinkButton = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 40px;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -1466,6 +1481,10 @@ const LinkButton = styled.a`
   padding: 0.72rem 1rem;
   font-size: 0.92rem;
   font-weight: 700;
+
+  @media (max-width: 640px) {
+    justify-content: flex-start;
+  }
 `
 
 const ProfileGrid = styled.section`
@@ -2065,6 +2084,17 @@ const StickySaveBar = styled.section`
     border-color: ${({ theme }) => theme.colors.blue8};
     background: ${({ theme }) => theme.colors.blue2};
   }
+
+  @media (max-width: 900px) {
+    position: fixed;
+    left: max(0.72rem, env(safe-area-inset-left, 0px));
+    right: max(0.72rem, env(safe-area-inset-right, 0px));
+    bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
+    z-index: 80;
+    padding: 0.72rem;
+    border-radius: 12px;
+    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.32);
+  }
 `
 
 const StickySaveCopy = styled.div`
@@ -2089,4 +2119,22 @@ const StickySaveActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
+
+  @media (max-width: 900px) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    > button {
+      display: inline-flex;
+      align-items: center;
+      width: 100%;
+      justify-content: center;
+      min-height: 40px;
+    }
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
 `

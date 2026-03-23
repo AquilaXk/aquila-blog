@@ -119,6 +119,11 @@ const Main = styled.main`
   padding: 1.5rem 1rem 2.6rem;
   display: grid;
   gap: 1.1rem;
+
+  @media (max-width: 900px) {
+    gap: 0.92rem;
+    padding-top: 1.1rem;
+  }
 `
 
 const HeroCard = styled.section`
@@ -133,6 +138,8 @@ const HeroCard = styled.section`
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
+    gap: 0.75rem;
+    padding: 0.84rem;
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   }
@@ -154,6 +161,19 @@ const HeroIntro = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.7;
   }
+
+  @media (max-width: 900px) {
+    gap: 0.68rem;
+
+    h1 {
+      font-size: clamp(1.56rem, 7vw, 1.88rem);
+    }
+
+    p {
+      font-size: 0.9rem;
+      line-height: 1.62;
+    }
+  }
 `
 
 const Eyebrow = styled.span`
@@ -170,6 +190,16 @@ const HeroActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const ActionLink = styled.a`
@@ -181,7 +211,7 @@ const ActionLink = styled.a`
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.92rem;
-  min-height: ${({ theme }) => `${theme.variables.ui.button.minHeightSm}px`};
+  min-height: max(40px, ${({ theme }) => `${theme.variables.ui.button.minHeightSm}px`});
   font-size: ${({ theme }) => `${theme.variables.ui.button.fontSize}rem`};
   font-weight: 700;
   text-decoration: none;
@@ -207,6 +237,10 @@ const ActionLink = styled.a`
     border-color: ${({ theme }) => theme.colors.blue10};
     background: ${({ theme }) => theme.colors.blue10};
     color: #fff;
+  }
+
+  @media (max-width: 1024px) {
+    width: 100%;
   }
 `
 
@@ -237,6 +271,24 @@ const ProfilePanel = styled.aside`
     white-space: pre-line;
     word-break: break-word;
   }
+
+  @media (max-width: 900px) {
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
+    text-align: left;
+    padding: 0.72rem;
+    gap: 0.3rem 0.62rem;
+
+    > div:first-of-type {
+      grid-row: span 3;
+      width: 76px;
+      height: 76px;
+    }
+
+    p {
+      display: none;
+    }
+  }
 `
 
 const StatusRow = styled.div`
@@ -245,7 +297,11 @@ const StatusRow = styled.div`
   gap: 0.55rem;
   max-width: 44rem;
 
-  @media (max-width: 760px) {
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
     grid-template-columns: 1fr;
   }
 `

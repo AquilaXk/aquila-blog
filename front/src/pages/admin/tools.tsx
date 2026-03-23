@@ -726,6 +726,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       onClick: async () => void fetchAuthSecurityEvents(),
     },
   ]
+  const shouldShowAdvancedPanels = !isMobileLayout || advancedPanelsOpen
+  const visiblePrioritizedActions = isMobileLayout ? prioritizedActions.slice(0, 3) : prioritizedActions
 
   return (
     <Main>
@@ -755,7 +757,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </AdvancedToggle>
       ) : null}
 
-      {(!isMobileLayout || advancedPanelsOpen) && (
+      {shouldShowAdvancedPanels && (
         <GuideGrid>
           {QUICK_GUIDES.map((guide) => (
             <GuideCard key={guide.title}>
@@ -821,7 +823,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </div>
         </SectionTop>
         <QuickActionRow>
-          {prioritizedActions.map((action) => (
+          {visiblePrioritizedActions.map((action) => (
             <ConsoleQuickActionButton
               key={action.key}
               type="button"
@@ -836,7 +838,18 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </QuickActionRow>
       </QuickActionsCard>
 
-      <Grid>
+      {isMobileLayout && !advancedPanelsOpen ? (
+        <CollapsedStateCard>
+          <strong>고급 진단은 접힌 상태입니다.</strong>
+          <p>기본 화면에서는 상태 요약과 자주 쓰는 액션만 노출합니다. 필요할 때만 고급 진단을 펼쳐 실행하세요.</p>
+          <CollapsedStateAction type="button" onClick={() => setAdvancedPanelsOpen(true)}>
+            고급 진단 펼치기
+          </CollapsedStateAction>
+        </CollapsedStateCard>
+      ) : null}
+
+      {shouldShowAdvancedPanels && (
+        <Grid>
         <SectionCard>
           <SectionTop>
             <div>
@@ -1341,35 +1354,36 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <InlineNotice>이벤트가 발생하면 이 영역에 표시됩니다.</InlineNotice>
           )}
         </SectionCard>
-      </Grid>
+        </Grid>
+      )}
 
-      {(!isMobileLayout || advancedPanelsOpen) && (
-      <ConsoleCard>
-        <ConsoleHeader>
-          <div>
-            <SectionEyebrow>Console</SectionEyebrow>
-            <h2>실행 결과 콘솔</h2>
-            <ConsoleDescription>메일, task queue, 파일 정리 진단 버튼과 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
-          </div>
-          <ConsoleStatus>{consoleStatus}</ConsoleStatus>
-        </ConsoleHeader>
-        <ConsoleQuickActions>
-          {consoleActions.map((action) => (
-            <ConsoleQuickActionButton
-              key={action.key}
-              type="button"
-              disabled={isBusy}
-              data-tone={action.tone}
-              title={action.description}
-              onClick={() => void action.onClick()}
-            >
-              <span className="title">{action.title}</span>
-              <span className="chip">진단</span>
-            </ConsoleQuickActionButton>
-          ))}
-        </ConsoleQuickActions>
-        <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
-      </ConsoleCard>
+      {shouldShowAdvancedPanels && (
+        <ConsoleCard>
+          <ConsoleHeader>
+            <div>
+              <SectionEyebrow>Console</SectionEyebrow>
+              <h2>실행 결과 콘솔</h2>
+              <ConsoleDescription>메일, task queue, 파일 정리 진단 버튼과 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
+            </div>
+            <ConsoleStatus>{consoleStatus}</ConsoleStatus>
+          </ConsoleHeader>
+          <ConsoleQuickActions>
+            {consoleActions.map((action) => (
+              <ConsoleQuickActionButton
+                key={action.key}
+                type="button"
+                disabled={isBusy}
+                data-tone={action.tone}
+                title={action.description}
+                onClick={() => void action.onClick()}
+              >
+                <span className="title">{action.title}</span>
+                <span className="chip">진단</span>
+              </ConsoleQuickActionButton>
+            ))}
+          </ConsoleQuickActions>
+          <ResultPanel>{result || "// 도구를 실행하면 API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
+        </ConsoleCard>
       )}
     </Main>
   )
@@ -1479,6 +1493,16 @@ const HeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const AdvancedToggle = styled.button`
@@ -1497,6 +1521,40 @@ const AdvancedToggle = styled.button`
     border-color: ${({ theme }) => theme.colors.gray7};
     color: ${({ theme }) => theme.colors.gray12};
   }
+`
+
+const CollapsedStateCard = styled.section`
+  display: grid;
+  gap: 0.62rem;
+  padding: 0.88rem 0.92rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+
+  strong {
+    font-size: 0.9rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+`
+
+const CollapsedStateAction = styled.button`
+  width: fit-content;
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.blue8};
+  background: ${({ theme }) => theme.colors.blue3};
+  color: ${({ theme }) => theme.colors.blue11};
+  padding: 0 0.82rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
 `
 
 const BaseButton = styled.button`
@@ -1547,6 +1605,10 @@ const NavLink = styled.a`
   min-height: 40px;
   font-size: 0.92rem;
   font-weight: 700;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+  }
 `
 
 const Grid = styled.section`

@@ -229,6 +229,20 @@ const LIST_SORT_OPTIONS = [
   { value: "CREATED_AT", label: "최신순" },
   { value: "CREATED_AT_ASC", label: "오래된순" },
 ] as const
+
+const MOBILE_STUDIO_STEPS: MobileStudioStep[] = ["query", "list", "edit", "publish"]
+const MOBILE_STUDIO_STEP_LABEL: Record<MobileStudioStep, string> = {
+  query: "조회",
+  list: "목록",
+  edit: "편집",
+  publish: "발행",
+}
+const MOBILE_STUDIO_STEP_DESCRIPTION: Record<MobileStudioStep, string> = {
+  query: "페이지/키워드/정렬 조건을 먼저 정리하고 목록을 불러오세요.",
+  list: "목록에서 대상 글을 선택하거나 post id를 확인해 편집 단계로 넘깁니다.",
+  edit: "본문, 태그, 메타를 정리한 뒤 발행 설정으로 이동합니다.",
+  publish: "노출 범위와 카드 미리보기를 확인하고 최종 반영하세요.",
+}
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
 const DEFAULT_THUMBNAIL_SOURCE_SIZE: ThumbnailSourceSize = {
@@ -377,6 +391,8 @@ const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
+const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
+const PREVIEW_THUMBNAIL_ALLOWED_QUERY_REGEX = /^\?(?:[A-Za-z0-9._~/%=&-]*)$/
 
 const extractFirstMarkdownImage = (content: string): string => {
   const match = markdownImagePattern.exec(content)
@@ -407,21 +423,32 @@ const normalizeSafeImageUrl = (raw: string): string => {
   return ""
 }
 
+const toSafePreviewThumbnailPath = (pathname: string, search: string): string => {
+  if (!PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX.test(pathname)) return ""
+  if (!search) return pathname
+  if (!PREVIEW_THUMBNAIL_ALLOWED_QUERY_REGEX.test(search)) return ""
+  return `${pathname}${search}`
+}
+
 const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
   const value = raw.trim()
   if (!value) return ""
   if (PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX.test(value)) return ""
 
   if (value.startsWith("/")) {
-    if (!value.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
-    return value
+    if (value.startsWith("//")) return ""
+    try {
+      const parsed = new URL(value, "https://preview.local")
+      return toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
+    } catch {
+      return ""
+    }
   }
 
   try {
     const parsed = new URL(value)
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
     if (parsed.username || parsed.password) return ""
-    if (!parsed.pathname.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
 
     const allowedHosts = new Set<string>()
     const baseUrl = getApiBaseUrl()
@@ -434,7 +461,8 @@ const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
       allowedHosts.add(window.location.host)
     }
     if (!allowedHosts.has(parsed.host)) return ""
-    return parsed.toString()
+    if (!parsed.pathname.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
+    return toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
   } catch {
     return ""
   }
@@ -3287,6 +3315,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           : isTempDraftMode
             ? disabled("publishTempPost")
             : disabled("modifyPost")
+  const mobileStudioStepIndex = MOBILE_STUDIO_STEPS.indexOf(mobileStudioStep)
+  const mobileStudioPrevStep =
+    mobileStudioStepIndex > 0 ? MOBILE_STUDIO_STEPS[mobileStudioStepIndex - 1] : null
+  const mobileStudioNextStep =
+    mobileStudioStepIndex < MOBILE_STUDIO_STEPS.length - 1
+      ? MOBILE_STUDIO_STEPS[mobileStudioStepIndex + 1]
+      : null
   const closeToolbarMenus = () => {
     setIsCalloutMenuOpen(false)
     setIsColorMenuOpen(false)
@@ -3568,6 +3603,34 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 발행
               </button>
             </MobileStudioStepper>
+            {isCompactMobileLayout ? (
+              <MobileStepGuide role="status" aria-live="polite">
+                <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[mobileStudioStep]}`}</strong>
+                <p>{MOBILE_STUDIO_STEP_DESCRIPTION[mobileStudioStep]}</p>
+                <div>
+                  <Button
+                    type="button"
+                    disabled={!mobileStudioPrevStep}
+                    onClick={() => {
+                      if (!mobileStudioPrevStep) return
+                      setMobileStudioStep(mobileStudioPrevStep)
+                    }}
+                  >
+                    {mobileStudioPrevStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioPrevStep]}로 이동` : "이전 단계 없음"}
+                  </Button>
+                  <PrimaryButton
+                    type="button"
+                    disabled={!mobileStudioNextStep}
+                    onClick={() => {
+                      if (!mobileStudioNextStep) return
+                      setMobileStudioStep(mobileStudioNextStep)
+                    }}
+                  >
+                    {mobileStudioNextStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioNextStep]} 단계로 이동` : "마지막 단계"}
+                  </PrimaryButton>
+                </div>
+              </MobileStepGuide>
+            ) : null}
             <ContentStudioGrid>
               <ContentStudioLeft
                 data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "query" || mobileStudioStep === "list"}
@@ -3815,97 +3878,104 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {adminPostViewRows.map((row) => (
-                          <tr key={row.id}>
-                            {listScope === "active" && (
-                              <td className="checkboxCell">
-                                <input
-                                  type="checkbox"
-                                  aria-label={`${row.id}번 글 선택`}
-                                  checked={selectedPostIdSet.has(row.id)}
-                                  onChange={() => togglePostSelection(row.id)}
-                                />
+                        {adminPostViewRows.map((row, rowIndex) => {
+                          const shouldOpenMenuUpward = rowIndex >= adminPostViewRows.length - 2
+
+                          return (
+                            <tr key={row.id}>
+                              {listScope === "active" && (
+                                <td className="checkboxCell">
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`${row.id}번 글 선택`}
+                                    checked={selectedPostIdSet.has(row.id)}
+                                    onChange={() => togglePostSelection(row.id)}
+                                  />
+                                </td>
+                              )}
+                              <td>{row.id}</td>
+                              <td className="title">
+                                <TitleCell>
+                                  <span className="text">{row.title}</span>
+                                  {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                                </TitleCell>
                               </td>
-                            )}
-                            <td>{row.id}</td>
-                            <td className="title">
-                              <TitleCell>
-                                <span className="text">{row.title}</span>
-                                {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
-                              </TitleCell>
-                            </td>
-                            <td className="visibilityCell">
-                              <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                                {visibilityLabel(row.published, row.listed)}
-                              </VisibilityBadge>
-                            </td>
-                            <td className="authorCell">{row.authorName}</td>
-                            <td className="dateCell">{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
-                            <td className="actionsCell">
-                              <InlineActions>
-                                {listScope === "active" ? (
-                                  <Button
-                                    type="button"
-                                    disabled={loadingKey.length > 0}
-                                    onClick={() => {
-                                      setPostId(String(row.id))
-                                      void loadPostForEditor(String(row.id))
-                                    }}
-                                  >
-                                    불러오기
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    disabled={loadingKey.length > 0}
-                                    onClick={() => void restoreDeletedPostFromList(row)}
-                                  >
-                                    복구
-                                  </Button>
-                                )}
-                                <MoreMenuWrap>
-                                  <MoreMenuButton
-                                    type="button"
-                                    aria-label={`${row.id}번 글 추가 작업`}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      setRowActionMenuId((prev) => (prev === row.id ? null : row.id))
-                                    }}
-                                  >
-                                    ⋯
-                                  </MoreMenuButton>
-                                  {rowActionMenuId === row.id && (
-                                    <MoreMenuList onClick={(event) => event.stopPropagation()}>
-                                      {listScope === "active" ? (
-                                        <button
-                                          type="button"
-                                          disabled={loadingKey.length > 0}
-                                          onClick={() => {
-                                            setRowActionMenuId(null)
-                                            openDeleteConfirm([row.id], row.title)
-                                          }}
-                                        >
-                                          삭제
-                                        </button>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          disabled={loadingKey.length > 0}
-                                          onClick={() => {
-                                            setRowActionMenuId(null)
-                                            void hardDeleteDeletedPostFromList(row)
-                                          }}
-                                        >
-                                          영구삭제
-                                        </button>
-                                      )}
-                                    </MoreMenuList>
+                              <td className="visibilityCell">
+                                <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
+                                  {visibilityLabel(row.published, row.listed)}
+                                </VisibilityBadge>
+                              </td>
+                              <td className="authorCell">{row.authorName}</td>
+                              <td className="dateCell">{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
+                              <td className="actionsCell">
+                                <InlineActions>
+                                  {listScope === "active" ? (
+                                    <Button
+                                      type="button"
+                                      disabled={loadingKey.length > 0}
+                                      onClick={() => {
+                                        setPostId(String(row.id))
+                                        void loadPostForEditor(String(row.id))
+                                      }}
+                                    >
+                                      불러오기
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      disabled={loadingKey.length > 0}
+                                      onClick={() => void restoreDeletedPostFromList(row)}
+                                    >
+                                      복구
+                                    </Button>
                                   )}
-                                </MoreMenuWrap>
-                              </InlineActions>
-                            </td>
-                          </tr>
-                        ))}
+                                  <MoreMenuWrap>
+                                    <MoreMenuButton
+                                      type="button"
+                                      aria-label={`${row.id}번 글 추가 작업`}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        setRowActionMenuId((prev) => (prev === row.id ? null : row.id))
+                                      }}
+                                    >
+                                      ⋯
+                                    </MoreMenuButton>
+                                    {rowActionMenuId === row.id && (
+                                      <MoreMenuList
+                                        data-placement={shouldOpenMenuUpward ? "top" : "bottom"}
+                                        onClick={(event) => event.stopPropagation()}
+                                      >
+                                        {listScope === "active" ? (
+                                          <button
+                                            type="button"
+                                            disabled={loadingKey.length > 0}
+                                            onClick={() => {
+                                              setRowActionMenuId(null)
+                                              openDeleteConfirm([row.id], row.title)
+                                            }}
+                                          >
+                                            삭제
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled={loadingKey.length > 0}
+                                            onClick={() => {
+                                              setRowActionMenuId(null)
+                                              void hardDeleteDeletedPostFromList(row)
+                                            }}
+                                          >
+                                            영구삭제
+                                          </button>
+                                        )}
+                                      </MoreMenuList>
+                                    )}
+                                  </MoreMenuWrap>
+                                </InlineActions>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                       </ListTable>
                     </ListTableWrap>
@@ -4999,13 +5069,24 @@ const HeroNav = styled.div`
   flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const AnchorButton = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 0.86rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -5026,6 +5107,10 @@ const AnchorButton = styled.a`
     border-color: ${({ theme }) => theme.colors.gray8};
     background: ${({ theme }) => theme.colors.gray3};
     color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  @media (max-width: 1024px) {
+    width: 100%;
   }
 `
 
@@ -5069,6 +5154,16 @@ const ActionCluster = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+
+  @media (max-width: 1024px) {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const WorkspaceGrid = styled.div`
@@ -5196,7 +5291,7 @@ const MobileStudioStepper = styled.div`
     background: ${({ theme }) => theme.colors.gray2};
 
     > button {
-      min-height: 36px;
+      min-height: 38px;
       border-radius: 999px;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
       background: transparent;
@@ -5210,6 +5305,51 @@ const MobileStudioStepper = styled.div`
       border-color: ${({ theme }) => theme.colors.blue8};
       color: ${({ theme }) => theme.colors.blue11};
       background: ${({ theme }) => theme.colors.blue3};
+    }
+  }
+`
+
+const MobileStepGuide = styled.section`
+  display: none;
+
+  @media (max-width: 960px) {
+    display: grid;
+    gap: 0.58rem;
+    margin-bottom: 0.42rem;
+    padding: 0.66rem 0.72rem;
+    border-radius: 10px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+
+    strong {
+      font-size: 0.86rem;
+      color: ${({ theme }) => theme.colors.gray12};
+      line-height: 1.4;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: ${({ theme }) => theme.colors.gray10};
+    }
+
+    > div {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+
+    button {
+      min-height: 38px;
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 520px) {
+    > div {
+      grid-template-columns: 1fr;
     }
   }
 `
@@ -7178,6 +7318,11 @@ const MoreMenuList = styled.div`
   padding: 0.25rem;
   display: grid;
   gap: 0.2rem;
+
+  &[data-placement="top"] {
+    top: auto;
+    bottom: calc(100% + 0.3rem);
+  }
 
   button {
     min-height: 36px;

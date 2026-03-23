@@ -114,10 +114,10 @@ const StyledWrapper = styled.div`
   > .field > .mid {
     width: 100%;
     min-width: 0;
-    min-height: 16px;
-    padding: 0.125rem 0;
+    min-height: 36px;
+    padding: 0.36rem 0;
     font-size: 0.875rem;
-    line-height: 1.35;
+    line-height: 1.45;
     color: ${({ theme }) => theme.colors.gray12};
     caret-color: ${({ theme }) => theme.colors.gray12};
     border: 0;
@@ -163,7 +163,10 @@ const StyledWrapper = styled.div`
     }
 
     > .field > .mid {
-      font-size: 0.75rem;
+      min-height: 34px;
+      padding: 0.34rem 0;
+      font-size: 0.82rem;
+      line-height: 1.45;
     }
   }
 `

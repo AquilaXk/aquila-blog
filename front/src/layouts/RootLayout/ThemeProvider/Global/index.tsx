@@ -13,7 +13,7 @@ export const Global = () => {
           min-height: 100%;
           -webkit-text-size-adjust: 100%;
           text-size-adjust: 100%;
-          overflow-x: clip;
+          overflow-x: visible;
         }
 
         body {
@@ -22,7 +22,7 @@ export const Global = () => {
           margin: 0;
           padding: 0;
           overflow-y: scroll;
-          overflow-x: clip;
+          overflow-x: visible;
           color: ${theme.colors.gray12};
           background-color: ${theme.colors.gray1};
           background-image: radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.08), transparent 38%);
@@ -34,6 +34,13 @@ export const Global = () => {
           font-synthesis: none;
         }
 
+        @media (max-width: 1023px) {
+          html,
+          body {
+            overflow-x: clip;
+          }
+        }
+
         @media (min-width: 1024px) {
           html {
             scrollbar-gutter: stable;
@@ -41,9 +48,11 @@ export const Global = () => {
         }
 
         @supports not (overflow: clip) {
-          html,
-          body {
-            overflow-x: hidden;
+          @media (max-width: 1023px) {
+            html,
+            body {
+              overflow-x: hidden;
+            }
           }
         }
 

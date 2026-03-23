@@ -33,6 +33,7 @@ export type IconName =
   | "rocket"
   | "globe"
   | "link"
+  | "share"
   | "phone"
 
 type Props = {
@@ -180,6 +181,15 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
           <path d="M10.2 13.8 8.5 15.5a3.2 3.2 0 1 1-4.5-4.5l2.6-2.6a3.2 3.2 0 0 1 4.5 0" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M13.8 10.2 15.5 8.5a3.2 3.2 0 1 1 4.5 4.5l-2.6 2.6a3.2 3.2 0 0 1-4.5 0" strokeLinecap="round" strokeLinejoin="round" />
           <path d="m9 15 6-6" strokeLinecap="round" />
+        </svg>
+      )
+    case "share":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <circle cx="6.5" cy="12.2" r="2.1" />
+          <circle cx="17.4" cy="6.4" r="2.1" />
+          <circle cx="17.4" cy="17.7" r="2.1" />
+          <path d="m8.3 11.3 7.1-3.7M8.3 13.2l7 3.8" strokeLinecap="round" />
         </svg>
       )
     case "phone":

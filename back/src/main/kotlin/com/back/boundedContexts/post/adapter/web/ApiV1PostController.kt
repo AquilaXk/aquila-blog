@@ -572,7 +572,9 @@ class ApiV1PostController(
         }
         applyPrivateNoStoreHeaders(response)
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanRead(rq.actor)
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanRead(rq.actor)
+        }
         return ResponseEntity.ok(makePostWithContentDto(post))
     }
 
@@ -700,7 +702,9 @@ class ApiV1PostController(
         @PathVariable @Positive id: Long,
     ): RsData<PostHitResBody> {
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanRead(rq.actorOrNull)
+        }
         if (postHitDedupUseCase.shouldCountHit(id, resolveHitViewerKey())) {
             postUseCase.incrementHit(post)
         }
@@ -726,7 +730,9 @@ class ApiV1PostController(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanRead(rq.actorOrNull)
+        }
         val likeResult = resolveLikeResult(post) { postUseCase.like(post, rq.actor) }
         return RsData(
             "200-1",
@@ -748,7 +754,9 @@ class ApiV1PostController(
         @PathVariable @Positive id: Long,
     ): RsData<PostLikeToggleResBody> {
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanRead(rq.actorOrNull)
+        }
         val likeResult = resolveLikeResult(post) { postUseCase.unlike(post, rq.actor) }
         return RsData(
             "200-1",

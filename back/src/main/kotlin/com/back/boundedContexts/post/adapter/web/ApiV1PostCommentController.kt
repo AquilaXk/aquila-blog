@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.input.PostUseCase
+import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.global.rsData.RsData
@@ -31,6 +32,12 @@ class ApiV1PostCommentController(
     private val postUseCase: PostUseCase,
     private val rq: Rq,
 ) {
+    private fun checkReadPermission(post: Post) {
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanRead(rq.actorOrNull)
+        }
+    }
+
     private fun makePostCommentDto(postComment: PostComment): PostCommentDto {
         val actor = rq.actorOrNull
         return PostCommentDto(postComment).apply {
@@ -46,7 +53,7 @@ class ApiV1PostCommentController(
         @org.springframework.web.bind.annotation.RequestParam(defaultValue = "200") limit: Int,
     ): List<PostCommentDto> {
         val post = postUseCase.findById(postId).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        checkReadPermission(post)
         val safeLimit = limit.coerceIn(1, 500)
         return postUseCase.getComments(post, safeLimit).map { makePostCommentDto(it) }
     }
@@ -58,7 +65,7 @@ class ApiV1PostCommentController(
         @PathVariable id: Long,
     ): PostCommentDto {
         val post = postUseCase.findById(postId).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        checkReadPermission(post)
         val postComment = postUseCase.findCommentById(post, id).getOrThrow()
         return makePostCommentDto(postComment)
     }
@@ -82,7 +89,7 @@ class ApiV1PostCommentController(
         @Valid @RequestBody reqBody: PostCommentWriteRequest,
     ): RsData<PostCommentDto> {
         val post = postUseCase.findById(postId).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        checkReadPermission(post)
         val parentComment =
             reqBody.parentCommentId?.let { parentId ->
                 postUseCase.findCommentById(post, parentId).getOrThrow()
@@ -111,7 +118,7 @@ class ApiV1PostCommentController(
         @Valid @RequestBody reqBody: PostCommentModifyRequest,
     ): RsData<Void> {
         val post = postUseCase.findById(postId).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        checkReadPermission(post)
         val postComment = postUseCase.findCommentById(post, id).getOrThrow()
         postComment.checkActorCanModify(rq.actor)
         postUseCase.modifyComment(postComment, rq.actor, reqBody.content)
@@ -125,7 +132,7 @@ class ApiV1PostCommentController(
         @PathVariable id: Long,
     ): RsData<Void> {
         val post = postUseCase.findById(postId).getOrThrow()
-        post.checkActorCanRead(rq.actorOrNull)
+        checkReadPermission(post)
         val postComment = postUseCase.findCommentById(post, id).getOrThrow()
         postComment.checkActorCanDelete(rq.actor)
         postUseCase.deleteComment(post, postComment, rq.actor)

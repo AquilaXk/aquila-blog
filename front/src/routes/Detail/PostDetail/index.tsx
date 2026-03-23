@@ -518,11 +518,14 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 <button
                   type="button"
                   className="floatingActionButton floatingShareButton"
-                  aria-label="글 링크 공유"
+                  aria-label="글 공유"
                   onClick={handleSharePost}
                 >
-                  <AppIcon name="link" />
+                  <AppIcon name="share" />
                 </button>
+                <span className="floatingShareLabel" aria-hidden="true">
+                  공유
+                </span>
                 {shareFeedback ? (
                   <span className="floatingShareFeedback" role="status" aria-live="polite">
                     {shareFeedback === "failed"
@@ -676,13 +679,14 @@ const StyledWrapper = styled.div`
   .leftRail,
   .rightRail {
     min-width: 0;
+    position: sticky;
+    top: calc(var(--app-header-height, 5.4rem) + 1rem);
     align-self: start;
   }
 
   .leftRailInner,
   .rightRailInner {
-    position: sticky;
-    top: calc(var(--app-header-height, 5.4rem) + 1rem);
+    position: static;
   }
 
   .floatingActionButton {
@@ -728,7 +732,7 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
 
     svg {
-      font-size: 1.08rem;
+      font-size: 1.02rem;
     }
   }
 
@@ -758,8 +762,16 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray9};
   }
 
+  .floatingShareLabel {
+    margin-top: -0.18rem;
+    font-size: 0.64rem;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    font-weight: 640;
+    color: ${({ theme }) => theme.colors.gray9};
+  }
+
   .rightRailInner {
-    position: sticky;
     border-left: 2px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : theme.colors.gray6)};
     padding: 0.18rem 0 0.18rem 0.82rem;
     background: transparent;

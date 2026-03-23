@@ -430,6 +430,14 @@ const toSafePreviewThumbnailPath = (pathname: string, search: string): string =>
   return `${pathname}${search}`
 }
 
+const resolvePreviewThumbnailApiOrigin = (): string => {
+  try {
+    return new URL(getApiBaseUrl()).origin
+  } catch {
+    return ""
+  }
+}
+
 const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
   const value = raw.trim()
   if (!value) return ""
@@ -439,7 +447,13 @@ const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
     if (value.startsWith("//")) return ""
     try {
       const parsed = new URL(value, "https://preview.local")
-      return toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
+      const safePath = toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
+      if (!safePath) return ""
+      const apiOrigin = resolvePreviewThumbnailApiOrigin()
+      if (typeof window !== "undefined" && apiOrigin && window.location.origin !== apiOrigin) {
+        return `${apiOrigin}${safePath}`
+      }
+      return safePath
     } catch {
       return ""
     }
@@ -462,7 +476,16 @@ const normalizeSafePreviewThumbnailUrl = (raw: string): string => {
     }
     if (!allowedHosts.has(parsed.host)) return ""
     if (!parsed.pathname.startsWith(PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX)) return ""
-    return toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
+    const safePath = toSafePreviewThumbnailPath(parsed.pathname, parsed.search)
+    if (!safePath) return ""
+    const apiOrigin = resolvePreviewThumbnailApiOrigin()
+    if (typeof window !== "undefined" && parsed.origin === window.location.origin) {
+      return safePath
+    }
+    if (apiOrigin && parsed.origin === apiOrigin) {
+      return `${apiOrigin}${safePath}`
+    }
+    return `${parsed.origin}${safePath}`
   } catch {
     return ""
   }
@@ -2391,10 +2414,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           expiresAt: Date.now() + 12_000,
           message: `${successIds.length}개 글을 삭제했습니다. 실행 취소 가능`,
         })
-        setGlobalNotice({
-          tone: "success",
-          text: `${successIds.length}개 글 삭제 완료 (12초 내 실행 취소 가능)`,
-        })
         setDeleteConfirmNotice({
           tone: "success",
           text: `${successIds.length}개 글을 삭제했습니다.`,
@@ -2406,10 +2425,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "error",
         text: `${failedIds.length}개 글 삭제에 실패했습니다. 다시 시도해주세요.`,
       })
-      setGlobalNotice({
-        tone: "error",
-        text: `${failedIds.length}개 글 삭제에 실패했습니다.`,
-      })
       return false
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2418,7 +2433,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         tone: "error",
         text: `삭제 실패: ${message}`,
       })
-      setGlobalNotice({ tone: "error", text: `삭제 실패: ${message}` })
       return false
     } finally {
       setLoadingKey("")

@@ -763,7 +763,7 @@ const FeedBody = styled.section`
     min-width: 0;
   }
 
-  @media (min-width: 1520px) {
+  @media (min-width: 1201px) {
     .tagColumn {
       position: absolute;
       top: 0;
@@ -771,9 +771,15 @@ const FeedBody = styled.section`
     }
   }
 
-  @media (min-width: 1520px) {
+  @media (min-width: 1201px) {
     .tagColumn {
-      left: -216px;
+      /*
+       * Velog-like vertical rail exposure:
+       * - starts at the same break tier as velog desktop-side tags (>1200)
+       * - keeps rail inside viewport without clipping on first visible range
+       * - converges to fixed -216px offset on wider screens
+       */
+      left: clamp(-216px, calc(584px - 50vw), -56px);
       width: 184px;
       min-width: 184px;
     }

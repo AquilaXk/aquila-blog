@@ -115,6 +115,8 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val privatePost = postFacade.write(user1, "비공개 댓글 점검용", "비공개 내용", false, false)
             postFacade.writeComment(user1, privatePost, "비공개 댓글")
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
             val accessToken = actorApplicationService.genAccessToken(admin)
 
             mvc

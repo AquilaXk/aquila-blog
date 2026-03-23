@@ -257,7 +257,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         @WithUserDetails("admin@test.com")
         fun `관리자 role 인증은 이메일 드리프트가 있어도 상세 수정 권한 플래그를 유지한다`() {
             val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
-            val post = postFacade.write(writer, "관리자 권한 확인 글", "내용", true, true)
+            val post = postFacade.write(writer, "관리자 권한 확인 글", "내용", false, false)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
 
@@ -266,6 +266,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
                 status { isOk() }
+                jsonPath("$.published") { value(false) }
                 jsonPath("$.actorCanModify") { value(true) }
                 jsonPath("$.actorCanDelete") { value(true) }
             }
@@ -1050,6 +1051,29 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
                 }
         }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자 role 인증은 이메일 드리프트가 있어도 비공개 글 조회수 반영을 허용한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(writer, "비공개 조회수 점검", "내용", false, false)
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+            val initialHitCount = post.hitCount
+
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
+            entityManager.clear()
+
+            mvc
+                .post("/post/api/v1/posts/${post.id}/hit") {
+                    header("X-Forwarded-For", "203.0.113.12")
+                    header(HttpHeaders.USER_AGENT, "JUnit-hit-admin-drift")
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.hitCount") { value(initialHitCount + 1) }
+                }
+        }
     }
 
     @Nested
@@ -1164,6 +1188,24 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                 status { isOk() }
                 jsonPath("$.data.liked") { value(false) }
                 jsonPath("$.data.likesCount") { value(initialLikesCount) }
+            }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자 role 인증은 이메일 드리프트가 있어도 비공개 글 좋아요 반영을 허용한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(writer, "비공개 좋아요 점검", "내용", false, false)
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
+            entityManager.clear()
+
+            mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+                jsonPath("$.data.liked") { value(true) }
             }
         }
     }

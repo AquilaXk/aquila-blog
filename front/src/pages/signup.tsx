@@ -11,6 +11,7 @@ import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
+import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
 
 type RsData<T> = {
   resultCode: string
@@ -45,9 +46,14 @@ const SignupPage = () => {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const normalizedEmail = normalizeAuthEmail(email)
 
-    if (!email.trim()) {
+    if (!normalizedEmail) {
       setError("이메일을 입력해주세요.")
+      return
+    }
+    if (!isValidAuthEmail(normalizedEmail)) {
+      setError("이메일 형식을 확인해주세요.")
       return
     }
 
@@ -58,7 +64,7 @@ const SignupPage = () => {
       const response = await apiFetch<RsData<SignupEmailStartResult>>("/member/api/v1/signup/email/start", {
         method: "POST",
         body: JSON.stringify({
-          email: email.trim(),
+          email: normalizedEmail,
           nextPath: next,
         }),
       })
@@ -93,6 +99,8 @@ const SignupPage = () => {
           </NaverFieldLabel>
           <NaverInput
             id="signup-email"
+            type="email"
+            inputMode="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             onFocus={() => setEmailFocused(true)}

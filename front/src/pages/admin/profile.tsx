@@ -378,6 +378,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   if (!sessionMember) return null
 
   const profileSrc = profileImgInputUrl.trim()
+  const displayName = sessionMember.nickname || sessionMember.username || "관리자"
+  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const profileUpdatedText = sessionMember.modifiedAt
     ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
     : "확인 전"
@@ -421,12 +423,12 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <PreviewCard>
           <AvatarFrame>
             {profileSrc ? (
-              <ProfileImage src={profileSrc} alt={sessionMember.username} width={128} height={128} priority />
+              <ProfileImage src={profileSrc} alt={displayName} width={128} height={128} priority />
             ) : (
-              <AvatarFallback>{sessionMember.username.slice(0, 2).toUpperCase()}</AvatarFallback>
+              <AvatarFallback>{displayNameInitial}</AvatarFallback>
             )}
           </AvatarFrame>
-          <strong>{sessionMember.username}</strong>
+          <strong>{displayName}</strong>
           <span>{profileRoleInput.trim() || "역할 미설정"}</span>
           <p>{profileBioInput.trim() || "소개 문구 미설정"}</p>
           <input
@@ -455,7 +457,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <MetaBar aria-label="프로필 메타 정보">
             <MetaItem>
               <span>현재 계정</span>
-              <strong>{sessionMember.username}</strong>
+              <strong>{displayName}</strong>
             </MetaItem>
             <MetaItem>
               <span>최종 수정 시각</span>

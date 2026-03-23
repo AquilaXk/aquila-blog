@@ -41,7 +41,7 @@ data class PostDto
             post.modifiedAt,
             post.author.id,
             post.author.name,
-            post.author.username,
+            post.author.name,
             post.author.profileImgUrlVersionedOrDefault,
             post.title,
             preview.thumbnail,

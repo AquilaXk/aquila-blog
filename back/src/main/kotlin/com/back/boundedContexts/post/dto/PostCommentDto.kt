@@ -32,7 +32,7 @@ data class PostCommentDto
             postComment.modifiedAt,
             postComment.author.id,
             postComment.author.name,
-            postComment.author.username,
+            postComment.author.name,
             postComment.author.redirectToProfileImgUrlVersionedOrDefault,
             postComment.author.profileImgUrlVersionedOrDefault,
             postComment.post.id,

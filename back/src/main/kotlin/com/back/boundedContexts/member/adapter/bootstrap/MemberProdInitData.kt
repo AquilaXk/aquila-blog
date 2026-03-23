@@ -3,9 +3,9 @@ package com.back.boundedContexts.member.adapter.bootstrap
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.global.app.AppConfig
+import com.back.global.exception.application.AppException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -25,8 +25,6 @@ import java.util.Locale
 class MemberProdInitData(
     private val memberUseCase: MemberUseCase,
     private val passwordEncoder: PasswordEncoder,
-    @param:Value("\${custom.admin.bootstrap.rotatePasswordOnStartup:false}")
-    private val rotatePasswordOnStartup: Boolean,
 ) {
     private val logger = LoggerFactory.getLogger(MemberProdInitData::class.java)
 
@@ -47,43 +45,41 @@ class MemberProdInitData(
      */
     @Transactional
     fun ensureConfiguredAdminMember() {
-        val adminNickname = AppConfig.adminUsernameOrBlank.trim().ifBlank { "관리자" }
+        val configuredAdminUsername = AppConfig.adminUsernameOrBlank.trim()
+        val adminNickname = configuredAdminUsername.ifBlank { "관리자" }
         val adminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
         val adminPassword = AppConfig.adminPasswordOrBlank
 
         if (adminEmail.isBlank()) return
         if (adminPassword.isBlank()) return
-        logger.info("Configured admin nickname from custom.admin.username: {}", adminNickname)
+        logger.info("Configured admin identity bootstrap started. email={} username={}", adminEmail, configuredAdminUsername)
         val existingAdmin =
             memberUseCase.findByEmail(adminEmail)
+                ?: configuredAdminUsername
+                    .takeIf { it.isNotBlank() }
+                    ?.let(memberUseCase::findByUsername)
         if (existingAdmin != null) {
             val hasPassword = !existingAdmin.password.isNullOrBlank()
             val passwordMatchesConfigured = hasPassword && passwordEncoder.matches(adminPassword, existingAdmin.password)
 
             if (!hasPassword) {
                 existingAdmin.password = passwordEncoder.encode(adminPassword)
-            } else if (!passwordMatchesConfigured && rotatePasswordOnStartup) {
-                existingAdmin.password = passwordEncoder.encode(adminPassword)
-                logger.warn("Rotated admin password on startup because custom.admin.bootstrap.rotatePasswordOnStartup=true")
             } else if (!passwordMatchesConfigured) {
-                logger.warn(
-                    "Admin password differs from configured value but rotation is disabled; set custom.admin.bootstrap.rotatePasswordOnStartup=true to rotate explicitly",
-                )
+                existingAdmin.password = passwordEncoder.encode(adminPassword)
+                logger.warn("Admin password rotated to match configured custom.admin.password")
             }
             // 과거 배포에서 username 기반 apiKey가 남아있을 수 있어 최초 1회 회전한다.
             if (existingAdmin.apiKey.isBlank() || existingAdmin.apiKey == existingAdmin.username) {
                 existingAdmin.modifyApiKey(MemberPolicy.genApiKey())
             }
-            if (adminEmail.isNotBlank()) {
-                val owner = memberUseCase.findByEmail(adminEmail)
-                if (owner == null || owner.id == existingAdmin.id) {
-                    existingAdmin.email = adminEmail
-                } else {
-                    logger.warn(
-                        "Admin email bootstrap skipped because configured email is already used by memberId={}",
-                        owner.id,
-                    )
-                }
+            val owner = memberUseCase.findByEmail(adminEmail)
+            if (owner == null || owner.id == existingAdmin.id) {
+                existingAdmin.email = adminEmail
+            } else {
+                throw AppException(
+                    "409-2",
+                    "관리자 이메일($adminEmail)이 다른 계정(memberId=${owner.id})에 이미 연결되어 있습니다. 기존 계정을 정리한 뒤 다시 기동해주세요.",
+                )
             }
             if (existingAdmin.nickname != adminNickname) {
                 existingAdmin.nickname = adminNickname

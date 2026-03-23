@@ -455,7 +455,13 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
 
       <form onSubmit={handleWriteComment} className="writeForm">
         <div className="composerAvatar">
-          {renderAvatar(me?.profileImageDirectUrl, me?.profileImageUrl, me?.username || "guest", 44, true)}
+          {renderAvatar(
+            me?.profileImageDirectUrl,
+            me?.profileImageUrl,
+            me?.nickname || me?.username || "guest",
+            44,
+            true
+          )}
         </div>
         <div className="composerBody">
           <textarea

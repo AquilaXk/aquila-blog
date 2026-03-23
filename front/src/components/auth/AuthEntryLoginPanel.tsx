@@ -17,6 +17,7 @@ type Props = {
   onTogglePassword: () => void
   onToggleKeepSignedIn: () => void
   onToggleIpSecurity: () => void
+  onOpenIpSecurityInfo: () => void
   onSwitchToSignup: () => void
 }
 
@@ -35,6 +36,7 @@ const AuthEntryLoginPanel = ({
   onTogglePassword,
   onToggleKeepSignedIn,
   onToggleIpSecurity,
+  onOpenIpSecurityInfo,
   onSwitchToSignup,
 }: Props) => {
   const [emailFocused, setEmailFocused] = useState(false)
@@ -53,6 +55,8 @@ const AuthEntryLoginPanel = ({
           <input
             className="naverFieldInput"
             id="auth-entry-email"
+            type="email"
+            inputMode="email"
             value={email}
             onChange={(event) => onEmailChange(event.target.value)}
             onFocus={() => setEmailFocused(true)}
@@ -65,7 +69,7 @@ const AuthEntryLoginPanel = ({
             <button
               type="button"
               className="fieldGhostButton"
-              aria-label="아이디 입력 지우기"
+              aria-label="이메일 입력 지우기"
               onClick={() => onEmailChange("")}
               disabled={loading}
             >
@@ -128,19 +132,31 @@ const AuthEntryLoginPanel = ({
             <span>로그인 상태 유지</span>
           </button>
 
-          <button
-            type="button"
-            className={`ipSecurityToggle ${ipSecurityOn ? "isOn" : ""}`}
-            onClick={onToggleIpSecurity}
-            aria-pressed={ipSecurityOn}
-          >
-            <span className="label">IP보안</span>
-            <span className="switch" aria-hidden="true">
-              <span className="thumb" />
-            </span>
-            <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
-          </button>
+          <div className="ipSecurityControl">
+            <button
+              type="button"
+              className="ipSecurityInfoButton"
+              onClick={onOpenIpSecurityInfo}
+              aria-haspopup="dialog"
+              aria-controls="ip-security-info-dialog"
+            >
+              IP보안
+            </button>
+            <button
+              type="button"
+              className={`ipSecurityToggle ${ipSecurityOn ? "isOn" : ""}`}
+              onClick={onToggleIpSecurity}
+              aria-pressed={ipSecurityOn}
+              aria-label="IP보안 ON/OFF"
+            >
+              <span className="switch" aria-hidden="true">
+                <span className="thumb" />
+              </span>
+              <span className="state">{ipSecurityOn ? "ON" : "OFF"}</span>
+            </button>
+          </div>
         </div>
+        <p className="ipSecurityHint">IP보안 ON 시 네트워크(IP) 변경 시 재로그인이 필요할 수 있습니다.</p>
 
         {error && <p className="inlineError">{error}</p>}
 

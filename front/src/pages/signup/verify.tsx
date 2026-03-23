@@ -6,8 +6,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AuthShell from "src/components/auth/AuthShell"
+import AppIcon from "src/components/icons/AppIcon"
 import { normalizeNextPath, replaceRoute, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
+import { evaluatePasswordPolicy } from "src/libs/validation/auth"
 
 type RsData<T> = {
   resultCode: string
@@ -82,7 +84,11 @@ const SignupVerifyPage = () => {
     }
   }, [router.isReady, token])
 
-  const passwordRule = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,64}$/
+  const passwordPolicy = useMemo(() => evaluatePasswordPolicy(password), [password])
+  const hasPasswordInput = password.length > 0
+  const hasPasswordConfirmInput = passwordConfirm.length > 0
+  const passwordMatched = hasPasswordInput && hasPasswordConfirmInput && password === passwordConfirm
+  const passwordMismatch = hasPasswordConfirmInput && password !== passwordConfirm
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -97,7 +103,7 @@ const SignupVerifyPage = () => {
       return
     }
 
-    if (!passwordRule.test(password)) {
+    if (!passwordPolicy.valid) {
       setSubmitError("비밀번호는 8~64자이며 영문 대문자/소문자/숫자/특수문자를 모두 포함해야 합니다.")
       return
     }
@@ -213,7 +219,46 @@ const SignupVerifyPage = () => {
                 {showPassword ? "숨기기" : "표시"}
               </GhostButton>
             </PasswordRow>
+            <ConfirmStatus data-state={passwordMatched ? "ok" : passwordMismatch ? "fail" : "idle"}>
+              <AppIcon
+                name={passwordMatched ? "check-circle" : passwordMismatch ? "close" : "question"}
+                aria-hidden="true"
+              />
+              <span>
+                {passwordMatched
+                  ? "비밀번호가 일치합니다."
+                  : passwordMismatch
+                    ? "비밀번호가 일치하지 않습니다."
+                    : "비밀번호 확인을 입력하면 일치 여부를 바로 표시합니다."}
+              </span>
+            </ConfirmStatus>
           </Field>
+
+          <PasswordPolicyCard>
+            <strong>비밀번호 규칙</strong>
+            <PasswordPolicyList>
+              <PasswordPolicyItem data-ok={passwordPolicy.length}>
+                <AppIcon name={passwordPolicy.length ? "check-circle" : "close"} aria-hidden="true" />
+                <span>8~64자 길이</span>
+              </PasswordPolicyItem>
+              <PasswordPolicyItem data-ok={passwordPolicy.lowercase}>
+                <AppIcon name={passwordPolicy.lowercase ? "check-circle" : "close"} aria-hidden="true" />
+                <span>영문 소문자 포함</span>
+              </PasswordPolicyItem>
+              <PasswordPolicyItem data-ok={passwordPolicy.uppercase}>
+                <AppIcon name={passwordPolicy.uppercase ? "check-circle" : "close"} aria-hidden="true" />
+                <span>영문 대문자 포함</span>
+              </PasswordPolicyItem>
+              <PasswordPolicyItem data-ok={passwordPolicy.digit}>
+                <AppIcon name={passwordPolicy.digit ? "check-circle" : "close"} aria-hidden="true" />
+                <span>숫자 포함</span>
+              </PasswordPolicyItem>
+              <PasswordPolicyItem data-ok={passwordPolicy.special}>
+                <AppIcon name={passwordPolicy.special ? "check-circle" : "close"} aria-hidden="true" />
+                <span>특수문자 포함</span>
+              </PasswordPolicyItem>
+            </PasswordPolicyList>
+          </PasswordPolicyCard>
 
           {submitError ? (
             <ErrorText>{submitError}</ErrorText>
@@ -294,6 +339,68 @@ const PasswordRow = styled.div`
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
+`
+
+const ConfirmStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.36rem;
+  font-size: 0.82rem;
+  color: ${({ theme }) => theme.colors.gray11};
+
+  svg {
+    font-size: 0.94rem;
+  }
+
+  &[data-state="ok"] {
+    color: ${({ theme }) => theme.colors.green10};
+  }
+
+  &[data-state="fail"] {
+    color: ${({ theme }) => theme.colors.red10};
+  }
+`
+
+const PasswordPolicyCard = styled.div`
+  display: grid;
+  gap: 0.52rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.72rem 0.84rem;
+
+  strong {
+    font-size: 0.84rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+`
+
+const PasswordPolicyList = styled.ul`
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.34rem;
+`
+
+const PasswordPolicyItem = styled.li`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: ${({ theme }) => theme.colors.gray11};
+
+  svg {
+    font-size: 0.92rem;
+  }
+
+  &[data-ok="true"] {
+    color: ${({ theme }) => theme.colors.green10};
+  }
+
+  &[data-ok="false"] {
+    color: ${({ theme }) => theme.colors.gray10};
+  }
 `
 
 const GhostButton = styled.button`

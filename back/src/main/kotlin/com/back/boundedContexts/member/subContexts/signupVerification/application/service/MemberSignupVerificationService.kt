@@ -56,6 +56,14 @@ class MemberSignupVerificationService(
     @Value("\${custom.member.signup.sessionExpirationSeconds:3600}")
     private val sessionExpirationSeconds: Long,
 ) {
+    companion object {
+        private const val MAX_EMAIL_LENGTH = 320
+        private val EMAIL_FORMAT_REGEX =
+            Regex(
+                "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+            )
+    }
+
     /**
      * 생성/시작 처리 흐름을 수행하고 중복 요청과 예외 케이스를 함께 다룹니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
@@ -250,4 +258,9 @@ class MemberSignupVerificationService(
             .trim()
             .lowercase(Locale.ROOT)
             .ifBlank { throw AppException("400-2", "이메일을 입력해주세요.") }
+            .also { normalized ->
+                if (normalized.length > MAX_EMAIL_LENGTH || !EMAIL_FORMAT_REGEX.matches(normalized)) {
+                    throw AppException("400-2", "이메일 형식을 확인해주세요.")
+                }
+            }
 }

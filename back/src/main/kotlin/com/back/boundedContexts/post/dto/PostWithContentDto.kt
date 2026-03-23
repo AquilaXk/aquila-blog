@@ -36,7 +36,7 @@ data class PostWithContentDto(
         post.modifiedAt,
         post.author.id,
         post.author.name,
-        post.author.username,
+        post.author.name,
         post.author.redirectToProfileImgUrlVersionedOrDefault,
         post.author.profileImgUrlVersionedOrDefault,
         post.title,

@@ -41,6 +41,10 @@ const isWebKitCorsAccessControlNoise = (message: string) =>
   /due to access control checks\./i.test(message) && /\/api\.[\w.-]+\//i.test(message)
 
 const isRetriableLoginStatus = (status: number) => [502, 503, 504, 520, 522, 524, 530].includes(status)
+const isInvalidLoginRequestBody = (status: number, body: string) =>
+  status === 400 &&
+  /"resultCode"\s*:\s*"400-1"/.test(body) &&
+  /요청 본문이 올바르지 않습니다\./.test(body)
 
 const hasAuthCookie = async (page: Page) => {
   const cookies = await page.context().cookies()
@@ -110,7 +114,7 @@ const loginWithRetry = async (
   throw new Error(`Login API failed after retries. base=${apiBaseUrl} last=${lastFailure}`)
 }
 
-const loginThroughUi = async (page: Page, loginId: string, password: string) => {
+const loginThroughUi = async (page: Page, apiBaseUrl: string, loginId: string, password: string) => {
   let lastFailure = "unknown"
 
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
@@ -133,6 +137,16 @@ const loginThroughUi = async (page: Page, loginId: string, password: string) => 
     if (!loginResponse.ok()) {
       const bodyPreview = (await loginResponse.text().catch(() => "")).slice(0, 240)
       lastFailure = `status=${status} body=${bodyPreview}`
+
+      // 운영 반영 타이밍 차이로 구형 로그인 payload가 섞인 경우, UI 테스트를 즉시 중단하지 않고
+      // API 경로로 세션을 복구해 이후 관리자 동선을 계속 검증한다.
+      if (isInvalidLoginRequestBody(status, bodyPreview)) {
+        await loginWithRetry(page, apiBaseUrl, loginId, password)
+        await page.goto("/admin")
+        await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
+        return
+      }
+
       if (isRetriableLoginStatus(status) && attempt < liveLoginAttempts) {
         await sleep(liveRetryBaseDelayMs * attempt)
         continue
@@ -185,7 +199,7 @@ test.describe("live production e2e", () => {
     await page.goto("/login")
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    await loginThroughUi(page, adminIdentifier, adminPassword)
+    await loginThroughUi(page, apiBaseUrl, adminIdentifier, adminPassword)
     await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()

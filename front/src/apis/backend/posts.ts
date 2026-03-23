@@ -203,13 +203,6 @@ const normalizeStringArray = (value?: string[]) => {
 const normalizeCategoryArray = (value?: string[]) =>
   normalizeStringArray(value).map(normalizeCategoryValue)
 
-const classifyPostsFetchError = (error: unknown): string => {
-  if (error instanceof ApiError) return `api-status-${error.status}`
-  if (isAbortError(error)) return "abort"
-  if (error instanceof Error) return "runtime"
-  return "unknown"
-}
-
 const pickPreferredImageUrl = (...candidates: Array<string | undefined>) => {
   for (const candidate of candidates) {
     if (typeof candidate !== "string") continue
@@ -857,8 +850,15 @@ export const getPosts = async (
 
     if (process.env.NODE_ENV !== "production") {
       // 로그 위변조(CWE-117) 방지를 위해 사용자/원격 입력(error.message/url/body)은 로그에 포함하지 않는다.
-      const safeFailureType = classifyPostsFetchError(error)
-      console.error(`[getPosts] backend request failed: ${safeFailureType}`)
+      if (error instanceof ApiError) {
+        console.error("[getPosts] backend request failed: api-status")
+      } else if (isAbortError(error)) {
+        console.error("[getPosts] backend request failed: abort")
+      } else if (error instanceof Error) {
+        console.error("[getPosts] backend request failed: runtime")
+      } else {
+        console.error("[getPosts] backend request failed: unknown")
+      }
     }
     if (throwOnError) throw error
     return []

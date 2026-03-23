@@ -558,7 +558,9 @@ check_backend_health() {
       docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
         --connect-timeout "${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS}" \
         --max-time "${HEALTHCHECK_MAX_TIME_SECONDS}" \
-        -s -o /dev/null -w "%{http_code}" "http://${host}:8080${HEALTHCHECK_PATH}"
+        -s -o /dev/null -w "%{http_code}" \
+        -H "Host: localhost" \
+        "http://${host}:8080${HEALTHCHECK_PATH}"
     } || true)"
 
     if is_healthy_http_code "${code}"; then

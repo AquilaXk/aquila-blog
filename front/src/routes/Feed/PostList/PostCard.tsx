@@ -4,11 +4,7 @@ import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
 import styled from "@emotion/styled"
-import {
-  FEED_CARD_META_FONT_SIZE_REM,
-  FEED_CARD_SUMMARY_LINES,
-  FEED_CARD_TITLE_LINE_HEIGHT,
-} from "@shared/ui-tokens"
+import { uiTokens } from "@shared/ui-tokens"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
@@ -24,6 +20,10 @@ type Props = {
   data: TPost
   layout?: "regular" | "pinned"
 }
+
+const FEED_CARD_META_FONT_SIZE_REM = uiTokens.feed.card.metaFontSizeRem
+const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
+const FEED_CARD_TITLE_LINE_HEIGHT = uiTokens.feed.card.titleLineHeight
 
 type NavigatorConnectionLike = {
   saveData?: boolean

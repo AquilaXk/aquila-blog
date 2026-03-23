@@ -1,9 +1,5 @@
 import styled from "@emotion/styled"
-import {
-  FEED_CHIP_GAP_PX,
-  FEED_TAG_RAIL_CHIP_MAX_PX,
-  FEED_TAG_RAIL_DESKTOP_MIN_PX,
-} from "@shared/ui-tokens"
+import { uiTokens } from "@shared/ui-tokens"
 import { useRouter } from "next/router"
 import React, { memo, startTransition, useCallback } from "react"
 import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
@@ -11,6 +7,9 @@ import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 
 type Props = {}
+const FEED_CHIP_GAP_PX = uiTokens.feed.chipGapPx
+const FEED_TAG_RAIL_CHIP_MAX_PX = uiTokens.feed.rail.chipMaxWidthPx
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = uiTokens.feed.rail.desktopMinWidthPx
 
 const TagList: React.FC<Props> = () => {
   const router = useRouter()

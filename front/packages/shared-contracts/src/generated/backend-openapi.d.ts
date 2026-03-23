@@ -986,6 +986,13 @@ export interface components {
             searchPipelineForceControlEnabled?: boolean;
             searchPipelineRuntimeOverride?: boolean;
             searchEngineMirrorForceDisabled?: boolean;
+            searchEngineMirrorCircuitOpen?: boolean;
+            /** Format: int64 */
+            searchEngineMirrorCircuitRemainingSeconds?: number;
+            /** Format: int32 */
+            searchEngineMirrorConsecutiveFailures?: number;
+            /** Format: int32 */
+            searchEngineMirrorFailureThreshold?: number;
         };
         SearchEngineMirrorForceDisableRequest: {
             forceDisabled?: boolean;
@@ -1326,6 +1333,10 @@ export interface components {
             delayedPendingCount?: number;
             /** Format: int64 */
             processingCount?: number;
+            /** Format: int64 */
+            backlogCount?: number;
+            /** Format: int64 */
+            queueLagSeconds?: number;
             /** Format: int64 */
             failedCount?: number;
             /** Format: int64 */

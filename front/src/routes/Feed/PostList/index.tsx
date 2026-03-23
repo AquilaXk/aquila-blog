@@ -63,6 +63,24 @@ const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClear
 const EmptyPostState = memo(EmptyPostStateInner)
 EmptyPostState.displayName = "EmptyPostState"
 
+const FilterLoadingStateInner: React.FC = () => (
+  <section className="searchLoadingState" aria-live="polite">
+    <div className="searchLoadingIcon" aria-hidden="true">
+      <AppIcon name="search" />
+    </div>
+    <h3>검색 결과를 불러오는 중...</h3>
+    <p>입력한 조건에 맞는 글을 찾고 있습니다.</p>
+    <div className="searchLoadingBars" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </div>
+  </section>
+)
+
+const FilterLoadingState = memo(FilterLoadingStateInner)
+FilterLoadingState.displayName = "FilterLoadingState"
+
 const PostList: React.FC<Props> = ({
   posts,
   hasFilter = false,
@@ -78,13 +96,16 @@ const PostList: React.FC<Props> = ({
 
   return (
     <StyledWrapper>
-      {isInitialLoading && (
-        <div className="skeletonGrid" aria-hidden="true">
-          {INITIAL_SKELETON_KEYS.map((key) => (
-            <article key={key} className="skeletonCard" />
-          ))}
-        </div>
-      )}
+      {isInitialLoading &&
+        (hasFilter ? (
+          <FilterLoadingState />
+        ) : (
+          <div className="skeletonGrid" aria-hidden="true">
+            {INITIAL_SKELETON_KEYS.map((key) => (
+              <article key={key} className="skeletonCard" />
+            ))}
+          </div>
+        ))}
       {showEmptyState && <EmptyPostState hasFilter={hasFilter} onClearFilters={onClearFilters} />}
       {posts.map((post) => (
         <PostCard key={post.id} data={post} layout="regular" />
@@ -233,6 +254,79 @@ const StyledWrapper = styled.div`
     .actionBtn--primary {
       border-color: ${({ theme }) => theme.colors.blue7};
       color: ${({ theme }) => theme.colors.blue11};
+    }
+  }
+
+  .searchLoadingState {
+    grid-column: 1 / -1;
+    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    min-height: 9.5rem;
+    padding: 1rem 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
+    gap: 0.5rem;
+
+    .searchLoadingIcon {
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 8px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      color: ${({ theme }) => theme.colors.blue10};
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      background: ${({ theme }) => theme.colors.gray2};
+    }
+
+    h3 {
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    p {
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+  }
+
+  .searchLoadingBars {
+    margin-top: 0.2rem;
+    width: min(340px, 72vw);
+    display: grid;
+    gap: 0.35rem;
+
+    span {
+      display: block;
+      height: 0.5rem;
+      border-radius: 999px;
+      background:
+        linear-gradient(
+          90deg,
+          ${({ theme }) => theme.colors.gray2} 0%,
+          ${({ theme }) => theme.colors.gray3} 50%,
+          ${({ theme }) => theme.colors.gray2} 100%
+        );
+      background-size: 220% 100%;
+      animation: feed-card-skeleton-pulse 1.1s ease-in-out infinite;
+    }
+
+    span:nth-of-type(2) {
+      width: 88%;
+      justify-self: center;
+    }
+
+    span:nth-of-type(3) {
+      width: 76%;
+      justify-self: center;
     }
   }
 

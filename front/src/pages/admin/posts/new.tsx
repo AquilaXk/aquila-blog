@@ -3472,7 +3472,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   </FieldBox>
                   <FieldBox className="wide">
                     <FieldLabel htmlFor="profile-bio">소개 문구</FieldLabel>
-                    <Input
+                    <ProfileBioTextArea
                       id="profile-bio"
                       placeholder="메인 페이지 소개문구"
                       value={profileBioInput}
@@ -5485,6 +5485,7 @@ const ProfileSummary = styled.div`
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.6;
     font-size: 0.85rem;
+    white-space: pre-line;
     overflow-wrap: anywhere;
   }
 `
@@ -5534,6 +5535,10 @@ const ProfileCurrentItem = styled.div`
 
     @media (max-width: 720px) {
       grid-column: span 1;
+    }
+
+    strong {
+      white-space: pre-line;
     }
   }
 
@@ -5636,6 +5641,24 @@ const Input = styled.input`
   min-width: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 0 0 4px ${({ theme }) => theme.colors.blue4};
+  }
+`
+
+const ProfileBioTextArea = styled.textarea`
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 8px;
+  padding: 0.72rem 0.8rem;
+  min-height: 96px;
+  min-width: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+  line-height: 1.6;
+  resize: vertical;
 
   &:focus-visible {
     outline: none;

@@ -104,6 +104,8 @@ const StyledWrapper = styled.div`
         font-size: 0.875rem;
         line-height: 1.65;
         color: ${({ theme }) => theme.colors.gray11};
+        white-space: pre-line;
+        word-break: break-word;
       }
     }
   }

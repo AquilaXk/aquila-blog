@@ -234,6 +234,8 @@ const ProfilePanel = styled.aside`
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.6;
+    white-space: pre-line;
+    word-break: break-word;
   }
 `
 

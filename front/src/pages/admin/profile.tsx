@@ -1526,6 +1526,7 @@ const PreviewCard = styled(PanelCard)`
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.65;
+    white-space: pre-line;
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;

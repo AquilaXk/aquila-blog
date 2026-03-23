@@ -98,12 +98,14 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const detailId = data?.id
   const didIncrementHitRef = useRef<string | null>(null)
   const likePendingRef = useRef(false)
+  const shareFeedbackResetTimerRef = useRef<number | null>(null)
   const articleRef = useRef<HTMLElement | null>(null)
   const [likePending, setLikePending] = useState(false)
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [tocItems, setTocItems] = useState<TocItem[]>([])
   const [activeTocId, setActiveTocId] = useState<string>("")
   const [showDetailedToc, setShowDetailedToc] = useState(false)
+  const [shareFeedback, setShareFeedback] = useState<"copied" | "shared" | "failed" | null>(null)
   const [engagement, setEngagement] = useState(() => ({
     likesCount: data?.likesCount ?? 0,
     hitCount: data?.hitCount ?? 0,
@@ -298,6 +300,25 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     }
   }, [detailId, queryClient])
 
+  useEffect(() => {
+    return () => {
+      if (typeof window === "undefined") return
+      if (shareFeedbackResetTimerRef.current === null) return
+      window.clearTimeout(shareFeedbackResetTimerRef.current)
+    }
+  }, [])
+
+  const flashShareFeedback = (next: "copied" | "shared" | "failed") => {
+    if (typeof window === "undefined") return
+    setShareFeedback(next)
+    if (shareFeedbackResetTimerRef.current !== null) {
+      window.clearTimeout(shareFeedbackResetTimerRef.current)
+    }
+    shareFeedbackResetTimerRef.current = window.setTimeout(() => {
+      setShareFeedback(null)
+    }, 1600)
+  }
+
   const handleToggleLike = async () => {
     if (!data) return
     if (likePendingRef.current) return
@@ -429,6 +450,39 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     }
   }
 
+  const handleSharePost = async () => {
+    if (!data) return
+    const canonicalPath = toCanonicalPostPath(postId)
+    const shareUrl = typeof window !== "undefined" ? window.location.href : canonicalPath
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({
+          title: data.title,
+          url: shareUrl,
+        })
+        flashShareFeedback("shared")
+        return
+      }
+
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        flashShareFeedback("copied")
+        return
+      }
+
+      if (typeof window !== "undefined" && typeof window.prompt === "function") {
+        window.prompt("링크를 복사하세요.", shareUrl)
+      }
+      flashShareFeedback("copied")
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      flashShareFeedback("failed")
+    }
+  }
+
   if (!data) return null
 
   const handleTocNavigate = (id: string) => {
@@ -445,20 +499,39 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           {showFloatingLike ? (
             <div className="leftRailInner">
               <div className="floatingLikeCluster">
+                <div className="floatingLikeStat">
+                  <button
+                    type="button"
+                    className="floatingActionButton floatingLikeButton"
+                    aria-label={`좋아요 ${engagement.likesCount}`}
+                    aria-pressed={engagement.actorHasLiked}
+                    data-active={engagement.actorHasLiked}
+                    disabled={likePending}
+                    onClick={handleToggleLike}
+                  >
+                    <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
+                  </button>
+                  <span className="floatingLikeCount" aria-hidden="true">
+                    {engagement.likesCount}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  className="floatingLikeButton"
-                  aria-label={`좋아요 ${engagement.likesCount}`}
-                  aria-pressed={engagement.actorHasLiked}
-                  data-active={engagement.actorHasLiked}
-                  disabled={likePending}
-                  onClick={handleToggleLike}
+                  className="floatingActionButton floatingShareButton"
+                  aria-label="글 링크 공유"
+                  onClick={handleSharePost}
                 >
-                  <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
+                  <AppIcon name="link" />
                 </button>
-                <span className="floatingLikeCount" aria-hidden="true">
-                  {engagement.likesCount}
-                </span>
+                {shareFeedback ? (
+                  <span className="floatingShareFeedback" role="status" aria-live="polite">
+                    {shareFeedback === "failed"
+                      ? "공유 실패"
+                      : shareFeedback === "shared"
+                        ? "공유됨"
+                        : "링크 복사"}
+                  </span>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -581,9 +654,9 @@ const StyledWrapper = styled.div`
 
   .detailLayout {
     display: grid;
-    grid-template-columns: 3.8rem minmax(0, 49rem) minmax(0, 13.25rem);
+    grid-template-columns: minmax(4.2rem, 4.8rem) minmax(0, 49rem) minmax(0, 14rem);
     justify-content: center;
-    gap: 0.85rem;
+    gap: 1.55rem;
     min-width: 0;
   }
 
@@ -603,57 +676,86 @@ const StyledWrapper = styled.div`
   .leftRail,
   .rightRail {
     min-width: 0;
+    align-self: start;
   }
 
   .leftRailInner,
   .rightRailInner {
     position: sticky;
-    top: 6.2rem;
+    top: calc(var(--app-header-height, 5.4rem) + 1rem);
   }
 
-  .floatingLikeButton {
-    width: 3rem;
-    height: 3rem;
+  .floatingActionButton {
+    width: 3.35rem;
+    height: 3.35rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border: 1.1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(15, 23, 42, 0.5)" : "rgba(255, 255, 255, 0.95)")};
     color: ${({ theme }) => theme.colors.gray12};
     cursor: pointer;
-    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+    transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
-      font-size: 1.02rem;
+      font-size: 1.16rem;
     }
 
-    &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.red7};
-
-      svg {
-        color: ${({ theme }) => theme.colors.red10};
-      }
+    &:hover {
+      transform: translateY(-1px);
+      border-color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.62)" : theme.colors.gray8)};
+      background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(17, 24, 39, 0.86)" : "#ffffff")};
     }
 
-    :disabled {
+    &:disabled {
       opacity: 0.7;
       cursor: not-allowed;
+      transform: none;
+    }
+  }
+
+  .floatingLikeButton[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.red7};
+
+    svg {
+      color: ${({ theme }) => theme.colors.red10};
+    }
+  }
+
+  .floatingShareButton {
+    color: ${({ theme }) => theme.colors.gray10};
+
+    svg {
+      font-size: 1.08rem;
     }
   }
 
   .floatingLikeCluster {
     display: grid;
     justify-items: center;
-    row-gap: 0.34rem;
+    row-gap: 0.52rem;
+  }
+
+  .floatingLikeStat {
+    display: grid;
+    justify-items: center;
+    row-gap: 0.38rem;
   }
 
   .floatingLikeCount {
-    font-size: 0.78rem;
+    font-size: 0.84rem;
     line-height: 1;
-    font-weight: 700;
+    font-weight: 760;
     color: ${({ theme }) => theme.colors.gray10};
+  }
+
+  .floatingShareFeedback {
+    font-size: 0.68rem;
+    line-height: 1;
+    font-weight: 650;
+    color: ${({ theme }) => theme.colors.gray9};
   }
 
   .rightRailInner {
@@ -768,7 +870,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 1240px) {
     .detailLayout {
       grid-template-columns: minmax(0, 49rem) minmax(0, 12.5rem);
-      gap: 0.8rem;
+      gap: 1.12rem;
     }
 
     .leftRail {

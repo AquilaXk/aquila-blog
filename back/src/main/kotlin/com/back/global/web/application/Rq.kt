@@ -13,6 +13,7 @@ import org.springframework.http.ResponseCookie
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import java.time.Duration
+import java.util.Locale
 
 /**
  * Rq는 글로벌 공통 유스케이스를 조합하는 애플리케이션 계층 구성요소입니다.
@@ -122,5 +123,19 @@ class Rq(
 
     fun deleteCookie(name: String) {
         setCookie(name, null, 0)
+    }
+
+    fun hasRole(role: String): Boolean {
+        val normalized =
+            role
+                .trim()
+                .uppercase(Locale.ROOT)
+        if (normalized.isBlank()) return false
+        val requiredAuthority = if (normalized.startsWith("ROLE_")) normalized else "ROLE_$normalized"
+
+        return SecurityContextHolder.getContext()
+            ?.authentication
+            ?.authorities
+            ?.any { it.authority.equals(requiredAuthority, ignoreCase = true) } == true
     }
 }

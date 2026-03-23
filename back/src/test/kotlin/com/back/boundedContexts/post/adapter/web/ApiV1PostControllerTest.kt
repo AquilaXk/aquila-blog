@@ -254,6 +254,24 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자 role 인증은 이메일 드리프트가 있어도 상세 수정 권한 플래그를 유지한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(writer, "관리자 권한 확인 글", "내용", true, true)
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
+            entityManager.clear()
+
+            mvc.get("/post/api/v1/posts/${post.id}").andExpect {
+                status { isOk() }
+                jsonPath("$.actorCanModify") { value(true) }
+                jsonPath("$.actorCanDelete") { value(true) }
+            }
+        }
+
+        @Test
         fun `실패 - 존재하지 않는 글`() {
             mvc.get("/post/api/v1/posts/${Int.MAX_VALUE}").andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
@@ -780,6 +798,29 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자 role 인증은 이메일 드리프트가 있어도 다른 사람 글 수정을 허용한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(writer, "원래 제목", "원래 내용", true, true)
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
+            entityManager.clear()
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "관리자 수정 제목", "content": "관리자 수정 내용"}"""
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.id") { value(post.id) }
+                    jsonPath("$.data.title") { value("관리자 수정 제목") }
+                }
+        }
+
+        @Test
         @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
@@ -910,6 +951,23 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `성공 - 관리자가 다른 사람 글 삭제`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "삭제될 글", "내용", true, true)
+
+            mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
+                status { isOk() }
+                jsonPath("$.resultCode") { value("200-1") }
+            }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자 role 인증은 이메일 드리프트가 있어도 다른 사람 글 삭제를 허용한다`() {
+            val writer = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(writer, "삭제될 글", "내용", true, true)
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+
+            jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
+            entityManager.clear()
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
                 status { isOk() }

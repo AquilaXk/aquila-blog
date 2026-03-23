@@ -317,10 +317,11 @@ class ApiV1PostController(
 
     private fun makePostWithContentDto(post: Post): PostWithContentDto {
         val actor = rq.actorOrNull
+        val hasAdminRole = rq.hasRole("ADMIN")
         return PostWithContentDto(post).apply {
             actorHasLiked = postUseCase.isLiked(post, actor)
-            actorCanModify = post.getCheckActorCanModifyRs(actor).isSuccess
-            actorCanDelete = post.getCheckActorCanDeleteRs(actor).isSuccess
+            actorCanModify = hasAdminRole || post.getCheckActorCanModifyRs(actor).isSuccess
+            actorCanDelete = hasAdminRole || post.getCheckActorCanDeleteRs(actor).isSuccess
         }
     }
 
@@ -652,9 +653,14 @@ class ApiV1PostController(
         @Valid @RequestBody reqBody: PostModifyRequest,
     ): RsData<PostWriteResultDto> {
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanModify(rq.actor)
+        val actor = rq.actor
+        // URL access 제어는 SecurityConfig(hasRole ADMIN)에서 우선 담당한다.
+        // 역할 드리프트 상황에서도 작성자 전용 정책 검증은 비관리자 요청에만 한정한다.
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanModify(actor)
+        }
         postUseCase.modify(
-            rq.actor,
+            actor,
             post,
             reqBody.title,
             reqBody.content,
@@ -672,8 +678,11 @@ class ApiV1PostController(
         @PathVariable @Positive id: Long,
     ): RsData<Void> {
         val post = postUseCase.findById(id).getOrThrow()
-        post.checkActorCanDelete(rq.actor)
-        postUseCase.delete(post, rq.actor)
+        val actor = rq.actor
+        if (!rq.hasRole("ADMIN")) {
+            post.checkActorCanDelete(actor)
+        }
+        postUseCase.delete(post, actor)
         return RsData("200-1", "${id}번 글이 삭제되었습니다.")
     }
 

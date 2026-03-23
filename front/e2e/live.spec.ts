@@ -299,7 +299,7 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: "운영 도구" })).toBeVisible()
-    await expect(page.getByText("Task Queue 진단")).toBeVisible()
+    await expect(page.getByRole("button", { name: /^Task Queue 진단 실행$/ })).toBeVisible()
 
     await page.goto("/admin/posts/new")
     await expect(page.getByRole("heading", { name: "글 작업실" })).toBeVisible()

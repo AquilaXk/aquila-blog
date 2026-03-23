@@ -863,7 +863,7 @@
         } ],
         "requestBody" : {
           "content" : {
-            "application/json" : {
+            "multipart/form-data" : {
               "schema" : {
                 "type" : "object",
                 "properties" : {
@@ -2650,8 +2650,7 @@
           },
           "username" : {
             "type" : "string",
-            "maxLength" : 30,
-            "minLength" : 2
+            "pattern" : "^$"
           },
           "password" : {
             "type" : "string",

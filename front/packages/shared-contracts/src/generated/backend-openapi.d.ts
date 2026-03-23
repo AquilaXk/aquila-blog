@@ -2195,7 +2195,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
+                "multipart/form-data": {
                     /** Format: binary */
                     file: string;
                 };

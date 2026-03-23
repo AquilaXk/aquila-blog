@@ -133,9 +133,9 @@ class Rq(
         if (normalized.isBlank()) return false
         val requiredAuthority = if (normalized.startsWith("ROLE_")) normalized else "ROLE_$normalized"
 
-        return SecurityContextHolder.getContext()
-            ?.authentication
-            ?.authorities
-            ?.any { it.authority.equals(requiredAuthority, ignoreCase = true) } == true
+        val authentication = SecurityContextHolder.getContext().authentication ?: return false
+        return authentication.authorities.any {
+            it.authority.equals(requiredAuthority, ignoreCase = true)
+        }
     }
 }

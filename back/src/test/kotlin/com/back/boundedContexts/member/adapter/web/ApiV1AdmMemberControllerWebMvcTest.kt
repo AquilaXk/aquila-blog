@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.adapter.web
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
+import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -302,6 +303,9 @@ class ApiV1AdmMemberControllerWebMvcTest {
 
     @TestConfiguration
     class TestSecurityConfig {
+        @Bean
+        fun postImageStorageProperties(): PostImageStorageProperties = PostImageStorageProperties()
+
         @Bean
         fun testSecurityFilterChain(http: HttpSecurity): SecurityFilterChain {
             http {

@@ -97,9 +97,9 @@ const StyledWrapper = styled.div`
     scrollbar-gutter: stable both-edges;
     overscroll-behavior: contain;
     position: sticky;
-    top: calc(var(--app-header-height, 73px) - 10px);
-    height: calc(100vh - var(--app-header-height, 73px));
-    height: calc(100dvh - var(--app-header-height, 73px));
+    top: calc(var(--app-header-height, 73px) + 0.65rem);
+    height: calc(100vh - var(--app-header-height, 73px) - 0.65rem);
+    height: calc(100dvh - var(--app-header-height, 73px) - 0.65rem);
 
     @media (min-width: 1180px) {
       display: block;

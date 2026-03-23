@@ -408,7 +408,8 @@ const StyledWrapper = styled(Link)`
     position: relative;
     height: 100%;
     content-visibility: auto;
-    contain-intrinsic-size: 420px;
+    /* Prevent mobile inline-size overflow while keeping first-paint block-size hint. */
+    contain-intrinsic-size: 0 420px;
     display: flex;
     flex-direction: column;
     border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};

@@ -694,6 +694,7 @@ const FeedExplorer = () => {
 
       if (window.innerWidth < FEED_TAG_RAIL_DESKTOP_MIN_PX) {
         feedBody.style.setProperty("--feed-tag-rail-overlap", "0px")
+        feedBody.dataset.railCollapsed = "false"
         return
       }
 
@@ -703,6 +704,7 @@ const FeedExplorer = () => {
         0,
         Math.ceil(railRect.right - feedRect.left + FEED_TAG_RAIL_SAFE_GAP_PX)
       )
+      feedBody.dataset.railCollapsed = "false"
       feedBody.style.setProperty("--feed-tag-rail-overlap", `${overlap}px`)
     }
 
@@ -712,8 +714,12 @@ const FeedExplorer = () => {
     }
 
     scheduleSync()
+    window.requestAnimationFrame(() => {
+      scheduleSync()
+    })
     window.addEventListener("resize", scheduleSync, { passive: true })
     window.addEventListener("orientationchange", scheduleSync)
+    window.addEventListener("load", scheduleSync)
 
     const resizeObserver =
       typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleSync) : null
@@ -722,10 +728,25 @@ const FeedExplorer = () => {
       if (tagColumnRef.current) resizeObserver.observe(tagColumnRef.current)
     }
 
+    const fontSet = document.fonts
+    const handleFontLoadingDone = () => scheduleSync()
+    if (fontSet) {
+      if (typeof fontSet.addEventListener === "function") {
+        fontSet.addEventListener("loadingdone", handleFontLoadingDone)
+      }
+      void fontSet.ready.then(() => {
+        scheduleSync()
+      }).catch(() => {})
+    }
+
     return () => {
       window.cancelAnimationFrame(rafId)
       window.removeEventListener("resize", scheduleSync)
       window.removeEventListener("orientationchange", scheduleSync)
+      window.removeEventListener("load", scheduleSync)
+      if (fontSet && typeof fontSet.removeEventListener === "function") {
+        fontSet.removeEventListener("loadingdone", handleFontLoadingDone)
+      }
       resizeObserver?.disconnect()
     }
   }, [])
@@ -845,7 +866,16 @@ const FeedBody = styled.section`
       calc(${FEED_TAG_RAIL_OFFSET_ANCHOR_PX}px - 50vw),
       ${FEED_TAG_RAIL_OFFSET_MAX_PX}px
     );
-    --feed-tag-rail-overlap: 0px;
+    /*
+     * CSS fallback overlap guard:
+     * If JS measurement is delayed on initial paint, keep post column clear from rail.
+     * JS later writes a precise value into --feed-tag-rail-overlap.
+     */
+    --feed-tag-rail-overlap: clamp(
+      0px,
+      calc(var(--feed-tag-rail-width) + var(--feed-tag-rail-left) + var(--feed-tag-rail-safe-gap)),
+      calc(var(--feed-tag-rail-width) + var(--feed-tag-rail-safe-gap))
+    );
 
     .tagColumn {
       /*
@@ -857,6 +887,10 @@ const FeedBody = styled.section`
       left: var(--feed-tag-rail-left);
       width: var(--feed-tag-rail-width);
       min-width: var(--feed-tag-rail-width);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition: opacity 0.14s ease-in;
     }
 
     .postColumn {
@@ -866,6 +900,7 @@ const FeedBody = styled.section`
        */
       margin-left: var(--feed-tag-rail-overlap);
     }
+
   }
 `
 

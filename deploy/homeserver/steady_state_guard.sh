@@ -10,6 +10,8 @@ CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 NETWORK_NAME="blog_home_default"
 LOCK_DIR="${SCRIPT_DIR}/.steady-state-guard.lock"
+DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
+DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -141,12 +143,40 @@ check_api_readiness() {
   return 1
 }
 
+deploy_lock_is_active() {
+  if [[ ! -d "${DEPLOY_LOCK_DIR}" ]]; then
+    return 1
+  fi
+
+  local lock_mtime now age
+  lock_mtime="$(stat -c %Y "${DEPLOY_LOCK_DIR}" 2>/dev/null || true)"
+  if [[ ! "${lock_mtime}" =~ ^[0-9]+$ ]]; then
+    log "skip: deploy lock detected (mtime unreadable): ${DEPLOY_LOCK_DIR}"
+    return 0
+  fi
+
+  now="$(date +%s)"
+  age=$(( now - lock_mtime ))
+  if (( age <= DEPLOY_LOCK_TTL_SECONDS )); then
+    log "skip: deploy lock detected: ${DEPLOY_LOCK_DIR} age_seconds=${age}"
+    return 0
+  fi
+
+  log "WARN stale deploy lock detected; removing ${DEPLOY_LOCK_DIR} age_seconds=${age}"
+  rm -rf "${DEPLOY_LOCK_DIR}" 2>/dev/null || true
+  return 1
+}
+
 main() {
   if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
     log "skip: previous guard still running"
     exit 0
   fi
   trap 'rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
+
+  if deploy_lock_is_active; then
+    exit 0
+  fi
 
   local ok=0
   if enforce_single_backend_rule; then ok=$((ok + 1)); fi

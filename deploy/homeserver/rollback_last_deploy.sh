@@ -10,6 +10,7 @@ STATE_FILE="${SCRIPT_DIR}/.active_backend"
 CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 NETWORK_NAME="blog_home_default"
+DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
 HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-20}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
@@ -55,6 +56,29 @@ compose() {
     return
   fi
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+}
+
+acquire_deploy_lock() {
+  if mkdir "${DEPLOY_LOCK_DIR}" 2>/dev/null; then
+    printf '%s\n' "$$" > "${DEPLOY_LOCK_DIR}/pid" 2>/dev/null || true
+    return 0
+  fi
+  local lock_pid
+  lock_pid="$(cat "${DEPLOY_LOCK_DIR}/pid" 2>/dev/null || true)"
+  if [[ "${lock_pid}" =~ ^[0-9]+$ ]] && ! kill -0 "${lock_pid}" 2>/dev/null; then
+    echo "removing stale deploy lock: ${DEPLOY_LOCK_DIR} pid=${lock_pid}" >&2
+    rm -rf "${DEPLOY_LOCK_DIR}" 2>/dev/null || true
+    if mkdir "${DEPLOY_LOCK_DIR}" 2>/dev/null; then
+      printf '%s\n' "$$" > "${DEPLOY_LOCK_DIR}/pid" 2>/dev/null || true
+      return 0
+    fi
+  fi
+  echo "rollback blocked: deploy lock already exists: ${DEPLOY_LOCK_DIR} pid=${lock_pid:-unknown}" >&2
+  return 1
+}
+
+release_deploy_lock() {
+  rm -rf "${DEPLOY_LOCK_DIR}" 2>/dev/null || true
 }
 
 warn_unsupported_docker_engine() {
@@ -333,6 +357,11 @@ if [[ -z "${BACKUP_DIR:-}" || ! -d "${BACKUP_DIR}" ]]; then
   echo "no backup directory found" >&2
   exit 1
 fi
+
+if ! acquire_deploy_lock; then
+  exit 1
+fi
+trap 'release_deploy_lock' EXIT INT TERM
 
 echo "rollback from backup: ${BACKUP_DIR}"
 

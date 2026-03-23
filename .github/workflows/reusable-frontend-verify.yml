@@ -64,7 +64,7 @@ jobs:
         if: inputs.openapi_artifact_name != ''
         id: download_openapi_artifact
         continue-on-error: true
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: ${{ inputs.openapi_artifact_name }}
           path: front/contracts/openapi-artifact
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload OpenAPI contract drift report
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: front-openapi-contract-report
           path: front/test-results/contracts-openapi
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload bundle budget report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: front-bundle-budget-report
           path: front/test-results/bundle-size
@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload Storybook gate report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: front-storybook-gate-report
           path: front/test-results/storybook
@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload Storybook static build
         if: success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: front-storybook-static
           path: front/storybook-static
@@ -182,7 +182,7 @@ jobs:
 
       - name: Upload frontend reports on failure
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: front-verify-playwright-report
           path: |

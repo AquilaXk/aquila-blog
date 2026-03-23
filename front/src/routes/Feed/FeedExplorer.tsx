@@ -1,4 +1,12 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
 import SearchInput from "./SearchInput"
@@ -30,6 +38,7 @@ const FEED_EXPLORER_SNAPSHOT_MAX_PAGES = 4
 const FEED_EXPLORER_SNAPSHOT_MAX_BYTES = 260_000
 const FEED_EXPLORER_RESTORE_MAX_KEYS = 4
 const FEED_EXPLORER_IDLE_REVALIDATE_TIMEOUT_MS = 1200
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
 type FeedExplorerRestoreState = {
   q: string
@@ -674,7 +683,7 @@ const FeedExplorer = () => {
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (typeof window === "undefined") return
 
     let rafId = 0
@@ -836,10 +845,7 @@ const FeedBody = styled.section`
       calc(${FEED_TAG_RAIL_OFFSET_ANCHOR_PX}px - 50vw),
       ${FEED_TAG_RAIL_OFFSET_MAX_PX}px
     );
-    --feed-tag-rail-overlap: max(
-      0px,
-      calc(var(--feed-tag-rail-width) + var(--feed-tag-rail-left) + var(--feed-tag-rail-safe-gap))
-    );
+    --feed-tag-rail-overlap: 0px;
 
     .tagColumn {
       /*

@@ -2,6 +2,7 @@ import { AppPropsWithLayout } from "../types"
 import { CacheProvider } from "@emotion/react"
 import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query"
 import type { NextWebVitalsMetric } from "next/app"
+import Head from "next/head"
 import { RootLayout } from "src/layouts"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { createQueryClient } from "src/libs/react-query"
@@ -15,6 +16,9 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
 
   return (
     <CacheProvider value={emotionCache}>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </Head>
       <QueryClientProvider client={queryClient}>
         <HydrationBoundary state={pageProps.dehydratedState}>
           <RootLayout>{getLayout(<Component {...pageProps} />)}</RootLayout>

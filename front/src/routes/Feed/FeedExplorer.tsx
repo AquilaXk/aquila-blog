@@ -1,7 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
-import { uiTokens } from "@shared/ui-tokens"
 import SearchInput from "./SearchInput"
 import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
@@ -16,11 +15,11 @@ import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-const FEED_TAG_RAIL_DESKTOP_MIN_PX = uiTokens.feed.rail.desktopMinWidthPx
-const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = uiTokens.feed.rail.offsetAnchorPx
-const FEED_TAG_RAIL_OFFSET_MAX_PX = uiTokens.feed.rail.offsetMaxPx
-const FEED_TAG_RAIL_OFFSET_MIN_PX = uiTokens.feed.rail.offsetMinPx
-const FEED_TAG_RAIL_WIDTH_PX = uiTokens.feed.rail.widthPx
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = 1201
+const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = 584
+const FEED_TAG_RAIL_OFFSET_MAX_PX = -56
+const FEED_TAG_RAIL_OFFSET_MIN_PX = -216
+const FEED_TAG_RAIL_WIDTH_PX = 184
 const FEED_TAG_RAIL_SAFE_GAP_PX = 12
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000

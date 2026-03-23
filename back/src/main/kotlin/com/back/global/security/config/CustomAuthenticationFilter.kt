@@ -23,6 +23,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import tools.jackson.databind.ObjectMapper
+import java.util.Locale
 
 /**
  * CustomAuthenticationFilter는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
@@ -117,6 +118,42 @@ class CustomAuthenticationFilter(
         val payload = accessToken.takeIf { it.isNotBlank() }?.let(actorApplicationService::payload)
 
         if (payload != null) {
+            // 쓰기 요청은 apiKey 기준 DB 회원을 우선 사용해 role 드리프트(특히 관리자 403 오탐)를 방지한다.
+            if (shouldPreferApiKeyAuthorityOnWrite(request, apiKey)) {
+                val apiKeyMember = actorApplicationService.findByApiKey(apiKey)
+                if (apiKeyMember != null) {
+                    if (apiKeyMember.ipSecurityEnabled) {
+                        val matched = authIpSecurityService.matches(apiKeyMember.ipSecurityFingerprint, clientIp)
+                        if (!matched) {
+                            runCatching {
+                                authSecurityEventService.recordIpSecurityMismatchBlocked(
+                                    memberId = apiKeyMember.id,
+                                    loginIdentifier = apiKeyMember.username,
+                                    rememberLoginEnabled = apiKeyMember.rememberLoginEnabled,
+                                    ipSecurityEnabled = apiKeyMember.ipSecurityEnabled,
+                                    expectedIpFingerprint = apiKeyMember.ipSecurityFingerprint,
+                                    requestPath = request.requestURI,
+                                    reason = "apikey-ip-mismatch",
+                                )
+                            }.onFailure { exception ->
+                                log.warn("auth_security_event_record_failed reason=apikey-ip-mismatch", exception)
+                            }
+                            authCookieService.expireAuthCookies()
+                            throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
+                        }
+                    }
+
+                    val rotatedAccessToken = actorApplicationService.genAccessToken(apiKeyMember)
+                    authCookieService.issueAccessToken(
+                        accessToken = rotatedAccessToken,
+                        rememberLoginEnabled = apiKeyMember.rememberLoginEnabled,
+                    )
+                    rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
+                    authenticate(apiKeyMember)
+                    return
+                }
+            }
+
             val tokenLoginIdentifier = resolveTokenLoginIdentifier(payload)
             if (payload.ipSecurityEnabled) {
                 val matched = authIpSecurityService.matches(payload.ipSecurityFingerprint, clientIp)
@@ -272,6 +309,7 @@ class CustomAuthenticationFilter(
     companion object {
         private const val MAX_PATH_LENGTH = 512
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+        private val MUTATING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
     }
 
     private fun resolveTokenLoginIdentifier(payload: AccessTokenPayload): String? {
@@ -291,5 +329,18 @@ class CustomAuthenticationFilter(
         if (normalizedEmail.isNotBlank()) return normalizedEmail
 
         return "member-${payload.id}"
+    }
+
+    private fun shouldPreferApiKeyAuthorityOnWrite(
+        request: HttpServletRequest,
+        apiKey: String,
+    ): Boolean {
+        if (apiKey.isBlank()) return false
+        val method =
+            request.method
+                ?.trim()
+                ?.uppercase(Locale.ROOT)
+                .orEmpty()
+        return method in MUTATING_METHODS
     }
 }

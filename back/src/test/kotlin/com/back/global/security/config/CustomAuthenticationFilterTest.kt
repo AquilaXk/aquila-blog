@@ -197,4 +197,90 @@ class CustomAuthenticationFilterTest {
             SecurityContextHolder.clearContext()
         }
     }
+
+    @Test
+    @DisplayName("쓰기 요청에서 accessToken payload 권한이 오래된 경우 apiKey 기준 DB 권한으로 재구성한다")
+    fun `mutating request prefers apiKey member authority over stale token payload`() {
+        AppConfig(
+            siteBackUrl = "https://api.aquilaxk.site",
+            siteFrontUrl = "https://www.aquilaxk.site",
+            adminUsername = "admin",
+            adminEmail = "admin@test.com",
+            adminPassword = "secret",
+        )
+
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
+        val rq = mock(Rq::class.java)
+        val objectMapper = ObjectMapper()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val apiKey = "admin-api-key"
+        val staleAccessToken = "stale-access-token"
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com", apiKey)
+
+        given(publicApiRequestMatcher.matches(request)).willReturn(false)
+        given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
+        given(rq.getCookieValue("apiKey", "")).willReturn(apiKey)
+        given(rq.getCookieValue("accessToken", "")).willReturn(staleAccessToken)
+        given(actorApplicationService.payload(staleAccessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    username = "internal-admin",
+                    email = "old-admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                ),
+            )
+        given(actorApplicationService.findByApiKey(apiKey)).willReturn(persistedAdmin)
+        given(actorApplicationService.genAccessToken(persistedAdmin)).willReturn("rotated-access-token")
+
+        val filter =
+            CustomAuthenticationFilter(
+                actorApplicationService = actorApplicationService,
+                authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
+                authCookieService = authCookieService,
+                objectMapper = objectMapper,
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                rq = rq,
+            )
+
+        val response = MockHttpServletResponse()
+        val filterChain =
+            MockFilterChain(
+                object : HttpServlet() {
+                    override fun service(
+                        req: HttpServletRequest,
+                        res: HttpServletResponse,
+                    ) {
+                        val authentication = SecurityContextHolder.getContext().authentication
+                        val hasAdminRole =
+                            authentication
+                                ?.authorities
+                                ?.any { authority -> authority.authority == "ROLE_ADMIN" }
+                                ?: false
+                        if (!hasAdminRole) {
+                            res.status = HttpServletResponse.SC_FORBIDDEN
+                            return
+                        }
+                        res.status = HttpServletResponse.SC_NO_CONTENT
+                    }
+                },
+            )
+
+        try {
+            filter.doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
 }

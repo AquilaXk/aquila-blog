@@ -1,9 +1,9 @@
 package com.back.global.security.config
 
-import com.back.global.app.AppConfig
-import com.back.global.app.application.AppFacade
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.core.env.Environment
 import org.springframework.http.HttpHeaders
 import org.springframework.stereotype.Component
 import org.springframework.web.cors.CorsConfiguration
@@ -15,7 +15,15 @@ import java.net.URI
  * 브라우저가 상태 코드를 정상적으로 해석할 수 있도록 보장합니다.
  */
 @Component
-class ApiCorsPolicy {
+class ApiCorsPolicy(
+    private val environment: Environment,
+    @Value("\${custom.site.frontUrl:}")
+    private val siteFrontUrl: String,
+    @Value("\${custom.site.backUrl:}")
+    private val siteBackUrl: String,
+    @Value("\${custom.site.cookieDomain:}")
+    private val siteCookieDomain: String,
+) {
     private val configuration =
         CorsConfiguration().apply {
             allowedOriginPatterns = buildAllowedOriginPatterns()
@@ -49,16 +57,17 @@ class ApiCorsPolicy {
     }
 
     private fun buildAllowedOriginPatterns(): List<String> {
-        val cookieDomain = AppFacade.siteCookieDomain.trim()
+        val cookieDomain = siteCookieDomain.trim()
+        val isProd = environment.matchesProfiles("prod")
         val configuredOrigins =
             buildList {
-                add(AppConfig.siteFrontUrl)
-                add(AppConfig.siteBackUrl)
+                add(siteFrontUrl)
+                add(siteBackUrl)
                 if (cookieDomain.isNotBlank()) {
                     add("https://$cookieDomain")
                     add("https://www.$cookieDomain")
                 }
-                if (!AppFacade.isProd) {
+                if (!isProd) {
                     add("http://localhost:*")
                     add("http://127.0.0.1:*")
                 }

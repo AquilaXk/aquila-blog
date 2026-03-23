@@ -1,6 +1,7 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
+import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
@@ -37,8 +38,13 @@ import java.util.concurrent.TimeUnit
 @RequestMapping("/post/api/v1")
 class ApiV1PostImageController(
     private val postImageStorageService: PostImageStoragePort,
+    private val postImageStorageProperties: PostImageStorageProperties,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    companion object {
+        private const val POST_IMAGE_MAX_FILE_SIZE_BYTES = 8L * 1024 * 1024
+    }
+
     data class UploadPostImageResBody(
         val key: String,
         val url: String,
@@ -54,6 +60,15 @@ class ApiV1PostImageController(
     fun uploadPostImage(
         @RequestPart("file") file: MultipartFile,
     ): RsData<UploadPostImageResBody> {
+        if (file.isEmpty) {
+            throw AppException("400-1", "이미지 파일이 비어 있습니다.")
+        }
+        val maxAllowedBytes = minOf(POST_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
+        if (file.size > maxAllowedBytes) {
+            val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
+            throw AppException("413-1", "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
+        }
+
         val uploadRequest =
             PostImageStoragePort.UploadImageRequest(
                 bytes = file.bytes,

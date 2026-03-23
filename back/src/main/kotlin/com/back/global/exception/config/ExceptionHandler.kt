@@ -18,6 +18,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.multipart.MaxUploadSizeExceededException
+import org.springframework.web.multipart.MultipartException
 
 /**
  * ExceptionHandler는 글로벌 런타임 동작을 정의하는 설정 클래스입니다.
@@ -99,6 +101,44 @@ class ExceptionHandler(
         ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(RsData("400-1", "요청 본문이 올바르지 않습니다."))
+
+    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    fun handleMaxUploadSizeExceededException(
+        ex: MaxUploadSizeExceededException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> {
+        val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+        val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
+        val reason = sanitizeLogValue(ex.message, MAX_QUERY_LENGTH)
+        logger.warn(
+            "multipart_request_too_large method={} path={} reason={}",
+            method,
+            path,
+            reason,
+        )
+        return ResponseEntity
+            .status(HttpStatus.PAYLOAD_TOO_LARGE)
+            .body(RsData("413-1", "업로드 가능한 파일 용량을 초과했습니다. 허용 크기 이내 이미지로 다시 시도해주세요."))
+    }
+
+    @ExceptionHandler(MultipartException::class)
+    fun handleMultipartException(
+        ex: MultipartException,
+        request: HttpServletRequest,
+    ): ResponseEntity<RsData<Void>> {
+        val method = sanitizeLogValue(request.method, MAX_METHOD_LENGTH)
+        val path = sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH)
+        val reason = sanitizeLogValue(ex.message, MAX_QUERY_LENGTH)
+        logger.warn(
+            "multipart_request_rejected method={} path={} reason={}",
+            method,
+            path,
+            reason,
+        )
+        return ResponseEntity
+            .status(HttpStatus.BAD_REQUEST)
+            .body(RsData("400-1", "업로드 요청 형식이 올바르지 않습니다. 이미지 파일을 다시 선택해주세요."))
+    }
 
     @ExceptionHandler(MissingRequestHeaderException::class)
     fun handleMissingRequestHeaderException(e: MissingRequestHeaderException): ResponseEntity<RsData<Void>> =

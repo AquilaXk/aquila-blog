@@ -20,6 +20,12 @@ import useAuthSession, { AuthMember } from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import {
+  buildImageOptimizationSummary,
+  normalizeProfileImageUploadError,
+  prepareProfileImageForUpload,
+  PROFILE_IMAGE_UPLOAD_RULE_LABEL,
+} from "src/libs/profileImageUpload"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   return await getAdminPageProps(req)
@@ -265,10 +271,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("upload")
-      setImageNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
+      setImageNotice({ tone: "loading", text: "프로필 이미지를 최적화하고 업로드하고 있습니다..." })
+      const prepared = await prepareProfileImageForUpload(file)
 
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", prepared.file, prepared.file.name)
 
       const uploadResponse = await fetch(
         `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
@@ -286,11 +293,17 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       const uploadData = (await uploadResponse.json()) as MemberMe
       syncProfileState(uploadData)
-      setImageNotice({ tone: "success", text: "프로필 이미지가 저장되었습니다." })
+      setImageNotice({
+        tone: "success",
+        text: `프로필 이미지가 저장되었습니다. ${buildImageOptimizationSummary(prepared)}`,
+      })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = normalizeProfileImageUploadError(error)
       setImageNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
     } finally {
+      if (profileImageFileInputRef.current) {
+        profileImageFileInputRef.current.value = ""
+      }
       setLoadingKey("")
     }
   }
@@ -449,7 +462,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           >
             {loadingKey === "upload" ? "업로드 중..." : "프로필 이미지 선택"}
           </PrimaryButton>
-          <Hint>{profileImageFileName || "아직 선택된 파일이 없습니다."}</Hint>
+          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : PROFILE_IMAGE_UPLOAD_RULE_LABEL}</Hint>
           {imageNotice.text ? <Notice data-tone={imageNotice.tone}>{imageNotice.text}</Notice> : null}
         </PreviewCard>
 
@@ -854,6 +867,9 @@ const PreviewCard = styled(PanelCard)`
   height: fit-content;
   position: sticky;
   top: 1rem;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 
   @media (max-width: 900px) {
     position: static;
@@ -861,17 +877,29 @@ const PreviewCard = styled(PanelCard)`
 
   strong {
     font-size: 1.15rem;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   span {
     color: ${({ theme }) => theme.colors.blue10};
     font-weight: 700;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.65;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 `
 
@@ -896,8 +924,13 @@ const AvatarFallback = styled.div`
 
 const Hint = styled.p`
   margin: 0;
+  width: 100%;
+  min-width: 0;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.86rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 `
 
 const FormCard = styled(PanelCard)`
@@ -948,7 +981,11 @@ const Notice = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
+  width: 100%;
+  min-width: 0;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.green7};

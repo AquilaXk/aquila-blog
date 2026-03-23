@@ -42,6 +42,14 @@ import {
   parseThumbnailFocusYFromUrl,
   stripThumbnailFocusFromUrl,
 } from "src/libs/thumbnailFocus"
+import {
+  buildImageOptimizationSummary,
+  normalizeProfileImageUploadError,
+  preparePostImageForUpload,
+  prepareProfileImageForUpload,
+  POST_IMAGE_UPLOAD_RULE_LABEL,
+  PROFILE_IMAGE_UPLOAD_RULE_LABEL,
+} from "src/libs/profileImageUpload"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -76,6 +84,12 @@ type UploadPostImageResponse = {
     key: string
     url: string
     markdown: string
+  }
+}
+type UploadPostImageResult = {
+  uploaded: UploadPostImageResponse
+  prepared: {
+    summary: string
   }
 }
 
@@ -941,7 +955,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   })
   const [profileImageNotice, setProfileImageNotice] = useState<NoticeState>({
     tone: "idle",
-    text: "프로필 이미지를 선택하면 즉시 업로드됩니다.",
+    text: `프로필 이미지를 선택하면 자동 최적화 후 즉시 업로드됩니다. (${PROFILE_IMAGE_UPLOAD_RULE_LABEL})`,
   })
   const [profileNotice, setProfileNotice] = useState<NoticeState>({
     tone: "idle",
@@ -2171,10 +2185,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("admMemberProfileImgUpdate")
-      setProfileImageNotice({ tone: "loading", text: "프로필 이미지를 업로드하고 있습니다..." })
+      setProfileImageNotice({ tone: "loading", text: "프로필 이미지를 최적화하고 업로드하고 있습니다..." })
+      const prepared = await prepareProfileImageForUpload(file)
 
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", prepared.file, prepared.file.name)
 
       const uploadResponse = await fetch(
         `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
@@ -2199,19 +2214,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       syncProfileState(uploadData)
       setProfileImageNotice({
         tone: "success",
-        text: "프로필 이미지가 저장되었습니다. 현재 미리보기에 반영된 상태가 저장값입니다.",
+        text: `프로필 이미지가 저장되었습니다. ${buildImageOptimizationSummary(prepared)}`,
       })
       setResult(
         pretty({
           uploadedUrl,
+          optimization: buildImageOptimizationSummary(prepared),
           member: uploadData,
         })
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = normalizeProfileImageUploadError(error)
       setProfileImageNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
       setResult(pretty({ error: message }))
     } finally {
+      if (profileImageFileInputRef.current) {
+        profileImageFileInputRef.current.value = ""
+      }
       setLoadingKey("")
     }
   }
@@ -2627,9 +2646,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     insertSnippet(markdown)
   }
 
-  const uploadPostImageFile = async (file: File): Promise<UploadPostImageResponse> => {
+  const uploadPostImageFile = async (file: File): Promise<UploadPostImageResult> => {
+    const prepared = await preparePostImageForUpload(file)
     const formData = new FormData()
-    formData.append("file", file)
+    formData.append("file", prepared.file, prepared.file.name)
 
     const response = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
       method: "POST",
@@ -2642,7 +2662,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
     }
 
-    return (await response.json()) as UploadPostImageResponse
+    return {
+      uploaded: (await response.json()) as UploadPostImageResponse,
+      prepared: {
+        summary: buildImageOptimizationSummary(prepared),
+      },
+    }
   }
 
   const handlePostImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -2653,23 +2678,24 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     void run("uploadPostImage", async () => {
       setPublishStatus({
         tone: "loading",
-        text: `이미지 "${file.name}" 업로드 중입니다. 업로드가 끝나면 본문에 자동 삽입됩니다.`,
+        text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 본문에 자동 삽입됩니다.`,
       })
 
       try {
         const uploaded = await uploadPostImageFile(file)
-        const markdown = uploaded.data?.markdown
+        const markdown = uploaded.uploaded.data?.markdown
         if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
         insertBlockSnippet(markdown)
         setPublishStatus({
           tone: "success",
-          text: `이미지 업로드가 완료되었습니다. 본문과 미리보기에서 반응형 크기로 확인할 수 있습니다.`,
+          text: `이미지 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
         })
         return uploaded
       } catch (error) {
+        const message = normalizeProfileImageUploadError(error)
         setPublishStatus({
           tone: "error",
-          text: `이미지 업로드 실패: ${error instanceof Error ? error.message : String(error)}`,
+          text: `이미지 업로드 실패: ${message}`,
         })
         throw error
       }
@@ -2681,10 +2707,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("uploadThumbnail")
       setPublishStatus({
         tone: "loading",
-        text: `썸네일 "${file.name}" 업로드 중입니다...`,
+        text: `썸네일 "${file.name}" 최적화/업로드 중입니다...`,
       })
       const uploaded = await uploadPostImageFile(file)
-      const uploadedUrl = uploaded.data?.url?.trim()
+      const uploadedUrl = uploaded.uploaded.data?.url?.trim()
       if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
       const safeUploadedUrl = normalizeSafeImageUrl(uploadedUrl)
       if (!safeUploadedUrl) throw new Error("허용되지 않은 썸네일 URL 형식입니다.")
@@ -2697,12 +2723,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setIsPreviewThumbnailError(false)
       setPublishStatus({
         tone: "success",
-        text: "썸네일 파일 업로드가 완료되었습니다. 이 이미지가 목록 카드에 우선 사용됩니다.",
+        text: `썸네일 파일 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
       })
     } catch (error) {
+      const message = normalizeProfileImageUploadError(error)
       setPublishStatus({
         tone: "error",
-        text: `썸네일 업로드 실패: ${error instanceof Error ? error.message : String(error)}`,
+        text: `썸네일 업로드 실패: ${message}`,
       })
     } finally {
       setLoadingKey("")
@@ -2808,7 +2835,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     : "확인 전"
   const profileImageHint = profileImageFileName
     ? `선택 파일: ${profileImageFileName}`
-    : "아직 선택된 파일이 없습니다."
+    : `${PROFILE_IMAGE_UPLOAD_RULE_LABEL} (선택 즉시 업로드)`
   const publishActionTitle =
     publishActionType === "create"
       ? "글 발행 설정"
@@ -3993,8 +4020,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <ToolbarCluster>
                 <ToolbarIconButton
                   type="button"
-                  title="이미지 업로드"
-                  aria-label="이미지 업로드"
+                  title={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
+                  aria-label={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
                   data-variant="primary"
                   disabled={disabled("uploadPostImage")}
                   onClick={() => runToolbarAction(() => postImageFileInputRef.current?.click())}
@@ -4229,6 +4256,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <MetaActionRow>
                     <Button
                       type="button"
+                      title={POST_IMAGE_UPLOAD_RULE_LABEL}
                       disabled={disabled("uploadThumbnail")}
                       onClick={() => thumbnailImageFileInputRef.current?.click()}
                     >
@@ -5110,6 +5138,10 @@ const InlineStatus = styled.div`
   border-radius: 8px;
   font-size: 0.82rem;
   line-height: 1.5;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 
   &[data-tone="idle"] {
     color: ${({ theme }) => theme.colors.gray11};

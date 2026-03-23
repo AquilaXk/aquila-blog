@@ -8,6 +8,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE
 import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfileLinkHref
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
@@ -24,6 +25,7 @@ import jakarta.validation.constraints.Size
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
+import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.multipart.MultipartFile
@@ -40,8 +42,13 @@ import java.nio.charset.StandardCharsets
 class ApiV1AdmMemberController(
     private val memberUseCase: MemberUseCase,
     private val postImageStorageService: PostImageStoragePort,
+    private val postImageStorageProperties: PostImageStorageProperties,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
 ) {
+    companion object {
+        private const val PROFILE_IMAGE_MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024
+    }
+
     private enum class LinkSection(
         val displayName: String,
         val defaultIcon: String,
@@ -147,7 +154,7 @@ class ApiV1AdmMemberController(
      * uploadProfileImageFile 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
      */
-    @PostMapping("/{id}/profileImageFile")
+    @PostMapping("/{id}/profileImageFile", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     @Transactional
     @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
     fun uploadProfileImageFile(
@@ -156,6 +163,15 @@ class ApiV1AdmMemberController(
         id: Long,
         @RequestPart("file") file: MultipartFile,
     ): MemberWithUsernameDto {
+        if (file.isEmpty) {
+            throw AppException("400-1", "이미지 파일이 비어 있습니다.")
+        }
+        val maxAllowedBytes = minOf(PROFILE_IMAGE_MAX_FILE_SIZE_BYTES, postImageStorageProperties.maxFileSizeBytes)
+        if (file.size > maxAllowedBytes) {
+            val limitMb = (maxAllowedBytes + (1024 * 1024) - 1) / (1024 * 1024)
+            throw AppException("413-1", "이미지 파일은 ${limitMb}MB 이하여야 합니다.")
+        }
+
         val member = memberUseCase.findById(id).orElseThrow()
         val uploadRequest =
             PostImageStoragePort.UploadImageRequest(

@@ -1,13 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
-import {
-  FEED_TAG_RAIL_DESKTOP_MIN_PX,
-  FEED_TAG_RAIL_OFFSET_ANCHOR_PX,
-  FEED_TAG_RAIL_OFFSET_MAX_PX,
-  FEED_TAG_RAIL_OFFSET_MIN_PX,
-  FEED_TAG_RAIL_WIDTH_PX,
-} from "@shared/ui-tokens"
+import { uiTokens } from "@shared/ui-tokens"
 import SearchInput from "./SearchInput"
 import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
@@ -22,6 +16,12 @@ import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = uiTokens.feed.rail.desktopMinWidthPx
+const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = uiTokens.feed.rail.offsetAnchorPx
+const FEED_TAG_RAIL_OFFSET_MAX_PX = uiTokens.feed.rail.offsetMaxPx
+const FEED_TAG_RAIL_OFFSET_MIN_PX = uiTokens.feed.rail.offsetMinPx
+const FEED_TAG_RAIL_WIDTH_PX = uiTokens.feed.rail.widthPx
+const FEED_TAG_RAIL_SAFE_GAP_PX = 12
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
@@ -382,6 +382,8 @@ const FeedExplorer = () => {
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const feedBodyRef = useRef<HTMLElement | null>(null)
+  const tagColumnRef = useRef<HTMLElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
   const hasHydratedQuerySnapshotRef = useRef(false)
@@ -673,6 +675,53 @@ const FeedExplorer = () => {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    let rafId = 0
+    const syncRailOverlap = () => {
+      const feedBody = feedBodyRef.current
+      const tagColumn = tagColumnRef.current
+      if (!feedBody || !tagColumn) return
+
+      if (window.innerWidth < FEED_TAG_RAIL_DESKTOP_MIN_PX) {
+        feedBody.style.setProperty("--feed-tag-rail-overlap", "0px")
+        return
+      }
+
+      const feedRect = feedBody.getBoundingClientRect()
+      const railRect = tagColumn.getBoundingClientRect()
+      const overlap = Math.max(
+        0,
+        Math.ceil(railRect.right - feedRect.left + FEED_TAG_RAIL_SAFE_GAP_PX)
+      )
+      feedBody.style.setProperty("--feed-tag-rail-overlap", `${overlap}px`)
+    }
+
+    const scheduleSync = () => {
+      window.cancelAnimationFrame(rafId)
+      rafId = window.requestAnimationFrame(syncRailOverlap)
+    }
+
+    scheduleSync()
+    window.addEventListener("resize", scheduleSync, { passive: true })
+    window.addEventListener("orientationchange", scheduleSync)
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleSync) : null
+    if (resizeObserver) {
+      if (feedBodyRef.current) resizeObserver.observe(feedBodyRef.current)
+      if (tagColumnRef.current) resizeObserver.observe(tagColumnRef.current)
+    }
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      window.removeEventListener("resize", scheduleSync)
+      window.removeEventListener("orientationchange", scheduleSync)
+      resizeObserver?.disconnect()
+    }
+  }, [])
+
   const hasFilter = Boolean(normalizedQuery || currentTag)
   const resultCount = pinnedPosts.length + regularPosts.length
   const hasQueryFilter = normalizedQuery.length > 0
@@ -705,8 +754,8 @@ const FeedExplorer = () => {
           onCompositionEnd={() => setIsComposing(false)}
         />
       </ExplorerCard>
-      <FeedBody data-sticky-rail-safe="true">
-        <aside className="tagColumn">
+      <FeedBody ref={feedBodyRef} data-sticky-rail-safe="true">
+        <aside ref={tagColumnRef} className="tagColumn">
           <TagList />
         </aside>
         <section className="postColumn">

@@ -15,6 +15,10 @@ type RumMetricPayload = {
     eventType?: string
     resourceUrl?: string
   }
+  context?: {
+    detailSection?: string
+    scrollY?: number
+  }
 }
 
 const RUM_ENDPOINT = "/api/rum/vitals"
@@ -75,6 +79,33 @@ const sendToAnalytics = (metric: NextWebVitalsMetric) => {
   })
 }
 
+const resolveDetailScrollContext = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") return undefined
+  if (!window.location.pathname.startsWith("/posts/")) return undefined
+
+  const sectionNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-rum-section]"))
+  if (!sectionNodes.length) return undefined
+
+  const anchorY = window.scrollY + Math.max(0, Math.round(window.innerHeight * 0.35))
+  let activeSection = sectionNodes[0].dataset.rumSection || "top"
+
+  for (const node of sectionNodes) {
+    const sectionName = node.dataset.rumSection
+    if (!sectionName) continue
+    const sectionTop = node.getBoundingClientRect().top + window.scrollY
+    if (sectionTop <= anchorY) {
+      activeSection = sectionName
+      continue
+    }
+    break
+  }
+
+  return {
+    detailSection: activeSection,
+    scrollY: Math.max(0, Math.round(window.scrollY)),
+  }
+}
+
 export const reportWebVital = (metric: NextWebVitalsMetric) => {
   if (!shouldSendMetric(metric)) return
 
@@ -125,6 +156,7 @@ export const reportWebVital = (metric: NextWebVitalsMetric) => {
     navigationType: metricWithDetail.navigationType,
     path: window.location.pathname,
     attribution,
+    context: metric.name === "INP" || metric.name === "LCP" ? resolveDetailScrollContext() : undefined,
   }
 
   sendToApi(payload)

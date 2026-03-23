@@ -8,8 +8,6 @@ import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
 
-const HEADER_HEIGHT = 73
-
 type Props = {
   initialAdminProfile?: AdminProfile | null
 }
@@ -66,18 +64,22 @@ const StyledWrapper = styled.div`
     gap: 1rem;
 
     @media (min-width: 1024px) {
+      grid-column: span 12 / span 12;
+    }
+
+    @media (min-width: 1180px) {
       grid-column: span 9 / span 9;
     }
 
     .mobileProfileCard {
-      @media (min-width: 1024px) {
+      @media (min-width: 1180px) {
         display: none;
       }
     }
 
     > .footer {
       padding-bottom: 2rem;
-      @media (min-width: 1024px) {
+      @media (min-width: 1180px) {
         display: none;
       }
     }
@@ -95,11 +97,11 @@ const StyledWrapper = styled.div`
     scrollbar-gutter: stable both-edges;
     overscroll-behavior: contain;
     position: sticky;
-    top: ${HEADER_HEIGHT - 10}px;
-    height: calc(100vh - ${HEADER_HEIGHT}px);
-    height: calc(100dvh - ${HEADER_HEIGHT}px);
+    top: calc(var(--app-header-height, 73px) - 10px);
+    height: calc(100vh - var(--app-header-height, 73px));
+    height: calc(100dvh - var(--app-header-height, 73px));
 
-    @media (min-width: 1024px) {
+    @media (min-width: 1180px) {
       display: block;
       grid-column: span 3 / span 3;
     }

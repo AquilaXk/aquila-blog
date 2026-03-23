@@ -455,9 +455,9 @@ const StyledWrapper = styled(Link)`
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: 1.06rem;
+          font-size: 1.08rem;
           line-height: ${FEED_CARD_TITLE_LINE_HEIGHT};
-          font-weight: 750;
+          font-weight: 760;
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -469,14 +469,14 @@ const StyledWrapper = styled(Link)`
       }
 
       > .summary {
-        margin-top: 0.34rem;
+        margin-top: 0.4rem;
         height: 3.9375rem;
 
         p {
           margin: 0;
-          color: ${({ theme }) => theme.colors.gray11};
+          color: ${({ theme }) => theme.colors.gray10};
           font-size: 0.875rem;
-          line-height: 1.58;
+          line-height: 1.6;
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -492,11 +492,11 @@ const StyledWrapper = styled(Link)`
         flex-wrap: wrap;
         gap: 0.42rem;
         align-items: center;
-        margin-top: 0.66rem;
-        padding-bottom: 0.95rem;
+        margin-top: 0.72rem;
+        padding-bottom: 1.06rem;
         color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
-        line-height: 1.5;
+        line-height: 1.55;
         letter-spacing: -0.01em;
 
         .dot {
@@ -518,7 +518,7 @@ const StyledWrapper = styled(Link)`
 
       > .footer {
         margin-top: auto;
-        padding-top: 0.58rem;
+        padding-top: 0.68rem;
         border-top: 1px solid ${({ theme }) => theme.colors.gray4};
         display: flex;
         align-items: center;

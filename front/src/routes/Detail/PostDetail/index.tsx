@@ -38,6 +38,18 @@ const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
 const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
 const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
+const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1081
+const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1241
+const DETAIL_RAIL_GAP_FROM_HEADER_PX = 16
+
+const getHeaderHeightFromCssVar = () => {
+  if (typeof window === "undefined" || typeof document === "undefined") return 56
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--app-header-height")
+  const parsed = Number.parseFloat(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 56
+}
+
+const resolveRailTopOffset = () => getHeaderHeightFromCssVar() + DETAIL_RAIL_GAP_FROM_HEADER_PX
 
 const normalizeHeadingText = (value: string): string =>
   value
@@ -100,12 +112,17 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const likePendingRef = useRef(false)
   const shareFeedbackResetTimerRef = useRef<number | null>(null)
   const articleRef = useRef<HTMLElement | null>(null)
+  const leftRailRef = useRef<HTMLElement | null>(null)
+  const leftRailInnerRef = useRef<HTMLDivElement | null>(null)
+  const rightRailRef = useRef<HTMLElement | null>(null)
+  const rightRailInnerRef = useRef<HTMLElement | null>(null)
   const [likePending, setLikePending] = useState(false)
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [tocItems, setTocItems] = useState<TocItem[]>([])
   const [activeTocId, setActiveTocId] = useState<string>("")
   const [showDetailedToc, setShowDetailedToc] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<"copied" | "shared" | "failed" | null>(null)
+  const [isHybridRailActive, setIsHybridRailActive] = useState(false)
   const [engagement, setEngagement] = useState(() => ({
     likesCount: data?.likesCount ?? 0,
     hitCount: data?.hitCount ?? 0,
@@ -239,39 +256,220 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   useEffect(() => {
     if (!tocItems.length || !visibleTocItems.length) return
 
-    const resolveActiveId = (items: TocItem[]) => {
-      let current = items[0]?.id || ""
-      for (let index = items.length - 1; index >= 0; index -= 1) {
-        const item = items[index]
+    const headingNodes = visibleTocItems
+      .map((item) => document.getElementById(item.id))
+      .filter((node): node is HTMLElement => Boolean(node))
+    if (!headingNodes.length) return
+
+    const ratioMap = new Map<string, number>()
+    const visibleIdSet = new Set(visibleTocItems.map((item) => item.id))
+    let rafId: number | null = null
+
+    const resolveActiveByRatio = () => {
+      const anchorTop = resolveRailTopOffset() + 12
+      const candidates = visibleTocItems.map((item) => {
         const node = document.getElementById(item.id)
-        if (!node) continue
-        const rect = node.getBoundingClientRect()
-        if (rect.top <= 140) {
-          current = item.id
-          break
+        const top = node ? node.getBoundingClientRect().top : Number.POSITIVE_INFINITY
+        const ratio = ratioMap.get(item.id) ?? 0
+        return { id: item.id, ratio, top }
+      })
+
+      const intersecting = candidates
+        .filter((candidate) => candidate.ratio > 0.04 && Number.isFinite(candidate.top))
+        .sort((a, b) => {
+          if (b.ratio !== a.ratio) return b.ratio - a.ratio
+          return Math.abs(a.top - anchorTop) - Math.abs(b.top - anchorTop)
+        })
+
+      if (intersecting.length > 0) {
+        return intersecting[0].id
+      }
+
+      const passed = candidates
+        .filter((candidate) => Number.isFinite(candidate.top) && candidate.top <= anchorTop)
+        .sort((a, b) => a.top - b.top)
+      if (passed.length > 0) {
+        return passed[passed.length - 1].id
+      }
+
+      return visibleTocItems[0]?.id || ""
+    }
+
+    const scheduleActiveSync = () => {
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        const nextId = resolveActiveByRatio()
+        if (!visibleIdSet.has(nextId)) return
+        setActiveTocId((prev) => (prev === nextId ? prev : nextId))
+      })
+    }
+
+    const thresholds = [0, 0.08, 0.2, 0.36, 0.5, 0.65, 0.8, 1]
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).id
+          if (!id || !visibleIdSet.has(id)) continue
+          ratioMap.set(id, entry.isIntersecting ? entry.intersectionRatio : 0)
         }
+        scheduleActiveSync()
+      },
+      {
+        root: null,
+        rootMargin: `-${resolveRailTopOffset() + 12}px 0px -52% 0px`,
+        threshold: thresholds,
       }
-      return current
+    )
+
+    headingNodes.forEach((node) => observer.observe(node))
+    scheduleActiveSync()
+
+    const handleResize = () => {
+      scheduleActiveSync()
     }
+    window.addEventListener("resize", handleResize)
 
-    const updateActiveToc = () => {
-      const visibleIdSet = new Set(visibleTocItems.map((item) => item.id))
-      let current = resolveActiveId(tocItems)
-      if (!visibleIdSet.has(current)) {
-        current = resolveActiveId(visibleTocItems)
-      }
-
-      setActiveTocId((prev) => (prev === current ? prev : current))
-    }
-
-    updateActiveToc()
-    window.addEventListener("scroll", updateActiveToc, { passive: true })
-    window.addEventListener("resize", updateActiveToc)
     return () => {
-      window.removeEventListener("scroll", updateActiveToc)
-      window.removeEventListener("resize", updateActiveToc)
+      observer.disconnect()
+      window.removeEventListener("resize", handleResize)
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      ratioMap.clear()
     }
   }, [tocItems, visibleTocItems])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const article = articleRef.current
+    if (!article) return
+
+    let rafId: number | null = null
+    let ticking = false
+
+    const clearInlineRailStyle = (inner: HTMLElement | null) => {
+      if (!inner) return
+      inner.style.position = ""
+      inner.style.top = ""
+      inner.style.left = ""
+      inner.style.width = ""
+      inner.style.bottom = ""
+      inner.style.transform = ""
+    }
+
+    const applyHybridRail = ({
+      rail,
+      inner,
+      enabled,
+    }: {
+      rail: HTMLElement | null
+      inner: HTMLElement | null
+      enabled: boolean
+    }) => {
+      if (!rail || !inner || !enabled) {
+        clearInlineRailStyle(inner)
+        return
+      }
+
+      const topOffset = resolveRailTopOffset()
+      const railRect = rail.getBoundingClientRect()
+      const innerHeight = inner.offsetHeight
+      const articleRect = article.getBoundingClientRect()
+      const railTopDoc = window.scrollY + railRect.top
+      const articleBottomDoc = window.scrollY + articleRect.bottom
+      const startFixedScrollY = railTopDoc - topOffset
+      const endFixedScrollY = articleBottomDoc - topOffset - innerHeight
+
+      if (railRect.width <= 0 || innerHeight <= 0 || endFixedScrollY <= startFixedScrollY) {
+        clearInlineRailStyle(inner)
+        return
+      }
+
+      if (window.scrollY < startFixedScrollY) {
+        inner.style.position = "absolute"
+        inner.style.top = "0px"
+        inner.style.left = "0px"
+        inner.style.width = "100%"
+        inner.style.bottom = ""
+        inner.style.transform = ""
+        return
+      }
+
+      if (window.scrollY > endFixedScrollY) {
+        const bottomTop = Math.max(0, articleBottomDoc - railTopDoc - innerHeight)
+        inner.style.position = "absolute"
+        inner.style.top = `${bottomTop}px`
+        inner.style.left = "0px"
+        inner.style.width = "100%"
+        inner.style.bottom = ""
+        inner.style.transform = ""
+        return
+      }
+
+      inner.style.position = "fixed"
+      inner.style.top = `${topOffset}px`
+      inner.style.left = `${Math.round(railRect.left)}px`
+      inner.style.width = `${Math.round(railRect.width)}px`
+      inner.style.bottom = ""
+      inner.style.transform = "translateZ(0)"
+    }
+
+    const syncHybridRails = () => {
+      const viewportWidth = window.innerWidth
+      const leftEnabled = showFloatingLike && viewportWidth >= LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX
+      const rightEnabled = showStickyToc && viewportWidth >= RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX
+      const hybridEnabled = leftEnabled || rightEnabled
+
+      setIsHybridRailActive((prev) => (prev === hybridEnabled ? prev : hybridEnabled))
+
+      applyHybridRail({
+        rail: leftRailRef.current,
+        inner: leftRailInnerRef.current,
+        enabled: leftEnabled,
+      })
+
+      applyHybridRail({
+        rail: rightRailRef.current,
+        inner: rightRailInnerRef.current,
+        enabled: rightEnabled,
+      })
+    }
+
+    const scheduleSync = () => {
+      if (ticking) return
+      ticking = true
+      rafId = window.requestAnimationFrame(() => {
+        ticking = false
+        syncHybridRails()
+      })
+    }
+
+    scheduleSync()
+    window.addEventListener("scroll", scheduleSync, { passive: true })
+    window.addEventListener("resize", scheduleSync, { passive: true })
+    window.addEventListener("orientationchange", scheduleSync)
+
+    const fontSet = document.fonts
+    if (fontSet) {
+      void fontSet.ready.then(() => scheduleSync()).catch(() => {})
+    }
+
+    const leftRailInnerNode = leftRailInnerRef.current
+    const rightRailInnerNode = rightRailInnerRef.current
+
+    return () => {
+      window.removeEventListener("scroll", scheduleSync)
+      window.removeEventListener("resize", scheduleSync)
+      window.removeEventListener("orientationchange", scheduleSync)
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      clearInlineRailStyle(leftRailInnerNode)
+      clearInlineRailStyle(rightRailInnerNode)
+      setIsHybridRailActive(false)
+    }
+  }, [showFloatingLike, showStickyToc, tocItems.length])
 
   useEffect(() => {
     if (!detailId) return
@@ -488,16 +686,24 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const handleTocNavigate = (id: string) => {
     const heading = document.getElementById(id)
     if (!heading) return
-    const targetTop = heading.getBoundingClientRect().top + window.scrollY - 96
+    const targetTop = heading.getBoundingClientRect().top + window.scrollY - (resolveRailTopOffset() + 24)
+    setActiveTocId(id)
+    const hash = `#${encodeURIComponent(id)}`
+    const nextUrl = `${window.location.pathname}${window.location.search}${hash}`
+    window.history.replaceState(window.history.state, "", nextUrl)
     window.scrollTo({ top: targetTop, behavior: "smooth" })
   }
 
   return (
-    <StyledWrapper>
-      <div className="detailLayout">
-        <aside className="leftRail" aria-hidden={!showFloatingLike}>
+    <StyledWrapper data-sticky-rail-safe="true">
+      <div
+        className="detailLayout"
+        data-hybrid-rails={isHybridRailActive}
+        data-sticky-rail-safe="true"
+      >
+        <aside ref={leftRailRef} className="leftRail" aria-hidden={!showFloatingLike}>
           {showFloatingLike ? (
-            <div className="leftRailInner">
+            <div ref={leftRailInnerRef} className="leftRailInner">
               <div className="floatingLikeCluster">
                 <div className="floatingLikeStat">
                   <button
@@ -542,26 +748,28 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
         <article ref={articleRef}>
           {data.type[0] === "Post" && (
-            <PostHeader
-              data={data}
-              likesCount={engagement.likesCount}
-              hitCount={engagement.hitCount}
-              actorHasLiked={engagement.actorHasLiked}
-              likePending={likePending}
-              hideLikeActionOnDesktop={showFloatingLike}
-              onToggleLike={handleToggleLike}
-              showModifyAction={canModifyPost}
-              showDeleteAction={canDeletePost}
-              adminActionPending={adminActionPending}
-              onEditPost={handleEditPost}
-              onDeletePost={handleDeletePost}
-            />
+            <section data-rum-section="header">
+              <PostHeader
+                data={data}
+                likesCount={engagement.likesCount}
+                hitCount={engagement.hitCount}
+                actorHasLiked={engagement.actorHasLiked}
+                likePending={likePending}
+                hideLikeActionOnDesktop={showFloatingLike}
+                onToggleLike={handleToggleLike}
+                showModifyAction={canModifyPost}
+                showDeleteAction={canDeletePost}
+                adminActionPending={adminActionPending}
+                onEditPost={handleEditPost}
+                onDeletePost={handleDeletePost}
+              />
+            </section>
           )}
-          <BodySection>
+          <BodySection data-rum-section="body">
             <MarkdownRenderer content={data.content} />
           </BodySection>
           {data.type[0] === "Post" && relatedByTagPosts.length > 0 && (
-            <RelatedSection aria-label="연관 글">
+            <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
               <header>
                 <h2>같은 태그 글</h2>
                 <Link href={relatedTag ? `/?tag=${encodeURIComponent(relatedTag)}` : "/"}>
@@ -582,7 +790,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             </RelatedSection>
           )}
           {data.type[0] === "Post" && relatedByAuthorPosts.length > 0 && (
-            <RelatedSection aria-label="같은 작성자 글">
+            <RelatedSection aria-label="같은 작성자 글" data-rum-section="related-author">
               <header>
                 <h2>같은 작성자 글</h2>
                 <Link href="/">
@@ -604,15 +812,19 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           )}
           {data.type[0] === "Post" && (
             <>
-              <Footer />
-              <DeferredCommentBox data={data} initialComments={initialComments} />
+              <section data-rum-section="footer">
+                <Footer />
+              </section>
+              <section data-rum-section="comments">
+                <DeferredCommentBox data={data} initialComments={initialComments} />
+              </section>
             </>
           )}
         </article>
 
-        <aside className="rightRail" aria-hidden={!showStickyToc}>
+        <aside ref={rightRailRef} className="rightRail" aria-hidden={!showStickyToc}>
           {showStickyToc ? (
-            <nav className="rightRailInner" aria-label="목차">
+            <nav ref={rightRailInnerRef} className="rightRailInner" aria-label="목차">
               <div className="rightRailHead">
                 <h2 className="rightRailTitle">목차</h2>
                 {hasDepth4Toc && (
@@ -657,10 +869,11 @@ const StyledWrapper = styled.div`
 
   .detailLayout {
     display: grid;
-    grid-template-columns: minmax(4.2rem, 4.8rem) minmax(0, 49rem) minmax(0, 14rem);
+    grid-template-columns: minmax(4.4rem, 5rem) minmax(0, 49rem) minmax(0, 15rem);
     justify-content: center;
-    gap: 1.55rem;
+    gap: 2rem;
     min-width: 0;
+    overflow: visible;
   }
 
   article {
@@ -682,6 +895,7 @@ const StyledWrapper = styled.div`
     position: sticky;
     top: calc(var(--app-header-height, 5.4rem) + 1rem);
     align-self: start;
+    overflow: visible;
   }
 
   .leftRailInner,
@@ -689,9 +903,24 @@ const StyledWrapper = styled.div`
     position: static;
   }
 
+  .detailLayout[data-hybrid-rails="true"] .leftRail,
+  .detailLayout[data-hybrid-rails="true"] .rightRail {
+    position: relative;
+    top: 0;
+    align-self: stretch;
+  }
+
+  .detailLayout[data-hybrid-rails="true"] .leftRailInner,
+  .detailLayout[data-hybrid-rails="true"] .rightRailInner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
   .floatingActionButton {
-    width: 3.35rem;
-    height: 3.35rem;
+    width: 3.25rem;
+    height: 3.25rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -704,7 +933,7 @@ const StyledWrapper = styled.div`
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
-      font-size: 1.16rem;
+      font-size: 1.18rem;
     }
 
     &:hover {
@@ -732,14 +961,14 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
 
     svg {
-      font-size: 1.02rem;
+      font-size: 1.08rem;
     }
   }
 
   .floatingLikeCluster {
     display: grid;
     justify-items: center;
-    row-gap: 0.52rem;
+    row-gap: 0.56rem;
   }
 
   .floatingLikeStat {
@@ -763,8 +992,8 @@ const StyledWrapper = styled.div`
   }
 
   .floatingShareLabel {
-    margin-top: -0.18rem;
-    font-size: 0.64rem;
+    margin-top: -0.12rem;
+    font-size: 0.68rem;
     line-height: 1;
     letter-spacing: 0.01em;
     font-weight: 640;
@@ -879,7 +1108,21 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 1240px) {
+  @media (max-width: 1439px) {
+    .detailLayout {
+      grid-template-columns: minmax(4rem, 4.5rem) minmax(0, 48rem) minmax(0, 13.8rem);
+      gap: 1.72rem;
+    }
+  }
+
+  @media (max-width: 1279px) {
+    .detailLayout {
+      grid-template-columns: minmax(3.8rem, 4.2rem) minmax(0, 46rem) minmax(0, 12.6rem);
+      gap: 1.18rem;
+    }
+  }
+
+  @media (max-width: 1200px) {
     .detailLayout {
       grid-template-columns: minmax(0, 49rem) minmax(0, 12.5rem);
       gap: 1.12rem;

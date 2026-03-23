@@ -11,6 +11,17 @@
 - 액션: hover는 강한 glow 대신 border/배경의 저강도 변화만 허용
 
 ## 컴포넌트 규격
+### Rail / TOC
+- 파일: `front/src/routes/Detail/PostDetail/index.tsx`
+- Rail sticky:
+  - CSS fallback + JS hybrid(`absolute → fixed → absolute`)을 함께 사용
+  - sticky top은 `--app-header-height + 16px`
+  - 본문-레일 간 간격은 viewport tier(1440/1280/1200)로 조절
+- TOC:
+  - active 항목 판별은 `IntersectionObserver` ratio 기반
+  - 클릭 시 `history.replaceState`로 hash 동기화
+  - 항목 최소 높이 `35px`
+
 ### Feed Search Input
 - 파일: `front/src/routes/Feed/SearchInput.tsx`
 - 높이: 데스크톱 `36px`, 모바일 `34px`
@@ -25,6 +36,11 @@
 - 본문 패딩: `theme.variables.ui.card.padding`
 - 요약 높이: `3.9375rem`(3줄)
 - 메타 폰트: `0.75rem`
+- 타이포 계층:
+  - 제목 `1.08rem/760`
+  - 요약 `0.875rem/1.6`
+  - 메타 `0.75rem/1.55`
+  - 푸터 상단 구분선과 메타 하단 간격을 분리해 읽기 리듬 유지
 - Hover:
   - 데스크톱(>1024px)에서만 `translateY`
   - 모바일은 그림자만 유지

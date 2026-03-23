@@ -230,7 +230,7 @@ const LIST_SORT_OPTIONS = [
   { value: "CREATED_AT_ASC", label: "오래된순" },
 ] as const
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
-const THUMBNAIL_FRAME_ASPECT_RATIO = 16 / 9
+const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
 const DEFAULT_THUMBNAIL_SOURCE_SIZE: ThumbnailSourceSize = {
   width: THUMBNAIL_FRAME_ASPECT_RATIO,
   height: 1,
@@ -1403,10 +1403,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       zoom: postThumbnailZoom,
     })
   }, [postThumbnailFocusX, postThumbnailFocusY, postThumbnailZoom, resolvedPreviewThumbnail])
-  const safePreviewThumbnail = useMemo(
-    () => normalizeSafePreviewThumbnailUrl(previewThumbnailSourceUrl),
-    [previewThumbnailSourceUrl]
-  )
+  const safePreviewThumbnail = useMemo(() => {
+    const preferredSource = previewThumbnailSourceUrl || resolvedPreviewThumbnail
+    return normalizeSafePreviewThumbnailUrl(preferredSource)
+  }, [previewThumbnailSourceUrl, resolvedPreviewThumbnail])
 
   const applyPreviewThumbStyle = useCallback((transform: ThumbnailTransformState) => {
     const frame = previewThumbFrameRef.current
@@ -4215,11 +4215,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
                       }
                     >
-                      출간 설정
+                      공개/미리보기 설정
                     </MetaToggleButton>
                   </MetaActionRow>
                   <PublishSettingsSummary>
-                    <SummaryPill>공개 범위: {currentVisibilityText}</SummaryPill>
+                    <SummaryPill>노출 설정: {currentVisibilityText}</SummaryPill>
                     <SummaryPill>
                       썸네일: {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "수동 지정" : "본문 첫 이미지 자동") : "없음"}
                     </SummaryPill>
@@ -4556,27 +4556,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <PublishModalHeader>
                 <div>
                   <h4>{publishActionTitle}</h4>
-                  <p>공개 범위, 썸네일, 요약을 점검한 뒤 최종 반영합니다.</p>
+                  <p>누가 볼 수 있는지와 피드 카드 모양(썸네일/요약)을 확인하고 반영하세요.</p>
                 </div>
               </PublishModalHeader>
               <PublishModalBody>
                 <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
                 {publishActionType !== "temp" ? (
                   <VisibilityWrap>
-                    <FieldLabel htmlFor="post-visibility-modal">공개 범위</FieldLabel>
+                    <FieldLabel htmlFor="post-visibility-modal">노출 범위 (누가 볼 수 있나요?)</FieldLabel>
                     <VisibilitySelect
                       id="post-visibility-modal"
                       value={postVisibility}
                       onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
                     >
-                      <option value="PRIVATE">비공개</option>
-                      <option value="PUBLIC_UNLISTED">링크 공개 (목록 미노출)</option>
-                      <option value="PUBLIC_LISTED">전체 공개 (목록 노출)</option>
+                      <option value="PRIVATE">비공개 (나만 확인)</option>
+                      <option value="PUBLIC_UNLISTED">링크 공개 (URL을 아는 사람만)</option>
+                      <option value="PUBLIC_LISTED">전체 공개 (메인 목록/검색 노출)</option>
                     </VisibilitySelect>
-                    <FieldHelp>전체 공개만 메인 페이지 목록에 노출됩니다.</FieldHelp>
+                    <FieldHelp>메인 페이지 카드 노출은 ‘전체 공개 (메인 목록/검색 노출)’에서만 됩니다.</FieldHelp>
                   </VisibilityWrap>
                 ) : (
-                  <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개(목록 노출)’로 반영됩니다.</PublishModeHint>
+                  <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개 (메인 목록/검색 노출)’로 반영됩니다.</PublishModeHint>
                 )}
 
                 <PostPreviewSetup>
@@ -5934,12 +5934,13 @@ const PreviewThumbFrame = styled.div`
   position: relative;
   width: min(100%, 320px);
   justify-self: start;
-  aspect-ratio: 16 / 9;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  aspect-ratio: ${THUMBNAIL_FRAME_ASPECT_RATIO} / 1;
+  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
+  background: ${({ theme }) => theme.colors.gray4};
   overflow: hidden;
   user-select: none;
+  isolation: isolate;
 
   &[data-draggable="true"] {
     cursor: grab;
@@ -5962,6 +5963,15 @@ const PreviewThumbFrame = styled.div`
     touch-action: none;
     -webkit-user-drag: none;
     will-change: top, left, width, height;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.16) 100%);
+    opacity: 0.9;
+    pointer-events: none;
   }
 
   .placeholder {

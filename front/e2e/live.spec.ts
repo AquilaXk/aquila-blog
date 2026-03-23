@@ -1,8 +1,10 @@
 import { expect, test, type Page } from "@playwright/test"
 
-const adminIdentifier = process.env.E2E_ADMIN_EMAIL?.trim() || ""
+const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
+const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
 const adminPassword = process.env.E2E_ADMIN_PASSWORD?.trim() || ""
-const hasLiveCredentials = Boolean(adminIdentifier && adminPassword)
+const hasLiveCredentials = Boolean((adminEmail || adminLegacyLoginId) && adminPassword)
+const hasUiLoginCredentials = Boolean(adminEmail && adminPassword)
 const explicitApiBaseUrl = process.env.E2E_API_BASE_URL?.trim() || ""
 const liveApiProbeAttempts = Number.parseInt(process.env.E2E_LIVE_API_PROBE_ATTEMPTS || "4", 10)
 const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS || "3", 10)
@@ -76,31 +78,77 @@ const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
   )
 }
 
+type LoginPayloadCandidate = {
+  label: "email+policy" | "email" | "username"
+  data: Record<string, string | boolean>
+}
+
+const buildLoginPayloadCandidates = (
+  email: string,
+  legacyLoginId: string,
+  password: string
+): LoginPayloadCandidate[] => {
+  const candidates: LoginPayloadCandidate[] = []
+  if (email) {
+    candidates.push({
+      label: "email+policy",
+      data: { email, password, rememberMe: true, ipSecurity: false },
+    })
+    candidates.push({
+      label: "email",
+      data: { email, password },
+    })
+  }
+  if (legacyLoginId) {
+    candidates.push({
+      label: "username",
+      data: { username: legacyLoginId, password },
+    })
+  }
+  return candidates
+}
+
 const loginWithRetry = async (
   page: Page,
   apiBaseUrl: string,
-  loginId: string,
+  loginEmail: string,
+  legacyLoginId: string,
   password: string
 ) => {
+  const payloadCandidates = buildLoginPayloadCandidates(loginEmail, legacyLoginId, password)
+  if (payloadCandidates.length === 0) {
+    throw new Error("Login credentials are missing. Provide E2E_ADMIN_EMAIL or E2E_ADMIN_USERNAME.")
+  }
+
   let lastFailure = "unknown"
 
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
+    let shouldRetryByStatus = false
+
     try {
-      const response = await page.request.post(`${apiBaseUrl}/member/api/v1/auth/login`, {
-        data: { email: loginId, password },
-        timeout: liveLoginTimeoutMs,
-      })
+      for (let payloadIndex = 0; payloadIndex < payloadCandidates.length; payloadIndex += 1) {
+        const payload = payloadCandidates[payloadIndex]
+        const isLastPayload = payloadIndex === payloadCandidates.length - 1
+        const response = await page.request.post(`${apiBaseUrl}/member/api/v1/auth/login`, {
+          data: payload.data,
+          timeout: liveLoginTimeoutMs,
+        })
 
-      if (response.ok()) return response
+        if (response.ok()) return response
 
-      const body = (await response.text().catch(() => "")).slice(0, 300)
-      const retriableStatus = [502, 503, 504, 520, 522, 524, 530].includes(response.status())
-      lastFailure = `status=${response.status()} body=${body}`
-      if (retriableStatus && attempt < liveLoginAttempts) {
-        await sleep(liveRetryBaseDelayMs * attempt)
-        continue
+        const body = (await response.text().catch(() => "")).slice(0, 300)
+        const status = response.status()
+        lastFailure = `status=${status} payload=${payload.label} body=${body}`
+
+        if (isInvalidLoginRequestBody(status, body) && !isLastPayload) continue
+
+        if (isRetriableLoginStatus(status) && attempt < liveLoginAttempts) {
+          shouldRetryByStatus = true
+          break
+        }
+
+        throw new Error(`Login API failed. ${lastFailure}`)
       }
-      throw new Error(`Login API failed. ${lastFailure}`)
     } catch (error) {
       if (isRetriableNetworkError(error) && attempt < liveLoginAttempts) {
         lastFailure = error instanceof Error ? error.message : String(error)
@@ -109,18 +157,29 @@ const loginWithRetry = async (
       }
       throw error
     }
+
+    if (shouldRetryByStatus && attempt < liveLoginAttempts) {
+      await sleep(liveRetryBaseDelayMs * attempt)
+      continue
+    }
   }
 
   throw new Error(`Login API failed after retries. base=${apiBaseUrl} last=${lastFailure}`)
 }
 
-const loginThroughUi = async (page: Page, apiBaseUrl: string, loginId: string, password: string) => {
+const loginThroughUi = async (
+  page: Page,
+  apiBaseUrl: string,
+  loginEmail: string,
+  legacyLoginId: string,
+  password: string
+) => {
   let lastFailure = "unknown"
 
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
     await page.goto("/login?next=%2Fadmin")
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
-    await page.getByLabel("이메일").fill(loginId)
+    await page.getByLabel("이메일").fill(loginEmail)
     await page.locator("#password").fill(password)
 
     const loginResponsePromise = page.waitForResponse(
@@ -141,7 +200,7 @@ const loginThroughUi = async (page: Page, apiBaseUrl: string, loginId: string, p
       // 운영 반영 타이밍 차이로 구형 로그인 payload가 섞인 경우, UI 테스트를 즉시 중단하지 않고
       // API 경로로 세션을 복구해 이후 관리자 동선을 계속 검증한다.
       if (isInvalidLoginRequestBody(status, bodyPreview)) {
-        await loginWithRetry(page, apiBaseUrl, loginId, password)
+        await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
         await page.goto("/admin")
         await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
         return
@@ -196,10 +255,11 @@ test.describe("live production e2e", () => {
   })
 
   test("관리자 UI 로그인 경로가 정상 동작한다", async ({ page }) => {
+    test.skip(!hasUiLoginCredentials, "UI 로그인 검증에는 E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD가 필요합니다.")
     await page.goto("/login")
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    await loginThroughUi(page, apiBaseUrl, adminIdentifier, adminPassword)
+    await loginThroughUi(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
     await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
@@ -218,7 +278,7 @@ test.describe("live production e2e", () => {
 
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    await loginWithRetry(page, apiBaseUrl, adminIdentifier, adminPassword)
+    await loginWithRetry(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
 
     await page.goto("/admin")
     await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })

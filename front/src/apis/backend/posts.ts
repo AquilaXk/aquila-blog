@@ -203,12 +203,12 @@ const normalizeStringArray = (value?: string[]) => {
 const normalizeCategoryArray = (value?: string[]) =>
   normalizeStringArray(value).map(normalizeCategoryValue)
 
-const toSafeLogText = (value: unknown, maxLength = 240) =>
-  String(value ?? "")
-    .replace(/[\r\n]+/g, " ")
-    .replace(/[<>]/g, "")
-    .trim()
-    .slice(0, maxLength)
+const classifyPostsFetchError = (error: unknown): string => {
+  if (error instanceof ApiError) return `api-status-${error.status}`
+  if (isAbortError(error)) return "abort"
+  if (error instanceof Error) return "runtime"
+  return "unknown"
+}
 
 const pickPreferredImageUrl = (...candidates: Array<string | undefined>) => {
   for (const candidate of candidates) {
@@ -856,13 +856,9 @@ export const getPosts = async (
     }
 
     if (process.env.NODE_ENV !== "production") {
-      const safeErrorDetail =
-        error instanceof ApiError
-          ? `ApiError(status=${error.status}, url=${toSafeLogText(error.url, 120)})`
-          : error instanceof Error
-            ? `${toSafeLogText(error.name, 40)}: ${toSafeLogText(error.message)}`
-            : toSafeLogText(error)
-      console.error(`[getPosts] backend request failed: ${safeErrorDetail}`)
+      // 로그 위변조(CWE-117) 방지를 위해 사용자/원격 입력(error.message/url/body)은 로그에 포함하지 않는다.
+      const safeFailureType = classifyPostsFetchError(error)
+      console.error(`[getPosts] backend request failed: ${safeFailureType}`)
     }
     if (throwOnError) throw error
     return []

@@ -156,7 +156,6 @@ const AuthEntryLoginPanel = ({
             </button>
           </div>
         </div>
-        <p className="ipSecurityHint">IP보안 ON 시 네트워크(IP) 변경 시 재로그인이 필요할 수 있습니다.</p>
 
         {error && <p className="inlineError">{error}</p>}
 

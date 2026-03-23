@@ -231,7 +231,6 @@ const LoginPage = () => {
               type="button"
               data-on={ipSecurityOn}
               aria-pressed={ipSecurityOn}
-              aria-describedby="ip-security-hint"
               aria-label="IP보안 ON/OFF"
               onClick={() => setIpSecurityOn((value) => !value)}
             >
@@ -242,9 +241,6 @@ const LoginPage = () => {
             </IpSecurityToggle>
           </IpSecurityControl>
         </LoginStateRow>
-        <IpSecurityHint id="ip-security-hint">
-          IP보안 ON 시 네트워크(IP) 변경 시 재로그인이 필요할 수 있습니다.
-        </IpSecurityHint>
 
         {error ? (
           <ErrorText>{error}</ErrorText>
@@ -506,13 +502,6 @@ const IpSecurityInfoButton = styled.button`
     color: ${({ theme }) => theme.colors.blue10};
     text-decoration-color: ${({ theme }) => theme.colors.blue8};
   }
-`
-
-const IpSecurityHint = styled.p`
-  margin: -0.18rem 0 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.8rem;
-  line-height: 1.45;
 `
 
 const PrimaryButton = styled.button`

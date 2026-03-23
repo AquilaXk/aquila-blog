@@ -642,13 +642,6 @@ const Modal = styled.div`
     }
   }
 
-  .ipSecurityHint {
-    margin: -0.18rem 0 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.45;
-  }
-
   .inlineError {
     margin: 0;
     border-radius: 10px;

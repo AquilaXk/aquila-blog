@@ -704,8 +704,9 @@ const FeedExplorer = () => {
         0,
         Math.ceil(railRect.right - feedRect.left + FEED_TAG_RAIL_SAFE_GAP_PX)
       )
-      feedBody.dataset.railCollapsed = "false"
-      feedBody.style.setProperty("--feed-tag-rail-overlap", `${overlap}px`)
+      const shouldCollapseRail = overlap > 0
+      feedBody.dataset.railCollapsed = shouldCollapseRail ? "true" : "false"
+      feedBody.style.setProperty("--feed-tag-rail-overlap", shouldCollapseRail ? "0px" : `${overlap}px`)
     }
 
     const scheduleSync = () => {
@@ -866,16 +867,7 @@ const FeedBody = styled.section`
       calc(${FEED_TAG_RAIL_OFFSET_ANCHOR_PX}px - 50vw),
       ${FEED_TAG_RAIL_OFFSET_MAX_PX}px
     );
-    /*
-     * CSS fallback overlap guard:
-     * If JS measurement is delayed on initial paint, keep post column clear from rail.
-     * JS later writes a precise value into --feed-tag-rail-overlap.
-     */
-    --feed-tag-rail-overlap: clamp(
-      0px,
-      calc(var(--feed-tag-rail-width) + var(--feed-tag-rail-left) + var(--feed-tag-rail-safe-gap)),
-      calc(var(--feed-tag-rail-width) + var(--feed-tag-rail-safe-gap))
-    );
+    --feed-tag-rail-overlap: 0px;
 
     .tagColumn {
       /*
@@ -893,14 +885,13 @@ const FeedBody = styled.section`
       transition: opacity 0.14s ease-in;
     }
 
-    .postColumn {
-      /*
-       * 절대 배치 레일이 본문 위로 침범하는 폭만큼 본문 시작점을 보정한다.
-       * (충분히 넓은 뷰포트에서는 overlap=0)
-       */
-      margin-left: var(--feed-tag-rail-overlap);
+    &[data-rail-collapsed="true"] {
+      .tagColumn {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
     }
-
   }
 `
 

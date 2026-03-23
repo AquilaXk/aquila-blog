@@ -387,20 +387,18 @@ const mermaidFenceRegex = /```mermaid\b[\s\S]*?```/gi
 const inlineCodeRegex = /`([^`]+)`/g
 const markdownPunctuationRegex = /[#>*_~-]/g
 const whitespaceRegex = /\s+/g
-const markdownPasteHintRegex = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|```|:::[A-Za-z]|[|].*[|])/m
+const markdownBlockHintRegex = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|:::[A-Za-z]|[|].*[|]|```)/m
+const codeLikeTextHintRegex =
+  /(?:\bdependencies\b|\bimplementation\b|\bcompileOnly\b|\bannotationProcessor\b|\bclass\b|\binterface\b|\bfunction\b|[{};])/i
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
 const EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH = 8_000
-const EDITOR_PREVIEW_HEAVY_SINGLE_MERMAID_LENGTH = 6_000
 const EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS = 2
 const EDITOR_PREVIEW_DELAY_LIGHT_MS = 120
 const EDITOR_PREVIEW_DELAY_MEDIUM_MS = 260
 const EDITOR_PREVIEW_DELAY_HEAVY_MS = 520
 const EDITOR_PREVIEW_DELAY_HEAVY_MERMAID_MS = 900
-const HTML_PASTE_CONVERSION_MAX_LENGTH = 120_000
-const HTML_PASTE_CONVERSION_MAX_TAG_COUNT = 4_000
-const HTML_PASTE_PLAIN_TEXT_BYPASS_LENGTH = 8_000
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
@@ -415,12 +413,6 @@ const countMarkdownMermaidBlocks = (content: string): number =>
   (content.match(mermaidFenceRegex) || []).length
 
 const resolveEditorPreviewDelay = (contentLength: number, mermaidBlockCount: number): number => {
-  if (
-    contentLength >= EDITOR_PREVIEW_HEAVY_SINGLE_MERMAID_LENGTH &&
-    mermaidBlockCount >= 1
-  ) {
-    return EDITOR_PREVIEW_DELAY_HEAVY_MERMAID_MS
-  }
   if (
     contentLength >= EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH &&
     mermaidBlockCount >= EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS
@@ -1086,26 +1078,18 @@ const convertHtmlToMarkdown = (html: string): string => {
   return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
 }
 
-const shouldBypassHtmlPasteConversion = (plainText: string, html: string): boolean => {
-  const trimmedPlain = plainText.trim()
+const shouldPreferPlainTextPaste = (plainText: string, html: string): boolean => {
+  const trimmed = plainText.trim()
   if (!html) return true
+  if (!trimmed) return false
 
-  if (trimmedPlain.length >= HTML_PASTE_PLAIN_TEXT_BYPASS_LENGTH) {
-    return true
-  }
+  // 코드/마크다운 성격이 명확하면 HTML 변환 대신 브라우저 기본 paste(text/plain)를 그대로 사용한다.
+  if (markdownBlockHintRegex.test(trimmed)) return true
+  if (trimmed.includes("\n") && codeLikeTextHintRegex.test(trimmed)) return true
 
-  if (markdownPasteHintRegex.test(trimmedPlain)) {
-    return true
-  }
-
-  if (html.length >= HTML_PASTE_CONVERSION_MAX_LENGTH) {
-    return true
-  }
-
-  const tagCount = (html.match(/</g) || []).length
-  if (tagCount >= HTML_PASTE_CONVERSION_MAX_TAG_COUNT) {
-    return true
-  }
+  // 외부 에디터/LLM 코드블록 복사 시 HTML이 과도하게 커져 메인스레드를 잠그는 케이스를 차단한다.
+  if (html.length >= 80_000) return true
+  if ((html.match(/</g) || []).length >= 2_200) return true
 
   return false
 }
@@ -1215,12 +1199,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     [previewContent]
   )
   const isPreviewHeavyDocument = useMemo(() => {
-    if (
-      previewContentLength >= EDITOR_PREVIEW_HEAVY_SINGLE_MERMAID_LENGTH &&
-      previewMermaidBlockCount >= 1
-    ) {
-      return true
-    }
     if (previewContentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return true
     if (
       previewContentLength >= EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH &&
@@ -3167,7 +3145,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const handlePasteFromHtml = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const plainText = e.clipboardData.getData("text/plain")
     const html = e.clipboardData.getData("text/html")
-    if (shouldBypassHtmlPasteConversion(plainText, html)) return
+    if (shouldPreferPlainTextPaste(plainText, html)) return
+    if (!html) return
 
     e.preventDefault()
     const markdown = convertHtmlToMarkdown(html)

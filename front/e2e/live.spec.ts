@@ -53,6 +53,16 @@ const hasAuthCookie = async (page: Page) => {
   return cookies.some((cookie) => cookie.name === "apiKey" || cookie.name === "accessToken")
 }
 
+const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
+  await page.goto("/admin")
+  try {
+    await page.waitForURL(/\/admin(\/|$)/, { timeout: timeoutMs })
+    return true
+  } catch {
+    return false
+  }
+}
+
 const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
   const probePaths = ["/actuator/health", "/member/api/v1/auth/me"]
   let lastFailure = "unknown"
@@ -217,10 +227,20 @@ const loginThroughUi = async (
     if (/\/admin(\/|$)/.test(currentUrl)) return
 
     // 성공 쿠키가 있는데 리다이렉트가 지연되는 경우 /admin 재진입으로 판정한다.
+    // 단, 쿠키가 만료/무효일 수 있으므로 즉시 실패시키지 않고 API 로그인 복구 경로를 탄다.
     if (await hasAuthCookie(page)) {
-      await page.goto("/admin")
-      await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
-      return
+      if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
+
+      await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
+      if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
+
+      lastFailure = `cookie-present-but-unauthorized url=${page.url()}`
+      if (attempt < liveLoginAttempts) {
+        await sleep(liveRetryBaseDelayMs * attempt)
+        continue
+      }
+
+      throw new Error(`UI login did not establish valid admin session. ${lastFailure}`)
     }
 
     const loginError = page

@@ -762,6 +762,24 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        @WithUserDetails("admin@test.com")
+        fun `성공 - 관리자가 다른 사람 글 수정`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "관리자 수정 제목", "content": "관리자 수정 내용"}"""
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.resultCode") { value("200-1") }
+                    jsonPath("$.data.id") { value(post.id) }
+                    jsonPath("$.data.title") { value("관리자 수정 제목") }
+                }
+        }
+
+        @Test
         @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()

@@ -9,6 +9,8 @@ if [[ -z "${staged_files}" ]]; then
   exit 0
 fi
 
+bash tools/guards/check-forbidden-tracked-files.sh --staged
+
 needs_contract_check="false"
 while IFS= read -r file; do
   case "${file}" in
@@ -41,4 +43,3 @@ echo "[pre-commit] OpenAPI 계약 드리프트 검사 실행: yarn contracts:che
   cd front
   yarn contracts:check
 )
-

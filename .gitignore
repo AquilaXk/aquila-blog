@@ -7,8 +7,19 @@ deploy/homeserver/.env.prod
 
 # Agent-only docs (machine-facing)
 AGENTS.md
+CLAUDE.md
+GEMINI.md
+CURSOR.md
+COPILOT.md
 docs/AGENT-CONTEXT.md
 docs/agent/
+.cursor/
+.claude/
+.aider/
+.aider*
+.windsurf/
+.codex/
+.ai/
 
 # k6 output artifacts
 perf/k6/results/*.json

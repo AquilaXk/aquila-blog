@@ -128,7 +128,7 @@ const StyledMain = styled.main`
 
   /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
   @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
-    width: ${DESKTOP_LOCK_WIDTH_PX}px;
+    width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);
   }
 
   @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {

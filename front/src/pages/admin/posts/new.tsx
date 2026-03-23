@@ -8,7 +8,6 @@ import {
   CSSProperties,
   PointerEvent,
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -384,11 +383,19 @@ const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
 const markdownImageReplaceRegex = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const markdownLinkRegex = /\[(.*?)\]\((.*?)\)/g
 const fencedCodeRegex = /```[\s\S]*?```/g
+const mermaidFenceRegex = /```mermaid\b[\s\S]*?```/gi
 const inlineCodeRegex = /`([^`]+)`/g
 const markdownPunctuationRegex = /[#>*_~-]/g
 const whitespaceRegex = /\s+/g
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
+const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
+const EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH = 8_000
+const EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS = 2
+const EDITOR_PREVIEW_DELAY_LIGHT_MS = 120
+const EDITOR_PREVIEW_DELAY_MEDIUM_MS = 260
+const EDITOR_PREVIEW_DELAY_HEAVY_MS = 520
+const EDITOR_PREVIEW_DELAY_HEAVY_MERMAID_MS = 900
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
@@ -397,6 +404,21 @@ const PREVIEW_THUMBNAIL_ALLOWED_QUERY_REGEX = /^\?(?:[A-Za-z0-9._~/%=&-]*)$/
 const extractFirstMarkdownImage = (content: string): string => {
   const match = markdownImagePattern.exec(content)
   return match?.[1]?.trim() || ""
+}
+
+const countMarkdownMermaidBlocks = (content: string): number =>
+  (content.match(mermaidFenceRegex) || []).length
+
+const resolveEditorPreviewDelay = (contentLength: number, mermaidBlockCount: number): number => {
+  if (
+    contentLength >= EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH &&
+    mermaidBlockCount >= EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS
+  ) {
+    return EDITOR_PREVIEW_DELAY_HEAVY_MERMAID_MS
+  }
+  if (contentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return EDITOR_PREVIEW_DELAY_HEAVY_MS
+  if (contentLength >= 5_000 || mermaidBlockCount > 0) return EDITOR_PREVIEW_DELAY_MEDIUM_MS
+  return EDITOR_PREVIEW_DELAY_LIGHT_MS
 }
 
 const normalizeSafeImageUrl = (raw: string): string => {
@@ -1133,7 +1155,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
-  const deferredPostContent = useDeferredValue(postContent)
+  const [previewContent, setPreviewContent] = useState(postContent)
+  const [isPreviewSyncPending, setIsPreviewSyncPending] = useState(false)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
   const thumbnailImageFileInputRef = useRef<HTMLInputElement>(null)
   const [thumbnailImageFileName, setThumbnailImageFileName] = useState("")
@@ -1146,6 +1169,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
   const [mobileStudioStep, setMobileStudioStep] = useState<MobileStudioStep>("query")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
+
+  const postContentMermaidBlockCount = useMemo(
+    () => countMarkdownMermaidBlocks(postContent),
+    [postContent]
+  )
+  const previewContentLength = previewContent.length
+  const previewMermaidBlockCount = useMemo(
+    () => countMarkdownMermaidBlocks(previewContent),
+    [previewContent]
+  )
+  const isPreviewHeavyDocument = useMemo(() => {
+    if (previewContentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return true
+    if (
+      previewContentLength >= EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH &&
+      previewMermaidBlockCount >= EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS
+    ) {
+      return true
+    }
+    return false
+  }, [previewContentLength, previewMermaidBlockCount])
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -1258,6 +1301,22 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     media.addListener(sync)
     return () => media.removeListener(sync)
   }, [])
+
+  useEffect(() => {
+    if (previewContent === postContent) {
+      setIsPreviewSyncPending(false)
+      return
+    }
+
+    setIsPreviewSyncPending(true)
+    const delay = resolveEditorPreviewDelay(postContent.length, postContentMermaidBlockCount)
+    const timer = window.setTimeout(() => {
+      setPreviewContent(postContent)
+      setIsPreviewSyncPending(false)
+    }, delay)
+
+    return () => window.clearTimeout(timer)
+  }, [postContent, postContentMermaidBlockCount, previewContent])
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setListPage(sanitizeNumberInput(e.target.value))
@@ -4499,12 +4558,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <PaneHeader>
                 <div>
                   <PaneTitle>미리보기</PaneTitle>
-                  <PaneDescription>오른쪽에서 최종 렌더링 형태를 바로 확인합니다.</PaneDescription>
+                  <PaneDescription>
+                    {isPreviewSyncPending
+                      ? "입력 반영 중입니다. 잠시 뒤 미리보기가 자동 갱신됩니다."
+                      : "오른쪽에서 최종 렌더링 형태를 바로 확인합니다."}
+                  </PaneDescription>
                 </div>
-                <PaneChip>{imageCount} images</PaneChip>
+                <PaneChip>
+                  {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
+                </PaneChip>
               </PaneHeader>
               <PreviewCard>
-                <MarkdownRenderer content={deferredPostContent} />
+                {isPreviewHeavyDocument ? (
+                  <PreviewHintNotice>
+                    긴 본문 보호 모드입니다. Mermaid는 코드 블록 형태로 렌더해 입력 중 브라우저 멈춤을
+                    방지합니다.
+                    {isPreviewSyncPending
+                      ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
+                      : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
+                  </PreviewHintNotice>
+                ) : null}
+                <MarkdownRenderer
+                  content={previewContent}
+                  disableMermaid={isPreviewHeavyDocument}
+                />
               </PreviewCard>
             </PreviewPane>
           </EditorGrid>
@@ -7575,6 +7652,17 @@ const PreviewCard = styled.div`
   > .aq-markdown {
     margin-top: 0;
   }
+`
+
+const PreviewHintNotice = styled.div`
+  margin-bottom: 0.75rem;
+  padding: 0.52rem 0.62rem;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: ${({ theme }) => theme.colors.blue3};
+  color: ${({ theme }) => theme.colors.blue11};
+  font-size: 0.78rem;
+  line-height: 1.5;
 `
 
 const WriterFooterBar = styled.div`

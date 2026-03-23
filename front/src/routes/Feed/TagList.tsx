@@ -1,5 +1,9 @@
 import styled from "@emotion/styled"
-import { FEED_CHIP_GAP_PX } from "@shared/ui-tokens"
+import {
+  FEED_CHIP_GAP_PX,
+  FEED_TAG_RAIL_CHIP_MAX_PX,
+  FEED_TAG_RAIL_DESKTOP_MIN_PX,
+} from "@shared/ui-tokens"
 import { useRouter } from "next/router"
 import React, { memo, startTransition, useCallback } from "react"
 import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
@@ -130,7 +134,7 @@ const StyledWrapper = styled.div`
     max-height: calc(100dvh - var(--app-header-height, 56px) - 1.8rem);
     overflow: hidden;
 
-    @media (min-width: 1201px) {
+    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
       display: block;
     }
   }
@@ -256,7 +260,7 @@ const StyledWrapper = styled.div`
       height: 0;
     }
 
-    @media (min-width: 1201px) {
+    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
       display: none;
     }
   }
@@ -315,7 +319,7 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (min-width: 769px) and (max-width: 1200px) {
+  @media (min-width: 769px) and (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
     .chipRail button {
       min-height: 34px;
       padding: 0.32rem 0.82rem;

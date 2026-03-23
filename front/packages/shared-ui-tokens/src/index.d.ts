@@ -5,6 +5,14 @@ export declare const uiTokens: {
   feed: {
     chipGapPx: number
     searchFieldMinHeightPx: number
+    rail: {
+      chipMaxWidthPx: number
+      desktopMinWidthPx: number
+      widthPx: number
+      offsetMinPx: number
+      offsetMaxPx: number
+      offsetAnchorPx: number
+    }
     card: {
       titleLineHeight: number
       summaryLineHeight: number
@@ -17,6 +25,12 @@ export declare const uiTokens: {
 export declare const MOBILE_TOUCH_TARGET_MIN_PX: number
 export declare const FEED_CHIP_GAP_PX: number
 export declare const FEED_SEARCH_FIELD_MIN_HEIGHT_PX: number
+export declare const FEED_TAG_RAIL_CHIP_MAX_PX: number
+export declare const FEED_TAG_RAIL_DESKTOP_MIN_PX: number
+export declare const FEED_TAG_RAIL_WIDTH_PX: number
+export declare const FEED_TAG_RAIL_OFFSET_MIN_PX: number
+export declare const FEED_TAG_RAIL_OFFSET_MAX_PX: number
+export declare const FEED_TAG_RAIL_OFFSET_ANCHOR_PX: number
 export declare const FEED_CARD_TITLE_LINE_HEIGHT: number
 export declare const FEED_CARD_SUMMARY_LINE_HEIGHT: number
 export declare const FEED_CARD_SUMMARY_LINES: number

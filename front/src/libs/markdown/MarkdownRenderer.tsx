@@ -23,9 +23,10 @@ export { markdownGuide } from "src/libs/markdown/rendering"
 type Props = {
   content?: string
   contentHtml?: string
+  disableMermaid?: boolean
 }
 
-const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
+const MarkdownRenderer: FC<Props> = ({ content, contentHtml, disableMermaid = false }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const imageRenderOrderRef = useRef(0)
   const normalizedContent = useMemo(() => normalizeMarkdownForRender(content || ""), [content])
@@ -57,7 +58,7 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml }) => {
     [renderKeySeed]
   )
 
-  useMermaidEffect(rootRef, renderKey)
+  useMermaidEffect(rootRef, renderKey, !disableMermaid)
   useResponsiveTableEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
   usePrismEffect(rootRef, renderKey, true)

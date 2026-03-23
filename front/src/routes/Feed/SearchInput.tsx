@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import {
   FEED_SEARCH_FIELD_MIN_HEIGHT_PX,
+  FEED_TAG_RAIL_CHIP_MAX_PX,
   MOBILE_TOUCH_TARGET_MIN_PX,
 } from "@shared/ui-tokens"
 import React, { InputHTMLAttributes, Ref } from "react"
@@ -105,7 +106,7 @@ const StyledWrapper = styled.div`
         background: ${({ theme }) => theme.colors.gray3};
       }
 
-      @media (max-width: 1200px) {
+      @media (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
         display: none;
       }
     }

@@ -20,10 +20,15 @@ const isMermaidSource = (rawCode: string) => {
   return MERMAID_SOURCE_PATTERN.test(firstLine)
 }
 
-const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string) => {
+const useMermaidEffect = (
+  rootRef?: RefObject<HTMLElement>,
+  contentKey?: string,
+  enabled = true
+) => {
   const [scheme] = useScheme()
 
   useEffect(() => {
+    if (!enabled) return
     const root = rootRef?.current
     if (!root) return
 
@@ -514,7 +519,7 @@ const useMermaidEffect = (rootRef?: RefObject<HTMLElement>, contentKey?: string)
         scheduledRunFrame = null
       }
     }
-  }, [contentKey, rootRef, scheme])
+  }, [contentKey, enabled, rootRef, scheme])
 
   return
 }

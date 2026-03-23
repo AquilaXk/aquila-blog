@@ -9,12 +9,18 @@ type RumBody = {
   navigationType?: unknown
   path?: unknown
   attribution?: unknown
+  context?: unknown
 }
 
 type RumAttribution = {
   target?: unknown
   eventType?: unknown
   resourceUrl?: unknown
+}
+
+type RumContext = {
+  detailSection?: unknown
+  scrollY?: unknown
 }
 
 const LOG_SLOW_ONLY = (process.env.RUM_LOG_SLOW_ONLY || "true").toLowerCase() !== "false"
@@ -83,6 +89,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   toSafeString(rawAttribution.target, 160)
   toSafeString(rawAttribution.eventType, 48)
   toSafeString(rawAttribution.resourceUrl, 240)
+  const rawContext = (body.context || {}) as RumContext
+  const detailSection = toSafeString(rawContext.detailSection, 24)
+  const scrollY = toSafeNumber(rawContext.scrollY)
   toSafeString(body.id, 120)
   toSafeString(body.path, 260)
 
@@ -94,7 +103,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!LOG_SLOW_ONLY || normalizedRating !== "good") {
     const metricLabel = toMetricLabel(name)
     const ratingLabel = toRatingLabel(normalizedRating)
-    console.info("[rum:vitals] metric=%s rating=%s", metricLabel, ratingLabel)
+    if (detailSection) {
+      console.info(
+        "[rum:vitals] metric=%s rating=%s section=%s scrollY=%s",
+        metricLabel,
+        ratingLabel,
+        detailSection,
+        scrollY ?? -1
+      )
+    } else {
+      console.info("[rum:vitals] metric=%s rating=%s", metricLabel, ratingLabel)
+    }
   }
 
   return res.status(204).end()

@@ -1,6 +1,13 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
+import {
+  FEED_TAG_RAIL_DESKTOP_MIN_PX,
+  FEED_TAG_RAIL_OFFSET_ANCHOR_PX,
+  FEED_TAG_RAIL_OFFSET_MAX_PX,
+  FEED_TAG_RAIL_OFFSET_MIN_PX,
+  FEED_TAG_RAIL_WIDTH_PX,
+} from "@shared/ui-tokens"
 import SearchInput from "./SearchInput"
 import PinnedPosts from "./PostList/PinnedPosts"
 import PostList from "./PostList"
@@ -698,7 +705,7 @@ const FeedExplorer = () => {
           onCompositionEnd={() => setIsComposing(false)}
         />
       </ExplorerCard>
-      <FeedBody>
+      <FeedBody data-sticky-rail-safe="true">
         <aside className="tagColumn">
           <TagList />
         </aside>
@@ -751,6 +758,10 @@ const ExplorerCard = styled.section`
 `
 
 const FeedBody = styled.section`
+  --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
+  --feed-tag-rail-left: ${FEED_TAG_RAIL_OFFSET_MIN_PX}px;
+  --feed-tag-rail-safe-gap: 0.8rem;
+  --feed-tag-rail-overlap: 0px;
   min-width: 0;
   position: relative;
   overflow: visible;
@@ -763,7 +774,7 @@ const FeedBody = styled.section`
     min-width: 0;
   }
 
-  @media (min-width: 1201px) {
+  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
     .tagColumn {
       position: absolute;
       top: 0;
@@ -771,7 +782,17 @@ const FeedBody = styled.section`
     }
   }
 
-  @media (min-width: 1201px) {
+  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    --feed-tag-rail-left: clamp(
+      ${FEED_TAG_RAIL_OFFSET_MIN_PX}px,
+      calc(${FEED_TAG_RAIL_OFFSET_ANCHOR_PX}px - 50vw),
+      ${FEED_TAG_RAIL_OFFSET_MAX_PX}px
+    );
+    --feed-tag-rail-overlap: max(
+      0px,
+      calc(var(--feed-tag-rail-width) + var(--feed-tag-rail-left) + var(--feed-tag-rail-safe-gap))
+    );
+
     .tagColumn {
       /*
        * Velog-like vertical rail exposure:
@@ -779,9 +800,17 @@ const FeedBody = styled.section`
        * - keeps rail inside viewport without clipping on first visible range
        * - converges to fixed -216px offset on wider screens
        */
-      left: clamp(-216px, calc(584px - 50vw), -56px);
-      width: 184px;
-      min-width: 184px;
+      left: var(--feed-tag-rail-left);
+      width: var(--feed-tag-rail-width);
+      min-width: var(--feed-tag-rail-width);
+    }
+
+    .postColumn {
+      /*
+       * 절대 배치 레일이 본문 위로 침범하는 폭만큼 본문 시작점을 보정한다.
+       * (충분히 넓은 뷰포트에서는 overlap=0)
+       */
+      margin-left: var(--feed-tag-rail-overlap);
     }
   }
 `

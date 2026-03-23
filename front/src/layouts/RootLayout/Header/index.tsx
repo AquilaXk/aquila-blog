@@ -78,16 +78,18 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
     if (!wrapper) return
 
     const root = document.documentElement
+    let lastHeight = 0
+
     const syncHeaderHeight = () => {
       const measured = Math.round(wrapper.getBoundingClientRect().height)
       if (measured <= 0) return
+      if (measured === lastHeight) return
+      lastHeight = measured
       root.style.setProperty("--app-header-height", `${measured}px`)
     }
 
-    syncHeaderHeight()
-
     let rafId: number | null = null
-    const handleResize = () => {
+    const scheduleSync = () => {
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
       }
@@ -97,20 +99,44 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
       })
     }
 
+    syncHeaderHeight()
+    scheduleSync()
+
+    const handleResize = () => scheduleSync()
+    const handleScroll = () => scheduleSync()
+
     window.addEventListener("resize", handleResize, { passive: true })
+    window.addEventListener("orientationchange", handleResize)
+    window.addEventListener("scroll", handleScroll, { passive: true })
 
     let observer: ResizeObserver | null = null
     if (typeof ResizeObserver !== "undefined") {
       observer = new ResizeObserver(() => {
-        syncHeaderHeight()
+        scheduleSync()
       })
       observer.observe(wrapper)
     }
 
+    const fontSet = document.fonts
+    const handleFontLoadingDone = () => scheduleSync()
+    if (fontSet) {
+      if (typeof fontSet.addEventListener === "function") {
+        fontSet.addEventListener("loadingdone", handleFontLoadingDone)
+      }
+      void fontSet.ready.then(() => {
+        scheduleSync()
+      }).catch(() => {})
+    }
+
     return () => {
       window.removeEventListener("resize", handleResize)
+      window.removeEventListener("orientationchange", handleResize)
+      window.removeEventListener("scroll", handleScroll)
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
+      }
+      if (fontSet && typeof fontSet.removeEventListener === "function") {
+        fontSet.removeEventListener("loadingdone", handleFontLoadingDone)
       }
       observer?.disconnect()
     }

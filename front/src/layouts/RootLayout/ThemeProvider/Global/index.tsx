@@ -45,6 +45,11 @@ export const Global = () => {
           html {
             scrollbar-gutter: stable;
           }
+
+          [data-sticky-rail-safe="true"] {
+            overflow: visible !important;
+            overflow-x: visible !important;
+          }
         }
 
         @supports not (overflow: clip) {

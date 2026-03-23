@@ -11,11 +11,23 @@
 - 모바일 터치 타깃 최소: `MOBILE_TOUCH_TARGET_MIN_PX=34`
 - 피드 검색 필드 높이: `FEED_SEARCH_FIELD_MIN_HEIGHT_PX=36`
 - 태그 칩 간격: `FEED_CHIP_GAP_PX=6`
+- 태그 레일 전환/오프셋:
+  - `FEED_TAG_RAIL_CHIP_MAX_PX=1200`
+  - `FEED_TAG_RAIL_DESKTOP_MIN_PX=1201`
+  - `FEED_TAG_RAIL_WIDTH_PX=184`
+  - `FEED_TAG_RAIL_OFFSET_MIN_PX=-216`
+  - `FEED_TAG_RAIL_OFFSET_MAX_PX=-56`
+  - `FEED_TAG_RAIL_OFFSET_ANCHOR_PX=584`
 - 카드 타이포:
   - 제목 줄간: `FEED_CARD_TITLE_LINE_HEIGHT`
   - 요약 줄간: `FEED_CARD_SUMMARY_LINE_HEIGHT`
   - 요약 줄 수: `FEED_CARD_SUMMARY_LINES`
   - 메타 폰트: `FEED_CARD_META_FONT_SIZE_REM`
+
+## 상세 레일/TOC 토큰성 규약
+- sticky top 기준은 고정 rem이 아니라 `--app-header-height + 16px`를 사용한다.
+- 상세 좌/우 레일은 JS 하이브리드 sticky(absolute↔fixed↔absolute)로 동작한다.
+- TOC active는 heading top 단순 비교가 아니라 intersection ratio 기반이다.
 
 ## 적용 원칙
 - 새 UI는 하드코딩된 숫자보다 토큰 사용을 우선한다.
@@ -27,4 +39,3 @@
 - `yarn test:e2e:perf`
 - `yarn test:e2e:a11y`
 - 모바일 overflow 관련 회귀는 `front/e2e/mobile-layout.spec.ts` 기준으로 확인한다.
-

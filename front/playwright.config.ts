@@ -1,9 +1,18 @@
 import { defineConfig, devices } from "@playwright/test"
 
+if (process.env.FORCE_COLOR && Object.prototype.hasOwnProperty.call(process.env, "NO_COLOR")) {
+  delete process.env.NO_COLOR
+}
+
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const useWebServer = process.env.PLAYWRIGHT_USE_WEBSERVER !== "false"
 const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
 const useLiveFailFast = process.env.PLAYWRIGHT_LIVE_FAIL_FAST === "true"
+const inheritedEnv = { ...process.env }
+
+if (inheritedEnv.FORCE_COLOR && Object.prototype.hasOwnProperty.call(inheritedEnv, "NO_COLOR")) {
+  delete inheritedEnv.NO_COLOR
+}
 
 const defaultProjects = [
   {
@@ -44,7 +53,7 @@ export default defineConfig({
         url: baseURL,
         cwd: __dirname,
         env: {
-          ...process.env,
+          ...inheritedEnv,
           NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:3000",
           BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:1",
         },

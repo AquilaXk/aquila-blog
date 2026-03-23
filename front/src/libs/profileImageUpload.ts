@@ -30,6 +30,13 @@ export type PreparedImageUpload = {
   height: number
 }
 
+export type ProfileImageEditTransform = {
+  focusX: number
+  focusY: number
+  zoom: number
+  outputSize?: number
+}
+
 const IMAGE_UPLOAD_POLICIES: Record<ImageUploadTarget, ImageUploadPolicy> = {
   profile: {
     // 실무 기준: 프로필 이미지는 2MB 이내 + 긴 변 1024px 제한.
@@ -64,6 +71,10 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
 
 export const PROFILE_IMAGE_UPLOAD_RULE_LABEL = "JPG/PNG/GIF/WebP, 자동 최적화 후 최대 2MB"
 export const POST_IMAGE_UPLOAD_RULE_LABEL = "JPG/PNG/GIF/WebP, 자동 최적화 후 최대 8MB"
+export const PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X = 50
+export const PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y = 38
+export const PROFILE_IMAGE_EDIT_MIN_ZOOM = 1
+export const PROFILE_IMAGE_EDIT_MAX_ZOOM = 2.8
 
 const normalizeMimeType = (raw: string): string =>
   raw
@@ -80,6 +91,16 @@ const hasAllowedExtension = (fileName: string): boolean => {
 }
 
 const bytesToMbText = (bytes: number): string => `${(bytes / MEGABYTE).toFixed(1)}MB`
+
+export const clampProfileImageEditFocus = (value: number): number => {
+  if (!Number.isFinite(value)) return PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X
+  return Math.min(100, Math.max(0, value))
+}
+
+export const clampProfileImageEditZoom = (value: number): number => {
+  if (!Number.isFinite(value)) return PROFILE_IMAGE_EDIT_MIN_ZOOM
+  return Math.min(PROFILE_IMAGE_EDIT_MAX_ZOOM, Math.max(PROFILE_IMAGE_EDIT_MIN_ZOOM, value))
+}
 
 const ensureFileIsUploadable = (file: File, target: ImageUploadTarget): void => {
   const policy = IMAGE_UPLOAD_POLICIES[target]
@@ -315,6 +336,60 @@ const optimizeImageByPolicy = async (
 const prepareImageForUpload = async (file: File, target: ImageUploadTarget): Promise<PreparedImageUpload> => {
   ensureFileIsUploadable(file, target)
   return await optimizeImageByPolicy(file, IMAGE_UPLOAD_POLICIES[target])
+}
+
+export const buildProfileImageEditedFile = async (
+  sourceFile: File,
+  transform: ProfileImageEditTransform
+): Promise<File> => {
+  ensureFileIsUploadable(sourceFile, "profile")
+
+  const image = await loadImageFromFile(sourceFile)
+  const outputSize = Math.max(320, Math.round(transform.outputSize || 1024))
+  const zoom = clampProfileImageEditZoom(transform.zoom)
+  const focusX = clampProfileImageEditFocus(transform.focusX)
+  const focusY = clampProfileImageEditFocus(transform.focusY)
+
+  const sourceWidth = image.naturalWidth || image.width
+  const sourceHeight = image.naturalHeight || image.height
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    throw new Error("프로필 편집에 사용할 이미지 해상도를 확인할 수 없습니다.")
+  }
+
+  const sourceAspect = sourceWidth / sourceHeight
+  const baseDrawWidth = sourceAspect >= 1 ? outputSize * sourceAspect : outputSize
+  const baseDrawHeight = sourceAspect >= 1 ? outputSize : outputSize / sourceAspect
+  const drawWidth = baseDrawWidth * zoom
+  const drawHeight = baseDrawHeight * zoom
+
+  const centerX = (focusX / 100) * outputSize
+  const centerY = (focusY / 100) * outputSize
+  const offsetX = centerX - drawWidth / 2
+  const offsetY = centerY - drawHeight / 2
+
+  const canvas = document.createElement("canvas")
+  canvas.width = outputSize
+  canvas.height = outputSize
+
+  const context = canvas.getContext("2d", { alpha: true })
+  if (!context) {
+    throw new Error("프로필 편집 캔버스를 준비하지 못했습니다.")
+  }
+
+  context.clearRect(0, 0, outputSize, outputSize)
+  context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight)
+
+  const webpBlob = isCanvasEncodeSupported("image/webp") ? await canvasToBlob(canvas, "image/webp", 0.92) : null
+  const fallbackBlob = webpBlob || (await canvasToBlob(canvas, "image/jpeg", 0.92))
+  if (!fallbackBlob) {
+    throw new Error("프로필 편집 이미지를 생성하지 못했습니다.")
+  }
+
+  const mimeType = webpBlob ? "image/webp" : "image/jpeg"
+  const extension = webpBlob ? "webp" : "jpg"
+  const baseName = sanitizeFileBaseName(sourceFile.name)
+  const fileName = `${baseName}-profile-edit.${extension}`
+  return new File([fallbackBlob], fileName, { type: mimeType })
 }
 
 export const prepareProfileImageForUpload = async (file: File): Promise<PreparedImageUpload> =>

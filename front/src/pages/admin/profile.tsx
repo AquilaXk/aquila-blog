@@ -1,7 +1,8 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
+import Image from "next/image"
 import Link from "next/link"
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import AppIcon, { IconName } from "src/components/icons/AppIcon"
@@ -21,10 +22,16 @@ import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import {
+  buildProfileImageEditedFile,
   buildImageOptimizationSummary,
+  clampProfileImageEditFocus,
+  clampProfileImageEditZoom,
   normalizeProfileImageUploadError,
   prepareProfileImageForUpload,
-  PROFILE_IMAGE_UPLOAD_RULE_LABEL,
+  PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X,
+  PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y,
+  PROFILE_IMAGE_EDIT_MAX_ZOOM,
+  PROFILE_IMAGE_EDIT_MIN_ZOOM,
 } from "src/libs/profileImageUpload"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -36,6 +43,20 @@ type NoticeTone = "idle" | "loading" | "success" | "error"
 type MemberMe = AuthMember
 type LinkSectionType = "service" | "contact"
 type OpenIconPicker = `${LinkSectionType}:${number}` | null
+type ProfileImageEditorDragState = {
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startFocusX: number
+  startFocusY: number
+}
+
+const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 
 const buildMemberRevisionKey = (member: MemberMe) =>
   [
@@ -143,11 +164,24 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     resolveContactLinks(initialMember)
   )
   const [profileImageFileName, setProfileImageFileName] = useState("")
+  const [isProfileImageEditorOpen, setIsProfileImageEditorOpen] = useState(false)
+  const [profileImageDraftFile, setProfileImageDraftFile] = useState<File | null>(null)
+  const [profileImageDraftPreviewUrl, setProfileImageDraftPreviewUrl] = useState("")
+  const [profileImageDraftFocusX, setProfileImageDraftFocusX] = useState(PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X)
+  const [profileImageDraftFocusY, setProfileImageDraftFocusY] = useState(PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y)
+  const [profileImageDraftZoom, setProfileImageDraftZoom] = useState(PROFILE_IMAGE_EDIT_MIN_ZOOM)
+  const [isProfileImageDraftDragging, setIsProfileImageDraftDragging] = useState(false)
+  const [profileImageDraftNotice, setProfileImageDraftNotice] = useState<{ tone: NoticeTone; text: string }>({
+    tone: "idle",
+    text: "",
+  })
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(
     () => (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
   )
   const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
+  const profileImageDraftFrameRef = useRef<HTMLDivElement>(null)
+  const profileImageDraftDragRef = useRef<ProfileImageEditorDragState | null>(null)
   const lastSyncedRevisionRef = useRef<string>(buildMemberRevisionKey(initialMember))
 
   const syncProfileState = useCallback((member: MemberMe) => {
@@ -203,6 +237,23 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       document.removeEventListener("keydown", handleEscape)
     }
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (profileImageDraftPreviewUrl) {
+        URL.revokeObjectURL(profileImageDraftPreviewUrl)
+      }
+    }
+  }, [profileImageDraftPreviewUrl])
+
+  useEffect(() => {
+    if (!isProfileImageEditorOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isProfileImageEditorOpen])
 
   const toPickerKey = useCallback((section: LinkSectionType, index: number): OpenIconPicker => {
     return `${section}:${index}`
@@ -264,49 +315,189 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
   }, [])
 
-  const handleUploadMemberProfileImage = async (selectedFile?: File) => {
-    const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
+  const clearProfileImageDraft = useCallback(() => {
+    profileImageDraftDragRef.current = null
+    setIsProfileImageDraftDragging(false)
+    setProfileImageDraftFile(null)
+    setProfileImageDraftFocusX(PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X)
+    setProfileImageDraftFocusY(PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y)
+    setProfileImageDraftZoom(PROFILE_IMAGE_EDIT_MIN_ZOOM)
+    setProfileImageDraftNotice({ tone: "idle", text: "" })
+    setProfileImageDraftPreviewUrl((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return ""
+    })
+  }, [])
+
+  const openProfileImageEditor = useCallback(() => {
+    setIsProfileImageEditorOpen(true)
+    setProfileImageDraftNotice({ tone: "idle", text: "" })
+  }, [])
+
+  const closeProfileImageEditor = useCallback(() => {
+    if (loadingKey === "upload") return
+    setIsProfileImageEditorOpen(false)
+    setIsProfileImageDraftDragging(false)
+  }, [loadingKey])
+
+  const handleDraftFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
     if (!file) return
-    if (!sessionMember?.id) return
+
+    setProfileImageFileName(file.name)
+    setProfileImageDraftFile(file)
+    setProfileImageDraftFocusX(PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X)
+    setProfileImageDraftFocusY(PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y)
+    setProfileImageDraftZoom(PROFILE_IMAGE_EDIT_MIN_ZOOM)
+    setProfileImageDraftNotice({ tone: "idle", text: "" })
+    setProfileImageDraftPreviewUrl((prev) => {
+      if (prev) {
+        URL.revokeObjectURL(prev)
+      }
+      return URL.createObjectURL(file)
+    })
+  }, [])
+
+  const handleProfileImageDraftPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!profileImageDraftFile) return
+      const frame = profileImageDraftFrameRef.current
+      if (!frame) return
+      if (event.button !== 0) return
+
+      event.preventDefault()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      setIsProfileImageDraftDragging(true)
+      profileImageDraftDragRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startFocusX: profileImageDraftFocusX,
+        startFocusY: profileImageDraftFocusY,
+      }
+    },
+    [profileImageDraftFile, profileImageDraftFocusX, profileImageDraftFocusY]
+  )
+
+  const handleProfileImageDraftPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = profileImageDraftDragRef.current
+      const frame = profileImageDraftFrameRef.current
+      if (!dragState || !frame || dragState.pointerId !== event.pointerId) return
+
+      event.preventDefault()
+      const deltaX = event.clientX - dragState.startClientX
+      const deltaY = event.clientY - dragState.startClientY
+      const zoomScale = Math.max(profileImageDraftZoom, PROFILE_IMAGE_EDIT_MIN_ZOOM)
+      const nextFocusX = clampProfileImageEditFocus(dragState.startFocusX - (deltaX / frame.clientWidth) * (100 / zoomScale))
+      const nextFocusY = clampProfileImageEditFocus(dragState.startFocusY - (deltaY / frame.clientHeight) * (100 / zoomScale))
+      setProfileImageDraftFocusX(nextFocusX)
+      setProfileImageDraftFocusY(nextFocusY)
+    },
+    [profileImageDraftZoom]
+  )
+
+  const handleProfileImageDraftPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = profileImageDraftDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+    profileImageDraftDragRef.current = null
+    setIsProfileImageDraftDragging(false)
+  }, [])
+
+  const requestProfileImageUpload = useCallback(async (memberId: number, file: File): Promise<Response> => {
+    const formData = new FormData()
+    formData.append("file", file, file.name)
+    return await fetch(`${getApiBaseUrl()}/member/api/v1/adm/members/${memberId}/profileImageFile`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    })
+  }, [])
+
+  const handleUploadMemberProfileImage = useCallback(async (selectedFile?: File): Promise<boolean> => {
+    const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
+    const memberId = sessionMember?.id
+    if (!file) return false
+    if (!memberId) return false
 
     try {
       setLoadingKey("upload")
       setImageNotice({ tone: "loading", text: "프로필 이미지를 최적화하고 업로드하고 있습니다..." })
       const prepared = await prepareProfileImageForUpload(file)
+      let uploadResponse = await requestProfileImageUpload(memberId, prepared.file)
 
-      const formData = new FormData()
-      formData.append("file", prepared.file, prepared.file.name)
+      if (uploadResponse.status === 409) {
+        const firstConflictBody = await parseResponseErrorBody(uploadResponse)
+        const retryMessage = "요청 충돌을 감지해 자동 재시도 중입니다..."
+        setImageNotice({ tone: "loading", text: retryMessage })
+        setProfileImageDraftNotice({ tone: "loading", text: retryMessage })
+        await sleep(PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS)
+        uploadResponse = await requestProfileImageUpload(memberId, prepared.file)
 
-      const uploadResponse = await fetch(
-        `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: formData,
+        if (!uploadResponse.ok) {
+          const retryBody = await parseResponseErrorBody(uploadResponse)
+          throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${retryBody || firstConflictBody}`.trim())
         }
-      )
-
-      if (!uploadResponse.ok) {
+      } else if (!uploadResponse.ok) {
         const body = await parseResponseErrorBody(uploadResponse)
         throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${body}`.trim())
       }
 
       const uploadData = (await uploadResponse.json()) as MemberMe
       syncProfileState(uploadData)
+      const successMessage = `프로필 이미지가 저장되었습니다. ${buildImageOptimizationSummary(prepared)}`
       setImageNotice({
         tone: "success",
-        text: `프로필 이미지가 저장되었습니다. ${buildImageOptimizationSummary(prepared)}`,
+        text: successMessage,
       })
+      setProfileImageDraftNotice({ tone: "success", text: successMessage })
+      return true
     } catch (error) {
       const message = normalizeProfileImageUploadError(error)
       setImageNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
+      setProfileImageDraftNotice({ tone: "error", text: `프로필 이미지 저장 실패: ${message}` })
+      return false
     } finally {
       if (profileImageFileInputRef.current) {
         profileImageFileInputRef.current.value = ""
       }
       setLoadingKey("")
     }
-  }
+  }, [requestProfileImageUpload, sessionMember?.id, syncProfileState])
+
+  const handleApplyProfileImageDraft = useCallback(async () => {
+    if (!profileImageDraftFile) {
+      setProfileImageDraftNotice({ tone: "error", text: "먼저 프로필 이미지를 선택해주세요." })
+      return
+    }
+
+    try {
+      setProfileImageDraftNotice({ tone: "loading", text: "편집 결과를 반영해 업로드하고 있습니다..." })
+      const editedFile = await buildProfileImageEditedFile(profileImageDraftFile, {
+        focusX: profileImageDraftFocusX,
+        focusY: profileImageDraftFocusY,
+        zoom: profileImageDraftZoom,
+      })
+      const uploaded = await handleUploadMemberProfileImage(editedFile)
+      if (uploaded) {
+        setIsProfileImageEditorOpen(false)
+        clearProfileImageDraft()
+      }
+    } catch (error) {
+      const message = normalizeProfileImageUploadError(error)
+      setProfileImageDraftNotice({ tone: "error", text: message })
+    }
+  }, [
+    clearProfileImageDraft,
+    handleUploadMemberProfileImage,
+    profileImageDraftFile,
+    profileImageDraftFocusX,
+    profileImageDraftFocusY,
+    profileImageDraftZoom,
+  ])
 
   const handleUpdateMemberProfileCard = async () => {
     if (!sessionMember?.id) return
@@ -449,20 +640,16 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             type="file"
             accept="image/*"
             style={{ display: "none" }}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => {
-              const file = e.target.files?.[0]
-              setProfileImageFileName(file?.name || "")
-              if (file) void handleUploadMemberProfileImage(file)
-            }}
+            onChange={handleDraftFileChange}
           />
           <PrimaryButton
             type="button"
-            onClick={() => profileImageFileInputRef.current?.click()}
+            onClick={openProfileImageEditor}
             disabled={loadingKey === "upload"}
           >
-            {loadingKey === "upload" ? "업로드 중..." : "프로필 이미지 선택"}
+            {loadingKey === "upload" ? "업로드 중..." : "프로필 이미지 편집"}
           </PrimaryButton>
-          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : PROFILE_IMAGE_UPLOAD_RULE_LABEL}</Hint>
+          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "편집 모달에서 파일 선택 후 저장하세요."}</Hint>
           {imageNotice.text ? <Notice data-tone={imageNotice.tone}>{imageNotice.text}</Notice> : null}
         </PreviewCard>
 
@@ -715,6 +902,103 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </PrimaryButton>
         </StickySaveActions>
       </StickySaveBar>
+
+      {isProfileImageEditorOpen ? (
+        <ModalOverlay
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeProfileImageEditor()
+            }
+          }}
+        >
+          <ModalCard role="dialog" aria-modal="true" aria-label="프로필 이미지 편집">
+            <ModalHeader>
+              <div>
+                <h2>프로필 이미지 편집</h2>
+                <p>파일 선택 후 드래그/확대 축소로 표시 영역을 조정해 저장할 수 있습니다.</p>
+              </div>
+              <ModalCloseButton type="button" onClick={closeProfileImageEditor} disabled={loadingKey === "upload"}>
+                <AppIcon name="close" />
+              </ModalCloseButton>
+            </ModalHeader>
+
+            <ModalConstraintList>
+              <li>지원 형식: JPG/PNG/GIF/WebP</li>
+              <li>프로필 업로드 기준: 자동 최적화 후 최대 2MB</li>
+              <li>움직이는 GIF는 애니메이션 보존을 위해 2MB 이하 원본만 허용</li>
+            </ModalConstraintList>
+
+            <ModalActions>
+              <Button type="button" onClick={() => profileImageFileInputRef.current?.click()} disabled={loadingKey === "upload"}>
+                파일 선택
+              </Button>
+              <Button type="button" onClick={clearProfileImageDraft} disabled={loadingKey === "upload"}>
+                편집값 초기화
+              </Button>
+            </ModalActions>
+
+            {profileImageDraftPreviewUrl ? (
+              <>
+                <ModalEditorFrame
+                  ref={profileImageDraftFrameRef}
+                  data-has-image="true"
+                  data-dragging={isProfileImageDraftDragging ? "true" : "false"}
+                  onPointerDown={handleProfileImageDraftPointerDown}
+                  onPointerMove={handleProfileImageDraftPointerMove}
+                  onPointerUp={handleProfileImageDraftPointerUp}
+                  onPointerCancel={handleProfileImageDraftPointerUp}
+                >
+                  <Image
+                    src={profileImageDraftPreviewUrl}
+                    alt="프로필 편집 미리보기"
+                    fill
+                    unoptimized
+                    sizes="(max-width: 768px) 100vw, 360px"
+                    style={{
+                      objectFit: "cover",
+                      objectPosition: `${profileImageDraftFocusX}% ${profileImageDraftFocusY}%`,
+                      transform: `scale(${profileImageDraftZoom})`,
+                    }}
+                    draggable={false}
+                  />
+                </ModalEditorFrame>
+
+                <ModalSliderWrap>
+                  <label htmlFor="profile-image-zoom">확대/축소</label>
+                  <input
+                    id="profile-image-zoom"
+                    type="range"
+                    min={PROFILE_IMAGE_EDIT_MIN_ZOOM}
+                    max={PROFILE_IMAGE_EDIT_MAX_ZOOM}
+                    step={0.01}
+                    value={profileImageDraftZoom}
+                    onChange={(event) => setProfileImageDraftZoom(clampProfileImageEditZoom(Number(event.target.value)))}
+                  />
+                  <span>{profileImageDraftZoom.toFixed(2)}x</span>
+                </ModalSliderWrap>
+              </>
+            ) : (
+              <ModalEmptyState>먼저 프로필 이미지를 선택해주세요.</ModalEmptyState>
+            )}
+
+            {profileImageDraftNotice.text ? <Notice data-tone={profileImageDraftNotice.tone}>{profileImageDraftNotice.text}</Notice> : null}
+
+            <ModalFooter>
+              <Button type="button" onClick={closeProfileImageEditor} disabled={loadingKey === "upload"}>
+                취소
+              </Button>
+              <PrimaryButton
+                type="button"
+                onClick={() => void handleApplyProfileImageDraft()}
+                disabled={loadingKey === "upload" || !profileImageDraftFile}
+              >
+                {loadingKey === "upload" ? "저장 중..." : "편집 결과 저장"}
+              </PrimaryButton>
+            </ModalFooter>
+          </ModalCard>
+        </ModalOverlay>
+      ) : null}
     </Main>
   )
 }
@@ -1004,6 +1288,151 @@ const Notice = styled.div`
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
   }
+`
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  background: rgba(6, 10, 16, 0.78);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+`
+
+const ModalCard = styled.section`
+  width: min(640px, 100%);
+  max-height: min(90vh, 860px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.42);
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+`
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+
+  h2 {
+    margin: 0;
+    font-size: 1.18rem;
+    line-height: 1.32;
+  }
+
+  p {
+    margin: 0.4rem 0 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+`
+
+const ModalCloseButton = styled.button`
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`
+
+const ModalConstraintList = styled.ul`
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.3rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.84rem;
+  line-height: 1.5;
+`
+
+const ModalActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+`
+
+const ModalEditorFrame = styled.div`
+  width: min(100%, 360px);
+  justify-self: center;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+
+  &[data-dragging="true"] {
+    cursor: grabbing;
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+    transform-origin: center;
+    transition: transform 0.08s linear, object-position 0.08s linear;
+  }
+`
+
+const ModalSliderWrap = styled.div`
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+
+  label {
+    font-size: 0.86rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 700;
+  }
+
+  input {
+    width: 100%;
+  }
+
+  span {
+    font-size: 0.82rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-variant-numeric: tabular-nums;
+    min-width: 3.4rem;
+    text-align: right;
+  }
+`
+
+const ModalEmptyState = styled.div`
+  border-radius: 10px;
+  border: 1px dashed ${({ theme }) => theme.colors.gray6};
+  padding: 1.05rem;
+  color: ${({ theme }) => theme.colors.gray11};
+  text-align: center;
+  font-size: 0.86rem;
+`
+
+const ModalFooter = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 `
 
 const FieldGrid = styled.div`

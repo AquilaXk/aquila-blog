@@ -196,6 +196,7 @@ const LIST_SORT_OPTIONS = [
   { value: "CREATED_AT", label: "최신순" },
   { value: "CREATED_AT_ASC", label: "오래된순" },
 ] as const
+const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 
 const TAG_TONES = [
   {
@@ -729,6 +730,11 @@ const parseResponseErrorBody = async (response: Response): Promise<string> => {
     return text
   }
 }
+
+const waitFor = (ms: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
 
 const escapePipes = (value: string) => value.replace(/[\\|]/g, "\\$&")
 
@@ -2187,20 +2193,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setLoadingKey("admMemberProfileImgUpdate")
       setProfileImageNotice({ tone: "loading", text: "프로필 이미지를 최적화하고 업로드하고 있습니다..." })
       const prepared = await prepareProfileImageForUpload(file)
+      const requestUpload = async () => {
+        const formData = new FormData()
+        formData.append("file", prepared.file, prepared.file.name)
+        return await fetch(
+          `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
+          {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          }
+        )
+      }
 
-      const formData = new FormData()
-      formData.append("file", prepared.file, prepared.file.name)
-
-      const uploadResponse = await fetch(
-        `${getApiBaseUrl()}/member/api/v1/adm/members/${sessionMember.id}/profileImageFile`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: formData,
+      let uploadResponse = await requestUpload()
+      if (uploadResponse.status === 409) {
+        const firstConflictBody = await parseResponseErrorBody(uploadResponse)
+        setProfileImageNotice({ tone: "loading", text: "요청 충돌을 감지해 자동 재시도 중입니다..." })
+        await waitFor(PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS)
+        uploadResponse = await requestUpload()
+        if (!uploadResponse.ok) {
+          const retryBody = await parseResponseErrorBody(uploadResponse)
+          throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${retryBody || firstConflictBody}`.trim())
         }
-      )
-
-      if (!uploadResponse.ok) {
+      } else if (!uploadResponse.ok) {
         const body = await parseResponseErrorBody(uploadResponse)
         throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${body}`.trim())
       }
@@ -2648,16 +2664,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const uploadPostImageFile = async (file: File): Promise<UploadPostImageResult> => {
     const prepared = await preparePostImageForUpload(file)
-    const formData = new FormData()
-    formData.append("file", prepared.file, prepared.file.name)
+    const requestUpload = async () => {
+      const formData = new FormData()
+      formData.append("file", prepared.file, prepared.file.name)
+      return await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      })
+    }
 
-    const response = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/images`, {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    })
-
-    if (!response.ok) {
+    let response = await requestUpload()
+    if (response.status === 409) {
+      const firstConflictBody = await parseResponseErrorBody(response)
+      await waitFor(PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS)
+      response = await requestUpload()
+      if (!response.ok) {
+        const retryBody = await parseResponseErrorBody(response)
+        throw new Error(`이미지 업로드 실패 (${response.status}): ${retryBody || firstConflictBody}`)
+      }
+    } else if (!response.ok) {
       const body = await parseResponseErrorBody(response)
       throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
     }

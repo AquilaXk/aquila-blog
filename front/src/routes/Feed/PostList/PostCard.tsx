@@ -493,6 +493,7 @@ const StyledWrapper = styled(Link)`
         gap: 0.42rem;
         align-items: center;
         margin-top: 0.66rem;
+        padding-bottom: 0.95rem;
         color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.5;
@@ -658,10 +659,11 @@ const StyledWrapper = styled(Link)`
 
           > .meta {
             margin-top: 0.7rem;
+            padding-bottom: 0.95rem;
           }
 
           > .footer {
-            margin-top: 0.7rem;
+            margin-top: 0;
             padding-top: 0.58rem;
           }
         }

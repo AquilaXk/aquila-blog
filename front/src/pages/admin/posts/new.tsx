@@ -505,6 +505,9 @@ const readThumbnailSourceSizeFromUrl = (url: string): Promise<ThumbnailSourceSiz
     image.src = url
   })
 
+const stripSummaryPrefix = (value: string) =>
+  value.replace(/^\s*(?:요약|summary)\s*[:：]\s*/i, "").trim()
+
 const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
   const normalized = content
     .replace(fencedCodeRegex, " ")
@@ -517,9 +520,10 @@ const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LEN
   const compactRaw = content.replace(whitespaceRegex, " ").trim()
   const relaxedNormalized = compactRaw.replace(markdownPunctuationRegex, " ").replace(whitespaceRegex, " ").trim()
   const fallbackSummary = normalized || relaxedNormalized || compactRaw || "요약을 생성할 수 없습니다."
+  const sanitizedSummary = stripSummaryPrefix(fallbackSummary) || fallbackSummary
 
-  if (fallbackSummary.length <= maxLength) return fallbackSummary
-  return `${fallbackSummary.slice(0, maxLength).trim()}...`
+  if (sanitizedSummary.length <= maxLength) return sanitizedSummary
+  return `${sanitizedSummary.slice(0, maxLength).trim()}...`
 }
 
 const normalizeRecommendedTags = (value: unknown, maxTags: number) => {

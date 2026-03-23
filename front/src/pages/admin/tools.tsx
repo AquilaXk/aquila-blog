@@ -48,6 +48,8 @@ type TaskTypeDiagnostics = {
   readyPendingCount: number
   delayedPendingCount: number
   processingCount: number
+  backlogCount?: number
+  queueLagSeconds?: number | null
   failedCount: number
   staleProcessingCount: number
   label: string
@@ -1130,6 +1132,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           <strong>{taskType.readyPendingCount}</strong>
                         </TaskMetric>
                         <TaskMetric>
+                          <span>backlog</span>
+                          <strong>{taskType.backlogCount ?? taskType.pendingCount + taskType.processingCount}</strong>
+                        </TaskMetric>
+                        <TaskMetric>
                           <span>delayed</span>
                           <strong>{taskType.delayedPendingCount}</strong>
                         </TaskMetric>
@@ -1149,7 +1155,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       <TaskMetaLine>
                         <span>가장 오래 대기 중</span>
                         <strong>
-                          {formatAge(taskType.oldestReadyPendingAgeSeconds)}
+                          {formatAge(taskType.queueLagSeconds ?? taskType.oldestReadyPendingAgeSeconds)}
                           {taskType.oldestReadyPendingAt ? ` · ${formatInstant(taskType.oldestReadyPendingAt)}` : ""}
                         </strong>
                       </TaskMetaLine>

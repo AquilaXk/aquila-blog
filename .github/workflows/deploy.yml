@@ -561,6 +561,16 @@ jobs:
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created: ${BACKUP_DIR}"
 
+          RUNTIME_SPLIT_ENABLED_VALUE="$(extract_env_value "RUNTIME_SPLIT_ENABLED")"
+          RUNTIME_SPLIT_STAGE_VALUE="$(extract_env_value "RUNTIME_SPLIT_STAGE")"
+          if [ -z "${RUNTIME_SPLIT_ENABLED_VALUE}" ]; then
+            RUNTIME_SPLIT_ENABLED_VALUE="false"
+          fi
+          if [ -z "${RUNTIME_SPLIT_STAGE_VALUE}" ]; then
+            RUNTIME_SPLIT_STAGE_VALUE="A"
+          fi
+          echo "runtime split from HOME_SERVER_ENV: enabled=${RUNTIME_SPLIT_ENABLED_VALUE} stage=${RUNTIME_SPLIT_STAGE_VALUE}"
+
           emit_post_deploy_diagnostics() {
             echo "[post-deploy-diagnostic] compose ps"
             docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps || true
@@ -580,12 +590,12 @@ jobs:
             emit_post_deploy_diagnostics
             if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
               echo "rollback from backup: ${BACKUP_DIR}" >&2
-              ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
+              RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
             fi
             exit 1
           }
 
-          if ! HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
+          if ! RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE_VALUE}" HEALTHCHECK_PATH=/actuator/health/readiness HEALTHCHECK_LOG_EVERY_N_TRIES=1 ./deploy/homeserver/blue_green_deploy.sh; then
             rollback_and_exit "blue_green_deploy_failed"
           fi
 

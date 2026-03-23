@@ -981,10 +981,10 @@ class ApiV1PostController(
         private const val MAX_EXPLORE_TAG_LENGTH = 40
         private const val MAX_CACHE_TAG_LENGTH = 64
         private const val SEARCH_SHORT_TTL_KEYWORD_LENGTH = 16
-        private const val SEARCH_NO_STORE_KEYWORD_LENGTH = 36
-        private const val SEARCH_NO_STORE_TOKEN_COUNT = 6
-        private const val SEARCH_HIGH_ENTROPY_MIN_LENGTH = 20
-        private const val SEARCH_HIGH_ENTROPY_UNIQUE_RATIO_THRESHOLD = 0.65
+        private const val SEARCH_NO_STORE_KEYWORD_LENGTH = 28
+        private const val SEARCH_NO_STORE_TOKEN_COUNT = 4
+        private const val SEARCH_HIGH_ENTROPY_MIN_LENGTH = 16
+        private const val SEARCH_HIGH_ENTROPY_UNIQUE_RATIO_THRESHOLD = 0.58
     }
 
     private data class PublicReadCachePolicy(

@@ -398,10 +398,10 @@ class PostPublicReadQueryService(
 
         private const val CACHE_KEY_DIRECT_MAX_LENGTH = 24
         private const val CACHE_KEY_HASH_LENGTH = 24
-        private const val MAX_CACHEABLE_PAGE = 20
-        private const val MAX_CACHEABLE_KW_LENGTH = 40
+        private const val MAX_CACHEABLE_PAGE = 10
+        private const val MAX_CACHEABLE_KW_LENGTH = 24
         private const val MAX_CACHEABLE_TAG_LENGTH = 24
-        private const val MAX_CACHEABLE_TOTAL_LENGTH = 48
+        private const val MAX_CACHEABLE_TOTAL_LENGTH = 32
         private const val MAX_LOG_FIELD_LENGTH = 240
         private const val MAX_CURSOR_PAGE_SIZE = 30
         private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"

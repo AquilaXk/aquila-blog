@@ -50,13 +50,11 @@ http://{$API_DOMAIN} {
 
   @publicFeed {
     path /post/api/v1/posts/feed
-    method GET
-    not header Cookie *
+    method GET HEAD
   }
   @publicExplore {
     path /post/api/v1/posts/explore
-    method GET
-    not header Cookie *
+    method GET HEAD
   }
   handle @publicFeed {
     header {
@@ -88,7 +86,6 @@ http://{$API_DOMAIN} {
   @publicReadFallback {
     path /post/api/v1/posts/search /post/api/v1/posts/tags /post/api/v1/posts/feed/cursor /post/api/v1/posts/explore/cursor /post/api/v1/posts/*
     method GET HEAD
-    not header Cookie *
   }
   handle @publicReadFallback {
     reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {

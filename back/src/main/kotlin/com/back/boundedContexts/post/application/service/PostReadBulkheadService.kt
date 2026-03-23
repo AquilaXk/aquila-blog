@@ -16,15 +16,15 @@ class PostReadBulkheadService(
     private val enabled: Boolean,
     @param:Value("\${custom.post.read.bulkhead.acquireTimeoutMs:25}")
     private val acquireTimeoutMs: Long,
-    @param:Value("\${custom.post.read.bulkhead.feedMaxConcurrent:24}")
+    @param:Value("\${custom.post.read.bulkhead.feedMaxConcurrent:20}")
     private val feedMaxConcurrent: Int,
-    @param:Value("\${custom.post.read.bulkhead.exploreMaxConcurrent:12}")
+    @param:Value("\${custom.post.read.bulkhead.exploreMaxConcurrent:10}")
     private val exploreMaxConcurrent: Int,
-    @param:Value("\${custom.post.read.bulkhead.searchMaxConcurrent:10}")
+    @param:Value("\${custom.post.read.bulkhead.searchMaxConcurrent:8}")
     private val searchMaxConcurrent: Int,
-    @param:Value("\${custom.post.read.bulkhead.detailMaxConcurrent:24}")
+    @param:Value("\${custom.post.read.bulkhead.detailMaxConcurrent:16}")
     private val detailMaxConcurrent: Int,
-    @param:Value("\${custom.post.read.bulkhead.tagsMaxConcurrent:8}")
+    @param:Value("\${custom.post.read.bulkhead.tagsMaxConcurrent:6}")
     private val tagsMaxConcurrent: Int,
 ) {
     private val feedSemaphore = Semaphore(feedMaxConcurrent.coerceAtLeast(1))

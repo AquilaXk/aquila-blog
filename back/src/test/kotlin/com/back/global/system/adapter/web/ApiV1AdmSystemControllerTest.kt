@@ -153,6 +153,8 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.taskTypes") { isArray() }
             jsonPath("$.taskTypes[0].taskType") { isString() }
             jsonPath("$.taskTypes[0].label") { isString() }
+            jsonPath("$.taskTypes[0].backlogCount") { isNumber() }
+            jsonPath("$.taskTypes[0].queueLagSeconds") { isNumber() }
             jsonPath("$.taskTypes[0].retryPolicy.maxRetries") { isNumber() }
             jsonPath("$.taskTypes[0].retryPolicy.baseDelaySeconds") { isNumber() }
             jsonPath("$.recentFailures") { isArray() }
@@ -238,12 +240,26 @@ class ApiV1AdmSystemControllerTest {
         given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
         given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
         given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+        given(postSearchEngineMirrorService.getCircuitStatus())
+            .willReturn(
+                PostSearchEngineMirrorService.MirrorCircuitStatus(
+                    open = true,
+                    openUntilEpochMs = 1_742_211_200_000,
+                    remainingSeconds = 52,
+                    consecutiveFailures = 5,
+                    failureThreshold = 5,
+                ),
+            )
 
         mvc.get("/system/api/v1/adm/search/runtime-flags").andExpect {
             status { isOk() }
             jsonPath("$.searchPipelineForceControlEnabled") { value(true) }
             jsonPath("$.searchPipelineRuntimeOverride") { value(true) }
             jsonPath("$.searchEngineMirrorForceDisabled") { value(false) }
+            jsonPath("$.searchEngineMirrorCircuitOpen") { value(true) }
+            jsonPath("$.searchEngineMirrorCircuitRemainingSeconds") { value(52) }
+            jsonPath("$.searchEngineMirrorConsecutiveFailures") { value(5) }
+            jsonPath("$.searchEngineMirrorFailureThreshold") { value(5) }
         }
     }
 
@@ -253,6 +269,16 @@ class ApiV1AdmSystemControllerTest {
         given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(true)
         given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(true)
         given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(false)
+        given(postSearchEngineMirrorService.getCircuitStatus())
+            .willReturn(
+                PostSearchEngineMirrorService.MirrorCircuitStatus(
+                    open = false,
+                    openUntilEpochMs = 0,
+                    remainingSeconds = 0,
+                    consecutiveFailures = 0,
+                    failureThreshold = 5,
+                ),
+            )
 
         mvc
             .post("/system/api/v1/adm/search/pipeline/force-control") {
@@ -271,6 +297,16 @@ class ApiV1AdmSystemControllerTest {
         given(postKeywordSearchPipelineService.isForceControlEnabled()).willReturn(false)
         given(postKeywordSearchPipelineService.isForceControlRuntimeOverridden()).willReturn(false)
         given(postSearchEngineMirrorService.isRuntimeForceDisabled()).willReturn(true)
+        given(postSearchEngineMirrorService.getCircuitStatus())
+            .willReturn(
+                PostSearchEngineMirrorService.MirrorCircuitStatus(
+                    open = false,
+                    openUntilEpochMs = 0,
+                    remainingSeconds = 0,
+                    consecutiveFailures = 0,
+                    failureThreshold = 5,
+                ),
+            )
 
         mvc
             .post("/system/api/v1/adm/search-engine/mirror/force-disable") {
@@ -363,6 +399,8 @@ class ApiV1AdmSystemControllerTest {
             readyPendingCount = 1,
             delayedPendingCount = 1,
             processingCount = 0,
+            backlogCount = 2,
+            queueLagSeconds = 30,
             failedCount = 1,
             staleProcessingCount = 0,
             oldestReadyPendingAt = Instant.parse("2026-03-13T00:00:00Z"),

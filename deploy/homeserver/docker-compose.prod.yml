@@ -42,8 +42,8 @@ services:
   back_blue:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
-    mem_limit: ${BACK_MEM_LIMIT:-1024m}
-    mem_reservation: ${BACK_MEM_RESERVATION:-512m}
+    mem_limit: ${BACK_MEM_LIMIT:-512m}
+    mem_reservation: ${BACK_MEM_RESERVATION:-256m}
     labels:
       autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:
@@ -75,8 +75,8 @@ services:
   back_green:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
-    mem_limit: ${BACK_MEM_LIMIT:-1024m}
-    mem_reservation: ${BACK_MEM_RESERVATION:-512m}
+    mem_limit: ${BACK_MEM_LIMIT:-512m}
+    mem_reservation: ${BACK_MEM_RESERVATION:-256m}
     labels:
       autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:
@@ -107,8 +107,8 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
-    mem_limit: ${BACK_READ_MEM_LIMIT:-768m}
-    mem_reservation: ${BACK_READ_MEM_RESERVATION:-256m}
+    mem_limit: ${BACK_READ_MEM_LIMIT:-640m}
+    mem_reservation: ${BACK_READ_MEM_RESERVATION:-320m}
     labels:
       autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:
@@ -139,8 +139,8 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
-    mem_limit: ${BACK_ADMIN_MEM_LIMIT:-768m}
-    mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
+    mem_limit: ${BACK_ADMIN_MEM_LIMIT:-384m}
+    mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-192m}
     labels:
       autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:
@@ -171,7 +171,7 @@ services:
     image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
     restart: unless-stopped
     mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
-    mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-256m}
+    mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-768m}
     env_file:
       - ./.env.prod
     environment:

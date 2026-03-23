@@ -15,8 +15,45 @@ HEALTHCHECK_RETRIES="${HEALTHCHECK_RETRIES:-20}"
 HEALTHCHECK_INTERVAL_SECONDS="${HEALTHCHECK_INTERVAL_SECONDS:-2}"
 HEALTHCHECK_CONNECT_TIMEOUT_SECONDS="${HEALTHCHECK_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTHCHECK_MAX_TIME_SECONDS="${HEALTHCHECK_MAX_TIME_SECONDS:-5}"
+RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
+
+normalize_bool() {
+  local raw="$1"
+  case "$(echo "${raw}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) echo "true" ;;
+    *) echo "false" ;;
+  esac
+}
+
+RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
+
+resolve_compose_profiles() {
+  local profiles="${COMPOSE_PROFILES:-}"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    echo "${profiles}"
+    return
+  fi
+
+  if [[ -z "${profiles}" ]]; then
+    echo "runtime-split"
+    return
+  fi
+
+  if [[ ",${profiles}," == *",runtime-split,"* ]]; then
+    echo "${profiles}"
+    return
+  fi
+
+  echo "${profiles},runtime-split"
+}
 
 compose() {
+  local profiles
+  profiles="$(resolve_compose_profiles)"
+  if [[ -n "${profiles}" ]]; then
+    COMPOSE_PROFILES="${profiles}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+    return
+  fi
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -334,7 +371,11 @@ fi
 inactive_backend="$(other_backend "${target_backend}")"
 
 warn_unsupported_docker_engine
-compose_up_with_retry db_1 redis_1 caddy cloudflared autoheal
+services_to_boot=(db_1 redis_1 caddy cloudflared autoheal)
+if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+  services_to_boot+=(back_read back_admin back_worker)
+fi
+compose_up_with_retry "${services_to_boot[@]}"
 ensure_db_runtime_guards || true
 reload_caddy
 ensure_caddy_mount_sync

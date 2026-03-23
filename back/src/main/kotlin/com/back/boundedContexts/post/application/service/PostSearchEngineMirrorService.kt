@@ -42,6 +42,14 @@ class PostSearchEngineMirrorService(
     private val objectMapper: ObjectMapper,
     private val meterRegistry: MeterRegistry? = null,
 ) {
+    data class MirrorCircuitStatus(
+        val open: Boolean,
+        val openUntilEpochMs: Long,
+        val remainingSeconds: Long,
+        val consecutiveFailures: Int,
+        val failureThreshold: Int,
+    )
+
     private val logger = LoggerFactory.getLogger(PostSearchEngineMirrorService::class.java)
     private val safeMaxTags = maxTags.coerceIn(1, 128)
     private val normalizedConnectTimeoutMs = connectTimeoutMs.coerceIn(100, 10_000)
@@ -57,6 +65,20 @@ class PostSearchEngineMirrorService(
     }
 
     fun isRuntimeForceDisabled(): Boolean = runtimeForceDisabled.get()
+
+    fun getCircuitStatus(): MirrorCircuitStatus {
+        val now = System.currentTimeMillis()
+        val openUntil = circuitOpenUntilEpochMs.get()
+        val remainingMillis = (openUntil - now).coerceAtLeast(0L)
+        val remainingSeconds = if (remainingMillis == 0L) 0L else ((remainingMillis - 1L) / 1_000L) + 1L
+        return MirrorCircuitStatus(
+            open = openUntil > now,
+            openUntilEpochMs = openUntil,
+            remainingSeconds = remainingSeconds,
+            consecutiveFailures = consecutiveFailureCount.get(),
+            failureThreshold = safeFailureThreshold,
+        )
+    }
 
     fun mirror(
         postId: Long,

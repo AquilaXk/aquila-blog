@@ -29,9 +29,9 @@ import kotlin.math.max
 class PostKeywordSearchPipelineService(
     @Value("\${custom.post.search.pipeline.enabled:true}")
     enabled: Boolean,
-    @Value("\${custom.post.search.pipeline.candidatePoolSize:260}")
+    @Value("\${custom.post.search.pipeline.candidatePoolSize:220}")
     candidatePoolSize: Int,
-    @Value("\${custom.post.search.pipeline.maxRerankPages:6}")
+    @Value("\${custom.post.search.pipeline.maxRerankPages:4}")
     maxRerankPages: Int,
     @Value("\${custom.post.search.pipeline.rollback.forceControl:false}")
     private val forceControlProfile: Boolean,

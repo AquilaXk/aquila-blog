@@ -18,8 +18,57 @@ HEALTHCHECK_LOG_EVERY_N_TRIES="${HEALTHCHECK_LOG_EVERY_N_TRIES:-5}"
 PREWARM_ENABLED="${PREWARM_ENABLED:-true}"
 PREWARM_CONNECT_TIMEOUT_SECONDS="${PREWARM_CONNECT_TIMEOUT_SECONDS:-2}"
 PREWARM_MAX_TIME_SECONDS="${PREWARM_MAX_TIME_SECONDS:-6}"
+PREWARM_RETRIES="${PREWARM_RETRIES:-2}"
+PREWARM_BACKOFF_SECONDS="${PREWARM_BACKOFF_SECONDS:-1}"
+RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
+RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
+
+normalize_bool() {
+  local raw="$1"
+  case "$(echo "${raw}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) echo "true" ;;
+    *) echo "false" ;;
+  esac
+}
+
+normalize_runtime_split_stage() {
+  local raw="$1"
+  case "$(echo "${raw}" | tr '[:lower:]' '[:upper:]')" in
+    B) echo "B" ;;
+    *) echo "A" ;;
+  esac
+}
+
+RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
+RUNTIME_SPLIT_STAGE="$(normalize_runtime_split_stage "${RUNTIME_SPLIT_STAGE}")"
+
+resolve_compose_profiles() {
+  local profiles="${COMPOSE_PROFILES:-}"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    echo "${profiles}"
+    return
+  fi
+
+  if [[ -z "${profiles}" ]]; then
+    echo "runtime-split"
+    return
+  fi
+
+  if [[ ",${profiles}," == *",runtime-split,"* ]]; then
+    echo "${profiles}"
+    return
+  fi
+
+  echo "${profiles},runtime-split"
+}
 
 compose() {
+  local profiles
+  profiles="$(resolve_compose_profiles)"
+  if [[ -n "${profiles}" ]]; then
+    COMPOSE_PROFILES="${profiles}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+    return
+  fi
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
@@ -124,6 +173,26 @@ upsert_env_key() {
   else
     printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
   fi
+}
+
+configure_runtime_split_env() {
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    echo "runtime-split disabled: blue/green all-in-one mode"
+    return 0
+  fi
+
+  local split_api_mode="all"
+  if [[ "${RUNTIME_SPLIT_STAGE}" == "B" ]]; then
+    split_api_mode="admin"
+  fi
+
+  upsert_env_key "READ_API_UPSTREAM" "back_read"
+  upsert_env_key "ADMIN_API_UPSTREAM" "back_admin"
+  upsert_env_key "CUSTOM__RUNTIME__API_MODE_BLUE" "${split_api_mode}"
+  upsert_env_key "CUSTOM__RUNTIME__API_MODE_GREEN" "${split_api_mode}"
+  upsert_env_key "CUSTOM__RUNTIME__API_MODE_WORKER" "all"
+
+  echo "runtime-split enabled: stage=${RUNTIME_SPLIT_STAGE}, blue/green apiMode=${split_api_mode}, read/admin upstream fixed"
 }
 
 resolve_local_repo_digest() {
@@ -485,23 +554,68 @@ prewarm_public_read_cache() {
   fi
 
   local warm_paths=(
+    "/post/api/v1/posts/feed?page=1&pageSize=30&sort=CREATED_AT"
     "/post/api/v1/posts/feed/cursor?pageSize=30&sort=CREATED_AT"
     "/post/api/v1/posts/explore?page=1&pageSize=30&sort=CREATED_AT"
     "/post/api/v1/posts/tags"
   )
 
+  local max_attempts=$(( PREWARM_RETRIES + 1 ))
+
+  prewarm_path_with_retry() {
+    local path="$1"
+    local label="$2"
+    local attempt=1
+    local code=""
+    while [[ "${attempt}" -le "${max_attempts}" ]]; do
+      code="$(probe_caddy_route_http_code "${api_domain}" "${path}")"
+      if is_cacheable_warmup_http_code "${code}"; then
+        echo "prewarm ok: ${label} status=${code} attempt=${attempt}/${max_attempts}"
+        return 0
+      fi
+      if [[ "${attempt}" -lt "${max_attempts}" ]]; then
+        sleep $(( PREWARM_BACKOFF_SECONDS * attempt ))
+      fi
+      attempt=$((attempt + 1))
+    done
+    echo "prewarm warn: ${label} status=${code:-none} attempts=${max_attempts}" >&2
+    return 1
+  }
+
+  prewarm_explore_cursor_with_retry() {
+    local tag="$1"
+    local label="$2"
+    local attempt=1
+    local code=""
+    while [[ "${attempt}" -le "${max_attempts}" ]]; do
+      code="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+        --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
+        --max-time "${PREWARM_MAX_TIME_SECONDS}" \
+        --get \
+        --data-urlencode "pageSize=30" \
+        --data-urlencode "sort=CREATED_AT" \
+        --data-urlencode "tag=${tag}" \
+        -s -o /dev/null -w "%{http_code}" "http://caddy:80/post/api/v1/posts/explore/cursor" \
+        -H "Host: ${api_domain}" || true)"
+      if is_cacheable_warmup_http_code "${code}"; then
+        echo "prewarm ok: ${label} status=${code} attempt=${attempt}/${max_attempts}"
+        return 0
+      fi
+      if [[ "${attempt}" -lt "${max_attempts}" ]]; then
+        sleep $(( PREWARM_BACKOFF_SECONDS * attempt ))
+      fi
+      attempt=$((attempt + 1))
+    done
+    echo "prewarm warn: ${label} status=${code:-none} attempts=${max_attempts}" >&2
+    return 1
+  }
+
   local path
   for path in "${warm_paths[@]}"; do
-    local code
-    code="$(probe_caddy_route_http_code "${api_domain}" "${path}")"
-    if is_cacheable_warmup_http_code "${code}"; then
-      echo "prewarm ok: ${path} status=${code}"
-    else
-      echo "prewarm warn: ${path} status=${code:-none}" >&2
-    fi
+    prewarm_path_with_retry "${path}" "${path}" || true
   done
 
-  local first_feed_id detail_code feed_body
+  local first_feed_id feed_body
   feed_body="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${PREWARM_MAX_TIME_SECONDS}" \
@@ -509,17 +623,12 @@ prewarm_public_read_cache() {
     -H "Host: ${api_domain}" || true)"
   first_feed_id="$(printf '%s' "${feed_body}" | awk -F'"id":' 'NF > 1 {split($2,a,/[^0-9]/); print a[1]; exit}')"
   if [[ -n "${first_feed_id}" ]]; then
-    detail_code="$(probe_caddy_route_http_code "${api_domain}" "/post/api/v1/posts/${first_feed_id}")"
-    if is_cacheable_warmup_http_code "${detail_code}"; then
-      echo "prewarm ok: /post/api/v1/posts/${first_feed_id} status=${detail_code}"
-    else
-      echo "prewarm warn: /post/api/v1/posts/${first_feed_id} status=${detail_code:-none}" >&2
-    fi
+    prewarm_path_with_retry "/post/api/v1/posts/${first_feed_id}" "/post/api/v1/posts/${first_feed_id}" || true
   else
     echo "prewarm skipped: no public post id available for detail warmup"
   fi
 
-  local tags_body first_tag tag_cursor_code
+  local tags_body first_tag
   tags_body="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
     --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
     --max-time "${PREWARM_MAX_TIME_SECONDS}" \
@@ -527,20 +636,7 @@ prewarm_public_read_cache() {
     -H "Host: ${api_domain}" || true)"
   first_tag="$(printf '%s' "${tags_body}" | awk -F'"tag":"' 'NF > 1 {split($2,a,"\""); print a[1]; exit}')"
   if [[ -n "${first_tag}" ]]; then
-    tag_cursor_code="$(docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
-      --connect-timeout "${PREWARM_CONNECT_TIMEOUT_SECONDS}" \
-      --max-time "${PREWARM_MAX_TIME_SECONDS}" \
-      --get \
-      --data-urlencode "pageSize=30" \
-      --data-urlencode "sort=CREATED_AT" \
-      --data-urlencode "tag=${first_tag}" \
-      -s -o /dev/null -w "%{http_code}" "http://caddy:80/post/api/v1/posts/explore/cursor" \
-      -H "Host: ${api_domain}" || true)"
-    if is_cacheable_warmup_http_code "${tag_cursor_code}"; then
-      echo "prewarm ok: /post/api/v1/posts/explore/cursor(tag=${first_tag}) status=${tag_cursor_code}"
-    else
-      echo "prewarm warn: /post/api/v1/posts/explore/cursor(tag=${first_tag}) status=${tag_cursor_code:-none}" >&2
-    fi
+    prewarm_explore_cursor_with_retry "${first_tag}" "/post/api/v1/posts/explore/cursor(tag=${first_tag})" || true
   else
     echo "prewarm skipped: no public tags available for explore/cursor"
   fi
@@ -751,6 +847,7 @@ require_supported_docker_engine
 validate_storage_env
 require_back_image
 validate_required_runtime_env
+configure_runtime_split_env
 
 api_domain="$(env_value "API_DOMAIN")"
 if [[ -z "${api_domain}" ]]; then
@@ -771,7 +868,11 @@ echo "next backend: ${next_backend}"
 action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
-compose_up_with_retry db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal back_worker
+services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal back_worker)
+if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+  services_to_boot+=(back_read back_admin)
+fi
+compose_up_with_retry "${services_to_boot[@]}"
 ensure_caddy_mount_sync
 check_cloudflared_runtime
 ensure_db_runtime_guards || true
@@ -780,6 +881,10 @@ compose_up_with_retry "${next_backend}"
 
 # Verify cutover target DNS and currently running active backend DNS (if running).
 check_required_backend_dns_from_caddy "${next_backend}" "${active_backend}"
+if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+  check_backend_dns_from_caddy "back_read"
+  check_backend_dns_from_caddy "back_admin"
+fi
 check_backend_health "${next_backend}"
 
 switch_caddy_upstream "${next_backend}"

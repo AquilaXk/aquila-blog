@@ -232,7 +232,7 @@ custom:
       dynamicBatchBacklogPerStep: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_BACKLOG_PER_STEP:120}
       dynamicBatchTargetHandlerDurationMs: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_TARGET_HANDLER_DURATION_MS:900}
       dynamicBatchMaxPrefetchMultiplier: ${CUSTOM__TASK__PROCESSOR__DYNAMIC_BATCH_MAX_PREFETCH_MULTIPLIER:2}
-      perTypeMaxConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_MAX_CONCURRENT:post.search-index.sync=4,post.read.prewarm=3,post.search-engine.mirror=2}
+      perTypeMaxConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_MAX_CONCURRENT:post.search-index.sync=4,post.read.prewarm=2,post.search-engine.mirror=1}
       perTypeAutoTuneEnabled: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_ENABLED:true}
       perTypeAutoTuneMinConcurrent: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_MIN_CONCURRENT:1}
       perTypeAutoTuneBacklogPerSlot: ${CUSTOM__TASK__PROCESSOR__PER_TYPE_AUTO_TUNE_BACKLOG_PER_SLOT:20}
@@ -311,8 +311,8 @@ custom:
     search:
       pipeline:
         enabled: ${CUSTOM__POST__SEARCH__PIPELINE__ENABLED:true}
-        candidatePoolSize: ${CUSTOM__POST__SEARCH__PIPELINE__CANDIDATE_POOL_SIZE:260}
-        maxRerankPages: ${CUSTOM__POST__SEARCH__PIPELINE__MAX_RERANK_PAGES:6}
+        candidatePoolSize: ${CUSTOM__POST__SEARCH__PIPELINE__CANDIDATE_POOL_SIZE:220}
+        maxRerankPages: ${CUSTOM__POST__SEARCH__PIPELINE__MAX_RERANK_PAGES:4}
         rollback:
           forceControl: ${CUSTOM__POST__SEARCH__PIPELINE__ROLLBACK__FORCE_CONTROL:false}
         ab:
@@ -363,11 +363,11 @@ custom:
       bulkhead:
         enabled: ${CUSTOM__POST__READ__BULKHEAD__ENABLED:true}
         acquireTimeoutMs: ${CUSTOM__POST__READ__BULKHEAD__ACQUIRE_TIMEOUT_MS:25}
-        feedMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__FEED_MAX_CONCURRENT:24}
-        exploreMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__EXPLORE_MAX_CONCURRENT:12}
-        searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:10}
-        detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:24}
-        tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:8}
+        feedMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__FEED_MAX_CONCURRENT:20}
+        exploreMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__EXPLORE_MAX_CONCURRENT:10}
+        searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:8}
+        detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:16}
+        tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
       tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
     idempotency:
       retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}

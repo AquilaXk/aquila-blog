@@ -21,6 +21,8 @@ data class TaskTypeDiagnostics(
     val readyPendingCount: Long,
     val delayedPendingCount: Long,
     val processingCount: Long,
+    val backlogCount: Long = 0,
+    val queueLagSeconds: Long? = null,
     val failedCount: Long,
     val staleProcessingCount: Long,
     val oldestReadyPendingAt: Instant?,
@@ -198,6 +200,8 @@ class TaskQueueDiagnosticsService(
             taskRepository
                 .findByTaskTypeAndStatusOrderByModifiedAtDesc(taskType, TaskStatus.FAILED, PageRequest.of(0, 1))
                 .firstOrNull()
+        val processingCount = taskRepository.countByTaskTypeAndStatus(taskType, TaskStatus.PROCESSING)
+        val queueLagSeconds = oldestReadyPending?.nextRetryAt?.let { ageInSeconds(it, now) }
 
         return TaskTypeDiagnostics(
             taskType = taskType,
@@ -205,7 +209,9 @@ class TaskQueueDiagnosticsService(
             pendingCount = pendingCount,
             readyPendingCount = readyPendingCount,
             delayedPendingCount = max(0, pendingCount - readyPendingCount),
-            processingCount = taskRepository.countByTaskTypeAndStatus(taskType, TaskStatus.PROCESSING),
+            processingCount = processingCount,
+            backlogCount = pendingCount + processingCount,
+            queueLagSeconds = queueLagSeconds,
             failedCount = taskRepository.countByTaskTypeAndStatus(taskType, TaskStatus.FAILED),
             staleProcessingCount =
                 taskRepository.countByTaskTypeAndStatusAndModifiedAtBefore(
@@ -214,7 +220,7 @@ class TaskQueueDiagnosticsService(
                     stuckBefore,
                 ),
             oldestReadyPendingAt = oldestReadyPending?.nextRetryAt,
-            oldestReadyPendingAgeSeconds = oldestReadyPending?.nextRetryAt?.let { ageInSeconds(it, now) },
+            oldestReadyPendingAgeSeconds = queueLagSeconds,
             latestFailureAt = latestFailure?.modifiedAt,
             latestFailureMessage = latestFailure?.errorMessage,
             retryPolicy = retryPolicy,

@@ -86,6 +86,10 @@ class ApiV1AdmSystemController(
         val searchPipelineForceControlEnabled: Boolean,
         val searchPipelineRuntimeOverride: Boolean,
         val searchEngineMirrorForceDisabled: Boolean,
+        val searchEngineMirrorCircuitOpen: Boolean,
+        val searchEngineMirrorCircuitRemainingSeconds: Long,
+        val searchEngineMirrorConsecutiveFailures: Int,
+        val searchEngineMirrorFailureThreshold: Int,
     )
 
     /**
@@ -157,12 +161,18 @@ class ApiV1AdmSystemController(
 
     @GetMapping("/search/runtime-flags")
     @Transactional(readOnly = true)
-    fun getSearchRuntimeFlags(): SearchRuntimeFlags =
-        SearchRuntimeFlags(
+    fun getSearchRuntimeFlags(): SearchRuntimeFlags {
+        val mirrorCircuitStatus = postSearchEngineMirrorService.getCircuitStatus()
+        return SearchRuntimeFlags(
             searchPipelineForceControlEnabled = postKeywordSearchPipelineService.isForceControlEnabled(),
             searchPipelineRuntimeOverride = postKeywordSearchPipelineService.isForceControlRuntimeOverridden(),
             searchEngineMirrorForceDisabled = postSearchEngineMirrorService.isRuntimeForceDisabled(),
+            searchEngineMirrorCircuitOpen = mirrorCircuitStatus.open,
+            searchEngineMirrorCircuitRemainingSeconds = mirrorCircuitStatus.remainingSeconds,
+            searchEngineMirrorConsecutiveFailures = mirrorCircuitStatus.consecutiveFailures,
+            searchEngineMirrorFailureThreshold = mirrorCircuitStatus.failureThreshold,
         )
+    }
 
     @PostMapping("/search/pipeline/force-control")
     @Transactional

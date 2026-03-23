@@ -22,6 +22,10 @@ PREWARM_RETRIES="${PREWARM_RETRIES:-2}"
 PREWARM_BACKOFF_SECONDS="${PREWARM_BACKOFF_SECONDS:-1}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
+AUTO_MEMORY_TUNER_ENABLED="${AUTO_MEMORY_TUNER_ENABLED:-true}"
+AUTO_MEMORY_TUNER_MAX_BUDGET_MB="${AUTO_MEMORY_TUNER_MAX_BUDGET_MB:-2816}"
+AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB:-2048}"
+AUTO_MEMORY_TUNER_MIN_BUDGET_MB="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB:-1280}"
 
 normalize_bool() {
   local raw="$1"
@@ -39,8 +43,22 @@ normalize_runtime_split_stage() {
   esac
 }
 
+normalize_positive_int() {
+  local raw="$1"
+  local fallback="$2"
+  if [[ "${raw}" =~ ^[0-9]+$ ]] && (( raw > 0 )); then
+    echo "${raw}"
+    return
+  fi
+  echo "${fallback}"
+}
+
 RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
 RUNTIME_SPLIT_STAGE="$(normalize_runtime_split_stage "${RUNTIME_SPLIT_STAGE}")"
+AUTO_MEMORY_TUNER_ENABLED="$(normalize_bool "${AUTO_MEMORY_TUNER_ENABLED}")"
+AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}" "2816")"
+AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}" "2048")"
+AUTO_MEMORY_TUNER_MIN_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MIN_BUDGET_MB}" "1280")"
 
 resolve_compose_profiles() {
   local profiles="${COMPOSE_PROFILES:-}"
@@ -193,6 +211,237 @@ configure_runtime_split_env() {
   upsert_env_key "CUSTOM__RUNTIME__API_MODE_WORKER" "all"
 
   echo "runtime-split enabled: stage=${RUNTIME_SPLIT_STAGE}, blue/green apiMode=${split_api_mode}, read/admin upstream fixed"
+}
+
+read_host_mem_total_mb() {
+  awk '/MemTotal:/ {printf "%d", $2 / 1024; exit}' /proc/meminfo 2>/dev/null || true
+}
+
+round_to_step_mb() {
+  local value="$1"
+  local step="${2:-64}"
+  echo $(( ((value + (step / 2)) / step) * step ))
+}
+
+reservation_half_mb() {
+  local limit_mb="$1"
+  local floor_mb="$2"
+  local value=$(( limit_mb / 2 ))
+  value=$(( (value / 64) * 64 ))
+  if (( value < floor_mb )); then
+    value="${floor_mb}"
+  fi
+  if (( value > limit_mb )); then
+    value="${limit_mb}"
+  fi
+  echo "${value}"
+}
+
+reservation_ratio_mb() {
+  local limit_mb="$1"
+  local numerator="$2"
+  local denominator="$3"
+  local floor_mb="$4"
+  local value=$(( (limit_mb * numerator) / denominator ))
+  value=$(( (value / 64) * 64 ))
+  if (( value < floor_mb )); then
+    value="${floor_mb}"
+  fi
+  if (( value > limit_mb )); then
+    value="${limit_mb}"
+  fi
+  echo "${value}"
+}
+
+scaled_limit_mb() {
+  local base_mb="$1"
+  local budget_mb="$2"
+  local base_total_mb="$3"
+  local minimum_mb="$4"
+  local value=$(( (base_mb * budget_mb + (base_total_mb / 2)) / base_total_mb ))
+  value="$(round_to_step_mb "${value}" "64")"
+  if (( value < minimum_mb )); then
+    value="${minimum_mb}"
+  fi
+  echo "${value}"
+}
+
+allocate_runtime_split_memory_limits() {
+  local budget_mb="$1"
+  local blue_min=384
+  local read_min=512
+  local admin_min=256
+  local worker_min=512
+  local blue
+  local read
+  local admin
+  local worker
+  local total
+
+  blue="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${blue_min}")"
+  read="$(scaled_limit_mb 640 "${budget_mb}" 2816 "${read_min}")"
+  admin="$(scaled_limit_mb 384 "${budget_mb}" 2816 "${admin_min}")"
+  worker="$(scaled_limit_mb 768 "${budget_mb}" 2816 "${worker_min}")"
+
+  total=$(( (blue * 2) + read + admin + worker ))
+  while (( total > budget_mb )); do
+    if (( blue > blue_min )); then
+      blue=$(( blue - 64 ))
+      total=$(( total - 128 ))
+      continue
+    fi
+    if (( worker > worker_min )); then
+      worker=$(( worker - 64 ))
+      total=$(( total - 64 ))
+      continue
+    fi
+    if (( read > read_min )); then
+      read=$(( read - 64 ))
+      total=$(( total - 64 ))
+      continue
+    fi
+    if (( admin > admin_min )); then
+      admin=$(( admin - 64 ))
+      total=$(( total - 64 ))
+      continue
+    fi
+    break
+  done
+
+  if (( total > budget_mb )); then
+    return 1
+  fi
+
+  AUTO_TUNED_BACK_MEM_LIMIT_MB="${blue}"
+  AUTO_TUNED_BACK_READ_MEM_LIMIT_MB="${read}"
+  AUTO_TUNED_BACK_ADMIN_MEM_LIMIT_MB="${admin}"
+  AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB="${worker}"
+  AUTO_TUNED_BACK_MEM_RESERVATION_MB="$(reservation_half_mb "${blue}" 192)"
+  AUTO_TUNED_BACK_READ_MEM_RESERVATION_MB="$(reservation_half_mb "${read}" 256)"
+  AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB="$(reservation_half_mb "${admin}" 128)"
+  AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB="$(reservation_ratio_mb "${worker}" 3 4 384)"
+
+  return 0
+}
+
+allocate_single_runtime_memory_limits() {
+  local budget_mb="$1"
+  local blue_min=384
+  local worker_min=512
+  local blue
+  local worker
+  local total
+
+  blue="$(scaled_limit_mb 512 "${budget_mb}" 1792 "${blue_min}")"
+  worker="$(scaled_limit_mb 768 "${budget_mb}" 1792 "${worker_min}")"
+
+  total=$(( (blue * 2) + worker ))
+  while (( total > budget_mb )); do
+    if (( blue > blue_min )); then
+      blue=$(( blue - 64 ))
+      total=$(( total - 128 ))
+      continue
+    fi
+    if (( worker > worker_min )); then
+      worker=$(( worker - 64 ))
+      total=$(( total - 64 ))
+      continue
+    fi
+    break
+  done
+
+  if (( total > budget_mb )); then
+    return 1
+  fi
+
+  AUTO_TUNED_BACK_MEM_LIMIT_MB="${blue}"
+  AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB="${worker}"
+  AUTO_TUNED_BACK_MEM_RESERVATION_MB="$(reservation_half_mb "${blue}" 192)"
+  AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB="$(reservation_ratio_mb "${worker}" 3 4 384)"
+
+  return 0
+}
+
+apply_auto_memory_tuner() {
+  if [[ "${AUTO_MEMORY_TUNER_ENABLED}" != "true" ]]; then
+    echo "auto-memory-tuner disabled"
+    return 0
+  fi
+
+  local mode="single-runtime"
+  local mode_min_budget_mb=1280
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    mode="runtime-split"
+    mode_min_budget_mb=2048
+  fi
+
+  if (( AUTO_MEMORY_TUNER_MAX_BUDGET_MB < mode_min_budget_mb )); then
+    echo "auto-memory-tuner guard: skip (max_budget_mb=${AUTO_MEMORY_TUNER_MAX_BUDGET_MB} < mode_min_budget_mb=${mode_min_budget_mb})" >&2
+    return 0
+  fi
+
+  local host_total_mb
+  host_total_mb="$(read_host_mem_total_mb)"
+  if [[ -z "${host_total_mb}" || ! "${host_total_mb}" =~ ^[0-9]+$ ]]; then
+    echo "auto-memory-tuner guard: skip (cannot read host memory)" >&2
+    return 0
+  fi
+
+  local available_budget_mb=$(( host_total_mb - AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB ))
+  if (( available_budget_mb < mode_min_budget_mb )); then
+    echo "auto-memory-tuner guard: skip (host_total_mb=${host_total_mb}, system_reserve_mb=${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}, available_budget_mb=${available_budget_mb}, required_min_mb=${mode_min_budget_mb})" >&2
+    return 0
+  fi
+
+  local target_budget_mb="${available_budget_mb}"
+  if (( target_budget_mb > AUTO_MEMORY_TUNER_MAX_BUDGET_MB )); then
+    target_budget_mb="${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}"
+  fi
+
+  local floor_budget_mb="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB}"
+  if (( floor_budget_mb < mode_min_budget_mb )); then
+    floor_budget_mb="${mode_min_budget_mb}"
+  fi
+  if (( target_budget_mb < floor_budget_mb )); then
+    target_budget_mb="${floor_budget_mb}"
+  fi
+  if (( target_budget_mb > AUTO_MEMORY_TUNER_MAX_BUDGET_MB )); then
+    target_budget_mb="${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}"
+  fi
+
+  if (( target_budget_mb < mode_min_budget_mb )); then
+    echo "auto-memory-tuner guard: skip (effective target_budget_mb=${target_budget_mb} < mode_min_budget_mb=${mode_min_budget_mb})" >&2
+    return 0
+  fi
+
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    if ! allocate_runtime_split_memory_limits "${target_budget_mb}"; then
+      echo "auto-memory-tuner guard: split allocation failed (target_budget_mb=${target_budget_mb})" >&2
+      return 0
+    fi
+
+    upsert_env_key "BACK_MEM_LIMIT" "${AUTO_TUNED_BACK_MEM_LIMIT_MB}m"
+    upsert_env_key "BACK_MEM_RESERVATION" "${AUTO_TUNED_BACK_MEM_RESERVATION_MB}m"
+    upsert_env_key "BACK_READ_MEM_LIMIT" "${AUTO_TUNED_BACK_READ_MEM_LIMIT_MB}m"
+    upsert_env_key "BACK_READ_MEM_RESERVATION" "${AUTO_TUNED_BACK_READ_MEM_RESERVATION_MB}m"
+    upsert_env_key "BACK_ADMIN_MEM_LIMIT" "${AUTO_TUNED_BACK_ADMIN_MEM_LIMIT_MB}m"
+    upsert_env_key "BACK_ADMIN_MEM_RESERVATION" "${AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB}m"
+    upsert_env_key "BACK_WORKER_MEM_LIMIT" "${AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB}m"
+    upsert_env_key "BACK_WORKER_MEM_RESERVATION" "${AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB}m"
+    echo "auto-memory-tuner applied: mode=${mode} stage=${RUNTIME_SPLIT_STAGE} host_total_mb=${host_total_mb} budget_mb=${target_budget_mb} back=${AUTO_TUNED_BACK_MEM_LIMIT_MB}/${AUTO_TUNED_BACK_MEM_RESERVATION_MB} read=${AUTO_TUNED_BACK_READ_MEM_LIMIT_MB}/${AUTO_TUNED_BACK_READ_MEM_RESERVATION_MB} admin=${AUTO_TUNED_BACK_ADMIN_MEM_LIMIT_MB}/${AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB} worker=${AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB}/${AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB}"
+    return 0
+  fi
+
+  if ! allocate_single_runtime_memory_limits "${target_budget_mb}"; then
+    echo "auto-memory-tuner guard: single allocation failed (target_budget_mb=${target_budget_mb})" >&2
+    return 0
+  fi
+
+  upsert_env_key "BACK_MEM_LIMIT" "${AUTO_TUNED_BACK_MEM_LIMIT_MB}m"
+  upsert_env_key "BACK_MEM_RESERVATION" "${AUTO_TUNED_BACK_MEM_RESERVATION_MB}m"
+  upsert_env_key "BACK_WORKER_MEM_LIMIT" "${AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB}m"
+  upsert_env_key "BACK_WORKER_MEM_RESERVATION" "${AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB}m"
+  echo "auto-memory-tuner applied: mode=${mode} host_total_mb=${host_total_mb} budget_mb=${target_budget_mb} back=${AUTO_TUNED_BACK_MEM_LIMIT_MB}/${AUTO_TUNED_BACK_MEM_RESERVATION_MB} worker=${AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB}/${AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB}"
 }
 
 resolve_local_repo_digest() {
@@ -848,6 +1097,7 @@ validate_storage_env
 require_back_image
 validate_required_runtime_env
 configure_runtime_split_env
+apply_auto_memory_tuner
 
 api_domain="$(env_value "API_DOMAIN")"
 if [[ -z "${api_domain}" ]]; then

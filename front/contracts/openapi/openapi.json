@@ -2178,6 +2178,21 @@
           },
           "searchEngineMirrorForceDisabled" : {
             "type" : "boolean"
+          },
+          "searchEngineMirrorCircuitOpen" : {
+            "type" : "boolean"
+          },
+          "searchEngineMirrorCircuitRemainingSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "searchEngineMirrorConsecutiveFailures" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "searchEngineMirrorFailureThreshold" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -3118,6 +3133,14 @@
             "format" : "int64"
           },
           "processingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "backlogCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "queueLagSeconds" : {
             "type" : "integer",
             "format" : "int64"
           },

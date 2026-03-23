@@ -23,7 +23,8 @@ import type { TPost } from "src/types"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-const FEED_TAG_RAIL_DESKTOP_MIN_PX = 1201
+// Disable desktop side-rail in production to prevent feed-width intrusion and asymmetrical gutters.
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = 99999
 const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = 584
 const FEED_TAG_RAIL_OFFSET_MAX_PX = -56
 const FEED_TAG_RAIL_OFFSET_MIN_PX = -216

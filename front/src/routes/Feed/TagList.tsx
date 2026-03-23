@@ -9,7 +9,8 @@ import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 type Props = {}
 const FEED_CHIP_GAP_PX = uiTokens.feed.chipGapPx
 const FEED_TAG_RAIL_CHIP_MAX_PX = 1200
-const FEED_TAG_RAIL_DESKTOP_MIN_PX = 1201
+// Keep chip rail as the single source of truth across breakpoints.
+const FEED_TAG_RAIL_DESKTOP_MIN_PX = 99999
 
 const TagList: React.FC<Props> = () => {
   const router = useRouter()

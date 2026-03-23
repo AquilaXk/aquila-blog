@@ -53,8 +53,17 @@ const hasAuthCookie = async (page: Page) => {
   return cookies.some((cookie) => cookie.name === "apiKey" || cookie.name === "accessToken")
 }
 
+const isNavigationInterruptedError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return /interrupted by another navigation/i.test(message)
+}
+
 const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
-  await page.goto("/admin")
+  try {
+    await page.goto("/admin")
+  } catch (error) {
+    if (!isNavigationInterruptedError(error)) throw error
+  }
   try {
     await page.waitForURL(/\/admin(\/|$)/, { timeout: timeoutMs })
     return true

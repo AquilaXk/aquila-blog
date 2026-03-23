@@ -339,7 +339,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
     inner class Me {
         @Test
         fun `내 정보 조회는 apiKey 쿠키가 있으면 회원 정보를 반환한다`() {
-            val member = memberFacade.findByUsername("user1")!!
+            val member = memberFacade.findByLoginId("user1")!!
 
             mvc
                 .get("/member/api/v1/auth/me") {
@@ -352,7 +352,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
                     jsonPath("$.modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                     jsonPath("$.isAdmin") { value(member.isAdmin) }
-                    jsonPath("$.username") { value(member.username) }
+                    jsonPath("$.username") { value(member.name) }
                     jsonPath("$.name") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
                     jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
@@ -384,7 +384,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `내 정보 조회에서 Authorization 헤더의 accessToken 이 잘못되어도 apiKey 가 유효하면 accessToken 을 재발급한다`() {
-            val member = memberFacade.findByUsername("user1")!!
+            val member = memberFacade.findByLoginId("user1")!!
 
             val resultActions =
                 mvc
@@ -398,7 +398,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                         jsonPath("$.createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
                         jsonPath("$.modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                         jsonPath("$.isAdmin") { value(member.isAdmin) }
-                        jsonPath("$.username") { value(member.username) }
+                        jsonPath("$.username") { value(member.name) }
                         jsonPath("$.name") { value(member.name) }
                         jsonPath("$.nickname") { value(member.nickname) }
                         jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
@@ -418,7 +418,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `내 정보 조회에서 Authorization 헤더의 apiKey 와 accessToken 이 모두 유효하면 회원 정보를 반환하고 accessToken 을 재발급하지 않는다`() {
-            val member = memberFacade.findByUsername("user1")!!
+            val member = memberFacade.findByLoginId("user1")!!
             val accessToken = authTokenService.genAccessToken(member)
 
             val resultActions =
@@ -433,7 +433,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                         jsonPath("$.createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
                         jsonPath("$.modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                         jsonPath("$.isAdmin") { value(member.isAdmin) }
-                        jsonPath("$.username") { value(member.username) }
+                        jsonPath("$.username") { value(member.name) }
                         jsonPath("$.name") { value(member.name) }
                         jsonPath("$.nickname") { value(member.nickname) }
                         jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
@@ -447,7 +447,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `내 정보 조회에서 표준 Bearer accessToken 형식도 허용한다`() {
-            val member = memberFacade.findByUsername("user1")!!
+            val member = memberFacade.findByLoginId("user1")!!
             val accessToken = authTokenService.genAccessToken(member)
 
             mvc
@@ -458,7 +458,7 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                     match(handler().handlerType(ApiV1AuthController::class.java))
                     match(handler().methodName("me"))
                     jsonPath("$.id") { value(member.id) }
-                    jsonPath("$.username") { value(member.username) }
+                    jsonPath("$.username") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
                     jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
                 }

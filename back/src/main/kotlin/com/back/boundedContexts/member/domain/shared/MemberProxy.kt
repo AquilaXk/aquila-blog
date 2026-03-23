@@ -12,7 +12,7 @@ class MemberProxy(
     id: Long,
     username: String,
     nickname: String,
-) : Member(id, username, null, nickname) {
+) : Member(id, username, null, nickname, real.email) {
     val persistenceMember: Member
         get() = real
 
@@ -78,6 +78,12 @@ class MemberProxy(
         get() = real.contactLinks
         set(value) {
             real.contactLinks = value
+        }
+
+    override var email
+        get() = real.email
+        set(value) {
+            real.email = value
         }
 
     override var apiKey

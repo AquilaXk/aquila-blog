@@ -36,8 +36,8 @@ import java.util.Locale
 )
 @AfterDDL(
     """
-    CREATE INDEX IF NOT EXISTS member_idx_pgroonga_username_nickname
-    ON member USING pgroonga ((ARRAY["username"::text, "nickname"::text])
+    CREATE INDEX IF NOT EXISTS member_idx_pgroonga_login_id_nickname
+    ON member USING pgroonga ((ARRAY["login_id"::text, "nickname"::text])
     pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram')
     """,
 )
@@ -47,7 +47,7 @@ class Member(
     @field:GeneratedValue(strategy = SEQUENCE, generator = "member_seq_gen")
     override val id: Long = 0,
     @field:NaturalId
-    @field:Column(unique = true, nullable = false)
+    @field:Column(name = "login_id", unique = true, nullable = false)
     val username: String,
     @field:Column(nullable = true)
     var password: String? = null,
@@ -123,10 +123,7 @@ class Member(
         get() {
             val configuredAdminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
             val memberEmail = email?.trim()?.lowercase(Locale.ROOT)
-            if (configuredAdminEmail.isNotBlank()) return memberEmail == configuredAdminEmail
-
-            val configuredAdminUsername = AppConfig.adminUsernameOrBlank.trim()
-            return configuredAdminUsername.isNotBlank() && username == configuredAdminUsername
+            return configuredAdminEmail.isNotBlank() && memberEmail == configuredAdminEmail
         }
 
     fun modify(

@@ -42,10 +42,9 @@ class ApiV1MemberController(
     @GetMapping("/adminProfile")
     @Transactional(readOnly = true)
     fun getAdminProfile(): MemberWithUsernameDto {
-        val adminUsername = AppConfig.adminUsernameOrBlank.trim()
         val adminEmail = AppConfig.adminEmailOrBlank.trim()
 
-        if (adminUsername.isBlank() && adminEmail.isBlank()) {
+        if (adminEmail.isBlank()) {
             throw AppException("404-1", "관리자 프로필이 설정되지 않았습니다.")
         }
 
@@ -53,9 +52,6 @@ class ApiV1MemberController(
             adminEmail
                 .takeIf { it.isNotBlank() }
                 ?.let(memberUseCase::findByEmail)
-                ?: adminUsername
-                    .takeIf { it.isNotBlank() }
-                    ?.let(memberUseCase::findByUsername)
                 ?: throw AppException("404-1", "관리자 프로필을 찾을 수 없습니다.")
 
         return MemberWithUsernameDto(adminMember)

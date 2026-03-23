@@ -38,9 +38,9 @@ class PostNotProdInitData(
 
     @Transactional
     fun makeBasePosts() {
-        val memberUser1 = memberUseCase.findByUsername("user1").getOrThrow()
-        val memberUser2 = memberUseCase.findByUsername("user2").getOrThrow()
-        val memberUser3 = memberUseCase.findByUsername("user3").getOrThrow()
+        val memberUser1 = memberUseCase.findByEmail("user1@test.com").getOrThrow()
+        val memberUser2 = memberUseCase.findByEmail("user2@test.com").getOrThrow()
+        val memberUser3 = memberUseCase.findByEmail("user3@test.com").getOrThrow()
 
         writeIfMissing(memberUser1, "제목 1", "내용 1", true, true)
         writeIfMissing(memberUser2, "제목 2", "내용 2", true, true)

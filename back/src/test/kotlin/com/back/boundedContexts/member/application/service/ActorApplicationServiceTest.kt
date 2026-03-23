@@ -36,7 +36,7 @@ class ActorApplicationServiceTest {
 
     @Test
     fun `username 으로 회원을 조회할 수 있다`() {
-        val member = actorApplicationService.findByUsername("user1")
+        val member = actorApplicationService.findByLoginId("user1")
 
         assertThat(member).isNotNull
         assertThat(member!!.username).isEqualTo("user1")
@@ -58,7 +58,13 @@ class ActorApplicationServiceTest {
 
         assertThat(accessToken).isNotBlank
         assertThat(actorApplicationService.payload(accessToken))
-            .isEqualTo(AccessTokenPayload(user1.id, user1.username, user1.name))
+            .isEqualTo(
+                AccessTokenPayload(
+                    id = user1.id,
+                    email = user1.email,
+                    name = user1.name,
+                ),
+            )
     }
 
     @Test
@@ -127,7 +133,7 @@ class ActorApplicationServiceTest {
 
         override fun existsByEmail(email: String): Boolean = member.email == email
 
-        override fun findByUsername(username: String): Member? = member.takeIf { it.username == username }
+        override fun findByLoginId(loginId: String): Member? = member.takeIf { it.username == loginId }
 
         override fun findByEmail(email: String): Member? = member.takeIf { it.email == email }
 

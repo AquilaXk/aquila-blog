@@ -49,8 +49,8 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
 
     @BeforeEach
     fun setUp() {
-        val user1 = actorApplicationService.findByUsername("user1").getOrThrow()
-        val user3 = actorApplicationService.findByUsername("user3").getOrThrow()
+        val user1 = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+        val user3 = actorApplicationService.findByEmail("user3@test.com").getOrThrow()
 
         post = postFacade.write(user1, "댓글 게시글", "댓글 게시글 내용", true, true)
         commentByAuthor = postFacade.writeComment(user1, post, "댓글 내용1")
@@ -111,8 +111,8 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `관리자 인증 쿠키가 있으면 비공개 글의 댓글 목록도 조회할 수 있다`() {
-            val user1 = actorApplicationService.findByUsername("user1").getOrThrow()
-            val admin = actorApplicationService.findByUsername("admin").getOrThrow()
+            val user1 = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val privatePost = postFacade.write(user1, "비공개 댓글 점검용", "비공개 내용", false, false)
             postFacade.writeComment(user1, privatePost, "비공개 댓글")
             val accessToken = actorApplicationService.genAccessToken(admin)
@@ -164,7 +164,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Write {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `인증된 사용자가 댓글을 작성하면 새 댓글이 정상 생성된다`() {
             val postId = post.id
 
@@ -190,7 +190,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user3")
+        @WithUserDetails("user3@test.com")
         fun `인증된 사용자가 기존 댓글에 대댓글을 작성하면 부모 댓글 식별자가 함께 저장된다`() {
             val postId = post.id
 
@@ -220,7 +220,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `실패 - 빈 내용`() {
             mvc
                 .post("/post/api/v1/posts/${post.id}/comments") {
@@ -238,7 +238,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Modify {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `작성자가 댓글을 수정 요청하면 내용이 정상적으로 변경된다`() {
             val postId = post.id
             val id = commentByAuthor.id
@@ -257,7 +257,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user3")
+        @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
             val postId = post.id
             val id = commentByAuthor.id
@@ -279,7 +279,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Delete {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `작성자가 댓글 삭제 요청 시 댓글이 정상 삭제된다`() {
             val postId = post.id
             val id = commentByAuthor.id
@@ -305,10 +305,22 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `부모 댓글을 삭제하면 그 대댓글도 함께 삭제된다`() {
-            val reply = postFacade.writeComment(actorApplicationService.findByUsername("user3").getOrThrow(), post, "대댓글", commentByAuthor)
-            val nestedReply = postFacade.writeComment(actorApplicationService.findByUsername("user1").getOrThrow(), post, "중첩 대댓글", reply)
+            val reply =
+                postFacade.writeComment(
+                    actorApplicationService.findByEmail("user3@test.com").getOrThrow(),
+                    post,
+                    "대댓글",
+                    commentByAuthor,
+                )
+            val nestedReply =
+                postFacade.writeComment(
+                    actorApplicationService.findByEmail("user1@test.com").getOrThrow(),
+                    post,
+                    "중첩 대댓글",
+                    reply,
+                )
             val postId = post.id
             val id = commentByAuthor.id
 
@@ -338,7 +350,7 @@ class ApiV1PostCommentControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user3")
+        @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
             val postId = post.id
             val id = commentByAuthor.id

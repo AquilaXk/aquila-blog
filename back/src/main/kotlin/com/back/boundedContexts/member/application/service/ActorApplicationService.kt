@@ -26,7 +26,7 @@ class ActorApplicationService(
     }
 
     @Transactional(readOnly = true)
-    override fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)
+    override fun findByLoginId(loginId: String): Member? = memberRepository.findByLoginId(loginId)
 
     @Transactional(readOnly = true)
     override fun findByEmail(email: String): Member? =

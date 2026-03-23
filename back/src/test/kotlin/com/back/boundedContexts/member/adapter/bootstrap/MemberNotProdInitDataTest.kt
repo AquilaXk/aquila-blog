@@ -15,21 +15,21 @@ class MemberNotProdInitDataTest {
 
     @Test
     fun `기본 회원 시드는 누락된 fixture만 생성한다`() {
-        given(memberUseCase.findByUsername("system")).willReturn(sampleMember("system", "시스템"))
-        given(memberUseCase.findByUsername("holding")).willReturn(null)
-        given(memberUseCase.findByUsername("admin")).willReturn(sampleMember("admin", "관리자"))
-        given(memberUseCase.findByUsername("user1")).willReturn(sampleMember("user1", "유저1"))
-        given(memberUseCase.findByUsername("user2")).willReturn(null)
-        given(memberUseCase.findByUsername("user3")).willReturn(null)
+        given(memberUseCase.findByEmail("system@test.com")).willReturn(sampleMember("system", "시스템"))
+        given(memberUseCase.findByEmail("holding@test.com")).willReturn(null)
+        given(memberUseCase.findByEmail("admin@test.com")).willReturn(sampleMember("admin", "관리자"))
+        given(memberUseCase.findByEmail("user1@test.com")).willReturn(sampleMember("user1", "유저1"))
+        given(memberUseCase.findByEmail("user2@test.com")).willReturn(null)
+        given(memberUseCase.findByEmail("user3@test.com")).willReturn(null)
 
         fixture.makeBaseMembers()
 
-        then(memberUseCase).should().join("holding", "1234", "홀딩", null, null)
-        then(memberUseCase).should().join("user2", "1234", "유저2", null, null)
-        then(memberUseCase).should().join("user3", "1234", "유저3", null, null)
-        then(memberUseCase).should(never()).join("system", "1234", "시스템", null, null)
-        then(memberUseCase).should(never()).join("admin", "1234", "관리자", null, null)
-        then(memberUseCase).should(never()).join("user1", "1234", "유저1", null, null)
+        then(memberUseCase).should().join("holding", "1234", "홀딩", null, "holding@test.com")
+        then(memberUseCase).should().join("user2", "1234", "유저2", null, "user2@test.com")
+        then(memberUseCase).should().join("user3", "1234", "유저3", null, "user3@test.com")
+        then(memberUseCase).should(never()).join("system", "1234", "시스템", null, "system@test.com")
+        then(memberUseCase).should(never()).join("admin", "1234", "관리자", null, "admin@test.com")
+        then(memberUseCase).should(never()).join("user1", "1234", "유저1", null, "user1@test.com")
     }
 
     private fun sampleMember(

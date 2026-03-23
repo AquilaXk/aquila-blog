@@ -95,7 +95,7 @@ class MemberApplicationServiceTest {
                 profileImgUrl = "https://example.com/modify-or-join-user1.png",
             )
 
-        val member = memberFacade.findByUsername(existingUsername)!!
+        val member = memberFacade.findByLoginId(existingUsername)!!
 
         assertThat(rsData.resultCode).isEqualTo("200-1")
         assertThat(rsData.msg).isEqualTo("회원 정보가 수정되었습니다.")
@@ -114,7 +114,7 @@ class MemberApplicationServiceTest {
                 profileImgUrl = "https://example.com/join-or-modify-user.png",
             )
 
-        val member = memberFacade.findByUsername("join-or-modify-user")!!
+        val member = memberFacade.findByLoginId("join-or-modify-user")!!
 
         assertThat(rsData.resultCode).isEqualTo("201-1")
         assertThat(rsData.msg).isEqualTo("회원가입이 완료되었습니다.")

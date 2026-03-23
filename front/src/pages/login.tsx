@@ -41,13 +41,8 @@ const LoginPage = () => {
   const loginIdPrefill = useMemo(() => {
     const emailRaw = router.query.email
     const emailValue = Array.isArray(emailRaw) ? emailRaw[0] : emailRaw
-    if (emailValue?.trim()) return emailValue.trim()
-
-    // 무중단 전환: 과거 signup redirect(`username`) 파라미터도 임시 수용한다.
-    const usernameRaw = router.query.username
-    const usernameValue = Array.isArray(usernameRaw) ? usernameRaw[0] : usernameRaw
-    return usernameValue?.trim() || ""
-  }, [router.query.email, router.query.username])
+    return emailValue?.trim() || ""
+  }, [router.query.email])
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")

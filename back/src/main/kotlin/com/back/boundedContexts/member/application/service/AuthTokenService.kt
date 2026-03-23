@@ -31,7 +31,7 @@ class AuthTokenService(
             .claims(
                 mapOf(
                     "id" to member.id,
-                    "username" to member.username,
+                    "email" to member.email,
                     "name" to member.name,
                     "rememberLoginEnabled" to member.rememberLoginEnabled,
                     "ipSecurityEnabled" to member.ipSecurityEnabled,
@@ -60,7 +60,8 @@ class AuthTokenService(
 
         return AccessTokenPayload(
             id = (payload["id"] as? Number)?.toLong() ?: return null,
-            username = payload["username"] as? String ?: return null,
+            username = payload["username"] as? String,
+            email = payload["email"] as? String,
             name = payload["name"] as? String ?: return null,
             rememberLoginEnabled = payload["rememberLoginEnabled"] as? Boolean ?: true,
             ipSecurityEnabled = payload["ipSecurityEnabled"] as? Boolean ?: false,

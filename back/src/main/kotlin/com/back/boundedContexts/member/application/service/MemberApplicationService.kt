@@ -54,7 +54,7 @@ class MemberApplicationService(
     ): Member {
         val normalizedEmail = normalizeEmailOrNull(email)
 
-        memberRepository.findByUsername(username)?.let {
+        memberRepository.findByLoginId(username)?.let {
             throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
         }
         normalizedEmail?.let {
@@ -74,7 +74,7 @@ class MemberApplicationService(
             try {
                 memberRepository.saveAndFlush(Member(0, username, encodedPassword, nickname, normalizedEmail))
             } catch (exception: DataIntegrityViolationException) {
-                if (memberRepository.findByUsername(username) != null) {
+                if (memberRepository.findByLoginId(username) != null) {
                     throw AppException("409-1", "이미 존재하는 회원 아이디입니다.")
                 }
                 normalizedEmail?.let {
@@ -133,9 +133,9 @@ class MemberApplicationService(
     }
 
     @Transactional(readOnly = true)
-    fun findByUsername(username: String): Member? =
+    fun findByLoginId(loginId: String): Member? =
         memberRepository
-            .findByUsername(username)
+            .findByLoginId(loginId)
             ?.let(memberProfileHydrator::hydrate)
 
     @Transactional(readOnly = true)
@@ -218,7 +218,7 @@ class MemberApplicationService(
         nickname: String,
         profileImgUrl: String?,
     ): RsData<Member> =
-        findByUsername(username)
+        findByLoginId(username)
             ?.let {
                 modify(it, nickname, profileImgUrl)
                 RsData("200-1", "회원 정보가 수정되었습니다.", it)

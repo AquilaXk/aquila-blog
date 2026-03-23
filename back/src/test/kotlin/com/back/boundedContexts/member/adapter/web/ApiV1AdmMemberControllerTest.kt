@@ -34,9 +34,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class UpdateProfileCard {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `관리자는 회원 프로필 카드와 메인 소개 카드를 함께 수정할 수 있다`() {
-            val member = memberFacade.findByUsername("admin")!!
+            val member = memberFacade.findByEmail("admin@test.com")!!
             val newRole = "Backend Developer"
             val newBio = "블로그 운영자 소개 문구"
             val newIntroTitle = "aquilaXk's Backend Log"
@@ -93,9 +93,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `관리자는 서비스와 연락처 링크를 모두 비운 상태로 저장할 수 있다`() {
-            val member = memberFacade.findByUsername("admin")!!
+            val member = memberFacade.findByEmail("admin@test.com")!!
 
             mvc
                 .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
@@ -123,9 +123,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `서비스 링크 아이콘이 허용 목록에 없으면 400을 반환한다`() {
-            val member = memberFacade.findByUsername("admin")!!
+            val member = memberFacade.findByEmail("admin@test.com")!!
 
             mvc
                 .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
@@ -151,9 +151,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `연락처 링크 아이콘이 비어 있으면 contact 기본 아이콘으로 저장된다`() {
-            val member = memberFacade.findByUsername("admin")!!
+            val member = memberFacade.findByEmail("admin@test.com")!!
 
             mvc
                 .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
@@ -182,7 +182,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `프로필 카드 수정에서 일반 사용자는 403을 반환한다`() {
             mvc
                 .patch("/member/api/v1/adm/members/1/profileCard") {
@@ -207,9 +207,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class UpdateProfileImg {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `관리자는 회원 프로필 이미지 URL을 변경할 수 있다`() {
-            val member = memberFacade.findByUsername("user1")!!
+            val member = memberFacade.findByEmail("user1@test.com")!!
             val newProfileImgUrl = "https://example.com/updated-profile.png"
 
             mvc
@@ -236,7 +236,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `회원 프로필 이미지 URL 변경에서 존재하지 않는 id를 보내면 404를 반환한다`() {
             mvc
                 .patch("/member/api/v1/adm/members/999999/profileImgUrl") {
@@ -255,7 +255,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `회원 프로필 이미지 URL 변경에서 profileImgUrl이 비어 있으면 400을 반환한다`() {
             mvc
                 .patch("/member/api/v1/adm/members/1/profileImgUrl") {
@@ -273,7 +273,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `회원 프로필 이미지 URL 변경에서 일반 사용자는 403을 반환한다`() {
             mvc
                 .patch("/member/api/v1/adm/members/1/profileImgUrl") {

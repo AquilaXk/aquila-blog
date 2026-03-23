@@ -23,7 +23,7 @@ class MemberRepositoryAdapter(
 
     override fun existsByEmail(email: String): Boolean = memberRepository.existsByEmail(email)
 
-    override fun findByUsername(username: String): Member? = memberRepository.findByUsername(username)
+    override fun findByLoginId(loginId: String): Member? = memberRepository.findByLoginId(loginId)
 
     override fun findByEmail(email: String): Member? = memberRepository.findByEmail(email)
 

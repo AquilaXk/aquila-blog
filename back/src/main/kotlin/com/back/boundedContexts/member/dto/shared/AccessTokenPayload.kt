@@ -7,7 +7,8 @@ package com.back.boundedContexts.member.dto.shared
  */
 data class AccessTokenPayload(
     val id: Long,
-    val username: String,
+    val username: String? = null,
+    val email: String? = null,
     val name: String,
     val rememberLoginEnabled: Boolean = true,
     val ipSecurityEnabled: Boolean = false,

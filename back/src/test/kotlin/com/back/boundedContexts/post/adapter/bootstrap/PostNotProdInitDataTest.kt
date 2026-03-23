@@ -23,9 +23,9 @@ class PostNotProdInitDataTest {
         val user2 = sampleMember(2, "user2", "유저2")
         val user3 = sampleMember(3, "user3", "유저3")
 
-        given(memberUseCase.findByUsername("user1")).willReturn(user1)
-        given(memberUseCase.findByUsername("user2")).willReturn(user2)
-        given(memberUseCase.findByUsername("user3")).willReturn(user3)
+        given(memberUseCase.findByEmail("user1@test.com")).willReturn(user1)
+        given(memberUseCase.findByEmail("user2@test.com")).willReturn(user2)
+        given(memberUseCase.findByEmail("user3@test.com")).willReturn(user3)
 
         given(postRepository.existsByAuthorAndTitle(user1, "제목 1")).willReturn(true)
         given(postRepository.existsByAuthorAndTitle(user2, "제목 2")).willReturn(false)

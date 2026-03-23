@@ -61,7 +61,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Write {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `인증된 사용자가 글을 작성하면 제목과 내용이 저장된 게시글이 정상 생성된다`() {
             val resultActions =
                 mvc.post("/post/api/v1/posts") {
@@ -87,7 +87,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `성공 - 공개 글 작성`() {
             mvc
                 .post("/post/api/v1/posts") {
@@ -103,7 +103,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `실패 - 제목 없이`() {
             mvc
                 .post("/post/api/v1/posts") {
@@ -144,7 +144,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `동일 Idempotency-Key 로 글 작성 요청을 재시도하면 중복 생성되지 않는다`() {
             val beforeCount = postFacade.count()
             val idempotencyKey = "same-write-key-001"
@@ -172,7 +172,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `contentHtml 저장 시 위험한 스크립트와 이벤트 속성은 제거된다`() {
             mvc
                 .post("/post/api/v1/posts") {
@@ -242,9 +242,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `성공 - 미공개 글 작성자 조회`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "미공개 글", "내용", false, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
@@ -264,9 +264,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user3")
+        @WithUserDetails("user3@test.com")
         fun `실패 - 미공개 글 다른 사용자`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "미공개 글", "내용", false, false)
 
             mvc.get("/post/api/v1/posts/${post.id}").andExpect {
@@ -325,7 +325,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `비공개 글은 공개 목록에서 조회되지 않는다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val unpublishedPost = postFacade.write(actor, "비공개 글", "비공개 내용", false, false)
 
             mvc.get("/post/api/v1/posts").andExpect {
@@ -336,7 +336,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `공개지만 목록 미노출 글은 공개 목록에서 조회되지 않는다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val unlistedPost = postFacade.write(actor, "비노출 공개 글", "비노출 내용", true, false)
 
             mvc.get("/post/api/v1/posts").andExpect {
@@ -377,7 +377,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `explore 커서 조회는 잘못된 인증 정보가 있어도 정상 반환된다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             postFacade.write(
                 actor,
                 "explore-cursor-public-${System.currentTimeMillis()}",
@@ -462,7 +462,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `탐색 목록 조회는 tags 와 category 메타를 포함한다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "feed-meta-${System.currentTimeMillis()}"
             val postContent =
                 """
@@ -490,7 +490,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `검색 목록 조회는 keyword 기준으로 공개 글을 반환한다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-list-${System.currentTimeMillis()}"
             val post =
                 postFacade.write(
@@ -539,7 +539,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `검색 목록 조회는 제목-태그-본문 가중치 순서로 정렬된다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val keyword = "rank-${System.currentTimeMillis()}"
             val titleMatchedPost =
                 postFacade.write(
@@ -587,7 +587,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `검색 목록 조회는 hashtag 의도를 태그 필터로 인식한다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-hashtag-${System.currentTimeMillis()}"
             val post =
                 postFacade.write(
@@ -619,7 +619,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `검색 목록 조회는 tag prefix 의도를 태그 필터로 인식한다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-tag-prefix-${System.currentTimeMillis()}"
             val post =
                 postFacade.write(
@@ -651,7 +651,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `탐색 목록 조회는 tag 파라미터로 필터링된다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "tag-filter-${System.currentTimeMillis()}"
             val post =
                 postFacade.write(
@@ -684,7 +684,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
         @Test
         fun `태그 집계 조회는 공개 목록의 태그 카운트를 반환한다`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             postFacade.write(
                 actor,
                 "tags-aggregation-${System.currentTimeMillis()}",
@@ -743,9 +743,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Modify {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `인증된 작성자가 기존 글 수정 요청 시 글이 정상 변경된다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
 
             mvc
@@ -762,9 +762,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user3")
+        @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
 
             mvc
@@ -779,9 +779,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `published false로 수정하면 listed가 자동으로 false가 된다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "공개 글", "내용", true, true)
 
             mvc
@@ -796,7 +796,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `실패 - 존재하지 않는 글`() {
             mvc
                 .put("/post/api/v1/posts/${Int.MAX_VALUE}") {
@@ -809,9 +809,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `실패 - 요청 version 이 현재 version 과 다르면 409`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
             val staleVersion = (post.version ?: 0L) + 1
 
@@ -826,9 +826,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `글 수정 시 contentHtml 은 sanitize 후 저장된다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "원본", "원본 본문", true, true)
 
             mvc
@@ -857,9 +857,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Delete {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `작성자가 본인 글 삭제 요청 시 삭제가 성공적으로 처리된다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "삭제할 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
@@ -872,9 +872,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `legacy version null 글도 삭제 요청이 성공한다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "legacy-version-null-${System.currentTimeMillis()}", "내용", true, true)
 
             jdbcTemplate.update("update post set version = null where id = ?", post.id)
@@ -888,9 +888,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `성공 - 관리자가 다른 사람 글 삭제`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "삭제될 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
@@ -900,9 +900,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user3")
+        @WithUserDetails("user3@test.com")
         fun `실패 - 권한 없음`() {
-            val actor = actorApplicationService.findByUsername("user1").getOrThrow()
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "다른 사람 글", "내용", true, true)
 
             mvc.delete("/post/api/v1/posts/${post.id}").andExpect {
@@ -913,7 +913,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `실패 - 존재하지 않는 글`() {
             mvc.delete("/post/api/v1/posts/${Int.MAX_VALUE}").andExpect {
                 status { isNotFound() }
@@ -979,7 +979,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class Like {
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `성공 - 좋아요 추가`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
@@ -995,7 +995,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `성공 - 좋아요 취소`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
 
@@ -1009,9 +1009,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `좋아요 카운터 attr 누락 상태에서도 unlike가 409 없이 동작한다`() {
-            val author = actorApplicationService.findByUsername("admin").getOrThrow()
+            val author = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(author, "like-attr-missing-${System.currentTimeMillis()}", "내용", true, true)
 
             mvc.put("/post/api/v1/posts/${post.id}/like").andExpect {
@@ -1050,7 +1050,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `멱등 like 요청은 여러 번 보내도 좋아요가 한번만 유지된다`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
             val initialLikesCount = post.likesCount
@@ -1070,7 +1070,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `멱등 unlike 요청은 여러 번 보내도 취소 상태가 유지된다`() {
             val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
             val initialLikesCount = post.likesCount
@@ -1095,7 +1095,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class GetMine {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `성공 - 내 글 목록 조회`() {
             mvc.get("/post/api/v1/posts/mine?page=1&pageSize=10").andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
@@ -1106,9 +1106,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `성공 - 키워드 검색`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val targetPost = postFacade.write(actor, "내 검색 키워드 글", "검색 검증 글")
 
             mvc
@@ -1135,7 +1135,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class GetOrCreateTemp {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `성공 - 새 임시글`() {
             mvc.post("/post/api/v1/posts/temp").andExpect {
                 match(handler().handlerType(ApiV1PostController::class.java))
@@ -1148,7 +1148,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `성공 - 기존 임시글`() {
             mvc.post("/post/api/v1/posts/temp")
 
@@ -1171,9 +1171,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
     @Nested
     inner class AdmDeletedList {
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `soft delete 글은 관리자 기본 목록에서 제외되고 deleted 목록에서 조회된다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val uniqueTitle = "삭제 목록 대상-${System.currentTimeMillis()}"
             val post = postFacade.write(actor, uniqueTitle, "삭제 목록 테스트 본문", true, true)
             postFacade.delete(post, actor)
@@ -1203,9 +1203,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `deleted 목록은 페이지네이션과 검색어가 적용된다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val prefix = "삭제탭-페이지"
 
             repeat(3) { idx ->
@@ -1227,7 +1227,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("user1")
+        @WithUserDetails("user1@test.com")
         fun `일반 사용자는 deleted 목록을 조회할 수 없다`() {
             mvc.get("/post/api/v1/adm/posts/deleted").andExpect {
                 status { isForbidden() }
@@ -1244,9 +1244,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `관리자는 deleted 글을 복구할 수 있다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val uniqueTitle = "복구 대상-${System.currentTimeMillis()}"
             val post = postFacade.write(actor, uniqueTitle, "복구 테스트 본문", true, true)
             postFacade.delete(post, actor)
@@ -1279,9 +1279,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        @WithUserDetails("admin")
+        @WithUserDetails("admin@test.com")
         fun `관리자는 deleted 글을 영구삭제할 수 있다`() {
-            val actor = actorApplicationService.findByUsername("admin").getOrThrow()
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val uniqueTitle = "영구삭제 대상-${System.currentTimeMillis()}"
             val post = postFacade.write(actor, uniqueTitle, "영구삭제 테스트 본문", true, true)
             postFacade.delete(post, actor)

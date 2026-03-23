@@ -66,7 +66,7 @@ class ApiV1MemberControllerWebMvcTest {
                 siteBackUrl = "http://localhost:8080",
                 siteFrontUrl = "http://localhost:3000",
                 adminUsername = "admin",
-                adminEmail = "",
+                adminEmail = "admin@test.com",
                 adminPassword = "test-password",
             )
         }
@@ -81,7 +81,7 @@ class ApiV1MemberControllerWebMvcTest {
             adminMember.profileBio = "소개"
             adminMember.homeIntroTitle = "aquilaXk's Blog"
             adminMember.homeIntroDescription = "welcome to my backend dev log!"
-            given(memberUseCase.findByUsername("admin")).willReturn(adminMember)
+            given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
 
             mvc
                 .get("/member/api/v1/members/adminProfile") {
@@ -92,7 +92,7 @@ class ApiV1MemberControllerWebMvcTest {
                     status { isOk() }
                     match(handler().handlerType(ApiV1MemberController::class.java))
                     match(handler().methodName("getAdminProfile"))
-                    jsonPath("$.username") { value(adminMember.username) }
+                    jsonPath("$.username") { value(adminMember.name) }
                     jsonPath("$.nickname") { value(adminMember.nickname) }
                     jsonPath("$.profileRole") { value("블로그 운영자") }
                     jsonPath("$.profileBio") { value("소개") }

@@ -59,7 +59,7 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
 
     @Test
     fun `post list query count sanity`() {
-        val admin = actorApplicationService.findByUsername("admin")!!
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
         postFacade.write(admin, "sanity list title", "sanity list content", true, true)
         statistics.clear()
 
@@ -74,7 +74,7 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
 
     @Test
     fun `post detail query count sanity`() {
-        val admin = actorApplicationService.findByUsername("admin")!!
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post = postFacade.write(admin, "sanity detail title", "sanity detail content", true, true)
         statistics.clear()
 
@@ -88,9 +88,9 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
     }
 
     @Test
-    @WithUserDetails("user1")
+    @WithUserDetails("user1@test.com")
     fun `write comment query count sanity`() {
-        val admin = actorApplicationService.findByUsername("admin")!!
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post = postFacade.write(admin, "sanity comment title", "sanity comment content", true, true)
         statistics.clear()
 
@@ -106,9 +106,9 @@ class PerformanceSanityTest : SeededSpringBootTestSupport() {
     }
 
     @Test
-    @WithUserDetails("user1")
+    @WithUserDetails("user1@test.com")
     fun `like put query count sanity`() {
-        val admin = actorApplicationService.findByUsername("admin")!!
+        val admin = actorApplicationService.findByEmail("admin@test.com")!!
         val post = postFacade.write(admin, "sanity like title", "sanity like content", true, true)
         statistics.clear()
 

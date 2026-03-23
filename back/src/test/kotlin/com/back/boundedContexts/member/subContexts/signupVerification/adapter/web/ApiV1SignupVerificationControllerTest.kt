@@ -169,7 +169,6 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
                         """
                         {
                             "signupToken": "invalid-token",
-                            "username": "verified-user",
                             "password": "Abcd1234!",
                             "nickname": "이메일인증회원"
                         }
@@ -181,7 +180,7 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        fun `레거시 클라이언트가 username을 보내도 최종 가입을 완료할 수 있다`() {
+        fun `signup complete 요청에 username 필드를 보내면 검증 오류를 반환한다`() {
             val email = "legacy-signup@example.com"
 
             mvc.post("/member/api/v1/signup/email/start") {
@@ -221,13 +220,8 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
                         }
                         """.trimIndent()
                 }.andExpect {
-                    status { isCreated() }
-                    jsonPath("$.resultCode") { value("201-2") }
+                    status { isBadRequest() }
                 }
-
-            val joinedMember = memberApplicationService.findByUsername("legacy-signup-user")
-            checkNotNull(joinedMember)
-            assertThat(joinedMember.email).isEqualTo(email)
         }
     }
 }

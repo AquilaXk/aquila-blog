@@ -46,7 +46,7 @@ class ApiV1MemberControllerTest : SeededSpringBootTestSupport() {
                             """.trimIndent()
                     }
 
-                val member = memberFacade.findByUsername("usernew")!!
+                val member = memberFacade.findByLoginId("usernew")!!
 
                 resultActions.andExpect {
                     status { isCreated() }

@@ -24,11 +24,11 @@ class MemberRepositoryImpl(
     @PersistenceContext
     private lateinit var entityManager: EntityManager
 
-    override fun findByUsername(username: String): Member? =
+    override fun findByLoginId(loginId: String): Member? =
         entityManager
             .unwrap(Session::class.java)
             .byNaturalId(Member::class.java)
-            .using("username", username)
+            .using("username", loginId)
             .load()
 
     override fun findQPagedByKw(
@@ -70,7 +70,7 @@ class MemberRepositoryImpl(
         QueryDslUtil.applySorting(query, pageable) { property ->
             when (property) {
                 "createdAt" -> member.createdAt
-                "username" -> member.username
+                "username", "loginId" -> member.username
                 "nickname" -> member.nickname
                 else -> null
             }

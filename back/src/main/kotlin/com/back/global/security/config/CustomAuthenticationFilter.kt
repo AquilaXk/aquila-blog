@@ -2,6 +2,7 @@ package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
@@ -116,13 +117,14 @@ class CustomAuthenticationFilter(
         val payload = accessToken.takeIf { it.isNotBlank() }?.let(actorApplicationService::payload)
 
         if (payload != null) {
+            val tokenLoginIdentifier = resolveTokenLoginIdentifier(payload)
             if (payload.ipSecurityEnabled) {
                 val matched = authIpSecurityService.matches(payload.ipSecurityFingerprint, clientIp)
                 if (!matched) {
                     runCatching {
                         authSecurityEventService.recordIpSecurityMismatchBlocked(
                             memberId = payload.id,
-                            loginIdentifier = payload.username,
+                            loginIdentifier = tokenLoginIdentifier,
                             rememberLoginEnabled = payload.rememberLoginEnabled,
                             ipSecurityEnabled = payload.ipSecurityEnabled,
                             expectedIpFingerprint = payload.ipSecurityFingerprint,
@@ -136,7 +138,14 @@ class CustomAuthenticationFilter(
                     throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
                 }
             }
-            val payloadMember = Member(payload.id, payload.username, null, payload.name)
+            val payloadMember =
+                Member(
+                    id = payload.id,
+                    username = resolvePrincipalUsername(payload),
+                    password = null,
+                    nickname = payload.name,
+                    email = payload.email,
+                )
             authenticate(payloadMember)
             return
         }
@@ -248,5 +257,24 @@ class CustomAuthenticationFilter(
     companion object {
         private const val MAX_PATH_LENGTH = 512
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+    }
+
+    private fun resolveTokenLoginIdentifier(payload: AccessTokenPayload): String? {
+        val normalizedEmail = payload.email?.trim().orEmpty()
+        if (normalizedEmail.isNotBlank()) return normalizedEmail
+
+        val normalizedUsername = payload.username?.trim().orEmpty()
+        if (normalizedUsername.isNotBlank()) return normalizedUsername
+        return null
+    }
+
+    private fun resolvePrincipalUsername(payload: AccessTokenPayload): String {
+        val normalizedUsername = payload.username?.trim().orEmpty()
+        if (normalizedUsername.isNotBlank()) return normalizedUsername
+
+        val normalizedEmail = payload.email?.trim().orEmpty()
+        if (normalizedEmail.isNotBlank()) return normalizedEmail
+
+        return "member-${payload.id}"
     }
 }

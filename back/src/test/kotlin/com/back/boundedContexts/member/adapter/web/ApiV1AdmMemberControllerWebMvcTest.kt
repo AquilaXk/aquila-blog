@@ -107,7 +107,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
                     jsonPath("$.content[$index].createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
                     jsonPath("$.content[$index].modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                     jsonPath("$.content[$index].isAdmin") { value(member.isAdmin) }
-                    jsonPath("$.content[$index].username") { value(member.username) }
+                    jsonPath("$.content[$index].username") { value(member.name) }
                     jsonPath("$.content[$index].name") { value(member.name) }
                     jsonPath("$.content[$index].nickname") { value(member.nickname) }
                     jsonPath("$.content[$index].profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }
@@ -131,7 +131,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.content.length()") { value(2) }
-                    jsonPath("$.content[*].username") { value(containsInAnyOrder("android-a", "android-guide")) }
+                    jsonPath("$.content[*].username") { value(containsInAnyOrder(matchedOne.name, matchedTwo.name)) }
                 }
         }
 
@@ -209,7 +209,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.content.length()") { value(1) }
-                    jsonPath("$.content[0].username") { value("profile-list-user") }
+                    jsonPath("$.content[0].username") { value(member.name) }
                     jsonPath("$.content[0].profileRole") { value("Backend Engineer") }
                     jsonPath("$.content[0].profileBio") { value("회원 목록 hydrate 검증용 bio") }
                 }
@@ -234,7 +234,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
                     jsonPath("$.createdAt") { value(startsWith(member.createdAt.toString().take(20))) }
                     jsonPath("$.modifiedAt") { value(startsWith(member.modifiedAt.toString().take(20))) }
                     jsonPath("$.isAdmin") { value(member.isAdmin) }
-                    jsonPath("$.username") { value(member.username) }
+                    jsonPath("$.username") { value(member.name) }
                     jsonPath("$.name") { value(member.name) }
                     jsonPath("$.nickname") { value(member.nickname) }
                     jsonPath("$.profileImageUrl") { value(startsWith(member.redirectToProfileImgUrlOrDefault)) }

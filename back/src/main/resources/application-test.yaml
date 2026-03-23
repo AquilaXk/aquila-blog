@@ -29,6 +29,7 @@ custom:
       legacyDirectJoinEnabled: true
   admin:
     username: admin
+    email: admin@test.com
   task:
     processor:
       inlineWhenNotProd: true

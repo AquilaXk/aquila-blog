@@ -30,7 +30,7 @@ interface MemberUseCase {
         profileImgUrl: String?,
     ): Member
 
-    fun findByUsername(username: String): Member?
+    fun findByLoginId(loginId: String): Member?
 
     fun findByEmail(email: String): Member?
 

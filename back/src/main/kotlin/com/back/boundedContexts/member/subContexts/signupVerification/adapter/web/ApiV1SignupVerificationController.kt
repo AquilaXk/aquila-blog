@@ -40,7 +40,10 @@ class ApiV1SignupVerificationController(
     data class SignupCompleteRequest(
         @field:NotBlank
         val signupToken: String,
-        @field:Size(min = 2, max = 30)
+        @field:Pattern(
+            regexp = "^$",
+            message = "username 필드는 더 이상 지원되지 않습니다.",
+        )
         val username: String? = null,
         @field:NotBlank
         @field:Size(min = 8, max = 64)
@@ -108,7 +111,6 @@ class ApiV1SignupVerificationController(
         val member =
             memberSignupVerificationService.completeSignup(
                 signupToken = reqBody.signupToken,
-                legacyUsername = reqBody.username,
                 password = reqBody.password,
                 nickname = reqBody.nickname,
             )

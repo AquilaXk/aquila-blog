@@ -24,13 +24,10 @@ class CustomUserDetailsService(
      */
     override fun loadUserByUsername(username: String): UserDetails {
         val normalizedIdentifier = username.trim()
+        if (!normalizedIdentifier.contains("@")) throw UsernameNotFoundException("사용자를 찾을 수 없습니다.")
+
         val member =
-            if (normalizedIdentifier.contains("@")) {
-                actorApplicationService.findByEmail(normalizedIdentifier.lowercase(Locale.ROOT))
-                    ?: actorApplicationService.findByUsername(normalizedIdentifier)
-            } else {
-                actorApplicationService.findByUsername(normalizedIdentifier)
-            }
+            actorApplicationService.findByEmail(normalizedIdentifier.lowercase(Locale.ROOT))
                 ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다.")
 
         return SecurityUser(

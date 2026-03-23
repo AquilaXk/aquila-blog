@@ -169,7 +169,7 @@ test("로그인 정책 토글값은 요청 바디에 반영되고 재진입 시 
   await page.locator("#password").fill("Abcd1234!")
 
   await page.getByRole("button", { name: "로그인 상태 유지" }).click()
-  await page.locator("button", { hasText: "IP보안" }).first().click()
+  await page.getByRole("button", { name: "IP보안 ON/OFF" }).click()
   await page.getByRole("button", { name: "로그인", exact: true }).click()
 
   await expect.poll(() => loginBodies.length).toBe(1)
@@ -572,7 +572,7 @@ test("로그인 실패 메시지가 상태코드 기준으로 표준화된다", 
   })
 
   await page.goto("/login")
-  await page.getByLabel("이메일").fill("wrong-user")
+  await page.getByLabel("이메일").fill("wrong-user@example.com")
   await page.locator("#password").fill("wrong-password")
   await page.getByRole("button", { name: "로그인", exact: true }).click()
 

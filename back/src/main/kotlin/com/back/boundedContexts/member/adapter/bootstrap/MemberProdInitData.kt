@@ -52,12 +52,9 @@ class MemberProdInitData(
 
         if (adminEmail.isBlank()) return
         if (adminPassword.isBlank()) return
-        logger.info("Configured admin identity bootstrap started. email={} username={}", adminEmail, configuredAdminUsername)
+        logger.info("Configured admin identity bootstrap started. email={} nickname={}", adminEmail, adminNickname)
         val existingAdmin =
             memberUseCase.findByEmail(adminEmail)
-                ?: configuredAdminUsername
-                    .takeIf { it.isNotBlank() }
-                    ?.let(memberUseCase::findByUsername)
         if (existingAdmin != null) {
             val hasPassword = !existingAdmin.password.isNullOrBlank()
             val passwordMatchesConfigured = hasPassword && passwordEncoder.matches(adminPassword, existingAdmin.password)

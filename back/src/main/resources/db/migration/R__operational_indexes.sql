@@ -7,15 +7,19 @@ BEGIN
             ON member (modified_at DESC);
     END IF;
 
+    IF to_regclass('public.member_idx_pgroonga_username_nickname') IS NOT NULL THEN
+        DROP INDEX IF EXISTS member_idx_pgroonga_username_nickname;
+    END IF;
+
     IF to_regclass('public.member') IS NOT NULL
         AND EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pgroonga') THEN
         IF EXISTS(SELECT 1 FROM pg_opclass WHERE opcname = 'pgroonga_text_array_full_text_search_ops_v2') THEN
-            CREATE INDEX IF NOT EXISTS member_idx_pgroonga_username_nickname
-                ON member USING pgroonga ((ARRAY["username"::text, "nickname"::text])
+            CREATE INDEX IF NOT EXISTS member_idx_pgroonga_login_id_nickname
+                ON member USING pgroonga ((ARRAY["login_id"::text, "nickname"::text])
                 pgroonga_text_array_full_text_search_ops_v2) WITH (tokenizer = 'TokenBigram');
         ELSIF EXISTS(SELECT 1 FROM pg_opclass WHERE opcname = 'pgroonga_text_array_full_text_search_ops') THEN
-            CREATE INDEX IF NOT EXISTS member_idx_pgroonga_username_nickname
-                ON member USING pgroonga ((ARRAY["username"::text, "nickname"::text])
+            CREATE INDEX IF NOT EXISTS member_idx_pgroonga_login_id_nickname
+                ON member USING pgroonga ((ARRAY["login_id"::text, "nickname"::text])
                 pgroonga_text_array_full_text_search_ops) WITH (tokenizer = 'TokenBigram');
         END IF;
     END IF;

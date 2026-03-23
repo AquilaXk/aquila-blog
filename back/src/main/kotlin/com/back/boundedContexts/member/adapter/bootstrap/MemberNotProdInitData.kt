@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Lazy
 import org.springframework.context.annotation.Profile
 import org.springframework.core.annotation.Order
 import org.springframework.transaction.annotation.Transactional
+import java.util.Locale
 
 /**
  * MemberNotProdInitData는 환경별 초기 데이터/부트스트랩 로직을 담당합니다.
@@ -38,20 +39,29 @@ class MemberNotProdInitData(
     @Transactional
     fun makeBaseMembers() {
         val adminUsername = AppConfig.adminUsernameOrBlank.trim().ifBlank { "admin" }
+        val configuredAdminEmail = AppConfig.adminEmailOrBlank.trim().lowercase(Locale.ROOT)
+        val adminEmail = configuredAdminEmail.ifBlank { "admin@test.com" }
+
+        data class SeedMember(
+            val username: String,
+            val nickname: String,
+            val email: String,
+        )
+
         val seedMembers =
             linkedMapOf(
-                "system" to "시스템",
-                "holding" to "홀딩",
+                "system@test.com" to SeedMember("system", "시스템", "system@test.com"),
+                "holding@test.com" to SeedMember("holding", "홀딩", "holding@test.com"),
                 // 관리자 계정은 환경설정 username 기준으로 단일 생성한다.
-                adminUsername to "관리자",
-                "user1" to "유저1",
-                "user2" to "유저2",
-                "user3" to "유저3",
+                adminEmail to SeedMember(adminUsername, "관리자", adminEmail),
+                "user1@test.com" to SeedMember("user1", "유저1", "user1@test.com"),
+                "user2@test.com" to SeedMember("user2", "유저2", "user2@test.com"),
+                "user3@test.com" to SeedMember("user3", "유저3", "user3@test.com"),
             )
 
-        seedMembers.forEach { (username, nickname) ->
-            if (memberUseCase.findByUsername(username) == null) {
-                memberUseCase.join(username, "1234", nickname, null)
+        seedMembers.forEach { (email, seed) ->
+            if (memberUseCase.findByEmail(email) == null) {
+                memberUseCase.join(seed.username, "1234", seed.nickname, null, seed.email)
             }
         }
     }

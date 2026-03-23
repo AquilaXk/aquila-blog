@@ -34,7 +34,7 @@ class MemberUseCaseAdapter(
         profileImgUrl: String?,
     ): Member = memberApplicationService.joinWithVerifiedEmail(email, password, nickname, profileImgUrl)
 
-    override fun findByUsername(username: String): Member? = memberApplicationService.findByUsername(username)
+    override fun findByLoginId(loginId: String): Member? = memberApplicationService.findByLoginId(loginId)
 
     override fun findByEmail(email: String): Member? = memberApplicationService.findByEmail(email)
 

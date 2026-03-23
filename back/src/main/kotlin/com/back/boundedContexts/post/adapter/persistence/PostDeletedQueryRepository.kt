@@ -63,7 +63,7 @@ class PostDeletedQueryRepository(
               p.id,
               p.title,
               p.author_id,
-              coalesce(m.nickname, m.username, '알 수 없음') as author_name,
+              coalesce(m.nickname, m.login_id, '알 수 없음') as author_name,
               p.published,
               p.listed,
               p.created_at,

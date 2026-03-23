@@ -1,6 +1,9 @@
 package com.back.global.security.config
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
+import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
+import com.back.global.app.AppConfig
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.web.application.AuthCookieService
@@ -17,6 +20,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
+import org.springframework.security.core.context.SecurityContextHolder
 import tools.jackson.databind.ObjectMapper
 
 @DisplayName("CustomAuthenticationFilter 테스트")
@@ -109,5 +113,88 @@ class CustomAuthenticationFilterTest {
         filter.doFilter(request, response, filterChain)
 
         assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+    }
+
+    @Test
+    @DisplayName("payload email 누락 토큰은 DB 회원 기준으로 권한을 복구하고 accessToken을 재발급한다")
+    fun `legacy payload without email restores admin authority from persisted member`() {
+        AppConfig(
+            siteBackUrl = "https://api.aquilaxk.site",
+            siteFrontUrl = "https://www.aquilaxk.site",
+            adminUsername = "admin",
+            adminEmail = "admin@test.com",
+            adminPassword = "secret",
+        )
+
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
+        val rq = mock(Rq::class.java)
+        val objectMapper = ObjectMapper()
+        val request = MockHttpServletRequest("PUT", "/post/api/v1/posts/452")
+        val legacyToken = "legacy-access-token"
+        val persistedAdmin = Member(54L, "internal-admin", null, "aquila", "admin@test.com")
+
+        given(publicApiRequestMatcher.matches(request)).willReturn(false)
+        given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $legacyToken")
+        given(actorApplicationService.payload(legacyToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    username = "internal-admin",
+                    email = null,
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                ),
+            )
+        given(actorApplicationService.findById(54L)).willReturn(persistedAdmin)
+        given(actorApplicationService.genAccessToken(persistedAdmin)).willReturn("rotated-access-token")
+
+        val filter =
+            CustomAuthenticationFilter(
+                actorApplicationService = actorApplicationService,
+                authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
+                authCookieService = authCookieService,
+                objectMapper = objectMapper,
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                rq = rq,
+            )
+
+        val response = MockHttpServletResponse()
+        val filterChain =
+            MockFilterChain(
+                object : HttpServlet() {
+                    override fun service(
+                        req: HttpServletRequest,
+                        res: HttpServletResponse,
+                    ) {
+                        val authentication = SecurityContextHolder.getContext().authentication
+                        val hasAdminRole =
+                            authentication
+                                ?.authorities
+                                ?.any { authority -> authority.authority == "ROLE_ADMIN" }
+                                ?: false
+                        if (!hasAdminRole) {
+                            res.status = HttpServletResponse.SC_FORBIDDEN
+                            return
+                        }
+                        res.status = HttpServletResponse.SC_NO_CONTENT
+                    }
+                },
+            )
+
+        try {
+            filter.doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
     }
 }

@@ -138,6 +138,21 @@ class CustomAuthenticationFilter(
                     throw AppException("401-7", "IP 보안 검증에 실패했습니다. 다시 로그인해주세요.")
                 }
             }
+
+            // 과거 토큰(payload.email 누락)과 현재 이메일 기반 관리자 판정의 드리프트를 즉시 복구한다.
+            if (payload.email.isNullOrBlank()) {
+                actorApplicationService.findById(payload.id)?.let { persistedMember ->
+                    val rotatedAccessToken = actorApplicationService.genAccessToken(persistedMember)
+                    authCookieService.issueAccessToken(
+                        accessToken = rotatedAccessToken,
+                        rememberLoginEnabled = persistedMember.rememberLoginEnabled,
+                    )
+                    rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
+                    authenticate(persistedMember)
+                    return
+                }
+            }
+
             val payloadMember =
                 Member(
                     id = payload.id,

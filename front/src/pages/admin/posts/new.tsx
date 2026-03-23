@@ -1142,8 +1142,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
   const [selectedPostIds, setSelectedPostIds] = useState<number[]>([])
-  const [rowActionMenuId, setRowActionMenuId] = useState<number | null>(null)
-  const [mobileActionSheetRow, setMobileActionSheetRow] = useState<AdminPostListItem | null>(null)
   const [softDeleteUndoState, setSoftDeleteUndoState] = useState<SoftDeleteUndoState | null>(null)
   const [deleteConfirmState, setDeleteConfirmState] = useState<DeleteConfirmState | null>(null)
   const [deleteConfirmNotice, setDeleteConfirmNotice] = useState<NoticeState>({
@@ -2561,8 +2559,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setSelectedPostIds([])
     setAdminPostRows([])
     setAdminPostTotal(0)
-    setRowActionMenuId(null)
-    setMobileActionSheetRow(null)
     setListQuickPreset("none")
     setDeletedListNotice({
       tone: "idle",
@@ -2578,13 +2574,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     )
     return () => window.clearTimeout(timeout)
   }, [softDeleteUndoState])
-
-  useEffect(() => {
-    if (rowActionMenuId === null) return
-    const close = () => setRowActionMenuId(null)
-    window.addEventListener("click", close)
-    return () => window.removeEventListener("click", close)
-  }, [rowActionMenuId])
 
   const handleUploadMemberProfileImage = async (selectedFile?: File) => {
     const file = selectedFile || profileImageFileInputRef.current?.files?.[0]
@@ -3878,9 +3867,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {adminPostViewRows.map((row, rowIndex) => {
-                          const shouldOpenMenuUpward = rowIndex >= adminPostViewRows.length - 2
-
+                        {adminPostViewRows.map((row) => {
                           return (
                             <tr key={row.id}>
                               {listScope === "active" && (
@@ -3910,67 +3897,45 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               <td className="actionsCell">
                                 <InlineActions>
                                   {listScope === "active" ? (
-                                    <Button
-                                      type="button"
-                                      disabled={loadingKey.length > 0}
-                                      onClick={() => {
-                                        setPostId(String(row.id))
-                                        void loadPostForEditor(String(row.id))
-                                      }}
-                                    >
-                                      불러오기
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      disabled={loadingKey.length > 0}
-                                      onClick={() => void restoreDeletedPostFromList(row)}
-                                    >
-                                      복구
-                                    </Button>
-                                  )}
-                                  <MoreMenuWrap>
-                                    <MoreMenuButton
-                                      type="button"
-                                      aria-label={`${row.id}번 글 추가 작업`}
-                                      onClick={(event) => {
-                                        event.stopPropagation()
-                                        setRowActionMenuId((prev) => (prev === row.id ? null : row.id))
-                                      }}
-                                    >
-                                      ⋯
-                                    </MoreMenuButton>
-                                    {rowActionMenuId === row.id && (
-                                      <MoreMenuList
-                                        data-placement={shouldOpenMenuUpward ? "top" : "bottom"}
-                                        onClick={(event) => event.stopPropagation()}
+                                    <>
+                                      <Button
+                                        type="button"
+                                        disabled={loadingKey.length > 0}
+                                        onClick={() => {
+                                          setPostId(String(row.id))
+                                          void loadPostForEditor(String(row.id))
+                                        }}
                                       >
-                                        {listScope === "active" ? (
-                                          <button
-                                            type="button"
-                                            disabled={loadingKey.length > 0}
-                                            onClick={() => {
-                                              setRowActionMenuId(null)
-                                              openDeleteConfirm([row.id], row.title)
-                                            }}
-                                          >
-                                            삭제
-                                          </button>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            disabled={loadingKey.length > 0}
-                                            onClick={() => {
-                                              setRowActionMenuId(null)
-                                              void hardDeleteDeletedPostFromList(row)
-                                            }}
-                                          >
-                                            영구삭제
-                                          </button>
-                                        )}
-                                      </MoreMenuList>
-                                    )}
-                                  </MoreMenuWrap>
+                                        불러오기
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        data-variant="danger"
+                                        disabled={loadingKey.length > 0}
+                                        onClick={() => openDeleteConfirm([row.id], row.title)}
+                                      >
+                                        삭제
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        disabled={loadingKey.length > 0}
+                                        onClick={() => void restoreDeletedPostFromList(row)}
+                                      >
+                                        복구
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        data-variant="danger"
+                                        disabled={loadingKey.length > 0}
+                                        onClick={() => void hardDeleteDeletedPostFromList(row)}
+                                      >
+                                        영구삭제
+                                      </Button>
+                                    </>
+                                  )}
                                 </InlineActions>
                               </td>
                             </tr>
@@ -3995,9 +3960,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               )}
                               <span className="rowId">#{row.id}</span>
                             </div>
-                            <button type="button" onClick={() => setMobileActionSheetRow(row)} aria-label="더보기">
-                              ⋯
-                            </button>
                           </header>
                           <h4>{row.title}</h4>
                           <p className="metaLine">
@@ -4008,24 +3970,44 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           </p>
                           <div className="mainAction">
                             {listScope === "active" ? (
-                              <Button
-                                type="button"
-                                disabled={loadingKey.length > 0}
-                                onClick={() => {
-                                  setPostId(String(row.id))
-                                  void loadPostForEditor(String(row.id))
-                                }}
-                              >
-                                불러오기
-                              </Button>
+                              <>
+                                <Button
+                                  type="button"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => {
+                                    setPostId(String(row.id))
+                                    void loadPostForEditor(String(row.id))
+                                  }}
+                                >
+                                  불러오기
+                                </Button>
+                                <Button
+                                  type="button"
+                                  data-variant="danger"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => openDeleteConfirm([row.id], row.title)}
+                                >
+                                  삭제
+                                </Button>
+                              </>
                             ) : (
-                              <Button
-                                type="button"
-                                disabled={loadingKey.length > 0}
-                                onClick={() => void restoreDeletedPostFromList(row)}
-                              >
-                                복구
-                              </Button>
+                              <>
+                                <Button
+                                  type="button"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => void restoreDeletedPostFromList(row)}
+                                >
+                                  복구
+                                </Button>
+                                <Button
+                                  type="button"
+                                  data-variant="danger"
+                                  disabled={loadingKey.length > 0}
+                                  onClick={() => void hardDeleteDeletedPostFromList(row)}
+                                >
+                                  영구삭제
+                                </Button>
+                              </>
                             )}
                           </div>
                         </article>
@@ -4132,42 +4114,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   실행 취소
                 </Button>
               </UndoToast>
-            )}
-
-            {mobileActionSheetRow && (
-              <ActionSheetBackdrop onClick={() => setMobileActionSheetRow(null)}>
-                <ActionSheet onClick={(event) => event.stopPropagation()}>
-                  <h4>#{mobileActionSheetRow.id} 작업</h4>
-                  <p>{mobileActionSheetRow.title}</p>
-                  {listScope === "active" ? (
-                    <Button
-                      type="button"
-                      data-variant="danger"
-                      onClick={() => {
-                        setMobileActionSheetRow(null)
-                        openDeleteConfirm([mobileActionSheetRow.id], mobileActionSheetRow.title)
-                      }}
-                    >
-                      삭제
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      data-variant="danger"
-                      onClick={() => {
-                        const row = mobileActionSheetRow
-                        setMobileActionSheetRow(null)
-                        void hardDeleteDeletedPostFromList(row)
-                      }}
-                    >
-                      영구삭제
-                    </Button>
-                  )}
-                  <Button type="button" onClick={() => setMobileActionSheetRow(null)}>
-                    닫기
-                  </Button>
-                </ActionSheet>
-              </ActionSheetBackdrop>
             )}
 
         {deleteConfirmState && (
@@ -7290,53 +7236,6 @@ const InlineActions = styled.div`
   }
 `
 
-const MoreMenuWrap = styled.div`
-  position: relative;
-`
-
-const MoreMenuButton = styled.button`
-  min-height: 44px;
-  min-width: 44px;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-`
-
-const MoreMenuList = styled.div`
-  position: absolute;
-  top: calc(100% + 0.3rem);
-  right: 0;
-  z-index: 5;
-  min-width: 7.2rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
-  background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.25rem;
-  display: grid;
-  gap: 0.2rem;
-
-  &[data-placement="top"] {
-    top: auto;
-    bottom: calc(100% + 0.3rem);
-  }
-
-  button {
-    min-height: 36px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.8rem;
-    text-align: left;
-    padding: 0 0.55rem;
-    cursor: pointer;
-  }
-`
-
 const MobileListCards = styled.div`
   display: none;
   margin-top: 0.65rem;
@@ -7406,7 +7305,8 @@ const MobileListCards = styled.div`
 
   .mainAction {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.42rem;
   }
 
   .mainAction > button {
@@ -7417,15 +7317,6 @@ const MobileListCards = styled.div`
   .rowId {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.78rem;
-  }
-
-  > article header > button {
-    min-width: 44px;
-    min-height: 44px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-radius: 8px;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
   }
 
   @media (max-width: 420px) {
@@ -7439,6 +7330,10 @@ const MobileListCards = styled.div`
       align-items: flex-start;
       flex-wrap: wrap;
       justify-content: flex-start;
+    }
+
+    .mainAction {
+      grid-template-columns: 1fr;
     }
   }
 `
@@ -7467,55 +7362,6 @@ const UndoToast = styled.div`
     right: 0.85rem;
     bottom: calc(0.85rem + env(safe-area-inset-bottom));
     flex-wrap: wrap;
-  }
-`
-
-const ActionSheetBackdrop = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 6, 23, 0.58);
-  z-index: 150;
-  display: grid;
-  align-items: end;
-`
-
-const ActionSheet = styled.div`
-  border-top-left-radius: 14px;
-  border-top-right-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray2};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-bottom: 0;
-  padding: 0.9rem;
-  display: grid;
-  gap: 0.55rem;
-  max-height: min(76vh, 540px);
-  overflow: auto;
-
-  h4 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.94rem;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    line-height: 1.45;
-    word-break: break-word;
-  }
-
-  > button {
-    width: 100%;
-    justify-content: center;
-  }
-
-  @media (max-width: 720px) {
-    padding:
-      0.82rem
-      max(0.82rem, env(safe-area-inset-right))
-      calc(0.82rem + env(safe-area-inset-bottom))
-      max(0.82rem, env(safe-area-inset-left));
   }
 `
 

@@ -5,6 +5,11 @@ import { pretendard } from "src/assets"
 
 export const Global = () => {
   const theme = useTheme()
+  const bodyBackgroundColor = theme.scheme === "light" ? "#f5f7fa" : theme.colors.gray1
+  const bodyBackgroundImage =
+    theme.scheme === "light"
+      ? "radial-gradient(circle at 18% -12%, rgba(37, 99, 235, 0.045), transparent 28%), radial-gradient(circle at 88% 0%, rgba(148, 163, 184, 0.08), transparent 24%)"
+      : "radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.08), transparent 38%)"
 
   return (
     <_Global
@@ -24,8 +29,8 @@ export const Global = () => {
           overflow-y: scroll;
           overflow-x: visible;
           color: ${theme.colors.gray12};
-          background-color: ${theme.colors.gray1};
-          background-image: radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.08), transparent 38%);
+          background-color: ${bodyBackgroundColor};
+          background-image: ${bodyBackgroundImage};
           font-family: ${pretendard.style.fontFamily};
           font-weight: ${pretendard.style.fontWeight};
           font-style: ${pretendard.style.fontStyle};

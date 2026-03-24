@@ -14,7 +14,7 @@ const CONFIG = {
     name: "aquilaXk",
     image: "/images/default-profile.svg",
     role: "backend developer",
-    bio: "I develop everything using node.",
+    bio: "백엔드 아키텍처와 운영 트러블슈팅을 기록합니다.",
     email: "illusiveman7@gmail.com",
     linkedin: "",
     github: "aquilaXk",
@@ -29,7 +29,7 @@ const CONFIG = {
   // blog setting (required)
   blog: {
     title: "aquilaXk's Blog",
-    description: "welcome to my backend dev log!",
+    description: "백엔드 아키텍처, 운영 트러블슈팅, 성능 최적화를 기록합니다.",
     scheme: "dark", // 'light' | 'dark' | 'system'
   },
 

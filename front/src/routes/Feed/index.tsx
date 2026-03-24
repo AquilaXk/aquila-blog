@@ -11,6 +11,16 @@ import {
   WIDE_SIDEBAR_LAYOUT_MIN_PX,
 } from "src/layouts/RootLayout/layoutTiers"
 
+const FEED_HERO_EYEBROW = "백엔드 아키텍처 · 운영 트러블슈팅 · 성능 최적화"
+const DEFAULT_HOME_DESCRIPTION = "실서비스에서 부딪힌 설계, 장애, 성능 문제를 다시 읽기 쉽게 정리합니다."
+
+const normalizeHomeIntroDescription = (value?: string) => {
+  const normalized = typeof value === "string" ? value.trim() : ""
+  if (!normalized) return DEFAULT_HOME_DESCRIPTION
+  if (/^welcome to my backend dev log!?$/i.test(normalized)) return DEFAULT_HOME_DESCRIPTION
+  return normalized
+}
+
 type Props = {
   initialAdminProfile?: AdminProfile | null
 }
@@ -18,12 +28,15 @@ type Props = {
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
   const introTitle = adminProfile?.homeIntroTitle || CONFIG.blog.title
-  const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.description
+  const introDescription = normalizeHomeIntroDescription(
+    adminProfile?.homeIntroDescription || CONFIG.blog.description
+  )
 
   return (
     <StyledWrapper>
       <div className="mid">
         <IntroCard>
+          <span className="eyebrow">{FEED_HERO_EYEBROW}</span>
           <h1>{introTitle}</h1>
           <p>{introDescription}</p>
         </IntroCard>
@@ -115,7 +128,18 @@ const StyledWrapper = styled.div`
 
 const IntroCard = styled.section`
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  padding: 0.35rem 0 1.05rem;
+  padding: 0.35rem 0 1.1rem;
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0.68rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+    font-weight: 760;
+    letter-spacing: 0.01em;
+    line-height: 1.4;
+  }
 
   h1 {
     margin: 0;
@@ -124,12 +148,36 @@ const IntroCard = styled.section`
     letter-spacing: -0.04em;
     line-height: 1.08;
     font-weight: 760;
+    max-width: 13ch;
   }
 
   p {
-    margin: 0.8rem 0 0;
-    max-width: 42rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.62;
+    margin: 0.72rem 0 0;
+    max-width: 38rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 1rem;
+    line-height: 1.68;
+    letter-spacing: -0.01em;
+  }
+
+  @media (max-width: 768px) {
+    padding-bottom: 0.92rem;
+
+    .eyebrow {
+      margin-bottom: 0.58rem;
+      font-size: 0.72rem;
+    }
+
+    h1 {
+      max-width: none;
+      font-size: clamp(1.85rem, 10vw, 2.55rem);
+      line-height: 1.1;
+    }
+
+    p {
+      margin-top: 0.62rem;
+      font-size: 0.92rem;
+      line-height: 1.62;
+    }
   }
 `

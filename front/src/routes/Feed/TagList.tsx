@@ -1,19 +1,45 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
-import React, { memo, startTransition, useCallback } from "react"
+import React, { memo, startTransition, useCallback, useMemo, useState } from "react"
 import { usePostsTotalCountQuery } from "src/hooks/usePostsTotalCountQuery"
 import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import {
   FEED_CHIP_GAP_PX,
-  FEED_TAG_RAIL_DESKTOP_MIN_PX,
   FEED_TAG_RAIL_CHIP_MAX_PX,
+  FEED_TAG_RAIL_DESKTOP_MIN_PX,
+  FEED_TAG_REPRESENTATIVE_CHIP_LIMIT,
+  FEED_TAG_REPRESENTATIVE_DESKTOP_LIMIT,
 } from "./feedUiTokens"
+
+type TagEntry = [string, number]
+
+const toRepresentativeTagEntries = (
+  tagEntries: TagEntry[],
+  currentTag: string | undefined,
+  limit: number,
+  expanded: boolean
+) => {
+  if (expanded || tagEntries.length <= limit) return tagEntries
+  if (limit <= 0) return []
+
+  const leadingEntries = tagEntries.slice(0, limit)
+  if (!currentTag) return leadingEntries
+
+  const currentEntry = tagEntries.find(([tag]) => tag === currentTag)
+  if (!currentEntry) return leadingEntries
+  if (leadingEntries.some(([tag]) => tag === currentTag)) return leadingEntries
+  if (limit === 1) return [currentEntry]
+
+  return [...leadingEntries.slice(0, limit - 1), currentEntry]
+}
 
 const TagList: React.FC = () => {
   const router = useRouter()
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
+  const [desktopExpanded, setDesktopExpanded] = useState(false)
+  const [chipExpanded, setChipExpanded] = useState(false)
   const totalPostCount = usePostsTotalCountQuery()
   const { tagEntries } = useTagsQuery()
   const allCount = totalPostCount
@@ -53,6 +79,29 @@ const TagList: React.FC = () => {
     [handleClickTag]
   )
 
+  const desktopTagEntries = useMemo(
+    () =>
+      toRepresentativeTagEntries(
+        tagEntries,
+        currentTag,
+        FEED_TAG_REPRESENTATIVE_DESKTOP_LIMIT,
+        desktopExpanded
+      ),
+    [currentTag, desktopExpanded, tagEntries]
+  )
+  const chipTagEntries = useMemo(
+    () =>
+      toRepresentativeTagEntries(
+        tagEntries,
+        currentTag,
+        FEED_TAG_REPRESENTATIVE_CHIP_LIMIT,
+        chipExpanded
+      ),
+    [chipExpanded, currentTag, tagEntries]
+  )
+  const hiddenDesktopTagCount = Math.max(tagEntries.length - desktopTagEntries.length, 0)
+  const hiddenChipTagCount = Math.max(tagEntries.length - chipTagEntries.length, 0)
+
   return (
     <StyledWrapper>
       <section
@@ -73,7 +122,7 @@ const TagList: React.FC = () => {
               {typeof allCount === "number" && <span className="count">({allCount})</span>}
             </button>
           </li>
-          {tagEntries.map(([key, count]) => (
+          {desktopTagEntries.map(([key, count]) => (
             <li key={key}>
               <button
                 type="button"
@@ -89,6 +138,16 @@ const TagList: React.FC = () => {
             </li>
           ))}
         </ul>
+        {hiddenDesktopTagCount > 0 && (
+          <button
+            type="button"
+            className="toggleButton"
+            aria-expanded={desktopExpanded}
+            onClick={() => setDesktopExpanded((prev) => !prev)}
+          >
+            {desktopExpanded ? "접기" : `더보기 (+${hiddenDesktopTagCount})`}
+          </button>
+        )}
       </section>
 
       <div
@@ -106,7 +165,7 @@ const TagList: React.FC = () => {
           <span className="name">전체</span>
           {typeof allCount === "number" && <span className="count">({allCount})</span>}
         </button>
-        {tagEntries.map(([key, count]) => (
+        {chipTagEntries.map(([key, count]) => (
           <button
             type="button"
             key={key}
@@ -120,6 +179,17 @@ const TagList: React.FC = () => {
             <span className="count">({count})</span>
           </button>
         ))}
+        {hiddenChipTagCount > 0 && (
+          <button
+            type="button"
+            className="chipToggle"
+            aria-expanded={chipExpanded}
+            onClick={() => setChipExpanded((prev) => !prev)}
+          >
+            <span className="name">{chipExpanded ? "접기" : "더보기"}</span>
+            {!chipExpanded && <span className="count">(+{hiddenChipTagCount})</span>}
+          </button>
+        )}
       </div>
     </StyledWrapper>
   )
@@ -211,6 +281,28 @@ const StyledWrapper = styled.div`
 
     &[data-active="true"] {
       background: transparent;
+    }
+  }
+
+  .toggleButton {
+    margin-top: 0.72rem;
+    min-height: 30px;
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    transition: color 0.125s ease-in;
+
+    &:hover {
+      color: ${({ theme }) => theme.colors.gray12};
+    }
+
+    &:focus-visible {
+      outline: 2px solid ${({ theme }) => theme.colors.blue8};
+      outline-offset: 2px;
+      border-radius: 999px;
     }
   }
 
@@ -341,6 +433,10 @@ const StyledWrapper = styled.div`
 
   .chipRail button[data-active="true"] .count {
     color: ${({ theme }) => theme.colors.blue10};
+  }
+
+  .chipRail .chipToggle {
+    flex: 0 0 auto;
   }
 
   @media (max-width: 768px) {

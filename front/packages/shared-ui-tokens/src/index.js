@@ -10,6 +10,10 @@ const uiTokens = {
       desktopMinWidthPx: 1201,
       widthPx: 184,
     },
+    tags: {
+      chipRepresentativeLimit: 6,
+      desktopRepresentativeLimit: 10,
+    },
     card: {
       titleLineHeight: 1.46,
       summaryLineHeight: 1.54,

@@ -14,6 +14,7 @@ import {
   useState,
 } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import {
@@ -536,29 +537,59 @@ const resolveThumbnailDrawRatios = (
 const clampThumbnailFocusBySource = ({
   focusX,
   focusY,
-  zoom,
-  sourceSize,
+  zoom: _zoom,
+  sourceSize: _sourceSize,
 }: {
   focusX: number
   focusY: number
   zoom: number
   sourceSize: ThumbnailSourceSize
 }): { focusX: number; focusY: number } => {
-  const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(sourceSize, zoom)
-  const minCenterX = Math.max(0, 1 - drawWidth / 2)
-  const maxCenterX = Math.min(1, drawWidth / 2)
-  const minCenterY = Math.max(0, 1 - drawHeight / 2)
-  const maxCenterY = Math.min(1, drawHeight / 2)
+  return {
+    focusX: clampThumbnailFocusX(focusX),
+    focusY: clampThumbnailFocusY(focusY),
+  }
+}
 
+const resolveThumbnailFramePositionFromFocus = ({
+  focusX,
+  focusY,
+  drawWidth,
+  drawHeight,
+}: {
+  focusX: number
+  focusY: number
+  drawWidth: number
+  drawHeight: number
+}) => {
   const normalizedFocusX = clampThumbnailFocusX(focusX) / 100
   const normalizedFocusY = clampThumbnailFocusY(focusY) / 100
 
-  const safeCenterX = minCenterX <= maxCenterX ? Math.min(maxCenterX, Math.max(minCenterX, normalizedFocusX)) : 0.5
-  const safeCenterY = minCenterY <= maxCenterY ? Math.min(maxCenterY, Math.max(minCenterY, normalizedFocusY)) : 0.5
+  return {
+    leftRatio: (1 - drawWidth) * normalizedFocusX,
+    topRatio: (1 - drawHeight) * normalizedFocusY,
+  }
+}
+
+const resolveThumbnailFocusFromFramePosition = ({
+  leftRatio,
+  topRatio,
+  drawWidth,
+  drawHeight,
+}: {
+  leftRatio: number
+  topRatio: number
+  drawWidth: number
+  drawHeight: number
+}) => {
+  const focusXRatio =
+    Math.abs(1 - drawWidth) < 0.000001 ? 0.5 : clampRatio(leftRatio / (1 - drawWidth))
+  const focusYRatio =
+    Math.abs(1 - drawHeight) < 0.000001 ? 0.5 : clampRatio(topRatio / (1 - drawHeight))
 
   return {
-    focusX: safeCenterX * 100,
-    focusY: safeCenterY * 100,
+    focusX: clampThumbnailFocusX(focusXRatio * 100),
+    focusY: clampThumbnailFocusY(focusYRatio * 100),
   }
 }
 
@@ -1251,6 +1282,17 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     applyProfileState(member)
   }, [applyProfileState, queryClient, setMe])
 
+  const refreshPublicPostReadViews = useCallback(async (affectedPostId?: string | number) => {
+    const resolvedPostId =
+      typeof affectedPostId === "number"
+        ? affectedPostId
+        : typeof affectedPostId === "string"
+          ? affectedPostId.trim()
+          : postId.trim()
+
+    await invalidatePublicPostReadCaches(queryClient, resolvedPostId || undefined)
+  }, [postId, queryClient])
+
   const refreshAdminProfile = useCallback(async (memberId: number, fallback?: MemberMe) => {
     try {
       const detailed = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${memberId}`)
@@ -1540,10 +1582,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (!frame) return
 
     const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(previewThumbSourceSizeRef.current, transform.zoom)
-    const centerXRatio = transform.focusX / 100
-    const centerYRatio = transform.focusY / 100
-    const leftRatio = centerXRatio - drawWidth / 2
-    const topRatio = centerYRatio - drawHeight / 2
+    const { leftRatio, topRatio } = resolveThumbnailFramePositionFromFocus({
+      focusX: transform.focusX,
+      focusY: transform.focusY,
+      drawWidth,
+      drawHeight,
+    })
 
     frame.style.setProperty("--preview-thumb-width", `${drawWidth * 100}%`)
     frame.style.setProperty("--preview-thumb-height", `${drawHeight * 100}%`)
@@ -1598,20 +1642,28 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         sourceSize,
         nextZoom
       )
-      const prevCenterX = baseTransform.focusX / 100
-      const prevCenterY = baseTransform.focusY / 100
-      const prevLeft = prevCenterX - prevDrawWidth / 2
-      const prevTop = prevCenterY - prevDrawHeight / 2
+      const { leftRatio: prevLeft, topRatio: prevTop } = resolveThumbnailFramePositionFromFocus({
+        focusX: baseTransform.focusX,
+        focusY: baseTransform.focusY,
+        drawWidth: prevDrawWidth,
+        drawHeight: prevDrawHeight,
+      })
 
       const pointerImageX = clampRatio((anchorXRatio - prevLeft) / prevDrawWidth)
       const pointerImageY = clampRatio((anchorYRatio - prevTop) / prevDrawHeight)
 
       const nextLeft = anchorXRatio - pointerImageX * nextDrawWidth
       const nextTop = anchorYRatio - pointerImageY * nextDrawHeight
+      const nextFocus = resolveThumbnailFocusFromFramePosition({
+        leftRatio: nextLeft,
+        topRatio: nextTop,
+        drawWidth: nextDrawWidth,
+        drawHeight: nextDrawHeight,
+      })
 
       return {
-        focusX: (nextLeft + nextDrawWidth / 2) * 100,
-        focusY: (nextTop + nextDrawHeight / 2) * 100,
+        focusX: nextFocus.focusX,
+        focusY: nextFocus.focusY,
         zoom: nextZoom,
       }
     },
@@ -1723,11 +1775,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const dragState = previewThumbDragRef.current
     if (!dragState || dragState.pointerId !== event.pointerId) return
 
+    const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(
+      previewThumbSourceSizeRef.current,
+      previewThumbTransformRef.current.zoom
+    )
+    const { leftRatio: startLeft, topRatio: startTop } = resolveThumbnailFramePositionFromFocus({
+      focusX: dragState.startFocusX,
+      focusY: dragState.startFocusY,
+      drawWidth,
+      drawHeight,
+    })
     const deltaXRatio = (event.clientX - dragState.startClientX) / rect.width
     const deltaYRatio = (event.clientY - dragState.startClientY) / rect.height
+    const nextFocus = resolveThumbnailFocusFromFramePosition({
+      leftRatio: startLeft + deltaXRatio,
+      topRatio: startTop + deltaYRatio,
+      drawWidth,
+      drawHeight,
+    })
     schedulePreviewThumbTransform({
-      focusX: dragState.startFocusX + deltaXRatio * 100,
-      focusY: dragState.startFocusY + deltaYRatio * 100,
+      focusX: nextFocus.focusX,
+      focusY: nextFocus.focusY,
       zoom: previewThumbTransformRef.current.zoom,
     })
   }, [computeAnchoredThumbnailTransform, schedulePreviewThumbTransform])
@@ -1878,7 +1946,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         window.cancelAnimationFrame(previewThumbTransformRafRef.current)
       }
     }
-  }, [])
+  }, [refreshPublicPostReadViews])
 
   const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
@@ -2139,6 +2207,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         lastWriteFingerprintRef.current = ""
         lastWriteIdempotencyKeyRef.current = ""
       }
+      await refreshPublicPostReadViews(response?.data?.id)
 
       const visibilityText =
         postVisibility === "PUBLIC_LISTED"
@@ -2198,6 +2267,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
+      await refreshPublicPostReadViews(postId)
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
       setResult(pretty(response as unknown as JsonValue))
       return true
@@ -2271,6 +2341,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setPostVisibility("PUBLIC_LISTED")
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(false)
+      await refreshPublicPostReadViews(postId)
       setPublishStatus({ tone: "success", text: "임시글 발행이 완료되었습니다." }, "page")
       setResult(pretty(response as unknown as JsonValue))
       return true
@@ -2489,6 +2560,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       if (Number.isFinite(selectedPostId) && successIds.includes(selectedPostId)) {
         switchToCreateMode({ keepContent: false })
       }
+      if (successIds.length > 0) {
+        await refreshPublicPostReadViews(successIds[0])
+      }
 
       if (failedIds.length === 0) {
         setSoftDeleteUndoState({
@@ -2535,6 +2609,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       })
 
       setResult(pretty(response as unknown as JsonValue))
+      await refreshPublicPostReadViews(row.id)
       setAdminPostRows((prev) => prev.filter((item) => item.id !== row.id))
       setAdminPostTotal((prev) => Math.max(0, prev - 1))
       setDeletedListNotice({
@@ -2555,7 +2630,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }, [])
+  }, [refreshPublicPostReadViews])
 
   const hardDeleteDeletedPostFromList = useCallback(async (row: AdminPostListItem) => {
     const confirmed = window.confirm(`#${row.id} 글을 영구삭제할까요?\n영구삭제 후에는 복구할 수 없습니다.`)
@@ -2574,6 +2649,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       })
 
       setResult(pretty(response))
+      await refreshPublicPostReadViews(row.id)
       setAdminPostRows((prev) => prev.filter((item) => item.id !== row.id))
       setAdminPostTotal((prev) => Math.max(0, prev - 1))
       setDeletedListNotice({
@@ -2594,7 +2670,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }, [])
+  }, [refreshPublicPostReadViews])
 
   const handleUndoSoftDelete = useCallback(async () => {
     if (!softDeleteUndoState || softDeleteUndoState.ids.length === 0) return
@@ -2624,6 +2700,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       )
 
       if (restoredIds.length > 0) {
+        await refreshPublicPostReadViews(restoredIds[0])
         await loadAdminPosts()
       }
 
@@ -2639,7 +2716,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setSoftDeleteUndoState(null)
       setLoadingKey("")
     }
-  }, [loadAdminPosts, softDeleteUndoState])
+  }, [loadAdminPosts, refreshPublicPostReadViews, softDeleteUndoState])
 
   useEffect(() => {
     if (adminPostRows.length === 0) {
@@ -4192,9 +4269,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     type="button"
                     data-variant="danger"
                     disabled={disabled("deletePost")}
-                    onClick={() =>
-                      run("deletePost", () => apiFetch(`/post/api/v1/posts/${postId}`, { method: "DELETE" }))
-                    }
+                    onClick={() => openDeleteConfirm([Number.parseInt(postId, 10)], postTitle)}
                   >
                     글 삭제
                   </Button>
@@ -5511,12 +5586,12 @@ const GlobalNoticeBar = styled.div`
 
 const ContentStudioGrid = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 
-  @media (max-width: 760px) {
-    grid-template-columns: 1fr;
+  @media (min-width: 1680px) {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   }
 `
 
@@ -7279,10 +7354,12 @@ const ListEmpty = styled.div`
 
 const ListTableWrap = styled.div`
   width: 100%;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   max-height: 52vh;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 10px;
+  overscroll-behavior: contain;
 
   @media (max-width: 900px) {
     display: none;
@@ -7296,6 +7373,11 @@ const SelectedPostPanel = styled.div`
   padding: 0.9rem;
   margin: 0;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+
+  @media (min-width: 1680px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 56px) + 0.72rem);
+  }
 
   @media (max-width: 420px) {
     border-radius: 10px;
@@ -7422,7 +7504,9 @@ const SelectionStickyBar = styled.div`
 
 const ListTable = styled.table`
   width: 100%;
+  min-width: 920px;
   border-collapse: collapse;
+  table-layout: fixed;
 
   th,
   td {
@@ -7463,24 +7547,23 @@ const ListTable = styled.table`
   }
 
   td.title {
-    min-width: 240px;
-    max-width: 420px;
+    min-width: 0;
   }
 
   th.authorCell,
   td.authorCell {
-    width: 96px;
+    width: 88px;
   }
 
   th.dateCell,
   td.dateCell {
-    width: 104px;
+    width: 112px;
     white-space: nowrap;
   }
 
   th.visibilityCell,
   td.visibilityCell {
-    width: 96px;
+    width: 88px;
   }
 
   th.visibilityCell {
@@ -7491,18 +7574,14 @@ const ListTable = styled.table`
 
   th.actionsCell,
   td.actionsCell {
-    width: 170px;
-    min-width: 170px;
+    width: 152px;
+    min-width: 152px;
   }
 
-  @media (max-width: 1360px) {
+  @media (max-width: 1520px) {
     th.authorCell,
     td.authorCell {
       display: none;
-    }
-
-    td.title {
-      max-width: 480px;
     }
   }
 `
@@ -7579,9 +7658,9 @@ const InlineActions = styled.div`
   align-items: center;
 
   ${Button} {
-    min-height: 44px;
-    padding: 0.42rem 0.66rem;
-    font-size: 0.78rem;
+    min-height: 40px;
+    padding: 0.38rem 0.58rem;
+    font-size: 0.76rem;
     white-space: nowrap;
   }
 `

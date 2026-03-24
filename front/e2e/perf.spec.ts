@@ -589,8 +589,8 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
     await page.waitForTimeout(160)
     const snapshot = await getVisualLayoutFingerprint(page)
 
-    // Linux headless 환경의 scrollbar/layout viewport 편차로 home-desktop-1440은
-    // x/y 절대 좌표가 1~2 tier까지 흔들릴 수 있어 범위 검증으로 고정한다.
+    // Linux headless 환경의 scrollbar/layout viewport 편차로 home/detail desktop 1440은
+    // x/y 절대 좌표가 흔들릴 수 있어 구조/폭/스크롤폭 범위 검증으로 고정한다.
     if (scenario.name === "home-desktop-1440") {
       expect(snapshot.route).toBe("/")
       expect(snapshot.viewport.width).toBe(1440)
@@ -621,6 +621,45 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       expect(firstCardHeight).toBeLessThanOrEqual(400)
       expect(railWidth).toBe(184)
       expect(railHeight).toBe(93)
+      expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
+      expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
+      expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
+      expect(bodyScrollWidth).toBeGreaterThanOrEqual(1420)
+      continue
+    }
+
+    if (scenario.name === "detail-desktop-1440") {
+      expect(snapshot.route).toBe("/posts/991")
+      expect(snapshot.viewport.width).toBe(1440)
+      expect(snapshot.viewport.height).toBe(900)
+      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.rails.leftReaction).toBe(true)
+      expect(snapshot.rails.rightToc).toBe(true)
+      expect(snapshot.profileSidebarVisible).toBe(false)
+      expect(snapshot.searchRect).toBeNull()
+      expect(snapshot.firstCardRect).toBeNull()
+      expect(snapshot.desktopTagRailRect).toBeNull()
+      expect(snapshot.leftRailRect).not.toBeNull()
+      expect(snapshot.rightRailRect).not.toBeNull()
+
+      const leftRailWidth = snapshot.leftRailRect?.width ?? 0
+      const leftRailHeight = snapshot.leftRailRect?.height ?? 0
+      const leftRailY = snapshot.leftRailRect?.y ?? 0
+      const rightRailWidth = snapshot.rightRailRect?.width ?? 0
+      const rightRailHeight = snapshot.rightRailRect?.height ?? 0
+      const rightRailY = snapshot.rightRailRect?.y ?? 0
+      const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+      const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+
+      expect(leftRailWidth).toBe(80)
+      expect(leftRailHeight).toBe(132)
+      expect(leftRailY).toBeGreaterThanOrEqual(84)
+      expect(leftRailY).toBeLessThanOrEqual(92)
+      expect(rightRailWidth).toBe(240)
+      expect(rightRailHeight).toBeGreaterThanOrEqual(280)
+      expect(rightRailHeight).toBeLessThanOrEqual(320)
+      expect(rightRailY).toBeGreaterThanOrEqual(84)
+      expect(rightRailY).toBeLessThanOrEqual(92)
       expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)

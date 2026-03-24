@@ -222,12 +222,18 @@ type ThumbnailPinchState = {
 }
 
 type PreviewViewportMode = "desktop" | "tablet" | "mobile"
+type ManageMobileStudioStep = "query" | "list"
+type ComposeMobileStudioStep = "edit" | "publish"
 
 const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
 const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
 const LIST_CONDITION_STORAGE_KEY = "admin.contentStudio.listConditions.v1"
 const LIST_CACHE_TTL_MS = 45_000
+const GLOBAL_NOTICE_IDLE_TEXT = "운영 작업 상태가 여기에 표시됩니다."
+const TAG_RECOMMENDATION_IDLE_TEXT = "AI 태그 추천 상태가 여기에 표시됩니다."
+const MANAGE_MOBILE_STUDIO_STEPS = ["query", "list"] as const
+const COMPOSE_MOBILE_STUDIO_STEPS = ["edit", "publish"] as const
 
 const LIST_SORT_OPTIONS = [
   { value: "CREATED_AT", label: "최신순" },
@@ -246,6 +252,10 @@ const MOBILE_STUDIO_STEP_DESCRIPTION: Record<MobileStudioStep, string> = {
   edit: "본문, 태그, 메타를 정리한 뒤 발행 설정으로 이동합니다.",
   publish: "노출 범위와 카드 미리보기를 확인하고 최종 반영하세요.",
 }
+
+const getMobileStudioStepMoveLabel = (step: MobileStudioStep) =>
+  `${MOBILE_STUDIO_STEP_LABEL[step]}${MOBILE_STUDIO_STEP_LABEL[step].endsWith("집") ? "으로" : "로"} 이동`
+
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
@@ -1222,11 +1232,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   })
   const [tagRecommendationNotice, setTagRecommendationNotice] = useState<NoticeState>({
     tone: "idle",
-    text: "AI 태그 추천 상태가 여기에 표시됩니다.",
+    text: TAG_RECOMMENDATION_IDLE_TEXT,
   })
   const [globalNotice, setGlobalNotice] = useState<NoticeState>({
     tone: "idle",
-    text: "운영 작업 상태가 여기에 표시됩니다.",
+    text: GLOBAL_NOTICE_IDLE_TEXT,
   })
   const [profileImageNotice, setProfileImageNotice] = useState<NoticeState>({
     tone: "idle",
@@ -1257,9 +1267,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isPreviewThumbDragging, setIsPreviewThumbDragging] = useState(false)
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportMode>("desktop")
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
-  const [mobileStudioStep, setMobileStudioStep] = useState<MobileStudioStep>("query")
+  const [mobileManageStep, setMobileManageStep] = useState<ManageMobileStudioStep>("query")
+  const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
+  const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
+  const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
 
   const postContentMermaidBlockCount = useMemo(
     () => countMarkdownMermaidBlocks(postContent),
@@ -1386,11 +1399,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     const media = window.matchMedia("(max-width: 720px)")
     const sync = () => {
-      const mobile = media.matches
-      setIsCompactMobileLayout(mobile)
-      if (!mobile) {
-        setMobileStudioStep("edit")
-      }
+      setIsCompactMobileLayout(media.matches)
     }
 
     sync()
@@ -1406,17 +1415,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const activateManageSurface = useCallback(() => {
     setStudioSurface("manage")
-    if (isCompactMobileLayout) {
-      setMobileStudioStep((current) => (current === "query" || current === "list" ? current : "query"))
-    }
-  }, [isCompactMobileLayout])
+  }, [])
 
   const activateComposeSurface = useCallback(() => {
     setStudioSurface("compose")
-    if (isCompactMobileLayout) {
-      setMobileStudioStep((current) => (current === "edit" || current === "publish" ? current : "edit"))
-    }
-  }, [isCompactMobileLayout])
+  }, [])
 
   useEffect(() => {
     if (previewContent === postContent) {
@@ -2115,7 +2118,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       "page"
     )
     if (isCompactMobileLayout) {
-      setMobileStudioStep("edit")
+      setMobileComposeStep("edit")
     }
   }, [activateComposeSurface, isCompactMobileLayout, setPublishStatus])
 
@@ -2128,7 +2131,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     if (isCompactMobileLayout) {
-      setMobileStudioStep("edit")
+      setMobileComposeStep("edit")
     }
   }, [activateComposeSurface, isCompactMobileLayout])
 
@@ -2395,7 +2398,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         "page"
       )
       if (isCompactMobileLayout) {
-        setMobileStudioStep("edit")
+        setMobileComposeStep("edit")
       }
       setResult(pretty(response as unknown as JsonValue))
     } catch (error) {
@@ -2575,7 +2578,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         text: `목록 조회 완료: ${nextTotal}건`,
       })
       if (isCompactMobileLayout) {
-        setMobileStudioStep("list")
+        setMobileManageStep("list")
       }
       setResult(pretty(data as unknown as JsonValue))
     } catch (error) {
@@ -3466,11 +3469,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
     setTagRecommendationNotice({
       tone: "idle",
-      text: "AI 태그 추천 상태가 여기에 표시됩니다.",
+      text: TAG_RECOMMENDATION_IDLE_TEXT,
     })
+    if (typeof window !== "undefined") {
+      const nextViewport: PreviewViewportMode =
+        window.innerWidth <= 480 ? "mobile" : window.innerWidth <= 1024 ? "tablet" : "desktop"
+      setPreviewViewport(nextViewport)
+    } else {
+      setPreviewViewport("desktop")
+    }
+    setIsMobileThumbnailEditorOpen(false)
+    setIsMobileMetaEditorOpen(false)
     setIsPublishModalOpen(true)
     if (isCompactMobileLayout) {
-      setMobileStudioStep("publish")
+      setMobileComposeStep("publish")
     }
   }
 
@@ -3502,11 +3514,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     })
     setTagRecommendationNotice({
       tone: "idle",
-      text: "AI 태그 추천 상태가 여기에 표시됩니다.",
+      text: TAG_RECOMMENDATION_IDLE_TEXT,
     })
     setIsPublishModalOpen(false)
     if (isCompactMobileLayout) {
-      setMobileStudioStep("edit")
+      setMobileComposeStep("edit")
     }
   }
 
@@ -3576,36 +3588,36 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         ? editorMode !== "edit" || disabled("modifyPost")
         : editorMode !== "edit" || disabled("publishTempPost")
   const mobilePrimaryActionLabel =
-    mobileStudioStep === "query"
-      ? "목록 조회"
-      : mobileStudioStep === "list"
-        ? "편집 단계로 이동"
-        : editorMode === "create"
-          ? "글 작성 설정 열기"
-          : isTempDraftMode
-            ? "임시글 발행 설정"
-            : "수정 설정 열기"
+    editorMode === "create"
+      ? "글 작성 설정 열기"
+      : isTempDraftMode
+        ? "임시글 발행 설정"
+        : "수정 설정 열기"
   const mobilePrimaryActionDisabled =
-    mobileStudioStep === "query"
-      ? disabled("postList")
-      : mobileStudioStep === "list"
-        ? false
-        : editorMode === "create"
-          ? disabled("writePost")
-          : isTempDraftMode
-            ? disabled("publishTempPost")
-            : disabled("modifyPost")
+    editorMode === "create"
+      ? disabled("writePost")
+      : isTempDraftMode
+        ? disabled("publishTempPost")
+        : disabled("modifyPost")
+  const activeMobileStudioStep = studioSurface === "manage" ? mobileManageStep : mobileComposeStep
   const mobileStudioSurfaceSteps =
     studioSurface === "manage"
-      ? (["query", "list"] as MobileStudioStep[])
-      : (["edit", "publish"] as MobileStudioStep[])
-  const mobileStudioStepIndex = mobileStudioSurfaceSteps.indexOf(mobileStudioStep)
+      ? ([...MANAGE_MOBILE_STUDIO_STEPS] as MobileStudioStep[])
+      : ([...COMPOSE_MOBILE_STUDIO_STEPS] as MobileStudioStep[])
+  const mobileStudioStepIndex = mobileStudioSurfaceSteps.indexOf(activeMobileStudioStep)
   const mobileStudioPrevStep =
     mobileStudioStepIndex > 0 ? mobileStudioSurfaceSteps[mobileStudioStepIndex - 1] : null
   const mobileStudioNextStep =
     mobileStudioStepIndex < mobileStudioSurfaceSteps.length - 1
       ? mobileStudioSurfaceSteps[mobileStudioStepIndex + 1]
       : null
+  const setActiveMobileStudioStep = (step: MobileStudioStep) => {
+    if (step === "query" || step === "list") {
+      setMobileManageStep(step)
+      return
+    }
+    setMobileComposeStep(step)
+  }
   const heroPrimaryActionLabel =
     studioSurface === "manage"
       ? "목록 불러오기"
@@ -3657,6 +3669,167 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     ""
   ).trim()
   const previewDateText = formatDate(new Date().toISOString(), "ko")
+  const shouldShowGlobalNotice =
+    globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
+  const thumbnailEditorPanel = (
+    <PreviewEditorSection>
+      <PreviewEditorSectionHeader>
+        <strong>썸네일 위치 조정</strong>
+        <span>드래그로 위치를 바꾸고, 휠 또는 슬라이더로 확대/축소합니다.</span>
+      </PreviewEditorSectionHeader>
+      <PreviewThumbFrame
+        ref={previewThumbFrameRef}
+        data-draggable={safePreviewThumbnail && !isPreviewThumbnailError}
+        data-dragging={isPreviewThumbDragging}
+        onPointerDown={handlePreviewThumbPointerDown}
+        onPointerMove={handlePreviewThumbPointerMove}
+        onPointerUp={finalizePreviewThumbPointer}
+        onPointerCancel={finalizePreviewThumbPointer}
+      >
+        {safePreviewThumbnail && !isPreviewThumbnailError ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={safePreviewThumbnail}
+            alt="포스트 미리보기 썸네일"
+            style={{
+              width: "var(--preview-thumb-width)",
+              height: "var(--preview-thumb-height)",
+              left: "var(--preview-thumb-left)",
+              top: "var(--preview-thumb-top)",
+              maxWidth: "none",
+              transform: "translateZ(0)",
+            }}
+            onError={() => setIsPreviewThumbnailError(true)}
+          />
+        ) : (
+          <div className="placeholder">
+            <em>썸네일 없음</em>
+            <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
+          </div>
+        )}
+      </PreviewThumbFrame>
+      {safePreviewThumbnail && !isPreviewThumbnailError ? (
+        <ZoomControlRow>
+          <FieldLabel htmlFor="post-thumbnail-zoom-modal">썸네일 배율</FieldLabel>
+          <ZoomRangeInput
+            id="post-thumbnail-zoom-modal"
+            type="range"
+            min={1}
+            max={2.5}
+            step={0.01}
+            value={postThumbnailZoom}
+            onChange={(e) =>
+              commitPreviewThumbTransform({
+                ...previewThumbTransformRef.current,
+                zoom: clampThumbnailZoom(Number(e.target.value)),
+              })
+            }
+          />
+          <ZoomControlMeta>
+            <ZoomValue>{postThumbnailZoom.toFixed(2)}x</ZoomValue>
+            <Button
+              type="button"
+              onClick={() =>
+                commitPreviewThumbTransform({
+                  ...previewThumbTransformRef.current,
+                  zoom: DEFAULT_THUMBNAIL_ZOOM,
+                })
+              }
+            >
+              배율 초기화
+            </Button>
+          </ZoomControlMeta>
+        </ZoomControlRow>
+      ) : null}
+    </PreviewEditorSection>
+  )
+  const previewMetaEditorPanel = (
+    <PreviewEditorSection>
+      <PreviewEditorSectionHeader>
+        <strong>카드 메타 편집</strong>
+        <span>썸네일 소스와 카드 요약을 이 구역에서 조정합니다.</span>
+      </PreviewEditorSectionHeader>
+      <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
+      <Input
+        id="post-thumbnail-url-modal"
+        placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
+        value={postThumbnailUrl}
+        onChange={(e) => {
+          const nextValue = e.target.value
+          setPostThumbnailUrl(nextValue)
+          const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
+          if (focusXFromInput !== null) {
+            setPostThumbnailFocusX(focusXFromInput)
+          }
+          const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
+          if (focusFromInput !== null) {
+            setPostThumbnailFocusY(focusFromInput)
+          }
+          const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
+          if (zoomFromInput !== null) {
+            setPostThumbnailZoom(zoomFromInput)
+          }
+          setPreviewThumbnailSourceUrl("")
+        }}
+      />
+      <MetaActionRow>
+        <Button
+          type="button"
+          title={POST_IMAGE_UPLOAD_RULE_LABEL}
+          disabled={disabled("uploadThumbnail")}
+          onClick={() => thumbnailImageFileInputRef.current?.click()}
+        >
+          {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
+            setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
+            setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
+            setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
+            setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
+            setPreviewThumbnailSourceUrl("")
+          }}
+        >
+          본문 첫 이미지 가져오기
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            setPostThumbnailUrl("")
+            setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
+            setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
+            setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
+            setPreviewThumbnailSourceUrl("")
+          }}
+        >
+          자동 모드로 되돌리기
+        </Button>
+      </MetaActionRow>
+      {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
+      <FieldLabel htmlFor="post-preview-summary-modal">미리보기 요약</FieldLabel>
+      <PreviewSummaryInput
+        id="post-preview-summary-modal"
+        placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
+        value={postSummary}
+        maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+        onChange={(e) => setPostSummary(e.target.value)}
+      />
+      <SummaryCounter>
+        {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
+      </SummaryCounter>
+      <MetaActionRow>
+        <Button
+          type="button"
+          onClick={() => setPostSummary(makePreviewSummary(postContent))}
+          disabled={!postContent.trim()}
+        >
+          본문 기반 요약 채우기
+        </Button>
+      </MetaActionRow>
+    </PreviewEditorSection>
+  )
 
   return (
     <Main>
@@ -3692,7 +3865,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개` : "미조회"}</strong>
             </MetricCard>
           </MetricGrid>
-          <ActionCluster>
+          <ActionCluster data-hidden={isCompactMobileLayout}>
             <HeroPrimaryActionButton
               type="button"
               disabled={studioSurface === "manage" ? disabled("postList") : loadingKey.length > 0}
@@ -3902,16 +4075,18 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <SectionDescription>조회 조건, 관리자 글 리스트, 선택한 글 작업만 모아 목록 점검과 운영 정리에 집중합니다.</SectionDescription>
               </div>
             </SectionTop>
-            <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
+            {shouldShowGlobalNotice ? (
+              <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
+            ) : null}
             <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
               {mobileStudioSurfaceSteps.map((step) => (
                 <button
                   key={step}
                   type="button"
                   role="tab"
-                  aria-selected={mobileStudioStep === step}
-                  data-active={mobileStudioStep === step}
-                  onClick={() => setMobileStudioStep(step)}
+                  aria-selected={activeMobileStudioStep === step}
+                  data-active={activeMobileStudioStep === step}
+                  onClick={() => setActiveMobileStudioStep(step)}
                 >
                   {MOBILE_STUDIO_STEP_LABEL[step]}
                 </button>
@@ -3919,25 +4094,25 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </MobileStudioStepper>
             {isCompactMobileLayout ? (
               <MobileStepGuide role="status" aria-live="polite">
-                <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[mobileStudioStep]}`}</strong>
-                <p>{MOBILE_STUDIO_STEP_DESCRIPTION[mobileStudioStep]}</p>
+                <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[activeMobileStudioStep]}`}</strong>
+                <p>{MOBILE_STUDIO_STEP_DESCRIPTION[activeMobileStudioStep]}</p>
                 <div>
                   <Button
                     type="button"
                     disabled={!mobileStudioPrevStep}
                     onClick={() => {
                       if (!mobileStudioPrevStep) return
-                      setMobileStudioStep(mobileStudioPrevStep)
+                      setActiveMobileStudioStep(mobileStudioPrevStep)
                     }}
                   >
-                    {mobileStudioPrevStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioPrevStep]}로 이동` : "이전 단계 없음"}
+                    {mobileStudioPrevStep ? getMobileStudioStepMoveLabel(mobileStudioPrevStep) : "이전 단계 없음"}
                   </Button>
                   <PrimaryButton
                     type="button"
                     disabled={!mobileStudioNextStep}
                     onClick={() => {
                       if (!mobileStudioNextStep) return
-                      setMobileStudioStep(mobileStudioNextStep)
+                      setActiveMobileStudioStep(mobileStudioNextStep)
                     }}
                   >
                     {mobileStudioNextStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioNextStep]} 단계로 이동` : "마지막 단계"}
@@ -3947,9 +4122,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             ) : null}
             <ContentStudioGrid>
               <ContentStudioLeft
-                data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "query" || mobileStudioStep === "list"}
+                data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "query" || activeMobileStudioStep === "list"}
               >
-                <QueryPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "query"}>
+                <QueryPanel data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "query"}>
                   <QueryHeader>
                     <h3>글 목록 조회 조건</h3>
                     <p>
@@ -4083,7 +4258,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   )}
                 </QueryPanel>
 
-              <ListPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "list"}>
+              <ListPanel data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "list"}>
                 <ListHeader>
                   <h3>{listScope === "active" ? "관리자 글 리스트" : "삭제 글 리스트"}</h3>
                   <ListHeaderActions>
@@ -4193,8 +4368,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       </thead>
                       <tbody>
                         {adminPostViewRows.map((row) => {
+                          const isLoadedRow = listScope === "active" && editorMode === "edit" && postId.trim() === String(row.id)
                           return (
-                            <tr key={row.id}>
+                            <tr key={row.id} data-active={isLoadedRow}>
                               {listScope === "active" && (
                                 <td className="checkboxCell">
                                   <input
@@ -4208,8 +4384,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               <td>{row.id}</td>
                               <td className="title">
                                 <TitleCell>
-                                  <span className="text">{row.title}</span>
-                                  {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                                  <div className="titleMain">
+                                    <span className="text">{row.title}</span>
+                                    {isLoadedRow && <LoadedBadge>현재 편집 중</LoadedBadge>}
+                                    {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                                  </div>
+                                  <span className="meta">
+                                    {row.authorName}
+                                    <span className="dot">•</span>
+                                    {(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}
+                                  </span>
                                 </TitleCell>
                               </td>
                               <td className="visibilityCell">
@@ -4223,42 +4407,48 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                 <InlineActions>
                                   {listScope === "active" ? (
                                     <>
-                                      <Button
+                                      <RowActionButton
                                         type="button"
+                                        data-variant="primary"
                                         disabled={loadingKey.length > 0}
                                         onClick={() => {
                                           setPostId(String(row.id))
                                           void loadPostForEditor(String(row.id))
                                         }}
                                       >
-                                        불러오기
-                                      </Button>
-                                      <Button
+                                        <AppIcon name="edit" />
+                                        <span>{isLoadedRow ? "계속 편집" : "편집 열기"}</span>
+                                      </RowActionButton>
+                                      <RowActionButton
                                         type="button"
-                                        data-variant="danger"
+                                        data-variant="soft-danger"
                                         disabled={loadingKey.length > 0}
                                         onClick={() => openDeleteConfirm([row.id], row.title)}
                                       >
-                                        삭제
-                                      </Button>
+                                        <AppIcon name="trash" />
+                                        <span>삭제</span>
+                                      </RowActionButton>
                                     </>
                                   ) : (
                                     <>
-                                      <Button
+                                      <RowActionButton
                                         type="button"
+                                        data-variant="primary"
                                         disabled={loadingKey.length > 0}
                                         onClick={() => void restoreDeletedPostFromList(row)}
                                       >
-                                        복구
-                                      </Button>
-                                      <Button
+                                        <AppIcon name="check-circle" />
+                                        <span>복구</span>
+                                      </RowActionButton>
+                                      <RowActionButton
                                         type="button"
-                                        data-variant="danger"
+                                        data-variant="soft-danger"
                                         disabled={loadingKey.length > 0}
                                         onClick={() => void hardDeleteDeletedPostFromList(row)}
                                       >
-                                        영구삭제
-                                      </Button>
+                                        <AppIcon name="trash" />
+                                        <span>영구삭제</span>
+                                      </RowActionButton>
                                     </>
                                   )}
                                 </InlineActions>
@@ -4271,8 +4461,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </ListTableWrap>
 
                     <MobileListCards>
-                      {adminPostViewRows.map((row) => (
-                        <article key={`mobile-${row.id}`}>
+                      {adminPostViewRows.map((row) => {
+                        const isLoadedRow = listScope === "active" && editorMode === "edit" && postId.trim() === String(row.id)
+                        return (
+                        <article key={`mobile-${row.id}`} data-active={isLoadedRow}>
                           <header>
                             <div className="metaLeading">
                               {listScope === "active" && (
@@ -4285,10 +4477,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               )}
                               <span className="rowId">#{row.id}</span>
                             </div>
+                            {isLoadedRow ? <LoadedBadge>현재 편집 중</LoadedBadge> : null}
                           </header>
                           <h4>{row.title}</h4>
                           <p className="metaLine">
-                            <span>{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</span>
+                            <span>
+                              {row.authorName}
+                              <span className="dot">•</span>
+                              {(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}
+                            </span>
                             <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                               {visibilityLabel(row.published, row.listed)}
                             </VisibilityBadge>
@@ -4296,47 +4493,53 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           <div className="mainAction">
                             {listScope === "active" ? (
                               <>
-                                <Button
+                                <RowActionButton
                                   type="button"
+                                  data-variant="primary"
                                   disabled={loadingKey.length > 0}
                                   onClick={() => {
                                     setPostId(String(row.id))
                                     void loadPostForEditor(String(row.id))
                                   }}
                                 >
-                                  불러오기
-                                </Button>
-                                <Button
+                                  <AppIcon name="edit" />
+                                  <span>{isLoadedRow ? "계속 편집" : "편집 열기"}</span>
+                                </RowActionButton>
+                                <RowActionButton
                                   type="button"
-                                  data-variant="danger"
+                                  data-variant="soft-danger"
                                   disabled={loadingKey.length > 0}
                                   onClick={() => openDeleteConfirm([row.id], row.title)}
                                 >
-                                  삭제
-                                </Button>
+                                  <AppIcon name="trash" />
+                                  <span>삭제</span>
+                                </RowActionButton>
                               </>
                             ) : (
                               <>
-                                <Button
+                                <RowActionButton
                                   type="button"
+                                  data-variant="primary"
                                   disabled={loadingKey.length > 0}
                                   onClick={() => void restoreDeletedPostFromList(row)}
                                 >
-                                  복구
-                                </Button>
-                                <Button
+                                  <AppIcon name="check-circle" />
+                                  <span>복구</span>
+                                </RowActionButton>
+                                <RowActionButton
                                   type="button"
-                                  data-variant="danger"
+                                  data-variant="soft-danger"
                                   disabled={loadingKey.length > 0}
                                   onClick={() => void hardDeleteDeletedPostFromList(row)}
                                 >
-                                  영구삭제
-                                </Button>
+                                  <AppIcon name="trash" />
+                                  <span>영구삭제</span>
+                                </RowActionButton>
                               </>
                             )}
                           </div>
                         </article>
-                      ))}
+                      )})}
                     </MobileListCards>
                   </>
                 )}
@@ -4346,7 +4549,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </ListPanel>
               </ContentStudioLeft>
 
-              <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "list"}>
+              <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "list"}>
                 <SelectedPostHeader>
                   <div>
                     <h3>선택한 글 작업</h3>
@@ -4486,35 +4689,21 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <SectionDescription>제목, 본문, 태그, 미리보기와 발행 설정만 남겨 작성 흐름이 끊기지 않도록 정리했습니다.</SectionDescription>
             </div>
           </SectionTop>
-          <ComposeMetricRow>
-            <ComposeMetricItem>
-              <span>현재 글</span>
-              <strong>{currentPostLabel}</strong>
-            </ComposeMetricItem>
-            <ComposeMetricItem>
-              <span>모드</span>
-              <strong>{editorModeLabel}</strong>
-            </ComposeMetricItem>
-            <ComposeMetricItem>
-              <span>공개 범위</span>
-              <strong>{currentVisibilityText}</strong>
-            </ComposeMetricItem>
-          </ComposeMetricRow>
           <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
             {mobileStudioSurfaceSteps.map((step) => (
               <button
                 key={step}
                 type="button"
                 role="tab"
-                aria-selected={mobileStudioStep === step}
-                data-active={mobileStudioStep === step}
+                aria-selected={activeMobileStudioStep === step}
+                data-active={activeMobileStudioStep === step}
                 onClick={() => {
                   if (step === "publish") {
-                    setMobileStudioStep("publish")
+                    setMobileComposeStep("publish")
                     openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
                     return
                   }
-                  setMobileStudioStep(step)
+                  setActiveMobileStudioStep(step)
                 }}
               >
                 {MOBILE_STUDIO_STEP_LABEL[step]}
@@ -4523,38 +4712,38 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </MobileStudioStepper>
           {isCompactMobileLayout ? (
             <MobileStepGuide role="status" aria-live="polite">
-              <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[mobileStudioStep]}`}</strong>
-              <p>{MOBILE_STUDIO_STEP_DESCRIPTION[mobileStudioStep]}</p>
+              <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[activeMobileStudioStep]}`}</strong>
+              <p>{MOBILE_STUDIO_STEP_DESCRIPTION[activeMobileStudioStep]}</p>
               <div>
                 <Button
                   type="button"
                   disabled={!mobileStudioPrevStep}
                   onClick={() => {
                     if (!mobileStudioPrevStep) return
-                    setMobileStudioStep(mobileStudioPrevStep)
+                    setActiveMobileStudioStep(mobileStudioPrevStep)
                   }}
                 >
-                  {mobileStudioPrevStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioPrevStep]}로 이동` : "이전 단계 없음"}
+                  {mobileStudioPrevStep ? getMobileStudioStepMoveLabel(mobileStudioPrevStep) : "이전 단계 없음"}
                 </Button>
                 <PrimaryButton
                   type="button"
-                  disabled={!mobileStudioNextStep}
-                  onClick={() => {
-                    if (!mobileStudioNextStep) return
-                    if (mobileStudioNextStep === "publish") {
-                      setMobileStudioStep("publish")
-                      openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                      return
-                    }
-                    setMobileStudioStep(mobileStudioNextStep)
-                  }}
-                >
+                    disabled={!mobileStudioNextStep}
+                    onClick={() => {
+                      if (!mobileStudioNextStep) return
+                      if (mobileStudioNextStep === "publish") {
+                        setMobileComposeStep("publish")
+                        openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                        return
+                      }
+                      setActiveMobileStudioStep(mobileStudioNextStep)
+                    }}
+                  >
                   {mobileStudioNextStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioNextStep]} 단계로 이동` : "마지막 단계"}
                 </PrimaryButton>
               </div>
             </MobileStepGuide>
           ) : null}
-        <EditorSection data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "edit" || mobileStudioStep === "publish"}>
+        <EditorSection data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "edit" || activeMobileStudioStep === "publish"}>
           <WriterHeader>
             <div className="titleField">
               <TitleInput
@@ -4970,22 +5159,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </ComposeSurfaceSection>
         )}
 
-        {isCompactMobileLayout && !isPublishModalOpen && (
+        {isCompactMobileLayout && studioSurface === "compose" && !isPublishModalOpen && (
           <MobilePrimaryActionBar>
             <PrimaryButton
               type="button"
               disabled={mobilePrimaryActionDisabled}
-              onClick={() => {
-                if (mobileStudioStep === "query") {
-                  void loadAdminPosts()
-                  return
-                }
-                if (mobileStudioStep === "list") {
-                  activateComposeSurface()
-                  return
-                }
-                openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-              }}
+              onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
             >
               {mobilePrimaryActionLabel}
             </PrimaryButton>
@@ -5110,164 +5289,43 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <FieldHelp>기기 탭을 바꾸면 실제 카드 폭 기준으로 제목 줄수와 썸네일 크롭 결과가 즉시 다시 계산됩니다.</FieldHelp>
                   </PreviewResultPanel>
 
-                  <PreviewEditorGrid>
-                    <PreviewEditorSection>
-                      <PreviewEditorSectionHeader>
-                        <strong>썸네일 위치 조정</strong>
-                        <span>드래그로 위치를 바꾸고, 휠 또는 슬라이더로 확대/축소합니다.</span>
-                      </PreviewEditorSectionHeader>
-                      <PreviewThumbFrame
-                        ref={previewThumbFrameRef}
-                        data-draggable={safePreviewThumbnail && !isPreviewThumbnailError}
-                        data-dragging={isPreviewThumbDragging}
-                        onPointerDown={handlePreviewThumbPointerDown}
-                        onPointerMove={handlePreviewThumbPointerMove}
-                        onPointerUp={finalizePreviewThumbPointer}
-                        onPointerCancel={finalizePreviewThumbPointer}
-                      >
-                        {safePreviewThumbnail && !isPreviewThumbnailError ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={safePreviewThumbnail}
-                            alt="포스트 미리보기 썸네일"
-                            style={{
-                              width: "var(--preview-thumb-width)",
-                              height: "var(--preview-thumb-height)",
-                              left: "var(--preview-thumb-left)",
-                              top: "var(--preview-thumb-top)",
-                              maxWidth: "none",
-                              transform: "translateZ(0)",
-                            }}
-                            onError={() => setIsPreviewThumbnailError(true)}
-                          />
-                        ) : (
-                          <div className="placeholder">
-                            <em>썸네일 없음</em>
-                            <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
+                  {isCompactMobileLayout ? (
+                    <CompactPublishEditorStack>
+                      <CompactPublishEditorCard>
+                        <CompactPublishEditorToggle
+                          type="button"
+                          aria-expanded={isMobileThumbnailEditorOpen}
+                          onClick={() => setIsMobileThumbnailEditorOpen((current) => !current)}
+                        >
+                          <div>
+                            <strong>썸네일 위치 조정</strong>
+                            <span>드래그/확대로 카드 크롭을 빠르게 맞춥니다.</span>
                           </div>
-                        )}
-                      </PreviewThumbFrame>
-                      {safePreviewThumbnail && !isPreviewThumbnailError ? (
-                        <ZoomControlRow>
-                          <FieldLabel htmlFor="post-thumbnail-zoom-modal">썸네일 배율</FieldLabel>
-                          <ZoomRangeInput
-                            id="post-thumbnail-zoom-modal"
-                            type="range"
-                            min={1}
-                            max={2.5}
-                            step={0.01}
-                            value={postThumbnailZoom}
-                            onChange={(e) =>
-                              commitPreviewThumbTransform({
-                                ...previewThumbTransformRef.current,
-                                zoom: clampThumbnailZoom(Number(e.target.value)),
-                              })
-                            }
-                          />
-                          <ZoomControlMeta>
-                            <ZoomValue>{postThumbnailZoom.toFixed(2)}x</ZoomValue>
-                            <Button
-                              type="button"
-                              onClick={() =>
-                                commitPreviewThumbTransform({
-                                  ...previewThumbTransformRef.current,
-                                  zoom: DEFAULT_THUMBNAIL_ZOOM,
-                                })
-                              }
-                            >
-                              배율 초기화
-                            </Button>
-                          </ZoomControlMeta>
-                        </ZoomControlRow>
-                      ) : null}
-                    </PreviewEditorSection>
-
-                    <PreviewEditorSection>
-                      <PreviewEditorSectionHeader>
-                        <strong>카드 메타 편집</strong>
-                        <span>썸네일 소스와 카드 요약을 이 구역에서 조정합니다.</span>
-                      </PreviewEditorSectionHeader>
-                      <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
-                      <Input
-                        id="post-thumbnail-url-modal"
-                        placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
-                        value={postThumbnailUrl}
-                        onChange={(e) => {
-                          const nextValue = e.target.value
-                          setPostThumbnailUrl(nextValue)
-                          const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
-                          if (focusXFromInput !== null) {
-                            setPostThumbnailFocusX(focusXFromInput)
-                          }
-                          const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
-                          if (focusFromInput !== null) {
-                            setPostThumbnailFocusY(focusFromInput)
-                          }
-                          const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
-                          if (zoomFromInput !== null) {
-                            setPostThumbnailZoom(zoomFromInput)
-                          }
-                          setPreviewThumbnailSourceUrl("")
-                        }}
-                      />
-                      <MetaActionRow>
-                        <Button
+                          <span>{isMobileThumbnailEditorOpen ? "접기" : "열기"}</span>
+                        </CompactPublishEditorToggle>
+                        {isMobileThumbnailEditorOpen ? thumbnailEditorPanel : null}
+                      </CompactPublishEditorCard>
+                      <CompactPublishEditorCard>
+                        <CompactPublishEditorToggle
                           type="button"
-                          title={POST_IMAGE_UPLOAD_RULE_LABEL}
-                          disabled={disabled("uploadThumbnail")}
-                          onClick={() => thumbnailImageFileInputRef.current?.click()}
+                          aria-expanded={isMobileMetaEditorOpen}
+                          onClick={() => setIsMobileMetaEditorOpen((current) => !current)}
                         >
-                          {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
-                            setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
-                            setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
-                            setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
-                            setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
-                            setPreviewThumbnailSourceUrl("")
-                          }}
-                        >
-                          본문 첫 이미지 가져오기
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            setPostThumbnailUrl("")
-                            setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
-                            setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
-                            setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
-                            setPreviewThumbnailSourceUrl("")
-                          }}
-                        >
-                          자동 모드로 되돌리기
-                        </Button>
-                      </MetaActionRow>
-                      {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
-                      <FieldLabel htmlFor="post-preview-summary-modal">미리보기 요약</FieldLabel>
-                      <PreviewSummaryInput
-                        id="post-preview-summary-modal"
-                        placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
-                        value={postSummary}
-                        maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
-                        onChange={(e) => setPostSummary(e.target.value)}
-                      />
-                      <SummaryCounter>
-                        {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
-                      </SummaryCounter>
-                      <MetaActionRow>
-                        <Button
-                          type="button"
-                          onClick={() => setPostSummary(makePreviewSummary(postContent))}
-                          disabled={!postContent.trim()}
-                        >
-                          본문 기반 요약 채우기
-                        </Button>
-                      </MetaActionRow>
-                    </PreviewEditorSection>
-                  </PreviewEditorGrid>
+                          <div>
+                            <strong>카드 메타 편집</strong>
+                            <span>썸네일 URL과 요약만 따로 정리합니다.</span>
+                          </div>
+                          <span>{isMobileMetaEditorOpen ? "접기" : "열기"}</span>
+                        </CompactPublishEditorToggle>
+                        {isMobileMetaEditorOpen ? previewMetaEditorPanel : null}
+                      </CompactPublishEditorCard>
+                    </CompactPublishEditorStack>
+                  ) : (
+                    <PreviewEditorGrid>
+                      {thumbnailEditorPanel}
+                      {previewMetaEditorPanel}
+                    </PreviewEditorGrid>
+                  )}
                 </PostPreviewSetup>
               </PublishModalBody>
               <PublishModalFooter>
@@ -5477,8 +5535,10 @@ const HeroCard = styled.section`
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
+    gap: 0.78rem;
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    padding: 0.88rem 0.92rem;
   }
 `
 
@@ -5581,7 +5641,7 @@ const MetricGrid = styled.div`
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 
-  @media (max-width: 640px) {
+  @media (max-width: 420px) {
     grid-template-columns: 1fr;
   }
 `
@@ -5611,6 +5671,10 @@ const ActionCluster = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+
+  &[data-hidden="true"] {
+    display: none;
+  }
 
   @media (max-width: 1024px) {
     width: 100%;
@@ -5814,7 +5878,7 @@ const ContentStudioGrid = styled.div`
   gap: 1rem;
   align-items: start;
 
-  @media (min-width: 1680px) {
+  @media (min-width: 1320px) {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   }
 `
@@ -6528,41 +6592,6 @@ const ComposeSurfaceSection = styled(Section)`
   }
 `
 
-const ComposeMetricRow = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
-
-  @media (max-width: 980px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const ComposeMetricItem = styled.div`
-  display: grid;
-  gap: 0.24rem;
-  padding: 0.72rem 0.78rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
-    font-weight: 700;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.94rem;
-    line-height: 1.45;
-  }
-`
-
 const WriterHeader = styled.div`
   display: grid;
   grid-template-columns: 1fr;
@@ -6589,7 +6618,7 @@ const WriterMetaStrip = styled.div`
   gap: 1rem;
   align-items: start;
 
-  @media (max-width: 760px) {
+  @media (max-width: 1024px) {
     grid-template-columns: 1fr;
   }
 `
@@ -6938,6 +6967,59 @@ const PreviewEditorGrid = styled.div`
   @media (min-width: 840px) {
     grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
     align-items: start;
+  }
+`
+
+const CompactPublishEditorStack = styled.div`
+  display: grid;
+  gap: 0.7rem;
+`
+
+const CompactPublishEditorCard = styled.div`
+  display: grid;
+  gap: 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.72rem;
+`
+
+const CompactPublishEditorToggle = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+
+  > div {
+    display: grid;
+    gap: 0.14rem;
+    min-width: 0;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+
+  > span:last-of-type {
+    flex: 0 0 auto;
+    color: ${({ theme }) => theme.colors.blue11};
+    font-weight: 700;
   }
 `
 
@@ -7730,7 +7812,7 @@ const EditorGrid = styled.div`
   overflow: visible;
   align-items: stretch;
 
-  @media (max-width: 760px) {
+  @media (max-width: 1024px) {
     --pane-body-height: clamp(18rem, 52vh, 34rem);
     grid-template-columns: 1fr;
     gap: 0.78rem;
@@ -7781,12 +7863,21 @@ const ListHeader = styled.div`
 const ListHeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.5rem;
   justify-content: flex-end;
   align-items: center;
 
   span {
-    margin-right: 0.1rem;
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.8rem;
+    font-weight: 700;
     white-space: nowrap;
   }
 
@@ -7870,7 +7961,7 @@ const SelectedPostPanel = styled.div`
   margin: 0;
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
 
-  @media (min-width: 1680px) {
+  @media (min-width: 1320px) {
     position: sticky;
     top: calc(var(--app-header-height, 56px) + 0.72rem);
   }
@@ -7952,7 +8043,7 @@ const SubActionRow = styled.div`
   padding-top: 0.65rem;
   border-top: 1px dashed ${({ theme }) => theme.colors.gray6};
 
-  ${Button} {
+  > button {
     border-style: dashed;
   }
 
@@ -8000,7 +8091,7 @@ const SelectionStickyBar = styled.div`
 
 const ListTable = styled.table`
   width: 100%;
-  min-width: 920px;
+  min-width: 980px;
   border-collapse: collapse;
   table-layout: fixed;
 
@@ -8026,6 +8117,19 @@ const ListTable = styled.table`
 
   tbody tr:last-of-type td {
     border-bottom: 0;
+  }
+
+  tbody tr {
+    transition: background-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  tbody tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  tbody tr[data-active="true"] td {
+    background:
+      linear-gradient(90deg, rgba(59, 130, 246, 0.14) 0, rgba(59, 130, 246, 0.04) 28px, rgba(255, 255, 255, 0.02) 28px);
   }
 
   .checkboxCell {
@@ -8070,8 +8174,8 @@ const ListTable = styled.table`
 
   th.actionsCell,
   td.actionsCell {
-    width: 152px;
-    min-width: 152px;
+    width: 196px;
+    min-width: 196px;
   }
 
   @media (max-width: 1520px) {
@@ -8083,17 +8187,41 @@ const ListTable = styled.table`
 `
 
 const TitleCell = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+  display: grid;
+  gap: 0.36rem;
   max-width: 100%;
   min-width: 0;
+
+  .titleMain {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
 
   .text {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 700;
+  }
+
+  .meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.34rem;
+    min-width: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .dot {
+    opacity: 0.65;
   }
 `
 
@@ -8107,6 +8235,21 @@ const DeletedBadge = styled.span`
   font-size: 0.68rem;
   font-weight: 700;
   padding: 0.12rem 0.42rem;
+  flex: 0 0 auto;
+`
+
+const LoadedBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: ${({ theme }) => theme.colors.blue3};
+  color: ${({ theme }) => theme.colors.blue11};
+  padding: 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
   flex: 0 0 auto;
 `
 
@@ -8148,21 +8291,54 @@ const VisibilityBadge = styled.span`
 `
 
 const InlineActions = styled.div`
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  gap: 0.42rem;
+  align-items: stretch;
+`
 
-  ${Button} {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 96px;
-    width: 96px;
-    min-height: 40px;
-    padding: 0.38rem 0.58rem;
-    font-size: 0.76rem;
-    white-space: nowrap;
+const RowActionButton = styled(Button)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.42rem 0.62rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &[data-variant="primary"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+
+  &[data-variant="primary"]:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.blue9};
+    background: ${({ theme }) => theme.colors.blue4};
+    color: ${({ theme }) => theme.colors.blue12};
+  }
+
+  &[data-variant="soft-danger"] {
+    border-color: rgba(239, 68, 68, 0.38);
+    background: rgba(127, 29, 29, 0.16);
+    color: ${({ theme }) => theme.colors.red11};
+  }
+
+  &[data-variant="soft-danger"]:hover:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.red8};
+    background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
   }
 `
 
@@ -8182,6 +8358,13 @@ const MobileListCards = styled.div`
     background: ${({ theme }) => theme.colors.gray2};
     display: grid;
     gap: 0.5rem;
+    transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  article[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(255, 255, 255, 0.02));
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18);
   }
 
   header {
@@ -8231,6 +8414,11 @@ const MobileListCards = styled.div`
     align-items: center;
     justify-content: space-between;
     gap: 0.42rem;
+
+    .dot {
+      margin: 0 0.26rem;
+      opacity: 0.65;
+    }
   }
 
   .mainAction {
@@ -8350,6 +8538,13 @@ const PublishModal = styled.div`
   padding: 1rem;
   display: grid;
   gap: 0.9rem;
+
+  @media (max-width: 720px) {
+    width: min(100%, 34rem);
+    max-height: min(92vh, 980px);
+    padding: 0.82rem;
+    gap: 0.78rem;
+  }
 `
 
 const PublishModalHeader = styled.div`
@@ -8370,6 +8565,10 @@ const PublishModalHeader = styled.div`
 const PublishModalBody = styled.div`
   display: grid;
   gap: 0.8rem;
+
+  @media (max-width: 720px) {
+    gap: 0.7rem;
+  }
 `
 
 const PublishModeHint = styled.div`
@@ -8640,7 +8839,7 @@ const DevConsoleSection = styled.section`
     white-space: nowrap;
   }
 
-  ${ResultPanel} {
+  > details > pre {
     margin: 0 1rem 1rem;
   }
 

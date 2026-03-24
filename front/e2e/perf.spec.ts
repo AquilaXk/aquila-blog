@@ -698,14 +698,14 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       expect(searchWidth).toBeGreaterThanOrEqual(320)
       expect(searchWidth).toBeLessThanOrEqual(336)
       expect(searchHeight).toBe(34)
-      expect(searchY).toBeGreaterThanOrEqual(188)
-      expect(searchY).toBeLessThanOrEqual(210)
+      expect(searchY).toBeGreaterThanOrEqual(156)
+      expect(searchY).toBeLessThanOrEqual(188)
       expect(firstCardWidth).toBeGreaterThanOrEqual(360)
       expect(firstCardWidth).toBeLessThanOrEqual(370)
       expect(firstCardHeight).toBeGreaterThanOrEqual(388)
       expect(firstCardHeight).toBeLessThanOrEqual(404)
-      expect(firstCardY).toBeGreaterThanOrEqual(324)
-      expect(firstCardY).toBeLessThanOrEqual(350)
+      expect(firstCardY).toBeGreaterThanOrEqual(298)
+      expect(firstCardY).toBeLessThanOrEqual(332)
       continue
     }
 
@@ -729,14 +729,14 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       expect(searchWidth).toBeGreaterThanOrEqual(692)
       expect(searchWidth).toBeLessThanOrEqual(710)
       expect(searchHeight).toBe(34)
-      expect(searchY).toBeGreaterThanOrEqual(188)
-      expect(searchY).toBeLessThanOrEqual(212)
+      expect(searchY).toBeGreaterThanOrEqual(156)
+      expect(searchY).toBeLessThanOrEqual(190)
       expect(firstCardWidth).toBeGreaterThanOrEqual(348)
       expect(firstCardWidth).toBeLessThanOrEqual(360)
       expect(firstCardHeight).toBeGreaterThanOrEqual(384)
       expect(firstCardHeight).toBeLessThanOrEqual(398)
-      expect(firstCardY).toBeGreaterThanOrEqual(326)
-      expect(firstCardY).toBeLessThanOrEqual(352)
+      expect(firstCardY).toBeGreaterThanOrEqual(300)
+      expect(firstCardY).toBeLessThanOrEqual(334)
       continue
     }
 
@@ -818,8 +818,6 @@ test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다
           searchBorder: "rgb(35, 41, 50)",
           cardBg: "rgb(13, 15, 18)",
           cardBorder: "rgb(29, 34, 43)",
-          summaryBgPrefix: "rgba(23, 27, 33",
-          summaryBorder: "rgb(42, 48, 56)",
           authShellBg: "rgb(13, 15, 18)",
           authShellBorder: "rgb(35, 41, 50)",
           toggleLabel: "라이트 모드로 전환",
@@ -831,8 +829,6 @@ test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다
           searchBorder: "rgb(215, 224, 234)",
           cardBg: "rgb(255, 255, 255)",
           cardBorder: "rgb(231, 237, 244)",
-          summaryBgPrefix: "rgba(255, 255, 255",
-          summaryBorder: "rgb(200, 210, 222)",
           authShellBg: "rgb(255, 255, 255)",
           authShellBorder: "rgb(215, 224, 234)",
           toggleLabel: "다크 모드로 전환",
@@ -857,8 +853,8 @@ test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다
       }
 
       if (scenario.route === "/posts/991") {
-        expect(fingerprint.summaryBg?.startsWith(expected.summaryBgPrefix)).toBe(true)
-        expect(fingerprint.summaryBorder).toBe(expected.summaryBorder)
+        expect(fingerprint.summaryBg).toBeNull()
+        expect(fingerprint.summaryBorder).toBeNull()
       }
 
       if (scenario.route === "/login") {

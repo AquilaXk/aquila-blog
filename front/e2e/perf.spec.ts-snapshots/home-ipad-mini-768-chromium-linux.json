@@ -1,0 +1,38 @@
+{
+  "route": "/",
+  "viewport": {
+    "width": 768,
+    "height": 1024
+  },
+  "scrollWidth": {
+    "html": 768,
+    "body": 768
+  },
+  "rails": {
+    "chip": true,
+    "desktopTag": false,
+    "leftReaction": false,
+    "rightToc": false
+  },
+  "profileSidebarVisible": false,
+  "searchRect": {
+    "x": 47,
+    "y": 177,
+    "width": 699,
+    "height": 34
+  },
+  "firstCardRect": {
+    "x": 14,
+    "y": 321,
+    "width": 354,
+    "height": 402
+  },
+  "desktopTagRailRect": {
+    "x": 0,
+    "y": 0,
+    "width": 0,
+    "height": 0
+  },
+  "leftRailRect": null,
+  "rightRailRect": null
+}

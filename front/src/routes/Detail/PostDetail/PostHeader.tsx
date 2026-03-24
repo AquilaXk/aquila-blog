@@ -22,6 +22,7 @@ type Props = {
   likePending?: boolean
   hideLikeActionOnDesktop?: boolean
   hideShareActionOnDesktop?: boolean
+  shareFeedback?: "copied" | "shared" | "failed" | null
   onToggleLike?: () => void
   onSharePost?: () => void
   showModifyAction?: boolean
@@ -39,6 +40,7 @@ const PostHeader: React.FC<Props> = ({
   likePending = false,
   hideLikeActionOnDesktop = false,
   hideShareActionOnDesktop = false,
+  shareFeedback = null,
   onToggleLike,
   onSharePost,
   showModifyAction = false,
@@ -146,6 +148,16 @@ const PostHeader: React.FC<Props> = ({
               <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
             </div>
           </div>
+          {shareFeedback && (
+            <span
+              className="shareFeedbackPill"
+              data-hide-desktop={hideShareActionOnDesktop}
+              role="status"
+              aria-live="polite"
+            >
+              {shareFeedback === "failed" ? "공유에 실패했습니다." : shareFeedback === "shared" ? "공유가 완료되었습니다." : "링크를 복사했습니다."}
+            </span>
+          )}
         </div>
       </div>
 
@@ -271,6 +283,20 @@ const StyledWrapper = styled.header`
     flex-wrap: wrap;
     gap: 0.52rem;
     min-width: 0;
+  }
+
+  .shareFeedbackPill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 0.78rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1;
   }
 
   .adminActions {
@@ -435,6 +461,10 @@ const StyledWrapper = styled.header`
       justify-content: flex-start;
     }
 
+    .shareFeedbackPill {
+      width: fit-content;
+    }
+
     .metaText,
     .stats {
       font-size: 0.86rem;
@@ -450,7 +480,8 @@ const StyledWrapper = styled.header`
 
   @media (min-width: 1201px) {
     .likeButton[data-hide-desktop="true"],
-    .shareButton[data-hide-desktop="true"] {
+    .shareButton[data-hide-desktop="true"],
+    .shareFeedbackPill[data-hide-desktop="true"] {
       display: none;
     }
   }

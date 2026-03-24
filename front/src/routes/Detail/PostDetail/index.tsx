@@ -799,6 +799,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 likePending={likePending}
                 hideLikeActionOnDesktop={showFloatingLike}
                 hideShareActionOnDesktop={showFloatingLike}
+                shareFeedback={shareFeedback}
                 onToggleLike={handleToggleLike}
                 onSharePost={handleSharePost}
                 showModifyAction={canModifyPost}
@@ -900,7 +901,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           {showStickyToc ? (
             <nav ref={rightRailInnerRef} className="rightRailInner" aria-label="목차">
               <div className="rightRailHead">
-                <h2 className="rightRailTitle">목차</h2>
+                <div className="rightRailTitleGroup">
+                  <h2 className="rightRailTitle">목차</h2>
+                  <span className="rightRailMeta">{visibleTocItems.length}개 섹션</span>
+                </div>
                 {hasDepth4Toc && (
                   <button
                     type="button"
@@ -1107,37 +1111,47 @@ const StyledWrapper = styled.div`
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.4rem;
-      margin-bottom: 0.28rem;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .rightRailTitleGroup {
+      display: grid;
+      gap: 0.18rem;
+      min-width: 0;
     }
 
     .rightRailTitle {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      margin: -1px;
-      padding: 0;
-      border: 0;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
+      margin: 0;
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.92rem;
+      line-height: 1.2;
+      font-weight: 780;
+      letter-spacing: -0.02em;
+    }
+
+    .rightRailMeta {
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.72rem;
+      line-height: 1.2;
+      font-weight: 650;
     }
 
     .tocDepthToggle {
-      border: 0;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
       border-radius: 999px;
-      background: transparent;
+      background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.71rem;
       font-weight: 700;
       line-height: 1;
-      padding: 0.18rem 0.36rem;
+      padding: 0.32rem 0.5rem;
       cursor: pointer;
+      flex-shrink: 0;
 
       &:hover {
         color: ${({ theme }) => theme.colors.gray12};
-        text-decoration: underline;
-        text-underline-offset: 2px;
+        border-color: ${({ theme }) => theme.colors.gray8};
       }
     }
 
@@ -1170,23 +1184,26 @@ const StyledWrapper = styled.div`
       width: 100%;
       text-align: left;
       border: 0;
-      border-radius: 0;
-      min-height: 36px;
-      padding: 0.35rem 0;
+      border-radius: 10px;
+      min-height: 38px;
+      padding: 0.46rem 0.6rem 0.46rem 0;
       background: transparent;
       color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.92)" : theme.colors.gray10)};
       font-size: 0.84rem;
       line-height: 1.35;
       cursor: pointer;
-      white-space: nowrap;
+      white-space: normal;
       overflow: hidden;
-      text-overflow: ellipsis;
       position: relative;
-      transition: color 0.15s ease;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      transition: color 0.15s ease, background-color 0.15s ease;
     }
 
     button:hover {
       color: ${({ theme }) => theme.colors.gray12};
+      background: ${({ theme }) => theme.colors.gray2};
     }
 
     button::before {
@@ -1204,6 +1221,7 @@ const StyledWrapper = styled.div`
     button[data-active="true"] {
       color: ${({ theme }) => theme.colors.gray12};
       font-weight: 700;
+      background: ${({ theme }) => theme.colors.gray2};
     }
 
     button[data-active="true"]::before {

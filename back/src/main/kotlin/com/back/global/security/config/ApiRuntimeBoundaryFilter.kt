@@ -57,6 +57,9 @@ class ApiRuntimeBoundaryFilter(
         method: String,
         path: String,
     ): Boolean {
+        // CORS preflight는 실제 메서드 권한 판단 이전에 항상 통과시켜야 브라우저가 본 요청 결과를 해석할 수 있다.
+        if (method == "OPTIONS") return true
+
         val isPublicReadApi = isPublicReadPath(path) && method in SAFE_METHODS
         return when (mode) {
             RuntimeApiMode.ALL -> true
@@ -94,7 +97,7 @@ class ApiRuntimeBoundaryFilter(
     }
 
     companion object {
-        private val SAFE_METHODS = setOf("GET", "HEAD", "OPTIONS")
+        private val SAFE_METHODS = setOf("GET", "HEAD")
         private val PUBLIC_READ_PATHS =
             listOf(
                 Regex("^/post/api/v1/posts/feed$"),

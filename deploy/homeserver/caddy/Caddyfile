@@ -50,11 +50,11 @@ http://{$API_DOMAIN} {
 
   @publicFeed {
     path /post/api/v1/posts/feed
-    method GET HEAD
+    method GET HEAD OPTIONS
   }
   @publicExplore {
     path /post/api/v1/posts/explore
-    method GET HEAD
+    method GET HEAD OPTIONS
   }
   handle @publicFeed {
     header {
@@ -84,8 +84,8 @@ http://{$API_DOMAIN} {
 
   # read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
   @publicReadFallback {
-    path /post/api/v1/posts/search /post/api/v1/posts/tags /post/api/v1/posts/feed/cursor /post/api/v1/posts/explore/cursor /post/api/v1/posts/*
-    method GET HEAD
+    path /post/api/v1/posts/search /post/api/v1/posts/tags /post/api/v1/posts/feed/cursor /post/api/v1/posts/explore/cursor /post/api/v1/posts/* /post/api/v1/posts/*/comments /post/api/v1/posts/*/comments/*
+    method GET HEAD OPTIONS
   }
   handle @publicReadFallback {
     reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {

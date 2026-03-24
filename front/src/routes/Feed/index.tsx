@@ -11,7 +11,6 @@ import {
   WIDE_SIDEBAR_LAYOUT_MIN_PX,
 } from "src/layouts/RootLayout/layoutTiers"
 
-const FEED_HERO_EYEBROW = "백엔드 아키텍처 · 운영 트러블슈팅 · 성능 최적화"
 const DEFAULT_HOME_DESCRIPTION = "백엔드 아키텍처, 운영 트러블슈팅, 성능 최적화를 실서비스 경험 기준으로 정리합니다."
 
 const normalizeHomeIntroDescription = (value?: string) => {
@@ -36,7 +35,6 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
     <StyledWrapper>
       <div className="mid">
         <IntroCard>
-          <span className="eyebrow">{FEED_HERO_EYEBROW}</span>
           <h1>{introTitle}</h1>
           <p>{introDescription}</p>
         </IntroCard>
@@ -134,17 +132,6 @@ const IntroCard = styled.section`
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
   padding: 0.28rem 0 0.96rem;
 
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    margin-bottom: 0.68rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    font-weight: 760;
-    letter-spacing: 0.01em;
-    line-height: 1.4;
-  }
-
   h1 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
@@ -166,11 +153,6 @@ const IntroCard = styled.section`
 
   @media (max-width: 768px) {
     padding-bottom: 0.76rem;
-
-    .eyebrow {
-      margin-bottom: 0.46rem;
-      font-size: 0.7rem;
-    }
 
     h1 {
       max-width: none;

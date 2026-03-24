@@ -40,6 +40,20 @@ class ApiRuntimeBoundaryFilterTest {
         assertThat(response.contentAsString).contains("503-1")
     }
 
+    @Test
+    @DisplayName("admin 모드에서도 댓글 경로 OPTIONS preflight는 차단하지 않는다")
+    fun `admin mode allows comments options preflight`() {
+        val filter = ApiRuntimeBoundaryFilter("admin", createApiCorsPolicy())
+        val request = MockHttpServletRequest("OPTIONS", "/post/api/v1/posts/466/comments")
+        request.addHeader("Origin", "https://www.aquilaxk.site")
+        request.addHeader("Access-Control-Request-Method", "POST")
+        val response = MockHttpServletResponse()
+
+        filter.doFilter(request, response, MockFilterChain())
+
+        assertThat(response.status).isEqualTo(HttpServletResponse.SC_OK)
+    }
+
     private fun createApiCorsPolicy(): ApiCorsPolicy =
         ApiCorsPolicy(
             environment = MockEnvironment().withProperty("spring.profiles.active", "prod"),

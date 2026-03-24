@@ -35,6 +35,11 @@ type TocItem = {
   level: 2 | 3 | 4
 }
 
+const renderRelatedSummary = (summary: string | undefined) => {
+  const summaryText = normalizeCardSummary(summary, { fallback: "", maxLength: 148 })
+  return summaryText ? <p>{summaryText}</p> : null
+}
+
 const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
 const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
@@ -167,10 +172,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     () => extractLeadingSummaryBlock(data?.content || "", 180),
     [data?.content]
   )
-  const detailSummary = useMemo(() => {
-    const source = extractedSummaryState.summary || data?.summary || ""
-    return normalizeCardSummary(source, { fallback: "", maxLength: 180 })
-  }, [data?.summary, extractedSummaryState.summary])
   const renderedContent = useMemo(() => {
     if (!data?.content) return ""
     return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content
@@ -831,17 +832,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               />
             </section>
           )}
-          {detailSummary ? (
-            <SummaryPanel aria-label="요약" data-rum-section="summary">
-              <div className="summaryHead">
-                <span className="summaryBadge">
-                  <AppIcon name="spark" aria-hidden="true" />
-                  한눈에 보기
-                </span>
-              </div>
-              <p>{detailSummary}</p>
-            </SummaryPanel>
-          ) : null}
           {showStickyToc && (
             <CompactTocSection aria-label="모바일 목차">
               <details>
@@ -888,10 +878,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   <li key={post.id}>
                     <Link href={toCanonicalPostPath(post.id)}>
                       <strong>{post.title}</strong>
-                      {(() => {
-                        const summaryText = normalizeCardSummary(post.summary, { fallback: "", maxLength: 148 })
-                        return summaryText ? <p>{summaryText}</p> : null
-                      })()}
+                      {renderRelatedSummary(post.summary)}
                       <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
                     </Link>
                   </li>
@@ -912,10 +899,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   <li key={post.id}>
                     <Link href={toCanonicalPostPath(post.id)}>
                       <strong>{post.title}</strong>
-                      {(() => {
-                        const summaryText = normalizeCardSummary(post.summary, { fallback: "", maxLength: 148 })
-                        return summaryText ? <p>{summaryText}</p> : null
-                      })()}
+                      {renderRelatedSummary(post.summary)}
                       <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
                     </Link>
                   </li>
@@ -1239,14 +1223,18 @@ const StyledWrapper = styled.div`
       border: 0;
       border-radius: 10px;
       min-height: 38px;
-      padding: 0.5rem 0.7rem 0.5rem 0;
+      box-sizing: border-box;
+      max-width: 100%;
+      padding: 0.56rem 0.96rem 0.56rem 0.22rem;
       background: transparent;
       color: ${({ theme }) => theme.colors.gray9};
       font-size: 0.84rem;
-      line-height: 1.35;
+      line-height: 1.42;
       cursor: pointer;
       white-space: normal;
       overflow: hidden;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
       position: relative;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -1336,65 +1324,6 @@ const BodySection = styled.div`
   @media (max-width: 768px) {
     margin-top: 0.55rem;
     padding-top: 0.85rem;
-  }
-`
-
-const SummaryPanel = styled.section`
-  margin-top: 0.32rem;
-  padding: 1rem 1.05rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(23, 27, 33, 0.82)" : "rgba(255, 255, 255, 0.94)"};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 16px 32px rgba(2, 6, 23, 0.2)" : "0 12px 28px rgba(15, 23, 42, 0.05)"};
-
-  .summaryHead {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    margin-bottom: 0.58rem;
-  }
-
-  .summaryBadge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.38rem;
-    min-height: 1.85rem;
-    padding: 0 0.72rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.75rem;
-    line-height: 1;
-    font-weight: 760;
-    letter-spacing: -0.01em;
-
-    svg {
-      color: ${({ theme }) => theme.colors.accentLink};
-      font-size: 0.84rem;
-    }
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.96rem;
-    line-height: 1.75;
-    letter-spacing: -0.012em;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-  }
-
-  @media (max-width: 768px) {
-    margin-top: 0.26rem;
-    padding: 0.9rem 0.92rem;
-
-    p {
-      font-size: 0.92rem;
-      line-height: 1.68;
-    }
   }
 `
 

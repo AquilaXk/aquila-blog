@@ -1,5 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
 import styled from "@emotion/styled"
-import Image from "next/image"
 import React from "react"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
@@ -60,6 +60,12 @@ const PostHeader: React.FC<Props> = ({
   const thumbnailFocusX = parseThumbnailFocusXFromUrl(data.thumbnail || "")
   const thumbnailFocusY = parseThumbnailFocusYFromUrl(data.thumbnail || "")
   const thumbnailZoom = parseThumbnailZoomFromUrl(data.thumbnail || "")
+  const shareFeedbackMessage =
+    shareFeedback === "failed"
+      ? "공유에 실패했습니다."
+      : shareFeedback === "shared"
+        ? "공유가 완료되었습니다."
+        : "링크를 복사했습니다."
 
   return (
     <StyledWrapper>
@@ -155,7 +161,7 @@ const PostHeader: React.FC<Props> = ({
               role="status"
               aria-live="polite"
             >
-              {shareFeedback === "failed" ? "공유에 실패했습니다." : shareFeedback === "shared" ? "공유가 완료되었습니다." : "링크를 복사했습니다."}
+              {shareFeedbackMessage}
             </span>
           )}
         </div>
@@ -163,16 +169,23 @@ const PostHeader: React.FC<Props> = ({
 
       {thumbnailSrc && (
         <div className="thumbnail">
-          <Image
+          <img
             src={thumbnailSrc}
-            css={{
+            alt={data.title}
+            loading="eager"
+            {...({ fetchpriority: "high" } as Record<string, string>)}
+            decoding="async"
+            draggable={false}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
               objectFit: "cover",
               objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
               transform: `scale(${thumbnailZoom})`,
               transformOrigin: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
             }}
-            fill
-            alt={data.title}
           />
         </div>
       )}

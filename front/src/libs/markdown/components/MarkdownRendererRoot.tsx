@@ -665,7 +665,7 @@ const MarkdownRendererRoot = styled.div`
       background: ${({ theme }) => theme.colors.gray2};
     }
 
-    table.aq-table-responsive > tbody > tr > td {
+    table.aq-table-responsive > tbody > tr > :is(td, th) {
       display: grid;
       grid-template-columns: minmax(5.2rem, 35%) minmax(0, 1fr);
       gap: 0.56rem;
@@ -679,11 +679,11 @@ const MarkdownRendererRoot = styled.div`
       overflow-wrap: anywhere;
     }
 
-    table.aq-table-responsive > tbody > tr > td:last-child {
+    table.aq-table-responsive > tbody > tr > :is(td, th):last-child {
       border-bottom: 0;
     }
 
-    table.aq-table-responsive > tbody > tr > td::before {
+    table.aq-table-responsive > tbody > tr > :is(td, th)::before {
       content: attr(data-label);
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.74rem;

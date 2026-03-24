@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import useAuthSession from "src/hooks/useAuthSession"
 import { normalizeNextPath, replaceRoute, toLoginPath } from "src/libs/router"
+import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { zIndexes } from "src/styles/zIndexes"
 
 const AuthEntryModal = dynamic(() => import("src/components/auth/AuthEntryModal"), {
@@ -87,11 +88,10 @@ const NavBar: React.FC = () => {
     if (typeof document === "undefined") return
     if (!mobileMenuOpen) return
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const releaseBodyScrollLock = acquireBodyScrollLock()
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseBodyScrollLock()
     }
   }, [mobileMenuOpen])
 

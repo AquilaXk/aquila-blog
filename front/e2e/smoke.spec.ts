@@ -490,6 +490,69 @@ test("잘못된 닫힘 fence(```4) 입력도 복구되어 머메이드와 후속
   await expect(page.locator("strong", { hasText: "볼드" })).toBeVisible()
 })
 
+test("상세 페이지 콜아웃과 토글 블록은 작성 문법대로 렌더된다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/779", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 779,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "콜아웃 토글 렌더링 테스트",
+        content: [
+          "> [!TIP] 핵심 포인트",
+          "> 콜아웃 본문입니다.",
+          "",
+          "<aside>",
+          "ℹ️ 추가 정보",
+          "aside 콜아웃 본문입니다.",
+          "</aside>",
+          "",
+          ":::toggle 더 보기",
+          "토글 내부 본문입니다.",
+          ":::",
+        ].join("\n"),
+        tags: [],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/779/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/779")
+  await expect(page.getByText("콜아웃 토글 렌더링 테스트")).toBeVisible()
+  await expect(page.locator(".aq-callout.aq-admonition-tip")).toContainText("핵심 포인트")
+  await expect(page.locator(".aq-callout.aq-admonition-tip")).toContainText("콜아웃 본문입니다.")
+  await expect(page.locator(".aq-callout.aq-admonition-info")).toContainText("추가 정보")
+  await expect(page.locator(".aq-callout.aq-admonition-info")).toContainText("aside 콜아웃 본문입니다.")
+  await page.getByText("더 보기").click()
+  await expect(page.getByText("토글 내부 본문입니다.")).toBeVisible()
+})
+
 test("비로그인 상태에서 좋아요 클릭 시 로그인 페이지로 이동한다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/101", async (route) => {
     await route.fulfill({

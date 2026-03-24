@@ -1,6 +1,7 @@
 import { RefObject, useEffect } from "react"
 import useScheme from "src/hooks/useScheme"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
+import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
 const MERMAID_SOURCE_PATTERN =
   /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
@@ -119,11 +120,10 @@ const useMermaidEffect = (
       overlay.appendChild(panel)
       document.body.appendChild(overlay)
 
-      const previousOverflow = document.body.style.overflow
-      document.body.style.overflow = "hidden"
+      const releaseBodyScrollLock = acquireBodyScrollLock()
 
       const closeOverlay = () => {
-        document.body.style.overflow = previousOverflow
+        releaseBodyScrollLock()
         overlay.remove()
         document.removeEventListener("keydown", handleEscape)
         mermaidOverlayCleanup = null

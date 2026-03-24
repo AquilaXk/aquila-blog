@@ -16,16 +16,16 @@
   },
   "profileSidebarVisible": false,
   "searchRect": {
-    "x": 47,
+    "x": 44,
     "y": 177,
-    "width": 324,
+    "width": 326,
     "height": 34
   },
   "firstCardRect": {
     "x": 14,
-    "y": 321,
+    "y": 318,
     "width": 366,
-    "height": 408
+    "height": 396
   },
   "desktopTagRailRect": {
     "x": 0,

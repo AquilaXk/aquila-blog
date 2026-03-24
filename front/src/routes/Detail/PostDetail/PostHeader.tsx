@@ -21,7 +21,9 @@ type Props = {
   actorHasLiked?: boolean
   likePending?: boolean
   hideLikeActionOnDesktop?: boolean
+  hideShareActionOnDesktop?: boolean
   onToggleLike?: () => void
+  onSharePost?: () => void
   showModifyAction?: boolean
   showDeleteAction?: boolean
   adminActionPending?: boolean
@@ -36,7 +38,9 @@ const PostHeader: React.FC<Props> = ({
   actorHasLiked = false,
   likePending = false,
   hideLikeActionOnDesktop = false,
+  hideShareActionOnDesktop = false,
   onToggleLike,
+  onSharePost,
   showModifyAction = false,
   showDeleteAction = false,
   adminActionPending = false,
@@ -110,22 +114,37 @@ const PostHeader: React.FC<Props> = ({
               )}
             </div>
           )}
-          <button
-            type="button"
-            className="likeButton"
-            aria-pressed={actorHasLiked}
-            data-active={actorHasLiked}
-            data-hide-desktop={hideLikeActionOnDesktop}
-            disabled={likePending}
-            onClick={onToggleLike}
-          >
-            <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
-            <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
-          </button>
+          <div className="engagementRow" aria-label="post engagement">
+            <button
+              type="button"
+              className="likeButton"
+              aria-pressed={actorHasLiked}
+              data-active={actorHasLiked}
+              data-hide-desktop={hideLikeActionOnDesktop}
+              disabled={likePending}
+              onClick={onToggleLike}
+            >
+              <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
+              <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
+            </button>
 
-          <div className="stats" aria-label="post stats">
-            <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
-            <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
+            {onSharePost && (
+              <button
+                type="button"
+                className="shareButton"
+                data-hide-desktop={hideShareActionOnDesktop}
+                aria-label="게시글 공유"
+                onClick={onSharePost}
+              >
+                <AppIcon name="share" />
+                <span>공유</span>
+              </button>
+            )}
+
+            <div className="stats" aria-label="post stats">
+              <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
+              <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -245,6 +264,15 @@ const StyledWrapper = styled.header`
     gap: 0.52rem;
   }
 
+  .engagementRow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.52rem;
+    min-width: 0;
+  }
+
   .adminActions {
     display: inline-flex;
     align-items: center;
@@ -320,6 +348,29 @@ const StyledWrapper = styled.header`
     }
   }
 
+  .shareButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    min-height: 40px;
+    padding: 0 0.9rem;
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      border-color 0.18s ease,
+      background-color 0.18s ease,
+      color 0.18s ease;
+
+    svg {
+      font-size: 1rem;
+    }
+  }
+
   .dot {
     width: 0.22rem;
     height: 0.22rem;
@@ -375,6 +426,13 @@ const StyledWrapper = styled.header`
     .actions {
       width: 100%;
       justify-content: flex-start;
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    .engagementRow {
+      width: 100%;
+      justify-content: flex-start;
     }
 
     .metaText,
@@ -382,10 +440,17 @@ const StyledWrapper = styled.header`
       font-size: 0.86rem;
     }
 
+    .statChip,
+    .likeButton,
+    .shareButton {
+      min-height: 38px;
+    }
+
   }
 
-  @media (min-width: 1241px) {
-    .likeButton[data-hide-desktop="true"] {
+  @media (min-width: 1201px) {
+    .likeButton[data-hide-desktop="true"],
+    .shareButton[data-hide-desktop="true"] {
       display: none;
     }
   }

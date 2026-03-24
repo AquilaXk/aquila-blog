@@ -248,6 +248,8 @@ const MOBILE_STUDIO_STEP_DESCRIPTION: Record<MobileStudioStep, string> = {
 }
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
+const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
+const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
 const DEFAULT_THUMBNAIL_SOURCE_SIZE: ThumbnailSourceSize = {
   width: THUMBNAIL_FRAME_ASPECT_RATIO,
   height: 1,
@@ -1072,13 +1074,13 @@ const preToMarkdown = (el: HTMLElement): string => {
 
 const detailsToMarkdown = (el: HTMLElement): string => {
   const summary = el.querySelector("summary")
-  const title = summary?.textContent?.trim() || "토글 제목"
+  const title = summary?.textContent?.trim() || EDITOR_TOGGLE_TITLE_PLACEHOLDER
 
   const contentNodes = Array.from(el.childNodes).filter((node) => node !== summary)
   const body = contentNodes
     .map((node) => (node.nodeType === Node.ELEMENT_NODE ? blockToMarkdown(node as HTMLElement) : inlineToMarkdown(node)))
     .join("\n")
-    .trim() || "내용을 입력하세요."
+    .trim() || EDITOR_BODY_PLACEHOLDER
 
   return `:::toggle ${title}\n${body}\n:::`
 }
@@ -1102,9 +1104,11 @@ const blockToMarkdown = (el: HTMLElement): string => {
   const hasToggleClass = /(^|\s)[a-z0-9_-]*toggle[a-z0-9_-]*(\s|$)/i.test(classNames)
   if (hasToggleClass) {
     const title =
-      el.querySelector("summary, [class*='toggle-summary'], [class*='summary']")?.textContent?.trim() || "토글 제목"
+      el.querySelector("summary, [class*='toggle-summary'], [class*='summary']")?.textContent?.trim() ||
+      EDITOR_TOGGLE_TITLE_PLACEHOLDER
     const body =
-      el.querySelector("[class*='toggle-content'], [class*='content']")?.textContent?.trim() || "내용을 입력하세요."
+      el.querySelector("[class*='toggle-content'], [class*='content']")?.textContent?.trim() ||
+      EDITOR_BODY_PLACEHOLDER
     return `:::toggle ${title}\n${body}\n:::`
   }
 
@@ -1132,6 +1136,32 @@ const convertHtmlToMarkdown = (html: string): string => {
     .filter(Boolean)
 
   return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
+}
+
+const detectPublishPlaceholderIssue = (content: string): string | null => {
+  let inFence = false
+
+  for (const rawLine of content.replace(/\r\n/g, "\n").split("\n")) {
+    const trimmed = rawLine.trim()
+    if (!trimmed) continue
+
+    if (/^```/.test(trimmed)) {
+      inFence = !inFence
+      continue
+    }
+
+    if (inFence || trimmed.startsWith(">")) continue
+
+    if (trimmed === EDITOR_BODY_PLACEHOLDER) {
+      return "본문에 기본 placeholder 문구가 남아 있습니다. 실제 내용으로 교체한 뒤 다시 시도해주세요."
+    }
+
+    if (trimmed === `:::toggle ${EDITOR_TOGGLE_TITLE_PLACEHOLDER}`) {
+      return "토글 제목이 기본값으로 남아 있습니다. 실제 제목으로 바꾼 뒤 다시 시도해주세요."
+    }
+  }
+
+  return null
 }
 
 const sanitizeNumberInput = (value: string) => value.replace(/[^\d]/g, "")
@@ -2208,6 +2238,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       return false
     }
 
+    const placeholderIssue = detectPublishPlaceholderIssue(postContent)
+    if (placeholderIssue) {
+      setPublishStatus({ tone: "error", text: placeholderIssue })
+      setResult(pretty({ error: placeholderIssue }))
+      return false
+    }
+
     try {
       setLoadingKey("writePost")
       setPublishStatus({ tone: "loading", text: "글 작성 중입니다..." })
@@ -2283,6 +2320,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       return false
     }
 
+    if (!postTitle.trim()) {
+      const msg = "제목을 입력해주세요."
+      setPublishStatus({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return false
+    }
+
+    if (!postContent.trim()) {
+      const msg = "본문을 입력해주세요."
+      setPublishStatus({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return false
+    }
+
+    const placeholderIssue = detectPublishPlaceholderIssue(postContent)
+    if (placeholderIssue) {
+      setPublishStatus({ tone: "error", text: placeholderIssue })
+      setResult(pretty({ error: placeholderIssue }))
+      return false
+    }
+
     try {
       setLoadingKey("modifyPost")
       setPublishStatus({ tone: "loading", text: "글 수정 중입니다..." })
@@ -2354,6 +2412,27 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       const msg = "발행할 임시글을 먼저 불러와주세요."
       setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
+      return false
+    }
+
+    if (!postTitle.trim()) {
+      const msg = "제목을 입력해주세요."
+      setPublishStatus({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return false
+    }
+
+    if (!postContent.trim()) {
+      const msg = "본문을 입력해주세요."
+      setPublishStatus({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return false
+    }
+
+    const placeholderIssue = detectPublishPlaceholderIssue(postContent)
+    if (placeholderIssue) {
+      setPublishStatus({ tone: "error", text: placeholderIssue })
+      setResult(pretty({ error: placeholderIssue }))
       return false
     }
 
@@ -3138,12 +3217,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const insertToggle = () => {
     const textarea = postContentRef.current
-    const defaultBody = "내용을 입력하세요."
+    const defaultBody = EDITOR_BODY_PLACEHOLDER
 
     if (!textarea) {
       setPostContent(
         (prev) =>
-          `${prev}${prev.endsWith("\n") ? "" : "\n"}:::toggle 토글 제목\n${defaultBody}\n:::\n`
+          `${prev}${prev.endsWith("\n") ? "" : "\n"}:::toggle ${EDITOR_TOGGLE_TITLE_PLACEHOLDER}\n${defaultBody}\n:::\n`
       )
       return
     }
@@ -3152,14 +3231,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const end = textarea.selectionEnd
     const selected = postContent.slice(start, end).trim()
     const body = selected || defaultBody
-    const snippet = `:::toggle 토글 제목\n${body}\n:::\n`
+    const snippet = `:::toggle ${EDITOR_TOGGLE_TITLE_PLACEHOLDER}\n${body}\n:::\n`
     const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
     setPostContent(nextContent)
 
     requestAnimationFrame(() => {
       textarea.focus()
       const titleStart = start + ":::toggle ".length
-      textarea.setSelectionRange(titleStart, titleStart + "토글 제목".length)
+      textarea.setSelectionRange(titleStart, titleStart + EDITOR_TOGGLE_TITLE_PLACEHOLDER.length)
     })
   }
 

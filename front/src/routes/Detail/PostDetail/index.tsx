@@ -798,7 +798,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 actorHasLiked={engagement.actorHasLiked}
                 likePending={likePending}
                 hideLikeActionOnDesktop={showFloatingLike}
+                hideShareActionOnDesktop={showFloatingLike}
                 onToggleLike={handleToggleLike}
+                onSharePost={handleSharePost}
                 showModifyAction={canModifyPost}
                 showDeleteAction={canDeletePost}
                 adminActionPending={adminActionPending}
@@ -806,6 +808,36 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 onDeletePost={handleDeletePost}
               />
             </section>
+          )}
+          {showStickyToc && (
+            <CompactTocSection aria-label="모바일 목차">
+              <details>
+                <summary>
+                  <div className="summaryCopy">
+                    <strong>이 글에서 다루는 내용</strong>
+                    <span>{visibleTocItems.length}개 섹션을 빠르게 이동합니다.</span>
+                  </div>
+                  <span className="summaryChevron" aria-hidden="true">
+                    <AppIcon name="chevron-down" />
+                  </span>
+                </summary>
+                <ol>
+                  {visibleTocItems.map((item) => (
+                    <li key={`compact-${item.id}`} data-level={item.level}>
+                      <button
+                        type="button"
+                        data-active={activeTocId === item.id}
+                        title={item.text}
+                        aria-label={item.text}
+                        onClick={() => handleTocNavigate(item.id)}
+                      >
+                        {item.text}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </CompactTocSection>
           )}
           <BodySection data-rum-section="body">
             <MarkdownRenderer content={data.content} />
@@ -1233,6 +1265,120 @@ const BodySection = styled.div`
   @media (max-width: 768px) {
     margin-top: 0.55rem;
     padding-top: 0.85rem;
+  }
+`
+
+const CompactTocSection = styled.section`
+  display: none;
+  margin-top: 0.2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  overflow: hidden;
+
+  details {
+    display: grid;
+  }
+
+  summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .summaryCopy {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  .summaryCopy strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.96rem;
+    line-height: 1.3;
+    font-weight: 760;
+  }
+
+  .summaryCopy span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .summaryChevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    color: ${({ theme }) => theme.colors.gray10};
+    flex-shrink: 0;
+    transition: transform 0.16s ease;
+  }
+
+  details[open] .summaryChevron {
+    transform: rotate(180deg);
+  }
+
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 0 0.78rem 0.88rem;
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  li[data-level="3"] button {
+    padding-left: 0.78rem;
+    font-size: 0.84rem;
+  }
+
+  li[data-level="4"] button {
+    padding-left: 1.26rem;
+    font-size: 0.8rem;
+  }
+
+  button {
+    width: 100%;
+    min-height: 38px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray10};
+    text-align: left;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    padding: 0.45rem 0.6rem;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background-color 0.16s ease, color 0.16s ease;
+  }
+
+  button:hover {
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  button[data-active="true"] {
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 700;
+  }
+
+  @media (max-width: 1080px) {
+    display: block;
   }
 `
 

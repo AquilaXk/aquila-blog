@@ -1447,6 +1447,8 @@ const RelatedSection = styled.section`
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   display: grid;
   gap: 0.72rem;
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 420px;
 
   > header {
     display: flex;

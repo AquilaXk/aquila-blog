@@ -8335,6 +8335,8 @@ const MobileListCards = styled.div`
     background: ${({ theme }) => theme.colors.gray2};
     display: grid;
     gap: 0.5rem;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 172px;
     transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   }
 

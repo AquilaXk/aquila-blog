@@ -152,34 +152,6 @@ const ACTION_LABELS: Record<string, string> = {
   authSecurityEvents: "인증 보안 이벤트 새로고침",
 }
 
-const QUICK_GUIDES = [
-  {
-    icon: "💬",
-    title: "댓글 API 테스트",
-    description: "조회/작성/수정/삭제를 즉시 점검합니다. 작성·수정·삭제는 실제 데이터가 바뀝니다.",
-  },
-  {
-    icon: "📧",
-    title: "회원가입 메일 진단",
-    description: "SMTP 설정 누락, 연결 실패, 테스트 메일 발송 결과를 한 번에 확인합니다.",
-  },
-  {
-    icon: "⚙️",
-    title: "Task Queue 모니터링",
-    description: "revalidate·메일 작업의 적체, 실패, stale processing을 진단합니다.",
-  },
-  {
-    icon: "🧹",
-    title: "스토리지 정리 상태",
-    description: "purge 후보와 safety threshold를 확인해 과삭제 리스크를 빠르게 파악합니다.",
-  },
-  {
-    icon: "🔐",
-    title: "인증 보안 이벤트",
-    description: "로그인 정책 적용과 IP 보안 차단 이벤트를 최근 내역으로 확인합니다.",
-  },
-] as const
-
 const formatInstant = (value: string | null | undefined) => {
   if (!value) return "-"
 
@@ -245,7 +217,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [taskQueuePanelOpen, setTaskQueuePanelOpen] = useState(false)
   const [cleanupPanelOpen, setCleanupPanelOpen] = useState(false)
   const [isMobileLayout, setIsMobileLayout] = useState(false)
-  const [advancedPanelsOpen, setAdvancedPanelsOpen] = useState(true)
+  const [advancedPanelsOpen, setAdvancedPanelsOpen] = useState(false)
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
     tone: "warning",
@@ -410,16 +382,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const media = window.matchMedia("(max-width: 960px)")
+    const media = window.matchMedia("(max-width: 720px)")
 
     const sync = () => {
-      const mobile = media.matches
-      setIsMobileLayout(mobile)
-      if (mobile) {
-        setAdvancedPanelsOpen(false)
-      } else {
-        setAdvancedPanelsOpen(true)
-      }
+      setIsMobileLayout(media.matches)
     }
 
     sync()
@@ -726,7 +692,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       onClick: async () => void fetchAuthSecurityEvents(),
     },
   ]
-  const shouldShowAdvancedPanels = !isMobileLayout || advancedPanelsOpen
+  const shouldShowAdvancedPanels = advancedPanelsOpen
   const visiblePrioritizedActions = isMobileLayout ? prioritizedActions.slice(0, 3) : prioritizedActions
 
   return (
@@ -735,7 +701,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <HeaderCopy>
           <Eyebrow>Admin Tools</Eyebrow>
           <h1>운영 도구</h1>
-          <p>운영 중 자주 쓰는 점검 기능을 목적별로 정리했습니다. 각 카드 설명을 보고 필요한 작업만 바로 실행하세요.</p>
+          <p>운영 상태 확인, 빠른 실행, 고급 진단을 분리해 필요한 정보만 먼저 보이도록 정리했습니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
@@ -746,30 +712,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </Link>
         </HeaderActions>
       </HeaderCard>
-
-      {isMobileLayout ? (
-        <AdvancedToggle
-          type="button"
-          aria-expanded={advancedPanelsOpen}
-          onClick={() => setAdvancedPanelsOpen((prev) => !prev)}
-        >
-          {advancedPanelsOpen ? "고급 진단 영역 접기" : "고급 진단 영역 펼치기"}
-        </AdvancedToggle>
-      ) : null}
-
-      {shouldShowAdvancedPanels && (
-        <GuideGrid>
-          {QUICK_GUIDES.map((guide) => (
-            <GuideCard key={guide.title}>
-              <GuideIcon aria-hidden="true">{guide.icon}</GuideIcon>
-              <div>
-                <h3>{guide.title}</h3>
-                <p>{guide.description}</p>
-              </div>
-            </GuideCard>
-          ))}
-        </GuideGrid>
-      )}
 
       <OverviewCard>
         <SectionTop>
@@ -838,10 +780,25 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </QuickActionRow>
       </QuickActionsCard>
 
-      {isMobileLayout && !advancedPanelsOpen ? (
+      <AdvancedPanelBar>
+        <AdvancedToggle
+          type="button"
+          aria-expanded={advancedPanelsOpen}
+          onClick={() => setAdvancedPanelsOpen((prev) => !prev)}
+        >
+          {advancedPanelsOpen ? "고급 진단 접기" : "고급 진단 열기"}
+        </AdvancedToggle>
+        <AdvancedPanelHint>
+          {advancedPanelsOpen
+            ? "상세 진단과 실행 콘솔을 펼친 상태입니다."
+            : "기본 화면에는 상태 요약과 자주 쓰는 액션만 남깁니다."}
+        </AdvancedPanelHint>
+      </AdvancedPanelBar>
+
+      {!advancedPanelsOpen ? (
         <CollapsedStateCard>
-          <strong>고급 진단은 접힌 상태입니다.</strong>
-          <p>기본 화면에서는 상태 요약과 자주 쓰는 액션만 노출합니다. 필요할 때만 고급 진단을 펼쳐 실행하세요.</p>
+          <strong>고급 진단은 기본으로 접어둡니다.</strong>
+          <p>Task Queue, 파일 정리, 인증 보안 이벤트, 실행 결과 콘솔은 필요할 때만 열어 정보 밀도를 낮춥니다.</p>
           <CollapsedStateAction type="button" onClick={() => setAdvancedPanelsOpen(true)}>
             고급 진단 펼치기
           </CollapsedStateAction>
@@ -1430,52 +1387,6 @@ const HeaderCopy = styled.div`
   max-width: 42rem;
 `
 
-const GuideGrid = styled.section`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const GuideCard = styled.article`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 0.8rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray3};
-  padding: 0.72rem 0.82rem;
-
-  h3 {
-    margin: 0 0 0.28rem;
-    font-size: 1.02rem;
-    letter-spacing: -0.02em;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    line-height: 1.6;
-  }
-`
-
-const GuideIcon = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  font-size: 1rem;
-`
-
 const Eyebrow = styled.span`
   width: fit-content;
   border-radius: 0;
@@ -1506,7 +1417,7 @@ const HeaderActions = styled.div`
 `
 
 const AdvancedToggle = styled.button`
-  min-height: 36px;
+  min-height: 40px;
   width: fit-content;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -1521,6 +1432,20 @@ const AdvancedToggle = styled.button`
     border-color: ${({ theme }) => theme.colors.gray7};
     color: ${({ theme }) => theme.colors.gray12};
   }
+`
+
+const AdvancedPanelBar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.72rem;
+`
+
+const AdvancedPanelHint = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.82rem;
+  line-height: 1.6;
 `
 
 const CollapsedStateCard = styled.section`
@@ -1634,7 +1559,7 @@ const QuickActionRow = styled.div`
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.6rem;
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     grid-template-columns: 1fr;
   }
 `
@@ -1665,7 +1590,7 @@ const SectionToggleButton = styled.button`
   border-radius: 999px;
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
-  min-height: 32px;
+  min-height: 40px;
   padding: 0 0.7rem;
   font-size: 0.76rem;
   font-weight: 700;

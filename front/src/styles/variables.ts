@@ -12,13 +12,13 @@ export const variables = {
   },
   ui: {
     card: {
-      radius: 14,
-      radiusLg: 20,
+      radius: 8,
+      radiusLg: 16,
       borderWidth: 1,
       padding: 16,
       paddingLg: 20,
-      shadow: "0 12px 28px rgba(0, 0, 0, 0.22)",
-      shadowHover: "0 16px 34px rgba(0, 0, 0, 0.28)",
+      shadow: "0 8px 20px rgba(0, 0, 0, 0.18)",
+      shadowHover: "0 14px 28px rgba(0, 0, 0, 0.24)",
     },
     button: {
       radius: 10,

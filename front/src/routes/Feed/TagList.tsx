@@ -6,14 +6,11 @@ import { useTagsQuery } from "src/hooks/useTagsQuery"
 import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import {
   FEED_CHIP_GAP_PX,
+  FEED_TAG_RAIL_DESKTOP_MIN_PX,
   FEED_TAG_RAIL_CHIP_MAX_PX,
 } from "./feedUiTokens"
 
-type Props = {
-  desktopRailEnabled?: boolean
-}
-
-const TagList: React.FC<Props> = ({ desktopRailEnabled = false }) => {
+const TagList: React.FC = () => {
   const router = useRouter()
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
@@ -60,7 +57,6 @@ const TagList: React.FC<Props> = ({ desktopRailEnabled = false }) => {
     <StyledWrapper>
       <section
         className="desktopPanel"
-        data-desktop-enabled={desktopRailEnabled}
         aria-label="태그 목록"
       >
         <h2 className="panelTitle">태그 목록</h2>
@@ -97,7 +93,6 @@ const TagList: React.FC<Props> = ({ desktopRailEnabled = false }) => {
 
       <div
         className="chipRail"
-        data-desktop-enabled={desktopRailEnabled}
         role="group"
         aria-label="태그 선택"
       >
@@ -144,7 +139,7 @@ const StyledWrapper = styled.div`
     max-height: calc(100dvh - var(--app-header-height, 56px) - 1.8rem);
     overflow: hidden;
 
-    &[data-desktop-enabled="true"] {
+    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
       display: block;
     }
   }
@@ -272,12 +267,13 @@ const StyledWrapper = styled.div`
       height: 0;
     }
 
-    &[data-desktop-enabled="true"] {
+    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
       display: none;
     }
   }
 
   .chipRail button {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 0.28rem;
@@ -285,29 +281,51 @@ const StyledWrapper = styled.div`
     white-space: nowrap;
     min-height: 34px;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    border: 0;
+    background: transparent;
     padding: 0.4rem 0.84rem;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
     scroll-snap-align: start;
     cursor: pointer;
-    transition: all 0.125s ease-in;
+    transition: color 0.125s ease-in;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 5px 0;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray1};
+      transition: all 0.125s ease-in;
+      z-index: 0;
+      pointer-events: none;
+    }
 
     &:hover {
-      border-color: ${({ theme }) => theme.colors.gray7};
-      background: ${({ theme }) => theme.colors.gray2};
+      &::after {
+        border-color: ${({ theme }) => theme.colors.gray7};
+        background: ${({ theme }) => theme.colors.gray2};
+      }
     }
 
     &[data-active="true"] {
-      border-color: ${({ theme }) => theme.colors.blue8};
-      background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.blue11};
+
+      &::after {
+        border-color: ${({ theme }) => theme.colors.blue8};
+        background: ${({ theme }) => theme.colors.gray2};
+      }
     }
 
     &:focus-visible {
       outline: 2px solid ${({ theme }) => theme.colors.blue8};
       outline-offset: 1px;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
     }
   }
 
@@ -334,8 +352,12 @@ const StyledWrapper = styled.div`
   @media (min-width: 769px) and (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
     .chipRail button {
       min-height: 34px;
-      padding: 0.32rem 0.82rem;
+      padding: 0.28rem 0.82rem;
       border-radius: 999px;
+
+      &::after {
+        inset: 6px 0;
+      }
     }
   }
 `

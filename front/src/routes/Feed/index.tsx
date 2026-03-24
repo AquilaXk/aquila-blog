@@ -7,6 +7,10 @@ import ContactCard from "./ContactCard"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
+import {
+  TABLET_LANDSCAPE_MAX_PX,
+  TABLET_LANDSCAPE_MIN_PX,
+} from "src/layouts/RootLayout/layoutTiers"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
@@ -67,6 +71,10 @@ const StyledWrapper = styled.div`
       grid-column: span 12 / span 12;
     }
 
+    @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
+      gap: 0.9rem;
+    }
+
     @media (min-width: 1180px) {
       grid-column: span 9 / span 9;
     }
@@ -100,6 +108,10 @@ const StyledWrapper = styled.div`
     top: calc(var(--app-header-height, 73px) + 0.65rem);
     height: calc(100vh - var(--app-header-height, 73px) - 0.65rem);
     height: calc(100dvh - var(--app-header-height, 73px) - 0.65rem);
+
+    @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
+      display: none;
+    }
 
     @media (min-width: 1180px) {
       display: block;

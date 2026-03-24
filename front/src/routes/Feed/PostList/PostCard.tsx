@@ -24,6 +24,10 @@ type Props = {
 const FEED_CARD_META_FONT_SIZE_REM = uiTokens.feed.card.metaFontSizeRem
 const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
 const FEED_CARD_TITLE_LINE_HEIGHT = uiTokens.feed.card.titleLineHeight
+const FEED_CARD_RADIUS_PX = 4
+const FEED_CARD_SHADOW = "0 6px 16px rgba(2, 6, 23, 0.18)"
+const FEED_CARD_SHADOW_HOVER = "0 16px 30px rgba(2, 6, 23, 0.28)"
+const FEED_CARD_HOVER_TRANSLATE_PX = -8
 
 type NavigatorConnectionLike = {
   saveData?: boolean
@@ -398,9 +402,9 @@ const StyledWrapper = styled(Link)`
   max-width: 100%;
   min-width: 0;
   text-decoration: none;
-  --post-card-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
-  --post-card-shadow-hover: ${({ theme }) => theme.variables.ui.card.shadowHover};
-  --post-card-translate-y: -6px;
+  --post-card-shadow: ${FEED_CARD_SHADOW};
+  --post-card-shadow-hover: ${FEED_CARD_SHADOW_HOVER};
+  --post-card-translate-y: ${FEED_CARD_HOVER_TRANSLATE_PX}px;
 
   &:focus-visible {
     outline: 0;
@@ -415,7 +419,7 @@ const StyledWrapper = styled(Link)`
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+    border-radius: ${FEED_CARD_RADIUS_PX}px;
     border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
     background: ${({ theme }) => theme.colors.gray1};
     box-shadow: var(--post-card-shadow);
@@ -497,8 +501,8 @@ const StyledWrapper = styled(Link)`
         flex-wrap: wrap;
         gap: 0.42rem;
         align-items: center;
-        margin-top: 0.72rem;
-        padding-bottom: 1.06rem;
+        margin-top: 0.84rem;
+        padding-bottom: 1.26rem;
         color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.55;
@@ -523,7 +527,7 @@ const StyledWrapper = styled(Link)`
 
       > .footer {
         margin-top: auto;
-        padding-top: 0.68rem;
+        padding-top: 0.82rem;
         border-top: 1px solid ${({ theme }) => theme.colors.gray4};
         display: flex;
         align-items: center;
@@ -614,12 +618,12 @@ const StyledWrapper = styled(Link)`
   }
 
   @media (max-width: 640px) {
-    --post-card-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
-    --post-card-shadow-hover: ${({ theme }) => theme.variables.ui.card.shadowHover};
+    --post-card-shadow: ${FEED_CARD_SHADOW};
+    --post-card-shadow-hover: ${FEED_CARD_SHADOW_HOVER};
     --post-card-translate-y: -4px;
 
     article {
-      border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+      border-radius: ${FEED_CARD_RADIUS_PX}px;
 
       > .thumbnail {
         max-height: 232px;

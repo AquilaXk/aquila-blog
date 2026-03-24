@@ -976,7 +976,7 @@ const StyledWrapper = styled.div`
     display: grid;
     grid-template-columns: 72px minmax(0, 48rem) minmax(0, 13rem);
     justify-content: center;
-    gap: 1.5rem;
+    gap: 2.25rem;
     min-width: 0;
     overflow: visible;
   }
@@ -1136,7 +1136,7 @@ const StyledWrapper = styled.div`
 
   .rightRailInner {
     border-left: 2px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : theme.colors.gray6)};
-    padding: 0.18rem 0 0.18rem 1.08rem;
+    padding: 0.18rem 0 0.18rem 1.25rem;
     background: transparent;
 
     .rightRailHead {
@@ -1268,7 +1268,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 1439px) {
     .detailLayout {
       grid-template-columns: 72px minmax(0, 48rem);
-      gap: 1.25rem;
+      gap: 1.75rem;
     }
 
     .rightRail {
@@ -1279,7 +1279,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 1279px) {
     .detailLayout {
       grid-template-columns: 72px minmax(0, 48rem);
-      gap: 1rem;
+      gap: 1.4rem;
     }
   }
 

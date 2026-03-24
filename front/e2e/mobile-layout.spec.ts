@@ -180,6 +180,7 @@ const captureLayoutSnapshot = async (page: Page) =>
       codeShellScrollWidth: firstCodeShell ? (firstCodeShell as HTMLElement).scrollWidth : null,
       codeShellOverflowX: codeShellStyle?.overflowX ?? null,
       tableRight: tableRect?.right ?? null,
+      firstTableCellLabel: document.querySelector("tbody td")?.getAttribute("data-label") ?? null,
     }
   })
 
@@ -226,6 +227,7 @@ test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 �
   expect(["auto", "scroll"]).toContain(firstSnapshot.codeShellOverflowX)
   expect(["auto", "scroll", "hidden", "clip"]).toContain(firstSnapshot.codeOverflowX)
   expect(firstSnapshot.tableRight ?? 0).toBeLessThanOrEqual(firstSnapshot.viewportWidth + 0.5)
+  expect(firstSnapshot.firstTableCellLabel).toBe("항목")
 
   await page.reload()
   await expect(page.locator("table")).toBeVisible()
@@ -239,4 +241,5 @@ test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 �
   expect(["auto", "scroll"]).toContain(secondSnapshot.codeShellOverflowX)
   expect(["auto", "scroll", "hidden", "clip"]).toContain(secondSnapshot.codeOverflowX)
   expect(secondSnapshot.tableRight ?? 0).toBeLessThanOrEqual(secondSnapshot.viewportWidth + 0.5)
+  expect(secondSnapshot.firstTableCellLabel).toBe("항목")
 })

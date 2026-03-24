@@ -10,6 +10,7 @@ import {
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
 import { formatShortDateTime } from "src/libs/utils"
+import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { pushRoute } from "src/libs/router"
 import { TMemberNotification, TMemberNotificationStreamPayload } from "src/types"
@@ -192,11 +193,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     if (typeof document === "undefined") return
     if (!open || !isMobileViewport) return
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const releaseBodyScrollLock = acquireBodyScrollLock()
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseBodyScrollLock()
     }
   }, [isMobileViewport, open])
 

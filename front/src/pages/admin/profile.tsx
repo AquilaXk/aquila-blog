@@ -36,6 +36,7 @@ import {
   PROFILE_IMAGE_EDIT_MIN_ZOOM,
   resolveProfileImageEditDrawRatios,
 } from "src/libs/profileImageUpload"
+import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   return await getAdminPageProps(req)
@@ -304,10 +305,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     if (!isProfileImageEditorOpen) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const releaseBodyScrollLock = acquireBodyScrollLock()
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseBodyScrollLock()
     }
   }, [isProfileImageEditorOpen])
 

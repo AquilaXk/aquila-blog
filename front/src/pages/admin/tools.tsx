@@ -621,6 +621,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     key: string
     title: string
     description: string
+    chipLabel: string
     tone: ActionCardTone
     onClick: () => Promise<void>
   }> = [
@@ -628,6 +629,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       key: "mailStatus",
       title: "메일 준비 상태 새로고침",
       description: "설정 누락/준비 상태 재진단",
+      chipLabel: "점검",
       tone: "infra",
       onClick: async () => void fetchSignupMailDiagnostics(false),
     },
@@ -635,6 +637,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       key: "mailConnectivity",
       title: "SMTP 연결 확인",
       description: "실제 SMTP 연결 가능 여부 점검",
+      chipLabel: "점검",
       tone: "infra",
       onClick: async () => void fetchSignupMailDiagnostics(true),
     },
@@ -642,6 +645,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       key: "taskQueueStatus",
       title: "Task Queue 진단",
       description: "적체·실패·stale processing 새로고침",
+      chipLabel: "진단",
       tone: "infra",
       onClick: async () => void fetchTaskQueueDiagnostics(),
     },
@@ -649,6 +653,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       key: "cleanupStatus",
       title: "파일 정리 진단",
       description: "purge 후보/threshold 상태 새로고침",
+      chipLabel: "진단",
       tone: "infra",
       onClick: async () => void fetchCleanupDiagnostics(),
     },
@@ -656,6 +661,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       key: "authSecurityEvents",
       title: "인증 보안 이벤트",
       description: "로그인 정책/IP 보안 차단 이벤트 조회",
+      chipLabel: "로그",
       tone: "infra",
       onClick: async () => void fetchAuthSecurityEvents(),
     },
@@ -664,30 +670,35 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const prioritizedActions: Array<{
     key: string
     label: string
+    chipLabel: string
     onClick: () => Promise<void>
     tone: ActionCardTone
   }> = [
     {
       key: "systemHealth",
       label: "서버 상태 새로고침",
+      chipLabel: "점검",
       tone: "infra",
       onClick: async () => void run("systemHealth", () => fetchSystemHealthCached()),
     },
     {
       key: "mailStatus",
       label: "메일 준비 상태",
+      chipLabel: "점검",
       tone: "infra",
       onClick: async () => void fetchSignupMailDiagnostics(false),
     },
     {
       key: "taskQueueStatus",
       label: "Task Queue 진단",
+      chipLabel: "진단",
       tone: "infra",
       onClick: async () => void fetchTaskQueueDiagnostics(),
     },
     {
       key: "authSecurityEvents",
       label: "인증 보안 이벤트",
+      chipLabel: "로그",
       tone: "infra",
       onClick: async () => void fetchAuthSecurityEvents(),
     },
@@ -699,9 +710,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     <Main>
       <HeaderCard>
         <HeaderCopy>
-          <Eyebrow>Admin Tools</Eyebrow>
+          <Eyebrow>운영 관리</Eyebrow>
           <h1>운영 도구</h1>
-          <p>운영 상태 확인, 빠른 실행, 고급 진단을 분리해 필요한 정보만 먼저 보이도록 정리했습니다.</p>
+          <p>상태 확인, 빠른 실행, 고급 진단을 필요한 순서대로 배치해 실무 점검 흐름이 바로 이어지게 정리했습니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
@@ -716,12 +727,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <OverviewCard>
         <SectionTop>
           <div>
-            <SectionEyebrow>Overview</SectionEyebrow>
+            <SectionEyebrow>운영 요약</SectionEyebrow>
             <SectionTitleRow>
               <SectionIcon aria-hidden="true">🧭</SectionIcon>
               <h2>운영 상태 요약</h2>
             </SectionTitleRow>
-            <SectionDescription>현재 상태를 먼저 확인하고, 필요한 진단만 바로 실행할 수 있도록 구성했습니다.</SectionDescription>
+            <SectionDescription>현재 상태를 먼저 확인하고 필요한 진단으로 바로 이어질 수 있게 구성했습니다.</SectionDescription>
           </div>
         </SectionTop>
         <OverviewGrid>
@@ -756,12 +767,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <QuickActionsCard>
         <SectionTop>
           <div>
-            <SectionEyebrow>Quick Actions</SectionEyebrow>
+            <SectionEyebrow>빠른 실행</SectionEyebrow>
             <SectionTitleRow>
               <SectionIcon aria-hidden="true">⚡</SectionIcon>
               <h2>자주 쓰는 운영 액션</h2>
             </SectionTitleRow>
-            <SectionDescription>모바일/데스크톱 공통으로 가장 자주 쓰는 점검 액션만 우선 배치했습니다.</SectionDescription>
+            <SectionDescription>자주 쓰는 점검만 먼저 배치해 운영 중 클릭 수를 줄였습니다.</SectionDescription>
           </div>
         </SectionTop>
         <QuickActionRow>
@@ -774,7 +785,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               onClick={() => void action.onClick()}
             >
               <span className="title">{action.label}</span>
-              <span className="chip">실행</span>
+              <span className="chip">{action.chipLabel}</span>
             </ConsoleQuickActionButton>
           ))}
         </QuickActionRow>
@@ -790,7 +801,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </AdvancedToggle>
         <AdvancedPanelHint>
           {advancedPanelsOpen
-            ? "상세 진단과 실행 콘솔을 펼친 상태입니다."
+            ? "상세 진단과 실행 로그를 펼친 상태입니다."
             : "기본 화면에는 상태 요약과 자주 쓰는 액션만 남깁니다."}
         </AdvancedPanelHint>
       </AdvancedPanelBar>
@@ -798,7 +809,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       {!advancedPanelsOpen ? (
         <CollapsedStateCard>
           <strong>고급 진단은 기본으로 접어둡니다.</strong>
-          <p>Task Queue, 파일 정리, 인증 보안 이벤트, 실행 결과 콘솔은 필요할 때만 열어 정보 밀도를 낮춥니다.</p>
+          <p>Task Queue, 파일 정리, 인증 보안 이벤트, 실행 로그는 필요할 때만 열어 정보 밀도를 낮춥니다.</p>
           <CollapsedStateAction type="button" onClick={() => setAdvancedPanelsOpen(true)}>
             고급 진단 펼치기
           </CollapsedStateAction>
@@ -810,7 +821,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>Comment Studio</SectionEyebrow>
+              <SectionEyebrow>댓글 점검</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">💬</SectionIcon>
                 <h2>댓글 테스트 도구</h2>
@@ -1217,12 +1228,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>Storage Cleanup</SectionEyebrow>
+              <SectionEyebrow>파일 정리</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">🧹</SectionIcon>
                 <h2>파일 정리 상태</h2>
               </SectionTitleRow>
-              <SectionDescription>TEMP/PENDING_DELETE 파일의 purge 대상 수와 safety threshold를 확인합니다.</SectionDescription>
+              <SectionDescription>TEMP/PENDING_DELETE 파일의 purge 대상과 safety threshold를 확인합니다.</SectionDescription>
             </div>
             <SectionToggleButton type="button" onClick={() => setCleanupPanelOpen((prev) => !prev)}>
               {cleanupPanelOpen ? "패널 접기" : "패널 펼치기"}
@@ -1266,12 +1277,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>Auth Security</SectionEyebrow>
+              <SectionEyebrow>인증 보안</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">🔐</SectionIcon>
                 <h2>인증 보안 이벤트</h2>
               </SectionTitleRow>
-              <SectionDescription>로그인 정책 적용/차단 이력을 최근 순으로 확인해 운영 이상 징후를 빠르게 파악합니다.</SectionDescription>
+              <SectionDescription>로그인 정책 적용·차단 이력을 최근 순으로 확인해 이상 징후를 빠르게 파악합니다.</SectionDescription>
             </div>
             <BaseButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
               이벤트 새로고침
@@ -1318,9 +1329,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ConsoleCard>
           <ConsoleHeader>
             <div>
-              <SectionEyebrow>Console</SectionEyebrow>
+              <SectionEyebrow>실행 로그</SectionEyebrow>
               <h2>실행 결과 콘솔</h2>
-              <ConsoleDescription>메일, task queue, 파일 정리 진단 버튼과 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
+              <ConsoleDescription>메일, Task Queue, 파일 정리 진단 결과와 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
             </div>
             <ConsoleStatus>{consoleStatus}</ConsoleStatus>
           </ConsoleHeader>
@@ -1335,7 +1346,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 onClick={() => void action.onClick()}
               >
                 <span className="title">{action.title}</span>
-                <span className="chip">진단</span>
+                <span className="chip">{action.chipLabel}</span>
               </ConsoleQuickActionButton>
             ))}
           </ConsoleQuickActions>
@@ -1396,8 +1407,7 @@ const Eyebrow = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 `
 
 const HeaderActions = styled.div`
@@ -1613,8 +1623,7 @@ const SectionEyebrow = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
   margin-bottom: 0.55rem;
 `
 

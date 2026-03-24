@@ -3576,7 +3576,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         : editorMode !== "edit" || disabled("publishTempPost")
   const mobilePrimaryActionLabel =
     editorMode === "create"
-      ? "글 작성 설정 열기"
+      ? "발행 설정 열기"
       : isTempDraftMode
         ? "임시글 발행 설정"
         : "수정 설정 열기"
@@ -3607,11 +3607,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
   const heroPrimaryActionLabel =
     studioSurface === "manage"
-      ? "목록 불러오기"
+      ? "목록 새로고침"
       : editorMode === "edit" || hasDraftContent
         ? "발행 설정 열기"
         : "새 글 초안 시작"
-  const heroSecondaryActionLabel = studioSurface === "manage" ? "작성/발행 열기" : "목록 관리 열기"
+  const heroSecondaryActionLabel = studioSurface === "manage" ? "글 작성 열기" : "목록 관리 열기"
   const closeToolbarMenus = () => {
     setIsCalloutMenuOpen(false)
     setIsColorMenuOpen(false)
@@ -3822,9 +3822,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     <Main>
       <HeroCard>
         <HeroIntro>
-          <HeroEyebrow>Content Studio</HeroEyebrow>
+          <HeroEyebrow>콘텐츠 관리</HeroEyebrow>
           <h1>글 작업실</h1>
-          <p>목록 관리와 작성/발행 흐름을 분리해 지금 필요한 작업만 집중해서 진행할 수 있도록 정리했습니다.</p>
+          <p>목록 점검과 글 작성을 나눠 지금 필요한 작업만 바로 이어갈 수 있게 정리했습니다.</p>
           <HeroNav>
             {adminTools.map((tool) => (
               <AnchorButton key={tool.href} href={tool.href}>
@@ -3836,20 +3836,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <HeroAside>
           <MetricGrid>
             <MetricCard>
-              <span>현재 흐름</span>
-              <strong>{studioSurface === "compose" ? "작성/발행" : "목록 관리"}</strong>
+              <span>현재 화면</span>
+              <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
             </MetricCard>
             <MetricCard>
-              <span>작업 중 글</span>
+              <span>편집 대상</span>
               <strong>{currentPostLabel}</strong>
             </MetricCard>
-            <MetricCard>
-              <span>공개 범위</span>
+            <MetricCard data-optional="true">
+              <span>공개 상태</span>
               <strong>{currentVisibilityText}</strong>
             </MetricCard>
-            <MetricCard>
-              <span>불러온 글 수</span>
-              <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개` : "미조회"}</strong>
+            <MetricCard data-optional="true">
+              <span>목록 상태</span>
+              <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개 조회됨` : "아직 안 불러옴"}</strong>
             </MetricCard>
           </MetricGrid>
           <ActionCluster data-hidden={isCompactMobileLayout}>
@@ -3899,7 +3899,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             data-active={studioSurface === "compose"}
             onClick={activateComposeSurface}
           >
-            작성/발행
+            글 작성
           </SurfaceTabButton>
           <SurfaceTabButton
             type="button"
@@ -3912,11 +3912,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </SurfaceTabButton>
         </SurfaceTabList>
         <SurfaceHintBar>
-          <strong>{studioSurface === "compose" ? "작성/발행 흐름" : "목록 관리 흐름"}</strong>
+          <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
           <span>
             {studioSurface === "compose"
-              ? "제목 입력, 본문 작성, 미리보기, 발행 설정을 한 번에 정리합니다."
-              : "조회 조건, 관리자 글 리스트, 선택 글 작업을 분리해 목록 점검에 집중합니다."}
+              ? "제목, 본문, 태그, 미리보기와 발행 설정까지 한 흐름으로 이어집니다."
+              : "조회 조건, 글 목록, 선택 글 작업을 나눠 목록 점검과 편집 전환이 바로 이어지게 합니다."}
           </span>
         </SurfaceHintBar>
       </StudioSurfaceCard>
@@ -4333,7 +4333,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               />
                             </th>
                           )}
-                          <th>ID</th>
+                          <th className="idCell">ID</th>
                           <th>제목</th>
                           <th className="visibilityCell">공개상태</th>
                           <th className="authorCell">작성자</th>
@@ -4369,7 +4369,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                   />
                                 </td>
                               )}
-                              <td>{row.id}</td>
+                              <td className="idCell">{row.id}</td>
                               <td className="title">
                                 <TitleCell>
                                   <div className="titleMain">
@@ -4793,8 +4793,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ComposeSurfaceSection>
           <SectionTop>
             <div>
-              <SectionEyebrow>Compose Studio</SectionEyebrow>
-              <h2>작성/발행 흐름</h2>
+              <SectionEyebrow>글 작성</SectionEyebrow>
+              <h2>글 작성</h2>
               <SectionDescription>제목, 본문, 태그, 미리보기와 발행 설정만 남겨 작성 흐름이 끊기지 않도록 정리했습니다.</SectionDescription>
             </div>
           </SectionTop>
@@ -5467,7 +5467,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <Section id="comment-studio">
               <SectionTop>
                 <div>
-                  <SectionEyebrow>Comment Studio</SectionEyebrow>
+                  <SectionEyebrow>댓글 점검</SectionEyebrow>
                   <h2>댓글 테스트 도구</h2>
                   <SectionDescription>댓글 CRUD 동작을 빠르게 점검할 때 사용하는 영역입니다.</SectionDescription>
                 </div>
@@ -5598,7 +5598,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <details open={Boolean(loadingKey)}>
             <summary>
               <div>
-                <SectionEyebrow>Developer Console</SectionEyebrow>
+                <SectionEyebrow>실행 로그</SectionEyebrow>
                 <strong>{loadingKey ? "작업 응답 확인 중" : "최근 작업 응답 보기"}</strong>
               </div>
               <span>{loadingKey ? `실행 중: ${loadingKey}` : "접어서 숨길 수 있습니다"}</span>
@@ -5686,8 +5686,7 @@ const HeroEyebrow = styled.span`
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 `
 
 const HeroNav = styled.div`
@@ -5773,6 +5772,12 @@ const MetricCard = styled.div`
     font-size: 0.98rem;
     color: ${({ theme }) => theme.colors.gray12};
     line-height: 1.45;
+  }
+
+  @media (max-width: 760px) {
+    &[data-optional="true"] {
+      display: none;
+    }
   }
 `
 
@@ -5932,8 +5937,7 @@ const SectionEyebrow = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 `
 
 const SectionDescription = styled.p`
@@ -8343,6 +8347,12 @@ const ListTable = styled.table`
     text-align: center;
     padding-left: 0.2rem;
     padding-right: 0.2rem;
+  }
+
+  th.idCell,
+  td.idCell {
+    width: 4.75rem;
+    white-space: nowrap;
   }
 
   input[type="checkbox"] {

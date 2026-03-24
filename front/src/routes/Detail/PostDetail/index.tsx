@@ -44,8 +44,8 @@ const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
 const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
 const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
-const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1081
-const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1241
+const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1440
+const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1201
 const DETAIL_RAIL_GAP_FROM_HEADER_PX = 16
 const STICKY_BLOCKING_OVERFLOW_VALUES = new Set(["auto", "scroll", "hidden", "clip"])
 
@@ -777,9 +777,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   <span className="floatingLikeCount" aria-hidden="true">
                     {engagement.likesCount}
                   </span>
-                  <span className="floatingActionCaption" aria-hidden="true">
-                    좋아요
-                  </span>
                 </div>
                 <div className="floatingShareStat">
                   <button
@@ -792,9 +789,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   >
                     <AppIcon name="share" />
                   </button>
-                  <span className="floatingActionCaption" aria-hidden="true">
-                    공유
-                  </span>
                 </div>
                 {shareFeedback ? (
                   <span className="floatingShareFeedback" role="status" aria-live="polite">
@@ -833,7 +827,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             </section>
           )}
           {showStickyToc && (
-            <CompactTocSection aria-label="모바일 목차">
+            <CompactTocSection aria-label="접이식 목차">
               <details>
                 <summary>
                   <div className="summaryCopy">
@@ -964,16 +958,25 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 export default PostDetail
 
 const StyledWrapper = styled.div`
-  max-width: 92rem;
+  width: min(100%, 76rem);
+  max-width: 76rem;
+  box-sizing: border-box;
   margin: 0 auto;
   min-width: 0;
   padding: 0 0.5rem;
 
+  @media (min-width: 1057px) and (max-width: 1440px) {
+    width: min(calc(100vw - 2rem), 76rem);
+    max-width: none;
+    margin-left: calc((1024px - min(calc(100vw - 2rem), 76rem)) / 2);
+    margin-right: 0;
+  }
+
   .detailLayout {
     display: grid;
-    grid-template-columns: minmax(4.4rem, 5rem) minmax(0, 49rem) minmax(0, 15rem);
+    grid-template-columns: 72px minmax(0, 48rem) minmax(0, 13rem);
     justify-content: center;
-    gap: 2.35rem;
+    gap: 1.5rem;
     min-width: 0;
     overflow: visible;
   }
@@ -1107,13 +1110,13 @@ const StyledWrapper = styled.div`
   .floatingLikeStat {
     display: grid;
     justify-items: center;
-    row-gap: 0.22rem;
+    row-gap: 0.36rem;
   }
 
   .floatingShareStat {
     display: grid;
     justify-items: center;
-    row-gap: 0.22rem;
+    row-gap: 0.36rem;
   }
 
   .floatingLikeCount {
@@ -1121,14 +1124,6 @@ const StyledWrapper = styled.div`
     line-height: 1;
     font-weight: 760;
     color: ${({ theme }) => theme.colors.gray10};
-  }
-
-  .floatingActionCaption {
-    font-size: 0.66rem;
-    line-height: 1;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: ${({ theme }) => theme.colors.gray9};
   }
 
   .floatingShareFeedback {
@@ -1272,22 +1267,26 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1439px) {
     .detailLayout {
-      grid-template-columns: minmax(4rem, 4.5rem) minmax(0, 48rem) minmax(0, 13.8rem);
-      gap: 1.96rem;
+      grid-template-columns: 72px minmax(0, 48rem);
+      gap: 1.25rem;
+    }
+
+    .rightRail {
+      display: none;
     }
   }
 
   @media (max-width: 1279px) {
     .detailLayout {
-      grid-template-columns: minmax(3.8rem, 4.2rem) minmax(0, 46rem) minmax(0, 12.6rem);
-      gap: 1.42rem;
+      grid-template-columns: 72px minmax(0, 48rem);
+      gap: 1rem;
     }
   }
 
   @media (max-width: 1200px) {
     .detailLayout {
-      grid-template-columns: minmax(0, 49rem) minmax(0, 12.5rem);
-      gap: 1.12rem;
+      grid-template-columns: minmax(0, 49rem);
+      gap: 0;
     }
 
     .leftRail {
@@ -1296,16 +1295,13 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 1080px) {
-    max-width: 72rem;
+    width: 100%;
+    max-width: 50rem;
     padding: 0;
 
     .detailLayout {
       grid-template-columns: minmax(0, 50rem);
       gap: 0;
-    }
-
-    .rightRail {
-      display: none;
     }
 
     article {
@@ -1436,7 +1432,7 @@ const CompactTocSection = styled.section`
     font-weight: 700;
   }
 
-  @media (max-width: 1080px) {
+  @media (max-width: 1439px) {
     display: block;
   }
 `

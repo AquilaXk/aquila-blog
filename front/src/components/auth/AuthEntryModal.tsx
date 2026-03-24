@@ -8,6 +8,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
 import { normalizeNextPath } from "src/libs/router"
+import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
 import IpSecurityInfoModal from "./IpSecurityInfoModal"
 import { buildSocialAuthItems } from "./socialAuth"
@@ -107,8 +108,7 @@ const AuthEntryModal: React.FC<Props> = ({
   useEffect(() => {
     if (!open) return
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
+    const releaseBodyScrollLock = acquireBodyScrollLock()
 
     setView("login")
     setError("")
@@ -126,7 +126,7 @@ const AuthEntryModal: React.FC<Props> = ({
     setSentEmail("")
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseBodyScrollLock()
     }
   }, [open])
 

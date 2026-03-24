@@ -1,0 +1,33 @@
+{
+  "route": "/posts/991",
+  "viewport": {
+    "width": 393,
+    "height": 852
+  },
+  "scrollWidth": {
+    "html": 393,
+    "body": 393
+  },
+  "rails": {
+    "chip": false,
+    "desktopTag": false,
+    "leftReaction": true,
+    "rightToc": true
+  },
+  "profileSidebarVisible": false,
+  "searchRect": null,
+  "firstCardRect": null,
+  "desktopTagRailRect": null,
+  "leftRailRect": {
+    "x": 0,
+    "y": 0,
+    "width": 0,
+    "height": 0
+  },
+  "rightRailRect": {
+    "x": 0,
+    "y": 0,
+    "width": 0,
+    "height": 0
+  }
+}

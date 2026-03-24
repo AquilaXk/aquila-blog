@@ -8,8 +8,7 @@ const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const INLINE_CODE_REGEX = /`([^`]+)`/g
 const MARKDOWN_LINK_REGEX = /\[(.*?)\]\((.*?)\)/g
 const MARKDOWN_PUNCTUATION_REGEX = /[#>*_~|-]/g
-const LEADING_SUMMARY_BLOCK_REGEX =
-  /^\s*((?:>\s?.*(?:\r?\n|$))+)(?:\r?\n){1,2}/
+const LEADING_SUMMARY_BLOCK_REGEX = /^\s*((?:>\s?.*\r?\n)+)(?:\r?\n){1,2}/
 const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:요약|summary)\b/i
 
 export const CARD_SUMMARY_PREVIEW_LIMIT = 150

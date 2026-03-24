@@ -444,6 +444,12 @@ test("메인 태그 레일은 1200/1201 전환에서 클리핑 없이 안전하�
   const railRect = await page.locator(".desktopPanel").boundingBox()
   expect(railRect).not.toBeNull()
   expect((railRect?.x ?? -1)).toBeGreaterThanOrEqual(0)
+
+  const firstCardRect = await page.locator(".postColumn article").first().boundingBox()
+  expect(firstCardRect).not.toBeNull()
+  const railRight = (railRect?.x ?? 0) + (railRect?.width ?? 0)
+  const firstCardLeft = firstCardRect?.x ?? 0
+  expect(firstCardLeft).toBeGreaterThanOrEqual(railRight + 8)
 })
 
 test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로 유지한다", async ({ page }) => {

@@ -457,11 +457,22 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
     const leftRailInnerNode = leftRailInnerRef.current
     const rightRailInnerNode = rightRailInnerRef.current
+    let resizeObserver: ResizeObserver | null = null
+
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        scheduleSync()
+      })
+      resizeObserver.observe(article)
+      if (leftRailInnerNode) resizeObserver.observe(leftRailInnerNode)
+      if (rightRailInnerNode) resizeObserver.observe(rightRailInnerNode)
+    }
 
     return () => {
       window.removeEventListener("scroll", scheduleSync)
       window.removeEventListener("resize", scheduleSync)
       window.removeEventListener("orientationchange", scheduleSync)
+      resizeObserver?.disconnect()
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
       }

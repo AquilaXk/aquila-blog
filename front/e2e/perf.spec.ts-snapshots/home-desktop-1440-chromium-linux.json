@@ -14,22 +14,22 @@
     "leftReaction": false,
     "rightToc": false
   },
-  "profileSidebarVisible": true,
+  "profileSidebarVisible": false,
   "searchRect": {
-    "x": 259,
-    "y": 272,
-    "width": 616,
+    "x": 471,
+    "y": 202,
+    "width": 656,
     "height": 36
   },
   "firstCardRect": {
-    "x": 224,
-    "y": 452,
-    "width": 349,
-    "height": 378
+    "x": 436,
+    "y": 313,
+    "width": 369,
+    "height": 388
   },
   "desktopTagRailRect": {
-    "x": 24,
-    "y": 403,
+    "x": 220,
+    "y": 264,
     "width": 184,
     "height": 93
   },

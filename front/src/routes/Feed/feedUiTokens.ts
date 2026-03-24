@@ -28,7 +28,7 @@ const resolveRailBreakpoint = () => {
   const chipMaxToken = asFiniteNumber(railTokens.chipMaxWidthPx, FEED_TAG_RAIL_CHIP_MAX_DEFAULT_PX)
   const desktopMinToken = asFiniteNumber(railTokens.desktopMinWidthPx, FEED_TAG_RAIL_DESKTOP_MIN_DEFAULT_PX)
 
-  // file: dependency 캐시로 구형 토큰(1519/1520)이 남아도, 피드 레일은 최신 기준(1200/1201)을 우선 적용한다.
+  // shared token 캐시에 구형 임계값(1519/1520)이 남아도 피드 레일은 최신 기준(1200/1201)을 우선 적용한다.
   if (desktopMinToken >= 1500 || chipMaxToken >= 1500) {
     return {
       chipMaxPx: FEED_TAG_RAIL_CHIP_MAX_DEFAULT_PX,

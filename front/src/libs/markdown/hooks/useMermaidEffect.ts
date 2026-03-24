@@ -4,7 +4,7 @@ import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
 const MERMAID_SOURCE_PATTERN =
-  /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
+  /^(%%\{|\s*(?:info|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
 
 const isMermaidSource = (rawCode: string) => {
   const normalized = rawCode.trim()
@@ -19,6 +19,109 @@ const isMermaidSource = (rawCode: string) => {
 
   const firstLine = lines[0].replace(/^\d+\s+/, "")
   return MERMAID_SOURCE_PATTERN.test(firstLine)
+}
+
+type MermaidVisualPreset = "service" | "github"
+
+const MERMAID_VISUAL_PRESET: MermaidVisualPreset = "github"
+
+const GITHUB_MERMAID_FONT_STACK =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"'
+
+const createGithubMermaidConfig = (scheme: "dark" | "light") => {
+  const isDark = scheme === "dark"
+
+  return {
+    theme: "base" as const,
+    darkMode: isDark,
+    themeVariables: isDark
+      ? {
+          darkMode: true,
+          background: "#0d1117",
+          primaryColor: "#161b22",
+          primaryTextColor: "#f0f6fc",
+          primaryBorderColor: "#30363d",
+          secondaryColor: "#161b22",
+          secondaryTextColor: "#f0f6fc",
+          secondaryBorderColor: "#30363d",
+          tertiaryColor: "#1f2937",
+          tertiaryTextColor: "#f0f6fc",
+          tertiaryBorderColor: "#30363d",
+          lineColor: "#8b949e",
+          textColor: "#f0f6fc",
+          nodeBkg: "#161b22",
+          nodeBorder: "#30363d",
+          mainBkg: "#161b22",
+          clusterBkg: "#0d1117",
+          clusterBorder: "#30363d",
+          edgeLabelBackground: "#161b22",
+          defaultLinkColor: "#8b949e",
+          actorBkg: "#161b22",
+          actorBorder: "#30363d",
+          actorTextColor: "#f0f6fc",
+          fontFamily: GITHUB_MERMAID_FONT_STACK,
+        }
+      : {
+          darkMode: false,
+          background: "#ffffff",
+          primaryColor: "#f6f8fa",
+          primaryTextColor: "#24292f",
+          primaryBorderColor: "#d0d7de",
+          secondaryColor: "#ffffff",
+          secondaryTextColor: "#24292f",
+          secondaryBorderColor: "#d0d7de",
+          tertiaryColor: "#f6f8fa",
+          tertiaryTextColor: "#24292f",
+          tertiaryBorderColor: "#d0d7de",
+          lineColor: "#57606a",
+          textColor: "#24292f",
+          nodeBkg: "#f6f8fa",
+          nodeBorder: "#d0d7de",
+          mainBkg: "#f6f8fa",
+          clusterBkg: "#f6f8fa",
+          clusterBorder: "#d0d7de",
+          edgeLabelBackground: "#ffffff",
+          defaultLinkColor: "#57606a",
+          actorBkg: "#f6f8fa",
+          actorBorder: "#d0d7de",
+          actorTextColor: "#24292f",
+          fontFamily: GITHUB_MERMAID_FONT_STACK,
+        },
+    securityLevel: "strict" as const,
+    suppressErrorRendering: true,
+    htmlLabels: false,
+    flowchart: {
+      curve: "linear" as const,
+      useMaxWidth: true,
+    },
+  }
+}
+
+const createServiceMermaidConfig = (scheme: "dark" | "light") => ({
+  theme: scheme === "dark" ? ("dark" as const) : ("neutral" as const),
+  securityLevel: "strict" as const,
+  suppressErrorRendering: true,
+  htmlLabels: false,
+  flowchart: {
+    curve: "linear" as const,
+    useMaxWidth: true,
+  },
+})
+
+const resolveMermaidPreset = (scheme: "dark" | "light") => {
+  if (MERMAID_VISUAL_PRESET === "github") {
+    return {
+      mode: "github" as const,
+      themeKey: `github-${scheme}`,
+      config: createGithubMermaidConfig(scheme),
+    }
+  }
+
+  return {
+    mode: "service" as const,
+    themeKey: `service-${scheme}`,
+    config: createServiceMermaidConfig(scheme),
+  }
 }
 
 const useMermaidEffect = (
@@ -188,7 +291,7 @@ const useMermaidEffect = (
       if (!blocks.length) return
 
       const mermaid = (await import("mermaid")).default
-      const theme = scheme === "dark" ? "dark" : "neutral"
+      const preset = resolveMermaidPreset(scheme === "dark" ? "dark" : "light")
 
       // Mermaid 기본 parseError 핸들러가 브라우저 알림을 띄우는 환경이 있어
       // 렌더 에러를 훅 내부 catch 경로로 모아 조용히 처리한다.
@@ -202,14 +305,7 @@ const useMermaidEffect = (
 
       mermaid.initialize({
         startOnLoad: false,
-        theme,
-        securityLevel: "strict",
-        flowchart: {
-          // GitHub 스타일과 동일하게 SVG label 기반으로 고정한다.
-          htmlLabels: false,
-          curve: "linear",
-          useMaxWidth: true,
-        },
+        ...preset.config,
       })
 
       let renderQueue = Promise.resolve()
@@ -259,13 +355,14 @@ const useMermaidEffect = (
         if (!hasMermaidHint && !looksLikeMermaid) return
         if (!block.dataset.mermaidRendered) {
           block.dataset.mermaidRendered = "pending"
+          block.dataset.mermaidPreset = preset.mode
         }
 
         const alreadyRendered =
           (block.dataset.mermaidRendered === "true" ||
             block.dataset.mermaidRendered === "error") &&
           block.dataset.mermaidSource === source &&
-          block.dataset.mermaidTheme === theme
+          block.dataset.mermaidTheme === preset.themeKey
         if (alreadyRendered) return
 
         const blockRect = block.getBoundingClientRect()
@@ -332,15 +429,14 @@ const useMermaidEffect = (
               : Math.max(1, fallbackHeight)
           const needsMobileExpandAction = isMobileViewport && intrinsicWidth > containerWidth + 12
 
-          const maxReadableHeight = isMobileViewport
-            ? Math.min(520, Math.floor(window.innerHeight * 0.68))
-            : Math.min(900, Math.floor(window.innerHeight * 0.78))
+          const maxReadableHeight = Math.min(520, Math.floor(window.innerHeight * 0.68))
+          const usesGithubNaturalDesktopSizing = preset.mode === "github" && !isMobileViewport
 
           let scale = 1
-          if (intrinsicWidth > containerWidth) {
+          if (!usesGithubNaturalDesktopSizing && intrinsicWidth > containerWidth) {
             scale = Math.min(scale, containerWidth / intrinsicWidth)
           }
-          if (intrinsicHeight * scale > maxReadableHeight) {
+          if (!usesGithubNaturalDesktopSizing && intrinsicHeight * scale > maxReadableHeight) {
             scale = Math.min(scale, maxReadableHeight / intrinsicHeight)
           }
 
@@ -354,15 +450,15 @@ const useMermaidEffect = (
           stage.style.minHeight = `${roundedHeight}px`
           stage.style.display = "flex"
           stage.style.justifyContent = "center"
-          stage.style.overflowX = "hidden"
-          block.style.overflowX = "hidden"
+          stage.style.overflowX = usesGithubNaturalDesktopSizing ? "auto" : "hidden"
+          block.style.overflowX = usesGithubNaturalDesktopSizing ? "auto" : "hidden"
           stage.style.setProperty("-webkit-overflow-scrolling", "touch")
           block.style.setProperty("-webkit-overflow-scrolling", "touch")
 
           svgElement.setAttribute("preserveAspectRatio", "xMidYMin meet")
           svgElement.style.width = `${roundedWidth}px`
           svgElement.style.height = `${roundedHeight}px`
-          svgElement.style.maxWidth = "100%"
+          svgElement.style.maxWidth = usesGithubNaturalDesktopSizing ? "none" : "100%"
           svgElement.style.maxHeight = "none"
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
@@ -390,7 +486,8 @@ const useMermaidEffect = (
           await renderSourceIntoBlock(source)
 
           block.dataset.mermaidSource = source
-          block.dataset.mermaidTheme = theme
+          block.dataset.mermaidTheme = preset.themeKey
+          block.dataset.mermaidPreset = preset.mode
           block.dataset.mermaidRendered = "true"
           block.dataset.mermaidRetryCount = "0"
           block.classList.remove("aq-mermaid-error")
@@ -404,7 +501,8 @@ const useMermaidEffect = (
             try {
               await renderSourceIntoBlock(fallbackSource)
               block.dataset.mermaidSource = fallbackSource
-              block.dataset.mermaidTheme = theme
+              block.dataset.mermaidTheme = preset.themeKey
+              block.dataset.mermaidPreset = preset.mode
               block.dataset.mermaidRendered = "true"
               block.dataset.mermaidRetryCount = "0"
               block.classList.remove("aq-mermaid-error")
@@ -427,15 +525,16 @@ const useMermaidEffect = (
             .replaceAll(">", "&gt;")
 
           block.dataset.mermaidSource = source
-          block.dataset.mermaidTheme = theme
+          block.dataset.mermaidTheme = preset.themeKey
+          block.dataset.mermaidPreset = preset.mode
           block.dataset.mermaidRendered = "error"
           block.classList.add("aq-mermaid-error")
           block.style.minHeight = ""
           block.innerHTML = `
-            <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
-              Mermaid 렌더링 실패: 문법 또는 다이어그램 코드를 확인하세요.
+            <div class="aq-mermaid-error-state">
+              <div class="aq-mermaid-error-title">Mermaid를 렌더하지 못했습니다.</div>
+              <code class="aq-mermaid-error-code">${escapedSource}</code>
             </div>
-            <code style="white-space:pre-wrap;display:block;">${escapedSource}</code>
           `
           const signature = `${source}:${String(error)}`
           if (!loggedErrorSignatures.has(signature)) {

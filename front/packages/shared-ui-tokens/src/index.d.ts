@@ -10,6 +10,10 @@ export declare const uiTokens: {
       desktopMinWidthPx: number
       widthPx: number
     }
+    tags: {
+      chipRepresentativeLimit: number
+      desktopRepresentativeLimit: number
+    }
     card: {
       titleLineHeight: number
       summaryLineHeight: number

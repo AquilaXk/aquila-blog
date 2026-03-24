@@ -19,6 +19,7 @@ import org.springframework.web.filter.OncePerRequestFilter
 class ApiRuntimeBoundaryFilter(
     @param:Value("\${custom.runtime.apiMode:all}")
     apiModeRaw: String,
+    private val apiCorsPolicy: ApiCorsPolicy,
 ) : OncePerRequestFilter() {
     private val mode = RuntimeApiMode.from(apiModeRaw)
     private val apiPathRegex = Regex("^/[^/]+/api/.*")
@@ -43,6 +44,7 @@ class ApiRuntimeBoundaryFilter(
             return
         }
 
+        apiCorsPolicy.applyResponseHeadersIfAllowed(request, response)
         response.status = HttpServletResponse.SC_SERVICE_UNAVAILABLE
         response.setHeader("Retry-After", "1")
         response.contentType = MediaType.APPLICATION_JSON_VALUE
@@ -102,6 +104,8 @@ class ApiRuntimeBoundaryFilter(
                 Regex("^/post/api/v1/posts/search$"),
                 Regex("^/post/api/v1/posts/tags$"),
                 Regex("^/post/api/v1/posts$"),
+                Regex("^/post/api/v1/posts/\\d+/comments$"),
+                Regex("^/post/api/v1/posts/\\d+/comments/\\d+$"),
             )
         private val PUBLIC_DETAIL_PATH = Regex("^/post/api/v1/posts/\\d+$")
     }

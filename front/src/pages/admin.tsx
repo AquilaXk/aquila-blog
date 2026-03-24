@@ -29,20 +29,23 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     {
       href: "/admin/profile",
       title: "프로필 관리",
-      description: "관리자 사진, 역할, 소개 문구를 수정합니다.",
+      description: "사진, 역할, 소개 문구를 정리합니다.",
       eyebrow: "Profile",
+      cta: "프로필 열기",
     },
     {
       href: "/admin/posts/new",
-      title: "글 작성 및 목록 관리",
-      description: "새 글 작성, 기존 글 불러오기, 메타데이터 관리까지 한 번에 처리합니다.",
+      title: "글 작업실",
+      description: "목록 관리와 작성/발행 흐름을 나눠 다룹니다.",
       eyebrow: "Content",
+      cta: "글 작업실 열기",
     },
     {
       href: "/admin/tools",
       title: "운영 도구",
-      description: "댓글 점검과 시스템 상태 확인을 별도 작업실에서 수행합니다.",
+      description: "요약, 빠른 실행, 고급 진단을 확인합니다.",
       eyebrow: "Tools",
+      cta: "도구 열기",
     },
   ]
 
@@ -54,10 +57,7 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <HeroIntro>
           <Eyebrow>Admin Hub</Eyebrow>
           <h1>운영 허브</h1>
-          <p>
-            자주 쓰는 관리자 기능을 역할별로 분리했습니다. 허브에서는 현재 계정 상태를 확인하고,
-            필요한 작업실로 바로 이동하면 됩니다.
-          </p>
+          <p>계정 상태를 확인한 뒤 필요한 작업실로 바로 이동할 수 있게 구성했습니다.</p>
           <StatusRow>
             <StatusItem>
               <span>현재 계정</span>
@@ -73,8 +73,8 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </StatusItem>
           </StatusRow>
           <HeroActions>
-            <Link href="/" passHref legacyBehavior>
-              <ActionLink data-tone="ghost">메인으로 이동</ActionLink>
+            <Link href="/admin/profile" passHref legacyBehavior>
+              <ActionLink data-tone="ghost">프로필 관리</ActionLink>
             </Link>
             <Link href="/admin/posts/new" passHref legacyBehavior>
               <ActionLink data-tone="primary">글 작업실 바로가기</ActionLink>
@@ -96,13 +96,13 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       </HeroCard>
 
       <CardGrid>
-        {quickLinks.map((item, index) => (
+        {quickLinks.map((item) => (
           <Link key={item.href} href={item.href} passHref legacyBehavior>
             <QuickCard>
               <small>{item.eyebrow}</small>
               <h2>{item.title}</h2>
               <p>{item.description}</p>
-              <span>{`${index + 1}. 바로 이동`}</span>
+              <span>{item.cta}</span>
             </QuickCard>
           </Link>
         ))}
@@ -354,8 +354,12 @@ const ProfileFallback = styled.div`
 
 const CardGrid = styled.section`
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.95rem;
+
+  @media (max-width: 960px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
@@ -402,8 +406,16 @@ const QuickCard = styled.a`
 
   span {
     width: fit-content;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-weight: 650;
-    font-size: 0.84rem;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.78rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 700;
+    font-size: 0.82rem;
   }
 `

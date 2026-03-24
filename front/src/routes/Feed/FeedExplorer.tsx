@@ -733,8 +733,7 @@ const FeedExplorer = () => {
         <section className="postColumn">
           <FilterContextBar data-visible={hasFilter}>
             <div className="contextMain">
-              <span className="contextLabel">{hasFilter ? "필터" : "피드"}</span>
-              <strong className="contextCount">{resultCount}개</strong>
+              <strong className="contextCount">{hasFilter ? `${resultCount}개` : `피드 ${resultCount}개`}</strong>
               {hasFilter && <span className="filterSummary">{filterSummary}</span>}
             </div>
             {hasFilter && (
@@ -844,12 +843,12 @@ const FeedBody = styled.section`
 `
 
 const FilterContextBar = styled.div`
-  min-height: 2rem;
-  margin: 0.18rem 0 0.26rem;
+  min-height: 1.8rem;
+  margin: 0.1rem 0 0.2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.6rem;
+  gap: 0.5rem;
   color: ${({ theme }) => theme.colors.gray10};
 
   .contextMain {
@@ -857,28 +856,21 @@ const FilterContextBar = styled.div`
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.42rem;
-  }
-
-  .contextLabel {
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-    color: ${({ theme }) => theme.colors.gray9};
+    gap: 0.38rem;
   }
 
   .contextCount {
-    font-size: 0.84rem;
+    font-size: 0.96rem;
     color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 700;
+    font-weight: 760;
+    letter-spacing: -0.015em;
   }
 
   .filterSummary {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.79rem;
-    line-height: 1.4;
-    font-weight: 550;
+    font-size: 0.77rem;
+    line-height: 1.35;
+    font-weight: 560;
     max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
@@ -887,13 +879,13 @@ const FilterContextBar = styled.div`
 
   .resetButton {
     flex: 0 0 auto;
-    min-height: 1.78rem;
-    padding: 0 0.62rem;
+    min-height: 1.7rem;
+    padding: 0 0.58rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
+    font-size: 0.74rem;
     font-weight: 700;
     cursor: pointer;
     transition: border-color 0.125s ease-in, color 0.125s ease-in, background-color 0.125s ease-in;
@@ -910,11 +902,11 @@ const FilterContextBar = styled.div`
     margin-bottom: 0.24rem;
 
     .contextCount {
-      font-size: 0.8rem;
+      font-size: 0.9rem;
     }
 
     .filterSummary {
-      font-size: 0.74rem;
+      font-size: 0.73rem;
       max-width: 100%;
     }
   }

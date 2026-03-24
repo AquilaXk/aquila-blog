@@ -25,8 +25,8 @@ const FEED_CARD_META_FONT_SIZE_REM = uiTokens.feed.card.metaFontSizeRem
 const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
 const FEED_CARD_TITLE_LINE_HEIGHT = uiTokens.feed.card.titleLineHeight
 const FEED_CARD_RADIUS_PX = 4
-const FEED_CARD_SHADOW = "0 6px 16px rgba(2, 6, 23, 0.18)"
-const FEED_CARD_SHADOW_HOVER = "0 16px 30px rgba(2, 6, 23, 0.28)"
+const FEED_CARD_SHADOW = "0 8px 20px rgba(2, 6, 23, 0.14)"
+const FEED_CARD_SHADOW_HOVER = "0 18px 34px rgba(2, 6, 23, 0.2)"
 const FEED_CARD_HOVER_TRANSLATE_PX = -8
 
 type NavigatorConnectionLike = {
@@ -449,14 +449,13 @@ const StyledWrapper = styled(Link)`
         opacity: 0.9;
         pointer-events: none;
       }
-
     }
 
-      > .content {
-        display: grid;
-        grid-template-rows: auto auto auto auto;
-        align-content: start;
-        min-height: 0;
+    > .content {
+      display: grid;
+      grid-template-rows: auto auto auto auto;
+      align-content: start;
+      min-height: 0;
       padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
       gap: 0;
 
@@ -464,7 +463,7 @@ const StyledWrapper = styled(Link)`
         h2 {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray12};
-          font-size: 1.08rem;
+          font-size: 1.02rem;
           line-height: ${FEED_CARD_TITLE_LINE_HEIGHT};
           font-weight: 760;
           letter-spacing: -0.01em;
@@ -478,14 +477,14 @@ const StyledWrapper = styled(Link)`
       }
 
       > .summary {
-        margin-top: 0.4rem;
+        margin-top: 0.32rem;
         height: 3.9375rem;
 
         p {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray10};
           font-size: 0.875rem;
-          line-height: 1.6;
+          line-height: 1.54;
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -501,11 +500,11 @@ const StyledWrapper = styled(Link)`
         flex-wrap: wrap;
         gap: 0.42rem;
         align-items: center;
-        margin-top: 0.84rem;
-        padding-bottom: 1.26rem;
+        margin-top: 0.72rem;
+        padding-bottom: 1rem;
         color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
-        line-height: 1.55;
+        line-height: 1.45;
         letter-spacing: -0.01em;
 
         .dot {
@@ -527,7 +526,7 @@ const StyledWrapper = styled(Link)`
 
       > .footer {
         margin-top: auto;
-        padding-top: 0.82rem;
+        padding-top: 0.68rem;
         border-top: 1px solid ${({ theme }) => theme.colors.gray4};
         display: flex;
         align-items: center;
@@ -562,12 +561,12 @@ const StyledWrapper = styled(Link)`
 
           .by {
             color: ${({ theme }) => theme.colors.gray10};
-            font-size: 0.75rem;
+            font-size: 0.72rem;
           }
 
           strong {
             color: ${({ theme }) => theme.colors.gray12};
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             font-weight: 760;
             line-height: 1.2;
             white-space: nowrap;
@@ -580,7 +579,7 @@ const StyledWrapper = styled(Link)`
         .like {
           display: inline-flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.42rem;
           color: ${({ theme }) => theme.colors.gray11};
           font-size: 0.75rem;
           font-weight: 700;
@@ -657,28 +656,28 @@ const StyledWrapper = styled(Link)`
     @media (min-width: 1201px) {
       article {
         > .content {
-          padding: 0.9rem 0.94rem 0.82rem;
+          padding: 1rem 1rem 0.88rem;
 
           > header h2 {
-            font-size: 1.04rem;
-            line-height: 1.36;
-            -webkit-line-clamp: 1;
+            font-size: 1rem;
+            line-height: 1.4;
+            -webkit-line-clamp: 2;
           }
 
           > .summary {
-            margin-top: 0.44rem;
-            height: 3.95rem;
+            margin-top: 0.34rem;
+            height: 3.9375rem;
 
             p {
-              font-size: 0.9rem;
-              line-height: 1.5;
+              font-size: 0.875rem;
+              line-height: 1.54;
             }
           }
 
           > .meta {
             flex-wrap: nowrap;
-            margin-top: 0.64rem;
-            padding-bottom: 0.84rem;
+            margin-top: 0.68rem;
+            padding-bottom: 0.92rem;
             line-height: 1.45;
             min-width: 0;
 
@@ -689,7 +688,7 @@ const StyledWrapper = styled(Link)`
 
           > .footer {
             margin-top: 0;
-            padding-top: 0.56rem;
+            padding-top: 0.62rem;
           }
         }
       }

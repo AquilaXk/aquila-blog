@@ -19,6 +19,7 @@ import useAuthSession from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import {
   compareCategoryValues,
+  formatDate,
   normalizeCategoryValue,
 } from "src/libs/utils"
 import { isNavigationCancelledError, replaceRoute, toLoginPath } from "src/libs/router"
@@ -220,6 +221,8 @@ type ThumbnailPinchState = {
   startZoom: number
 }
 
+type PreviewViewportMode = "desktop" | "tablet" | "mobile"
+
 const TAG_CATALOG_STORAGE_KEY = "admin.editor.customTags"
 const CATEGORY_CATALOG_STORAGE_KEY = "admin.editor.customCategories"
 const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
@@ -249,6 +252,31 @@ const DEFAULT_THUMBNAIL_SOURCE_SIZE: ThumbnailSourceSize = {
   width: THUMBNAIL_FRAME_ASPECT_RATIO,
   height: 1,
 }
+const PREVIEW_CARD_VIEWPORTS: Record<
+  PreviewViewportMode,
+  {
+    label: string
+    description: string
+    cardWidth: number
+  }
+> = {
+  desktop: {
+    label: "Desktop",
+    description: "1440px 메인 카드 폭",
+    cardWidth: 368,
+  },
+  tablet: {
+    label: "iPad mini",
+    description: "768px 2열 카드 폭",
+    cardWidth: 320,
+  },
+  mobile: {
+    label: "iPhone 15 Pro",
+    description: "393px 1열 카드 폭",
+    cardWidth: 286,
+  },
+}
+const PREVIEW_CARD_VIEWPORT_ORDER: PreviewViewportMode[] = ["desktop", "tablet", "mobile"]
 
 const TAG_TONES = [
   {
@@ -1197,6 +1225,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
   const [previewThumbSourceSize, setPreviewThumbSourceSize] = useState<ThumbnailSourceSize>(DEFAULT_THUMBNAIL_SOURCE_SIZE)
   const [isPreviewThumbDragging, setIsPreviewThumbDragging] = useState(false)
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewportMode>("desktop")
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
   const [mobileStudioStep, setMobileStudioStep] = useState<MobileStudioStep>("query")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
@@ -3532,6 +3561,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const member = sessionMember
   const displayName = member.nickname || member.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
+  const previewViewportConfig = PREVIEW_CARD_VIEWPORTS[previewViewport]
+  const previewVisibilityLabel =
+    publishActionType === "temp"
+      ? "전체 공개"
+      : postVisibility === "PRIVATE"
+        ? "비공개"
+        : postVisibility === "PUBLIC_UNLISTED"
+          ? "링크 공개"
+          : "전체 공개"
+  const previewThumbnailSrc = safePreviewThumbnail && !isPreviewThumbnailError ? safePreviewThumbnail : ""
+  const previewAuthorAvatarSrc = (
+    profileImgInputUrl.trim() ||
+    member.profileImageDirectUrl ||
+    member.profileImageUrl ||
+    ""
+  ).trim()
+  const previewDateText = formatDate(new Date().toISOString(), "ko")
 
   return (
     <Main>
@@ -4899,159 +4945,250 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PostPreviewSetup>
                   <PostPreviewHeader>
                     <strong>포스트 미리보기</strong>
-                    <span>썸네일/요약을 지정하면 목록 카드에 우선 반영됩니다.</span>
+                    <span>상단에는 실제 메인 카드 기준 결과를, 하단에는 썸네일/요약 편집기를 분리해 보여줍니다.</span>
                   </PostPreviewHeader>
-                  <PreviewThumbFrame
-                    ref={previewThumbFrameRef}
-                    data-draggable={safePreviewThumbnail && !isPreviewThumbnailError}
-                    data-dragging={isPreviewThumbDragging}
-                    onPointerDown={handlePreviewThumbPointerDown}
-                    onPointerMove={handlePreviewThumbPointerMove}
-                    onPointerUp={finalizePreviewThumbPointer}
-                    onPointerCancel={finalizePreviewThumbPointer}
-                  >
-                    {safePreviewThumbnail && !isPreviewThumbnailError ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={safePreviewThumbnail}
-                        alt="포스트 미리보기 썸네일"
-                        style={{
-                          width: "var(--preview-thumb-width)",
-                          height: "var(--preview-thumb-height)",
-                          left: "var(--preview-thumb-left)",
-                          top: "var(--preview-thumb-top)",
-                          maxWidth: "none",
-                          transform: "translateZ(0)",
-                        }}
-                        onError={() => setIsPreviewThumbnailError(true)}
-                      />
-                    ) : (
-                      <div className="placeholder">
-                        <em>썸네일 없음</em>
-                        <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
+                  <PreviewResultPanel>
+                    <PreviewResultHeader>
+                      <div>
+                        <strong>실제 카드 결과</strong>
+                        <span>{previewViewportConfig.description} 기준으로 제목·요약·썸네일 잘림을 즉시 확인합니다.</span>
                       </div>
-                    )}
-                  </PreviewThumbFrame>
-                  {safePreviewThumbnail && !isPreviewThumbnailError ? (
-                    <>
-                      <FieldHelp>이미지를 잡아 360도(좌/우/상/하/대각)로 이동할 수 있고, 휠 또는 슬라이더로 확대/축소할 수 있습니다.</FieldHelp>
-                      <ZoomControlRow>
-                        <FieldLabel htmlFor="post-thumbnail-zoom-modal">썸네일 배율</FieldLabel>
-                        <ZoomRangeInput
-                          id="post-thumbnail-zoom-modal"
-                          type="range"
-                          min={1}
-                          max={2.5}
-                          step={0.01}
-                          value={postThumbnailZoom}
-                          onChange={(e) =>
-                            commitPreviewThumbTransform({
-                              ...previewThumbTransformRef.current,
-                              zoom: clampThumbnailZoom(Number(e.target.value)),
-                            })
+                      <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
+                        {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
+                          const viewportConfig = PREVIEW_CARD_VIEWPORTS[viewport]
+                          return (
+                            <PreviewViewportButton
+                              key={viewport}
+                              type="button"
+                              role="tab"
+                              aria-selected={previewViewport === viewport}
+                              data-active={previewViewport === viewport}
+                              onClick={() => setPreviewViewport(viewport)}
+                            >
+                              {viewportConfig.label}
+                            </PreviewViewportButton>
+                          )
+                        })}
+                      </PreviewViewportTabs>
+                    </PreviewResultHeader>
+                    <PreviewResultFrame style={{ width: `min(100%, ${previewViewportConfig.cardWidth}px)` }}>
+                      <PreviewResultCard>
+                        <div className="thumbnail">
+                          {previewThumbnailSrc ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={previewThumbnailSrc}
+                              alt="실제 카드 기준 포스트 썸네일 미리보기"
+                              style={{
+                                objectFit: "cover",
+                                objectPosition: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
+                                transform: `scale(${postThumbnailZoom})`,
+                                transformOrigin: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
+                              }}
+                              onError={() => setIsPreviewThumbnailError(true)}
+                            />
+                          ) : (
+                            <div className="thumbnail-placeholder">
+                              <em>썸네일 없음</em>
+                              <span>본문 첫 이미지가 자동 카드 썸네일로 사용됩니다.</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="content">
+                          <PreviewVisibilityBadge>{previewVisibilityLabel}</PreviewVisibilityBadge>
+                          <h4>{postTitle.trim() || "제목을 입력하면 실제 카드처럼 여기에 표시됩니다."}</h4>
+                          <p className="summary">
+                            {resolvedPreviewSummary || "요약을 비워두면 본문 기반 자동 요약이 실제 카드에 반영됩니다."}
+                          </p>
+                          <div className="meta">
+                            <span>{previewDateText}</span>
+                            <span className="dot">·</span>
+                            <span className="comment">
+                              <AppIcon name="message" />
+                              0개의 댓글
+                            </span>
+                          </div>
+                          <div className="footer">
+                            <div className="author">
+                              <span className="avatar" aria-hidden="true">
+                                {previewAuthorAvatarSrc ? (
+                                  <ProfileImage src={previewAuthorAvatarSrc} alt="" fillContainer />
+                                ) : (
+                                  <span className="initial">{displayNameInitial}</span>
+                                )}
+                              </span>
+                              <span className="by">by</span>
+                              <strong>{displayName}</strong>
+                            </div>
+                            <div className="like">
+                              <AppIcon name="heart" />
+                              <span>0</span>
+                            </div>
+                          </div>
+                        </div>
+                      </PreviewResultCard>
+                    </PreviewResultFrame>
+                    <FieldHelp>기기 탭을 바꾸면 실제 카드 폭 기준으로 제목 줄수와 썸네일 크롭 결과가 즉시 다시 계산됩니다.</FieldHelp>
+                  </PreviewResultPanel>
+
+                  <PreviewEditorGrid>
+                    <PreviewEditorSection>
+                      <PreviewEditorSectionHeader>
+                        <strong>썸네일 위치 조정</strong>
+                        <span>드래그로 위치를 바꾸고, 휠 또는 슬라이더로 확대/축소합니다.</span>
+                      </PreviewEditorSectionHeader>
+                      <PreviewThumbFrame
+                        ref={previewThumbFrameRef}
+                        data-draggable={safePreviewThumbnail && !isPreviewThumbnailError}
+                        data-dragging={isPreviewThumbDragging}
+                        onPointerDown={handlePreviewThumbPointerDown}
+                        onPointerMove={handlePreviewThumbPointerMove}
+                        onPointerUp={finalizePreviewThumbPointer}
+                        onPointerCancel={finalizePreviewThumbPointer}
+                      >
+                        {safePreviewThumbnail && !isPreviewThumbnailError ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={safePreviewThumbnail}
+                            alt="포스트 미리보기 썸네일"
+                            style={{
+                              width: "var(--preview-thumb-width)",
+                              height: "var(--preview-thumb-height)",
+                              left: "var(--preview-thumb-left)",
+                              top: "var(--preview-thumb-top)",
+                              maxWidth: "none",
+                              transform: "translateZ(0)",
+                            }}
+                            onError={() => setIsPreviewThumbnailError(true)}
+                          />
+                        ) : (
+                          <div className="placeholder">
+                            <em>썸네일 없음</em>
+                            <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
+                          </div>
+                        )}
+                      </PreviewThumbFrame>
+                      {safePreviewThumbnail && !isPreviewThumbnailError ? (
+                        <ZoomControlRow>
+                          <FieldLabel htmlFor="post-thumbnail-zoom-modal">썸네일 배율</FieldLabel>
+                          <ZoomRangeInput
+                            id="post-thumbnail-zoom-modal"
+                            type="range"
+                            min={1}
+                            max={2.5}
+                            step={0.01}
+                            value={postThumbnailZoom}
+                            onChange={(e) =>
+                              commitPreviewThumbTransform({
+                                ...previewThumbTransformRef.current,
+                                zoom: clampThumbnailZoom(Number(e.target.value)),
+                              })
+                            }
+                          />
+                          <ZoomControlMeta>
+                            <ZoomValue>{postThumbnailZoom.toFixed(2)}x</ZoomValue>
+                            <Button
+                              type="button"
+                              onClick={() =>
+                                commitPreviewThumbTransform({
+                                  ...previewThumbTransformRef.current,
+                                  zoom: DEFAULT_THUMBNAIL_ZOOM,
+                                })
+                              }
+                            >
+                              배율 초기화
+                            </Button>
+                          </ZoomControlMeta>
+                        </ZoomControlRow>
+                      ) : null}
+                    </PreviewEditorSection>
+
+                    <PreviewEditorSection>
+                      <PreviewEditorSectionHeader>
+                        <strong>카드 메타 편집</strong>
+                        <span>썸네일 소스와 카드 요약을 이 구역에서 조정합니다.</span>
+                      </PreviewEditorSectionHeader>
+                      <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
+                      <Input
+                        id="post-thumbnail-url-modal"
+                        placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
+                        value={postThumbnailUrl}
+                        onChange={(e) => {
+                          const nextValue = e.target.value
+                          setPostThumbnailUrl(nextValue)
+                          const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
+                          if (focusXFromInput !== null) {
+                            setPostThumbnailFocusX(focusXFromInput)
                           }
-                        />
-                        <ZoomValue>{postThumbnailZoom.toFixed(2)}x</ZoomValue>
+                          const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
+                          if (focusFromInput !== null) {
+                            setPostThumbnailFocusY(focusFromInput)
+                          }
+                          const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
+                          if (zoomFromInput !== null) {
+                            setPostThumbnailZoom(zoomFromInput)
+                          }
+                          setPreviewThumbnailSourceUrl("")
+                        }}
+                      />
+                      <MetaActionRow>
                         <Button
                           type="button"
-                          onClick={() =>
-                            commitPreviewThumbTransform({
-                              ...previewThumbTransformRef.current,
-                              zoom: DEFAULT_THUMBNAIL_ZOOM,
-                            })
-                          }
+                          title={POST_IMAGE_UPLOAD_RULE_LABEL}
+                          disabled={disabled("uploadThumbnail")}
+                          onClick={() => thumbnailImageFileInputRef.current?.click()}
                         >
-                          배율 초기화
+                          {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
                         </Button>
-                      </ZoomControlRow>
-                    </>
-                  ) : null}
-                  <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
-                  <Input
-                    id="post-thumbnail-url-modal"
-                    placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
-                    value={postThumbnailUrl}
-                    onChange={(e) => {
-                      const nextValue = e.target.value
-                      setPostThumbnailUrl(nextValue)
-                      const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
-                      if (focusXFromInput !== null) {
-                        setPostThumbnailFocusX(focusXFromInput)
-                      }
-                      const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
-                      if (focusFromInput !== null) {
-                        setPostThumbnailFocusY(focusFromInput)
-                      }
-                      const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
-                      if (zoomFromInput !== null) {
-                        setPostThumbnailZoom(zoomFromInput)
-                      }
-                      setPreviewThumbnailSourceUrl("")
-                    }}
-                  />
-                  <MetaActionRow>
-                    <Button
-                      type="button"
-                      title={POST_IMAGE_UPLOAD_RULE_LABEL}
-                      disabled={disabled("uploadThumbnail")}
-                      onClick={() => thumbnailImageFileInputRef.current?.click()}
-                    >
-                      {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
-                        setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
-                        setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
-                        setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
-                        setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
-                        setPreviewThumbnailSourceUrl("")
-                      }}
-                    >
-                      본문 첫 이미지 가져오기
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        setPostThumbnailUrl("")
-                        setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
-                        setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
-                        setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
-                        setPreviewThumbnailSourceUrl("")
-                      }}
-                    >
-                      자동 모드로 되돌리기
-                    </Button>
-                  </MetaActionRow>
-                  {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
-                  <FieldLabel htmlFor="post-preview-summary-modal">미리보기 요약</FieldLabel>
-                  <PreviewSummaryInput
-                    id="post-preview-summary-modal"
-                    placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
-                    value={postSummary}
-                    maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
-                    onChange={(e) => setPostSummary(e.target.value)}
-                  />
-                  <SummaryCounter>
-                    {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
-                  </SummaryCounter>
-                  <MetaActionRow>
-                    <Button
-                      type="button"
-                      onClick={() => setPostSummary(makePreviewSummary(postContent))}
-                      disabled={!postContent.trim()}
-                    >
-                      본문 기반 요약 채우기
-                    </Button>
-                  </MetaActionRow>
-                  <FieldHelp>아래 블록은 목록 카드에 실제로 노출될 제목/요약 미리보기입니다.</FieldHelp>
-                  <PreviewCardSnapshot>
-                    <PreviewFixedTitle>{postTitle.trim() || "제목을 입력하면 여기에 고정 표시됩니다."}</PreviewFixedTitle>
-                    <PreviewSummaryText>
-                      {resolvedPreviewSummary || "본문을 입력하면 자동 요약이 생성됩니다."}
-                    </PreviewSummaryText>
-                  </PreviewCardSnapshot>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
+                            setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
+                            setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
+                            setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
+                            setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
+                            setPreviewThumbnailSourceUrl("")
+                          }}
+                        >
+                          본문 첫 이미지 가져오기
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            setPostThumbnailUrl("")
+                            setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
+                            setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
+                            setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
+                            setPreviewThumbnailSourceUrl("")
+                          }}
+                        >
+                          자동 모드로 되돌리기
+                        </Button>
+                      </MetaActionRow>
+                      {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
+                      <FieldLabel htmlFor="post-preview-summary-modal">미리보기 요약</FieldLabel>
+                      <PreviewSummaryInput
+                        id="post-preview-summary-modal"
+                        placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
+                        value={postSummary}
+                        maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+                        onChange={(e) => setPostSummary(e.target.value)}
+                      />
+                      <SummaryCounter>
+                        {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
+                      </SummaryCounter>
+                      <MetaActionRow>
+                        <Button
+                          type="button"
+                          onClick={() => setPostSummary(makePreviewSummary(postContent))}
+                          disabled={!postContent.trim()}
+                        >
+                          본문 기반 요약 채우기
+                        </Button>
+                      </MetaActionRow>
+                    </PreviewEditorSection>
+                  </PreviewEditorGrid>
                 </PostPreviewSetup>
               </PublishModalBody>
               <PublishModalFooter>
@@ -6446,7 +6583,7 @@ const WriterMetaActions = styled.div`
 
 const PostPreviewSetup = styled.section`
   display: grid;
-  gap: 0.44rem;
+  gap: 1rem;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -6456,6 +6593,44 @@ const PostPreviewSetup = styled.section`
 const PostPreviewHeader = styled.div`
   display: grid;
   gap: 0.12rem;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.96rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+`
+
+const PreviewResultPanel = styled.div`
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    ${({ theme }) => theme.colors.gray1};
+  padding: 0.9rem;
+`
+
+const PreviewResultHeader = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+
+  > div:first-of-type {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
+  }
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
@@ -6471,6 +6646,249 @@ const PostPreviewHeader = styled.div`
   }
 `
 
+const PreviewViewportTabs = styled.div`
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+`
+
+const PreviewViewportButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
+  padding: 0 0.78rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue6} inset;
+  }
+
+  &:hover:not([data-active="true"]) {
+    border-color: ${({ theme }) => theme.colors.gray8};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+`
+
+const PreviewResultFrame = styled.div`
+  width: 100%;
+`
+
+const PreviewVisibilityBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid rgba(45, 212, 191, 0.34);
+  background: rgba(20, 184, 166, 0.12);
+  color: #99f6e4;
+  padding: 0 0.56rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+`
+
+const PreviewResultCard = styled.article`
+  overflow: hidden;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray4};
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.22);
+
+  .thumbnail {
+    position: relative;
+    aspect-ratio: ${THUMBNAIL_FRAME_ASPECT_RATIO} / 1;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at top left, rgba(96, 165, 250, 0.08), transparent 48%),
+      ${({ theme }) => theme.colors.gray3};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray4};
+  }
+
+  .thumbnail img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .thumbnail-placeholder {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-content: center;
+    gap: 0.28rem;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .thumbnail-placeholder em {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  .thumbnail-placeholder span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+
+  .content {
+    display: grid;
+    gap: 0.72rem;
+    padding: 1rem;
+  }
+
+  h4 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1rem;
+    font-weight: 760;
+    line-height: 1.33;
+    letter-spacing: -0.015em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .summary {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.86rem;
+    line-height: 1.55;
+    min-height: calc(1.55em * 3);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .meta,
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+  }
+
+  .meta {
+    padding-top: 0.05rem;
+  }
+
+  .meta .dot {
+    opacity: 0.7;
+  }
+
+  .comment,
+  .like,
+  .author {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.34rem;
+  }
+
+  .author {
+    min-width: 0;
+  }
+
+  .author strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  .author .by {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .avatar {
+    position: relative;
+    flex: 0 0 1.85rem;
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 999px;
+    overflow: hidden;
+    background: ${({ theme }) => theme.colors.gray4};
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+  }
+
+  .initial {
+    display: grid;
+    place-content: center;
+    width: 100%;
+    height: 100%;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .like {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 700;
+  }
+`
+
+const PreviewEditorGrid = styled.div`
+  display: grid;
+  gap: 0.8rem;
+
+  @media (min-width: 840px) {
+    grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+    align-items: start;
+  }
+`
+
+const PreviewEditorSection = styled.div`
+  display: grid;
+  gap: 0.58rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+  padding: 0.85rem;
+`
+
+const PreviewEditorSectionHeader = styled.div`
+  display: grid;
+  gap: 0.14rem;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+`
+
 const PreviewThumbFrame = styled.div`
   --preview-thumb-width: 100%;
   --preview-thumb-height: 100%;
@@ -6478,7 +6896,7 @@ const PreviewThumbFrame = styled.div`
   --preview-thumb-top: 0%;
 
   position: relative;
-  width: min(100%, 320px);
+  width: min(100%, 360px);
   justify-self: start;
   aspect-ratio: ${THUMBNAIL_FRAME_ASPECT_RATIO} / 1;
   border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
@@ -6607,9 +7025,9 @@ const SummaryActionStatus = styled.div`
 const ZoomControlRow = styled.div`
   display: grid;
   gap: 0.42rem;
-  align-items: center;
+  align-items: start;
   justify-items: start;
-  width: min(100%, 320px);
+  width: min(100%, 360px);
 
   @media (max-width: 780px) {
     width: 100%;
@@ -6622,33 +7040,24 @@ const ZoomRangeInput = styled.input`
 `
 
 const ZoomValue = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  padding: 0 0.55rem;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.78rem;
   line-height: 1;
+  font-weight: 700;
 `
 
-const PreviewFixedTitle = styled.h4`
-  margin: 0.2rem 0 0;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.95rem;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-`
-
-const PreviewCardSnapshot = styled.div`
-  display: grid;
-  gap: 0.22rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 10px;
-  padding: 0.65rem 0.74rem;
-  background: ${({ theme }) => theme.colors.gray2};
-`
-
-const PreviewSummaryText = styled.p`
-  margin: 0.05rem 0 0;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.82rem;
-  line-height: 1.55;
+const ZoomControlMeta = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 `
 
 const MetaActionRow = styled.div`
@@ -7853,7 +8262,7 @@ const ConfirmModal = styled.div`
 `
 
 const PublishModal = styled.div`
-  width: min(760px, 100%);
+  width: min(880px, 100%);
   max-height: min(86vh, 920px);
   overflow: auto;
   border-radius: 8px;

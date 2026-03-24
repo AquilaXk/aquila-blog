@@ -56,10 +56,10 @@ const StyledWrapper = styled.div`
   > .field {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.42rem;
     min-width: 0;
     min-height: ${FEED_SEARCH_FIELD_MIN_HEIGHT_PX}px;
-    padding: 0 0.625rem;
+    padding: 0 0.56rem;
     border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray1};
@@ -71,13 +71,13 @@ const StyledWrapper = styled.div`
       justify-content: center;
       flex: 0 0 auto;
       color: ${({ theme }) => theme.colors.gray10};
-      width: 16px;
-      height: 16px;
+      width: 15px;
+      height: 15px;
       transition: all 0.125s ease-in;
 
       svg {
-        width: 16px;
-        height: 16px;
+        width: 15px;
+        height: 15px;
       }
     }
 
@@ -86,14 +86,14 @@ const StyledWrapper = styled.div`
       align-items: center;
       justify-content: center;
       flex: 0 0 auto;
-      min-width: 60px;
-      height: 28px;
-      padding: 0 0.65rem;
+      min-width: 56px;
+      height: 26px;
+      padding: 0 0.58rem;
       border-radius: ${({ theme }) => `${theme.variables.ui.button.radiusPill}px`};
       border: 1px solid ${({ theme }) => theme.colors.gray6};
-      background: ${({ theme }) => theme.colors.gray2};
+      background: transparent;
       color: ${({ theme }) => theme.colors.gray11};
-      font-size: 0.8rem;
+      font-size: 0.77rem;
       font-weight: 700;
       letter-spacing: 0;
       line-height: 1;
@@ -116,9 +116,9 @@ const StyledWrapper = styled.div`
     width: 100%;
     min-width: 0;
     min-height: 36px;
-    padding: 0.36rem 0;
-    font-size: 0.875rem;
-    line-height: 1.45;
+    padding: 0.32rem 0;
+    font-size: 0.84rem;
+    line-height: 1.4;
     color: ${({ theme }) => theme.colors.gray12};
     caret-color: ${({ theme }) => theme.colors.gray12};
     border: 0;
@@ -149,7 +149,7 @@ const StyledWrapper = styled.div`
 
   > .field:focus-within {
     border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray1};
 
     .searchIcon {
       color: ${({ theme }) => theme.colors.gray12};

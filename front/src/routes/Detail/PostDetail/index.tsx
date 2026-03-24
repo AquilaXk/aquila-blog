@@ -747,16 +747,16 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             <div ref={leftRailInnerRef} className="leftRailInner">
               <div className="floatingLikeCluster">
                 <div className="floatingLikeStat">
-                <button
-                  type="button"
-                  className="floatingActionButton floatingLikeButton"
-                  title="좋아요"
-                  data-tooltip="좋아요"
-                  aria-label={`좋아요 ${engagement.likesCount}`}
-                  aria-pressed={engagement.actorHasLiked}
-                  data-active={engagement.actorHasLiked}
-                  disabled={likePending}
-                  onClick={handleToggleLike}
+                  <button
+                    type="button"
+                    className="floatingActionButton floatingLikeButton"
+                    title="좋아요"
+                    data-tooltip="좋아요"
+                    aria-label={`좋아요 ${engagement.likesCount}`}
+                    aria-pressed={engagement.actorHasLiked}
+                    data-active={engagement.actorHasLiked}
+                    disabled={likePending}
+                    onClick={handleToggleLike}
                   >
                     <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
                   </button>
@@ -767,12 +767,12 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 <button
                   type="button"
                   className="floatingActionButton floatingShareButton"
-                  title="공유 링크 복사"
-                  data-tooltip="공유 링크 복사"
-                  aria-label="공유 링크 복사"
+                  title="공유"
+                  data-tooltip="공유"
+                  aria-label="게시글 공유"
                   onClick={handleSharePost}
                 >
-                  <AppIcon name="link" />
+                  <AppIcon name="share" />
                 </button>
                 {shareFeedback ? (
                   <span className="floatingShareFeedback" role="status" aria-live="polite">
@@ -915,7 +915,7 @@ const StyledWrapper = styled.div`
     display: grid;
     grid-template-columns: minmax(4.4rem, 5rem) minmax(0, 49rem) minmax(0, 15rem);
     justify-content: center;
-    gap: 2rem;
+    gap: 2.35rem;
     min-width: 0;
     overflow: visible;
   }
@@ -963,8 +963,8 @@ const StyledWrapper = styled.div`
   }
 
   .floatingActionButton {
-    width: 3.25rem;
-    height: 3.25rem;
+    width: 3.45rem;
+    height: 3.45rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -977,7 +977,7 @@ const StyledWrapper = styled.div`
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
-      font-size: 1.18rem;
+      font-size: 1.24rem;
     }
 
     &:hover {
@@ -1036,14 +1036,14 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
 
     svg {
-      font-size: 1.04rem;
+      font-size: 1.14rem;
     }
   }
 
   .floatingLikeCluster {
     display: grid;
     justify-items: center;
-    row-gap: 0.56rem;
+    row-gap: 0.62rem;
   }
 
   .floatingLikeStat {
@@ -1068,7 +1068,7 @@ const StyledWrapper = styled.div`
 
   .rightRailInner {
     border-left: 2px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : theme.colors.gray6)};
-    padding: 0.18rem 0 0.18rem 0.82rem;
+    padding: 0.18rem 0 0.18rem 0.96rem;
     background: transparent;
 
     .rightRailHead {
@@ -1160,7 +1160,7 @@ const StyledWrapper = styled.div`
     button::before {
       content: "";
       position: absolute;
-      left: -0.82rem;
+      left: -0.96rem;
       top: 0.24rem;
       bottom: 0.24rem;
       width: 2px;
@@ -1182,14 +1182,14 @@ const StyledWrapper = styled.div`
   @media (max-width: 1439px) {
     .detailLayout {
       grid-template-columns: minmax(4rem, 4.5rem) minmax(0, 48rem) minmax(0, 13.8rem);
-      gap: 1.72rem;
+      gap: 1.96rem;
     }
   }
 
   @media (max-width: 1279px) {
     .detailLayout {
       grid-template-columns: minmax(3.8rem, 4.2rem) minmax(0, 46rem) minmax(0, 12.6rem);
-      gap: 1.18rem;
+      gap: 1.42rem;
     }
   }
 

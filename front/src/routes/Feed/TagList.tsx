@@ -146,21 +146,21 @@ const StyledWrapper = styled.div`
 
   .panelTitle {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
-    font-weight: 700;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.96rem;
+    font-weight: 760;
     letter-spacing: -0.01em;
     line-height: 1.5;
-    padding: 0 0 0.5rem;
+    padding: 0 0 0.42rem;
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
   }
 
   .desktopList {
     list-style: none;
-    margin: 1rem 0 0;
+    margin: 0.88rem 0 0;
     padding: 0;
     display: grid;
-    gap: 0.25rem;
+    gap: 0.18rem;
     max-height: calc(100vh - var(--app-header-height, 56px) - 6.35rem);
     max-height: calc(100dvh - var(--app-header-height, 56px) - 6.35rem);
     overflow-y: auto;
@@ -184,7 +184,7 @@ const StyledWrapper = styled.div`
     border: 0;
     border-radius: 4px;
     background: transparent;
-    padding: 0.125rem 0.25rem;
+    padding: 0.12rem 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -215,9 +215,9 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button .name {
-    font-size: 0.875rem;
-    font-weight: 620;
-    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    font-weight: 610;
+    color: ${({ theme }) => theme.colors.gray11};
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -230,8 +230,8 @@ const StyledWrapper = styled.div`
   }
 
   .desktopList button .count {
-    font-size: 0.75rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray9};
     font-variant-numeric: tabular-nums;
   }
 
@@ -248,7 +248,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     align-content: flex-start;
     margin-bottom: 0;
-    gap: 0.35rem;
+    gap: 0.3rem;
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x proximity;
@@ -276,14 +276,14 @@ const StyledWrapper = styled.div`
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.28rem;
+    gap: 0.24rem;
     text-align: left;
     white-space: nowrap;
     min-height: 34px;
     border-radius: 999px;
     border: 0;
     background: transparent;
-    padding: 0.4rem 0.84rem;
+    padding: 0.34rem 0.82rem;
     color: ${({ theme }) => theme.colors.gray11};
     flex-shrink: 0;
     scroll-snap-align: start;
@@ -330,13 +330,13 @@ const StyledWrapper = styled.div`
   }
 
   .chipRail button .name {
-    font-size: 0.75rem;
+    font-size: 0.73rem;
     font-weight: 650;
   }
 
   .chipRail button .count {
-    font-size: 0.75rem;
-    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray9};
   }
 
   .chipRail button[data-active="true"] .count {

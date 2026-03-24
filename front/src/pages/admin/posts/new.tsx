@@ -1128,7 +1128,7 @@ const buildListCacheKey = (params: {
 const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { me, authStatus, setMe, refresh } = useAuthSession()
+  const { me, authStatus, setMe } = useAuthSession()
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
@@ -7658,6 +7658,11 @@ const InlineActions = styled.div`
   align-items: center;
 
   ${Button} {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 96px;
+    width: 96px;
     min-height: 40px;
     padding: 0.38rem 0.58rem;
     font-size: 0.76rem;

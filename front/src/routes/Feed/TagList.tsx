@@ -7,12 +7,13 @@ import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import {
   FEED_CHIP_GAP_PX,
   FEED_TAG_RAIL_CHIP_MAX_PX,
-  FEED_TAG_RAIL_DESKTOP_MIN_PX,
 } from "./feedUiTokens"
 
-type Props = {}
+type Props = {
+  desktopRailEnabled?: boolean
+}
 
-const TagList: React.FC<Props> = () => {
+const TagList: React.FC<Props> = ({ desktopRailEnabled = false }) => {
   const router = useRouter()
   const currentTag =
     typeof router.query.tag === "string" ? router.query.tag : undefined
@@ -57,7 +58,11 @@ const TagList: React.FC<Props> = () => {
 
   return (
     <StyledWrapper>
-      <section className="desktopPanel" aria-label="태그 목록">
+      <section
+        className="desktopPanel"
+        data-desktop-enabled={desktopRailEnabled}
+        aria-label="태그 목록"
+      >
         <h2 className="panelTitle">태그 목록</h2>
         <ul className="desktopList">
           <li>
@@ -90,7 +95,12 @@ const TagList: React.FC<Props> = () => {
         </ul>
       </section>
 
-      <div className="chipRail" role="group" aria-label="태그 선택">
+      <div
+        className="chipRail"
+        data-desktop-enabled={desktopRailEnabled}
+        role="group"
+        aria-label="태그 선택"
+      >
         <button
           type="button"
           data-active={!currentTag}
@@ -134,7 +144,7 @@ const StyledWrapper = styled.div`
     max-height: calc(100dvh - var(--app-header-height, 56px) - 1.8rem);
     overflow: hidden;
 
-    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    &[data-desktop-enabled="true"] {
       display: block;
     }
   }
@@ -262,7 +272,7 @@ const StyledWrapper = styled.div`
       height: 0;
     }
 
-    @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    &[data-desktop-enabled="true"] {
       display: none;
     }
   }

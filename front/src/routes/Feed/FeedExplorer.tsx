@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
@@ -21,12 +22,14 @@ import { type ExplorePostsPage } from "src/apis/backend/posts"
 import type { TPost } from "src/types"
 import {
   FEED_TAG_RAIL_DESKTOP_MIN_PX,
+  FEED_TAG_RAIL_OFFSET_MIN_PX,
   FEED_TAG_RAIL_WIDTH_PX,
 } from "./feedUiTokens"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
 const FEED_TAG_RAIL_GAP_PX = 16
+const FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX = 8
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
@@ -383,6 +386,9 @@ const useDebouncedValue = (value: string, pause = false) => {
 const FeedExplorer = () => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
+  const [desktopRailEnabled, setDesktopRailEnabled] = useState(false)
+  const [desktopRailOffsetPx, setDesktopRailOffsetPx] = useState(FEED_TAG_RAIL_OFFSET_MIN_PX)
+  const [desktopRailOverlapInsetPx, setDesktopRailOverlapInsetPx] = useState(0)
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -428,6 +434,7 @@ const FeedExplorer = () => {
     enabled: router.isReady,
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
+  const feedBodyRef = useRef<HTMLElement | null>(null)
   const lastLoadMoreAtRef = useRef(0)
   const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
@@ -440,6 +447,70 @@ const FeedExplorer = () => {
   useEffect(() => {
     isFetchingNextPageRef.current = isFetchingNextPage
   }, [isFetchingNextPage])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const feedBody = feedBodyRef.current
+    if (!feedBody) return
+
+    let rafId: number | null = null
+    let observer: ResizeObserver | null = null
+
+    const syncDesktopRailVisibility = () => {
+      if (window.innerWidth < FEED_TAG_RAIL_DESKTOP_MIN_PX) {
+        setDesktopRailEnabled(false)
+        setDesktopRailOffsetPx(FEED_TAG_RAIL_OFFSET_MIN_PX)
+        setDesktopRailOverlapInsetPx(0)
+        return
+      }
+
+      const rect = feedBody.getBoundingClientRect()
+      const minOffsetToStayVisible = FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX - rect.left
+      const nextOffset = Math.min(0, Math.max(FEED_TAG_RAIL_OFFSET_MIN_PX, minOffsetToStayVisible))
+      const nextOverlapInset = Math.max(
+        0,
+        FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX + nextOffset
+      )
+
+      setDesktopRailEnabled(true)
+      setDesktopRailOffsetPx((prev) => (Math.abs(prev - nextOffset) < 1 ? prev : nextOffset))
+      setDesktopRailOverlapInsetPx((prev) =>
+        Math.abs(prev - nextOverlapInset) < 1 ? prev : nextOverlapInset
+      )
+    }
+
+    const scheduleSync = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        syncDesktopRailVisibility()
+      })
+    }
+
+    syncDesktopRailVisibility()
+    window.addEventListener("resize", scheduleSync, { passive: true })
+    window.addEventListener("orientationchange", scheduleSync)
+    window.addEventListener("scroll", scheduleSync, { passive: true })
+
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        scheduleSync()
+      })
+      observer.observe(feedBody)
+    }
+
+    return () => {
+      window.removeEventListener("resize", scheduleSync)
+      window.removeEventListener("orientationchange", scheduleSync)
+      window.removeEventListener("scroll", scheduleSync)
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      observer?.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     restoreSnapshotRef.current = {
@@ -681,6 +752,21 @@ const FeedExplorer = () => {
   const resultCount = pinnedPosts.length + regularPosts.length
   const hasQueryFilter = normalizedQuery.length > 0
   const hasTagFilter = Boolean(currentTag)
+  const explorerRailStyle = useMemo(
+    () =>
+      ({
+        "--feed-tag-rail-overlap-px": `${desktopRailOverlapInsetPx}px`,
+      }) as CSSProperties,
+    [desktopRailOverlapInsetPx]
+  )
+  const feedBodyRailStyle = useMemo(
+    () =>
+      ({
+        "--feed-tag-rail-left-px": `${desktopRailOffsetPx}px`,
+        "--feed-tag-rail-overlap-px": `${desktopRailOverlapInsetPx}px`,
+      }) as CSSProperties,
+    [desktopRailOffsetPx, desktopRailOverlapInsetPx]
+  )
 
   const handleClearFilters = useCallback(() => {
     setQ("")
@@ -700,7 +786,7 @@ const FeedExplorer = () => {
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard>
+      <ExplorerCard data-desktop-rail={desktopRailEnabled} style={explorerRailStyle}>
         <div className="searchSlot">
           <SearchInput
             inputRef={searchInputRef}
@@ -711,9 +797,14 @@ const FeedExplorer = () => {
           />
         </div>
       </ExplorerCard>
-      <FeedBody data-sticky-rail-safe="true">
+      <FeedBody
+        ref={feedBodyRef}
+        data-desktop-rail={desktopRailEnabled}
+        data-sticky-rail-safe="true"
+        style={feedBodyRailStyle}
+      >
         <aside className="tagColumn">
-          <TagList />
+          <TagList desktopRailEnabled={desktopRailEnabled} />
         </aside>
         <section className="postColumn">
           <FilterContextBar data-visible={hasFilter}>
@@ -749,7 +840,7 @@ const FeedExplorer = () => {
 export default FeedExplorer
 
 const ExplorerCard = styled.section`
-  --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
+  --feed-tag-rail-overlap-px: 0px;
   display: grid;
   gap: 0;
   padding: 0;
@@ -761,14 +852,14 @@ const ExplorerCard = styled.section`
 
   .searchSlot {
     min-width: 0;
+    width: min(100%, 58.5rem);
+    padding-left: var(--feed-tag-rail-overlap-px);
+    transition: padding-left 0.14s ease-in;
   }
 
-  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-    grid-template-columns: minmax(0, var(--feed-tag-rail-width)) minmax(0, 1fr);
-    column-gap: ${FEED_TAG_RAIL_GAP_PX}px;
-
+  @media (max-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX - 1}px) {
     .searchSlot {
-      grid-column: 2 / 3;
+      padding-left: 0;
     }
   }
 
@@ -779,6 +870,8 @@ const ExplorerCard = styled.section`
 
 const FeedBody = styled.section`
   --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
+  --feed-tag-rail-left-px: ${FEED_TAG_RAIL_OFFSET_MIN_PX}px;
+  --feed-tag-rail-overlap-px: 0px;
   min-width: 0;
   overflow: visible;
 
@@ -793,21 +886,30 @@ const FeedBody = styled.section`
   }
 
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-    display: grid;
-    grid-template-columns: minmax(0, var(--feed-tag-rail-width)) minmax(0, 1fr);
-    align-items: start;
-    column-gap: ${FEED_TAG_RAIL_GAP_PX}px;
+    position: relative;
 
-    .tagColumn {
-      width: 100%;
-      min-width: 0;
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+    &[data-desktop-rail="true"] {
+      .tagColumn {
+        position: absolute;
+        top: 0;
+        left: var(--feed-tag-rail-left-px);
+        width: var(--feed-tag-rail-width);
+        min-width: 0;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+      }
+
+      .postColumn {
+        padding-left: var(--feed-tag-rail-overlap-px);
+        transition: padding-left 0.14s ease-in;
+      }
     }
 
-    .postColumn {
-      margin-left: 0;
+    &[data-desktop-rail="false"] {
+      .tagColumn {
+        display: none;
+      }
     }
   }
 `

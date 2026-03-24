@@ -24,6 +24,7 @@ const AuthShell = ({
   activeTab,
   title,
   subtitle,
+  eyebrow,
   footer,
   children,
   loginHref = "/login",
@@ -32,9 +33,10 @@ const AuthShell = ({
   return (
     <Main>
       <Backdrop />
-      <Shell>
+      <Shell data-auth-shell="true">
         <FormPanel>
           <Top>
+            <Eyebrow>{eyebrow}</Eyebrow>
             <Title>{title}</Title>
             <SubTitle>{subtitle}</SubTitle>
           </Top>
@@ -76,7 +78,7 @@ const Backdrop = styled.div`
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 16% -6%, rgba(59, 130, 246, 0.12), transparent 36%),
+    radial-gradient(circle at 16% -6%, rgba(59, 130, 246, 0.075), transparent 34%),
     ${({ theme }) => theme.colors.gray1};
 `
 
@@ -87,10 +89,10 @@ const Shell = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 22px;
   overflow: hidden;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   box-shadow: ${({ theme }) =>
     theme.scheme === "light"
-      ? "0 12px 32px rgba(15, 23, 42, 0.1)"
+      ? "0 18px 40px rgba(15, 23, 42, 0.08)"
       : "0 18px 40px rgba(0, 0, 0, 0.3)"};
 `
 
@@ -106,7 +108,18 @@ const FormPanel = styled.section`
 `
 
 const Top = styled.div`
-  margin-bottom: 1rem;
+  margin-bottom: 1.04rem;
+`
+
+const Eyebrow = styled.span`
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0.38rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.74rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 `
 
 const Title = styled.h2`
@@ -126,13 +139,13 @@ const Tabs = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.42rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.08rem;
 `
 
 const ActiveTab = styled.div`
   border-radius: 11px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : theme.colors.gray3)};
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.66rem 0.76rem;
   text-align: center;
@@ -142,7 +155,7 @@ const ActiveTab = styled.div`
 const PassiveTab = styled(Link)`
   border-radius: 11px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => (theme.scheme === "light" ? "#f8fafc" : theme.colors.gray1)};
   color: ${({ theme }) => theme.colors.gray11};
   padding: 0.66rem 0.76rem;
   text-align: center;
@@ -158,11 +171,11 @@ const Body = styled.div`
 `
 
 const Footer = styled.div`
-  margin-top: 0.95rem;
+  margin-top: 1rem;
   color: ${({ theme }) => theme.colors.gray11};
 
   a {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.accentLink};
     text-decoration: underline;
     text-underline-offset: 3px;
   }

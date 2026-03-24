@@ -177,7 +177,8 @@ const StyledWrapper = styled.div`
   z-index: ${zIndexes.header};
   position: sticky;
   top: 0;
-  background-color: ${({ theme }) => `${theme.colors.gray1}e6`};
+  background-color: ${({ theme }) =>
+    theme.scheme === "light" ? "rgba(249, 251, 254, 0.94)" : `${theme.colors.gray1}e6`};
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);

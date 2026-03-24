@@ -51,6 +51,7 @@ import {
   POST_IMAGE_UPLOAD_RULE_LABEL,
   PROFILE_IMAGE_UPLOAD_RULE_LABEL,
 } from "src/libs/profileImageUpload"
+import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -421,13 +422,7 @@ const normalizeMetaItems = (raw: string): string[] => {
 const normalizeMetaScalar = (raw: string) => raw.trim().replace(/^['"]|['"]$/g, "")
 
 const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
-const markdownImageReplaceRegex = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
-const markdownLinkRegex = /\[(.*?)\]\((.*?)\)/g
-const fencedCodeRegex = /```[\s\S]*?```/g
 const mermaidFenceRegex = /```mermaid\b[\s\S]*?```/gi
-const inlineCodeRegex = /`([^`]+)`/g
-const markdownPunctuationRegex = /[#>*_~-]/g
-const whitespaceRegex = /\s+/g
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
@@ -649,26 +644,8 @@ const readThumbnailSourceSizeFromUrl = (url: string): Promise<ThumbnailSourceSiz
     image.src = url
   })
 
-const stripSummaryPrefix = (value: string) =>
-  value.replace(/^\s*(?:요약|summary)\s*[:：]\s*/i, "").trim()
-
-const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) => {
-  const normalized = content
-    .replace(fencedCodeRegex, " ")
-    .replace(markdownImageReplaceRegex, " ")
-    .replace(inlineCodeRegex, "$1")
-    .replace(markdownLinkRegex, "$1")
-    .replace(markdownPunctuationRegex, " ")
-    .replace(whitespaceRegex, " ")
-    .trim()
-  const compactRaw = content.replace(whitespaceRegex, " ").trim()
-  const relaxedNormalized = compactRaw.replace(markdownPunctuationRegex, " ").replace(whitespaceRegex, " ").trim()
-  const fallbackSummary = normalized || relaxedNormalized || compactRaw || "요약을 생성할 수 없습니다."
-  const sanitizedSummary = stripSummaryPrefix(fallbackSummary) || fallbackSummary
-
-  if (sanitizedSummary.length <= maxLength) return sanitizedSummary
-  return `${sanitizedSummary.slice(0, maxLength).trim()}...`
-}
+const makePreviewSummary = (content: string, maxLength = PREVIEW_SUMMARY_MAX_LENGTH) =>
+  buildPreviewSummaryFromMarkdown(content, maxLength, "요약을 생성할 수 없습니다.")
 
 const normalizeRecommendedTags = (value: unknown, maxTags: number) => {
   if (!Array.isArray(value)) return []

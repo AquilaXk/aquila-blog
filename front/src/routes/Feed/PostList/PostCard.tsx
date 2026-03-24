@@ -15,6 +15,7 @@ import {
   parseThumbnailZoomFromUrl,
   stripThumbnailFocusFromUrl,
 } from "src/libs/thumbnailFocus"
+import { normalizeCardSummary } from "src/libs/postSummary"
 
 type Props = {
   data: TPost
@@ -29,22 +30,6 @@ const FEED_CARD_RADIUS_PX = 4
 const FEED_CARD_SHADOW = "0 8px 20px rgba(2, 6, 23, 0.14)"
 const FEED_CARD_SHADOW_HOVER = "0 18px 34px rgba(2, 6, 23, 0.2)"
 const FEED_CARD_HOVER_TRANSLATE_PX = -8
-const SUMMARY_PREFIX_REGEX = /^(?:요약|summary)\s*[:：-]\s*/i
-const CARD_SUMMARY_PREVIEW_LIMIT = 150
-
-const normalizeFeedCardSummary = (value?: string) => {
-  if (typeof value !== "string") return "핵심 내용을 정리 중입니다."
-
-  const normalized = value
-    .replace(/&#x3A;/gi, ":")
-    .replace(/\s+/g, " ")
-    .replace(SUMMARY_PREFIX_REGEX, "")
-    .trim()
-
-  if (normalized.length === 0) return "핵심 내용을 정리 중입니다."
-  if (normalized.length <= CARD_SUMMARY_PREVIEW_LIMIT) return normalized
-  return `${normalized.slice(0, CARD_SUMMARY_PREVIEW_LIMIT).trimEnd()}...`
-}
 
 type NavigatorConnectionLike = {
   saveData?: boolean
@@ -256,7 +241,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
     data?.date?.start_date || data.createdTime,
     CONFIG.lang
   )
-  const summary = normalizeFeedCardSummary(data.summary)
+  const summary = normalizeCardSummary(data.summary)
   const commentsCount = data.commentsCount ?? 0
   const likesCount = data.likesCount ?? 0
   const { thumbnailSrc, thumbnailFocusX, thumbnailFocusY, thumbnailZoom } = useMemo(() => {
@@ -494,13 +479,13 @@ const StyledWrapper = styled(Link)`
       }
 
       > .summary {
-        margin-top: 0.32rem;
+        margin-top: 0.28rem;
         height: 3.9375rem;
 
         p {
           margin: 0;
           color: ${({ theme }) => theme.colors.gray10};
-          font-size: 0.875rem;
+          font-size: 0.85rem;
           line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
           letter-spacing: -0.01em;
           word-break: keep-all;
@@ -517,8 +502,8 @@ const StyledWrapper = styled(Link)`
         flex-wrap: wrap;
         gap: 0.42rem;
         align-items: center;
-        margin-top: 0.72rem;
-        padding-bottom: 1rem;
+        margin-top: 0.6rem;
+        padding-bottom: 0.88rem;
         color: ${({ theme }) => theme.colors.gray10};
         font-size: ${FEED_CARD_META_FONT_SIZE_REM}rem;
         line-height: 1.45;
@@ -543,7 +528,7 @@ const StyledWrapper = styled(Link)`
 
       > .footer {
         margin-top: auto;
-        padding-top: 0.68rem;
+        padding-top: 0.74rem;
         border-top: 1px solid ${({ theme }) => theme.colors.gray4};
         display: flex;
         align-items: center;
@@ -615,16 +600,19 @@ const StyledWrapper = styled(Link)`
     article {
       transition:
         transform 0.25s ease-in,
-        box-shadow 0.25s ease-in;
+        box-shadow 0.25s ease-in,
+        border-color 0.25s ease-in;
     }
 
     &:hover article,
     &:focus-visible article {
-      transform: translateY(var(--post-card-translate-y));
-      box-shadow: var(--post-card-shadow-hover);
+      transform: translateY(${({ theme }) => (theme.scheme === "light" ? "-2px" : "var(--post-card-translate-y)")});
+      box-shadow: ${({ theme }) =>
+        theme.scheme === "light" ? "0 8px 18px rgba(15, 23, 42, 0.06)" : "var(--post-card-shadow-hover)"};
+      border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray5 : theme.colors.gray5)};
 
       > .thumbnail img {
-        transform: scale(1.025);
+        transform: scale(${({ theme }) => (theme.scheme === "light" ? 1.01 : 1.025)});
       }
 
       @media screen and (max-width: 1024px) {

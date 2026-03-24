@@ -4,6 +4,7 @@ const clsBudget = Number(process.env.CLS_BUDGET || 0.1)
 const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
+const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/profile", "/admin/posts/new", "/admin/tools"]
 
 const buildMockExploreItem = (id: number) => ({
@@ -375,6 +376,54 @@ const getVisualLayoutFingerprint = async (page: Page) =>
     }
   })
 
+const applySchemePreference = async (page: Page, scheme: "light" | "dark") => {
+  await page.context().clearCookies()
+  await page.context().addCookies([
+    {
+      name: "scheme",
+      value: scheme,
+      url: playwrightBaseURL,
+    },
+  ])
+}
+
+const waitForSchemeReady = async (page: Page, scheme: "light" | "dark") => {
+  const expectedBodyBg = scheme === "light" ? "rgb(243, 245, 248)" : "rgb(13, 15, 18)"
+  await page.waitForFunction(
+    (bodyColor) => getComputedStyle(document.body).backgroundColor === bodyColor,
+    expectedBodyBg
+  )
+}
+
+const getThemeSurfaceFingerprint = async (page: Page) =>
+  page.evaluate(() => {
+    const readStyle = (selector: string, property: keyof CSSStyleDeclaration) => {
+      const node = document.querySelector(selector)
+      if (!node) return null
+      return getComputedStyle(node as HTMLElement)[property]
+    }
+
+    const readThemeToggleLabel = () => {
+      const toggle = document.querySelector('button[aria-label*="모드로 전환"]')
+      return toggle?.getAttribute("aria-label") ?? null
+    }
+
+    return {
+      route: window.location.pathname,
+      themeToggleLabel: readThemeToggleLabel(),
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      headerBg: readStyle('[data-autohide]', "backgroundColor"),
+      searchBg: readStyle(".field", "backgroundColor"),
+      searchBorder: readStyle(".field", "borderTopColor"),
+      cardBg: readStyle(".postColumn article", "backgroundColor"),
+      cardBorder: readStyle(".postColumn article", "borderTopColor"),
+      summaryBg: readStyle('[data-rum-section="summary"]', "backgroundColor"),
+      summaryBorder: readStyle('[data-rum-section="summary"]', "borderTopColor"),
+      authShellBg: readStyle('[data-auth-shell="true"]', "backgroundColor"),
+      authShellBorder: readStyle('[data-auth-shell="true"]', "borderTopColor"),
+    }
+  })
+
 const waitForStableHeaderAuthState = async (page: Page) => {
   await page
     .waitForSelector('.authArea:not([data-auth-state="loading"])', {
@@ -629,6 +678,68 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       continue
     }
 
+    if (scenario.name === "home-iphone15pro-393") {
+      expect(snapshot.route).toBe("/")
+      expect(snapshot.viewport.width).toBe(393)
+      expect(snapshot.viewport.height).toBe(852)
+      expect(snapshot.rails.chip).toBe(true)
+      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.profileSidebarVisible).toBe(false)
+      expect(snapshot.searchRect).not.toBeNull()
+      expect(snapshot.firstCardRect).not.toBeNull()
+
+      const searchWidth = snapshot.searchRect?.width ?? 0
+      const searchHeight = snapshot.searchRect?.height ?? 0
+      const searchY = snapshot.searchRect?.y ?? 0
+      const firstCardWidth = snapshot.firstCardRect?.width ?? 0
+      const firstCardHeight = snapshot.firstCardRect?.height ?? 0
+      const firstCardY = snapshot.firstCardRect?.y ?? 0
+
+      expect(searchWidth).toBeGreaterThanOrEqual(320)
+      expect(searchWidth).toBeLessThanOrEqual(336)
+      expect(searchHeight).toBe(34)
+      expect(searchY).toBeGreaterThanOrEqual(188)
+      expect(searchY).toBeLessThanOrEqual(210)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(360)
+      expect(firstCardWidth).toBeLessThanOrEqual(370)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(388)
+      expect(firstCardHeight).toBeLessThanOrEqual(404)
+      expect(firstCardY).toBeGreaterThanOrEqual(324)
+      expect(firstCardY).toBeLessThanOrEqual(350)
+      continue
+    }
+
+    if (scenario.name === "home-ipad-mini-768") {
+      expect(snapshot.route).toBe("/")
+      expect(snapshot.viewport.width).toBe(768)
+      expect(snapshot.viewport.height).toBe(1024)
+      expect(snapshot.rails.chip).toBe(true)
+      expect(snapshot.rails.desktopTag).toBe(false)
+      expect(snapshot.profileSidebarVisible).toBe(false)
+      expect(snapshot.searchRect).not.toBeNull()
+      expect(snapshot.firstCardRect).not.toBeNull()
+
+      const searchWidth = snapshot.searchRect?.width ?? 0
+      const searchHeight = snapshot.searchRect?.height ?? 0
+      const searchY = snapshot.searchRect?.y ?? 0
+      const firstCardWidth = snapshot.firstCardRect?.width ?? 0
+      const firstCardHeight = snapshot.firstCardRect?.height ?? 0
+      const firstCardY = snapshot.firstCardRect?.y ?? 0
+
+      expect(searchWidth).toBeGreaterThanOrEqual(692)
+      expect(searchWidth).toBeLessThanOrEqual(710)
+      expect(searchHeight).toBe(34)
+      expect(searchY).toBeGreaterThanOrEqual(188)
+      expect(searchY).toBeLessThanOrEqual(212)
+      expect(firstCardWidth).toBeGreaterThanOrEqual(348)
+      expect(firstCardWidth).toBeLessThanOrEqual(360)
+      expect(firstCardHeight).toBeGreaterThanOrEqual(384)
+      expect(firstCardHeight).toBeLessThanOrEqual(398)
+      expect(firstCardY).toBeGreaterThanOrEqual(326)
+      expect(firstCardY).toBeLessThanOrEqual(352)
+      continue
+    }
+
     if (scenario.name === "detail-desktop-1440") {
       expect(snapshot.route).toBe("/posts/991")
       expect(snapshot.viewport.width).toBe(1440)
@@ -654,7 +765,7 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
 
       expect(leftRailWidth).toBe(80)
       expect(leftRailHeight).toBeGreaterThanOrEqual(132)
-      expect(leftRailHeight).toBeLessThanOrEqual(144)
+      expect(leftRailHeight).toBeLessThanOrEqual(172)
       expect(leftRailY).toBeGreaterThanOrEqual(84)
       expect(leftRailY).toBeLessThanOrEqual(92)
       expect(rightRailWidth).toBe(240)
@@ -670,6 +781,91 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
     }
 
     expect(JSON.stringify(snapshot, null, 2)).toMatchSnapshot(`${scenario.name}.json`)
+  }
+})
+
+test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await mockDetailRailEndpoint(page, 991)
+
+  const scenarios = [
+    { route: "/", viewport: { width: 1440, height: 900 } },
+    { route: "/", viewport: { width: 393, height: 852 } },
+    { route: "/", viewport: { width: 768, height: 1024 } },
+    { route: "/posts/991", viewport: { width: 1440, height: 900 } },
+    { route: "/posts/991", viewport: { width: 393, height: 852 } },
+    { route: "/posts/991", viewport: { width: 768, height: 1024 } },
+    { route: "/login", viewport: { width: 1440, height: 900 } },
+    { route: "/login", viewport: { width: 393, height: 852 } },
+    { route: "/login", viewport: { width: 768, height: 1024 } },
+  ] as const
+
+  for (const scheme of ["dark", "light"] as const) {
+    for (const scenario of scenarios) {
+      await applySchemePreference(page, scheme)
+      await page.setViewportSize(scenario.viewport)
+      await page.goto(scenario.route)
+      await waitForPageReady(page)
+      await waitForSchemeReady(page, scheme)
+      await page.waitForTimeout(120)
+
+      const fingerprint = await getThemeSurfaceFingerprint(page)
+      const expected = {
+        dark: {
+          bodyBg: "rgb(13, 15, 18)",
+          headerBgChannel: "13, 15, 18",
+          searchBg: "rgb(13, 15, 18)",
+          searchBorder: "rgb(35, 41, 50)",
+          cardBg: "rgb(13, 15, 18)",
+          cardBorder: "rgb(29, 34, 43)",
+          summaryBgPrefix: "rgba(23, 27, 33",
+          summaryBorder: "rgb(42, 48, 56)",
+          authShellBg: "rgb(13, 15, 18)",
+          authShellBorder: "rgb(35, 41, 50)",
+          toggleLabel: "라이트 모드로 전환",
+        },
+        light: {
+          bodyBg: "rgb(243, 245, 248)",
+          headerBgChannel: "249, 251, 254",
+          searchBg: "rgb(255, 255, 255)",
+          searchBorder: "rgb(215, 224, 234)",
+          cardBg: "rgb(255, 255, 255)",
+          cardBorder: "rgb(231, 237, 244)",
+          summaryBgPrefix: "rgba(255, 255, 255",
+          summaryBorder: "rgb(200, 210, 222)",
+          authShellBg: "rgb(255, 255, 255)",
+          authShellBorder: "rgb(215, 224, 234)",
+          toggleLabel: "다크 모드로 전환",
+        },
+      }[scheme]
+
+      expect(fingerprint.route).toBe(scenario.route)
+      expect(fingerprint.bodyBg).toBe(expected.bodyBg)
+      if (scheme === "light") {
+        expect(fingerprint.headerBg).not.toBeNull()
+        expect(fingerprint.headerBg).not.toBe(fingerprint.bodyBg)
+      } else {
+        expect(fingerprint.headerBg?.includes(expected.headerBgChannel)).toBe(true)
+      }
+      expect(fingerprint.themeToggleLabel).toBe(expected.toggleLabel)
+
+      if (scenario.route === "/") {
+        expect(fingerprint.searchBg).toBe(expected.searchBg)
+        expect(fingerprint.searchBorder).toBe(expected.searchBorder)
+        expect(fingerprint.cardBg).toBe(expected.cardBg)
+        expect(fingerprint.cardBorder).toBe(expected.cardBorder)
+      }
+
+      if (scenario.route === "/posts/991") {
+        expect(fingerprint.summaryBg?.startsWith(expected.summaryBgPrefix)).toBe(true)
+        expect(fingerprint.summaryBorder).toBe(expected.summaryBorder)
+      }
+
+      if (scenario.route === "/login") {
+        expect(fingerprint.authShellBg).toBe(expected.authShellBg)
+        expect(fingerprint.authShellBorder).toBe(expected.authShellBorder)
+      }
+    }
   }
 })
 

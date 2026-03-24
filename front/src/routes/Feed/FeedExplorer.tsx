@@ -844,7 +844,7 @@ const FeedBody = styled.section`
 
 const FilterContextBar = styled.div`
   min-height: 1.8rem;
-  margin: 0.1rem 0 0.2rem;
+  margin: 0.04rem 0 0.16rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -860,17 +860,17 @@ const FilterContextBar = styled.div`
   }
 
   .contextCount {
-    font-size: 0.96rem;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 760;
+    font-size: 0.88rem;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-weight: 740;
     letter-spacing: -0.015em;
   }
 
   .filterSummary {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.77rem;
+    color: ${({ theme }) => theme.colors.gray9};
+    font-size: 0.74rem;
     line-height: 1.35;
-    font-weight: 560;
+    font-weight: 600;
     max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
@@ -880,18 +880,18 @@ const FilterContextBar = styled.div`
   .resetButton {
     flex: 0 0 auto;
     min-height: 1.7rem;
-    padding: 0 0.58rem;
+    padding: 0 0.52rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.74rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
     font-weight: 700;
     cursor: pointer;
     transition: border-color 0.125s ease-in, color 0.125s ease-in, background-color 0.125s ease-in;
 
     &:hover {
-      border-color: ${({ theme }) => theme.colors.gray8};
+      border-color: ${({ theme }) => theme.colors.gray7};
       background: ${({ theme }) => theme.colors.gray2};
       color: ${({ theme }) => theme.colors.gray12};
     }
@@ -899,14 +899,14 @@ const FilterContextBar = styled.div`
 
   @media (max-width: 768px) {
     margin-top: 0.14rem;
-    margin-bottom: 0.24rem;
+    margin-bottom: 0.18rem;
 
     .contextCount {
-      font-size: 0.9rem;
+      font-size: 0.84rem;
     }
 
     .filterSummary {
-      font-size: 0.73rem;
+      font-size: 0.71rem;
       max-width: 100%;
     }
   }

@@ -17,6 +17,7 @@ import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPost, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
 import AppIcon from "src/components/icons/AppIcon"
+import { extractLeadingSummaryBlock, normalizeCardSummary } from "src/libs/postSummary"
 
 type Props = {
   initialComments?: TPostComment[] | null
@@ -162,6 +163,18 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     [showDetailedToc, tocItems]
   )
   const showStickyToc = visibleTocItems.length >= 2
+  const extractedSummaryState = useMemo(
+    () => extractLeadingSummaryBlock(data?.content || "", 180),
+    [data?.content]
+  )
+  const detailSummary = useMemo(() => {
+    const source = extractedSummaryState.summary || data?.summary || ""
+    return normalizeCardSummary(source, { fallback: "", maxLength: 180 })
+  }, [data?.summary, extractedSummaryState.summary])
+  const renderedContent = useMemo(() => {
+    if (!data?.content) return ""
+    return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content
+  }, [data?.content, extractedSummaryState.contentWithoutSummary, extractedSummaryState.summary])
   const relatedTag = useMemo(
     () =>
       data?.tags
@@ -763,17 +776,25 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   <span className="floatingLikeCount" aria-hidden="true">
                     {engagement.likesCount}
                   </span>
+                  <span className="floatingActionCaption" aria-hidden="true">
+                    좋아요
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  className="floatingActionButton floatingShareButton"
-                  title="공유"
-                  data-tooltip="공유"
-                  aria-label="게시글 공유"
-                  onClick={handleSharePost}
-                >
-                  <AppIcon name="share" />
-                </button>
+                <div className="floatingShareStat">
+                  <button
+                    type="button"
+                    className="floatingActionButton floatingShareButton"
+                    title="공유"
+                    data-tooltip="공유"
+                    aria-label="게시글 공유"
+                    onClick={handleSharePost}
+                  >
+                    <AppIcon name="share" />
+                  </button>
+                  <span className="floatingActionCaption" aria-hidden="true">
+                    공유
+                  </span>
+                </div>
                 {shareFeedback ? (
                   <span className="floatingShareFeedback" role="status" aria-live="polite">
                     {shareFeedback === "failed"
@@ -810,6 +831,17 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               />
             </section>
           )}
+          {detailSummary ? (
+            <SummaryPanel aria-label="요약" data-rum-section="summary">
+              <div className="summaryHead">
+                <span className="summaryBadge">
+                  <AppIcon name="spark" aria-hidden="true" />
+                  한눈에 보기
+                </span>
+              </div>
+              <p>{detailSummary}</p>
+            </SummaryPanel>
+          ) : null}
           {showStickyToc && (
             <CompactTocSection aria-label="모바일 목차">
               <details>
@@ -841,7 +873,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             </CompactTocSection>
           )}
           <BodySection data-rum-section="body">
-            <MarkdownRenderer content={data.content} />
+            <MarkdownRenderer content={renderedContent} />
           </BodySection>
           {data.type[0] === "Post" && relatedByTagPosts.length > 0 && (
             <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
@@ -856,7 +888,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   <li key={post.id}>
                     <Link href={toCanonicalPostPath(post.id)}>
                       <strong>{post.title}</strong>
-                      {post.summary && <p>{post.summary}</p>}
+                      {(() => {
+                        const summaryText = normalizeCardSummary(post.summary, { fallback: "", maxLength: 148 })
+                        return summaryText ? <p>{summaryText}</p> : null
+                      })()}
                       <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
                     </Link>
                   </li>
@@ -877,7 +912,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   <li key={post.id}>
                     <Link href={toCanonicalPostPath(post.id)}>
                       <strong>{post.title}</strong>
-                      {post.summary && <p>{post.summary}</p>}
+                      {(() => {
+                        const summaryText = normalizeCardSummary(post.summary, { fallback: "", maxLength: 148 })
+                        return summaryText ? <p>{summaryText}</p> : null
+                      })()}
                       <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
                     </Link>
                   </li>
@@ -1085,7 +1123,13 @@ const StyledWrapper = styled.div`
   .floatingLikeStat {
     display: grid;
     justify-items: center;
-    row-gap: 0.38rem;
+    row-gap: 0.22rem;
+  }
+
+  .floatingShareStat {
+    display: grid;
+    justify-items: center;
+    row-gap: 0.22rem;
   }
 
   .floatingLikeCount {
@@ -1095,16 +1139,25 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
   }
 
+  .floatingActionCaption {
+    font-size: 0.66rem;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: ${({ theme }) => theme.colors.gray9};
+  }
+
   .floatingShareFeedback {
     font-size: 0.68rem;
     line-height: 1;
     font-weight: 650;
     color: ${({ theme }) => theme.colors.gray9};
+    text-align: center;
   }
 
   .rightRailInner {
     border-left: 2px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : theme.colors.gray6)};
-    padding: 0.18rem 0 0.18rem 0.96rem;
+    padding: 0.18rem 0 0.18rem 1.08rem;
     background: transparent;
 
     .rightRailHead {
@@ -1186,9 +1239,9 @@ const StyledWrapper = styled.div`
       border: 0;
       border-radius: 10px;
       min-height: 38px;
-      padding: 0.46rem 0.6rem 0.46rem 0;
+      padding: 0.5rem 0.7rem 0.5rem 0;
       background: transparent;
-      color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.92)" : theme.colors.gray10)};
+      color: ${({ theme }) => theme.colors.gray9};
       font-size: 0.84rem;
       line-height: 1.35;
       cursor: pointer;
@@ -1202,7 +1255,7 @@ const StyledWrapper = styled.div`
     }
 
     button:hover {
-      color: ${({ theme }) => theme.colors.gray12};
+      color: ${({ theme }) => theme.colors.gray11};
       background: ${({ theme }) => theme.colors.gray2};
     }
 
@@ -1214,14 +1267,14 @@ const StyledWrapper = styled.div`
       bottom: 0.24rem;
       width: 2px;
       opacity: 0;
-      background: ${({ theme }) => (theme.scheme === "dark" ? "#e2e8f0" : "#111827")};
+      background: ${({ theme }) => theme.colors.accentBorder};
       transition: opacity 0.15s ease;
     }
 
     button[data-active="true"] {
       color: ${({ theme }) => theme.colors.gray12};
       font-weight: 700;
-      background: ${({ theme }) => theme.colors.gray2};
+      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
     }
 
     button[data-active="true"]::before {
@@ -1283,6 +1336,65 @@ const BodySection = styled.div`
   @media (max-width: 768px) {
     margin-top: 0.55rem;
     padding-top: 0.85rem;
+  }
+`
+
+const SummaryPanel = styled.section`
+  margin-top: 0.32rem;
+  padding: 1rem 1.05rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(23, 27, 33, 0.82)" : "rgba(255, 255, 255, 0.94)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 16px 32px rgba(2, 6, 23, 0.2)" : "0 12px 28px rgba(15, 23, 42, 0.05)"};
+
+  .summaryHead {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 0.58rem;
+  }
+
+  .summaryBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    min-height: 1.85rem;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.75rem;
+    line-height: 1;
+    font-weight: 760;
+    letter-spacing: -0.01em;
+
+    svg {
+      color: ${({ theme }) => theme.colors.accentLink};
+      font-size: 0.84rem;
+    }
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.96rem;
+    line-height: 1.75;
+    letter-spacing: -0.012em;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 768px) {
+    margin-top: 0.26rem;
+    padding: 0.9rem 0.92rem;
+
+    p {
+      font-size: 0.92rem;
+      line-height: 1.68;
+    }
   }
 `
 
@@ -1454,13 +1566,15 @@ const RelatedSection = styled.section`
     padding: 0.68rem 0.74rem;
     border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray1};
     text-decoration: none;
-    transition: border-color 0.14s ease-in, background-color 0.14s ease-in;
+    transition: border-color 0.14s ease-in, background-color 0.14s ease-in, box-shadow 0.14s ease-in;
 
     &:hover {
       border-color: ${({ theme }) => theme.colors.gray8};
-      background: ${({ theme }) => theme.colors.gray3};
+      background: ${({ theme }) => theme.colors.gray2};
+      box-shadow: ${({ theme }) =>
+        theme.scheme === "light" ? "0 10px 24px rgba(15, 23, 42, 0.05)" : "none"};
     }
   }
 

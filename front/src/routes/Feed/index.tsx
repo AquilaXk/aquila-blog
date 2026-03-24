@@ -12,7 +12,7 @@ import {
 } from "src/layouts/RootLayout/layoutTiers"
 
 const FEED_HERO_EYEBROW = "백엔드 아키텍처 · 운영 트러블슈팅 · 성능 최적화"
-const DEFAULT_HOME_DESCRIPTION = "실서비스에서 부딪힌 설계, 장애, 성능 문제를 다시 읽기 쉽게 정리합니다."
+const DEFAULT_HOME_DESCRIPTION = "백엔드 아키텍처, 운영 트러블슈팅, 성능 최적화를 실서비스 경험 기준으로 정리합니다."
 
 const normalizeHomeIntroDescription = (value?: string) => {
   const normalized = typeof value === "string" ? value.trim() : ""
@@ -77,13 +77,17 @@ const StyledWrapper = styled.div`
   }
 
   @media (max-width: 768px) {
-    padding: 0.42rem 0 1.1rem;
+    padding: 0.28rem 0 0.96rem;
   }
 
   > .mid {
     display: grid;
     min-width: 0;
     gap: 1rem;
+
+    @media (max-width: 768px) {
+      gap: 0.82rem;
+    }
 
     .mobileProfileCard {
       @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
@@ -128,7 +132,7 @@ const StyledWrapper = styled.div`
 
 const IntroCard = styled.section`
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  padding: 0.35rem 0 1.1rem;
+  padding: 0.28rem 0 0.96rem;
 
   .eyebrow {
     display: inline-flex;
@@ -152,20 +156,20 @@ const IntroCard = styled.section`
   }
 
   p {
-    margin: 0.72rem 0 0;
+    margin: 0.62rem 0 0;
     max-width: 38rem;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 1rem;
-    line-height: 1.68;
+    font-size: 0.98rem;
+    line-height: 1.64;
     letter-spacing: -0.01em;
   }
 
   @media (max-width: 768px) {
-    padding-bottom: 0.92rem;
+    padding-bottom: 0.76rem;
 
     .eyebrow {
-      margin-bottom: 0.58rem;
-      font-size: 0.72rem;
+      margin-bottom: 0.46rem;
+      font-size: 0.7rem;
     }
 
     h1 {
@@ -175,9 +179,9 @@ const IntroCard = styled.section`
     }
 
     p {
-      margin-top: 0.62rem;
-      font-size: 0.92rem;
-      line-height: 1.62;
+      margin-top: 0.54rem;
+      font-size: 0.9rem;
+      line-height: 1.58;
     }
   }
 `

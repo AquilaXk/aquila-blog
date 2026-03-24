@@ -216,9 +216,9 @@ const StyledWrapper = styled.div`
 
   .panelTitle {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.96rem;
-    font-weight: 760;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.9rem;
+    font-weight: 740;
     letter-spacing: -0.01em;
     line-height: 1.5;
     padding: 0 0 0.42rem;
@@ -260,7 +260,7 @@ const StyledWrapper = styled.div`
     align-items: center;
     gap: ${FEED_CHIP_GAP_PX}px;
     text-align: left;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
     transition: all 0.125s ease-in;
 
@@ -275,7 +275,7 @@ const StyledWrapper = styled.div`
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.blue8};
+      outline: 2px solid ${({ theme }) => theme.colors.accentBorder};
       outline-offset: 1px;
     }
 
@@ -300,7 +300,7 @@ const StyledWrapper = styled.div`
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.blue8};
+      outline: 2px solid ${({ theme }) => theme.colors.accentBorder};
       outline-offset: 2px;
       border-radius: 999px;
     }
@@ -309,26 +309,26 @@ const StyledWrapper = styled.div`
   .desktopList button .name {
     font-size: 0.84rem;
     font-weight: 610;
-    color: ${({ theme }) => theme.colors.gray11};
+    color: ${({ theme }) => theme.colors.gray10};
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .desktopList button[data-active="true"] .name {
-    color: ${({ theme }) => theme.colors.blue11};
+    color: ${({ theme }) => theme.colors.accentLink};
     font-weight: 700;
     text-decoration: none;
   }
 
   .desktopList button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: ${({ theme }) => theme.colors.gray8};
     font-variant-numeric: tabular-nums;
   }
 
   .desktopList button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.accentLink};
   }
 
   .chipRail {
@@ -387,7 +387,7 @@ const StyledWrapper = styled.div`
       position: absolute;
       inset: 5px 0;
       border-radius: 999px;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      border: 1px solid ${({ theme }) => theme.colors.gray5};
       background: ${({ theme }) => theme.colors.gray1};
       transition: all 0.125s ease-in;
       z-index: 0;
@@ -402,16 +402,16 @@ const StyledWrapper = styled.div`
     }
 
     &[data-active="true"] {
-      color: ${({ theme }) => theme.colors.blue11};
+      color: ${({ theme }) => theme.colors.accentLink};
 
       &::after {
-        border-color: ${({ theme }) => theme.colors.blue8};
+        border-color: ${({ theme }) => theme.colors.accentBorder};
         background: ${({ theme }) => theme.colors.gray2};
       }
     }
 
     &:focus-visible {
-      outline: 2px solid ${({ theme }) => theme.colors.blue8};
+      outline: 2px solid ${({ theme }) => theme.colors.accentBorder};
       outline-offset: 1px;
     }
 
@@ -428,11 +428,11 @@ const StyledWrapper = styled.div`
 
   .chipRail button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray9};
+    color: ${({ theme }) => theme.colors.gray8};
   }
 
   .chipRail button[data-active="true"] .count {
-    color: ${({ theme }) => theme.colors.blue10};
+    color: ${({ theme }) => theme.colors.accentLink};
   }
 
   .chipRail .chipToggle {

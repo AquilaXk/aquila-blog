@@ -3,9 +3,22 @@ import React from "react"
 import { ThemeProvider } from "src/layouts/RootLayout/ThemeProvider"
 
 const preview: Preview = {
+  globalTypes: {
+    scheme: {
+      name: "Theme",
+      defaultValue: "dark",
+      toolbar: {
+        icon: "mirror",
+        items: [
+          { value: "dark", title: "Dark" },
+          { value: "light", title: "Light" },
+        ],
+      },
+    },
+  },
   decorators: [
-    (Story) => (
-      <ThemeProvider scheme="dark">
+    (Story, context) => (
+      <ThemeProvider scheme={context.globals.scheme === "light" ? "light" : "dark"}>
         <div style={{ width: "100%", minHeight: "100vh", padding: "2rem" }}>
           <Story />
         </div>

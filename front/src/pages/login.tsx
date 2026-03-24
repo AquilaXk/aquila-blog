@@ -272,14 +272,17 @@ const NaverField = styled.div`
   position: relative;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
   min-height: 76px;
   padding: 1.55rem 0.92rem 0.48rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 1px 0 rgba(15, 23, 42, 0.03)" : "none"};
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 
   &[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.gray7};
-    box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.1);
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "0 0 0 2px rgba(148, 163, 184, 0.12)" : "0 0 0 2px rgba(148, 163, 184, 0.1)"};
   }
 `
 
@@ -346,7 +349,7 @@ const GhostIconButton = styled.button`
   padding: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : theme.colors.gray2)};
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.72rem;
   display: inline-flex;
@@ -505,8 +508,8 @@ const IpSecurityInfoButton = styled.button`
   cursor: pointer;
 
   &:hover {
-    color: ${({ theme }) => theme.colors.blue10};
-    text-decoration-color: ${({ theme }) => theme.colors.blue8};
+    color: ${({ theme }) => theme.colors.accentLink};
+    text-decoration-color: ${({ theme }) => theme.colors.accentBorder};
   }
 `
 
@@ -518,7 +521,9 @@ const PrimaryButton = styled.button`
   color: #fff;
   font-weight: 700;
   cursor: pointer;
-  transition: filter 0.16s ease;
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 10px 22px rgba(18, 184, 134, 0.18)" : "none"};
+  transition: filter 0.16s ease, box-shadow 0.16s ease;
 
   &:hover:not(:disabled) {
     filter: brightness(1.06);
@@ -533,9 +538,9 @@ const PrimaryButton = styled.button`
 const ErrorText = styled.p`
   margin: 0;
   border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.red7};
-  background: ${({ theme }) => theme.colors.red3};
-  color: ${({ theme }) => theme.colors.red11};
+  border: 1px solid ${({ theme }) => theme.colors.statusDangerBorder};
+  background: ${({ theme }) => theme.colors.statusDangerSurface};
+  color: ${({ theme }) => theme.colors.statusDangerText};
   padding: 0.82rem 0.9rem;
   font-size: 0.9rem;
   line-height: 1.55;
@@ -544,9 +549,9 @@ const ErrorText = styled.p`
 const SuccessText = styled.p`
   margin: 0;
   border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.green7};
-  background: ${({ theme }) => theme.colors.green3};
-  color: ${({ theme }) => theme.colors.green11};
+  border: 1px solid ${({ theme }) => theme.colors.statusSuccessBorder};
+  background: ${({ theme }) => theme.colors.statusSuccessSurface};
+  color: ${({ theme }) => theme.colors.statusSuccessText};
   padding: 0.82rem 0.9rem;
   font-size: 0.87rem;
   line-height: 1.65;

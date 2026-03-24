@@ -5,10 +5,10 @@ import { pretendard } from "src/assets"
 
 export const Global = () => {
   const theme = useTheme()
-  const bodyBackgroundColor = theme.scheme === "light" ? "#f5f7fa" : theme.colors.gray1
+  const bodyBackgroundColor = theme.scheme === "light" ? "#f3f5f8" : theme.colors.gray1
   const bodyBackgroundImage =
     theme.scheme === "light"
-      ? "radial-gradient(circle at 18% -12%, rgba(37, 99, 235, 0.045), transparent 28%), radial-gradient(circle at 88% 0%, rgba(148, 163, 184, 0.08), transparent 24%)"
+      ? "radial-gradient(circle at 18% -12%, rgba(37, 99, 235, 0.025), transparent 26%), radial-gradient(circle at 88% 0%, rgba(148, 163, 184, 0.04), transparent 22%)"
       : "radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.08), transparent 38%)"
 
   return (

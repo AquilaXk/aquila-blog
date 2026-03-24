@@ -2,13 +2,11 @@ import {
   startTransition,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
 import styled from "@emotion/styled"
-import { uiTokens } from "@shared/ui-tokens"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
 import SearchInput from "./SearchInput"
 import PinnedPosts from "./PostList/PinnedPosts"
@@ -21,15 +19,14 @@ import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { type ExplorePostsPage } from "src/apis/backend/posts"
 import type { TPost } from "src/types"
+import {
+  FEED_TAG_RAIL_DESKTOP_MIN_PX,
+  FEED_TAG_RAIL_WIDTH_PX,
+} from "./feedUiTokens"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-const FEED_TAG_RAIL_DESKTOP_MIN_PX = uiTokens.feed.rail.desktopMinWidthPx
-const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = uiTokens.feed.rail.offsetAnchorPx
-const FEED_TAG_RAIL_OFFSET_MAX_PX = uiTokens.feed.rail.offsetMaxPx
-const FEED_TAG_RAIL_OFFSET_MIN_PX = uiTokens.feed.rail.offsetMinPx
-const FEED_TAG_RAIL_WIDTH_PX = uiTokens.feed.rail.widthPx
-const FEED_TAG_RAIL_SAFE_GAP_PX = 12
+const FEED_TAG_RAIL_GAP_PX = 16
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
@@ -39,8 +36,6 @@ const FEED_EXPLORER_SNAPSHOT_MAX_PAGES = 4
 const FEED_EXPLORER_SNAPSHOT_MAX_BYTES = 260_000
 const FEED_EXPLORER_RESTORE_MAX_KEYS = 4
 const FEED_EXPLORER_IDLE_REVALIDATE_TIMEOUT_MS = 1200
-const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
-
 type FeedExplorerRestoreState = {
   q: string
   tag: string
@@ -391,8 +386,6 @@ const FeedExplorer = () => {
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
-  const feedBodyRef = useRef<HTMLElement | null>(null)
-  const tagColumnRef = useRef<HTMLElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
   const restoreQueryPagesRef = useRef<FeedExplorerSnapshotPage[] | null>(null)
   const hasHydratedQuerySnapshotRef = useRef(false)
@@ -684,74 +677,6 @@ const FeedExplorer = () => {
     return () => observer.disconnect()
   }, [])
 
-  useIsomorphicLayoutEffect(() => {
-    if (typeof window === "undefined") return
-
-    let rafId = 0
-    const syncRailOverlap = () => {
-      const feedBody = feedBodyRef.current
-      const tagColumn = tagColumnRef.current
-      if (!feedBody || !tagColumn) return
-
-      if (window.innerWidth < FEED_TAG_RAIL_DESKTOP_MIN_PX) {
-        feedBody.style.setProperty("--feed-tag-rail-overlap", "0px")
-        feedBody.dataset.railCollapsed = "false"
-        return
-      }
-
-      const feedRect = feedBody.getBoundingClientRect()
-      const railRect = tagColumn.getBoundingClientRect()
-      const overlap = Math.max(
-        0,
-        Math.ceil(railRect.right - feedRect.left + FEED_TAG_RAIL_SAFE_GAP_PX)
-      )
-      feedBody.dataset.railCollapsed = "false"
-      feedBody.style.setProperty("--feed-tag-rail-overlap", `${overlap}px`)
-    }
-
-    const scheduleSync = () => {
-      window.cancelAnimationFrame(rafId)
-      rafId = window.requestAnimationFrame(syncRailOverlap)
-    }
-
-    scheduleSync()
-    window.requestAnimationFrame(() => {
-      scheduleSync()
-    })
-    window.addEventListener("resize", scheduleSync, { passive: true })
-    window.addEventListener("orientationchange", scheduleSync)
-    window.addEventListener("load", scheduleSync)
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleSync) : null
-    if (resizeObserver) {
-      if (feedBodyRef.current) resizeObserver.observe(feedBodyRef.current)
-      if (tagColumnRef.current) resizeObserver.observe(tagColumnRef.current)
-    }
-
-    const fontSet = document.fonts
-    const handleFontLoadingDone = () => scheduleSync()
-    if (fontSet) {
-      if (typeof fontSet.addEventListener === "function") {
-        fontSet.addEventListener("loadingdone", handleFontLoadingDone)
-      }
-      void fontSet.ready.then(() => {
-        scheduleSync()
-      }).catch(() => {})
-    }
-
-    return () => {
-      window.cancelAnimationFrame(rafId)
-      window.removeEventListener("resize", scheduleSync)
-      window.removeEventListener("orientationchange", scheduleSync)
-      window.removeEventListener("load", scheduleSync)
-      if (fontSet && typeof fontSet.removeEventListener === "function") {
-        fontSet.removeEventListener("loadingdone", handleFontLoadingDone)
-      }
-      resizeObserver?.disconnect()
-    }
-  }, [])
-
   const hasFilter = Boolean(normalizedQuery || currentTag)
   const resultCount = pinnedPosts.length + regularPosts.length
   const hasQueryFilter = normalizedQuery.length > 0
@@ -784,8 +709,8 @@ const FeedExplorer = () => {
           onCompositionEnd={() => setIsComposing(false)}
         />
       </ExplorerCard>
-      <FeedBody ref={feedBodyRef} data-sticky-rail-safe="true">
-        <aside ref={tagColumnRef} className="tagColumn">
+      <FeedBody data-sticky-rail-safe="true">
+        <aside className="tagColumn">
           <TagList />
         </aside>
         <section className="postColumn">
@@ -838,55 +763,36 @@ const ExplorerCard = styled.section`
 
 const FeedBody = styled.section`
   --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
-  --feed-tag-rail-left: ${FEED_TAG_RAIL_OFFSET_MIN_PX}px;
-  --feed-tag-rail-safe-gap: 0.8rem;
-  --feed-tag-rail-overlap: 0px;
   min-width: 0;
-  position: relative;
   overflow: visible;
 
   .tagColumn {
     min-width: 0;
+    display: block;
   }
 
   .postColumn {
     min-width: 0;
+    margin-left: 0;
   }
 
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-    .tagColumn {
-      position: absolute;
-      top: 0;
-      z-index: 1;
-    }
-  }
-
-  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-    --feed-tag-rail-left: clamp(
-      ${FEED_TAG_RAIL_OFFSET_MIN_PX}px,
-      calc(${FEED_TAG_RAIL_OFFSET_ANCHOR_PX}px - 50vw),
-      ${FEED_TAG_RAIL_OFFSET_MAX_PX}px
-    );
-    --feed-tag-rail-overlap: 0px;
+    display: grid;
+    grid-template-columns: minmax(0, var(--feed-tag-rail-width)) minmax(0, 1fr);
+    align-items: start;
+    column-gap: ${FEED_TAG_RAIL_GAP_PX}px;
 
     .tagColumn {
-      /*
-       * Velog-like vertical rail exposure:
-       * - starts at the desktop wide tier (>=1520)
-       * - keeps rail inside viewport without clipping on first visible range
-       * - converges to fixed -216px offset on wider screens
-       */
-      left: var(--feed-tag-rail-left);
-      width: var(--feed-tag-rail-width);
-      min-width: var(--feed-tag-rail-width);
+      width: 100%;
+      min-width: 0;
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
-      transition: opacity 0.14s ease-in;
+      transition: opacity 0.125s ease-in;
     }
 
     .postColumn {
-      margin-left: var(--feed-tag-rail-overlap);
+      margin-left: 0;
     }
   }
 `

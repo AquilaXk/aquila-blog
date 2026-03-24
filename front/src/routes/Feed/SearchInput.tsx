@@ -1,15 +1,15 @@
 import styled from "@emotion/styled"
-import { uiTokens } from "@shared/ui-tokens"
 import React, { InputHTMLAttributes, Ref } from "react"
 import AppIcon from "src/components/icons/AppIcon"
+import {
+  FEED_SEARCH_FIELD_MIN_HEIGHT_PX,
+  FEED_TAG_RAIL_CHIP_MAX_PX,
+  MOBILE_TOUCH_TARGET_MIN_PX,
+} from "./feedUiTokens"
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
   inputRef?: Ref<HTMLInputElement>
 }
-
-const FEED_SEARCH_FIELD_MIN_HEIGHT_PX = uiTokens.feed.searchFieldMinHeightPx
-const FEED_TAG_RAIL_CHIP_MAX_PX = uiTokens.feed.rail.chipMaxWidthPx
-const MOBILE_TOUCH_TARGET_MIN_PX = uiTokens.touch.mobileMinTargetPx
 
 const SearchInput: React.FC<Props> = ({ inputRef, ...props }) => {
   const inputId = props.id || "feed-search-input"

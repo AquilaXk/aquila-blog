@@ -108,6 +108,8 @@ const buildMemberRevisionKey = (member: MemberMe) =>
     member.profileBio || "",
     member.homeIntroTitle || "",
     member.homeIntroDescription || "",
+    JSON.stringify(resolveServiceLinks(member)),
+    JSON.stringify(resolveContactLinks(member)),
   ].join("|")
 
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
@@ -248,6 +250,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setServiceLinksInput(resolveServiceLinks(member))
     setContactLinksInput(resolveContactLinks(member))
     setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
+    lastSyncedRevisionRef.current = buildMemberRevisionKey(member)
   }, [queryClient, setMe])
 
   const refreshAdminProfile = useCallback(async (memberId: number, fallback?: MemberMe) => {
@@ -268,7 +271,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (lastSyncedRevisionRef.current === nextRevision) return
 
     syncProfileState(sessionMember)
-    lastSyncedRevisionRef.current = nextRevision
   }, [authStatus, sessionMember, syncProfileState])
 
   useEffect(() => {
@@ -918,31 +920,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     sessionMember,
   ])
 
-  if (!sessionMember) return null
-
-  const profileSrc = profileImgInputUrl.trim()
-  const displayName = sessionMember.nickname || sessionMember.username || "관리자"
-  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
-  const profileUpdatedText = sessionMember.modifiedAt
-    ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
-    : "확인 전"
-
-  const handleRefreshStoredProfile = async () => {
-    if (!sessionMember?.id) return
-    try {
-      setLoadingKey("refresh")
-      setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
-      const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
-      if (refreshed) {
-        setProfileNotice({ tone: "success", text: "현재 저장값을 다시 불러왔습니다." })
-      }
-    } finally {
-      setLoadingKey("")
-    }
-  }
-
   useEffect(() => {
-    if (typeof window === "undefined" || !hasUnsavedChanges) return
+    if (typeof window === "undefined" || !sessionMember || !hasUnsavedChanges) return
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
@@ -967,7 +946,30 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
       router.events.off("routeChangeStart", handleRouteChangeStart)
     }
-  }, [hasUnsavedChanges, router])
+  }, [hasUnsavedChanges, router, sessionMember])
+
+  if (!sessionMember) return null
+
+  const profileSrc = profileImgInputUrl.trim()
+  const displayName = sessionMember.nickname || sessionMember.username || "관리자"
+  const displayNameInitial = displayName.slice(0, 2).toUpperCase()
+  const profileUpdatedText = sessionMember.modifiedAt
+    ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
+    : "확인 전"
+
+  const handleRefreshStoredProfile = async () => {
+    if (!sessionMember?.id) return
+    try {
+      setLoadingKey("refresh")
+      setProfileNotice({ tone: "loading", text: "현재 저장값을 다시 불러오는 중입니다..." })
+      const refreshed = await refreshAdminProfile(sessionMember.id, sessionMember)
+      if (refreshed) {
+        setProfileNotice({ tone: "success", text: "현재 저장값을 다시 불러왔습니다." })
+      }
+    } finally {
+      setLoadingKey("")
+    }
+  }
 
   return (
     <Main>

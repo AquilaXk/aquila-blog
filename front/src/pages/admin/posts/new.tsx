@@ -1925,6 +1925,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   ])
 
   useEffect(() => {
+    if (!isPublishModalOpen) return
+    if (!safePreviewThumbnail || isPreviewThumbnailError) return
+    if (!previewThumbFrameRef.current) return
+
+    applyPreviewThumbStyle(previewThumbTransformRef.current)
+  }, [applyPreviewThumbStyle, isPreviewThumbnailError, isPublishModalOpen, safePreviewThumbnail])
+
+  useEffect(() => {
     if (safePreviewThumbnail && !isPreviewThumbnailError) return
     previewThumbDragRef.current = null
     previewThumbPinchRef.current = null

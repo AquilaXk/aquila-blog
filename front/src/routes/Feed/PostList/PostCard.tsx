@@ -40,7 +40,7 @@ const MAX_PREFETCH_QUEUE_SIZE_MID_MEMORY = 12
 const MAX_PREFETCH_QUEUE_SIZE_LOW_MEMORY = 8
 const MAX_PREFETCHED_PATHS = 256
 const POST_CARD_THUMBNAIL_SIZES =
-  "(min-width: 1520px) 420px, (min-width: 1057px) 368px, (min-width: 768px) 46vw, 94vw"
+  "(min-width: 1520px) 420px, (min-width: 1201px) 320px, (min-width: 1057px) 368px, (min-width: 768px) 46vw, 94vw"
 const prefetchedPostPathLRU = new Map<string, true>()
 const queuedPrefetchListeners = new Map<string, Array<(success: boolean) => void>>()
 const pendingPrefetchPaths: string[] = []
@@ -413,9 +413,6 @@ const StyledWrapper = styled(Link)`
     max-width: 100%;
     min-width: 0;
     height: 100%;
-    content-visibility: auto;
-    /* Prevent mobile inline-size overflow while keeping first-paint block-size hint. */
-    contain-intrinsic-size: 0 420px;
     display: flex;
     flex-direction: column;
     border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
@@ -427,7 +424,7 @@ const StyledWrapper = styled(Link)`
       position: relative;
       width: 100%;
       max-width: 100%;
-      aspect-ratio: 1.94 / 1;
+      aspect-ratio: 1.92 / 1;
       background-color: ${({ theme }) => theme.colors.gray4};
       overflow: hidden;
       isolation: isolate;
@@ -631,6 +628,10 @@ const StyledWrapper = styled(Link)`
       > .content {
         padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
 
+        > header h2 {
+          -webkit-line-clamp: 2;
+        }
+
         > .summary p {
           -webkit-line-clamp: 3;
         }
@@ -649,34 +650,42 @@ const StyledWrapper = styled(Link)`
   }
 
   &[data-layout="regular"] {
-    @media (min-width: 1201px) and (max-width: 1519px) {
+    @media (min-width: 1201px) {
       article {
         > .content {
           padding: 0.9rem 0.94rem 0.82rem;
 
           > header h2 {
-            font-size: 1.08rem;
-            line-height: 1.34;
+            font-size: 1.04rem;
+            line-height: 1.36;
+            -webkit-line-clamp: 1;
           }
 
           > .summary {
-            margin-top: 0.52rem;
-            height: 4.25rem;
+            margin-top: 0.44rem;
+            height: 3.95rem;
 
             p {
-              font-size: 0.93rem;
-              line-height: 1.52;
+              font-size: 0.9rem;
+              line-height: 1.5;
             }
           }
 
           > .meta {
-            margin-top: 0.7rem;
-            padding-bottom: 0.95rem;
+            flex-wrap: nowrap;
+            margin-top: 0.64rem;
+            padding-bottom: 0.84rem;
+            line-height: 1.45;
+            min-width: 0;
+
+            .comment {
+              white-space: nowrap;
+            }
           }
 
           > .footer {
             margin-top: 0;
-            padding-top: 0.58rem;
+            padding-top: 0.56rem;
           }
         }
       }

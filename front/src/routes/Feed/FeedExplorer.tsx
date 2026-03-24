@@ -804,7 +804,6 @@ const FeedBody = styled.section`
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
-      transition: opacity 0.125s ease-in;
     }
 
     .postColumn {

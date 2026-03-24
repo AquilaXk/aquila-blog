@@ -113,14 +113,14 @@ const RootLayout = ({ children }: Props) => {
       {/* {metaConfig.type !== "Paper" && <Header />} */}
       <Header fullWidth={false} />
       <RouteProgress data-busy={isNavigating} aria-hidden="true" />
-      <StyledMain>{children}</StyledMain>
+      <StyledMain $isFeedRoute={router.pathname === "/"}>{children}</StyledMain>
     </ThemeProvider>
   )
 }
 
 export default RootLayout
 
-const StyledMain = styled.main`
+const StyledMain = styled.main<{ $isFeedRoute: boolean }>`
   margin: 0 auto;
   box-sizing: border-box;
   width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
@@ -130,6 +130,15 @@ const StyledMain = styled.main`
   @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
     width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);
   }
+
+  ${({ $isFeedRoute }) =>
+    $isFeedRoute
+      ? `
+  @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: 1201px) {
+    width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
+  }
+`
+      : ""}
 
   @media (max-width: ${FLUID_LAYOUT_MAX_PX}px) {
     width: 100%;

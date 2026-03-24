@@ -399,7 +399,7 @@ const StyledWrapper = styled.div`
 
     &::before {
       width: 100%;
-      aspect-ratio: 1.94 / 1;
+      aspect-ratio: 1.92 / 1;
     }
 
     &::after {

@@ -1536,33 +1536,36 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     frame.style.setProperty("--preview-thumb-top", `${topRatio * 100}%`)
   }, [])
 
+  const commitPreviewThumbTransform = useCallback((next: ThumbnailTransformState) => {
+    const zoom = clampThumbnailZoom(next.zoom)
+    const clampedFocus = clampThumbnailFocusBySource({
+      focusX: next.focusX,
+      focusY: next.focusY,
+      zoom,
+      sourceSize: previewThumbSourceSizeRef.current,
+    })
+    const normalized: ThumbnailTransformState = {
+      focusX: clampedFocus.focusX,
+      focusY: clampedFocus.focusY,
+      zoom,
+    }
+
+    previewThumbTransformRef.current = normalized
+    applyPreviewThumbStyle(normalized)
+    setPostThumbnailFocusX((prev) => (Math.abs(prev - normalized.focusX) > 0.0001 ? normalized.focusX : prev))
+    setPostThumbnailFocusY((prev) => (Math.abs(prev - normalized.focusY) > 0.0001 ? normalized.focusY : prev))
+    setPostThumbnailZoom((prev) => (Math.abs(prev - normalized.zoom) > 0.0001 ? normalized.zoom : prev))
+  }, [applyPreviewThumbStyle])
+
   const schedulePreviewThumbTransform = useCallback((next: ThumbnailTransformState) => {
     previewThumbTransformRef.current = next
     if (previewThumbTransformRafRef.current !== null) return
 
     previewThumbTransformRafRef.current = window.requestAnimationFrame(() => {
       previewThumbTransformRafRef.current = null
-      const current = previewThumbTransformRef.current
-      const zoom = clampThumbnailZoom(current.zoom)
-      const clampedFocus = clampThumbnailFocusBySource({
-        focusX: current.focusX,
-        focusY: current.focusY,
-        zoom,
-        sourceSize: previewThumbSourceSizeRef.current,
-      })
-      const normalized: ThumbnailTransformState = {
-        focusX: clampedFocus.focusX,
-        focusY: clampedFocus.focusY,
-        zoom,
-      }
-
-      previewThumbTransformRef.current = normalized
-      applyPreviewThumbStyle(normalized)
-      setPostThumbnailFocusX((prev) => (Math.abs(prev - normalized.focusX) > 0.0001 ? normalized.focusX : prev))
-      setPostThumbnailFocusY((prev) => (Math.abs(prev - normalized.focusY) > 0.0001 ? normalized.focusY : prev))
-      setPostThumbnailZoom((prev) => (Math.abs(prev - normalized.zoom) > 0.0001 ? normalized.zoom : prev))
+      commitPreviewThumbTransform(previewThumbTransformRef.current)
     })
-  }, [applyPreviewThumbStyle])
+  }, [commitPreviewThumbTransform])
 
   const computeAnchoredThumbnailTransform = useCallback(
     (
@@ -1812,28 +1815,30 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         if (previewThumbSourceSeqRef.current !== nextSeq) return
         previewThumbSourceSizeRef.current = sourceSize
         setPreviewThumbSourceSize(sourceSize)
+        commitPreviewThumbTransform(previewThumbTransformRef.current)
       })
       .catch(() => {
         if (previewThumbSourceSeqRef.current !== nextSeq) return
         previewThumbSourceSizeRef.current = DEFAULT_THUMBNAIL_SOURCE_SIZE
         setPreviewThumbSourceSize(DEFAULT_THUMBNAIL_SOURCE_SIZE)
+        commitPreviewThumbTransform(previewThumbTransformRef.current)
       })
-  }, [isPreviewThumbnailError, safePreviewThumbnail])
+  }, [commitPreviewThumbTransform, isPreviewThumbnailError, safePreviewThumbnail])
 
   useEffect(() => {
     if (!safePreviewThumbnail || isPreviewThumbnailError) return
-    schedulePreviewThumbTransform({
+    commitPreviewThumbTransform({
       focusX: postThumbnailFocusX,
       focusY: postThumbnailFocusY,
       zoom: postThumbnailZoom,
     })
   }, [
+    commitPreviewThumbTransform,
     isPreviewThumbnailError,
     postThumbnailFocusX,
     postThumbnailFocusY,
     postThumbnailZoom,
     safePreviewThumbnail,
-    schedulePreviewThumbTransform,
   ])
 
   useEffect(() => {
@@ -4739,7 +4744,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           step={0.01}
                           value={postThumbnailZoom}
                           onChange={(e) =>
-                            schedulePreviewThumbTransform({
+                            commitPreviewThumbTransform({
                               ...previewThumbTransformRef.current,
                               zoom: clampThumbnailZoom(Number(e.target.value)),
                             })
@@ -4749,7 +4754,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         <Button
                           type="button"
                           onClick={() =>
-                            schedulePreviewThumbTransform({
+                            commitPreviewThumbTransform({
                               ...previewThumbTransformRef.current,
                               zoom: DEFAULT_THUMBNAIL_ZOOM,
                             })

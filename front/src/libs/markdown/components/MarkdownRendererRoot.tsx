@@ -473,6 +473,36 @@ const MarkdownRendererRoot = styled.div`
     margin: 0;
   }
 
+  .aq-mermaid[data-mermaid-preset="github"] .aq-mermaid-stage {
+    justify-content: flex-start;
+  }
+
+  .aq-mermaid[data-mermaid-preset="github"] .aq-mermaid-stage > svg {
+    margin: 0;
+  }
+
+  .aq-mermaid-error-state {
+    border-radius: 12px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    padding: 0.82rem 0.9rem;
+  }
+
+  .aq-mermaid-error-title {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .aq-mermaid-error-code {
+    display: block;
+    white-space: pre-wrap;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.86rem;
+    line-height: 1.56;
+  }
+
   .aq-mermaid-expand-btn {
     margin: 0.45rem 0 0;
     min-height: 32px;
@@ -752,70 +782,21 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition {
     --ad-header-h: 52px;
-    --ad-accent: #10acc6;
-    --ad-header-bg: #d8e8ee;
-    --ad-body-bg: #eceff1;
-    --ad-border: #dde2e7;
-    --ad-text: #4e5e68;
-    --ad-strip-w: 8px;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='21' fill='%2310acc6'/%3E%3Crect x='22' y='19' width='4' height='14' rx='2' fill='white'/%3E%3Ccircle cx='24' cy='13' r='3' fill='white'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#38bdf8" : "#0f6fa8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.14)" : "#e9f5fb")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.06)" : "#f7fbfe")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.24)" : "#bfe0f4")};
+    --ad-text: ${({ theme }) => theme.colors.gray11};
     position: relative;
     display: block;
-    border: 0;
+    border: 1px solid var(--ad-border);
+    border-left: 8px solid var(--ad-accent);
     border-radius: 8px;
     overflow: hidden;
     padding: 0;
     margin: 0.9rem 0;
-    background: linear-gradient(
-      to right,
-      var(--ad-accent) 0 var(--ad-strip-w),
-      var(--ad-body-bg) var(--ad-strip-w) 100%
-    );
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    background: var(--ad-body-bg);
     color: var(--ad-text);
-  }
-
-  .aq-callout.aq-admonition::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    height: var(--ad-header-h);
-    background-image:
-      linear-gradient(
-        to right,
-        transparent 0 var(--ad-strip-w),
-        var(--ad-header-bg) var(--ad-strip-w) 100%
-      ),
-      linear-gradient(
-        to right,
-        transparent 0 var(--ad-strip-w),
-        var(--ad-border) var(--ad-strip-w) 100%
-      );
-    background-repeat: no-repeat;
-    background-size:
-      100% calc(100% - 1px),
-      100% 1px;
-    background-position:
-      left top,
-      left bottom;
-    z-index: 1;
-    pointer-events: none;
-  }
-
-  .aq-callout.aq-admonition::after {
-    content: "";
-    position: absolute;
-    left: var(--ad-strip-w);
-    top: 0;
-    right: 0;
-    bottom: 0;
-    border: 1px solid var(--ad-border);
-    border-left: 0;
-    border-radius: 0 8px 8px 0;
-    z-index: 0;
-    pointer-events: none;
   }
 
   .aq-callout.aq-admonition > * {
@@ -825,35 +806,38 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition .aq-callout-box-text {
     margin-left: 0;
-    padding: 64px 32px 18px 32px;
+    padding: 0 24px 18px;
     color: var(--ad-text);
   }
 
-  .aq-callout.aq-admonition .aq-callout-box-text::before {
-    content: attr(data-admonition-title);
-    position: absolute;
-    left: 58px;
-    top: calc(var(--ad-header-h) / 2);
-    transform: translateY(-50%);
-    color: var(--ad-accent);
-    font-size: 1.2rem;
-    font-weight: 600;
-    line-height: 1.1;
-    letter-spacing: 0;
+  .aq-callout.aq-admonition .aq-callout-head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: var(--ad-header-h);
+    margin: 0 -24px 14px;
+    padding: 0 24px;
+    background: var(--ad-header-bg);
+    border-bottom: 1px solid var(--ad-border);
   }
 
-  .aq-callout.aq-admonition .aq-callout-box-text::after {
-    content: "";
-    position: absolute;
-    left: 24px;
-    top: calc(var(--ad-header-h) / 2);
-    transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
-    background-image: var(--ad-icon-svg);
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
+  .aq-callout.aq-admonition .aq-callout-head[data-has-title="false"] {
+    margin-bottom: 12px;
+  }
+
+  .aq-callout.aq-admonition .aq-callout-emoji {
+    color: var(--ad-accent);
+    font-size: 1.22rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .aq-callout.aq-admonition .aq-callout-title {
+    color: var(--ad-accent);
+    font-size: 1.02rem;
+    font-weight: 700;
+    line-height: 1.32;
+    letter-spacing: -0.01em;
   }
 
   .aq-callout.aq-admonition .aq-page-icon-inline {
@@ -866,50 +850,46 @@ const MarkdownRendererRoot = styled.div`
     line-height: 1.6;
   }
 
-  .aq-callout.aq-admonition .aq-markdown-text[data-admonition-heading="true"] {
-    display: none;
-  }
-
   .aq-callout.aq-admonition-tip {
-    --ad-accent: #e08600;
-    --ad-header-bg: #ebe2d4;
-    --ad-body-bg: #ececec;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='21' fill='%23f39200'/%3E%3Cpath d='M24 10c-6 0-10 4.6-10 10.2 0 3.3 1.5 5.4 3.5 7.3 1.4 1.3 2.5 2.8 2.5 4.8h8c0-2 1.1-3.5 2.5-4.8 2-1.9 3.5-4 3.5-7.3C34 14.6 30 10 24 10z' fill='white'/%3E%3Crect x='20' y='33' width='8' height='3' rx='1.5' fill='white'/%3E%3Crect x='21' y='37' width='6' height='2.5' rx='1.25' fill='white'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#f6ad55" : "#b45309")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.15)" : "#fff1d6")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.07)" : "#fffbf3")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.26)" : "#f6d7a7")};
   }
 
   .aq-callout.aq-admonition-info {
-    --ad-accent: #1098b0;
-    --ad-header-bg: #d8e8ee;
-    --ad-body-bg: #eceff1;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='21' fill='%2310acc6'/%3E%3Crect x='22' y='19' width='4' height='14' rx='2' fill='white'/%3E%3Ccircle cx='24' cy='13' r='3' fill='white'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#38bdf8" : "#0f6fa8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.14)" : "#e9f5fb")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.06)" : "#f7fbfe")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.24)" : "#bfe0f4")};
   }
 
   .aq-callout.aq-admonition-warning {
-    --ad-accent: #c86a73;
-    --ad-header-bg: #f0dee2;
-    --ad-body-bg: #f1eaec;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpolygon points='24,4 45,41 3,41' fill='%23d96c77'/%3E%3Crect x='22' y='16' width='4' height='14' rx='2' fill='white'/%3E%3Ccircle cx='24' cy='34' r='2.5' fill='white'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#fb7185" : "#c2415c")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.15)" : "#fdf0f3")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.07)" : "#fff7f8")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.26)" : "#f2c7d0")};
   }
 
   .aq-callout.aq-admonition-outline {
-    --ad-accent: #6e94ad;
-    --ad-header-bg: #dfe8ef;
-    --ad-body-bg: #e8eef3;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='7' y='5' width='34' height='38' rx='4' fill='%236e94ad'/%3E%3Crect x='13' y='14' width='22' height='2.8' rx='1.4' fill='white'/%3E%3Crect x='13' y='21' width='22' height='2.8' rx='1.4' fill='white'/%3E%3Crect x='13' y='28' width='16' height='2.8' rx='1.4' fill='white'/%3E%3Crect x='17' y='2.5' width='14' height='6' rx='3' fill='%235b7f96'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#94a3b8" : "#64748b")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.14)" : "#eef2f6")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.06)" : "#f8fafc")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "#d7dce3")};
   }
 
   .aq-callout.aq-admonition-example {
-    --ad-accent: #2d9b56;
-    --ad-header-bg: #deefdf;
-    --ad-body-bg: #eaf4eb;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='5' y='5' width='38' height='38' rx='8' fill='%232d9b56'/%3E%3Cpath d='M14 25.5l6.2 6.3L34.5 17.5' fill='none' stroke='white' stroke-width='4.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4ade80" : "#15803d")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.14)" : "#edf8f1")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.06)" : "#f7fcf8")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.24)" : "#cfe8d9")};
   }
 
   .aq-callout.aq-admonition-summary {
-    --ad-accent: #7a6fb2;
-    --ad-header-bg: #e5e2f0;
-    --ad-body-bg: #edebf5;
-    --ad-icon-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M8 11h22v28H8z' fill='%237a6fb2'/%3E%3Cpath d='M18 8h22v28H18z' fill='%238a80c2'/%3E%3Cpath d='M23 16h12M23 22h12M23 28h8' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#818cf8" : "#5b5fc7")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(129, 140, 248, 0.14)" : "#efeffd")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(129, 140, 248, 0.06)" : "#f8f8ff")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(129, 140, 248, 0.24)" : "#d7d8f2")};
   }
 `
 

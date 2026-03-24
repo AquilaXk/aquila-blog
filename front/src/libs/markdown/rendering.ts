@@ -10,7 +10,7 @@ export type CalloutKind = "tip" | "info" | "warning" | "outline" | "example" | "
 export type MarkdownSegment =
   | { type: "markdown"; content: string }
   | { type: "toggle"; title: string; content: string }
-  | { type: "callout"; kind: CalloutKind; title: string; content: string }
+  | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string }
 
 export const markdownGuide = `### 작성 가이드
 - 코드블록: \`\`\`ts
@@ -33,6 +33,7 @@ graph TD
   ℹ️
   내용
   </aside>
+  허용 이모지 예시: 💡 ✨ / ℹ️ / ⚠️ 🚨 / 📋 📝 / ✅ / 📚 🧾
   지원 타입: TIP, INFO, WARNING, OUTLINE, EXAMPLE, SUMMARY
 - 테이블:
   | name | value |
@@ -51,29 +52,40 @@ const CALLOUT_KIND_MAP: Record<string, CalloutKind> = {
   IMPORTANT: "summary",
 }
 
-const CALLOUT_TITLE_MAP: Record<CalloutKind, string> = {
-  tip: "Tip",
-  info: "Information",
-  warning: "Warning",
-  outline: "개요",
-  example: "정답",
-  summary: "정리",
+const CALLOUT_EMOJI_BY_KIND: Record<CalloutKind, string> = {
+  tip: "💡",
+  info: "ℹ️",
+  warning: "⚠️",
+  outline: "📋",
+  example: "✅",
+  summary: "📚",
 }
 
 const CALLOUT_EMOJI_MAP: Array<{ marker: string; kind: CalloutKind }> = [
   { marker: "💡", kind: "tip" },
+  { marker: "✨", kind: "tip" },
   { marker: "ℹ️", kind: "info" },
   { marker: "ℹ", kind: "info" },
   { marker: "⚠️", kind: "warning" },
   { marker: "⚠", kind: "warning" },
+  { marker: "🚨", kind: "warning" },
+  { marker: "❗", kind: "warning" },
+  { marker: "⛔", kind: "warning" },
   { marker: "📋", kind: "outline" },
+  { marker: "📝", kind: "outline" },
+  { marker: "📌", kind: "outline" },
+  { marker: "🗒️", kind: "outline" },
   { marker: "✅", kind: "example" },
+  { marker: "✔️", kind: "example" },
+  { marker: "☑️", kind: "example" },
   { marker: "📚", kind: "summary" },
+  { marker: "🧾", kind: "summary" },
 ]
 
 type ParsedCalloutHeader = {
   kind: CalloutKind
   title: string
+  emoji: string
 }
 
 const LANGUAGE_LABEL_MAP: Record<string, string> = {
@@ -108,7 +120,7 @@ const LANGUAGE_LABEL_MAP: Record<string, string> = {
 }
 
 const MERMAID_SOURCE_PATTERN =
-  /^(%%\{|\s*(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
+  /^(%%\{|\s*(?:info|flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|c4Context|C4Context|xychart-beta)\b)/
 
 const HTML_ENTITY_MAP: Record<string, string> = {
   lt: "<",
@@ -163,7 +175,8 @@ const parseCalloutHeader = (raw: string): ParsedCalloutHeader | null => {
     const customTitle = blockquoteMatch?.[2]?.trim() || ""
     return {
       kind: mappedKind,
-      title: customTitle || CALLOUT_TITLE_MAP[mappedKind],
+      title: customTitle,
+      emoji: CALLOUT_EMOJI_BY_KIND[mappedKind],
     }
   }
 
@@ -173,7 +186,42 @@ const parseCalloutHeader = (raw: string): ParsedCalloutHeader | null => {
   const inlineTitle = line.slice(emojiMatch.marker.length).trim()
   return {
     kind: emojiMatch.kind,
-    title: inlineTitle || CALLOUT_TITLE_MAP[emojiMatch.kind],
+    title: inlineTitle,
+    emoji: CALLOUT_EMOJI_BY_KIND[emojiMatch.kind],
+  }
+}
+
+const extractPromotedCalloutTitle = (bodyLines: string[]) => {
+  const firstBodyLineIndex = bodyLines.findIndex((row) => row.trim().length > 0)
+  if (firstBodyLineIndex < 0) {
+    return { title: "", bodyLines }
+  }
+
+  const originalLine = bodyLines[firstBodyLineIndex]
+  const trimmedLine = originalLine.trim()
+  const headingMatch = trimmedLine.match(/^#{1,6}\s+(.+)$/)
+  if (headingMatch) {
+    return {
+      title: headingMatch[1]?.trim() || "",
+      bodyLines: bodyLines.filter((_, index) => index !== firstBodyLineIndex),
+    }
+  }
+
+  const boldMatch = trimmedLine.match(/^(?:[-*+]\s+)?(?:\*\*(.+?)\*\*|__(.+?)__)(.*)$/)
+  const promotedTitle = (boldMatch?.[1] || boldMatch?.[2] || "").trim()
+  if (!promotedTitle) {
+    return { title: "", bodyLines }
+  }
+
+  const remainingLine = (boldMatch?.[3] || "").trim()
+
+  const resolvedBodyLines = remainingLine
+    ? bodyLines.map((line, index) => (index === firstBodyLineIndex ? remainingLine : line))
+    : bodyLines.filter((_, index) => index !== firstBodyLineIndex)
+
+  return {
+    title: promotedTitle,
+    bodyLines: resolvedBodyLines,
   }
 }
 
@@ -181,25 +229,15 @@ const buildCalloutSegment = (
   header: ParsedCalloutHeader,
   bodyLines: string[]
 ): MarkdownSegment => {
-  const firstBodyLineIndex = bodyLines.findIndex((row) => row.trim().length > 0)
-  const firstBodyLine = firstBodyLineIndex >= 0 ? bodyLines[firstBodyLineIndex].trim() : ""
-  const standaloneTitle =
-    firstBodyLine.match(/^\*\*(.+?)\*\*$/)?.[1]?.trim() ||
-    firstBodyLine.match(/^__(.+?)__$/)?.[1]?.trim() ||
-    firstBodyLine.match(/^#{1,6}\s+(.+)$/)?.[1]?.trim() ||
-    ""
-
-  const resolvedTitle = standaloneTitle || header.title
-  const resolvedBodyLines =
-    standaloneTitle && firstBodyLineIndex >= 0
-      ? bodyLines.filter((_, index) => index !== firstBodyLineIndex)
-      : bodyLines
+  const promoted = extractPromotedCalloutTitle(bodyLines)
+  const resolvedTitle = promoted.title || header.title
 
   return {
     type: "callout",
     kind: header.kind,
     title: resolvedTitle,
-    content: resolvedBodyLines.join("\n").trim() || "내용을 입력하세요.",
+    emoji: header.emoji,
+    content: promoted.bodyLines.join("\n").trim() || "내용을 입력하세요.",
   }
 }
 
@@ -571,7 +609,8 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
           segments.push({
             type: "callout",
             kind: "info",
-            title: CALLOUT_TITLE_MAP.info,
+            title: "",
+            emoji: CALLOUT_EMOJI_BY_KIND.info,
             content: normalizedBodyLines.join("\n").trim() || "내용을 입력하세요.",
           })
         }

@@ -183,7 +183,13 @@ const MarkdownRenderer: FC<Props> = ({ content, contentHtml, disableMermaid = fa
               key={`callout-${index}`}
               className={`aq-callout aq-callout-box aq-admonition aq-admonition-${segment.kind}`}
             >
-              <div className="aq-callout-box-text" data-admonition-title={segment.title}>
+              <div className="aq-callout-box-text">
+                <div className="aq-callout-head" data-has-title={segment.title ? "true" : "false"}>
+                  <span className="aq-callout-emoji" aria-hidden="true">
+                    {segment.emoji}
+                  </span>
+                  {segment.title ? <strong className="aq-callout-title">{segment.title}</strong> : null}
+                </div>
                 {renderMarkdown(segment.content, `callout-body-${index}`, true)}
               </div>
             </div>

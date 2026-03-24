@@ -41,36 +41,6 @@ const toSafeNumber = (value: unknown) => {
   return null
 }
 
-const toMetricLabel = (name: string) => {
-  switch (name) {
-    case "CLS":
-      return "CLS"
-    case "FCP":
-      return "FCP"
-    case "INP":
-      return "INP"
-    case "LCP":
-      return "LCP"
-    case "TTFB":
-      return "TTFB"
-    default:
-      return "UNKNOWN"
-  }
-}
-
-const toRatingLabel = (rating: string) => {
-  switch (rating) {
-    case "good":
-      return "good"
-    case "needs-improvement":
-      return "needs-improvement"
-    case "poor":
-      return "poor"
-    default:
-      return "unknown"
-  }
-}
-
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST")
@@ -90,8 +60,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   toSafeString(rawAttribution.eventType, 48)
   toSafeString(rawAttribution.resourceUrl, 240)
   const rawContext = (body.context || {}) as RumContext
-  const detailSection = toSafeString(rawContext.detailSection, 24)
-  const scrollY = toSafeNumber(rawContext.scrollY)
+  toSafeString(rawContext.detailSection, 24)
+  toSafeNumber(rawContext.scrollY)
   toSafeString(body.id, 120)
   toSafeString(body.path, 260)
 
@@ -101,19 +71,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   const normalizedRating = ALLOWED_RATINGS.has(rating) ? rating : "unknown"
   if (!LOG_SLOW_ONLY || normalizedRating !== "good") {
-    const metricLabel = toMetricLabel(name)
-    const ratingLabel = toRatingLabel(normalizedRating)
-    if (detailSection) {
-      console.info(
-        "[rum:vitals] metric=%s rating=%s section=%s scrollY=%s",
-        metricLabel,
-        ratingLabel,
-        detailSection,
-        scrollY ?? -1
-      )
-    } else {
-      console.info("[rum:vitals] metric=%s rating=%s", metricLabel, ratingLabel)
-    }
+    console.info("[rum:vitals] slow metric observed")
   }
 
   return res.status(204).end()

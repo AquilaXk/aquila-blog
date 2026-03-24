@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
@@ -25,12 +24,22 @@ import {
   FEED_TAG_RAIL_OFFSET_MIN_PX,
   FEED_TAG_RAIL_WIDTH_PX,
 } from "./feedUiTokens"
+import {
+  TABLET_LANDSCAPE_MAX_PX,
+  TABLET_LANDSCAPE_MIN_PX,
+} from "src/layouts/RootLayout/layoutTiers"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
 const FEED_TAG_RAIL_GAP_PX = 16
+<<<<<<< ours
+const FEED_TAG_RAIL_OVERLAP_TOTAL_PX = FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX
+const FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX = 1032
+=======
 const FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX = 24
+>>>>>>> theirs
 const FEED_POST_COLUMN_MAX_WIDTH_REM = 47.75
+const FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM = 44
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
@@ -387,9 +396,11 @@ const useDebouncedValue = (value: string, pause = false) => {
 const FeedExplorer = () => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
-  const [desktopRailEnabled, setDesktopRailEnabled] = useState(false)
+<<<<<<< ours
+=======
   const [desktopRailOffsetPx, setDesktopRailOffsetPx] = useState(FEED_TAG_RAIL_OFFSET_MIN_PX)
   const [desktopRailOverlapInsetPx, setDesktopRailOverlapInsetPx] = useState(0)
+>>>>>>> theirs
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -435,7 +446,6 @@ const FeedExplorer = () => {
     enabled: router.isReady,
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
-  const feedBodyRef = useRef<HTMLElement | null>(null)
   const lastLoadMoreAtRef = useRef(0)
   const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
@@ -449,7 +459,9 @@ const FeedExplorer = () => {
     isFetchingNextPageRef.current = isFetchingNextPage
   }, [isFetchingNextPage])
 
-  useEffect(() => {
+<<<<<<< ours
+=======
+  useLayoutEffect(() => {
     if (typeof window === "undefined") return
     const feedBody = feedBodyRef.current
     if (!feedBody) return
@@ -463,7 +475,6 @@ const FeedExplorer = () => {
 
     const syncDesktopRailVisibility = () => {
       if (window.innerWidth < FEED_TAG_RAIL_DESKTOP_MIN_PX) {
-        setDesktopRailEnabled(false)
         setDesktopRailOffsetPx(FEED_TAG_RAIL_OFFSET_MIN_PX)
         setDesktopRailOverlapInsetPx(0)
         return
@@ -474,7 +485,6 @@ const FeedExplorer = () => {
       const nextOffset = Math.min(0, Math.max(FEED_TAG_RAIL_OFFSET_MIN_PX, minOffsetToStayVisible))
       const nextOverlapInset = Math.max(0, FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX + nextOffset)
 
-      setDesktopRailEnabled(true)
       setDesktopRailOffsetPx((prev) =>
         Math.abs(prev - nextOffset) < 1 ? prev : nextOffset
       )
@@ -549,6 +559,7 @@ const FeedExplorer = () => {
     }
   }, [])
 
+>>>>>>> theirs
   useEffect(() => {
     restoreSnapshotRef.current = {
       q,
@@ -789,6 +800,13 @@ const FeedExplorer = () => {
   const resultCount = pinnedPosts.length + regularPosts.length
   const hasQueryFilter = normalizedQuery.length > 0
   const hasTagFilter = Boolean(currentTag)
+  const filterSummary = useMemo(() => {
+    if (!hasFilter) return ""
+    const parts: string[] = []
+    if (hasQueryFilter) parts.push(`검색 "${normalizedQuery}"`)
+    if (hasTagFilter && currentTag) parts.push(`태그 "${currentTag}"`)
+    return parts.join(" · ")
+  }, [currentTag, hasFilter, hasQueryFilter, hasTagFilter, normalizedQuery])
   const explorerRailStyle = useMemo(
     () =>
       ({
@@ -823,7 +841,7 @@ const FeedExplorer = () => {
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard data-desktop-rail={desktopRailEnabled} style={explorerRailStyle}>
+      <ExplorerCard style={explorerRailStyle}>
         <div className="searchSlot">
           <SearchInput
             inputRef={searchInputRef}
@@ -834,26 +852,28 @@ const FeedExplorer = () => {
           />
         </div>
       </ExplorerCard>
+<<<<<<< ours
+      <FeedBody data-sticky-rail-safe="true">
+=======
       <FeedBody
         ref={feedBodyRef}
-        data-desktop-rail={desktopRailEnabled}
         data-sticky-rail-safe="true"
         style={feedBodyRailStyle}
       >
+>>>>>>> theirs
         <aside className="tagColumn">
-          <TagList desktopRailEnabled={desktopRailEnabled} />
+          <TagList />
         </aside>
         <section className="postColumn">
           <FilterContextBar data-visible={hasFilter}>
             <div className="contextMain">
-              <span className="contextLabel">피드</span>
+              <span className="contextLabel">{hasFilter ? "필터" : "피드"}</span>
               <strong className="contextCount">{resultCount}개</strong>
-              {hasQueryFilter && <span className="chip">검색: {normalizedQuery}</span>}
-              {hasTagFilter && <span className="chip">태그: {currentTag}</span>}
+              {hasFilter && <span className="filterSummary">{filterSummary}</span>}
             </div>
             {hasFilter && (
               <button type="button" className="resetButton" onClick={handleClearFilters}>
-                조건 초기화
+                초기화
               </button>
             )}
           </FilterContextBar>
@@ -901,6 +921,18 @@ const ExplorerCard = styled.section`
     }
   }
 
+  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    --feed-tag-rail-left-px: clamp(
+      ${FEED_TAG_RAIL_OFFSET_MIN_PX}px,
+      calc((${FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX}px - 100vw) / 2),
+      0px
+    );
+    --feed-tag-rail-overlap-px: max(
+      0px,
+      calc(${FEED_TAG_RAIL_OVERLAP_TOTAL_PX}px + var(--feed-tag-rail-left-px))
+    );
+  }
+
   @media (max-width: 768px) {
     margin-bottom: 0.38rem;
   }
@@ -914,6 +946,10 @@ const FeedBody = styled.section`
   min-width: 0;
   overflow: visible;
 
+  @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
+    --feed-post-column-max-width: ${FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM}rem;
+  }
+
   .tagColumn {
     min-width: 0;
     display: block;
@@ -926,23 +962,28 @@ const FeedBody = styled.section`
   }
 
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    --feed-tag-rail-left-px: clamp(
+      ${FEED_TAG_RAIL_OFFSET_MIN_PX}px,
+      calc((${FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX}px - 100vw) / 2),
+      0px
+    );
+    --feed-tag-rail-overlap-px: max(
+      0px,
+      calc(${FEED_TAG_RAIL_OVERLAP_TOTAL_PX}px + var(--feed-tag-rail-left-px))
+    );
     position: relative;
+    padding-left: var(--feed-tag-rail-overlap-px);
+    transition: padding-left 0.14s ease-in;
 
-    &[data-desktop-rail="true"] {
-      padding-left: var(--feed-tag-rail-overlap-px);
-      transition: padding-left 0.14s ease-in;
-
-      .tagColumn {
-        position: absolute;
-        top: 0;
-        left: var(--feed-tag-rail-left-px);
-        width: var(--feed-tag-rail-width);
-        min-width: 0;
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-      }
-
+    .tagColumn {
+      position: absolute;
+      top: 0;
+      left: var(--feed-tag-rail-left-px);
+      width: var(--feed-tag-rail-width);
+      min-width: 0;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
     }
   }
 `
@@ -978,18 +1019,11 @@ const FilterContextBar = styled.div`
     font-weight: 700;
   }
 
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.6rem;
-    padding: 0 0.56rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
-    font-weight: 620;
-    line-height: 1;
+  .filterSummary {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.79rem;
+    line-height: 1.4;
+    font-weight: 550;
     max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
@@ -998,11 +1032,11 @@ const FilterContextBar = styled.div`
 
   .resetButton {
     flex: 0 0 auto;
-    min-height: 1.9rem;
-    padding: 0 0.72rem;
+    min-height: 1.78rem;
+    padding: 0 0.62rem;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
+    background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.76rem;
     font-weight: 700;
@@ -1024,9 +1058,9 @@ const FilterContextBar = styled.div`
       font-size: 0.8rem;
     }
 
-    .chip {
-      font-size: 0.72rem;
-      min-height: 1.52rem;
+    .filterSummary {
+      font-size: 0.74rem;
+      max-width: 100%;
     }
   }
 `

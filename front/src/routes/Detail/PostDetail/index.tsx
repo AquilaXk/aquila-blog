@@ -41,6 +41,7 @@ const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
 const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1081
 const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1241
 const DETAIL_RAIL_GAP_FROM_HEADER_PX = 16
+const STICKY_BLOCKING_OVERFLOW_VALUES = new Set(["auto", "scroll", "hidden", "clip"])
 
 const getHeaderHeightFromCssVar = () => {
   if (typeof window === "undefined" || typeof document === "undefined") return 56
@@ -50,6 +51,24 @@ const getHeaderHeightFromCssVar = () => {
 }
 
 const resolveRailTopOffset = () => getHeaderHeightFromCssVar() + DETAIL_RAIL_GAP_FROM_HEADER_PX
+
+const hasStickyBlockingAncestor = (node: HTMLElement | null) => {
+  if (typeof window === "undefined" || !node) return false
+  let current = node.parentElement
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    const style = window.getComputedStyle(current)
+    if (
+      STICKY_BLOCKING_OVERFLOW_VALUES.has(style.overflowY) ||
+      STICKY_BLOCKING_OVERFLOW_VALUES.has(style.overflow)
+    ) {
+      return true
+    }
+    current = current.parentElement
+  }
+
+  return false
+}
 
 const normalizeHeadingText = (value: string): string =>
   value
@@ -122,7 +141,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const [activeTocId, setActiveTocId] = useState<string>("")
   const [showDetailedToc, setShowDetailedToc] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<"copied" | "shared" | "failed" | null>(null)
-  const [isHybridRailActive, setIsHybridRailActive] = useState(false)
+  const [leftHybridRailActive, setLeftHybridRailActive] = useState(false)
+  const [rightHybridRailActive, setRightHybridRailActive] = useState(false)
   const [engagement, setEngagement] = useState(() => ({
     likesCount: data?.likesCount ?? 0,
     hitCount: data?.hitCount ?? 0,
@@ -419,20 +439,28 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       const viewportWidth = window.innerWidth
       const leftEnabled = showFloatingLike && viewportWidth >= LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX
       const rightEnabled = showStickyToc && viewportWidth >= RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX
-      const hybridEnabled = leftEnabled || rightEnabled
+      const leftNeedsHybridFallback =
+        leftEnabled && hasStickyBlockingAncestor(leftRailRef.current)
+      const rightNeedsHybridFallback =
+        rightEnabled && hasStickyBlockingAncestor(rightRailRef.current)
 
-      setIsHybridRailActive((prev) => (prev === hybridEnabled ? prev : hybridEnabled))
+      setLeftHybridRailActive((prev) =>
+        prev === leftNeedsHybridFallback ? prev : leftNeedsHybridFallback
+      )
+      setRightHybridRailActive((prev) =>
+        prev === rightNeedsHybridFallback ? prev : rightNeedsHybridFallback
+      )
 
       applyHybridRail({
         rail: leftRailRef.current,
         inner: leftRailInnerRef.current,
-        enabled: leftEnabled,
+        enabled: leftNeedsHybridFallback,
       })
 
       applyHybridRail({
         rail: rightRailRef.current,
         inner: rightRailInnerRef.current,
-        enabled: rightEnabled,
+        enabled: rightNeedsHybridFallback,
       })
     }
 
@@ -478,7 +506,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       }
       clearInlineRailStyle(leftRailInnerNode)
       clearInlineRailStyle(rightRailInnerNode)
-      setIsHybridRailActive(false)
+      setLeftHybridRailActive(false)
+      setRightHybridRailActive(false)
     }
   }, [showFloatingLike, showStickyToc, tocItems.length])
 
@@ -709,22 +738,25 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     <StyledWrapper data-sticky-rail-safe="true">
       <div
         className="detailLayout"
-        data-hybrid-rails={isHybridRailActive}
+        data-left-hybrid={leftHybridRailActive}
+        data-right-hybrid={rightHybridRailActive}
         data-sticky-rail-safe="true"
       >
-        <aside ref={leftRailRef} className="leftRail" aria-hidden={!showFloatingLike}>
+        <aside ref={leftRailRef} className="leftRail" data-hybrid-active={leftHybridRailActive} aria-hidden={!showFloatingLike}>
           {showFloatingLike ? (
             <div ref={leftRailInnerRef} className="leftRailInner">
               <div className="floatingLikeCluster">
                 <div className="floatingLikeStat">
-                  <button
-                    type="button"
-                    className="floatingActionButton floatingLikeButton"
-                    aria-label={`좋아요 ${engagement.likesCount}`}
-                    aria-pressed={engagement.actorHasLiked}
-                    data-active={engagement.actorHasLiked}
-                    disabled={likePending}
-                    onClick={handleToggleLike}
+                <button
+                  type="button"
+                  className="floatingActionButton floatingLikeButton"
+                  title="좋아요"
+                  data-tooltip="좋아요"
+                  aria-label={`좋아요 ${engagement.likesCount}`}
+                  aria-pressed={engagement.actorHasLiked}
+                  data-active={engagement.actorHasLiked}
+                  disabled={likePending}
+                  onClick={handleToggleLike}
                   >
                     <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
                   </button>
@@ -735,14 +767,13 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 <button
                   type="button"
                   className="floatingActionButton floatingShareButton"
-                  aria-label="글 공유"
+                  title="공유 링크 복사"
+                  data-tooltip="공유 링크 복사"
+                  aria-label="공유 링크 복사"
                   onClick={handleSharePost}
                 >
-                  <AppIcon name="share" />
+                  <AppIcon name="link" />
                 </button>
-                <span className="floatingShareLabel" aria-hidden="true">
-                  공유
-                </span>
                 {shareFeedback ? (
                   <span className="floatingShareFeedback" role="status" aria-live="polite">
                     {shareFeedback === "failed"
@@ -833,7 +864,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           )}
         </article>
 
-        <aside ref={rightRailRef} className="rightRail" aria-hidden={!showStickyToc}>
+        <aside ref={rightRailRef} className="rightRail" data-hybrid-active={rightHybridRailActive} aria-hidden={!showStickyToc}>
           {showStickyToc ? (
             <nav ref={rightRailInnerRef} className="rightRailInner" aria-label="목차">
               <div className="rightRailHead">
@@ -855,6 +886,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                     <button
                       type="button"
                       data-active={activeTocId === item.id}
+                      title={item.text}
+                      aria-label={item.text}
                       onClick={() => handleTocNavigate(item.id)}
                     >
                       {item.text}
@@ -914,15 +947,15 @@ const StyledWrapper = styled.div`
     position: static;
   }
 
-  .detailLayout[data-hybrid-rails="true"] .leftRail,
-  .detailLayout[data-hybrid-rails="true"] .rightRail {
+  .detailLayout[data-left-hybrid="true"] .leftRail,
+  .detailLayout[data-right-hybrid="true"] .rightRail {
     position: relative;
     top: 0;
     align-self: stretch;
   }
 
-  .detailLayout[data-hybrid-rails="true"] .leftRailInner,
-  .detailLayout[data-hybrid-rails="true"] .rightRailInner {
+  .detailLayout[data-left-hybrid="true"] .leftRailInner,
+  .detailLayout[data-right-hybrid="true"] .rightRailInner {
     position: absolute;
     top: 0;
     left: 0;
@@ -960,6 +993,37 @@ const StyledWrapper = styled.div`
     }
   }
 
+  @media (hover: hover) and (pointer: fine) {
+    .floatingActionButton[data-tooltip] {
+      position: relative;
+    }
+
+    .floatingActionButton[data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 0.6rem);
+      top: 50%;
+      transform: translateY(-50%);
+      white-space: nowrap;
+      padding: 0.3rem 0.48rem;
+      border-radius: 8px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray2};
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.68rem;
+      line-height: 1;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    .floatingActionButton[data-tooltip]:hover::after,
+    .floatingActionButton[data-tooltip]:focus-visible::after {
+      opacity: 1;
+    }
+  }
+
   .floatingLikeButton[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.red7};
 
@@ -972,7 +1036,7 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
 
     svg {
-      font-size: 1.08rem;
+      font-size: 1.04rem;
     }
   }
 
@@ -999,15 +1063,6 @@ const StyledWrapper = styled.div`
     font-size: 0.68rem;
     line-height: 1;
     font-weight: 650;
-    color: ${({ theme }) => theme.colors.gray9};
-  }
-
-  .floatingShareLabel {
-    margin-top: -0.12rem;
-    font-size: 0.68rem;
-    line-height: 1;
-    letter-spacing: 0.01em;
-    font-weight: 640;
     color: ${({ theme }) => theme.colors.gray9};
   }
 
@@ -1084,17 +1139,22 @@ const StyledWrapper = styled.div`
       text-align: left;
       border: 0;
       border-radius: 0;
-      min-height: 35px;
-      padding: 0.32rem 0;
+      min-height: 36px;
+      padding: 0.35rem 0;
       background: transparent;
       color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.92)" : theme.colors.gray10)};
       font-size: 0.84rem;
-      line-height: 1.45;
+      line-height: 1.35;
       cursor: pointer;
-      white-space: normal;
-      overflow-wrap: anywhere;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       position: relative;
       transition: color 0.15s ease;
+    }
+
+    button:hover {
+      color: ${({ theme }) => theme.colors.gray12};
     }
 
     button::before {

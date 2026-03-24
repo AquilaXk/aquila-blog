@@ -329,12 +329,66 @@ const getRailStickySnapshot = async (page: Page) =>
     }
   })
 
+const getVisualLayoutFingerprint = async (page: Page) =>
+  page.evaluate(() => {
+    const readRect = (selector: string) => {
+      const node = document.querySelector(selector)
+      if (!node) return null
+      const rect = (node as HTMLElement).getBoundingClientRect()
+      return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    }
+
+    const isVisible = (selector: string) => {
+      const node = document.querySelector(selector) as HTMLElement | null
+      if (!node) return false
+      const style = window.getComputedStyle(node)
+      return style.display !== "none" && style.visibility !== "hidden" && Number.parseFloat(style.opacity) > 0
+    }
+
+    return {
+      route: window.location.pathname,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
+      scrollWidth: {
+        html: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+      },
+      rails: {
+        chip: isVisible(".chipRail"),
+        desktopTag: isVisible(".desktopPanel"),
+        leftReaction: isVisible(".leftRailInner"),
+        rightToc: isVisible(".rightRailInner"),
+      },
+      profileSidebarVisible: isVisible(".rt"),
+      searchRect: readRect("#feed-search-input"),
+      firstCardRect: readRect(".postColumn article"),
+      desktopTagRailRect: readRect(".desktopPanel"),
+      leftRailRect: readRect(".leftRailInner"),
+      rightRailRect: readRect(".rightRailInner"),
+    }
+  })
+
 const waitForStableHeaderAuthState = async (page: Page) => {
   await page
     .waitForSelector('.authArea:not([data-auth-state="loading"])', {
       timeout: 1200,
     })
     .catch(() => {})
+}
+
+const waitForPageReady = async (page: Page, options?: { waitAuth?: boolean }) => {
+  await page.waitForLoadState("domcontentloaded")
+  await page.waitForLoadState("networkidle", { timeout: 2500 }).catch(() => {})
+  if (options?.waitAuth !== false) {
+    await waitForStableHeaderAuthState(page)
+  }
 }
 
 const getMaxHorizontalJitter = (
@@ -355,7 +409,7 @@ test("홈 페이지 CLS(web-vitals) 예산을 통과한다", async ({ page }) =>
   await installClsObserver(page)
   await mockFeedEndpoints(page)
   await page.goto("/")
-  await page.waitForLoadState("networkidle")
+  await waitForPageReady(page)
   await page.waitForTimeout(1500)
 
   const cls = await page.evaluate(() => (window as unknown as { __aqCls?: number }).__aqCls ?? 0)
@@ -369,8 +423,7 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
 
   for (const route of refreshCheckRoutes) {
     await page.goto(route)
-    await page.waitForLoadState("networkidle")
-    await waitForStableHeaderAuthState(page)
+    await waitForPageReady(page)
     await page.waitForTimeout(300)
     const before = await getLayoutSnapshot(page)
     await page.evaluate(() => {
@@ -378,7 +431,7 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
     })
 
     await page.reload({ waitUntil: "networkidle" })
-    await waitForStableHeaderAuthState(page)
+    await waitForPageReady(page)
     await page.waitForTimeout(1000)
     const after = await getLayoutSnapshot(page)
 
@@ -405,8 +458,7 @@ test("메인 레이아웃은 desktop width-lock 구간(1057~1440)에서 1024px �
   for (const checkpoint of checkpoints) {
     await page.setViewportSize({ width: checkpoint.viewport, height: 900 })
     await page.goto("/")
-    await page.waitForLoadState("networkidle")
-    await waitForStableHeaderAuthState(page)
+    await waitForPageReady(page)
 
     const snapshot = await getWidthLockSnapshot(page)
     expect(snapshot.mainWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
@@ -415,8 +467,7 @@ test("메인 레이아웃은 desktop width-lock 구간(1057~1440)에서 1024px �
 
   await page.setViewportSize({ width: 1056, height: 900 })
   await page.goto("/")
-  await page.waitForLoadState("networkidle")
-  await waitForStableHeaderAuthState(page)
+  await waitForPageReady(page)
 
   const fluidSnapshot = await getWidthLockSnapshot(page)
   const expectedFluidWidth = Math.min(fluidSnapshot.layoutViewport, fluidSnapshot.bodyViewport)
@@ -431,24 +482,25 @@ test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안�
 
   await page.setViewportSize({ width: 1200, height: 900 })
   await page.goto("/")
-  await page.waitForLoadState("networkidle")
-  await waitForStableHeaderAuthState(page)
+  await waitForPageReady(page)
   await expect(page.locator(".chipRail")).toBeVisible()
   await expect(page.locator(".desktopPanel")).toBeHidden()
 
   await page.setViewportSize({ width: 1201, height: 900 })
   await page.reload({ waitUntil: "networkidle" })
-  await waitForStableHeaderAuthState(page)
+  await waitForPageReady(page)
   await expect(page.locator(".chipRail")).toBeHidden()
   await expect(page.locator(".desktopPanel")).toBeVisible()
-
-  const midRailRect = await page.locator(".desktopPanel").boundingBox()
-  expect(midRailRect).not.toBeNull()
-  expect((midRailRect?.x ?? -1)).toBeGreaterThanOrEqual(0)
+  await expect
+    .poll(async () => {
+      const rect = await page.locator(".desktopPanel").boundingBox()
+      return rect?.x ?? -999
+    })
+    .toBeGreaterThanOrEqual(0)
 
   await page.setViewportSize({ width: 1680, height: 900 })
   await page.reload({ waitUntil: "networkidle" })
-  await waitForStableHeaderAuthState(page)
+  await waitForPageReady(page)
   await expect(page.locator(".desktopPanel")).toBeVisible()
 
   const railRect = await page.locator(".desktopPanel").boundingBox()
@@ -469,7 +521,7 @@ test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로
 
   await page.setViewportSize({ width: 1440, height: 960 })
   await page.goto(`/posts/${postId}`)
-  await page.waitForLoadState("networkidle")
+  await waitForPageReady(page)
   await expect(page.getByText("상세 레일 스티키 회귀 점검")).toBeVisible()
   await expect(page.locator(".rightRailInner")).toBeVisible()
   await expect(page.locator(".leftRailInner")).toBeVisible()
@@ -495,6 +547,29 @@ test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로
 
   expect(Math.abs((midSnapshot.leftRail?.left ?? 0) - (deepSnapshot.leftRail?.left ?? 0))).toBeLessThanOrEqual(2)
   expect(Math.abs((midSnapshot.rightRail?.left ?? 0) - (deepSnapshot.rightRail?.left ?? 0))).toBeLessThanOrEqual(2)
+})
+
+test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지한다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+  await mockDetailRailEndpoint(page, 991)
+
+  const scenarios = [
+    { name: "home-desktop-1440", viewport: { width: 1440, height: 900 }, route: "/" },
+    { name: "home-iphone15pro-393", viewport: { width: 393, height: 852 }, route: "/" },
+    { name: "home-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/" },
+    { name: "detail-desktop-1440", viewport: { width: 1440, height: 900 }, route: "/posts/991" },
+    { name: "detail-iphone15pro-393", viewport: { width: 393, height: 852 }, route: "/posts/991" },
+    { name: "detail-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/posts/991" },
+  ] as const
+
+  for (const scenario of scenarios) {
+    await page.setViewportSize(scenario.viewport)
+    await page.goto(scenario.route)
+    await waitForPageReady(page)
+    await page.waitForTimeout(160)
+    const snapshot = await getVisualLayoutFingerprint(page)
+    expect(JSON.stringify(snapshot, null, 2)).toMatchSnapshot(`${scenario.name}.json`)
+  }
 })
 
 test("홈 피드 무한스크롤은 연속 트리거에서도 feed 호출이 폭주하지 않는다", async ({ page }) => {
@@ -556,7 +631,7 @@ test("홈 피드 무한스크롤은 연속 트리거에서도 feed 호출이 폭
   })
 
   await page.goto("/")
-  await page.waitForLoadState("networkidle")
+  await waitForPageReady(page)
 
   for (let i = 0; i < 8; i += 1) {
     await page.evaluate(() => {
@@ -645,7 +720,7 @@ test("홈 피드 긴 목록에서도 동일 page를 중복 요청하지 않는�
   })
 
   await page.goto("/")
-  await page.waitForLoadState("networkidle")
+  await waitForPageReady(page)
 
   for (let i = 0; i < 28; i += 1) {
     await page.evaluate(() => {

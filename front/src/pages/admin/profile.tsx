@@ -2,6 +2,7 @@ import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/router"
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
@@ -69,6 +70,7 @@ type ProfileImagePointerPosition = { clientX: number; clientY: number }
 
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE: ProfileImageSourceSize = { width: 1, height: 1 }
+const PROFILE_UNSAVED_CHANGES_MESSAGE = "저장하지 않은 변경 사항이 있습니다. 이 페이지를 떠날까요?"
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -179,6 +181,7 @@ const serializeComparableLinks = (
 ) => JSON.stringify(toPayloadLinks(section, items, defaultIcon))
 
 const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
+  const router = useRouter()
   const queryClient = useQueryClient()
   const { me, authStatus, setMe } = useAuthSession()
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
@@ -938,13 +941,44 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !hasUnsavedChanges) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = PROFILE_UNSAVED_CHANGES_MESSAGE
+      return PROFILE_UNSAVED_CHANGES_MESSAGE
+    }
+
+    const handleRouteChangeStart = (nextUrl: string) => {
+      if (nextUrl === router.asPath) return
+      const confirmed = window.confirm(PROFILE_UNSAVED_CHANGES_MESSAGE)
+      if (confirmed) return
+
+      router.events.emit("routeChangeError")
+      const error = new Error("Navigation aborted due to unsaved profile changes.") as Error & { cancelled?: boolean }
+      error.cancelled = true
+      throw error
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    router.events.on("routeChangeStart", handleRouteChangeStart)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      router.events.off("routeChangeStart", handleRouteChangeStart)
+    }
+  }, [hasUnsavedChanges, router])
+
   return (
     <Main>
       <HeaderCard>
         <HeaderCopy>
           <Eyebrow>Profile Studio</Eyebrow>
           <h1>관리자 프로필 관리</h1>
-          <p>관리자 1명의 프로필 카드 정보만 여기서 수정합니다.</p>
+          <p>프로필 카드와 메인 소개 문구를 한 화면에서 정리합니다.</p>
+          <HeaderStatusBadge data-dirty={hasUnsavedChanges ? "true" : "false"}>
+            {hasUnsavedChanges ? "미저장 변경 있음" : "저장 상태 최신"}
+          </HeaderStatusBadge>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/" passHref legacyBehavior>
@@ -1358,7 +1392,7 @@ const Main = styled.main`
   display: grid;
   gap: 1.1rem;
 
-  @media (max-width: 900px) {
+  @media (max-width: 760px) {
     padding-bottom: calc(9.2rem + env(safe-area-inset-bottom, 0px));
   }
 `
@@ -1390,6 +1424,26 @@ const HeaderCopy = styled.div`
   display: grid;
   gap: 0.7rem;
   max-width: 38rem;
+`
+
+const HeaderStatusBadge = styled.span`
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 0.78rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
+  font-weight: 700;
+
+  &[data-dirty="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
 `
 
 const Eyebrow = styled.span`
@@ -1493,7 +1547,7 @@ const ProfileGrid = styled.section`
   gap: 1rem;
   align-items: start;
 
-  @media (max-width: 900px) {
+  @media (max-width: 760px) {
     grid-template-columns: 1fr;
   }
 `
@@ -1520,8 +1574,9 @@ const PreviewCard = styled(PanelCard)`
   min-width: 0;
   overflow: hidden;
 
-  @media (max-width: 900px) {
+  @media (max-width: 760px) {
     position: static;
+    order: 2;
   }
 
   strong {
@@ -1586,6 +1641,10 @@ const Hint = styled.p`
 const FormCard = styled(PanelCard)`
   display: grid;
   gap: 1rem;
+
+  @media (max-width: 760px) {
+    order: 1;
+  }
 `
 
 const MetaBar = styled.div`
@@ -2085,7 +2144,7 @@ const StickySaveBar = styled.section`
     background: ${({ theme }) => theme.colors.blue2};
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 760px) {
     position: fixed;
     left: max(0.72rem, env(safe-area-inset-left, 0px));
     right: max(0.72rem, env(safe-area-inset-right, 0px));
@@ -2120,7 +2179,7 @@ const StickySaveActions = styled.div`
   flex-wrap: wrap;
   gap: 0.65rem;
 
-  @media (max-width: 900px) {
+  @media (max-width: 760px) {
     width: 100%;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

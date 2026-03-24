@@ -161,6 +161,7 @@ type NoticeState = {
 }
 type EditorMode = "create" | "edit"
 type PublishActionType = "create" | "modify" | "temp"
+type StudioSurface = "manage" | "compose"
 type MobileStudioStep = "query" | "list" | "edit" | "publish"
 type ParsedEditorMeta = {
   body: string
@@ -229,7 +230,6 @@ const LIST_SORT_OPTIONS = [
   { value: "CREATED_AT_ASC", label: "오래된순" },
 ] as const
 
-const MOBILE_STUDIO_STEPS: MobileStudioStep[] = ["query", "list", "edit", "publish"]
 const MOBILE_STUDIO_STEP_LABEL: Record<MobileStudioStep, string> = {
   query: "조회",
   list: "목록",
@@ -1168,6 +1168,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isPreviewThumbDragging, setIsPreviewThumbDragging] = useState(false)
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
   const [mobileStudioStep, setMobileStudioStep] = useState<MobileStudioStep>("query")
+  const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
 
   const postContentMermaidBlockCount = useMemo(
@@ -1282,7 +1283,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const media = window.matchMedia("(max-width: 960px)")
+    const media = window.matchMedia("(max-width: 720px)")
     const sync = () => {
       const mobile = media.matches
       setIsCompactMobileLayout(mobile)
@@ -1301,6 +1302,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     media.addListener(sync)
     return () => media.removeListener(sync)
   }, [])
+
+  const activateManageSurface = useCallback(() => {
+    setStudioSurface("manage")
+    if (isCompactMobileLayout) {
+      setMobileStudioStep((current) => (current === "query" || current === "list" ? current : "query"))
+    }
+  }, [isCompactMobileLayout])
+
+  const activateComposeSurface = useCallback(() => {
+    setStudioSurface("compose")
+    if (isCompactMobileLayout) {
+      setMobileStudioStep((current) => (current === "edit" || current === "publish" ? current : "edit"))
+    }
+  }, [isCompactMobileLayout])
 
   useEffect(() => {
     if (previewContent === postContent) {
@@ -1938,6 +1953,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const switchToCreateMode = useCallback((options?: { keepContent?: boolean }) => {
     const keepContent = options?.keepContent ?? true
+    activateComposeSurface()
     setEditorMode("create")
     setIsTempDraftMode(false)
     setPostId("")
@@ -1966,9 +1982,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (isCompactMobileLayout) {
       setMobileStudioStep("edit")
     }
-  }, [isCompactMobileLayout, setPublishStatus])
+  }, [activateComposeSurface, isCompactMobileLayout, setPublishStatus])
 
   const applyLoadedPostContext = useCallback((post: PostForEditor) => {
+    activateComposeSurface()
     setPostId(String(post.id))
     setPostVersion(typeof post.version === "number" ? post.version : null)
     setEditorMode("edit")
@@ -1978,7 +1995,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (isCompactMobileLayout) {
       setMobileStudioStep("edit")
     }
-  }, [isCompactMobileLayout])
+  }, [activateComposeSurface, isCompactMobileLayout])
 
   const loadPostForEditor = useCallback(async (targetPostId: string = postId) => {
     try {
@@ -2305,6 +2322,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   )
 
   const loadAdminPosts = useCallback(async () => {
+    activateManageSurface()
     const safePage = sanitizeNumberInput(listPage || "1") || "1"
     const safePageSize = sanitizeNumberInput(listPageSize || "30") || "30"
     const safeSort =
@@ -2382,7 +2400,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } finally {
       setLoadingKey("")
     }
-  }, [isCompactMobileLayout, listKw, listPage, listPageSize, listScope, listSort])
+  }, [activateManageSurface, isCompactMobileLayout, listKw, listPage, listPageSize, listScope, listSort])
 
   const togglePostSelection = useCallback((id: number) => {
     if (listScope === "deleted") return
@@ -3247,6 +3265,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }
 
   const openPublishModal = (actionType: PublishActionType) => {
+    activateComposeSurface()
     setPublishActionType(actionType)
     setPublishModalNotice({
       tone: "idle",
@@ -3325,6 +3344,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
+  const hasDraftContent = Boolean(postTitle.trim() || postContent.trim() || postTags.length > 0)
   const localDraftStatusText = localDraftSavedAt
     ? `브라우저 임시저장: ${localDraftSavedAt.slice(5, 16).replace("T", " ")}`
     : "브라우저 임시저장 없음"
@@ -3382,13 +3402,24 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           : isTempDraftMode
             ? disabled("publishTempPost")
             : disabled("modifyPost")
-  const mobileStudioStepIndex = MOBILE_STUDIO_STEPS.indexOf(mobileStudioStep)
+  const mobileStudioSurfaceSteps =
+    studioSurface === "manage"
+      ? (["query", "list"] as MobileStudioStep[])
+      : (["edit", "publish"] as MobileStudioStep[])
+  const mobileStudioStepIndex = mobileStudioSurfaceSteps.indexOf(mobileStudioStep)
   const mobileStudioPrevStep =
-    mobileStudioStepIndex > 0 ? MOBILE_STUDIO_STEPS[mobileStudioStepIndex - 1] : null
+    mobileStudioStepIndex > 0 ? mobileStudioSurfaceSteps[mobileStudioStepIndex - 1] : null
   const mobileStudioNextStep =
-    mobileStudioStepIndex < MOBILE_STUDIO_STEPS.length - 1
-      ? MOBILE_STUDIO_STEPS[mobileStudioStepIndex + 1]
+    mobileStudioStepIndex < mobileStudioSurfaceSteps.length - 1
+      ? mobileStudioSurfaceSteps[mobileStudioStepIndex + 1]
       : null
+  const heroPrimaryActionLabel =
+    studioSurface === "manage"
+      ? "목록 불러오기"
+      : editorMode === "edit" || hasDraftContent
+        ? "발행 설정 열기"
+        : "새 글 초안 시작"
+  const heroSecondaryActionLabel = studioSurface === "manage" ? "작성/발행 열기" : "목록 관리 열기"
   const closeToolbarMenus = () => {
     setIsCalloutMenuOpen(false)
     setIsColorMenuOpen(false)
@@ -3405,7 +3436,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const adminTools = [
     { href: "/admin", label: "허브" },
     { href: "/admin/profile", label: "프로필" },
-    { href: "#content-studio", label: "글 관리" },
+    { href: "#studio-surface", label: "작업 흐름" },
     { href: "/admin/tools", label: "도구" },
   ]
 
@@ -3423,10 +3454,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <HeroIntro>
           <HeroEyebrow>Content Studio</HeroEyebrow>
           <h1>글 작업실</h1>
-          <p>
-            글 작성과 목록 관리만 남긴 작업실입니다. 프로필 관리와 운영 도구는 각각 별도 페이지로
-            분리했습니다.
-          </p>
+          <p>목록 관리와 작성/발행 흐름을 분리해 지금 필요한 작업만 집중해서 진행할 수 있도록 정리했습니다.</p>
           <HeroNav>
             {adminTools.map((tool) => (
               <AnchorButton key={tool.href} href={tool.href}>
@@ -3438,8 +3466,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <HeroAside>
           <MetricGrid>
             <MetricCard>
-              <span>현재 계정</span>
-              <strong>{displayName}</strong>
+              <span>현재 흐름</span>
+              <strong>{studioSurface === "compose" ? "작성/발행" : "목록 관리"}</strong>
             </MetricCard>
             <MetricCard>
               <span>작업 중 글</span>
@@ -3457,36 +3485,71 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <ActionCluster>
             <HeroPrimaryActionButton
               type="button"
-              disabled={disabled("postList")}
-              onClick={() => void loadAdminPosts()}
+              disabled={studioSurface === "manage" ? disabled("postList") : loadingKey.length > 0}
+              onClick={() => {
+                if (studioSurface === "manage") {
+                  void loadAdminPosts()
+                  return
+                }
+
+                activateComposeSurface()
+                if (editorMode === "edit" || hasDraftContent) {
+                  openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                  return
+                }
+
+                switchToCreateMode({ keepContent: false })
+              }}
             >
-              글 목록 새로고침
+              {heroPrimaryActionLabel}
             </HeroPrimaryActionButton>
             <HeroActionButton
               type="button"
-              disabled={disabled("me")}
-              onClick={() =>
-                run("me", async () => {
-                  const member = (await refresh()).data
-                  if (!member) {
-                    throw new Error("현재 로그인 정보를 불러올 수 없습니다.")
-                  }
-                  const refreshed = await refreshAdminProfile(member.id, member)
-                  if (refreshed) {
-                    setProfileNotice({
-                      tone: "success",
-                      text: "현재 로그인 정보와 프로필 저장값을 다시 동기화했습니다.",
-                    })
-                  }
-                  return (refreshed || member) as unknown as JsonValue
-                })
-              }
+              disabled={loadingKey.length > 0}
+              onClick={() => {
+                if (studioSurface === "manage") {
+                  activateComposeSurface()
+                  return
+                }
+                activateManageSurface()
+              }}
             >
-              내 정보
+              {heroSecondaryActionLabel}
             </HeroActionButton>
           </ActionCluster>
         </HeroAside>
       </HeroCard>
+
+      <StudioSurfaceCard id="studio-surface">
+        <SurfaceTabList role="tablist" aria-label="작업 흐름 선택">
+          <SurfaceTabButton
+            type="button"
+            role="tab"
+            aria-selected={studioSurface === "compose"}
+            data-active={studioSurface === "compose"}
+            onClick={activateComposeSurface}
+          >
+            작성/발행
+          </SurfaceTabButton>
+          <SurfaceTabButton
+            type="button"
+            role="tab"
+            aria-selected={studioSurface === "manage"}
+            data-active={studioSurface === "manage"}
+            onClick={activateManageSurface}
+          >
+            목록 관리
+          </SurfaceTabButton>
+        </SurfaceTabList>
+        <SurfaceHintBar>
+          <strong>{studioSurface === "compose" ? "작성/발행 흐름" : "목록 관리 흐름"}</strong>
+          <span>
+            {studioSurface === "compose"
+              ? "제목 입력, 본문 작성, 미리보기, 발행 설정을 한 번에 정리합니다."
+              : "조회 조건, 관리자 글 리스트, 선택 글 작업을 분리해 목록 점검에 집중합니다."}
+          </span>
+        </SurfaceHintBar>
+      </StudioSurfaceCard>
 
       <WorkspaceGrid>
         <WorkspaceMain>
@@ -3620,55 +3683,29 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </Section>
           )}
 
+          {studioSurface === "manage" && (
           <Section id="content-studio">
             <SectionTop>
               <div>
-                <SectionEyebrow>Content Studio</SectionEyebrow>
-                <h2>글 작성 및 목록 관리</h2>
-                <SectionDescription>
-                  조회 조건, 관리자 글 리스트, 에디터를 한 구역에 모아서 운영 흐름이 끊기지 않도록
-                  정리했습니다.
-                </SectionDescription>
+                <SectionEyebrow>Content Manager</SectionEyebrow>
+                <h2>글 목록 관리</h2>
+                <SectionDescription>조회 조건, 관리자 글 리스트, 선택한 글 작업만 모아 목록 점검과 운영 정리에 집중합니다.</SectionDescription>
               </div>
             </SectionTop>
             <GlobalNoticeBar data-tone={globalNotice.tone}>{globalNotice.text}</GlobalNoticeBar>
             <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mobileStudioStep === "query"}
-                data-active={mobileStudioStep === "query"}
-                onClick={() => setMobileStudioStep("query")}
-              >
-                조회
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mobileStudioStep === "list"}
-                data-active={mobileStudioStep === "list"}
-                onClick={() => setMobileStudioStep("list")}
-              >
-                목록
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mobileStudioStep === "edit"}
-                data-active={mobileStudioStep === "edit"}
-                onClick={() => setMobileStudioStep("edit")}
-              >
-                편집
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mobileStudioStep === "publish"}
-                data-active={mobileStudioStep === "publish"}
-                onClick={() => setMobileStudioStep("publish")}
-              >
-                발행
-              </button>
+              {mobileStudioSurfaceSteps.map((step) => (
+                <button
+                  key={step}
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileStudioStep === step}
+                  data-active={mobileStudioStep === step}
+                  onClick={() => setMobileStudioStep(step)}
+                >
+                  {MOBILE_STUDIO_STEP_LABEL[step]}
+                </button>
+              ))}
             </MobileStudioStepper>
             {isCompactMobileLayout ? (
               <MobileStepGuide role="status" aria-live="polite">
@@ -4099,7 +4136,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </ListPanel>
               </ContentStudioLeft>
 
-              <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "edit"}>
+              <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "list"}>
                 <SelectedPostHeader>
                   <div>
                     <h3>선택한 글 작업</h3>
@@ -4193,6 +4230,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </Button>
               </UndoToast>
             )}
+          </Section>
+          )}
 
         {deleteConfirmState && (
           <ModalBackdrop onClick={closeDeleteConfirm}>
@@ -4230,6 +4269,83 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </ConfirmModal>
           </ModalBackdrop>
         )}
+        {studioSurface === "compose" && (
+        <ComposeSurfaceSection>
+          <SectionTop>
+            <div>
+              <SectionEyebrow>Compose Studio</SectionEyebrow>
+              <h2>작성/발행 흐름</h2>
+              <SectionDescription>제목, 본문, 태그, 미리보기와 발행 설정만 남겨 작성 흐름이 끊기지 않도록 정리했습니다.</SectionDescription>
+            </div>
+          </SectionTop>
+          <ComposeMetricRow>
+            <ComposeMetricItem>
+              <span>현재 글</span>
+              <strong>{currentPostLabel}</strong>
+            </ComposeMetricItem>
+            <ComposeMetricItem>
+              <span>모드</span>
+              <strong>{editorModeLabel}</strong>
+            </ComposeMetricItem>
+            <ComposeMetricItem>
+              <span>공개 범위</span>
+              <strong>{currentVisibilityText}</strong>
+            </ComposeMetricItem>
+          </ComposeMetricRow>
+          <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
+            {mobileStudioSurfaceSteps.map((step) => (
+              <button
+                key={step}
+                type="button"
+                role="tab"
+                aria-selected={mobileStudioStep === step}
+                data-active={mobileStudioStep === step}
+                onClick={() => {
+                  if (step === "publish") {
+                    setMobileStudioStep("publish")
+                    openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                    return
+                  }
+                  setMobileStudioStep(step)
+                }}
+              >
+                {MOBILE_STUDIO_STEP_LABEL[step]}
+              </button>
+            ))}
+          </MobileStudioStepper>
+          {isCompactMobileLayout ? (
+            <MobileStepGuide role="status" aria-live="polite">
+              <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[mobileStudioStep]}`}</strong>
+              <p>{MOBILE_STUDIO_STEP_DESCRIPTION[mobileStudioStep]}</p>
+              <div>
+                <Button
+                  type="button"
+                  disabled={!mobileStudioPrevStep}
+                  onClick={() => {
+                    if (!mobileStudioPrevStep) return
+                    setMobileStudioStep(mobileStudioPrevStep)
+                  }}
+                >
+                  {mobileStudioPrevStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioPrevStep]}로 이동` : "이전 단계 없음"}
+                </Button>
+                <PrimaryButton
+                  type="button"
+                  disabled={!mobileStudioNextStep}
+                  onClick={() => {
+                    if (!mobileStudioNextStep) return
+                    if (mobileStudioNextStep === "publish") {
+                      setMobileStudioStep("publish")
+                      openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                      return
+                    }
+                    setMobileStudioStep(mobileStudioNextStep)
+                  }}
+                >
+                  {mobileStudioNextStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioNextStep]} 단계로 이동` : "마지막 단계"}
+                </PrimaryButton>
+              </div>
+            </MobileStepGuide>
+          ) : null}
         <EditorSection data-mobile-visible={!isCompactMobileLayout || mobileStudioStep === "edit" || mobileStudioStep === "publish"}>
           <WriterHeader>
             <div className="titleField">
@@ -4643,6 +4759,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </WriterFooterControls>
           </WriterFooterBar>
         </EditorSection>
+        </ComposeSurfaceSection>
+        )}
 
         {isCompactMobileLayout && !isPublishModalOpen && (
           <MobilePrimaryActionBar>
@@ -4655,7 +4773,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   return
                 }
                 if (mobileStudioStep === "list") {
-                  setMobileStudioStep("edit")
+                  activateComposeSurface()
                   return
                 }
                 openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
@@ -4878,8 +4996,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </ModalBackdrop>
         )}
 
-          </Section>
-
           {SHOW_LEGACY_UTILITY_STUDIO && (
           <UtilityGrid>
             <Section id="comment-studio">
@@ -5036,7 +5152,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.5rem 1rem 2.8rem;
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
   }
 
@@ -5060,7 +5176,7 @@ const HeroCard = styled.section`
   padding: 1rem 1.05rem;
   margin-bottom: 1.1rem;
 
-  @media (max-width: 980px) {
+  @media (max-width: 760px) {
     grid-template-columns: 1fr;
     border-radius: 16px;
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
@@ -5208,6 +5324,90 @@ const ActionCluster = styled.div`
   }
 `
 
+const StudioSurfaceCard = styled.section`
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.82rem 0.9rem;
+  margin-bottom: 1.1rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+
+  @media (max-width: 420px) {
+    padding: 0.72rem 0.74rem;
+    border-radius: 12px;
+  }
+`
+
+const SurfaceTabList = styled.div`
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.46rem;
+  width: fit-content;
+  padding: 0.28rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray1};
+
+  @media (max-width: 560px) {
+    width: 100%;
+  }
+`
+
+const SurfaceTabButton = styled.button`
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 0.95rem;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  &[data-active="true"] {
+    background: ${({ theme }) => theme.colors.blue9};
+    color: ${({ theme }) => theme.colors.gray1};
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+  }
+`
+
+const SurfaceHintBar = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  gap: 0.7rem 0.9rem;
+  align-items: start;
+  padding: 0.78rem 0.84rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.9rem;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
+`
+
 const WorkspaceGrid = styled.div`
   display: block;
 `
@@ -5311,20 +5511,24 @@ const GlobalNoticeBar = styled.div`
 
 const ContentStudioGrid = styled.div`
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
   gap: 1rem;
   align-items: start;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
 `
 
 const MobileStudioStepper = styled.div`
   display: none;
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     position: sticky;
     top: calc(var(--app-header-height, 56px) + 0.32rem);
     z-index: 12;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.4rem;
     margin: 0.2rem 0 0.4rem;
     padding: 0.5rem;
@@ -5354,7 +5558,7 @@ const MobileStudioStepper = styled.div`
 const MobileStepGuide = styled.section`
   display: none;
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     display: grid;
     gap: 0.58rem;
     margin-bottom: 0.42rem;
@@ -5412,7 +5616,7 @@ const ContentStudioLeft = styled.div`
     gap: 0.8rem;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     &[data-mobile-visible="false"] {
       display: none;
     }
@@ -5431,7 +5635,7 @@ const QueryPanel = styled.div`
     padding: 0.62rem 0.62rem 0.72rem;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     &[data-mobile-visible="false"] {
       display: none;
     }
@@ -5503,7 +5707,7 @@ const QueryGrid = styled.div`
     }
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     grid-template-columns: 1fr;
   }
 `
@@ -5537,7 +5741,7 @@ const QueryActions = styled.div`
     min-width: 9.5rem;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     display: grid;
     grid-template-columns: 1fr;
 
@@ -5799,7 +6003,7 @@ const ActionRow = styled.div`
     min-width: 8.8rem;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     display: grid;
     grid-template-columns: 1fr;
 
@@ -6003,10 +6207,60 @@ const EditorSection = styled.div`
     margin-top: 0.92rem;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     &[data-mobile-visible="false"] {
       display: none;
     }
+  }
+`
+
+const ComposeSurfaceSection = styled(Section)`
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.96rem;
+  background: linear-gradient(
+    180deg,
+    ${({ theme }) => theme.colors.gray2} 0%,
+    ${({ theme }) => theme.colors.gray1} 100%
+  );
+
+  @media (max-width: 420px) {
+    padding: 0.78rem;
+  }
+`
+
+const ComposeMetricRow = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ComposeMetricItem = styled.div`
+  display: grid;
+  gap: 0.24rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.94rem;
+    line-height: 1.45;
   }
 `
 
@@ -6036,7 +6290,7 @@ const WriterMetaStrip = styled.div`
   gap: 1rem;
   align-items: start;
 
-  @media (max-width: 980px) {
+  @media (max-width: 760px) {
     grid-template-columns: 1fr;
   }
 `
@@ -6102,7 +6356,7 @@ const WriterMetaActions = styled.div`
   justify-items: stretch;
   align-content: start;
 
-  @media (max-width: 980px) {
+  @media (max-width: 760px) {
     justify-items: stretch;
   }
 `
@@ -6905,7 +7159,7 @@ const EditorGrid = styled.div`
   overflow: visible;
   align-items: stretch;
 
-  @media (max-width: 980px) {
+  @media (max-width: 760px) {
     --pane-body-height: clamp(18rem, 52vh, 34rem);
     grid-template-columns: 1fr;
     gap: 0.78rem;
@@ -6922,7 +7176,7 @@ const ListPanel = styled.div`
   display: grid;
   gap: 0.62rem;
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     &[data-mobile-visible="false"] {
       display: none;
     }
@@ -7048,7 +7302,7 @@ const SelectedPostPanel = styled.div`
     padding: 0.68rem;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     &[data-mobile-visible="false"] {
       display: none;
     }
@@ -7575,7 +7829,7 @@ const PreviewPane = styled(EditorPane)`
   border-color: ${({ theme }) => theme.colors.gray7};
   background: ${({ theme }) => theme.colors.gray1};
 
-  @media (max-width: 980px) {
+  @media (max-width: 760px) {
     border-left: 1px solid ${({ theme }) => theme.colors.gray7};
     border-top: 1px solid ${({ theme }) => theme.colors.gray7};
   }
@@ -7729,7 +7983,7 @@ const WriterFooterActions = styled.div`
 const MobilePrimaryActionBar = styled.div`
   display: none;
 
-  @media (max-width: 960px) {
+  @media (max-width: 720px) {
     position: fixed;
     left: max(0.72rem, env(safe-area-inset-left, 0px));
     right: max(0.72rem, env(safe-area-inset-right, 0px));

@@ -701,13 +701,15 @@ const FeedExplorer = () => {
     <>
       <PinnedPosts posts={pinnedPosts} />
       <ExplorerCard>
-        <SearchInput
-          inputRef={searchInputRef}
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-        />
+        <div className="searchSlot">
+          <SearchInput
+            inputRef={searchInputRef}
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+          />
+        </div>
       </ExplorerCard>
       <FeedBody data-sticky-rail-safe="true">
         <aside className="tagColumn">
@@ -747,6 +749,7 @@ const FeedExplorer = () => {
 export default FeedExplorer
 
 const ExplorerCard = styled.section`
+  --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
   display: grid;
   gap: 0;
   padding: 0;
@@ -755,6 +758,19 @@ const ExplorerCard = styled.section`
   height: auto;
   overflow: visible;
   margin-bottom: 0.52rem;
+
+  .searchSlot {
+    min-width: 0;
+  }
+
+  @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
+    grid-template-columns: minmax(0, var(--feed-tag-rail-width)) minmax(0, 1fr);
+    column-gap: ${FEED_TAG_RAIL_GAP_PX}px;
+
+    .searchSlot {
+      grid-column: 2 / 3;
+    }
+  }
 
   @media (max-width: 768px) {
     margin-bottom: 0.38rem;

@@ -8,7 +8,6 @@ const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const INLINE_CODE_REGEX = /`([^`]+)`/g
 const MARKDOWN_LINK_REGEX = /\[(.*?)\]\((.*?)\)/g
 const MARKDOWN_PUNCTUATION_REGEX = /[#>*_~|-]/g
-const LEADING_SUMMARY_BLOCK_REGEX = /^\s*((?:>\s?.*\r?\n)+)(?:\r?\n){1,2}/
 const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:요약|summary)\b/i
 
 export const CARD_SUMMARY_PREVIEW_LIMIT = 150
@@ -81,15 +80,15 @@ export const extractLeadingSummaryBlock = (
   content: string,
   maxLength = CARD_SUMMARY_PREVIEW_LIMIT
 ) => {
-  const match = content.match(LEADING_SUMMARY_BLOCK_REGEX)
-  if (!match) {
+  const extracted = extractLeadingQuoteBlock(content)
+  if (!extracted) {
     return {
       summary: "",
       contentWithoutSummary: content,
     }
   }
 
-  const rawBlock = match[1]
+  const rawBlock = extracted.rawBlock
   if (!SUMMARY_BLOCK_START_REGEX.test(rawBlock)) {
     return {
       summary: "",
@@ -103,10 +102,71 @@ export const extractLeadingSummaryBlock = (
     .replace(/__/g, " ")
     .trim()
   const summary = normalizeCardSummary(blockContent, { fallback: "", maxLength })
-  const contentWithoutSummary = content.slice(match[0].length).trimStart()
+  const contentWithoutSummary = content.slice(extracted.matchLength).trimStart()
 
   return {
     summary,
     contentWithoutSummary,
+  }
+}
+
+const extractLeadingQuoteBlock = (
+  content: string
+): {
+  rawBlock: string
+  matchLength: number
+} | null => {
+  const totalLength = content.length
+  let cursor = 0
+
+  const isSimpleWhitespace = (ch: string) =>
+    ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f" || ch === "\v"
+
+  const readLineBreakLength = (index: number) => {
+    if (index >= totalLength) return 0
+    if (content[index] === "\r") return content[index + 1] === "\n" ? 2 : 1
+    return content[index] === "\n" ? 1 : 0
+  }
+
+  while (cursor < totalLength && isSimpleWhitespace(content[cursor])) {
+    cursor += 1
+  }
+
+  const blockStart = cursor
+  let blockEnd = cursor
+  let quoteLineCount = 0
+
+  while (cursor < totalLength && content[cursor] === ">") {
+    quoteLineCount += 1
+    cursor += 1
+    if (content[cursor] === " ") cursor += 1
+
+    while (cursor < totalLength && readLineBreakLength(cursor) === 0) {
+      cursor += 1
+    }
+
+    const lineBreakLength = readLineBreakLength(cursor)
+    if (lineBreakLength > 0) {
+      cursor += lineBreakLength
+    }
+
+    blockEnd = cursor
+  }
+
+  if (quoteLineCount === 0) return null
+
+  let separatorLineBreakCount = 0
+  while (separatorLineBreakCount < 2) {
+    const lineBreakLength = readLineBreakLength(cursor)
+    if (lineBreakLength === 0) break
+    cursor += lineBreakLength
+    separatorLineBreakCount += 1
+  }
+
+  if (separatorLineBreakCount < 1) return null
+
+  return {
+    rawBlock: content.slice(blockStart, blockEnd),
+    matchLength: cursor,
   }
 }

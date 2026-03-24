@@ -8,8 +8,7 @@ import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { CONFIG } from "site.config"
 import FeedExplorer from "./FeedExplorer"
 import {
-  TABLET_LANDSCAPE_MAX_PX,
-  TABLET_LANDSCAPE_MIN_PX,
+  WIDE_SIDEBAR_LAYOUT_MIN_PX,
 } from "src/layouts/RootLayout/layoutTiers"
 
 type Props = {
@@ -50,72 +49,62 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
 
 export default Feed
 
+const FEED_SIDEBAR_WIDTH_REM = 20
+
 const StyledWrapper = styled.div`
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  padding: 1rem 0 1.9rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem;
+  align-items: start;
+  padding: 1rem 0 1.9rem;
+
+  @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, ${FEED_SIDEBAR_WIDTH_REM}rem);
+    column-gap: clamp(1.5rem, 2.2vw, 2.5rem);
+  }
 
   @media (max-width: 768px) {
-    display: block;
     padding: 0.42rem 0 1.1rem;
   }
 
   > .mid {
-    grid-column: span 12 / span 12;
     display: grid;
     min-width: 0;
     gap: 1rem;
 
-    @media (min-width: 1024px) {
-      grid-column: span 12 / span 12;
-    }
-
-    @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
-      gap: 0.9rem;
-    }
-
-    @media (min-width: 1180px) {
-      grid-column: span 9 / span 9;
-    }
-
     .mobileProfileCard {
-      @media (min-width: 1180px) {
+      @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
         display: none;
       }
     }
 
     > .footer {
       padding-bottom: 2rem;
-      @media (min-width: 1180px) {
+      @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
         display: none;
       }
     }
   }
 
   > .rt {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    &::-webkit-scrollbar {
-      display: none;
-    }
-
     display: none;
+    min-width: 0;
     overflow: auto;
-    scrollbar-gutter: stable both-edges;
     overscroll-behavior: contain;
     position: sticky;
     top: calc(var(--app-header-height, 73px) + 0.65rem);
     height: calc(100vh - var(--app-header-height, 73px) - 0.65rem);
     height: calc(100dvh - var(--app-header-height, 73px) - 0.65rem);
+    gap: 1rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 
-    @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
+    &::-webkit-scrollbar {
       display: none;
     }
 
-    @media (min-width: 1180px) {
-      display: block;
-      grid-column: span 3 / span 3;
+    @media (min-width: ${WIDE_SIDEBAR_LAYOUT_MIN_PX}px) {
+      display: grid;
     }
 
     .footer {

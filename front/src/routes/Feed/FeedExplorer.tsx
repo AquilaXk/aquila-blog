@@ -2,11 +2,9 @@ import {
   startTransition,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
@@ -23,7 +21,6 @@ import { type ExplorePostsPage } from "src/apis/backend/posts"
 import type { TPost } from "src/types"
 import {
   FEED_TAG_RAIL_DESKTOP_MIN_PX,
-  FEED_TAG_RAIL_OFFSET_MIN_PX,
   FEED_TAG_RAIL_WIDTH_PX,
 } from "./feedUiTokens"
 import {
@@ -33,11 +30,8 @@ import {
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
-const FEED_TAG_RAIL_GAP_PX = 16
-const FEED_TAG_RAIL_OVERLAP_TOTAL_PX = FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX
-const FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX = 1032
-const FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX = 24
-const FEED_POST_COLUMN_MAX_WIDTH_REM = 47.75
+const FEED_TAG_RAIL_GAP_PX = 32
+const FEED_POST_COLUMN_MAX_WIDTH_REM = 52
 const FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM = 44
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
@@ -395,8 +389,6 @@ const useDebouncedValue = (value: string, pause = false) => {
 const FeedExplorer = () => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
-  const [desktopRailOffsetPx, setDesktopRailOffsetPx] = useState(FEED_TAG_RAIL_OFFSET_MIN_PX)
-  const [desktopRailOverlapInsetPx, setDesktopRailOverlapInsetPx] = useState(0)
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -442,7 +434,6 @@ const FeedExplorer = () => {
     enabled: router.isReady,
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
-  const feedBodyRef = useRef<HTMLElement | null>(null)
   const lastLoadMoreAtRef = useRef(0)
   const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
@@ -456,103 +447,6 @@ const FeedExplorer = () => {
     isFetchingNextPageRef.current = isFetchingNextPage
   }, [isFetchingNextPage])
 
-  useLayoutEffect(() => {
-    if (typeof window === "undefined") return
-    const feedBody = feedBodyRef.current
-    if (!feedBody) return
-
-    let rafId: number | null = null
-    let settleRafId: number | null = null
-    let settleRafId2: number | null = null
-    let settleTimerId: number | null = null
-    let settleTimerId2: number | null = null
-    let observer: ResizeObserver | null = null
-
-    const syncDesktopRailVisibility = () => {
-      if (window.innerWidth < FEED_TAG_RAIL_DESKTOP_MIN_PX) {
-        setDesktopRailOffsetPx(FEED_TAG_RAIL_OFFSET_MIN_PX)
-        setDesktopRailOverlapInsetPx(0)
-        return
-      }
-
-      const rect = feedBody.getBoundingClientRect()
-      const minOffsetToStayVisible = FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX - rect.left
-      const nextOffset = Math.min(0, Math.max(FEED_TAG_RAIL_OFFSET_MIN_PX, minOffsetToStayVisible))
-      const nextOverlapInset = Math.max(0, FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX + nextOffset)
-
-      setDesktopRailOffsetPx((prev) =>
-        Math.abs(prev - nextOffset) < 1 ? prev : nextOffset
-      )
-      setDesktopRailOverlapInsetPx((prev) =>
-        Math.abs(prev - nextOverlapInset) < 1 ? prev : nextOverlapInset
-      )
-    }
-
-    const scheduleSync = () => {
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId)
-      }
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null
-        syncDesktopRailVisibility()
-      })
-    }
-
-    syncDesktopRailVisibility()
-    settleRafId = window.requestAnimationFrame(() => {
-      scheduleSync()
-      settleRafId2 = window.requestAnimationFrame(() => {
-        scheduleSync()
-      })
-    })
-    settleTimerId = window.setTimeout(() => {
-      scheduleSync()
-    }, 120)
-    settleTimerId2 = window.setTimeout(() => {
-      scheduleSync()
-    }, 360)
-    window.addEventListener("resize", scheduleSync, { passive: true })
-    window.addEventListener("orientationchange", scheduleSync)
-    window.addEventListener("load", scheduleSync)
-
-    const fontSet = document.fonts
-    if (fontSet) {
-      void fontSet.ready.then(() => {
-        scheduleSync()
-      }).catch(() => {})
-    }
-
-    if (typeof ResizeObserver !== "undefined") {
-      observer = new ResizeObserver(() => {
-        scheduleSync()
-      })
-      observer.observe(feedBody)
-      const feedRootMain = feedBody.closest("main")
-      if (feedRootMain) observer.observe(feedRootMain)
-    }
-
-    return () => {
-      window.removeEventListener("resize", scheduleSync)
-      window.removeEventListener("orientationchange", scheduleSync)
-      window.removeEventListener("load", scheduleSync)
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId)
-      }
-      if (settleRafId !== null) {
-        window.cancelAnimationFrame(settleRafId)
-      }
-      if (settleRafId2 !== null) {
-        window.cancelAnimationFrame(settleRafId2)
-      }
-      if (settleTimerId !== null) {
-        window.clearTimeout(settleTimerId)
-      }
-      if (settleTimerId2 !== null) {
-        window.clearTimeout(settleTimerId2)
-      }
-      observer?.disconnect()
-    }
-  }, [])
   useEffect(() => {
     restoreSnapshotRef.current = {
       q,
@@ -800,21 +694,6 @@ const FeedExplorer = () => {
     if (hasTagFilter && currentTag) parts.push(`태그 "${currentTag}"`)
     return parts.join(" · ")
   }, [currentTag, hasFilter, hasQueryFilter, hasTagFilter, normalizedQuery])
-  const explorerRailStyle = useMemo(
-    () =>
-      ({
-        "--feed-tag-rail-overlap-px": `${desktopRailOverlapInsetPx}px`,
-      }) as CSSProperties,
-    [desktopRailOverlapInsetPx]
-  )
-  const feedBodyRailStyle = useMemo(
-    () =>
-      ({
-        "--feed-tag-rail-left-px": `${desktopRailOffsetPx}px`,
-        "--feed-tag-rail-overlap-px": `${desktopRailOverlapInsetPx}px`,
-      }) as CSSProperties,
-    [desktopRailOffsetPx, desktopRailOverlapInsetPx]
-  )
 
   const handleClearFilters = useCallback(() => {
     setQ("")
@@ -834,7 +713,7 @@ const FeedExplorer = () => {
   return (
     <>
       <PinnedPosts posts={pinnedPosts} />
-      <ExplorerCard style={explorerRailStyle}>
+      <ExplorerCard>
         <div className="searchSlot">
           <SearchInput
             inputRef={searchInputRef}
@@ -845,11 +724,7 @@ const FeedExplorer = () => {
           />
         </div>
       </ExplorerCard>
-      <FeedBody
-        ref={feedBodyRef}
-        data-sticky-rail-safe="true"
-        style={feedBodyRailStyle}
-      >
+      <FeedBody data-sticky-rail-safe="true">
         <aside className="tagColumn">
           <TagList />
         </aside>
@@ -886,7 +761,9 @@ const FeedExplorer = () => {
 export default FeedExplorer
 
 const ExplorerCard = styled.section`
-  --feed-tag-rail-overlap-px: 0px;
+  --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
+  --feed-tag-rail-gap: ${FEED_TAG_RAIL_GAP_PX}px;
+  --feed-post-column-max-width: ${FEED_POST_COLUMN_MAX_WIDTH_REM}rem;
   display: grid;
   gap: 0;
   padding: 0;
@@ -898,28 +775,25 @@ const ExplorerCard = styled.section`
 
   .searchSlot {
     min-width: 0;
-    width: min(100%, ${FEED_POST_COLUMN_MAX_WIDTH_REM}rem);
-    padding-left: var(--feed-tag-rail-overlap-px);
+    width: min(100%, var(--feed-post-column-max-width));
     margin-inline: auto;
-    transition: padding-left 0.14s ease-in;
   }
 
-  @media (max-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX - 1}px) {
-    .searchSlot {
-      padding-left: 0;
-    }
+  @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
+    --feed-post-column-max-width: ${FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM}rem;
   }
 
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-    --feed-tag-rail-left-px: clamp(
-      ${FEED_TAG_RAIL_OFFSET_MIN_PX}px,
-      calc((${FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX}px - 100vw) / 2),
-      0px
-    );
-    --feed-tag-rail-overlap-px: max(
-      0px,
-      calc(${FEED_TAG_RAIL_OVERLAP_TOTAL_PX}px + var(--feed-tag-rail-left-px))
-    );
+    grid-template-columns: var(--feed-tag-rail-width) minmax(0, var(--feed-post-column-max-width));
+    column-gap: var(--feed-tag-rail-gap);
+    justify-content: center;
+    align-items: start;
+
+    .searchSlot {
+      width: 100%;
+      margin-inline: 0;
+      grid-column: 2;
+    }
   }
 
   @media (max-width: 768px) {
@@ -929,8 +803,7 @@ const ExplorerCard = styled.section`
 
 const FeedBody = styled.section`
   --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
-  --feed-tag-rail-left-px: ${FEED_TAG_RAIL_OFFSET_MIN_PX}px;
-  --feed-tag-rail-overlap-px: 0px;
+  --feed-tag-rail-gap: ${FEED_TAG_RAIL_GAP_PX}px;
   --feed-post-column-max-width: ${FEED_POST_COLUMN_MAX_WIDTH_REM}rem;
   min-width: 0;
   overflow: visible;
@@ -951,28 +824,19 @@ const FeedBody = styled.section`
   }
 
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
-    --feed-tag-rail-left-px: clamp(
-      ${FEED_TAG_RAIL_OFFSET_MIN_PX}px,
-      calc((${FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX}px - 100vw) / 2),
-      0px
-    );
-    --feed-tag-rail-overlap-px: max(
-      0px,
-      calc(${FEED_TAG_RAIL_OVERLAP_TOTAL_PX}px + var(--feed-tag-rail-left-px))
-    );
-    position: relative;
-    padding-left: var(--feed-tag-rail-overlap-px);
-    transition: padding-left 0.14s ease-in;
+    display: grid;
+    grid-template-columns: var(--feed-tag-rail-width) minmax(0, var(--feed-post-column-max-width));
+    column-gap: var(--feed-tag-rail-gap);
+    justify-content: center;
+    align-items: start;
 
     .tagColumn {
-      position: absolute;
-      top: 0;
-      left: var(--feed-tag-rail-left-px);
-      width: var(--feed-tag-rail-width);
       min-width: 0;
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
+    }
+
+    .postColumn {
+      width: 100%;
+      margin-inline: 0;
     }
   }
 `

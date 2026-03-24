@@ -4,9 +4,6 @@ type FeedRailTokens = {
   chipMaxWidthPx?: number
   desktopMinWidthPx?: number
   widthPx?: number
-  offsetMinPx?: number
-  offsetMaxPx?: number
-  offsetAnchorPx?: number
 }
 
 type FeedTokens = {
@@ -38,6 +35,3 @@ export const FEED_TAG_RAIL_DESKTOP_MIN_PX = asFiniteNumber(
   FEED_TAG_RAIL_DESKTOP_MIN_DEFAULT_PX
 )
 export const FEED_TAG_RAIL_WIDTH_PX = asFiniteNumber(railTokens.widthPx, 184)
-export const FEED_TAG_RAIL_OFFSET_MIN_PX = asFiniteNumber(railTokens.offsetMinPx, -216)
-export const FEED_TAG_RAIL_OFFSET_MAX_PX = asFiniteNumber(railTokens.offsetMaxPx, -56)
-export const FEED_TAG_RAIL_OFFSET_ANCHOR_PX = asFiniteNumber(railTokens.offsetAnchorPx, 584)

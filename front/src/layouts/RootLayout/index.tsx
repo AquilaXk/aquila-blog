@@ -13,6 +13,8 @@ import {
   DESKTOP_LOCK_MIN_PX,
   DESKTOP_LOCK_WIDTH_PX,
   FLUID_LAYOUT_MAX_PX,
+  WIDE_CONTENT_BREAKPOINT_PX,
+  WIDE_CONTENT_MAX_PX,
 } from "./layoutTiers"
 
 type Props = {
@@ -125,6 +127,10 @@ const StyledMain = styled.main`
   box-sizing: border-box;
   width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
   padding: 0 clamp(0.85rem, 1.6vw, 1.2rem);
+
+  @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
+    width: min(100%, ${WIDE_CONTENT_MAX_PX}px);
+  }
 
   /* Velog-like desktop width lock: fixed content rail before tablet/mobile fluid mode */
   @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {

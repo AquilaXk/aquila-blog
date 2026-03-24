@@ -11,6 +11,8 @@ import {
   DESKTOP_LOCK_MIN_PX,
   DESKTOP_LOCK_WIDTH_PX,
   FLUID_LAYOUT_MAX_PX,
+  WIDE_CONTENT_BREAKPOINT_PX,
+  WIDE_CONTENT_MAX_PX,
 } from "../layoutTiers"
 
 type Props = {
@@ -196,6 +198,10 @@ const StyledWrapper = styled.div`
     width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
     min-height: 3.45rem;
     margin: 0 auto;
+
+    @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
+      width: min(100%, ${WIDE_CONTENT_MAX_PX}px);
+    }
 
     @media (max-width: ${DESKTOP_LOCK_MAX_PX}px) and (min-width: ${DESKTOP_LOCK_MIN_PX}px) {
       width: min(100%, ${DESKTOP_LOCK_WIDTH_PX}px);

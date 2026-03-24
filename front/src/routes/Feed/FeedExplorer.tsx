@@ -2,9 +2,11 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react"
 import styled from "@emotion/styled"
 import { InfiniteData, useQueryClient } from "@tanstack/react-query"
@@ -32,12 +34,9 @@ import {
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
 const FEED_TAG_RAIL_GAP_PX = 16
-<<<<<<< ours
 const FEED_TAG_RAIL_OVERLAP_TOTAL_PX = FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX
 const FEED_TAG_RAIL_VIEWPORT_LOCK_ANCHOR_PX = 1032
-=======
 const FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX = 24
->>>>>>> theirs
 const FEED_POST_COLUMN_MAX_WIDTH_REM = 47.75
 const FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM = 44
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
@@ -396,11 +395,8 @@ const useDebouncedValue = (value: string, pause = false) => {
 const FeedExplorer = () => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
-<<<<<<< ours
-=======
   const [desktopRailOffsetPx, setDesktopRailOffsetPx] = useState(FEED_TAG_RAIL_OFFSET_MIN_PX)
   const [desktopRailOverlapInsetPx, setDesktopRailOverlapInsetPx] = useState(0)
->>>>>>> theirs
   const [isComposing, setIsComposing] = useState(false)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -446,6 +442,7 @@ const FeedExplorer = () => {
     enabled: router.isReady,
   })
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
+  const feedBodyRef = useRef<HTMLElement | null>(null)
   const lastLoadMoreAtRef = useRef(0)
   const lastObserverTriggerAtRef = useRef(0)
   const hasNextPageRef = useRef(hasNextPage)
@@ -459,8 +456,6 @@ const FeedExplorer = () => {
     isFetchingNextPageRef.current = isFetchingNextPage
   }, [isFetchingNextPage])
 
-<<<<<<< ours
-=======
   useLayoutEffect(() => {
     if (typeof window === "undefined") return
     const feedBody = feedBodyRef.current
@@ -558,8 +553,6 @@ const FeedExplorer = () => {
       observer?.disconnect()
     }
   }, [])
-
->>>>>>> theirs
   useEffect(() => {
     restoreSnapshotRef.current = {
       q,
@@ -852,15 +845,11 @@ const FeedExplorer = () => {
           />
         </div>
       </ExplorerCard>
-<<<<<<< ours
-      <FeedBody data-sticky-rail-safe="true">
-=======
       <FeedBody
         ref={feedBodyRef}
         data-sticky-rail-safe="true"
         style={feedBodyRailStyle}
       >
->>>>>>> theirs
         <aside className="tagColumn">
           <TagList />
         </aside>

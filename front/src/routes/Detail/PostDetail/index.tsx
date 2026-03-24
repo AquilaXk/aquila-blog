@@ -46,7 +46,7 @@ const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
 const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
 const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1440
 const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1201
-const DETAIL_RAIL_GAP_FROM_HEADER_PX = 16
+const DETAIL_RAIL_GAP_FROM_HEADER_PX = 20
 const STICKY_BLOCKING_OVERFLOW_VALUES = new Set(["auto", "scroll", "hidden", "clip"])
 
 const getHeaderHeightFromCssVar = () => {
@@ -974,9 +974,9 @@ const StyledWrapper = styled.div`
 
   .detailLayout {
     display: grid;
-    grid-template-columns: 72px minmax(0, 48rem) minmax(0, 13rem);
+    grid-template-columns: 72px minmax(0, 48rem) minmax(0, 12.5rem);
     justify-content: center;
-    gap: 2.25rem;
+    gap: 2.5rem;
     min-width: 0;
     overflow: visible;
   }
@@ -1001,6 +1001,7 @@ const StyledWrapper = styled.div`
     top: calc(var(--app-header-height, 5.4rem) + 1rem);
     align-self: start;
     overflow: visible;
+    z-index: 1;
   }
 
   .leftRailInner,
@@ -1024,27 +1025,27 @@ const StyledWrapper = styled.div`
   }
 
   .floatingActionButton {
-    width: 3.45rem;
-    height: 3.45rem;
+    width: 3.2rem;
+    height: 3.2rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     border-radius: 999px;
-    border: 1.1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(15, 23, 42, 0.5)" : "rgba(255, 255, 255, 0.95)")};
+    border: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.28)" : theme.colors.gray6)};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(15, 23, 42, 0.32)" : "rgba(255, 255, 255, 0.92)")};
     color: ${({ theme }) => theme.colors.gray12};
     cursor: pointer;
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
-      font-size: 1.24rem;
+      font-size: 1.14rem;
     }
 
     &:hover {
       transform: translateY(-1px);
       border-color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.62)" : theme.colors.gray8)};
-      background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(17, 24, 39, 0.86)" : "#ffffff")};
+      background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(17, 24, 39, 0.62)" : "#ffffff")};
     }
 
     &:disabled {
@@ -1097,14 +1098,14 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
 
     svg {
-      font-size: 1.14rem;
+      font-size: 1.02rem;
     }
   }
 
   .floatingLikeCluster {
     display: grid;
     justify-items: center;
-    row-gap: 0.62rem;
+    row-gap: 0.54rem;
   }
 
   .floatingLikeStat {
@@ -1120,23 +1121,23 @@ const StyledWrapper = styled.div`
   }
 
   .floatingLikeCount {
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     line-height: 1;
-    font-weight: 760;
+    font-weight: 720;
     color: ${({ theme }) => theme.colors.gray10};
   }
 
   .floatingShareFeedback {
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     line-height: 1;
-    font-weight: 650;
+    font-weight: 600;
     color: ${({ theme }) => theme.colors.gray9};
     text-align: center;
   }
 
   .rightRailInner {
-    border-left: 2px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : theme.colors.gray6)};
-    padding: 0.18rem 0 0.18rem 1.25rem;
+    border-left: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.26)" : theme.colors.gray6)};
+    padding: 0.2rem 0 0.2rem 1.4rem;
     background: transparent;
 
     .rightRailHead {
@@ -1156,7 +1157,7 @@ const StyledWrapper = styled.div`
     .rightRailTitle {
       margin: 0;
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.92rem;
+      font-size: 0.88rem;
       line-height: 1.2;
       font-weight: 780;
       letter-spacing: -0.02em;
@@ -1164,9 +1165,9 @@ const StyledWrapper = styled.div`
 
     .rightRailMeta {
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.72rem;
+      font-size: 0.69rem;
       line-height: 1.2;
-      font-weight: 650;
+      font-weight: 620;
     }
 
     .tocDepthToggle {
@@ -1220,10 +1221,10 @@ const StyledWrapper = styled.div`
       min-height: 38px;
       box-sizing: border-box;
       max-width: 100%;
-      padding: 0.56rem 0.96rem 0.56rem 0.22rem;
+      padding: 0.52rem 0.82rem 0.52rem 0.28rem;
       background: transparent;
       color: ${({ theme }) => theme.colors.gray9};
-      font-size: 0.84rem;
+      font-size: 0.82rem;
       line-height: 1.42;
       cursor: pointer;
       white-space: normal;
@@ -1245,10 +1246,10 @@ const StyledWrapper = styled.div`
     button::before {
       content: "";
       position: absolute;
-      left: -0.96rem;
+      left: -1.18rem;
       top: 0.24rem;
       bottom: 0.24rem;
-      width: 2px;
+      width: 1px;
       opacity: 0;
       background: ${({ theme }) => theme.colors.accentBorder};
       transition: opacity 0.15s ease;
@@ -1268,7 +1269,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 1439px) {
     .detailLayout {
       grid-template-columns: 72px minmax(0, 48rem);
-      gap: 1.75rem;
+      gap: 2rem;
     }
 
     .rightRail {
@@ -1279,7 +1280,7 @@ const StyledWrapper = styled.div`
   @media (max-width: 1279px) {
     .detailLayout {
       grid-template-columns: 72px minmax(0, 48rem);
-      gap: 1.4rem;
+      gap: 1.6rem;
     }
   }
 

@@ -290,6 +290,27 @@ const PREVIEW_CARD_VIEWPORTS: Record<
   },
 }
 const PREVIEW_CARD_VIEWPORT_ORDER: PreviewViewportMode[] = ["desktop", "tablet", "mobile"]
+const PUBLISH_VISIBILITY_OPTIONS: Array<{
+  value: PostVisibility
+  label: string
+  description: string
+}> = [
+  {
+    value: "PUBLIC_LISTED",
+    label: "전체 공개",
+    description: "메인 목록과 검색에 노출됩니다.",
+  },
+  {
+    value: "PUBLIC_UNLISTED",
+    label: "링크 공개",
+    description: "URL을 아는 사람만 볼 수 있습니다.",
+  },
+  {
+    value: "PRIVATE",
+    label: "비공개",
+    description: "관리자만 확인합니다.",
+  },
+]
 
 const TAG_TONES = [
   {
@@ -1444,9 +1465,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [])
 
   const publishModalHintByAction = useCallback((actionType: PublishActionType): string => {
-    if (actionType === "create") return "작성 전 검증 결과와 오류가 여기에 표시됩니다."
-    if (actionType === "modify") return "수정 전 검증 결과와 오류가 여기에 표시됩니다."
-    return "임시글 발행 전 검증 결과와 오류가 여기에 표시됩니다."
+    if (actionType === "create") return "작성 전 확인이 필요한 항목만 이곳에 표시됩니다."
+    if (actionType === "modify") return "수정 전 확인이 필요한 항목만 이곳에 표시됩니다."
+    return "임시글 발행 전 확인이 필요한 항목만 이곳에 표시됩니다."
   }, [])
 
   const setPublishStatus = useCallback(
@@ -3458,8 +3479,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     } else {
       setPreviewViewport("desktop")
     }
-    setIsMobileThumbnailEditorOpen(false)
-    setIsMobileMetaEditorOpen(false)
+    const shouldOpenThumbnailEditorByDefault = Boolean(safePreviewThumbnail && !isPreviewThumbnailError)
+    setIsMobileThumbnailEditorOpen(shouldOpenThumbnailEditorByDefault)
+    setIsMobileMetaEditorOpen(!shouldOpenThumbnailEditorByDefault)
     setIsPublishModalOpen(true)
     if (isCompactMobileLayout) {
       setMobileComposeStep("publish")
@@ -3552,10 +3574,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     : `${PROFILE_IMAGE_UPLOAD_RULE_LABEL} (선택 즉시 업로드)`
   const publishActionTitle =
     publishActionType === "create"
-      ? "글 발행 설정"
+      ? "글 작성 설정"
       : publishActionType === "modify"
         ? "글 수정 설정"
-        : "임시글 발행 설정"
+        : "임시글 공개 설정"
+  const publishActionDescription =
+    publishActionType === "create"
+      ? "노출 범위와 카드 결과를 한 번에 확인한 뒤 바로 작성합니다."
+      : publishActionType === "modify"
+        ? "수정 저장 전 노출 범위와 카드 결과를 마지막으로 점검합니다."
+        : "임시글을 공개 글로 전환하기 전에 카드 노출 상태를 확인합니다."
   const publishActionButtonText =
     publishActionType === "create"
       ? loadingKey === "writePost"
@@ -3574,6 +3602,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       : publishActionType === "modify"
         ? editorMode !== "edit" || disabled("modifyPost")
         : editorMode !== "edit" || disabled("publishTempPost")
+  const publishActionSummaryLabel =
+    publishActionType === "create"
+      ? "새 글 작성"
+      : publishActionType === "modify"
+        ? "기존 글 수정"
+        : "임시글 공개"
   const mobilePrimaryActionLabel =
     editorMode === "create"
       ? "발행 설정 열기"
@@ -3612,6 +3646,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         ? "발행 설정 열기"
         : "새 글 초안 시작"
   const heroSecondaryActionLabel = studioSurface === "manage" ? "글 작성 열기" : "목록 관리 열기"
+  const isCompactManageSurface = isCompactMobileLayout && studioSurface === "manage"
+  const showSelectedPanelInManageSurface = !isCompactMobileLayout || activeMobileStudioStep !== "list" || hasSelectedManagedPost
   const closeToolbarMenus = () => {
     setIsCalloutMenuOpen(false)
     setIsColorMenuOpen(false)
@@ -3649,6 +3685,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           ? "링크 공개"
           : "전체 공개"
   const previewThumbnailSrc = safePreviewThumbnail && !isPreviewThumbnailError ? safePreviewThumbnail : ""
+  const previewThumbnailStatusLabel = previewThumbnailSrc ? "썸네일 설정됨" : "썸네일 자동 사용"
+  const previewSummaryStatusLabel = postSummary.trim() ? "요약 직접 입력" : "요약 자동 생성"
+  const shouldShowPublishModalNotice = publishModalNotice.tone !== "idle"
   const previewAuthorAvatarSrc = (
     profileImgInputUrl.trim() ||
     member.profileImageDirectUrl ||
@@ -3820,20 +3859,28 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   return (
     <Main>
-      <HeroCard>
-        <HeroIntro>
-          <HeroEyebrow>콘텐츠 관리</HeroEyebrow>
+      <HeroCard data-compact-manage={isCompactManageSurface}>
+        <HeroIntro data-compact-manage={isCompactManageSurface}>
+          {!isCompactManageSurface ? <HeroEyebrow>콘텐츠 관리</HeroEyebrow> : null}
           <h1>글 작업실</h1>
-          <p>목록 점검과 글 작성을 나눠 지금 필요한 작업만 바로 이어갈 수 있게 정리했습니다.</p>
-          <HeroNav>
-            {adminTools.map((tool) => (
-              <AnchorButton key={tool.href} href={tool.href}>
-                {tool.label}
-              </AnchorButton>
-            ))}
-          </HeroNav>
+          <p>
+            {studioSurface === "manage"
+              ? isCompactManageSurface
+                ? "목록을 바로 불러오고, 필요한 글만 선택해 이어서 편집하도록 압축했습니다."
+                : "목록 점검과 선택 글 작업을 나눠 운영 정리와 편집 전환이 바로 이어지게 했습니다."
+              : "제목, 본문, 태그, 발행 설정까지 한 흐름으로 이어지도록 정리했습니다."}
+          </p>
+          {!isCompactManageSurface ? (
+            <HeroNav>
+              {adminTools.map((tool) => (
+                <AnchorButton key={tool.href} href={tool.href}>
+                  {tool.label}
+                </AnchorButton>
+              ))}
+            </HeroNav>
+          ) : null}
         </HeroIntro>
-        <HeroAside>
+        <HeroAside data-compact-manage={isCompactManageSurface}>
           <MetricGrid>
             <MetricCard>
               <span>현재 화면</span>
@@ -3890,7 +3937,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </HeroAside>
       </HeroCard>
 
-      <StudioSurfaceCard id="studio-surface">
+      <StudioSurfaceCard id="studio-surface" data-compact-manage={isCompactManageSurface}>
         <SurfaceTabList role="tablist" aria-label="작업 흐름 선택">
           <SurfaceTabButton
             type="button"
@@ -3911,14 +3958,16 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             목록 관리
           </SurfaceTabButton>
         </SurfaceTabList>
-        <SurfaceHintBar>
-          <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
-          <span>
-            {studioSurface === "compose"
-              ? "제목, 본문, 태그, 미리보기와 발행 설정까지 한 흐름으로 이어집니다."
-              : "조회 조건, 글 목록, 선택 글 작업을 나눠 목록 점검과 편집 전환이 바로 이어지게 합니다."}
-          </span>
-        </SurfaceHintBar>
+        {!isCompactManageSurface ? (
+          <SurfaceHintBar>
+            <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
+            <span>
+              {studioSurface === "compose"
+                ? "제목, 본문, 태그, 미리보기와 발행 설정까지 한 흐름으로 이어집니다."
+                : "조회 조건, 글 목록, 선택 글 작업을 나눠 목록 점검과 편집 전환이 바로 이어지게 합니다."}
+            </span>
+          </SurfaceHintBar>
+        ) : null}
       </StudioSurfaceCard>
 
       <WorkspaceGrid>
@@ -4057,7 +4106,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <Section id="content-studio">
             <SectionTop>
               <div>
-                <SectionEyebrow>Content Manager</SectionEyebrow>
+                <SectionEyebrow>목록 관리</SectionEyebrow>
                 <h2>글 목록 관리</h2>
                 <SectionDescription>조회 조건, 관리자 글 리스트, 선택한 글 작업만 모아 목록 점검과 운영 정리에 집중합니다.</SectionDescription>
               </div>
@@ -4295,7 +4344,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <ListEmpty>
                     <p>
                       {listScope === "active"
-                        ? "목록이 없습니다. 바로 불러오기를 실행해 시작하세요."
+                        ? "목록이 없습니다. 위 조회 조건에서 목록 새로고침을 눌러 시작하세요."
                         : "삭제된 글이 없습니다. 삭제 글 목록을 조회해 최신 상태를 확인하세요."}
                     </p>
                     <div className="actions">
@@ -4306,15 +4355,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       >
                         {listScope === "active" ? "목록 새로고침" : "삭제 글 목록 조회"}
                       </PrimaryButton>
-                      {listScope === "active" && (
-                        <Button
-                          type="button"
-                          disabled={disabled("postTemp")}
-                          onClick={() => void handleLoadOrCreateTempPost()}
-                        >
-                          임시글 열기
-                        </Button>
-                      )}
                     </div>
                   </ListEmpty>
                 ) : (
@@ -4335,8 +4375,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           )}
                           <th className="idCell">ID</th>
                           <th>제목</th>
-                          <th className="visibilityCell">공개상태</th>
-                          <th className="authorCell">작성자</th>
                           <th className="dateCell">
                             {listScope === "active" ? (
                               <SortHeaderButton
@@ -4376,20 +4414,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                     <span className="text">{row.title}</span>
                                     {isLoadedRow && <LoadedBadge>현재 편집 중</LoadedBadge>}
                                     {listScope === "deleted" && <DeletedBadge>삭제됨</DeletedBadge>}
+                                    <VisibilityBadge className="inlineVisibility" data-tone={toVisibility(row.published, row.listed)}>
+                                      {visibilityLabel(row.published, row.listed)}
+                                    </VisibilityBadge>
                                   </div>
-                                  <span className="meta">
-                                    {row.authorName}
-                                    <span className="dot">•</span>
-                                    {(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}
-                                  </span>
+                                  <span className="meta">{row.authorName || "작성자 미상"}</span>
                                 </TitleCell>
                               </td>
-                              <td className="visibilityCell">
-                                <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
-                                  {visibilityLabel(row.published, row.listed)}
-                                </VisibilityBadge>
-                              </td>
-                              <td className="authorCell">{row.authorName}</td>
                               <td className="dateCell">{(listScope === "deleted" ? row.deletedAt : row.modifiedAt)?.slice(0, 10) || "-"}</td>
                               <td className="actionsCell">
                                 <InlineActions>
@@ -4537,14 +4568,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </ListPanel>
               </ContentStudioLeft>
 
-              <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "list"}>
+              <SelectedPostPanel data-mobile-visible={showSelectedPanelInManageSurface}>
                 <SelectedPostHeader>
                   <div>
-                    <h3>{hasSelectedManagedPost ? "선택한 글" : "다음 작업"}</h3>
+                    <h3>{hasSelectedManagedPost ? "선택한 글" : "빠른 작업"}</h3>
                     <p>
                       {hasSelectedManagedPost
                         ? "선택한 글의 편집/삭제를 이어가고, 필요할 때만 고급 작업을 펼칩니다."
-                        : "기본 흐름은 목록에서 글을 선택하는 것입니다. 직접 post id 입력은 고급 작업으로 접어둡니다."}
+                        : "기본 흐름은 목록에서 글을 고른 뒤 이어서 작업하는 것입니다. 직접 불러오기는 필요할 때만 사용합니다."}
                     </p>
                   </div>
                   <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
@@ -4674,8 +4705,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 ) : (
                   <>
                     <SelectedPostStateCard data-tone="idle">
-                      <strong>목록에서 글을 하나 고르면 여기서 바로 이어서 작업할 수 있습니다.</strong>
-                      <p>조회 후 선택하는 흐름을 기본으로 두고, 새 글 작성과 임시글 열기만 빠르게 제공합니다.</p>
+                      <strong>목록에서 글을 고르면 이 패널에서 바로 편집을 이어갈 수 있습니다.</strong>
+                      <p>새 글 작성은 여기서 시작하고, 기존 글 편집은 왼쪽 목록 선택을 기본 동선으로 둡니다.</p>
                     </SelectedPostStateCard>
                     <ActionRow>
                       <PrimaryButton
@@ -4685,13 +4716,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       >
                         새 글 작성 시작
                       </PrimaryButton>
-                      <Button
-                        type="button"
-                        disabled={disabled("postTemp")}
-                        onClick={() => void handleLoadOrCreateTempPost()}
-                      >
-                        임시글 열기
-                      </Button>
                     </ActionRow>
                     <InlineDisclosure open={isDirectLoadOpen}>
                       <summary
@@ -5286,39 +5310,53 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <PublishModalHeader>
                 <div>
                   <h4>{publishActionTitle}</h4>
-                  <p>누가 볼 수 있는지와 피드 카드 모양(썸네일/요약)을 확인하고 반영하세요.</p>
+                  <p>{publishActionDescription}</p>
                 </div>
+                <PublishSettingsSummary aria-label="현재 발행 설정 요약">
+                  <SummaryPill>{publishActionSummaryLabel}</SummaryPill>
+                  <SummaryPill>{`노출 ${previewVisibilityLabel}`}</SummaryPill>
+                  <SummaryPill>{previewThumbnailStatusLabel}</SummaryPill>
+                  <SummaryPill>{previewSummaryStatusLabel}</SummaryPill>
+                </PublishSettingsSummary>
               </PublishModalHeader>
               <PublishModalBody>
-                <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
-                {publishActionType !== "temp" ? (
-                  <VisibilityWrap>
-                    <FieldLabel htmlFor="post-visibility-modal">노출 범위 (누가 볼 수 있나요?)</FieldLabel>
-                    <VisibilitySelect
-                      id="post-visibility-modal"
-                      value={postVisibility}
-                      onChange={(e) => setPostVisibility(e.target.value as PostVisibility)}
-                    >
-                      <option value="PRIVATE">비공개 (나만 확인)</option>
-                      <option value="PUBLIC_UNLISTED">링크 공개 (URL을 아는 사람만)</option>
-                      <option value="PUBLIC_LISTED">전체 공개 (메인 목록/검색 노출)</option>
-                    </VisibilitySelect>
-                    <FieldHelp>메인 페이지 카드 노출은 ‘전체 공개 (메인 목록/검색 노출)’에서만 됩니다.</FieldHelp>
-                  </VisibilityWrap>
-                ) : (
-                  <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개 (메인 목록/검색 노출)’로 반영됩니다.</PublishModeHint>
-                )}
-
-                <PostPreviewSetup>
-                  <PostPreviewHeader>
-                    <strong>포스트 미리보기</strong>
-                    <span>상단에는 실제 메인 카드 기준 결과를, 하단에는 썸네일/요약 편집기를 분리해 보여줍니다.</span>
-                  </PostPreviewHeader>
+                {shouldShowPublishModalNotice ? (
+                  <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
+                ) : null}
+                <PublishOverviewGrid>
+                  {publishActionType !== "temp" ? (
+                    <VisibilityCard>
+                      <SectionKicker>노출 범위</SectionKicker>
+                      <strong>누가 이 글을 볼 수 있나요?</strong>
+                      <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
+                        {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
+                          <VisibilityOptionButton
+                            key={option.value}
+                            type="button"
+                            data-active={postVisibility === option.value}
+                            aria-pressed={postVisibility === option.value}
+                            onClick={() => setPostVisibility(option.value)}
+                          >
+                            <strong>{option.label}</strong>
+                            <span>{option.description}</span>
+                          </VisibilityOptionButton>
+                        ))}
+                      </VisibilityOptionGrid>
+                      <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
+                    </VisibilityCard>
+                  ) : (
+                    <VisibilityCard>
+                      <SectionKicker>노출 범위</SectionKicker>
+                      <strong>임시글은 공개 글로 전환됩니다.</strong>
+                      <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개’로 반영됩니다.</PublishModeHint>
+                    </VisibilityCard>
+                  )}
                   <PreviewResultPanel>
                     <PreviewResultHeader>
                       <div>
-                        <strong>실제 카드 결과</strong>
-                        <span>{previewViewportConfig.description} 기준으로 제목·요약·썸네일 잘림을 즉시 확인합니다.</span>
+                        <SectionKicker>실제 카드 결과</SectionKicker>
+                        <strong>{previewViewportConfig.label} 기준 미리보기</strong>
+                        <span>{previewViewportConfig.description} 폭에서 제목·요약·썸네일 잘림을 바로 확인합니다.</span>
                       </div>
                       <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
                         {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
@@ -5363,9 +5401,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         </div>
                         <div className="content">
                           <PreviewVisibilityBadge>{previewVisibilityLabel}</PreviewVisibilityBadge>
-                          <h4>{postTitle.trim() || "제목을 입력하면 실제 카드처럼 여기에 표시됩니다."}</h4>
+                          <h4>{postTitle.trim() || "제목을 입력하면 카드 결과가 여기에 표시됩니다."}</h4>
                           <p className="summary">
-                            {resolvedPreviewSummary || "요약을 비워두면 본문 기반 자동 요약이 실제 카드에 반영됩니다."}
+                            {resolvedPreviewSummary || "요약을 비워두면 본문에서 자동 생성한 요약이 카드에 반영됩니다."}
                           </p>
                           <div className="meta">
                             <span>{previewDateText}</span>
@@ -5395,8 +5433,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         </div>
                       </PreviewResultCard>
                     </PreviewResultFrame>
-                    <FieldHelp>기기 탭을 바꾸면 실제 카드 폭 기준으로 제목 줄수와 썸네일 크롭 결과가 즉시 다시 계산됩니다.</FieldHelp>
                   </PreviewResultPanel>
+                </PublishOverviewGrid>
+
+                <PostPreviewSetup>
+                  <PostPreviewHeader>
+                    <strong>카드 요소 편집</strong>
+                    <span>썸네일 위치와 카드 요약만 조정합니다. 결과는 위 카드에서 바로 확인됩니다.</span>
+                  </PostPreviewHeader>
 
                   {isCompactMobileLayout ? (
                     <CompactPublishEditorStack>
@@ -5448,7 +5492,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   }
                   onClick={closePublishModal}
                 >
-                  취소
+                  닫기
                 </Button>
                 <PrimaryButton
                   type="button"
@@ -5565,7 +5609,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <Section id="system-tools">
               <SectionTop>
                 <div>
-                  <SectionEyebrow>System Tools</SectionEyebrow>
+                  <SectionEyebrow>시스템 점검</SectionEyebrow>
                   <h2>운영 점검 도구</h2>
                   <SectionDescription>자주 확인하는 관리성 API를 한곳에 모았습니다.</SectionDescription>
                 </div>
@@ -5649,6 +5693,15 @@ const HeroCard = styled.section`
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
     padding: 0.88rem 0.92rem;
   }
+
+  &[data-compact-manage="true"] {
+    margin-bottom: 0.7rem;
+
+    @media (max-width: 760px) {
+      gap: 0.6rem;
+      padding: 0.72rem 0.8rem;
+    }
+  }
 `
 
 const HeroIntro = styled.div`
@@ -5671,6 +5724,15 @@ const HeroIntro = styled.div`
     max-width: 44rem;
     color: ${({ theme }) => theme.colors.gray11};
     line-height: 1.7;
+  }
+
+  &[data-compact-manage="true"] {
+    gap: 0.5rem;
+
+    p {
+      font-size: 0.86rem;
+      line-height: 1.55;
+    }
   }
 `
 
@@ -5742,6 +5804,10 @@ const AnchorButton = styled.a`
 const HeroAside = styled.aside`
   display: grid;
   gap: 0.85rem;
+
+  &[data-compact-manage="true"] {
+    gap: 0.6rem;
+  }
 `
 
 const MetricGrid = styled.div`
@@ -5814,6 +5880,15 @@ const StudioSurfaceCard = styled.section`
   @media (max-width: 420px) {
     padding: 0.72rem 0.74rem;
     border-radius: 12px;
+  }
+
+  &[data-compact-manage="true"] {
+    margin-bottom: 0.8rem;
+
+    @media (max-width: 720px) {
+      gap: 0.55rem;
+      padding: 0.64rem 0.72rem;
+    }
   }
 `
 
@@ -5994,6 +6069,10 @@ const ContentStudioGrid = styled.div`
   @media (min-width: 1320px) {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   }
+
+  @media (max-width: 720px) {
+    gap: 0.76rem;
+  }
 `
 
 const MobileStudioStepper = styled.div`
@@ -6037,7 +6116,7 @@ const MobileStepGuide = styled.section`
   @media (max-width: 720px) {
     display: grid;
     gap: 0.58rem;
-    margin-bottom: 0.42rem;
+    margin-bottom: 0.28rem;
     padding: 0.66rem 0.72rem;
     border-radius: 10px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -6845,7 +6924,7 @@ const WriterMetaActions = styled.div`
 
 const PostPreviewSetup = styled.section`
   display: grid;
-  gap: 1rem;
+  gap: 0.82rem;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -6854,19 +6933,99 @@ const PostPreviewSetup = styled.section`
 
 const PostPreviewHeader = styled.div`
   display: grid;
-  gap: 0.12rem;
+  gap: 0.18rem;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.96rem;
+    font-size: 0.92rem;
     font-weight: 700;
     line-height: 1.3;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     line-height: 1.45;
+  }
+`
+
+const SectionKicker = styled.span`
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+`
+
+const PublishOverviewGrid = styled.div`
+  display: grid;
+  gap: 0.8rem;
+
+  @media (min-width: 880px) {
+    grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+    align-items: start;
+  }
+`
+
+const VisibilityCard = styled.section`
+  display: grid;
+  gap: 0.62rem;
+  align-content: start;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    ${({ theme }) => theme.colors.gray1};
+  padding: 0.9rem;
+
+  > strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.94rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+`
+
+const VisibilityOptionGrid = styled.div`
+  display: grid;
+  gap: 0.5rem;
+`
+
+const VisibilityOptionButton = styled.button`
+  display: grid;
+  gap: 0.16rem;
+  width: 100%;
+  padding: 0.72rem 0.78rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue6} inset;
   }
 `
 
@@ -8366,38 +8525,23 @@ const ListTable = styled.table`
     min-width: 0;
   }
 
-  th.authorCell,
-  td.authorCell {
-    width: 88px;
-  }
-
   th.dateCell,
   td.dateCell {
     width: 112px;
     white-space: nowrap;
   }
 
-  th.visibilityCell,
-  td.visibilityCell {
-    width: 88px;
-  }
-
-  th.visibilityCell {
-    line-height: 1.25;
-    text-align: center;
-    white-space: nowrap;
-  }
-
   th.actionsCell,
   td.actionsCell {
-    width: 196px;
-    min-width: 196px;
+    width: 168px;
+    min-width: 168px;
   }
 
   @media (max-width: 1520px) {
-    th.authorCell,
-    td.authorCell {
-      display: none;
+    th.actionsCell,
+    td.actionsCell {
+      width: 156px;
+      min-width: 156px;
     }
   }
 `
@@ -8428,7 +8572,6 @@ const TitleCell = styled.div`
   .meta {
     display: inline-flex;
     align-items: center;
-    gap: 0.34rem;
     min-width: 0;
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.72rem;
@@ -8436,8 +8579,8 @@ const TitleCell = styled.div`
     white-space: nowrap;
   }
 
-  .dot {
-    opacity: 0.65;
+  .inlineVisibility {
+    display: inline-flex;
   }
 `
 
@@ -8759,42 +8902,46 @@ const ConfirmModal = styled.div`
 `
 
 const PublishModal = styled.div`
-  width: min(880px, 100%);
+  width: min(960px, 100%);
   max-height: min(86vh, 920px);
   overflow: auto;
-  border-radius: 8px;
+  border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem;
+  padding: 1rem 1rem 0;
   display: grid;
-  gap: 0.9rem;
+  gap: 0.8rem;
 
   @media (max-width: 720px) {
     width: min(100%, 34rem);
     max-height: min(92vh, 980px);
-    padding: 0.82rem;
+    padding: 0.82rem 0.82rem 0;
     gap: 0.78rem;
   }
 `
 
 const PublishModalHeader = styled.div`
+  display: grid;
+  gap: 0.75rem;
+
   h4 {
     margin: 0;
-    font-size: 1.02rem;
+    font-size: 1.08rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
-    margin: 0.3rem 0 0;
+    margin: 0.24rem 0 0;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.5;
   }
 `
 
 const PublishModalBody = styled.div`
   display: grid;
   gap: 0.8rem;
+  padding-bottom: 0.6rem;
 
   @media (max-width: 720px) {
     gap: 0.7rem;
@@ -8802,9 +8949,9 @@ const PublishModalBody = styled.div`
 `
 
 const PublishModeHint = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   border-radius: 12px;
   padding: 0.62rem 0.74rem;
   font-size: 0.8rem;
@@ -8816,6 +8963,19 @@ const PublishModalFooter = styled.div`
   justify-content: flex-end;
   gap: 0.5rem;
   flex-wrap: wrap;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 0 -1rem;
+  padding: 0.9rem 1rem 1rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: 0 -10px 28px rgba(2, 6, 23, 0.12);
+
+  @media (max-width: 720px) {
+    margin: 0 -0.82rem;
+    padding: 0.82rem 0.82rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  }
 `
 
 const EditorPane = styled.section`

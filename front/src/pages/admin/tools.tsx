@@ -147,7 +147,7 @@ const ACTION_LABELS: Record<string, string> = {
   mailStatus: "메일 준비 상태 새로고침",
   mailConnectivity: "SMTP 연결 확인",
   mailTest: "테스트 메일 발송",
-  taskQueueStatus: "Task Queue 진단 새로고침",
+  taskQueueStatus: "작업 큐 진단 새로고침",
   cleanupStatus: "파일 정리 진단 새로고침",
   authSecurityEvents: "인증 보안 이벤트 새로고침",
 }
@@ -407,7 +407,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       setTaskQueueDiagnostics(diagnostics)
       setResult(pretty(diagnostics))
     } catch (error) {
-      const message = toFriendlyApiMessage(error, "Task Queue 진단 조회에 실패했습니다.")
+      const message = toFriendlyApiMessage(error, "작업 큐 진단 조회에 실패했습니다.")
       setTaskQueueDiagnosticsError(message)
       setResult(pretty({ error: message }))
     } finally {
@@ -643,7 +643,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
     {
       key: "taskQueueStatus",
-      title: "Task Queue 진단",
+      title: "작업 큐 진단",
       description: "적체·실패·stale processing 새로고침",
       chipLabel: "진단",
       tone: "infra",
@@ -690,7 +690,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
     {
       key: "taskQueueStatus",
-      label: "Task Queue 진단",
+      label: "작업 큐 진단",
       chipLabel: "진단",
       tone: "infra",
       onClick: async () => void fetchTaskQueueDiagnostics(),
@@ -747,7 +747,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <span>{mailDiagnostics?.checkedAt ? formatInstant(mailDiagnostics.checkedAt) : "-"}</span>
           </OverviewItem>
           <OverviewItem>
-            <small>Task Queue</small>
+            <small>작업 큐</small>
             <strong>{queueStatusLabel}</strong>
             <span>{queueHealthMessage}</span>
           </OverviewItem>
@@ -809,7 +809,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       {!advancedPanelsOpen ? (
         <CollapsedStateCard>
           <strong>고급 진단은 기본으로 접어둡니다.</strong>
-          <p>Task Queue, 파일 정리, 인증 보안 이벤트, 실행 로그는 필요할 때만 열어 정보 밀도를 낮춥니다.</p>
+          <p>작업 큐, 파일 정리, 인증 보안 이벤트, 실행 로그는 필요할 때만 열어 정보 밀도를 낮춥니다.</p>
           <CollapsedStateAction type="button" onClick={() => setAdvancedPanelsOpen(true)}>
             고급 진단 펼치기
           </CollapsedStateAction>
@@ -869,7 +869,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>System Tools</SectionEyebrow>
+              <SectionEyebrow>시스템 점검</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">🩺</SectionIcon>
                 <h2>시스템 점검 도구</h2>
@@ -893,7 +893,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>Monitoring</SectionEyebrow>
+              <SectionEyebrow>모니터링</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">📈</SectionIcon>
                 <h2>서비스 모니터링</h2>
@@ -958,7 +958,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>Signup Mail</SectionEyebrow>
+              <SectionEyebrow>가입 메일</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">📧</SectionIcon>
                 <h2>회원가입 메일 진단</h2>
@@ -1035,7 +1035,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>Task Queue</SectionEyebrow>
+              <SectionEyebrow>작업 큐</SectionEyebrow>
               <SectionTitleRow>
                 <SectionIcon aria-hidden="true">⚙️</SectionIcon>
                 <h2>백그라운드 작업 상태</h2>
@@ -1331,7 +1331,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <div>
               <SectionEyebrow>실행 로그</SectionEyebrow>
               <h2>실행 결과 콘솔</h2>
-              <ConsoleDescription>메일, Task Queue, 파일 정리 진단 결과와 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
+              <ConsoleDescription>메일, 작업 큐, 파일 정리 진단 결과와 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
             </div>
             <ConsoleStatus>{consoleStatus}</ConsoleStatus>
           </ConsoleHeader>
@@ -2200,6 +2200,7 @@ const MonitoringActions = styled.div`
   align-items: center;
   gap: 0.62rem;
   margin-top: 0.7rem;
+  margin-bottom: 0.6rem;
 
   a {
     text-decoration: none;

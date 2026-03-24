@@ -5,7 +5,7 @@ const MarkdownRendererRoot = styled.div`
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-x: hidden;
+  overflow-x: visible;
   overflow-wrap: anywhere;
   word-break: break-word;
   color: ${({ theme }) => theme.colors.gray12};
@@ -439,6 +439,14 @@ const MarkdownRendererRoot = styled.div`
     scrollbar-width: thin;
   }
 
+  .aq-mermaid[data-mermaid-wide="true"] {
+    width: var(--aq-mermaid-wide-width, 100%);
+    max-width: none;
+    margin-left: calc(var(--aq-mermaid-bleed-left, 0px) * -1);
+    margin-right: calc(var(--aq-mermaid-bleed-right, 0px) * -1);
+    overflow: visible;
+  }
+
   .aq-mermaid[data-mermaid-rendered="pending"] {
     min-height: 7.5rem;
   }
@@ -458,6 +466,11 @@ const MarkdownRendererRoot = styled.div`
     -webkit-overflow-scrolling: touch;
   }
 
+  .aq-mermaid[data-mermaid-wide="true"] .aq-mermaid-stage {
+    max-width: none;
+    overflow: visible;
+  }
+
   .aq-mermaid-stage > svg {
     display: block;
     width: auto;
@@ -470,14 +483,6 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-mermaid-stage > svg .nodeLabel p,
   .aq-mermaid-stage > svg .edgeLabel p {
-    margin: 0;
-  }
-
-  .aq-mermaid[data-mermaid-preset="github"] .aq-mermaid-stage {
-    justify-content: flex-start;
-  }
-
-  .aq-mermaid[data-mermaid-preset="github"] .aq-mermaid-stage > svg {
     margin: 0;
   }
 
@@ -514,6 +519,12 @@ const MarkdownRendererRoot = styled.div`
     font-size: 0.76rem;
     font-weight: 700;
     cursor: pointer;
+  }
+
+  .aq-mermaid[data-mermaid-expandable="true"] .aq-mermaid-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   pre code .token.comment,
@@ -666,6 +677,14 @@ const MarkdownRendererRoot = styled.div`
 
     .aq-mermaid {
       padding-bottom: 0.24rem;
+    }
+
+    .aq-mermaid[data-mermaid-wide="true"] {
+      width: 100%;
+      max-width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      overflow-x: auto;
     }
   }
 

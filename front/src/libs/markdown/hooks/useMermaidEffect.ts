@@ -27,6 +27,10 @@ const MERMAID_VISUAL_PRESET: MermaidVisualPreset = "github"
 
 const GITHUB_MERMAID_FONT_STACK =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"'
+const DESKTOP_MERMAID_MIN_VIEWPORT_PX = 1201
+const MERMAID_DESKTOP_WIDE_MAX_PX = 1100
+const MERMAID_DESKTOP_SAFE_MARGIN_PX = 24
+const MERMAID_EXPAND_THRESHOLD_PX = 80
 
 const createGithubMermaidConfig = (scheme: "dark" | "light") => {
   const isDark = scheme === "dark"
@@ -178,8 +182,8 @@ const useMermaidEffect = (
       overlay.style.padding = "max(0.9rem, env(safe-area-inset-top, 0px)) max(0.9rem, env(safe-area-inset-right, 0px)) max(0.9rem, env(safe-area-inset-bottom, 0px)) max(0.9rem, env(safe-area-inset-left, 0px))"
 
       const panel = document.createElement("div")
-      panel.style.width = "min(96vw, 980px)"
-      panel.style.maxHeight = "min(88dvh, 760px)"
+      panel.style.width = "min(96vw, 1280px)"
+      panel.style.maxHeight = "min(90dvh, 820px)"
       panel.style.overflow = "auto"
       panel.style.borderRadius = "14px"
       panel.style.border = "1px solid rgba(255, 255, 255, 0.14)"
@@ -385,6 +389,9 @@ const useMermaidEffect = (
 
         const renderSourceIntoBlock = async (sourceToRender: string) => {
           const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
+          const isDesktopViewport = window.matchMedia(
+            `(min-width: ${DESKTOP_MERMAID_MIN_VIEWPORT_PX}px)`
+          ).matches
           const containerWidth = Math.max(280, visibleWidth)
           const reserveHeight = Math.max(120, Math.ceil(blockRect.height))
 
@@ -427,16 +434,64 @@ const useMermaidEffect = (
             Number.isFinite(viewBoxHeight) && viewBoxHeight > 0
               ? viewBoxHeight
               : Math.max(1, fallbackHeight)
-          const needsMobileExpandAction = isMobileViewport && intrinsicWidth > containerWidth + 12
+          const needsExpandAction = intrinsicWidth > containerWidth + MERMAID_EXPAND_THRESHOLD_PX
+          let maxDisplayWidth = containerWidth
+          let wideBleedLeft = 0
+          let wideBleedRight = 0
+
+          if (isDesktopViewport && needsExpandAction) {
+            const detailLayout = block.closest<HTMLElement>(".detailLayout")
+            const leftRail = detailLayout?.querySelector<HTMLElement>(".leftRail")
+            const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
+            const liveBlockRect = block.getBoundingClientRect()
+            const leftBound =
+              leftRail && leftRail.offsetParent !== null
+                ? leftRail.getBoundingClientRect().right + MERMAID_DESKTOP_SAFE_MARGIN_PX
+                : MERMAID_DESKTOP_SAFE_MARGIN_PX
+            const rightBound =
+              rightRail && rightRail.offsetParent !== null
+                ? rightRail.getBoundingClientRect().left - MERMAID_DESKTOP_SAFE_MARGIN_PX
+                : window.innerWidth - MERMAID_DESKTOP_SAFE_MARGIN_PX
+            const safeLaneWidth = Math.max(containerWidth, Math.round(rightBound - leftBound))
+            const desiredWideWidth = Math.max(
+              containerWidth,
+              Math.min(intrinsicWidth, MERMAID_DESKTOP_WIDE_MAX_PX, safeLaneWidth)
+            )
+            const desiredExtra = Math.max(0, desiredWideWidth - containerWidth)
+
+            if (desiredExtra > 24) {
+              const leftAllowance = Math.max(0, Math.round(liveBlockRect.left - leftBound))
+              const rightAllowance = Math.max(0, Math.round(rightBound - liveBlockRect.right))
+              let nextLeftBleed = Math.min(leftAllowance, Math.round(desiredExtra / 2))
+              let nextRightBleed = desiredExtra - nextLeftBleed
+
+              if (nextRightBleed > rightAllowance) {
+                nextRightBleed = rightAllowance
+                nextLeftBleed = Math.min(leftAllowance, desiredExtra - nextRightBleed)
+              }
+
+              if (nextLeftBleed > leftAllowance) {
+                nextLeftBleed = leftAllowance
+                nextRightBleed = Math.min(rightAllowance, desiredExtra - nextLeftBleed)
+              }
+
+              const actualWideWidth = containerWidth + nextLeftBleed + nextRightBleed
+              if (actualWideWidth > containerWidth + 24) {
+                maxDisplayWidth = actualWideWidth
+                wideBleedLeft = nextLeftBleed
+                wideBleedRight = nextRightBleed
+              }
+            }
+          }
 
           const maxReadableHeight = Math.min(520, Math.floor(window.innerHeight * 0.68))
-          const usesGithubNaturalDesktopSizing = preset.mode === "github" && !isMobileViewport
+          const usesDesktopWideLane = maxDisplayWidth > containerWidth + 24
 
           let scale = 1
-          if (!usesGithubNaturalDesktopSizing && intrinsicWidth > containerWidth) {
-            scale = Math.min(scale, containerWidth / intrinsicWidth)
+          if (intrinsicWidth > maxDisplayWidth) {
+            scale = Math.min(scale, maxDisplayWidth / intrinsicWidth)
           }
-          if (!usesGithubNaturalDesktopSizing && intrinsicHeight * scale > maxReadableHeight) {
+          if (isMobileViewport && intrinsicHeight * scale > maxReadableHeight) {
             scale = Math.min(scale, maxReadableHeight / intrinsicHeight)
           }
 
@@ -445,20 +500,25 @@ const useMermaidEffect = (
 
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
-          const stageWidth = containerWidth
+          const stageWidth = usesDesktopWideLane ? maxDisplayWidth : containerWidth
           stage.style.width = `${stageWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
           stage.style.display = "flex"
           stage.style.justifyContent = "center"
-          stage.style.overflowX = usesGithubNaturalDesktopSizing ? "auto" : "hidden"
-          block.style.overflowX = usesGithubNaturalDesktopSizing ? "auto" : "hidden"
+          stage.style.overflowX = usesDesktopWideLane ? "visible" : "auto"
+          block.style.overflowX = usesDesktopWideLane ? "visible" : "auto"
           stage.style.setProperty("-webkit-overflow-scrolling", "touch")
           block.style.setProperty("-webkit-overflow-scrolling", "touch")
+          block.dataset.mermaidWide = usesDesktopWideLane ? "true" : "false"
+          block.dataset.mermaidExpandable = needsExpandAction ? "true" : "false"
+          block.style.setProperty("--aq-mermaid-wide-width", `${stageWidth}px`)
+          block.style.setProperty("--aq-mermaid-bleed-left", `${wideBleedLeft}px`)
+          block.style.setProperty("--aq-mermaid-bleed-right", `${wideBleedRight}px`)
 
           svgElement.setAttribute("preserveAspectRatio", "xMidYMin meet")
           svgElement.style.width = `${roundedWidth}px`
           svgElement.style.height = `${roundedHeight}px`
-          svgElement.style.maxWidth = usesGithubNaturalDesktopSizing ? "none" : "100%"
+          svgElement.style.maxWidth = "100%"
           svgElement.style.maxHeight = "none"
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
@@ -466,7 +526,7 @@ const useMermaidEffect = (
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
 
-          if (needsMobileExpandAction) {
+          if (needsExpandAction) {
             const expandButton = document.createElement("button")
             expandButton.type = "button"
             expandButton.className = "aq-mermaid-expand-btn"

@@ -764,11 +764,11 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
       expect(leftRailWidth).toBe(72)
-      expect(leftRailHeight).toBeGreaterThanOrEqual(132)
+      expect(leftRailHeight).toBeGreaterThanOrEqual(128)
       expect(leftRailHeight).toBeLessThanOrEqual(172)
       expect(leftRailY).toBeGreaterThanOrEqual(84)
       expect(leftRailY).toBeLessThanOrEqual(92)
-      expect(rightRailWidth).toBe(208)
+      expect(rightRailWidth).toBe(200)
       expect(rightRailHeight).toBeGreaterThanOrEqual(280)
       expect(rightRailHeight).toBeLessThanOrEqual(380)
       expect(rightRailY).toBeGreaterThanOrEqual(84)

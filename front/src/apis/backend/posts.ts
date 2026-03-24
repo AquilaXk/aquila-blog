@@ -1,6 +1,9 @@
+import type { QueryClient } from "@tanstack/react-query"
 import { PostDetail, TPost } from "src/types"
 import { normalizeCategoryValue } from "src/libs/utils"
-import { ApiError, apiFetch } from "./client"
+import { clearFeedExplorerRestoreCache } from "src/routes/Feed/feedRestoreCache"
+import { queryKey } from "src/constants/queryKey"
+import { ApiError, apiFetch, evictBrowserRevalidateCacheEntries } from "./client"
 import { asOpenApiPath } from "./openapiContract"
 
 type PageDto<T> = {
@@ -316,9 +319,48 @@ let postsCache: TPost[] | null = null
 let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
 let isPublicCursorDisabledCache: boolean | null = null
+const PUBLIC_POST_READ_CACHE_PATH_REGEX =
+  /^\/post\/api\/v1\/posts\/(?:feed|explore|search|tags)(?:\/|$)|^\/post\/api\/v1\/posts\/[0-9]+(?:\/|$)/i
 
 type GetPostsOptions = {
   throwOnError?: boolean
+}
+
+export const invalidatePublicPostReadCaches = async (
+  queryClient?: QueryClient,
+  postId?: string | number
+) => {
+  postsCache = null
+  postsCacheAt = 0
+  pendingPostsPromise = null
+
+  if (typeof window !== "undefined") {
+    clearFeedExplorerRestoreCache()
+    evictBrowserRevalidateCacheEntries((url) => {
+      try {
+        const parsed = new URL(url)
+        return PUBLIC_POST_READ_CACHE_PATH_REGEX.test(parsed.pathname)
+      } catch {
+        return false
+      }
+    })
+  }
+
+  if (!queryClient) return
+
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: ["posts"] }),
+    queryClient.cancelQueries({ queryKey: ["tags"] }),
+    queryClient.cancelQueries({ queryKey: ["post"] }),
+  ])
+
+  queryClient.removeQueries({ queryKey: ["posts"] })
+  queryClient.removeQueries({ queryKey: queryKey.tags() })
+  queryClient.removeQueries({ queryKey: queryKey.postsTotalCount() })
+  queryClient.removeQueries({ queryKey: ["post"] })
+  if (postId !== undefined && postId !== null && String(postId).trim()) {
+    queryClient.removeQueries({ queryKey: queryKey.post(String(postId).trim()) })
+  }
 }
 
 export type ExplorePostsParams = {

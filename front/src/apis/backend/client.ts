@@ -177,6 +177,29 @@ const refreshRevalidateCacheEntry = (
   })
 }
 
+export const evictBrowserRevalidateCacheEntries = (predicate: (url: string) => boolean) => {
+  if (isServer) return
+
+  const cacheKeysToDelete: string[] = []
+  browserRevalidateCache.forEach((_, url) => {
+    if (predicate(url)) cacheKeysToDelete.push(url)
+  })
+  cacheKeysToDelete.forEach((url) => {
+    browserRevalidateCache.delete(url)
+  })
+
+  const inFlightKeysToDelete: string[] = []
+  browserInFlightGetRequests.forEach((_, key) => {
+    const separatorIndex = key.indexOf(":")
+    if (separatorIndex < 0) return
+    const url = key.slice(separatorIndex + 1)
+    if (url && predicate(url)) inFlightKeysToDelete.push(key)
+  })
+  inFlightKeysToDelete.forEach((key) => {
+    browserInFlightGetRequests.delete(key)
+  })
+}
+
 const resolveStatusMessage = (status: number) => {
   if (status === 400) return "요청 값이 올바르지 않습니다."
   if (status === 401) return "로그인이 필요합니다."

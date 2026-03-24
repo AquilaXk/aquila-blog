@@ -29,7 +29,8 @@ import {
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
 const FEED_TAG_RAIL_GAP_PX = 16
-const FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX = 8
+const FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX = 24
+const FEED_POST_COLUMN_MAX_WIDTH_REM = 47.75
 const FEED_EXPLORER_RESTORE_KEY_PREFIX = "feed:explorer:state:v2"
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
@@ -454,6 +455,10 @@ const FeedExplorer = () => {
     if (!feedBody) return
 
     let rafId: number | null = null
+    let settleRafId: number | null = null
+    let settleRafId2: number | null = null
+    let settleTimerId: number | null = null
+    let settleTimerId2: number | null = null
     let observer: ResizeObserver | null = null
 
     const syncDesktopRailVisibility = () => {
@@ -467,13 +472,12 @@ const FeedExplorer = () => {
       const rect = feedBody.getBoundingClientRect()
       const minOffsetToStayVisible = FEED_TAG_RAIL_SAFE_VIEWPORT_GUTTER_PX - rect.left
       const nextOffset = Math.min(0, Math.max(FEED_TAG_RAIL_OFFSET_MIN_PX, minOffsetToStayVisible))
-      const nextOverlapInset = Math.max(
-        0,
-        FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX + nextOffset
-      )
+      const nextOverlapInset = Math.max(0, FEED_TAG_RAIL_WIDTH_PX + FEED_TAG_RAIL_GAP_PX + nextOffset)
 
       setDesktopRailEnabled(true)
-      setDesktopRailOffsetPx((prev) => (Math.abs(prev - nextOffset) < 1 ? prev : nextOffset))
+      setDesktopRailOffsetPx((prev) =>
+        Math.abs(prev - nextOffset) < 1 ? prev : nextOffset
+      )
       setDesktopRailOverlapInsetPx((prev) =>
         Math.abs(prev - nextOverlapInset) < 1 ? prev : nextOverlapInset
       )
@@ -490,23 +494,56 @@ const FeedExplorer = () => {
     }
 
     syncDesktopRailVisibility()
+    settleRafId = window.requestAnimationFrame(() => {
+      scheduleSync()
+      settleRafId2 = window.requestAnimationFrame(() => {
+        scheduleSync()
+      })
+    })
+    settleTimerId = window.setTimeout(() => {
+      scheduleSync()
+    }, 120)
+    settleTimerId2 = window.setTimeout(() => {
+      scheduleSync()
+    }, 360)
     window.addEventListener("resize", scheduleSync, { passive: true })
     window.addEventListener("orientationchange", scheduleSync)
-    window.addEventListener("scroll", scheduleSync, { passive: true })
+    window.addEventListener("load", scheduleSync)
+
+    const fontSet = document.fonts
+    if (fontSet) {
+      void fontSet.ready.then(() => {
+        scheduleSync()
+      }).catch(() => {})
+    }
 
     if (typeof ResizeObserver !== "undefined") {
       observer = new ResizeObserver(() => {
         scheduleSync()
       })
       observer.observe(feedBody)
+      const feedRootMain = feedBody.closest("main")
+      if (feedRootMain) observer.observe(feedRootMain)
     }
 
     return () => {
       window.removeEventListener("resize", scheduleSync)
       window.removeEventListener("orientationchange", scheduleSync)
-      window.removeEventListener("scroll", scheduleSync)
+      window.removeEventListener("load", scheduleSync)
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
+      }
+      if (settleRafId !== null) {
+        window.cancelAnimationFrame(settleRafId)
+      }
+      if (settleRafId2 !== null) {
+        window.cancelAnimationFrame(settleRafId2)
+      }
+      if (settleTimerId !== null) {
+        window.clearTimeout(settleTimerId)
+      }
+      if (settleTimerId2 !== null) {
+        window.clearTimeout(settleTimerId2)
       }
       observer?.disconnect()
     }
@@ -852,8 +889,9 @@ const ExplorerCard = styled.section`
 
   .searchSlot {
     min-width: 0;
-    width: min(100%, 58.5rem);
+    width: min(100%, ${FEED_POST_COLUMN_MAX_WIDTH_REM}rem);
     padding-left: var(--feed-tag-rail-overlap-px);
+    margin-inline: auto;
     transition: padding-left 0.14s ease-in;
   }
 
@@ -872,6 +910,7 @@ const FeedBody = styled.section`
   --feed-tag-rail-width: ${FEED_TAG_RAIL_WIDTH_PX}px;
   --feed-tag-rail-left-px: ${FEED_TAG_RAIL_OFFSET_MIN_PX}px;
   --feed-tag-rail-overlap-px: 0px;
+  --feed-post-column-max-width: ${FEED_POST_COLUMN_MAX_WIDTH_REM}rem;
   min-width: 0;
   overflow: visible;
 
@@ -882,13 +921,17 @@ const FeedBody = styled.section`
 
   .postColumn {
     min-width: 0;
-    margin-left: 0;
+    width: min(100%, var(--feed-post-column-max-width));
+    margin-inline: auto;
   }
 
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
     position: relative;
 
     &[data-desktop-rail="true"] {
+      padding-left: var(--feed-tag-rail-overlap-px);
+      transition: padding-left 0.14s ease-in;
+
       .tagColumn {
         position: absolute;
         top: 0;
@@ -900,16 +943,6 @@ const FeedBody = styled.section`
         pointer-events: auto;
       }
 
-      .postColumn {
-        padding-left: var(--feed-tag-rail-overlap-px);
-        transition: padding-left 0.14s ease-in;
-      }
-    }
-
-    &[data-desktop-rail="false"] {
-      .tagColumn {
-        display: none;
-      }
     }
   }
 `

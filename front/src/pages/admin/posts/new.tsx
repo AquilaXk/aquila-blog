@@ -1277,6 +1277,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [listSort, setListSort] = useState("CREATED_AT")
   const [listScope, setListScope] = useState<PostListScope>("active")
   const [listQuickPreset, setListQuickPreset] = useState<ListQuickPreset>("none")
+  const [isListAdvancedOpen, setIsListAdvancedOpen] = useState(false)
+  const [isDirectLoadOpen, setIsDirectLoadOpen] = useState(false)
+  const [isSelectedToolsOpen, setIsSelectedToolsOpen] = useState(false)
 
   const [profileImgInputUrl, setProfileImgInputUrl] = useState(() =>
     (initialMember.profileImageDirectUrl || initialMember.profileImageUrl || "").trim()
@@ -3515,12 +3518,19 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const currentFlags = toFlags(postVisibility)
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
   const editorModeLabel = editorMode === "edit" ? "수정 모드" : "새 글 모드"
+  const hasSelectedManagedPost = editorMode === "edit" && postId.trim().length > 0
   const currentPostLabel =
-    editorMode === "edit" && postId.trim()
+    hasSelectedManagedPost
       ? `${postTitle.trim() || "제목 없음"} · #${postId}`
       : postTitle.trim() || "새 글 초안"
   const selectedPostLabel =
-    editorMode === "edit" && postId.trim() ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
+    hasSelectedManagedPost ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
+  const hasListFiltersApplied =
+    listKw.trim().length > 0 ||
+    listQuickPreset !== "none" ||
+    listPage !== "1" ||
+    listPageSize !== "30" ||
+    (listScope === "active" && listSort !== "CREATED_AT")
   const contentLength = postContent.trim().length
   const lineCount = postContent ? postContent.split("\n").length : 0
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
@@ -4106,8 +4116,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <h3>글 목록 조회 조건</h3>
                     <p>
                       {listScope === "active"
-                        ? "활성 글/임시글 조회 조건입니다."
-                        : "삭제 글 조회 및 복구/영구삭제 조건입니다."}
+                        ? "최근 글을 빠르게 다시 열고 필요한 경우만 고급 조건을 펼쳐 조회합니다."
+                        : "삭제 글을 확인하고 복구/영구삭제 대상을 정리합니다."}
                     </p>
                     <ListScopeTabs>
                       <ListScopeButton
@@ -4126,72 +4136,29 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       </ListScopeButton>
                     </ListScopeTabs>
                   </QueryHeader>
-                  <QueryGrid>
-                    <FieldBox className="listPage">
-                      <FieldLabel htmlFor="list-page">페이지</FieldLabel>
-                      <Input
-                        id="list-page"
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        placeholder="예: 1"
-                        value={listPage}
-                        onChange={handleListPageChange}
-                      />
-                    </FieldBox>
-                    <FieldBox className="listPageSize">
-                      <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
-                      <Input
-                        id="list-page-size"
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={30}
-                        placeholder="1~30"
-                        value={listPageSize}
-                        onChange={handleListPageSizeChange}
-                      />
-                    </FieldBox>
-                    <FieldBox className="listKw">
-                      <FieldLabel htmlFor="list-kw">검색어</FieldLabel>
-                      <Input
-                        id="list-kw"
-                        placeholder="제목/본문 키워드"
-                        value={listKw}
-                        onChange={(e) => setListKw(e.target.value)}
-                      />
-                    </FieldBox>
-                    {listScope === "active" && (
-                      <FieldBox className="listSort">
-                        <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
-                        <FieldSelect
-                          id="list-sort"
-                          value={listSort}
-                          onChange={handleListSortChange}
-                        >
-                          {LIST_SORT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </FieldSelect>
-                      </FieldBox>
-                    )}
-                  </QueryGrid>
+                  <FieldBox>
+                    <FieldLabel htmlFor="list-kw">검색어</FieldLabel>
+                    <Input
+                      id="list-kw"
+                      placeholder={listScope === "active" ? "제목/본문 키워드" : "삭제된 글 제목/본문 키워드"}
+                      value={listKw}
+                      onChange={(e) => setListKw(e.target.value)}
+                    />
+                  </FieldBox>
 
                   <QueryActions>
                     <PrimaryButton
                       disabled={disabled("postList")}
                       onClick={() => void loadAdminPosts()}
                     >
-                      {listScope === "active" ? "전체 글 목록 조회" : "삭제 글 목록 조회"}
+                      {listScope === "active" ? "목록 새로고침" : "삭제 글 조회"}
                     </PrimaryButton>
                     {listScope === "active" && (
                       <Button
                         disabled={disabled("postTemp")}
                         onClick={() => void handleLoadOrCreateTempPost()}
                       >
-                        임시글 불러오기/없으면 생성
+                        임시글 열기
                       </Button>
                     )}
                   </QueryActions>
@@ -4211,28 +4178,79 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       >
                         임시글
                       </PresetButton>
-                      <PresetButton
-                        type="button"
-                        data-active={false}
-                        onClick={() => {
-                          setListQuickPreset("none")
-                          setListScope("deleted")
-                        }}
-                      >
-                        삭제 글
-                      </PresetButton>
-                      <PresetButton
-                        type="button"
-                        data-active={listQuickPreset === "none"}
-                        onClick={() => {
-                          setListQuickPreset("none")
-                          setListKw("")
-                        }}
-                      >
-                        프리셋 해제
-                      </PresetButton>
+                      {hasListFiltersApplied && (
+                        <PresetButton
+                          type="button"
+                          data-active={false}
+                          onClick={() => {
+                            setListQuickPreset("none")
+                            setListKw("")
+                            setListPage("1")
+                            setListPageSize("30")
+                            setListSort("CREATED_AT")
+                          }}
+                        >
+                          조건 초기화
+                        </PresetButton>
+                      )}
                     </PresetRow>
                   )}
+                  <InlineDisclosure open={isListAdvancedOpen}>
+                    <summary onClick={(event) => {
+                      event.preventDefault()
+                      setIsListAdvancedOpen((prev) => !prev)
+                    }}>
+                      <strong>고급 조회 옵션</strong>
+                      <span>{isListAdvancedOpen ? "닫기" : "열기"}</span>
+                    </summary>
+                    {isListAdvancedOpen && (
+                      <div className="body">
+                        <QueryGrid>
+                          <FieldBox className="listPage">
+                            <FieldLabel htmlFor="list-page">페이지</FieldLabel>
+                            <Input
+                              id="list-page"
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              placeholder="예: 1"
+                              value={listPage}
+                              onChange={handleListPageChange}
+                            />
+                          </FieldBox>
+                          <FieldBox className="listPageSize">
+                            <FieldLabel htmlFor="list-page-size">페이지 크기</FieldLabel>
+                            <Input
+                              id="list-page-size"
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={30}
+                              placeholder="1~30"
+                              value={listPageSize}
+                              onChange={handleListPageSizeChange}
+                            />
+                          </FieldBox>
+                          {listScope === "active" && (
+                            <FieldBox className="listSort">
+                              <FieldLabel htmlFor="list-sort">정렬 기준</FieldLabel>
+                              <FieldSelect
+                                id="list-sort"
+                                value={listSort}
+                                onChange={handleListSortChange}
+                              >
+                                {LIST_SORT_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </FieldSelect>
+                            </FieldBox>
+                          )}
+                        </QueryGrid>
+                      </div>
+                    )}
+                  </InlineDisclosure>
                 </QueryPanel>
 
               <ListPanel data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "list"}>
@@ -4248,13 +4266,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           onClick={toggleSelectAllVisiblePosts}
                         >
                           {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
-                        </Button>
-                        <Button
-                          type="button"
-                          disabled={selectedPostIds.length === 0 || loadingKey.length > 0}
-                          onClick={() => openDeleteConfirm(selectedPostIds)}
-                        >
-                          선택 삭제
                         </Button>
                       </>
                     ) : (
@@ -4293,7 +4304,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         disabled={disabled("postList")}
                         onClick={() => void loadAdminPosts()}
                       >
-                        {listScope === "active" ? "전체 글 목록 조회" : "삭제 글 목록 조회"}
+                        {listScope === "active" ? "목록 새로고침" : "삭제 글 목록 조회"}
                       </PrimaryButton>
                       {listScope === "active" && (
                         <Button
@@ -4301,7 +4312,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           disabled={disabled("postTemp")}
                           onClick={() => void handleLoadOrCreateTempPost()}
                         >
-                          임시글 불러오기/없으면 생성
+                          임시글 열기
                         </Button>
                       )}
                     </div>
@@ -4394,11 +4405,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                         }}
                                       >
                                         <AppIcon name="edit" />
-                                        <span>{isLoadedRow ? "계속 편집" : "편집 열기"}</span>
+                                        <span>{isLoadedRow ? "계속 편집" : "편집"}</span>
                                       </RowActionButton>
                                       <RowActionButton
                                         type="button"
-                                        data-variant="soft-danger"
+                                        data-variant="subtle-danger"
                                         disabled={loadingKey.length > 0}
                                         onClick={() => openDeleteConfirm([row.id], row.title)}
                                       >
@@ -4419,7 +4430,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                       </RowActionButton>
                                       <RowActionButton
                                         type="button"
-                                        data-variant="soft-danger"
+                                        data-variant="subtle-danger"
                                         disabled={loadingKey.length > 0}
                                         onClick={() => void hardDeleteDeletedPostFromList(row)}
                                       >
@@ -4480,11 +4491,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                   }}
                                 >
                                   <AppIcon name="edit" />
-                                  <span>{isLoadedRow ? "계속 편집" : "편집 열기"}</span>
+                                  <span>{isLoadedRow ? "계속 편집" : "편집"}</span>
                                 </RowActionButton>
                                 <RowActionButton
                                   type="button"
-                                  data-variant="soft-danger"
+                                  data-variant="subtle-danger"
                                   disabled={loadingKey.length > 0}
                                   onClick={() => openDeleteConfirm([row.id], row.title)}
                                 >
@@ -4505,7 +4516,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                 </RowActionButton>
                                 <RowActionButton
                                   type="button"
-                                  data-variant="soft-danger"
+                                  data-variant="subtle-danger"
                                   disabled={loadingKey.length > 0}
                                   onClick={() => void hardDeleteDeletedPostFromList(row)}
                                 >
@@ -4529,84 +4540,205 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <SelectedPostPanel data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "list"}>
                 <SelectedPostHeader>
                   <div>
-                    <h3>선택한 글 작업</h3>
+                    <h3>{hasSelectedManagedPost ? "선택한 글" : "다음 작업"}</h3>
                     <p>
-                      목록에서 글을 불러오거나 `post id`를 입력해 수정/삭제를 진행합니다.
+                      {hasSelectedManagedPost
+                        ? "선택한 글의 편집/삭제를 이어가고, 필요할 때만 고급 작업을 펼칩니다."
+                        : "기본 흐름은 목록에서 글을 선택하는 것입니다. 직접 post id 입력은 고급 작업으로 접어둡니다."}
                     </p>
                   </div>
                   <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
                 </SelectedPostHeader>
-                <SelectedPostGrid>
-                  <FieldBox>
-                    <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
-                    <Input
-                      id="selected-post-id"
-                      placeholder="예: 1"
-                      value={postId}
-                      onChange={(e) => {
-                        const nextId = e.target.value.trim()
-                        setPostId(nextId)
-                        if (!nextId) {
-                          setEditorMode("create")
-                          setPostVersion(null)
-                          setIsTempDraftMode(false)
-                        }
-                      }}
-                    />
-                  </FieldBox>
-                </SelectedPostGrid>
-                <SelectedPostHint>목록의 ‘불러오기’를 누르거나 ID 입력 후 ‘글 불러오기’를 실행하세요.</SelectedPostHint>
-                <ActionRow>
-                  <Button
-                    type="button"
-                    disabled={loadingKey.length > 0}
-                    onClick={() => switchToCreateMode({ keepContent: true })}
-                  >
-                    새 글 모드 전환
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={disabled("postOne")}
-                    onClick={() => void loadPostForEditor()}
-                  >
-                    글 불러오기
-                  </Button>
-                  <PrimaryButton
-                    type="button"
-                    disabled={editorMode !== "edit" || disabled("modifyPost")}
-                    onClick={() => openPublishModal("modify")}
-                  >
-                    글 수정
-                  </PrimaryButton>
-                  <Button
-                    type="button"
-                    data-variant="danger"
-                    disabled={disabled("deletePost")}
-                    onClick={() => openDeleteConfirm([Number.parseInt(postId, 10)], postTitle)}
-                  >
-                    글 삭제
-                  </Button>
-                </ActionRow>
-                <SubActionRow>
-                  <Button
-                    type="button"
-                    disabled={disabled("hitPost")}
-                    onClick={() =>
-                      run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
-                    }
-                  >
-                    조회수 테스트
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={disabled("likePost")}
-                    onClick={() =>
-                      run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
-                    }
-                  >
-                    좋아요 반영 테스트
-                  </Button>
-                </SubActionRow>
+                {hasSelectedManagedPost ? (
+                  <>
+                    <SelectedPostStateCard data-tone="active">
+                      <div className="headline">
+                        <strong>{postTitle.trim() || "제목 없음"}</strong>
+                        {isTempDraftMode ? (
+                          <LoadedBadge>임시글</LoadedBadge>
+                        ) : (
+                          <VisibilityBadge data-tone={postVisibility}>{currentVisibilityText}</VisibilityBadge>
+                        )}
+                      </div>
+                      <p>목록에서 선택한 글을 바로 이어서 편집하거나, 이 패널에서 삭제를 진행할 수 있습니다.</p>
+                      <div className="meta">
+                        <span>{`post id #${postId}`}</span>
+                        <span>{`버전 ${postVersion ?? "-"}`}</span>
+                      </div>
+                    </SelectedPostStateCard>
+                    <ActionRow>
+                      <PrimaryButton
+                        type="button"
+                        disabled={editorMode !== "edit" || disabled("modifyPost")}
+                        onClick={() => openPublishModal("modify")}
+                      >
+                        편집 계속
+                      </PrimaryButton>
+                      <Button
+                        type="button"
+                        disabled={loadingKey.length > 0}
+                        onClick={() => switchToCreateMode({ keepContent: false })}
+                      >
+                        새 글 작성
+                      </Button>
+                      <Button
+                        type="button"
+                        data-variant="danger"
+                        disabled={disabled("deletePost")}
+                        onClick={() => openDeleteConfirm([Number.parseInt(postId, 10)], postTitle)}
+                      >
+                        글 삭제
+                      </Button>
+                    </ActionRow>
+                    <InlineDisclosure open={isDirectLoadOpen}>
+                      <summary
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setIsDirectLoadOpen((prev) => !prev)
+                        }}
+                      >
+                        <strong>다른 글 직접 불러오기</strong>
+                        <span>{isDirectLoadOpen ? "닫기" : "열기"}</span>
+                      </summary>
+                      {isDirectLoadOpen && (
+                        <div className="body">
+                          <SelectedPostGrid>
+                            <FieldBox>
+                              <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
+                              <Input
+                                id="selected-post-id"
+                                placeholder="예: 1"
+                                value={postId}
+                                onChange={(e) => {
+                                  const nextId = e.target.value.trim()
+                                  setPostId(nextId)
+                                  if (nextId !== postId.trim()) {
+                                    setEditorMode("create")
+                                    setPostVersion(null)
+                                    setIsTempDraftMode(false)
+                                  }
+                                }}
+                              />
+                            </FieldBox>
+                          </SelectedPostGrid>
+                          <SelectedPostHint>목록 선택 없이 특정 post id를 바로 열어야 할 때만 사용합니다.</SelectedPostHint>
+                          <ActionRow>
+                            <Button
+                              type="button"
+                              disabled={disabled("postOne")}
+                              onClick={() => void loadPostForEditor()}
+                            >
+                              글 불러오기
+                            </Button>
+                          </ActionRow>
+                        </div>
+                      )}
+                    </InlineDisclosure>
+                    <InlineDisclosure open={isSelectedToolsOpen}>
+                      <summary
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setIsSelectedToolsOpen((prev) => !prev)
+                        }}
+                      >
+                        <strong>진단 도구</strong>
+                        <span>{isSelectedToolsOpen ? "닫기" : "열기"}</span>
+                      </summary>
+                      {isSelectedToolsOpen && (
+                        <div className="body">
+                          <SelectedPostHint>운영 확인이 필요할 때만 조회수/좋아요 테스트를 실행합니다.</SelectedPostHint>
+                          <SubActionRow>
+                            <Button
+                              type="button"
+                              disabled={disabled("hitPost")}
+                              onClick={() =>
+                                run("hitPost", () => apiFetch(`/post/api/v1/posts/${postId}/hit`, { method: "POST" }))
+                              }
+                            >
+                              조회수 테스트
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={disabled("likePost")}
+                              onClick={() =>
+                                run("likePost", () => apiFetch(`/post/api/v1/posts/${postId}/like`, { method: "PUT" }))
+                              }
+                            >
+                              좋아요 반영 테스트
+                            </Button>
+                          </SubActionRow>
+                        </div>
+                      )}
+                    </InlineDisclosure>
+                  </>
+                ) : (
+                  <>
+                    <SelectedPostStateCard data-tone="idle">
+                      <strong>목록에서 글을 하나 고르면 여기서 바로 이어서 작업할 수 있습니다.</strong>
+                      <p>조회 후 선택하는 흐름을 기본으로 두고, 새 글 작성과 임시글 열기만 빠르게 제공합니다.</p>
+                    </SelectedPostStateCard>
+                    <ActionRow>
+                      <PrimaryButton
+                        type="button"
+                        disabled={loadingKey.length > 0}
+                        onClick={() => switchToCreateMode({ keepContent: false })}
+                      >
+                        새 글 작성 시작
+                      </PrimaryButton>
+                      <Button
+                        type="button"
+                        disabled={disabled("postTemp")}
+                        onClick={() => void handleLoadOrCreateTempPost()}
+                      >
+                        임시글 열기
+                      </Button>
+                    </ActionRow>
+                    <InlineDisclosure open={isDirectLoadOpen}>
+                      <summary
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setIsDirectLoadOpen((prev) => !prev)
+                        }}
+                      >
+                        <strong>post id 직접 불러오기</strong>
+                        <span>{isDirectLoadOpen ? "닫기" : "열기"}</span>
+                      </summary>
+                      {isDirectLoadOpen && (
+                        <div className="body">
+                          <SelectedPostGrid>
+                            <FieldBox>
+                              <FieldLabel htmlFor="selected-post-id">post id</FieldLabel>
+                              <Input
+                                id="selected-post-id"
+                                placeholder="예: 1"
+                                value={postId}
+                                onChange={(e) => {
+                                  const nextId = e.target.value.trim()
+                                  setPostId(nextId)
+                                  if (nextId !== postId.trim()) {
+                                    setEditorMode("create")
+                                    setPostVersion(null)
+                                    setIsTempDraftMode(false)
+                                  }
+                                }}
+                              />
+                            </FieldBox>
+                          </SelectedPostGrid>
+                          <SelectedPostHint>특정 글 번호를 이미 알고 있을 때만 사용합니다.</SelectedPostHint>
+                          <ActionRow>
+                            <Button
+                              type="button"
+                              disabled={disabled("postOne")}
+                              onClick={() => void loadPostForEditor()}
+                            >
+                              글 불러오기
+                            </Button>
+                          </ActionRow>
+                        </div>
+                      )}
+                    </InlineDisclosure>
+                  </>
+                )}
               </SelectedPostPanel>
             </ContentStudioGrid>
 
@@ -6088,6 +6220,47 @@ const QueryActions = styled.div`
     > button {
       width: 100%;
     }
+  }
+`
+
+const InlineDisclosure = styled.details`
+  margin-top: 0.68rem;
+  border-top: 1px dashed ${({ theme }) => theme.colors.gray6};
+  padding-top: 0.68rem;
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.72rem;
+    list-style: none;
+    cursor: pointer;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    line-height: 1.45;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  summary > span:last-of-type {
+    flex: 0 0 auto;
+    color: ${({ theme }) => theme.colors.blue11};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .body {
+    display: grid;
+    gap: 0.62rem;
+    margin-top: 0.72rem;
   }
 `
 
@@ -8005,6 +8178,62 @@ const SelectedPostGrid = styled.div`
   gap: 0.7rem;
 `
 
+const SelectedPostStateCard = styled.div`
+  display: grid;
+  gap: 0.52rem;
+  padding: 0.78rem 0.82rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  margin-bottom: 0.72rem;
+
+  &[data-tone="active"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(255, 255, 255, 0.02));
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    font-weight: 760;
+    line-height: 1.45;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.58;
+  }
+
+  .headline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  .meta span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    padding: 0 0.62rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+`
+
 const SelectedPostHint = styled.p`
   margin: 0.1rem 0 0;
   font-size: 0.78rem;
@@ -8315,6 +8544,18 @@ const RowActionButton = styled(Button)`
   &[data-variant="soft-danger"]:hover:not(:disabled) {
     border-color: ${({ theme }) => theme.colors.red8};
     background: ${({ theme }) => theme.colors.red3};
+    color: ${({ theme }) => theme.colors.red11};
+  }
+
+  &[data-variant="subtle-danger"] {
+    border-color: transparent;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.red10};
+  }
+
+  &[data-variant="subtle-danger"]:hover:not(:disabled) {
+    border-color: rgba(239, 68, 68, 0.22);
+    background: rgba(127, 29, 29, 0.12);
     color: ${({ theme }) => theme.colors.red11};
   }
 `

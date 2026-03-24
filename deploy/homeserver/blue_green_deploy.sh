@@ -155,6 +155,14 @@ compose_up_with_retry() {
   return 1
 }
 
+cloudflared_registration_log_exists() {
+  local logs="$1"
+  if echo "${logs}" | grep -Eqi 'Registered tunnel connection|Connection .* registered'; then
+    return 0
+  fi
+  return 1
+}
+
 check_cloudflared_runtime() {
   local cid
   cid="$(compose ps -q cloudflared | head -n 1)"
@@ -181,11 +189,17 @@ check_cloudflared_runtime() {
   fi
 
   local cf_logs
-  cf_logs="$(compose logs --no-color --tail=160 cloudflared || true)"
-  if ! echo "${cf_logs}" | grep -Eqi 'Registered tunnel connection|Connection .* registered'; then
-    echo "cloudflared tunnel registration log not found" >&2
-    echo "${cf_logs}" >&2
-    return 1
+  cf_logs="$(compose logs --no-color --tail=240 cloudflared || true)"
+  if ! cloudflared_registration_log_exists "${cf_logs}"; then
+    echo "cloudflared registration log missing in recent logs; restarting cloudflared once" >&2
+    compose restart cloudflared >/dev/null || true
+    sleep 2
+    cf_logs="$(compose logs --no-color --tail=320 cloudflared || true)"
+    if ! cloudflared_registration_log_exists "${cf_logs}"; then
+      echo "cloudflared tunnel registration log not found" >&2
+      echo "${cf_logs}" >&2
+      return 1
+    fi
   fi
 
   echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}"
@@ -495,6 +509,16 @@ ensure_image_env_key_from_local_digest() {
 }
 
 require_back_image() {
+  local env_file_back_image
+  env_file_back_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  if [[ -n "${env_file_back_image}" ]]; then
+    if [[ -n "${BACK_IMAGE:-}" && "${BACK_IMAGE}" != "${env_file_back_image}" ]]; then
+      echo "BACK_IMAGE shell override detected. using ${ENV_FILE} value (${env_file_back_image})" >&2
+    fi
+    BACK_IMAGE="${env_file_back_image}"
+    export BACK_IMAGE
+  fi
+
   if [[ -z "${BACK_IMAGE:-}" ]]; then
     echo "BACK_IMAGE is empty. refusing deploy to avoid accidental latest-image rollout." >&2
     echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2

@@ -870,19 +870,27 @@ const ReplyList = styled.ul`
 
 const EmptyState = styled.div`
   display: grid;
-  gap: 0.18rem;
-  padding: 1rem 0;
-  border-radius: 0;
-  border: 0;
-  background: transparent;
+  gap: 0.24rem;
+  margin-left: calc(44px + 0.85rem);
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.94rem;
+    line-height: 1.35;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 640px) {
+    margin-left: 0;
+    padding: 0.9rem 0.92rem;
   }
 `

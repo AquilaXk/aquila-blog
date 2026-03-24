@@ -30,7 +30,7 @@ const ProfileImage: React.FC<Props> = ({
       <img
         alt={alt}
         loading={loading || (priority ? "eager" : "lazy")}
-        fetchPriority={priority ? "high" : "auto"}
+        {...({ fetchpriority: priority ? "high" : "auto" } as Record<string, string>)}
         decoding={priority ? "sync" : "async"}
         draggable={false}
         style={{

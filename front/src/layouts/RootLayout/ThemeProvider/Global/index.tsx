@@ -34,14 +34,14 @@ export const Global = () => {
           font-synthesis: none;
         }
 
-        @media (max-width: 1023px) {
+        @media (max-width: 1199px) {
           html,
           body {
             overflow-x: clip;
           }
         }
 
-        @media (min-width: 1024px) {
+        @media (min-width: 1200px) {
           html {
             scrollbar-gutter: stable;
           }
@@ -53,7 +53,7 @@ export const Global = () => {
         }
 
         @supports not (overflow: clip) {
-          @media (max-width: 1023px) {
+          @media (max-width: 1199px) {
             html,
             body {
               overflow-x: hidden;

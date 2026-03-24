@@ -394,6 +394,9 @@ export default memo(PostCard, arePostCardPropsEqual)
 
 const StyledWrapper = styled(Link)`
   display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   text-decoration: none;
   --post-card-shadow: ${({ theme }) => theme.variables.ui.card.shadow};
   --post-card-shadow-hover: ${({ theme }) => theme.variables.ui.card.shadowHover};
@@ -406,6 +409,9 @@ const StyledWrapper = styled(Link)`
   article {
     overflow: hidden;
     position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     height: 100%;
     content-visibility: auto;
     /* Prevent mobile inline-size overflow while keeping first-paint block-size hint. */
@@ -420,6 +426,7 @@ const StyledWrapper = styled(Link)`
     > .thumbnail {
       position: relative;
       width: 100%;
+      max-width: 100%;
       aspect-ratio: 1.94 / 1;
       background-color: ${({ theme }) => theme.colors.gray4};
       overflow: hidden;
@@ -616,6 +623,10 @@ const StyledWrapper = styled(Link)`
 
     article {
       border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
+
+      > .thumbnail {
+        max-height: 232px;
+      }
 
       > .content {
         padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};

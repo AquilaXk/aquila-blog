@@ -173,9 +173,9 @@ export default memo(PostList, arePostListPropsEqual)
 const StyledWrapper = styled.div`
   margin: 0.9rem 0 0.35rem;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
-  grid-auto-rows: 1fr;
   overflow-anchor: none;
 
   @media (min-width: 768px) {
@@ -364,9 +364,9 @@ const StyledWrapper = styled.div`
   .skeletonGrid {
     width: 100%;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     align-items: start;
-    grid-auto-rows: 1fr;
 
     @media (min-width: 768px) {
       grid-template-columns: repeat(2, minmax(0, 1fr));

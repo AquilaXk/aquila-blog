@@ -14,7 +14,9 @@ const useScheme = (): [SchemeType, SetScheme] => {
 
   const { data } = useQuery<SchemeType>({
     queryKey: queryKey.scheme(),
+    queryFn: () => fallbackScheme,
     enabled: false,
+    staleTime: Infinity,
     // SSR/CSR 첫 렌더를 동일하게 맞춰 새로고침 시 하이드레이션 흔들림을 줄인다.
     initialData: fallbackScheme,
   })

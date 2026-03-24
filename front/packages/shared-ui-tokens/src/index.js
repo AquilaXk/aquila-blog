@@ -12,7 +12,7 @@ const uiTokens = {
     },
     tags: {
       chipRepresentativeLimit: 6,
-      desktopRepresentativeLimit: 10,
+      desktopRepresentativeLimit: 20,
     },
     card: {
       titleLineHeight: 1.46,

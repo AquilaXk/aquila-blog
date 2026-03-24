@@ -29,7 +29,7 @@ const tagTokens = (feedTokens.tags ?? {}) as {
 const FEED_TAG_RAIL_CHIP_MAX_DEFAULT_PX = 1200
 const FEED_TAG_RAIL_DESKTOP_MIN_DEFAULT_PX = 1201
 const FEED_TAG_REPRESENTATIVE_CHIP_DEFAULT = 6
-const FEED_TAG_REPRESENTATIVE_DESKTOP_DEFAULT = 10
+const FEED_TAG_REPRESENTATIVE_DESKTOP_DEFAULT = 20
 
 export const MOBILE_TOUCH_TARGET_MIN_PX = asFiniteNumber(touchTokens.mobileMinTargetPx, 34)
 export const FEED_CHIP_GAP_PX = asFiniteNumber(feedTokens.chipGapPx, 6)

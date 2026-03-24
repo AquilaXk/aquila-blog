@@ -23,11 +23,28 @@ type Props = {
 
 const FEED_CARD_META_FONT_SIZE_REM = uiTokens.feed.card.metaFontSizeRem
 const FEED_CARD_SUMMARY_LINES = uiTokens.feed.card.summaryLines
+const FEED_CARD_SUMMARY_LINE_HEIGHT = uiTokens.feed.card.summaryLineHeight
 const FEED_CARD_TITLE_LINE_HEIGHT = uiTokens.feed.card.titleLineHeight
 const FEED_CARD_RADIUS_PX = 4
 const FEED_CARD_SHADOW = "0 8px 20px rgba(2, 6, 23, 0.14)"
 const FEED_CARD_SHADOW_HOVER = "0 18px 34px rgba(2, 6, 23, 0.2)"
 const FEED_CARD_HOVER_TRANSLATE_PX = -8
+const SUMMARY_PREFIX_REGEX = /^(?:요약|summary)\s*[:：-]\s*/i
+const CARD_SUMMARY_PREVIEW_LIMIT = 150
+
+const normalizeFeedCardSummary = (value?: string) => {
+  if (typeof value !== "string") return "핵심 내용을 정리 중입니다."
+
+  const normalized = value
+    .replace(/&#x3A;/gi, ":")
+    .replace(/\s+/g, " ")
+    .replace(SUMMARY_PREFIX_REGEX, "")
+    .trim()
+
+  if (normalized.length === 0) return "핵심 내용을 정리 중입니다."
+  if (normalized.length <= CARD_SUMMARY_PREVIEW_LIMIT) return normalized
+  return `${normalized.slice(0, CARD_SUMMARY_PREVIEW_LIMIT).trimEnd()}...`
+}
 
 type NavigatorConnectionLike = {
   saveData?: boolean
@@ -239,7 +256,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
     data?.date?.start_date || data.createdTime,
     CONFIG.lang
   )
-  const summary = data.summary?.trim() || "아직 등록된 요약이 없습니다."
+  const summary = normalizeFeedCardSummary(data.summary)
   const commentsCount = data.commentsCount ?? 0
   const likesCount = data.likesCount ?? 0
   const { thumbnailSrc, thumbnailFocusX, thumbnailFocusY, thumbnailZoom } = useMemo(() => {
@@ -484,7 +501,7 @@ const StyledWrapper = styled(Link)`
           margin: 0;
           color: ${({ theme }) => theme.colors.gray10};
           font-size: 0.875rem;
-          line-height: 1.54;
+          line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
           letter-spacing: -0.01em;
           word-break: keep-all;
           overflow-wrap: anywhere;
@@ -670,7 +687,7 @@ const StyledWrapper = styled(Link)`
 
             p {
               font-size: 0.875rem;
-              line-height: 1.54;
+              line-height: ${FEED_CARD_SUMMARY_LINE_HEIGHT};
             }
           }
 

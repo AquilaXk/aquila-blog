@@ -28,10 +28,26 @@ const nearBlackDarkGray = {
   gray12: "#f3f4f6",
 }
 
+const balancedLightGray = {
+  gray1: "#ffffff",
+  gray2: "#fbfcfe",
+  gray3: "#f5f7fa",
+  gray4: "#edf1f6",
+  gray5: "#dfe5ec",
+  gray6: "#d0d8e2",
+  gray7: "#bec9d5",
+  gray8: "#a8b5c4",
+  gray9: "#7f8c9d",
+  gray10: "#5b6472",
+  gray11: "#3e4652",
+  gray12: "#111827",
+}
+
 export const colors = {
   light: {
     ...indigo,
     ...gray,
+    ...balancedLightGray,
     ...blue,
     ...red,
     ...green,

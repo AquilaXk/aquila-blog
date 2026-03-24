@@ -11,18 +11,26 @@
 - 모바일 터치 타깃 최소: `MOBILE_TOUCH_TARGET_MIN_PX=34`
 - 피드 검색 필드 높이: `FEED_SEARCH_FIELD_MIN_HEIGHT_PX=36`
 - 태그 칩 간격: `FEED_CHIP_GAP_PX=6`
-- 태그 레일 전환/오프셋:
+- 태그 레일 전환/대표 노출:
   - `FEED_TAG_RAIL_CHIP_MAX_PX=1200`
   - `FEED_TAG_RAIL_DESKTOP_MIN_PX=1201`
   - `FEED_TAG_RAIL_WIDTH_PX=184`
-  - `FEED_TAG_RAIL_OFFSET_MIN_PX=-216`
-  - `FEED_TAG_RAIL_OFFSET_MAX_PX=-56`
-  - `FEED_TAG_RAIL_OFFSET_ANCHOR_PX=584`
+  - `FEED_TAG_REPRESENTATIVE_CHIP_LIMIT=6`
+  - `FEED_TAG_REPRESENTATIVE_DESKTOP_LIMIT=10`
 - 카드 타이포:
   - 제목 줄간: `FEED_CARD_TITLE_LINE_HEIGHT`
   - 요약 줄간: `FEED_CARD_SUMMARY_LINE_HEIGHT`
   - 요약 줄 수: `FEED_CARD_SUMMARY_LINES`
   - 메타 폰트: `FEED_CARD_META_FONT_SIZE_REM`
+
+## 라이트 모드 기준
+- page background: `#f5f7fa`
+- surface(gray1): `#ffffff`
+- elevated(gray2): `#fbfcfe`
+- border(gray5~6): `#dfe5ec` ~ `#d0d8e2`
+- secondary text(gray10): `#5b6472`
+- primary text(gray12): `#111827`
+- body glow는 light mode에서 `opacity <= 0.05`로 유지한다.
 
 ## 상세 레일/TOC 토큰성 규약
 - sticky top 기준은 고정 rem이 아니라 `--app-header-height + 16px`를 사용한다.

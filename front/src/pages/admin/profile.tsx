@@ -1008,7 +1008,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <PreviewCard>
           <AvatarFrame>
             {profileSrc ? (
-              <ProfileImage src={profileSrc} alt={displayName} width={128} height={128} priority />
+              <ProfileImage src={profileSrc} alt={displayName} fillContainer priority />
             ) : (
               <AvatarFallback>{displayNameInitial}</AvatarFallback>
             )}
@@ -1017,9 +1017,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <span>{profileRoleInput.trim() || "역할 미설정"}</span>
           <p>{profileBioInput.trim() || "소개 문구 미설정"}</p>
           <PreviewMetaStrip>
-            <small>헤더 브랜드</small>
+            <small>블로그 명</small>
             <BrandTitlePreview>
-              <BrandMark className="brandMark" sizes="18px" />
+              {blogTitleInput.trim() ? <BrandMark className="brandMark" /> : null}
               <strong>{blogTitleInput.trim() || "미설정"}</strong>
             </BrandTitlePreview>
           </PreviewMetaStrip>
@@ -1087,11 +1087,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <FormSection>
               <SectionHeading>
                 <h2>홈 소개</h2>
-                <p>헤더 브랜드와 메인 소개 문구만 나눠 관리합니다.</p>
+                <p>헤더 로고 옆 블로그 명과 메인 소개 문구만 관리합니다.</p>
               </SectionHeading>
               <FieldGrid data-columns="2">
                 <FieldBox>
-                  <FieldLabel htmlFor="blog-title">헤더 브랜드명</FieldLabel>
+                  <FieldLabel htmlFor="blog-title">블로그 명</FieldLabel>
                   <Input
                     id="blog-title"
                     placeholder="예: aquilaXk's Blog"
@@ -1670,6 +1670,7 @@ const PreviewCard = styled(PanelCard)`
 `
 
 const AvatarFrame = styled.div`
+  position: relative;
   width: 84px;
   height: 84px;
   border-radius: 999px;
@@ -1724,7 +1725,9 @@ const PreviewMetaStrip = styled.div`
 const BrandTitlePreview = styled.span`
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.38rem;
+  width: 100%;
   min-width: 0;
 
   .brandMark {
@@ -1935,7 +1938,8 @@ const ModalEditorFrame = styled.div`
   --profile-draft-top: 0%;
 
   position: relative;
-  width: min(100%, 360px);
+  width: 100%;
+  max-width: 360px;
   justify-self: center;
   aspect-ratio: 1 / 1;
   border-radius: 999px;

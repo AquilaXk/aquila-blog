@@ -261,6 +261,7 @@ const getMobileStudioStepMoveLabel = (step: MobileStudioStep) =>
   `${MOBILE_STUDIO_STEP_LABEL[step]}${MOBILE_STUDIO_STEP_LABEL[step].endsWith("집") ? "으로" : "로"} 이동`
 
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
+const IMAGE_UPLOAD_CONFLICT_MAX_RETRIES = 3
 const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
@@ -987,6 +988,40 @@ const waitFor = (ms: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)
   })
+
+const computeConflictRetryDelay = (attempt: number): number =>
+  PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS * Math.max(1, attempt + 1)
+
+const uploadWithConflictRetry = async (
+  requestUpload: () => Promise<Response>,
+  maxRetries: number = IMAGE_UPLOAD_CONFLICT_MAX_RETRIES
+): Promise<Response> => {
+  let lastConflictBody = ""
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const response = await requestUpload()
+    if (response.status !== 409) {
+      if (!response.ok) {
+        const body = await parseResponseErrorBody(response)
+        throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
+      }
+      return response
+    }
+
+    lastConflictBody = await parseResponseErrorBody(response)
+    if (attempt >= maxRetries) {
+      throw new Error(
+        `이미지 업로드 실패 (409): ${lastConflictBody || "요청 충돌이 반복되어 업로드를 완료하지 못했습니다."}`
+      )
+    }
+
+    await waitFor(computeConflictRetryDelay(attempt))
+  }
+
+  throw new Error(
+    `이미지 업로드 실패 (409): ${lastConflictBody || "요청 충돌이 반복되어 업로드를 완료하지 못했습니다."}`
+  )
+}
 
 const escapePipes = (value: string) => value.replace(/[\\|]/g, "\\$&")
 
@@ -2903,20 +2938,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         )
       }
 
-      let uploadResponse = await requestUpload()
-      if (uploadResponse.status === 409) {
-        const firstConflictBody = await parseResponseErrorBody(uploadResponse)
-        setProfileImageNotice({ tone: "loading", text: "요청 충돌을 감지해 자동 재시도 중입니다..." })
-        await waitFor(PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS)
-        uploadResponse = await requestUpload()
-        if (!uploadResponse.ok) {
-          const retryBody = await parseResponseErrorBody(uploadResponse)
-          throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${retryBody || firstConflictBody}`.trim())
-        }
-      } else if (!uploadResponse.ok) {
-        const body = await parseResponseErrorBody(uploadResponse)
-        throw new Error(`이미지 업로드 실패 (${uploadResponse.status}) ${body}`.trim())
-      }
+      setProfileImageNotice({ tone: "loading", text: "요청 충돌 여부를 확인하며 업로드 중입니다..." })
+      const uploadResponse = await uploadWithConflictRetry(requestUpload)
 
       const uploadData = (await uploadResponse.json()) as MemberMe
       const uploadedUrl = (uploadData?.profileImageDirectUrl || uploadData?.profileImageUrl || "").trim()
@@ -3372,19 +3395,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       })
     }
 
-    let response = await requestUpload()
-    if (response.status === 409) {
-      const firstConflictBody = await parseResponseErrorBody(response)
-      await waitFor(PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS)
-      response = await requestUpload()
-      if (!response.ok) {
-        const retryBody = await parseResponseErrorBody(response)
-        throw new Error(`이미지 업로드 실패 (${response.status}): ${retryBody || firstConflictBody}`)
-      }
-    } else if (!response.ok) {
-      const body = await parseResponseErrorBody(response)
-      throw new Error(`이미지 업로드 실패 (${response.status}): ${body}`)
-    }
+    const response = await uploadWithConflictRetry(requestUpload)
 
     return {
       uploaded: (await response.json()) as UploadPostImageResponse,

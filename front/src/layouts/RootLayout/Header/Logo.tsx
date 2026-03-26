@@ -10,7 +10,7 @@ const Logo = () => {
 
   return (
     <StyledWrapper href="/" aria-label={blogTitle}>
-      <BrandMark className="brandMark" priority sizes="(max-width: 720px) 22px, 28px" />
+      <BrandMark className="brandMark" priority />
       <span className="brandText">{blogTitle}</span>
     </StyledWrapper>
   )

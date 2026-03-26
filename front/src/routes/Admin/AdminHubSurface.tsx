@@ -82,7 +82,7 @@ const AdminHubSurface = ({
       <ProfileCompact>
         <ProfileFrame>
           {profileSrc ? (
-            <ProfileImage src={profileSrc} alt={displayName} width={72} height={72} priority />
+            <ProfileImage src={profileSrc} alt={displayName} fillContainer priority />
           ) : (
             <ProfileFallback>{displayNameInitial}</ProfileFallback>
           )}
@@ -314,6 +314,7 @@ const ProfileCompact = styled.section`
 `
 
 const ProfileFrame = styled.div`
+  position: relative;
   width: 52px;
   height: 52px;
   border-radius: 999px;

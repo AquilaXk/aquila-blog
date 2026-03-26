@@ -1,21 +1,20 @@
-import Image from "next/image"
-
 type Props = {
   className?: string
   priority?: boolean
-  sizes?: string
 }
 
-const BrandMark: React.FC<Props> = ({ className, priority = false, sizes = "28px" }) => {
+const BrandMark: React.FC<Props> = ({ className, priority = false }) => {
   return (
     <span className={className} aria-hidden="true">
-      <Image
+      {/* Hot path icon: keep native img to avoid next/image runtime cost in shared header bundle. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         src="/brand-mascot.png"
         alt=""
         width={96}
         height={96}
-        priority={priority}
-        sizes={sizes}
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
         draggable={false}
         style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
       />

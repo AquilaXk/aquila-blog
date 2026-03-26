@@ -252,8 +252,11 @@ custom:
       post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:8}
       post-explore-cursor-first-v1: ${CUSTOM__CACHE__POST_EXPLORE_CURSOR_FIRST_TTL_SECONDS:8}
       post-search-v1: ${CUSTOM__CACHE__POST_SEARCH_TTL_SECONDS:8}
+      post-search-negative-v1: ${CUSTOM__CACHE__POST_SEARCH_NEGATIVE_TTL_SECONDS:20}
       post-tags-v4: ${CUSTOM__CACHE__POST_TAGS_TTL_SECONDS:12}
-      post-detail-public-v4: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_TTL_SECONDS:15}
+      post-detail-public-meta-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_META_TTL_SECONDS:15}
+      post-detail-public-content-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_CONTENT_TTL_SECONDS:15}
+      post-detail-public-negative-v1: ${CUSTOM__CACHE__POST_DETAIL_PUBLIC_NEGATIVE_TTL_SECONDS:20}
   revalidate:
     url: "${CUSTOM__REVALIDATE__URL:}"
     token: "${CUSTOM__REVALIDATE__TOKEN:}"
@@ -368,6 +371,7 @@ custom:
         searchMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__SEARCH_MAX_CONCURRENT:8}
         detailMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__DETAIL_MAX_CONCURRENT:16}
         tagsMaxConcurrent: ${CUSTOM__POST__READ__BULKHEAD__TAGS_MAX_CONCURRENT:6}
+      detail-content-cache-max-chars: ${CUSTOM__POST__READ__DETAIL_CONTENT_CACHE_MAX_CHARS:120000}
       tags-local-cache-ttl-seconds: ${CUSTOM__POST__READ__TAGS_LOCAL_CACHE_TTL_SECONDS:180}
     idempotency:
       retentionDays: ${CUSTOM__POST__IDEMPOTENCY__RETENTION_DAYS:30}

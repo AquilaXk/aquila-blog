@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import java.time.Instant
@@ -50,6 +51,8 @@ interface PostRepositoryCustom {
     ): List<Post>
 
     fun findPublicDetailById(id: Long): Post?
+
+    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
     fun findAllPublicListedContents(): List<String>
 

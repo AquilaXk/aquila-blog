@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.domain.PostComment
 import com.back.boundedContexts.post.domain.postMixin.PostLikeToggleResult
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -33,6 +34,8 @@ interface PostUseCase {
     fun findById(id: Long): Post?
 
     fun findPublicDetailById(id: Long): Post?
+
+    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
     fun findLatest(): Post?
 

@@ -28,6 +28,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostCommentDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostMetaExtractor
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.event.PostCommentDeletedEvent
 import com.back.boundedContexts.post.event.PostCommentModifiedEvent
@@ -43,6 +44,7 @@ import com.back.global.security.application.HtmlContentSanitizer
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.standard.dto.page.PagedResult
 import com.back.standard.dto.post.type1.PostSearchSortType1
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.cache.CacheManager
@@ -72,6 +74,7 @@ class PostApplicationService(
     private val eventPublisher: EventPublisher,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val cacheManager: CacheManager,
+    private val meterRegistry: MeterRegistry? = null,
     private val postRecommendRankingService: PostRecommendRankingService,
     private val postRecommendFeatureStoreService: PostRecommendFeatureStoreService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
@@ -89,8 +92,8 @@ class PostApplicationService(
     private var publicTagCountsCache: TagCountsCache? = null
 
     private val tagCacheTtlMillis: Long = tagsLocalCacheTtlSeconds.coerceAtLeast(5) * 1_000
-    private val hotPageSizes = listOf(30, 24, 18, 12)
-    private val hotSorts = listOf(PostSearchSortType1.CREATED_AT, PostSearchSortType1.CREATED_AT_ASC)
+    private val hotPageSizes = listOf(30, 24)
+    private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
     private val maxTagCacheEvict = 12
 
     fun count(): Long = postRepository.count()
@@ -135,6 +138,7 @@ class PostApplicationService(
                 evictImpactedTagPages = isPublic,
                 evictTagsPublic = isPublic,
                 evictDetail = isPublic,
+                evictReason = "write",
             )
             if (isPublic) {
                 postRecommendFeatureStoreService.refresh(created)
@@ -185,6 +189,7 @@ class PostApplicationService(
             evictImpactedTagPages = isPublic,
             evictTagsPublic = isPublic,
             evictDetail = isPublic,
+            evictReason = "write-idempotent",
         )
         if (isPublic) {
             postRecommendFeatureStoreService.refresh(createdPost)
@@ -213,6 +218,8 @@ class PostApplicationService(
                 }
                 hydrateMembersProfileImgAttrs(listOf(post.author))
             }
+
+    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
 
     fun findLatest(): Post? = postRepository.findFirstByOrderByIdDesc()
 
@@ -275,6 +282,7 @@ class PostApplicationService(
             evictImpactedTagPages = affectsPublicRead && (tagChanged || listingVisibilityChanged),
             evictTagsPublic = affectsPublicRead && (tagChanged || listingVisibilityChanged),
             evictDetail = affectsPublicRead && (listingVisibilityChanged || titleChanged || contentChanged),
+            evictReason = "modify",
         )
         if (isPublic) {
             postRecommendFeatureStoreService.refresh(post)
@@ -402,6 +410,7 @@ class PostApplicationService(
             evictImpactedTagPages = wasPublic,
             evictTagsPublic = wasPublic,
             evictDetail = wasPublic,
+            evictReason = "soft-delete",
         )
         postRecommendFeatureStoreService.evict(post.id)
 
@@ -911,6 +920,7 @@ class PostApplicationService(
             evictImpactedTagPages = isPublic,
             evictTagsPublic = isPublic,
             evictDetail = isPublic,
+            evictReason = "restore",
         )
         if (isPublic) {
             postRecommendFeatureStoreService.refresh(restoredPost)
@@ -951,6 +961,7 @@ class PostApplicationService(
             evictImpactedTagPages = true,
             evictTagsPublic = true,
             evictDetail = true,
+            evictReason = "hard-delete",
         )
         postRecommendFeatureStoreService.evict(id)
     }
@@ -1253,15 +1264,18 @@ class PostApplicationService(
         evictImpactedTagPages: Boolean = true,
         evictTagsPublic: Boolean = true,
         evictDetail: Boolean = true,
+        evictReason: String = "unknown",
     ) {
         if (evictTagsPublic) {
             publicTagCountsCache = null
+            recordCacheEvict("local-tag-counts", "clear", evictReason)
         }
         val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
         val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
         val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
         val exploreCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)
         val searchCache = cacheManager.getCache(PostQueryCacheNames.SEARCH)
+        val searchNegativeCache = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
         val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
 
         if (evictHotReadPages || evictSearchFirstPage) {
@@ -1270,12 +1284,19 @@ class PostApplicationService(
                     val sortName = sort.name
                     if (evictHotReadPages) {
                         feedCache?.evict("page=1:size=$pageSize:sort=$sortName")
+                        recordCacheEvict(PostQueryCacheNames.FEED, "key", evictReason)
                         exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=_")
+                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
                         feedCursorFirstCache?.evict("size=$pageSize:sort=$sortName")
+                        recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
                         exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
+                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
                     }
                     if (evictSearchFirstPage) {
                         searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                        recordCacheEvict(PostQueryCacheNames.SEARCH, "key", evictReason)
+                        searchNegativeCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
+                        recordCacheEvict(PostQueryCacheNames.SEARCH_NEGATIVE, "key", evictReason)
                     }
                 }
             }
@@ -1299,7 +1320,9 @@ class PostApplicationService(
                     hotSorts.forEach { sort ->
                         val sortName = sort.name
                         exploreCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_:tag=$token")
+                        recordCacheEvict(PostQueryCacheNames.EXPLORE, "key", evictReason)
                         exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=$token")
+                        recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
                     }
                 }
             }
@@ -1307,15 +1330,36 @@ class PostApplicationService(
 
         if (evictTagsPublic) {
             tagsCache?.evict("public")
+            recordCacheEvict(PostQueryCacheNames.TAGS, "key", evictReason)
         }
         if (evictDetail) {
-            val detailCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC)
+            val detailMetaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
+            val detailContentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
+            val detailNegativeCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
             if (postId == null) {
-                detailCache?.clear()
+                detailMetaCache?.clear()
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "clear", evictReason)
+                detailContentCache?.clear()
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "clear", evictReason)
+                detailNegativeCache?.clear()
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "clear", evictReason)
             } else {
-                detailCache?.evict(postId)
+                detailMetaCache?.evict(postId)
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "key", evictReason)
+                detailContentCache?.evict(postId)
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT, "key", evictReason)
+                detailNegativeCache?.evict(postId)
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "key", evictReason)
             }
         }
+    }
+
+    private fun recordCacheEvict(
+        cacheName: String,
+        scope: String,
+        reason: String,
+    ) {
+        meterRegistry?.counter("post.read.cache.evict", "cache", cacheName, "scope", scope, "reason", reason)?.increment()
     }
 
     private fun isPubliclyListed(post: Post): Boolean = post.published && post.listed

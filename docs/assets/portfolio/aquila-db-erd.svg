@@ -1,0 +1,36 @@
+<svg width="1200" height="560" viewBox="0 0 1200 560" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="560" rx="28" fill="url(#bg)" />
+  <text x="64" y="84" fill="#e2e8f0" font-size="32" font-family="Inter, Arial, sans-serif" font-weight="700">Core Domain ERD (Simplified)</text>
+  <text x="64" y="124" fill="#94a3b8" font-size="16" font-family="Inter, Arial, sans-serif">member · post · comment · like · notification</text>
+
+  <rect x="80" y="180" width="220" height="120" rx="14" fill="#111827" stroke="#1f2937" />
+  <text x="105" y="225" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">member</text>
+  <text x="105" y="255" fill="#94a3b8" font-size="12" font-family="Inter, Arial, sans-serif">id, nickname, email</text>
+
+  <rect x="360" y="180" width="220" height="120" rx="14" fill="#111827" stroke="#1f2937" />
+  <text x="385" y="225" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">post</text>
+  <text x="385" y="255" fill="#94a3b8" font-size="12" font-family="Inter, Arial, sans-serif">id, author_id, content</text>
+
+  <rect x="640" y="180" width="220" height="120" rx="14" fill="#111827" stroke="#1f2937" />
+  <text x="665" y="225" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">comment</text>
+  <text x="665" y="255" fill="#94a3b8" font-size="12" font-family="Inter, Arial, sans-serif">id, post_id, author_id</text>
+
+  <rect x="360" y="340" width="220" height="120" rx="14" fill="#111827" stroke="#1f2937" />
+  <text x="385" y="385" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">post_like</text>
+  <text x="385" y="415" fill="#94a3b8" font-size="12" font-family="Inter, Arial, sans-serif">post_id, member_id</text>
+
+  <rect x="640" y="340" width="220" height="120" rx="14" fill="#111827" stroke="#1f2937" />
+  <text x="665" y="385" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">notification</text>
+  <text x="665" y="415" fill="#94a3b8" font-size="12" font-family="Inter, Arial, sans-serif">member_id, event</text>
+
+  <line x1="300" y1="240" x2="360" y2="240" stroke="#38bdf8" stroke-width="3" />
+  <line x1="580" y1="240" x2="640" y2="240" stroke="#38bdf8" stroke-width="3" />
+  <line x1="470" y1="300" x2="470" y2="340" stroke="#38bdf8" stroke-width="3" />
+  <line x1="750" y1="300" x2="750" y2="340" stroke="#38bdf8" stroke-width="3" />
+</svg>

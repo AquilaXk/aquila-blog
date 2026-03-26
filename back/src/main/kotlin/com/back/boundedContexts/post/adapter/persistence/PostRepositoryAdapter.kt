@@ -5,6 +5,7 @@ import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Component
@@ -102,6 +103,8 @@ class PostRepositoryAdapter(
         )
 
     override fun findPublicDetailById(id: Long): Post? = postRepository.findPublicDetailById(id)
+
+    override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)
 
     override fun findAllPublicListedContents(): List<String> = postRepository.findAllPublicListedContents()
 

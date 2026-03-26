@@ -711,7 +711,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <HeaderCard>
         <HeaderCopy>
           <h1>운영 도구</h1>
-          <p>상태를 먼저 보고, 자주 쓰는 실행만 상단에 남기고, 상세 진단은 필요할 때만 펼치도록 정리했습니다.</p>
+          <p>상태를 먼저 보고, 자주 쓰는 실행만 상단에 두고, 상세 진단은 필요할 때만 펼칩니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
@@ -792,20 +792,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </AdvancedToggle>
         <AdvancedPanelHint>
           {advancedPanelsOpen
-            ? "상세 진단과 실행 로그를 펼친 상태입니다."
+            ? "상세 진단과 실행 결과를 펼친 상태입니다."
             : "기본 화면에는 상태 요약과 자주 쓰는 액션만 남깁니다."}
         </AdvancedPanelHint>
       </AdvancedPanelBar>
-
-      {!advancedPanelsOpen ? (
-        <CollapsedStateCard>
-          <strong>고급 진단은 기본으로 접어둡니다.</strong>
-          <p>상세 로그와 관리 작업은 필요할 때만 열어 화면 밀도를 낮춥니다.</p>
-          <CollapsedStateAction type="button" onClick={() => setAdvancedPanelsOpen(true)}>
-            고급 진단 펼치기
-          </CollapsedStateAction>
-        </CollapsedStateCard>
-      ) : null}
 
       {shouldShowAdvancedPanels && (
         <Grid>
@@ -813,7 +803,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <h2>댓글 점검</h2>
-              <SectionDescription>댓글 조회, 작성, 수정, 삭제 동작을 빠르게 점검합니다.</SectionDescription>
+              <SectionDescription>댓글 조회/작성/수정/삭제 흐름만 빠르게 점검합니다.</SectionDescription>
             </div>
           </SectionTop>
           <InlineNotice data-tone="warning">
@@ -857,7 +847,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <h2>시스템 점검</h2>
-              <SectionDescription>자주 확인하는 관리자 API만 별도로 모았습니다.</SectionDescription>
+              <SectionDescription>자주 확인하는 관리자 API만 모았습니다.</SectionDescription>
             </div>
           </SectionTop>
           <ActionCardGrid data-columns="2">
@@ -877,23 +867,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <h2>모니터링</h2>
-              <SectionDescription>관리자 페이지 진입 시 서버 상태를 1회 조회하고, 10초 캐시를 재사용합니다.</SectionDescription>
+              <SectionDescription>서버 상태와 외부 대시보드를 한 구역에서 확인합니다.</SectionDescription>
             </div>
             <StatusBadge data-status={systemHealthStatus}>{systemHealthStatus}</StatusBadge>
           </SectionTop>
-          <InlineNotice data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
-            최근 서버 상태 조회: {systemHealthFetchedAt}
-          </InlineNotice>
-          {systemHealthSummary.length > 0 && (
-            <MetaGrid>
-              {systemHealthSummary.map((line) => (
-                <MetaBox key={line}>
-                  <small>컴포넌트</small>
-                  <strong>{line}</strong>
-                </MetaBox>
-              ))}
-            </MetaGrid>
-          )}
           <MonitoringActions>
             <BaseButton type="button" disabled={isBusy} onClick={() => void run("systemHealth", () => fetchSystemHealthCached())}>
               서버 상태 즉시 새로고침
@@ -919,19 +896,34 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </InlineNotice>
             )}
           </MonitoringActions>
-          {dashboardOpen && monitoringEmbedIsCrossOrigin && (
-            <InlineNotice data-tone="warning">
-              임베드 주소가 관리자 페이지와 다른 도메인이라 브라우저 보안 정책상 콘솔 경고가 표시될 수 있습니다.
+          <MonitoringResultCard>
+            <InlineNotice data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
+              최근 서버 상태 조회: {systemHealthFetchedAt}
             </InlineNotice>
-          )}
-          {dashboardOpen && monitoringEmbedUrl && (
-            <MonitoringFrame
-              src={monitoringEmbedUrl}
-              loading="lazy"
-              title="Monitoring Dashboard"
-              referrerPolicy="no-referrer"
-            />
-          )}
+            {systemHealthSummary.length > 0 && (
+              <MetaGrid>
+                {systemHealthSummary.map((line) => (
+                  <MetaBox key={line}>
+                    <small>컴포넌트</small>
+                    <strong>{line}</strong>
+                  </MetaBox>
+                ))}
+              </MetaGrid>
+            )}
+            {dashboardOpen && monitoringEmbedIsCrossOrigin && (
+              <InlineNotice data-tone="warning">
+                임베드 주소가 관리자 페이지와 다른 도메인이라 브라우저 보안 정책상 콘솔 경고가 표시될 수 있습니다.
+              </InlineNotice>
+            )}
+            {dashboardOpen && monitoringEmbedUrl && (
+              <MonitoringFrame
+                src={monitoringEmbedUrl}
+                loading="lazy"
+                title="Monitoring Dashboard"
+                referrerPolicy="no-referrer"
+              />
+            )}
+          </MonitoringResultCard>
         </SectionCard>
 
         <SectionCard>
@@ -1408,41 +1400,6 @@ const AdvancedPanelHint = styled.p`
   line-height: 1.6;
 `
 
-const CollapsedStateCard = styled.section`
-  display: grid;
-  gap: 0.62rem;
-  padding: 0.88rem 0.92rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: none;
-
-  strong {
-    font-size: 0.9rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.6;
-  }
-`
-
-const CollapsedStateAction = styled.button`
-  width: fit-content;
-  min-height: 36px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
-  padding: 0 0.82rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-`
-
 const BaseButton = styled.button`
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -1512,7 +1469,7 @@ const SectionCard = styled.section`
 `
 
 const QuickActionsCard = styled(SectionCard)`
-  padding: 0.92rem 1rem;
+  padding: 0.84rem 0.92rem;
 `
 
 const QuickActionRow = styled.div`
@@ -1636,19 +1593,16 @@ const ActionCardButton = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.8rem 0.88rem;
+  padding: 0.72rem 0.8rem;
   text-align: left;
   display: grid;
-  gap: 0.42rem;
+  gap: 0.36rem;
   cursor: pointer;
   transition:
     border-color 0.16s ease,
-    transform 0.16s ease,
-    box-shadow 0.16s ease;
+    background-color 0.16s ease;
 
   &:hover {
-    transform: none;
-    box-shadow: none;
     background: ${({ theme }) => theme.colors.gray3};
     border-color: ${({ theme }) => theme.colors.gray7};
   }
@@ -1656,8 +1610,6 @@ const ActionCardButton = styled.button`
   &:disabled {
     opacity: 0.56;
     cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
   }
 
   &[data-tone="danger"] {
@@ -1687,9 +1639,9 @@ const ActionCardTitle = styled.span`
 `
 
 const ActionCardHint = styled.span`
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
-  line-height: 1.55;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.78rem;
+  line-height: 1.5;
 `
 
 const ActionStateChip = styled.span`
@@ -2131,6 +2083,14 @@ const MonitoringActions = styled.div`
   }
 `
 
+const MonitoringResultCard = styled.div`
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.72rem;
+  padding-top: 0.72rem;
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+`
+
 const MonitoringFrame = styled.iframe`
   margin-top: 0.85rem;
   width: 100%;
@@ -2232,10 +2192,10 @@ const ConsoleQuickActionButton = styled.button`
     justify-content: center;
     flex: 0 0 auto;
     border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.indigo8};
-    background: ${({ theme }) => theme.colors.indigo3};
-    color: ${({ theme }) => theme.colors.indigo11};
-    padding: 0.2rem 0.46rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    padding: 0.16rem 0.42rem;
     font-size: 0.72rem;
     font-weight: 800;
   }
@@ -2265,7 +2225,7 @@ const OverviewCard = styled.section`
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-  padding: 1rem;
+  padding: 0.92rem 0.96rem;
   box-shadow: none;
 `
 
@@ -2286,10 +2246,10 @@ const OverviewGrid = styled.div`
 const OverviewItem = styled.article`
   display: grid;
   gap: 0.2rem;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.68rem 0.76rem;
+  padding: 0.6rem 0.68rem;
 
   small {
     color: ${({ theme }) => theme.colors.gray10};
@@ -2299,13 +2259,13 @@ const OverviewItem = styled.article`
   }
 
   strong {
-    font-size: 1.02rem;
+    font-size: 0.96rem;
     letter-spacing: -0.01em;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     line-height: 1.45;
   }
 `

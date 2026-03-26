@@ -976,7 +976,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <HeaderCard>
         <HeaderCopy>
           <h1>운영 프로필</h1>
-          <p>프로필 카드와 홈 소개 문구를 한 번에 정리하고, 저장은 하단 바에서 마무리합니다.</p>
+          <p>프로필 카드와 홈 소개 문구를 한 흐름에서 정리합니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/" passHref legacyBehavior>
@@ -1046,7 +1046,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <FormSection>
               <SectionHeading>
                 <h2>기본 정보</h2>
-                <p>프로필 카드에 바로 노출되는 역할과 소개를 정리합니다.</p>
+                <p>역할과 소개 문구만 간단히 정리합니다.</p>
               </SectionHeading>
               <FieldGrid data-columns="2">
                 <FieldBox>
@@ -1073,7 +1073,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <FormSection>
               <SectionHeading>
                 <h2>홈 소개</h2>
-                <p>메인 페이지 상단 소개 카드에 보일 제목과 설명을 수정합니다.</p>
+                <p>메인 페이지 상단 소개 카드 문구를 수정합니다.</p>
               </SectionHeading>
               <FieldGrid data-columns="2">
                 <FieldBox>
@@ -1100,14 +1100,14 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <LinkSectionCard>
               <SectionHeading>
                 <h2>서비스 링크</h2>
-                <p>메인 페이지 Service 카드에 표시할 링크를 관리합니다.</p>
+                <p>메인 페이지 Service 카드 링크를 관리합니다.</p>
               </SectionHeading>
               <LinkSectionHeader>
                 <Button type="button" onClick={() => appendLinkItem("service")}>
                   항목 추가
                 </Button>
               </LinkSectionHeader>
-              <LinkSectionHint>아이콘을 고르고 표시 이름과 링크만 입력하면 됩니다.</LinkSectionHint>
+              <LinkSectionHint>아이콘, 이름, 링크만 입력하면 됩니다.</LinkSectionHint>
               <LinkItemsWrap>
                 {serviceLinksInput.length > 0 ? (
                   serviceLinksInput.map((item, index) => (
@@ -1156,7 +1156,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           </IconPickerPanel>
                         )}
                       </IconPickerField>
-                      <FieldBox>
+                      <FieldBox className="nameField">
                         <FieldLabel as="span">표시 이름</FieldLabel>
                         <Input
                           placeholder="예: aquila-blog"
@@ -1164,7 +1164,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           onChange={(e) => updateLinkItem("service", index, "label", e.target.value)}
                         />
                       </FieldBox>
-                      <FieldBox>
+                      <FieldBox className="urlField">
                         <FieldLabel as="span">이동 링크</FieldLabel>
                         <Input
                           placeholder="https://..."
@@ -1172,7 +1172,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           onChange={(e) => updateLinkItem("service", index, "href", e.target.value)}
                         />
                       </FieldBox>
-                      <RemoveButton type="button" onClick={() => removeLinkItem("service", index)}>
+                      <RemoveButton className="removeAction" type="button" onClick={() => removeLinkItem("service", index)}>
                         삭제
                       </RemoveButton>
                     </LinkItemRow>
@@ -1185,14 +1185,14 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <LinkSectionCard>
               <SectionHeading>
                 <h2>연락 링크</h2>
-                <p>메인 페이지 Contact 카드에 노출할 연락처 링크를 관리합니다.</p>
+                <p>메인 페이지 Contact 카드 링크를 관리합니다.</p>
               </SectionHeading>
               <LinkSectionHeader>
                 <Button type="button" onClick={() => appendLinkItem("contact")}>
                   항목 추가
                 </Button>
               </LinkSectionHeader>
-              <LinkSectionHint>아이콘을 고르고 표시 이름과 링크만 입력하면 됩니다.</LinkSectionHint>
+              <LinkSectionHint>아이콘, 이름, 링크만 입력하면 됩니다.</LinkSectionHint>
               <LinkItemsWrap>
                 {contactLinksInput.length > 0 ? (
                   contactLinksInput.map((item, index) => (
@@ -1241,7 +1241,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           </IconPickerPanel>
                         )}
                       </IconPickerField>
-                      <FieldBox>
+                      <FieldBox className="nameField">
                         <FieldLabel as="span">표시 이름</FieldLabel>
                         <Input
                           placeholder="예: github"
@@ -1249,7 +1249,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           onChange={(e) => updateLinkItem("contact", index, "label", e.target.value)}
                         />
                       </FieldBox>
-                      <FieldBox>
+                      <FieldBox className="urlField">
                         <FieldLabel as="span">이동 링크</FieldLabel>
                         <Input
                           placeholder="예: mailto:me@example.com"
@@ -1257,7 +1257,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           onChange={(e) => updateLinkItem("contact", index, "href", e.target.value)}
                         />
                       </FieldBox>
-                      <RemoveButton type="button" onClick={() => removeLinkItem("contact", index)}>
+                      <RemoveButton className="removeAction" type="button" onClick={() => removeLinkItem("contact", index)}>
                         삭제
                       </RemoveButton>
                     </LinkItemRow>
@@ -1268,7 +1268,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </LinkItemsWrap>
             </LinkSectionCard>
           </FormSections>
-          {profileNotice.text ? <Notice data-tone={profileNotice.tone}>{profileNotice.text}</Notice> : null}
         </FormCard>
       </ProfileGrid>
 
@@ -1276,9 +1275,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <StickySaveCopy>
           <strong>{hasUnsavedChanges ? "미저장 변경 사항이 있습니다." : "모든 변경 사항이 저장되어 있습니다."}</strong>
           <span>
-            {hasUnsavedChanges
-              ? "스크롤 위치와 상관없이 하단에서 바로 저장할 수 있습니다."
-              : "항목을 수정하면 저장 버튼이 활성화됩니다."}
+            {profileNotice.tone !== "idle"
+              ? profileNotice.text
+              : hasUnsavedChanges
+                ? "스크롤 위치와 상관없이 하단에서 바로 저장할 수 있습니다."
+                : "항목을 수정하면 저장 버튼이 활성화됩니다."}
           </span>
         </StickySaveCopy>
         <StickySaveActions>
@@ -1412,7 +1413,7 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.5rem 1rem 2.6rem;
   display: grid;
-  gap: 1.1rem;
+  gap: 0.95rem;
 
   @media (max-width: 760px) {
     padding-bottom: calc(9.2rem + env(safe-area-inset-bottom, 0px));
@@ -1421,8 +1422,8 @@ const Main = styled.main`
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 0.95rem;
-  padding: 1.05rem 1.1rem;
+  gap: 0.8rem;
+  padding: 0.96rem 1rem;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 16px;
   background: ${({ theme }) => theme.colors.gray2};
@@ -1438,14 +1439,15 @@ const HeaderCard = styled.section`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.75;
+    font-size: 0.86rem;
+    line-height: 1.55;
   }
 `
 
 const HeaderCopy = styled.div`
   display: grid;
-  gap: 0.7rem;
-  max-width: 38rem;
+  gap: 0.45rem;
+  max-width: 32rem;
 `
 
 const HeaderActions = styled.div`
@@ -1467,9 +1469,9 @@ const HeaderActions = styled.div`
 const HeaderMetaStrip = styled.section`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.6rem;
-  padding: 0.72rem 0.84rem;
-  border-radius: 12px;
+  gap: 0.45rem;
+  padding: 0.58rem 0.7rem;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
 
@@ -1477,13 +1479,13 @@ const HeaderMetaStrip = styled.section`
   strong {
     display: inline-flex;
     align-items: center;
-    min-height: 34px;
+    min-height: 30px;
     border-radius: 999px;
-    padding: 0 0.72rem;
+    padding: 0 0.62rem;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     font-weight: 700;
     white-space: nowrap;
   }
@@ -1573,8 +1575,8 @@ const LinkButton = styled.a`
 
 const ProfileGrid = styled.section`
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: 292px minmax(0, 1fr);
+  gap: 0.92rem;
   align-items: start;
 
   @media (max-width: 760px) {
@@ -1583,23 +1585,23 @@ const ProfileGrid = styled.section`
 `
 
 const PanelCard = styled.section`
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
-  padding: 1rem;
+  padding: 0.88rem;
 `
 
 const PreviewCard = styled(PanelCard)`
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: 0.65rem;
+  gap: 0.55rem;
   text-align: center;
   align-self: start;
   height: fit-content;
   position: sticky;
-  top: 1rem;
+  top: 0.78rem;
   width: 100%;
   min-width: 0;
   overflow: hidden;
@@ -1610,7 +1612,7 @@ const PreviewCard = styled(PanelCard)`
   }
 
   strong {
-    font-size: 1.15rem;
+    font-size: 1.02rem;
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -1620,6 +1622,7 @@ const PreviewCard = styled(PanelCard)`
   span {
     color: ${({ theme }) => theme.colors.blue10};
     font-weight: 700;
+    font-size: 0.8rem;
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -1629,7 +1632,8 @@ const PreviewCard = styled(PanelCard)`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.65;
+    font-size: 0.82rem;
+    line-height: 1.55;
     white-space: pre-line;
     width: 100%;
     min-width: 0;
@@ -1639,8 +1643,8 @@ const PreviewCard = styled(PanelCard)`
 `
 
 const AvatarFrame = styled.div`
-  width: 128px;
-  height: 128px;
+  width: 108px;
+  height: 108px;
   border-radius: 999px;
   overflow: hidden;
   border: none;
@@ -1672,7 +1676,7 @@ const PreviewMetaStrip = styled.div`
   width: 100%;
   display: grid;
   gap: 0.18rem;
-  padding: 0.6rem 0.72rem;
+  padding: 0.5rem 0.6rem;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -1692,7 +1696,7 @@ const PreviewMetaStrip = styled.div`
 
 const FormCard = styled(PanelCard)`
   display: grid;
-  gap: 1rem;
+  gap: 0.88rem;
 
   @media (max-width: 760px) {
     order: 1;
@@ -1701,13 +1705,13 @@ const FormCard = styled(PanelCard)`
 
 const FormSections = styled.div`
   display: grid;
-  gap: 1rem;
+  gap: 0.82rem;
 `
 
 const FormSection = styled.section`
   display: grid;
-  gap: 0.8rem;
-  padding: 0.9rem;
+  gap: 0.72rem;
+  padding: 0.78rem;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -1726,8 +1730,8 @@ const SectionHeading = styled.div`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.5;
   }
 `
 
@@ -2011,8 +2015,8 @@ const LinkSectionHeader = styled.div`
 const LinkSectionHint = styled.p`
   margin: -0.15rem 0 0;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.82rem;
-  line-height: 1.5;
+  font-size: 0.78rem;
+  line-height: 1.45;
 `
 
 const LinkItemsWrap = styled.div`
@@ -2022,21 +2026,43 @@ const LinkItemsWrap = styled.div`
 
 const LinkItemRow = styled.div`
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: 220px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon name remove"
+    "url url remove";
   gap: 0.65rem;
-  align-items: end;
-  padding: 0.85rem 0;
+  align-items: start;
+  padding: 0.78rem 0;
   border-radius: 0;
   border: 0;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
 
+  > .nameField {
+    grid-area: name;
+  }
+
+  > .urlField {
+    grid-area: url;
+  }
+
+  > .removeAction {
+    grid-area: remove;
+    align-self: end;
+  }
+
   @media (max-width: 980px) {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "icon"
+      "name"
+      "url"
+      "remove";
   }
 `
 
 const IconPickerField = styled.div`
+  grid-area: icon;
   display: grid;
   gap: 0.45rem;
   min-width: 0;
@@ -2183,7 +2209,8 @@ const RemoveButton = styled(Button)`
   border-color: ${({ theme }) => theme.colors.red7};
   background: transparent;
   white-space: nowrap;
-  min-height: 3.45rem;
+  min-height: 2.85rem;
+  padding: 0 0.72rem;
 `
 
 const InlineEmpty = styled.p`
@@ -2198,21 +2225,21 @@ const InlineEmpty = styled.p`
 
 const StickySaveBar = styled.section`
   position: sticky;
-  bottom: 0.45rem;
+  bottom: 0.2rem;
   z-index: 15;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.78rem 0.92rem;
-  border-radius: 10px;
+  padding: 0.62rem 0.78rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: rgba(18, 21, 26, 0.94);
 
   &[data-dirty="true"] {
     border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue2};
+    background: rgba(27, 45, 74, 0.9);
   }
 
   @media (max-width: 760px) {
@@ -2221,25 +2248,25 @@ const StickySaveBar = styled.section`
     right: max(0.72rem, env(safe-area-inset-right, 0px));
     bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
     z-index: 80;
-    padding: 0.72rem;
+    padding: 0.68rem;
     border-radius: 12px;
-    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.32);
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
   }
 `
 
 const StickySaveCopy = styled.div`
   min-width: 0;
   display: grid;
-  gap: 0.16rem;
+  gap: 0.12rem;
 
   strong {
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     color: ${({ theme }) => theme.colors.gray12};
     line-height: 1.35;
   }
 
   span {
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     color: ${({ theme }) => theme.colors.gray10};
     line-height: 1.45;
   }

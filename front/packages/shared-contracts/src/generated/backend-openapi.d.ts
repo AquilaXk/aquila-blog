@@ -1240,6 +1240,9 @@ export interface components {
             profileImageDirectUrl?: string;
             profileRole?: string;
             profileBio?: string;
+            aboutRole?: string;
+            aboutBio?: string;
+            aboutDetails?: string;
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
@@ -1258,6 +1261,9 @@ export interface components {
         UpdateProfileCardRequest: {
             role?: string;
             bio?: string;
+            aboutRole?: string;
+            aboutBio?: string;
+            aboutDetails?: string;
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;

@@ -75,6 +75,10 @@ MONITOR_DOMAIN=status.<your-domain>
 
 - Hostname: `status.<your-domain>`
 - Service: `http://caddy:80`
+- Hostname: `grafana.<your-domain>`
+- Service: `http://caddy:80`
+- Hostname: `prometheus.<your-domain>`
+- Service: `http://caddy:80`
 
 ### 3) Uptime Kuma 초기 설정
 
@@ -93,11 +97,24 @@ UPTIME_KUMA_PROXY_ORIGIN=https://status.<your-domain>
 # client-side
 NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH=/status/<slug>
 NEXT_PUBLIC_UPTIME_KUMA_URL=/status/<slug>
+NEXT_PUBLIC_MONITORING_EMBED_URL=https://grafana.<your-domain>/d/blog-overview/main?orgId=1&kiosk
+NEXT_PUBLIC_PROMETHEUS_URL=https://prometheus.<your-domain>
 ```
 
 - `front/next.config.js` rewrites가 `/status/*`, `/assets/*`, `/api/status-page/*`를 `UPTIME_KUMA_PROXY_ORIGIN`으로 전달한다.
 - 기본 임베드 URL은 `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH`이며, 필요 시 `NEXT_PUBLIC_MONITORING_EMBED_URL`로 수동 override 가능하다.
 - `NEXT_PUBLIC_GRAFANA_EMBED_URL`은 하위호환 fallback으로만 유지한다.
+
+## Grafana + Prometheus 최소 운영 구성
+
+- compose 서비스: `prometheus`, `grafana` 추가
+- Prometheus scrape target: `back_blue:8080`, `back_green:8080`, `back_worker:8080` (`/actuator/prometheus`)
+- Grafana datasource provisioning: `http://prometheus:9090`
+- 기본 대시보드 JSON: `deploy/homeserver/monitoring/grafana/dashboards/blog-overview.json`
+- 기본 알림 룰: `deploy/homeserver/monitoring/rules/task-alerts.yml`
+- 보안:
+  - `api.<domain>/actuator/prometheus`는 Caddy에서 `403`으로 차단
+  - Prometheus UI는 Caddy `basicauth`로 보호(`PROMETHEUS_BASIC_AUTH_*`)
 
 ## 홈서버 배포 파일
 

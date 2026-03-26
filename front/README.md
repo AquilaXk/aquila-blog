@@ -40,6 +40,8 @@ yarn dev
 | 이름 | 용도 |
 | --- | --- |
 | `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH` | 관리자 도구의 상태 페이지 임베드 경로 |
+| `NEXT_PUBLIC_MONITORING_EMBED_URL` | 관리자 도구의 모니터링 iframe URL(예: Grafana kiosk URL) |
+| `NEXT_PUBLIC_PROMETHEUS_URL` | 관리자 도구의 Prometheus 바로가기 URL |
 | `UPTIME_KUMA_PROXY_ORIGIN` | `/status/*` rewrite 대상 오리진 |
 | `PLAYWRIGHT_BASE_URL` | live E2E 대상 URL |
 | `BUNDLE_BUDGET_MARGIN_PERCENT` | 번들 예산 허용 오차(%) |

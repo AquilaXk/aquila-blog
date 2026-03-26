@@ -400,7 +400,7 @@ fi
 inactive_backend="$(other_backend "${target_backend}")"
 
 warn_unsupported_docker_engine
-services_to_boot=(db_1 redis_1 caddy cloudflared autoheal)
+services_to_boot=(db_1 redis_1 caddy cloudflared uptime_kuma prometheus grafana autoheal)
 if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin back_worker)
 fi

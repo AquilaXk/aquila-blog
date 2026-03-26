@@ -62,6 +62,7 @@ class SecurityConfig(
                     // 프로덕션에서는 k8s/lb health probe 외 actuator 공개를 차단한다.
                     authorize("/actuator/health/liveness", permitAll)
                     authorize("/actuator/health/readiness", permitAll)
+                    authorize("/actuator/prometheus", permitAll)
                     authorize("/actuator/**", hasRole("ADMIN"))
                 } else {
                     authorize("/actuator/health/**", permitAll)

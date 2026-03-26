@@ -1171,7 +1171,7 @@ echo "next backend: ${next_backend}"
 action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
-services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal back_worker)
+services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma prometheus grafana autoheal back_worker)
 if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin)
 fi

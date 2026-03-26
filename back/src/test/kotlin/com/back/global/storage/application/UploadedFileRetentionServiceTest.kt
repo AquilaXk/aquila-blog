@@ -71,6 +71,27 @@ class UploadedFileRetentionServiceTest {
     }
 
     @Test
+    fun `업로드 파일 시퀀스는 이미지 업로드 경로에서 1씩 증가한다`() {
+        uploadedFileRetentionService.registerTempUpload(
+            objectKey = "posts/2026/03/seq-first.png",
+            contentType = "image/png",
+            fileSize = 128,
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+        uploadedFileRetentionService.registerTempUpload(
+            objectKey = "posts/2026/03/seq-second.png",
+            contentType = "image/png",
+            fileSize = 256,
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+
+        val first = uploadedFileRepository.findByObjectKey("posts/2026/03/seq-first.png")!!
+        val second = uploadedFileRepository.findByObjectKey("posts/2026/03/seq-second.png")!!
+
+        assertThat(second.id).isEqualTo(first.id + 1)
+    }
+
+    @Test
     fun `프로필 이미지를 교체하면 새 이미지는 활성화되고 이전 이미지는 3일 후 삭제 예약된다`() {
         val oldKey = "posts/2026/03/profile-old.png"
         val newKey = "posts/2026/03/profile-new.png"

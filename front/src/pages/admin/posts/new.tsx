@@ -3576,7 +3576,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
-  const hasDraftContent = Boolean(postTitle.trim() || postContent.trim() || postTags.length > 0)
   const localDraftStatusText = localDraftSavedAt
     ? `브라우저 임시저장: ${localDraftSavedAt.slice(5, 16).replace("T", " ")}`
     : "브라우저 임시저장 없음"
@@ -6681,15 +6680,6 @@ const PrimaryButton = styled(Button)`
     background: ${({ theme }) => theme.colors.blue10};
     color: ${({ theme }) => theme.colors.gray1};
   }
-`
-
-const VisibilitySelect = styled.select`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
-  padding: 0.52rem 0.62rem;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.86rem;
 `
 
 const EditorSection = styled.div`

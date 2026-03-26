@@ -12,6 +12,7 @@ NETWORK_NAME="blog_home_default"
 LOCK_DIR="${SCRIPT_DIR}/.steady-state-guard.lock"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
+GRAFANA_DS_STATE_FILE="${SCRIPT_DIR}/.grafana-datasource-state"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -24,6 +25,50 @@ compose() {
 env_value() {
   local key="$1"
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+}
+
+normalize_positive_int() {
+  local value="$1"
+  local fallback="$2"
+  if [[ "${value}" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s' "${value}"
+  else
+    printf '%s' "${fallback}"
+  fi
+}
+
+normalize_non_negative_int() {
+  local value="$1"
+  local fallback="$2"
+  if [[ "${value}" =~ ^[0-9]+$ ]]; then
+    printf '%s' "${value}"
+  else
+    printf '%s' "${fallback}"
+  fi
+}
+
+GRAFANA_DS_FAIL_COUNT=0
+GRAFANA_DS_LAST_RECREATE_EPOCH=0
+
+load_grafana_ds_state() {
+  GRAFANA_DS_FAIL_COUNT=0
+  GRAFANA_DS_LAST_RECREATE_EPOCH=0
+  [[ -f "${GRAFANA_DS_STATE_FILE}" ]] || return 0
+
+  local fail_count_raw last_recreate_raw
+  fail_count_raw="$(awk -F= '$1 == "fail_count" {print $2; exit}' "${GRAFANA_DS_STATE_FILE}" 2>/dev/null || true)"
+  last_recreate_raw="$(awk -F= '$1 == "last_recreate_epoch" {print $2; exit}' "${GRAFANA_DS_STATE_FILE}" 2>/dev/null || true)"
+
+  if [[ "${fail_count_raw}" =~ ^[0-9]+$ ]]; then
+    GRAFANA_DS_FAIL_COUNT="${fail_count_raw}"
+  fi
+  if [[ "${last_recreate_raw}" =~ ^[0-9]+$ ]]; then
+    GRAFANA_DS_LAST_RECREATE_EPOCH="${last_recreate_raw}"
+  fi
+}
+
+save_grafana_ds_state() {
+  printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${GRAFANA_DS_FAIL_COUNT}" "${GRAFANA_DS_LAST_RECREATE_EPOCH}" > "${GRAFANA_DS_STATE_FILE}"
 }
 
 host_caddy_sha256() {
@@ -143,6 +188,89 @@ check_api_readiness() {
   return 1
 }
 
+query_grafana_prometheus_datasource() {
+  local grafana_user="$1"
+  local grafana_password="$2"
+
+  local response code
+  response="$(
+    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+      --connect-timeout 3 \
+      --max-time 8 \
+      -sS \
+      -u "${grafana_user}:${grafana_password}" \
+      -w $'\nHTTP_STATUS:%{http_code}\n' \
+      "http://grafana:3000/api/datasources/uid/prometheus" || true
+  )"
+  code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
+  [[ -n "${code}" ]] || code="none"
+  printf '%s' "${code}"
+  if [[ "${code}" == "200" ]] && printf '%s' "${response}" | grep -q '"uid":"prometheus"'; then
+    return 0
+  fi
+  return 1
+}
+
+check_grafana_prometheus_datasource() {
+  local grafana_user grafana_password
+  grafana_user="$(env_value "GRAFANA_ADMIN_USER")"
+  grafana_password="$(env_value "GRAFANA_ADMIN_PASSWORD")"
+  [[ -n "${grafana_user}" ]] || grafana_user="admin"
+  [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
+
+  local fail_threshold cooldown_seconds
+  fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_DS_FAIL_THRESHOLD")" "3")"
+  cooldown_seconds="$(normalize_non_negative_int "$(env_value "GRAFANA_DS_RECREATE_COOLDOWN_SECONDS")" "900")"
+
+  load_grafana_ds_state
+
+  local status_code
+  if status_code="$(query_grafana_prometheus_datasource "${grafana_user}" "${grafana_password}")"; then
+    if (( GRAFANA_DS_FAIL_COUNT > 0 )); then
+      log "OK grafana datasource uid=prometheus recovered status=${status_code} consecutive_failures=${GRAFANA_DS_FAIL_COUNT}"
+    else
+      log "OK grafana datasource uid=prometheus"
+    fi
+    GRAFANA_DS_FAIL_COUNT=0
+    save_grafana_ds_state
+    return 0
+  fi
+
+  GRAFANA_DS_FAIL_COUNT=$(( GRAFANA_DS_FAIL_COUNT + 1 ))
+  save_grafana_ds_state
+  log "WARN grafana datasource unhealthy status=${status_code} consecutive_failures=${GRAFANA_DS_FAIL_COUNT} threshold=${fail_threshold}"
+
+  if (( GRAFANA_DS_FAIL_COUNT < fail_threshold )); then
+    return 1
+  fi
+
+  local now elapsed_since_recreate
+  now="$(date +%s)"
+  elapsed_since_recreate=$(( now - GRAFANA_DS_LAST_RECREATE_EPOCH ))
+  if (( GRAFANA_DS_LAST_RECREATE_EPOCH > 0 && elapsed_since_recreate < cooldown_seconds )); then
+    local cooldown_remaining
+    cooldown_remaining=$(( cooldown_seconds - elapsed_since_recreate ))
+    log "WARN grafana datasource recreate skipped due cooldown remaining_seconds=${cooldown_remaining}"
+    return 1
+  fi
+
+  log "WARN grafana datasource threshold reached; recreating grafana"
+  compose up -d --force-recreate grafana >/dev/null || true
+  GRAFANA_DS_LAST_RECREATE_EPOCH="${now}"
+  save_grafana_ds_state
+  sleep 3
+
+  if status_code="$(query_grafana_prometheus_datasource "${grafana_user}" "${grafana_password}")"; then
+    GRAFANA_DS_FAIL_COUNT=0
+    save_grafana_ds_state
+    log "OK grafana datasource repaired uid=prometheus status=${status_code}"
+    return 0
+  fi
+
+  log "FAIL grafana datasource uid=prometheus status=${status_code} after_recreate=true"
+  return 1
+}
+
 deploy_lock_is_active() {
   if [[ ! -d "${DEPLOY_LOCK_DIR}" ]]; then
     return 1
@@ -182,9 +310,10 @@ main() {
   if enforce_single_backend_rule; then ok=$((ok + 1)); fi
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi
   if check_api_readiness; then ok=$((ok + 1)); fi
+  if check_grafana_prometheus_datasource; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 3 ]]; then
-    compose logs --no-color --tail=80 caddy >&2 || true
+  if [[ "${ok}" -ne 4 ]]; then
+    compose logs --no-color --tail=80 caddy grafana >&2 || true
     exit 1
   fi
 }

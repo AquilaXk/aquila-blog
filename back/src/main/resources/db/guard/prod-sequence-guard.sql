@@ -25,4 +25,5 @@ SELECT setval('public.post_attr_seq', COALESCE((SELECT MAX(id) + 1 FROM public.p
 SELECT setval('public.post_like_seq', COALESCE((SELECT MAX(id) + 1 FROM public.post_like), 1), false);
 SELECT setval('public.post_comment_seq', COALESCE((SELECT MAX(id) + 1 FROM public.post_comment), 1), false);
 SELECT setval('public.task_seq', COALESCE((SELECT MAX(id) + 1 FROM public.task), 1), false);
+ALTER SEQUENCE IF EXISTS uploaded_file_seq INCREMENT BY 1;
 SELECT setval('public.uploaded_file_seq', COALESCE((SELECT MAX(id) + 1 FROM public.uploaded_file), 1), false);

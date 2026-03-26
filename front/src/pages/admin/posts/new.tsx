@@ -1249,6 +1249,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     text: "기존 글의 태그를 선택하거나 새 값을 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다.",
   })
   const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
+  const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
+  const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
@@ -3643,9 +3645,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     studioSurface === "manage"
       ? "목록 새로고침"
       : editorMode === "edit" || hasDraftContent
-        ? "발행 설정 열기"
-        : "새 글 초안 시작"
-  const heroSecondaryActionLabel = studioSurface === "manage" ? "글 작성 열기" : "목록 관리 열기"
+        ? "설정 열기"
+        : "새 글 시작"
+  const heroSecondaryActionLabel = studioSurface === "manage" ? "글 작성" : "목록 관리"
   const isCompactManageSurface = isCompactMobileLayout && studioSurface === "manage"
   const showSelectedPanelInManageSurface = !isCompactMobileLayout || activeMobileStudioStep !== "list" || hasSelectedManagedPost
   const closeToolbarMenus = () => {
@@ -3661,13 +3663,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const codeBlockTemplate = "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```"
   const mermaidTemplate = "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```"
   const tableTemplate = "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |"
-  const adminTools = [
-    { href: "/admin", label: "허브" },
-    { href: "/admin/profile", label: "프로필" },
-    { href: "#studio-surface", label: "작업 흐름" },
-    { href: "/admin/tools", label: "도구" },
-  ]
-
   if (!sessionMember) {
     return null
   }
@@ -3697,6 +3692,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const previewDateText = formatDate(new Date().toISOString(), "ko")
   const shouldShowGlobalNotice =
     globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
+  const shouldShowPublishNotice = publishNotice.tone !== "idle"
+  const shouldShowTagRecommendationNotice =
+    tagRecommendationNotice.tone !== "idle" || tagRecommendationNotice.text !== TAG_RECOMMENDATION_IDLE_TEXT
   const thumbnailEditorPanel = (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
@@ -3865,9 +3863,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <p>
             {studioSurface === "manage"
               ? isCompactManageSurface
-                ? "목록을 바로 불러오고, 필요한 글만 선택해 이어서 편집하도록 압축했습니다."
-                : "목록 점검과 선택 글 작업을 나눠 운영 정리와 편집 전환이 바로 이어지게 했습니다."
-              : "제목, 본문, 태그, 발행 설정까지 한 흐름으로 이어지도록 정리했습니다."}
+                ? "목록에서 고른 글만 이어서 수정할 수 있게 정리했습니다."
+                : "조회 → 선택 → 편집 흐름만 남겨 목록 작업을 더 빠르게 정리했습니다."
+              : "제목, 태그, 본문과 발행만 한 흐름으로 정리했습니다."}
           </p>
           <StudioStatusStrip aria-label="글 작업실 상태 요약">
             <StudioStatusItem>
@@ -3887,15 +3885,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개 조회됨` : "아직 안 불러옴"}</strong>
             </StudioStatusItem>
           </StudioStatusStrip>
-          {!isCompactManageSurface ? (
-            <HeroNav>
-              {adminTools.map((tool) => (
-                <AnchorButton key={tool.href} href={tool.href}>
-                  {tool.label}
-                </AnchorButton>
-              ))}
-            </HeroNav>
-          ) : null}
         </HeroIntro>
         <HeroAside data-compact-manage={isCompactManageSurface}>
           <ActionCluster data-hidden={isCompactMobileLayout}>
@@ -3957,7 +3946,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             목록 관리
           </SurfaceTabButton>
         </SurfaceTabList>
-        {!isCompactManageSurface ? <SurfaceHintBar>{studioSurface === "compose" ? "작성 우선, 목록은 보조 흐름으로 유지합니다." : "조회 → 선택 → 편집 흐름에 맞춰 목록 작업을 정리합니다."}</SurfaceHintBar> : null}
       </StudioSurfaceCard>
 
       <WorkspaceGrid>
@@ -4297,15 +4285,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <ListHeaderActions>
                     <span>{selectedPostIds.length > 0 ? `${selectedPostIds.length}개 선택` : `총 ${adminPostTotal}건`}</span>
                     {listScope === "active" ? (
-                      <>
+                      adminPostViewRows.length > 0 ? (
                         <Button
                           type="button"
-                          disabled={adminPostViewRows.length === 0 || loadingKey.length > 0}
+                          disabled={loadingKey.length > 0}
                           onClick={toggleSelectAllVisiblePosts}
                         >
                           {isAllVisiblePostsSelected ? "현재 목록 선택 해제" : "현재 목록 전체 선택"}
                         </Button>
-                      </>
+                      ) : null
                     ) : (
                       <ReadOnlyHint>삭제 글은 복구 또는 영구삭제로 정리할 수 있습니다.</ReadOnlyHint>
                     )}
@@ -4587,8 +4575,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <h3>{hasSelectedManagedPost ? "선택한 글" : "빠른 작업"}</h3>
                     <p>
                       {hasSelectedManagedPost
-                        ? "선택한 글의 편집/삭제를 이어가고, 필요할 때만 고급 작업을 펼칩니다."
-                        : "기본 흐름은 목록에서 글을 고른 뒤 이어서 작업하는 것입니다. 직접 불러오기는 필요할 때만 사용합니다."}
+                        ? "선택한 글을 바로 이어서 수정하고, 필요할 때만 보조 작업을 펼칩니다."
+                        : "목록에서 글을 고른 뒤 이어서 작업하는 흐름을 기본으로 둡니다."}
                     </p>
                   </div>
                   <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
@@ -4604,7 +4592,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           <VisibilityBadge data-tone={postVisibility}>{currentVisibilityText}</VisibilityBadge>
                         )}
                       </div>
-                      <p>목록에서 선택한 글을 바로 이어서 편집하거나, 이 패널에서 삭제를 진행할 수 있습니다.</p>
+                      <p>기본 작업은 편집 계속 1개만 앞세우고, 삭제/진단은 필요할 때만 펼칩니다.</p>
                       <div className="meta">
                         <span>{`post id #${postId}`}</span>
                         <span>{`버전 ${postVersion ?? "-"}`}</span>
@@ -4718,8 +4706,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 ) : (
                   <>
                     <SelectedPostStateCard data-tone="idle">
-                      <strong>목록에서 글을 고르면 이 패널에서 바로 편집을 이어갈 수 있습니다.</strong>
-                      <p>새 글 작성은 여기서 시작하고, 기존 글 편집은 왼쪽 목록 선택을 기본 동선으로 둡니다.</p>
+                      <strong>목록에서 글을 고르면 여기서 바로 편집을 이어갈 수 있습니다.</strong>
+                      <p>새 글 작성은 여기서 시작하고, 직접 불러오기는 필요할 때만 사용합니다.</p>
                     </SelectedPostStateCard>
                     <ActionRow>
                       <PrimaryButton
@@ -4942,48 +4930,61 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     />
                   </InlineTagList>
                   <FieldHelp>쉼표 또는 Enter로 태그를 추가하고, 태그를 눌러 삭제할 수 있습니다.</FieldHelp>
-                  <MetaActionRow>
-                    <Button
-                      type="button"
-                      disabled={disabled("recommendTags") || !postContent.trim()}
-                      onClick={() => void handleRecommendTags()}
+                  <InlineDisclosure open={isComposeAssistOpen}>
+                    <summary
+                      onClick={(event) => {
+                        event.preventDefault()
+                        setIsComposeAssistOpen((prev) => !prev)
+                      }}
                     >
-                      {loadingKey === "recommendTags" ? "AI 태그 추천 중..." : "AI 태그 추천"}
-                    </Button>
-                  </MetaActionRow>
-                  <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
-                    {tagRecommendationNotice.text}
-                  </SummaryActionStatus>
+                      <strong>보조 설정</strong>
+                      <span>{isComposeAssistOpen ? "닫기" : "열기"}</span>
+                    </summary>
+                    {isComposeAssistOpen && (
+                      <div className="body">
+                        <MetaActionRow>
+                          <Button
+                            type="button"
+                            disabled={disabled("recommendTags") || !postContent.trim()}
+                            onClick={() => void handleRecommendTags()}
+                          >
+                            {loadingKey === "recommendTags" ? "AI 태그 추천 중..." : "AI 태그 추천"}
+                          </Button>
+                          <MetaToggleButton
+                            type="button"
+                            data-active={activeMetaPanel === "tag"}
+                            onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
+                          >
+                            태그 관리
+                          </MetaToggleButton>
+                          <MetaToggleButton
+                            type="button"
+                            data-active={isPublishModalOpen}
+                            onClick={() =>
+                              openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                            }
+                          >
+                            공개/미리보기 설정
+                          </MetaToggleButton>
+                        </MetaActionRow>
+                        <PublishSettingsSummary>
+                          <SummaryPill>노출 설정: {currentVisibilityText}</SummaryPill>
+                          <SummaryPill>
+                            썸네일: {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "수동 지정" : "본문 첫 이미지 자동") : "없음"}
+                          </SummaryPill>
+                          <SummaryPill>
+                            요약: {postSummary.trim() ? `${postSummary.trim().length}자` : "자동 생성"}
+                          </SummaryPill>
+                        </PublishSettingsSummary>
+                        {shouldShowTagRecommendationNotice ? (
+                          <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
+                            {tagRecommendationNotice.text}
+                          </SummaryActionStatus>
+                        ) : null}
+                      </div>
+                    )}
+                  </InlineDisclosure>
                 </InlineTagComposer>
-                <WriterMetaActions>
-                  <MetaActionRow>
-                    <MetaToggleButton
-                      type="button"
-                      data-active={activeMetaPanel === "tag"}
-                      onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
-                    >
-                      태그 관리
-                    </MetaToggleButton>
-                    <MetaToggleButton
-                      type="button"
-                      data-active={isPublishModalOpen}
-                      onClick={() =>
-                        openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                      }
-                    >
-                      공개/미리보기 설정
-                    </MetaToggleButton>
-                  </MetaActionRow>
-                  <PublishSettingsSummary>
-                    <SummaryPill>노출 설정: {currentVisibilityText}</SummaryPill>
-                    <SummaryPill>
-                      썸네일: {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "수동 지정" : "본문 첫 이미지 자동") : "없음"}
-                    </SummaryPill>
-                    <SummaryPill>
-                      요약: {postSummary.trim() ? `${postSummary.trim().length}자` : "자동 생성"}
-                    </SummaryPill>
-                  </PublishSettingsSummary>
-                </WriterMetaActions>
               </WriterMetaStrip>
             </div>
           </WriterHeader>
@@ -5249,55 +5250,74 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </PreviewPane>
           </EditorGrid>
           <WriterFooterBar>
-              <WriterFooterSummary>
+            <WriterFooterSummary>
                 <span>{currentPostLabel}</span>
                 <span>{tagSummaryText}</span>
                 <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
                 <span>{localDraftStatusText}</span>
               </WriterFooterSummary>
             <WriterFooterControls>
-              <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice>
+              {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
               <WriterFooterActions>
-                <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                  브라우저 임시저장
-                </Button>
-                <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
-                  임시저장 불러오기
-                </Button>
-                <Button
-                  type="button"
-                  disabled={loadingKey.length > 0 || !localDraftSavedAt}
-                  onClick={clearLocalDraft}
-                >
-                  임시저장 삭제
-                </Button>
-                <Button type="button" disabled={loadingKey.length > 0} onClick={() => switchToCreateMode({ keepContent: true })}>
-                  새 글 모드
-                </Button>
-                <Button
-                  type="button"
-                  disabled={editorMode !== "edit" || disabled("modifyPost")}
-                  onClick={() => openPublishModal("modify")}
-                >
-                  선택 글 수정
-                </Button>
-                {isTempDraftMode && (
+                {editorMode === "edit" ? (
                   <PrimaryButton
                     type="button"
-                    disabled={editorMode !== "edit" || disabled("publishTempPost")}
-                    onClick={() => openPublishModal("temp")}
+                    disabled={isTempDraftMode ? disabled("publishTempPost") : disabled("modifyPost")}
+                    onClick={() => openPublishModal(isTempDraftMode ? "temp" : "modify")}
                   >
-                    {loadingKey === "publishTempPost" ? "발행 중..." : "임시글 발행"}
+                    {isTempDraftMode
+                      ? loadingKey === "publishTempPost"
+                        ? "발행 중..."
+                        : "임시글 발행"
+                      : "선택 글 수정"}
+                  </PrimaryButton>
+                ) : (
+                  <PrimaryButton
+                    type="button"
+                    disabled={disabled("writePost")}
+                    onClick={handleClickCreatePost}
+                  >
+                    {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
                   </PrimaryButton>
                 )}
-                <PrimaryButton
-                  type="button"
-                  disabled={disabled("writePost")}
-                  onClick={handleClickCreatePost}
-                >
-                  {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
-                </PrimaryButton>
               </WriterFooterActions>
+              <InlineDisclosure open={isComposeUtilityOpen}>
+                <summary
+                  onClick={(event) => {
+                    event.preventDefault()
+                    setIsComposeUtilityOpen((prev) => !prev)
+                  }}
+                >
+                  <strong>보조 작업</strong>
+                  <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
+                </summary>
+                {isComposeUtilityOpen && (
+                  <div className="body">
+                    <SubActionRow>
+                      <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
+                        브라우저 임시저장
+                      </Button>
+                      <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
+                        임시저장 불러오기
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={loadingKey.length > 0 || !localDraftSavedAt}
+                        onClick={clearLocalDraft}
+                      >
+                        임시저장 삭제
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={loadingKey.length > 0}
+                        onClick={() => switchToCreateMode({ keepContent: true })}
+                      >
+                        새 글 모드
+                      </Button>
+                    </SubActionRow>
+                  </div>
+                )}
+              </InlineDisclosure>
             </WriterFooterControls>
           </WriterFooterBar>
         </EditorSection>
@@ -5690,8 +5710,8 @@ const Main = styled.main`
 const HeroCard = styled.section`
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 1rem;
-  border-radius: 18px;
+  gap: 0.88rem;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
@@ -5718,7 +5738,7 @@ const HeroCard = styled.section`
 
 const HeroIntro = styled.div`
   display: grid;
-  gap: 0.72rem;
+  gap: 0.58rem;
 
   h1 {
     margin: 0;
@@ -5733,9 +5753,10 @@ const HeroIntro = styled.div`
 
   p {
     margin: 0;
-    max-width: 44rem;
+    max-width: 38rem;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
+    font-size: 0.92rem;
+    line-height: 1.6;
   }
 
   &[data-compact-manage="true"] {
@@ -5793,69 +5814,26 @@ const StudioStatusItem = styled.div`
   }
 `
 
-const HeroNav = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem;
-
-  @media (max-width: 1024px) {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
-  }
-
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const AnchorButton = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  padding: 0 0.86rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-weight: 650;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  text-decoration: none;
-  font-size: 0.84rem;
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  @media (max-width: 1024px) {
-    width: 100%;
-  }
-`
-
 const HeroAside = styled.aside`
   display: grid;
-  gap: 0.65rem;
+  align-content: start;
+  justify-items: end;
+  gap: 0.48rem;
 
   &[data-compact-manage="true"] {
-    gap: 0.6rem;
+    gap: 0.48rem;
+  }
+
+  @media (max-width: 1024px) {
+    justify-items: stretch;
   }
 `
 
 const ActionCluster = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  justify-content: flex-end;
+  gap: 0.45rem;
 
   &[data-hidden="true"] {
     display: none;
@@ -5873,10 +5851,12 @@ const ActionCluster = styled.div`
 `
 
 const StudioSurfaceCard = styled.section`
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.55rem;
-  padding: 0.76rem 0.84rem;
-  margin-bottom: 1.1rem;
+  padding: 0.68rem 0.78rem;
+  margin-bottom: 0.96rem;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 14px;
   background: ${({ theme }) => theme.colors.gray2};
@@ -5889,11 +5869,12 @@ const StudioSurfaceCard = styled.section`
 
   &[data-compact-manage="true"] {
     margin-bottom: 0.8rem;
+  }
 
-    @media (max-width: 720px) {
-      gap: 0.55rem;
-      padding: 0.64rem 0.72rem;
-    }
+  @media (max-width: 720px) {
+    display: grid;
+    justify-content: stretch;
+    padding: 0.64rem 0.72rem;
   }
 `
 
@@ -5937,12 +5918,6 @@ const SurfaceTabButton = styled.button`
     outline: none;
     box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
   }
-`
-
-const SurfaceHintBar = styled.div`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.82rem;
-  line-height: 1.55;
 `
 
 const WorkspaceGrid = styled.div`
@@ -6737,7 +6712,9 @@ const HeroActionButton = styled(Button)`
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-weight: 650;
-  padding: 0.6rem 0.92rem;
+  min-height: 38px;
+  padding: 0.54rem 0.82rem;
+  font-size: 0.84rem;
 
   &:hover:not(:disabled) {
     background: ${({ theme }) => theme.colors.gray4};
@@ -6882,17 +6859,6 @@ const InlineMetaInput = styled(Input)`
 
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray10};
-  }
-`
-
-const WriterMetaActions = styled.div`
-  display: grid;
-  gap: 0.72rem;
-  justify-items: stretch;
-  align-content: start;
-
-  @media (max-width: 760px) {
-    justify-items: stretch;
   }
 `
 
@@ -8244,7 +8210,7 @@ const SelectedPostPanel = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 10px;
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.9rem;
+  padding: 0.82rem;
   margin: 0;
   box-shadow: none;
 
@@ -8274,15 +8240,15 @@ const SelectedPostHeader = styled.div`
 
   h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.94rem;
     font-weight: 720;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
     margin: 0.24rem 0 0;
-    font-size: 0.84rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.5;
     color: ${({ theme }) => theme.colors.gray11};
   }
 
@@ -8295,11 +8261,11 @@ const SelectedPostBadge = styled.span`
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 0.36rem 0.7rem;
+  padding: 0.3rem 0.62rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
   white-space: nowrap;
 
@@ -8318,7 +8284,7 @@ const SelectedPostGrid = styled.div`
 const SelectedPostStateCard = styled.div`
   display: grid;
   gap: 0.52rem;
-  padding: 0.78rem 0.82rem;
+  padding: 0.72rem 0.76rem;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
@@ -8331,7 +8297,7 @@ const SelectedPostStateCard = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
+    font-size: 0.84rem;
     font-weight: 760;
     line-height: 1.45;
   }
@@ -8339,7 +8305,7 @@ const SelectedPostStateCard = styled.div`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     line-height: 1.58;
   }
 
@@ -9148,7 +9114,7 @@ const WriterFooterSummary = styled.div`
 
 const WriterFooterControls = styled.div`
   display: grid;
-  gap: 0.6rem;
+  gap: 0.52rem;
   justify-items: stretch;
   flex: 1 1 34rem;
   width: min(100%, 48rem);
@@ -9167,6 +9133,7 @@ const WriterFooterActions = styled.div`
   flex-wrap: wrap;
   gap: 0.55rem;
   justify-content: flex-end;
+  align-items: center;
 
   @media (max-width: 720px) {
     width: 100%;

@@ -34,7 +34,7 @@ const AdminHubSurface = ({
       <HeaderPanel>
         <HeaderCopy>
           <h1>관리자 작업 진입점</h1>
-          <p>지금 필요한 화면만 빠르게 열고, 나머지 설명은 작업 안에서 확인하도록 정리했습니다.</p>
+          <p>지금 필요한 화면만 빠르게 열 수 있도록 핵심 작업만 남겼습니다.</p>
         </HeaderCopy>
         <StatusStrip aria-label="관리자 상태 요약">
           <StatusItem>
@@ -56,7 +56,7 @@ const AdminHubSurface = ({
         <TaskPanelHeader>
           <div>
             <h2>주요 작업</h2>
-            <p>프로필, 글 작업실, 운영 도구 순으로 바로 이동할 수 있습니다.</p>
+            <p>프로필, 글 작업실, 운영 도구로 바로 이동합니다.</p>
           </div>
         </TaskPanelHeader>
         <TaskList>
@@ -90,7 +90,7 @@ const AdminHubSurface = ({
         <ProfileCopy>
           <strong>{displayName}</strong>
           <span>{profileRole || "관리자 역할 미설정"}</span>
-          <p>{profileBio || "관리자 소개 문구가 아직 없습니다."}</p>
+          <p>{profileBio || "관리자 소개 문구가 없습니다."}</p>
         </ProfileCopy>
         <Link href="/admin/profile" passHref legacyBehavior>
           <ProfileAction>프로필 정리</ProfileAction>
@@ -103,23 +103,23 @@ const AdminHubSurface = ({
 export default AdminHubSurface
 
 const Main = styled.main`
-  max-width: 1120px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 1.4rem 1rem 2.5rem;
+  padding: 1.2rem 1rem 2.3rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 0.78rem;
 
   @media (max-width: 900px) {
-    gap: 0.78rem;
+    gap: 0.72rem;
     padding-top: 1rem;
   }
 `
 
 const HeaderPanel = styled.section`
   display: grid;
-  gap: 0.8rem;
-  padding: 0.96rem 1rem;
-  border-radius: 14px;
+  gap: 0.68rem;
+  padding: 0.84rem 0.92rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
@@ -127,7 +127,7 @@ const HeaderPanel = styled.section`
 
 const HeaderCopy = styled.div`
   display: grid;
-  gap: 0.42rem;
+  gap: 0.32rem;
 
   h1 {
     margin: 0;
@@ -137,16 +137,17 @@ const HeaderCopy = styled.div`
 
   p {
     margin: 0;
-    max-width: 42rem;
+    max-width: 34rem;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.62;
+    font-size: 0.86rem;
+    line-height: 1.55;
   }
 `
 
 const StatusStrip = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.45rem;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -157,7 +158,7 @@ const StatusItem = styled.div`
   display: grid;
   gap: 0.2rem;
   min-width: 0;
-  padding: 0.58rem 0.64rem;
+  padding: 0.48rem 0.56rem;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -170,7 +171,7 @@ const StatusItem = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     font-weight: 700;
     line-height: 1.35;
     overflow: hidden;
@@ -181,9 +182,9 @@ const StatusItem = styled.div`
 
 const TaskPanel = styled.section`
   display: grid;
-  gap: 0.78rem;
-  padding: 0.96rem 1rem;
-  border-radius: 14px;
+  gap: 0.7rem;
+  padding: 0.84rem 0.92rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
@@ -202,23 +203,23 @@ const TaskPanelHeader = styled.div`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.5;
   }
 `
 
 const TaskList = styled.div`
   display: grid;
-  gap: 0.6rem;
+  gap: 0.5rem;
 `
 
 const TaskLink = styled.a`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.85rem;
+  gap: 0.7rem;
   align-items: center;
-  padding: 0.82rem 0.88rem;
-  border-radius: 12px;
+  padding: 0.72rem 0.78rem;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: inherit;
@@ -230,7 +231,7 @@ const TaskLink = styled.a`
 
   &[data-primary="true"] {
     border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    background: ${({ theme }) => theme.colors.blue2};
   }
 
   &:hover {
@@ -255,15 +256,19 @@ const TaskCopy = styled.div`
   gap: 0.22rem;
 
   strong {
-    font-size: 0.98rem;
+    font-size: 0.94rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.55;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
   }
 `
 
@@ -275,13 +280,13 @@ const TaskMeta = styled.div`
   span {
     display: inline-flex;
     align-items: center;
-    min-height: 34px;
+    min-height: 30px;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    padding: 0 0.7rem;
-    font-size: 0.78rem;
+    padding: 0 0.62rem;
+    font-size: 0.75rem;
     font-weight: 700;
     white-space: nowrap;
   }
@@ -290,10 +295,10 @@ const TaskMeta = styled.div`
 const ProfileCompact = styled.section`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.8rem;
+  gap: 0.65rem;
   align-items: center;
-  padding: 0.84rem 0.96rem;
-  border-radius: 14px;
+  padding: 0.72rem 0.84rem;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
 
@@ -307,8 +312,8 @@ const ProfileCompact = styled.section`
 `
 
 const ProfileFrame = styled.div`
-  width: 72px;
-  height: 72px;
+  width: 60px;
+  height: 60px;
   border-radius: 999px;
   overflow: hidden;
 `
@@ -331,20 +336,24 @@ const ProfileCopy = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.98rem;
+    font-size: 0.92rem;
   }
 
   span {
-    color: ${({ theme }) => theme.colors.accentLink};
+    color: ${({ theme }) => theme.colors.gray11};
     font-weight: 700;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.55;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
     overflow-wrap: anywhere;
   }
 `
@@ -353,14 +362,14 @@ const ProfileAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 38px;
+  min-height: 34px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
-  padding: 0 0.82rem;
-  font-size: 0.82rem;
+  padding: 0 0.72rem;
+  font-size: 0.78rem;
   font-weight: 700;
 
   @media (max-width: 760px) {

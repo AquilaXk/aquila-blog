@@ -66,6 +66,9 @@ type MemberMe = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutRole?: string
+  aboutBio?: string
+  aboutDetails?: string
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -2987,6 +2990,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           body: JSON.stringify({
             role: profileRoleInput.trim(),
             bio: profileBioInput.trim(),
+            aboutRole: (sessionMember.aboutRole || "").trim(),
+            aboutBio: (sessionMember.aboutBio || "").trim(),
+            aboutDetails: (sessionMember.aboutDetails || "").trim(),
             blogTitle: (sessionMember.blogTitle || "").trim(),
             homeIntroTitle: (sessionMember.homeIntroTitle || "").trim(),
             homeIntroDescription: (sessionMember.homeIntroDescription || "").trim(),

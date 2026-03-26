@@ -43,6 +43,9 @@ export type AuthMember = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutRole?: string
+  aboutBio?: string
+  aboutDetails?: string
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string

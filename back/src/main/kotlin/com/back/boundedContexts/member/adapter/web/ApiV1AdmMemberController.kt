@@ -76,6 +76,12 @@ class ApiV1AdmMemberController(
         val role: String = "",
         @field:Size(max = 1000)
         val bio: String = "",
+        @field:Size(max = 100)
+        val aboutRole: String? = null,
+        @field:Size(max = 2000)
+        val aboutBio: String? = null,
+        @field:Size(max = 12000)
+        val aboutDetails: String? = null,
         @field:Size(max = 120)
         val blogTitle: String = "",
         @field:Size(max = 120)
@@ -223,6 +229,9 @@ class ApiV1AdmMemberController(
             member = member,
             role = reqBody.role.trim(),
             bio = reqBody.bio.trim(),
+            aboutRole = reqBody.aboutRole?.trim(),
+            aboutBio = reqBody.aboutBio?.trim(),
+            aboutDetails = reqBody.aboutDetails?.trim(),
             blogTitle = reqBody.blogTitle.trim(),
             homeIntroTitle = reqBody.homeIntroTitle.trim(),
             homeIntroDescription = reqBody.homeIntroDescription.trim(),

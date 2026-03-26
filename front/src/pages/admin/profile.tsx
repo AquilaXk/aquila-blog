@@ -108,6 +108,9 @@ const buildMemberRevisionKey = (member: MemberMe) =>
     member.profileImageUrl || "",
     member.profileRole || "",
     member.profileBio || "",
+    member.aboutRole || "",
+    member.aboutBio || "",
+    member.aboutDetails || "",
     member.blogTitle || "",
     member.homeIntroTitle || "",
     member.homeIntroDescription || "",
@@ -201,6 +204,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   })
   const [profileRoleInput, setProfileRoleInput] = useState(initialMember.profileRole || "")
   const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
+  const [aboutRoleInput, setAboutRoleInput] = useState(initialMember.aboutRole || "")
+  const [aboutBioInput, setAboutBioInput] = useState(initialMember.aboutBio || "")
+  const [aboutDetailsInput, setAboutDetailsInput] = useState(initialMember.aboutDetails || "")
   const [blogTitleInput, setBlogTitleInput] = useState(initialMember.blogTitle || "")
   const [homeIntroTitleInput, setHomeIntroTitleInput] = useState(initialMember.homeIntroTitle || "")
   const [homeIntroDescriptionInput, setHomeIntroDescriptionInput] = useState(initialMember.homeIntroDescription || "")
@@ -249,6 +255,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setAdminProfileCache(queryClient, toAdminProfile(member))
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
+    setAboutRoleInput(member.aboutRole || "")
+    setAboutBioInput(member.aboutBio || "")
+    setAboutDetailsInput(member.aboutDetails || "")
     setBlogTitleInput(member.blogTitle || "")
     setHomeIntroTitleInput(member.homeIntroTitle || "")
     setHomeIntroDescriptionInput(member.homeIntroDescription || "")
@@ -867,6 +876,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         body: JSON.stringify({
           role: profileRoleInput.trim(),
           bio: profileBioInput.trim(),
+          aboutRole: aboutRoleInput.trim(),
+          aboutBio: aboutBioInput.trim(),
+          aboutDetails: aboutDetailsInput.trim(),
           blogTitle: blogTitleInput.trim(),
           homeIntroTitle: homeIntroTitleInput.trim(),
           homeIntroDescription: homeIntroDescriptionInput.trim(),
@@ -893,6 +905,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     if (normalizeComparableText(profileRoleInput) !== normalizeComparableText(sessionMember.profileRole)) return true
     if (normalizeComparableText(profileBioInput) !== normalizeComparableText(sessionMember.profileBio)) return true
+    if (normalizeComparableText(aboutRoleInput) !== normalizeComparableText(sessionMember.aboutRole)) return true
+    if (normalizeComparableText(aboutBioInput) !== normalizeComparableText(sessionMember.aboutBio)) return true
+    if (normalizeComparableText(aboutDetailsInput) !== normalizeComparableText(sessionMember.aboutDetails)) return true
     if (normalizeComparableText(blogTitleInput) !== normalizeComparableText(sessionMember.blogTitle)) return true
     if (normalizeComparableText(homeIntroTitleInput) !== normalizeComparableText(sessionMember.homeIntroTitle)) return true
     if (normalizeComparableText(homeIntroDescriptionInput) !== normalizeComparableText(sessionMember.homeIntroDescription)) {
@@ -916,6 +931,9 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     return currentContact !== savedContact
   }, [
+    aboutBioInput,
+    aboutDetailsInput,
+    aboutRoleInput,
     blogTitleInput,
     contactLinksInput,
     homeIntroDescriptionInput,
@@ -1080,6 +1098,43 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     value={profileBioInput}
                     onChange={(e) => setProfileBioInput(e.target.value)}
                   />
+                </FieldBox>
+              </FieldGrid>
+            </FormSection>
+
+            <FormSection>
+              <SectionHeading>
+                <h2>About Me 정보 카드</h2>
+                <p>About 페이지 전용 역할/소개를 메인 프로필과 분리해 관리합니다.</p>
+              </SectionHeading>
+              <FieldGrid data-columns="2">
+                <FieldBox>
+                  <FieldLabel htmlFor="about-role">About 역할</FieldLabel>
+                  <Input
+                    id="about-role"
+                    placeholder="예: Backend Developer"
+                    value={aboutRoleInput}
+                    onChange={(e) => setAboutRoleInput(e.target.value)}
+                  />
+                </FieldBox>
+                <FieldBox>
+                  <FieldLabel htmlFor="about-bio">About 소개 문구</FieldLabel>
+                  <TextArea
+                    id="about-bio"
+                    placeholder="About Me 카드에 노출할 상세 소개 문구"
+                    value={aboutBioInput}
+                    onChange={(e) => setAboutBioInput(e.target.value)}
+                  />
+                </FieldBox>
+                <FieldBox style={{ gridColumn: "1 / -1" }}>
+                  <FieldLabel htmlFor="about-details">About 상세 섹션</FieldLabel>
+                  <TextArea
+                    id="about-details"
+                    placeholder={"예시)\n## 경력\n2021.07 - 2022.04 SpaceWalk(DE Chapter) Intern\n2020.09 - 2021.02 세종대학교 NLP 학부 연구생\n\n## 수상이력\n2021.06 세종대학교 창의설계경진대회 인기상\n2020.12 세종대학교 해커톤 장려상\n\n## 논문\n2020.12 텍스트 마이닝을 이용한 ESG 요소 분석"}
+                    value={aboutDetailsInput}
+                    onChange={(e) => setAboutDetailsInput(e.target.value)}
+                  />
+                  <Hint>형식: `## 섹션명` 제목 아래 줄마다 항목을 입력하면 About 페이지에 구분선 스타일로 렌더링됩니다.</Hint>
                 </FieldBox>
               </FieldGrid>
             </FormSection>

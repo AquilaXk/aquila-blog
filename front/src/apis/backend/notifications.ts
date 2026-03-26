@@ -1,4 +1,4 @@
-import { apiFetch } from "src/apis/backend/client"
+import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { TMemberNotification } from "src/types"
 import { asOpenApiPath } from "./openapiContract"
 
@@ -46,5 +46,13 @@ export const markAllNotificationsRead = () =>
     method: "POST",
   })
 
-export const buildNotificationStreamUrl = () =>
-  NOTIFICATIONS_STREAM_API_PATH
+export const buildNotificationStreamUrl = () => {
+  if (typeof window === "undefined") return NOTIFICATIONS_STREAM_API_PATH
+
+  try {
+    const apiBaseUrl = getApiBaseUrl()
+    return new URL(NOTIFICATIONS_STREAM_API_PATH, `${apiBaseUrl}/`).toString()
+  } catch {
+    return NOTIFICATIONS_STREAM_API_PATH
+  }
+}

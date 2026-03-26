@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { ApiError } from "src/apis/backend/client"
 import {
   buildNotificationStreamUrl,
   getNotificationSnapshot,
@@ -25,6 +26,23 @@ const SSE_RECOVERY_PROBE_MS = 120_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
 const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
 const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
+
+const isLoopbackHost = (hostname: string) =>
+  hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]"
+
+const resolveSiteKey = (hostname: string) => {
+  const normalized = hostname.trim().toLowerCase()
+  if (!normalized) return ""
+  if (isLoopbackHost(normalized)) return normalized
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(normalized)) return normalized
+
+  const parts = normalized.split(".").filter(Boolean)
+  if (parts.length <= 2) return normalized
+  return parts.slice(-2).join(".")
+}
+
+const isSameSiteOrigin = (left: URL, right: URL) =>
+  left.protocol === right.protocol && resolveSiteKey(left.hostname) === resolveSiteKey(right.hostname)
 
 const sanitizeNotificationEventId = (raw: string | null | undefined): string | null => {
   if (!raw) return null
@@ -66,6 +84,11 @@ const persistSnapshot = (payload: StoredNotificationSnapshot) => {
   }
 }
 
+const clearStoredSnapshot = () => {
+  if (typeof window === "undefined") return
+  window.sessionStorage.removeItem(SNAPSHOT_STORAGE_KEY)
+}
+
 const loadStoredSnapshot = (): StoredNotificationSnapshot | null => {
   if (typeof window === "undefined") return null
   try {
@@ -90,9 +113,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     try {
       const streamUrl = new URL(buildNotificationStreamUrl(), window.location.origin)
       const currentUrl = new URL(window.location.href)
-      // Cloudflare edge + cross-origin(EventSource) 조합에서는 QUIC/H3 콘솔 오류가 반복될 수 있어
-      // 오리진이 다르면 SSE 대신 폴링을 기본값으로 사용한다.
-      return streamUrl.origin !== currentUrl.origin
+      // 완전한 cross-site 오리진에서만 폴링으로 강등한다.
+      // www/api 같은 동일 사이트 서브도메인 조합은 SSE를 우선 유지한다.
+      return streamUrl.origin !== currentUrl.origin && !isSameSiteOrigin(streamUrl, currentUrl)
     } catch {
       return false
     }
@@ -114,6 +137,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isReady, setIsReady] = useState(false)
   const [isSnapshotFallback, setIsSnapshotFallback] = useState(false)
+  const [notificationAccessState, setNotificationAccessState] = useState<"pending" | "ready" | "blocked">(
+    "pending"
+  )
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState !== "hidden"
   )
@@ -141,11 +167,24 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setLastNotificationEventId(toLatestNotificationEventId(snapshot.items))
       setIsReady(true)
       setIsSnapshotFallback(false)
+      setNotificationAccessState("ready")
       persistSnapshot({
         items: snapshot.items,
         unreadCount: snapshot.unreadCount,
       })
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setItems([])
+        setUnreadCount(0)
+        setIsReady(false)
+        setIsSnapshotFallback(false)
+        setNotificationAccessState("blocked")
+        setOpen(false)
+        clearStoredSnapshot()
+        setLastNotificationEventId(null)
+        return
+      }
+
       const stored = loadStoredSnapshot()
       if (stored) {
         setItems(stored.items)
@@ -153,10 +192,12 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         setLastNotificationEventId(toLatestNotificationEventId(stored.items))
         setIsReady(true)
         setIsSnapshotFallback(true)
+        setNotificationAccessState("ready")
         return
       }
       setIsReady(false)
       setIsSnapshotFallback(false)
+      setNotificationAccessState("pending")
     }
   }, [enabled, setLastNotificationEventId])
 
@@ -207,8 +248,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setOpen(false)
       setIsReady(false)
       setIsSnapshotFallback(false)
+      setNotificationAccessState("pending")
       reconnectAttemptRef.current = 0
       setLastNotificationEventId(null)
+      clearStoredSnapshot()
       setStreamMode(preferPolling ? "poll" : "sse")
       return
     }
@@ -224,7 +267,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }, [enabled, isReady, items, unreadCount])
 
   useEffect(() => {
-    if (!enabled || streamMode !== "sse" || !isDocumentVisible) return
+    if (!enabled || streamMode !== "sse" || !isDocumentVisible || notificationAccessState !== "ready") return
 
     let disposed = false
 
@@ -321,10 +364,18 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       eventSourceRef.current?.close()
       eventSourceRef.current = null
     }
-  }, [enabled, isDocumentVisible, loadSnapshot, pushNotification, setLastNotificationEventId, streamMode])
+  }, [
+    enabled,
+    isDocumentVisible,
+    loadSnapshot,
+    notificationAccessState,
+    pushNotification,
+    setLastNotificationEventId,
+    streamMode,
+  ])
 
   useEffect(() => {
-    if (!enabled || streamMode !== "poll" || !isDocumentVisible) return
+    if (!enabled || streamMode !== "poll" || !isDocumentVisible || notificationAccessState !== "ready") return
 
     let disposed = false
     let timer: number | null = null
@@ -347,13 +398,14 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         window.clearTimeout(timer)
       }
     }
-  }, [enabled, isDocumentVisible, loadSnapshot, streamMode])
+  }, [enabled, isDocumentVisible, loadSnapshot, notificationAccessState, streamMode])
 
   useEffect(() => {
     if (!enabled) return
     if (!isDocumentVisible) return
     if (preferPolling) return
     if (streamMode !== "poll") return
+    if (notificationAccessState !== "ready") return
 
     const timer = window.setTimeout(() => {
       reconnectAttemptRef.current = 0
@@ -363,7 +415,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [enabled, isDocumentVisible, preferPolling, streamMode])
+  }, [enabled, isDocumentVisible, notificationAccessState, preferPolling, streamMode])
 
   useEffect(() => {
     if (!open) return
@@ -548,9 +600,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
             tabIndex={-1}
           >
             <div className="panelHead">
-              <div>
+              <div className="panelTitle">
                 <strong>알림</strong>
-                <span>{isSnapshotFallback ? "연결이 불안정해 마지막 알림 스냅샷을 표시 중입니다." : "답글과 댓글 알림을 확인할 수 있습니다."}</span>
+                {isSnapshotFallback && <small>오프라인 스냅샷</small>}
               </div>
               <button type="button" className="readAllBtn" onClick={() => void handleMarkAllRead()} disabled={!hasUnread}>
                 모두 읽음
@@ -590,8 +642,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
               </ul>
             ) : (
               <div className="empty">
-                <strong>새 알림이 없습니다.</strong>
-                <span>누군가 댓글이나 답글을 남기면 여기에 표시됩니다.</span>
+                <strong>알림이 없습니다.</strong>
               </div>
             )}
           </div>
@@ -710,18 +761,33 @@ const StyledWrapper = styled.div`
     gap: 0.7rem;
     margin-bottom: 0.62rem;
     padding: 0.08rem 0.12rem;
+  }
+
+  .panelTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.46rem;
+    min-width: 0;
 
     strong {
       display: block;
       color: ${({ theme }) => theme.colors.gray12};
       font-size: 0.96rem;
-      margin-bottom: 0.14rem;
+      margin: 0;
     }
 
-    span {
+    small {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 0 0.46rem;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.75rem;
-      line-height: 1.4;
+      background: ${({ theme }) => theme.colors.gray2};
+      font-size: 0.68rem;
+      font-weight: 700;
+      white-space: nowrap;
     }
   }
 
@@ -872,19 +938,13 @@ const StyledWrapper = styled.div`
 
   .empty {
     display: grid;
-    gap: 0.24rem;
+    gap: 0;
     padding: 1rem 0.28rem 0.45rem;
     text-align: center;
 
     strong {
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.88rem;
-    }
-
-    span {
-      color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.76rem;
-      line-height: 1.5;
+      font-size: 0.84rem;
     }
   }
 

@@ -56,6 +56,24 @@ class MemberProxy(
             real.profileBio = value
         }
 
+    override var aboutRole
+        get() = real.aboutRole
+        set(value) {
+            real.aboutRole = value
+        }
+
+    override var aboutBio
+        get() = real.aboutBio
+        set(value) {
+            real.aboutBio = value
+        }
+
+    override var aboutDetails
+        get() = real.aboutDetails
+        set(value) {
+            real.aboutDetails = value
+        }
+
     override var homeIntroTitle
         get() = real.homeIntroTitle
         set(value) {

@@ -7,6 +7,9 @@ import java.util.Locale
 
 const val PROFILE_ROLE = "profileRole"
 const val PROFILE_BIO = "profileBio"
+const val ABOUT_ROLE = "aboutRole"
+const val ABOUT_BIO = "aboutBio"
+const val ABOUT_DETAILS = "aboutDetails"
 const val BLOG_TITLE = "blogTitle"
 const val HOME_INTRO_TITLE = "homeIntroTitle"
 const val HOME_INTRO_DESCRIPTION = "homeIntroDescription"
@@ -15,6 +18,9 @@ const val PROFILE_CONTACT_LINKS = "profileContactLinks"
 
 private const val PROFILE_ROLE_DEFAULT_VALUE = ""
 private const val PROFILE_BIO_DEFAULT_VALUE = ""
+private const val ABOUT_ROLE_DEFAULT_VALUE = ""
+private const val ABOUT_BIO_DEFAULT_VALUE = ""
+private const val ABOUT_DETAILS_DEFAULT_VALUE = ""
 private const val BLOG_TITLE_DEFAULT_VALUE = ""
 private const val HOME_INTRO_TITLE_DEFAULT_VALUE = ""
 private const val HOME_INTRO_DESCRIPTION_DEFAULT_VALUE = ""
@@ -166,6 +172,21 @@ interface MemberHasProfileCard : MemberAware {
             loader?.invoke() ?: MemberAttr(0, member, PROFILE_BIO, PROFILE_BIO_DEFAULT_VALUE)
         }
 
+    fun getOrInitAboutRoleAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(ABOUT_ROLE) {
+            loader?.invoke() ?: MemberAttr(0, member, ABOUT_ROLE, ABOUT_ROLE_DEFAULT_VALUE)
+        }
+
+    fun getOrInitAboutBioAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(ABOUT_BIO) {
+            loader?.invoke() ?: MemberAttr(0, member, ABOUT_BIO, ABOUT_BIO_DEFAULT_VALUE)
+        }
+
+    fun getOrInitAboutDetailsAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(ABOUT_DETAILS) {
+            loader?.invoke() ?: MemberAttr(0, member, ABOUT_DETAILS, ABOUT_DETAILS_DEFAULT_VALUE)
+        }
+
     fun getOrInitHomeIntroTitleAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
         member.getOrPutAttr(HOME_INTRO_TITLE) {
             loader?.invoke() ?: MemberAttr(0, member, HOME_INTRO_TITLE, HOME_INTRO_TITLE_DEFAULT_VALUE)
@@ -201,6 +222,24 @@ interface MemberHasProfileCard : MemberAware {
         get() = getOrInitProfileBioAttr().strValue ?: PROFILE_BIO_DEFAULT_VALUE
         set(value) {
             getOrInitProfileBioAttr().strValue = value
+        }
+
+    var aboutRole: String
+        get() = getOrInitAboutRoleAttr().strValue ?: ABOUT_ROLE_DEFAULT_VALUE
+        set(value) {
+            getOrInitAboutRoleAttr().strValue = value
+        }
+
+    var aboutBio: String
+        get() = getOrInitAboutBioAttr().strValue ?: ABOUT_BIO_DEFAULT_VALUE
+        set(value) {
+            getOrInitAboutBioAttr().strValue = value
+        }
+
+    var aboutDetails: String
+        get() = getOrInitAboutDetailsAttr().strValue ?: ABOUT_DETAILS_DEFAULT_VALUE
+        set(value) {
+            getOrInitAboutDetailsAttr().strValue = value
         }
 
     var blogTitle: String

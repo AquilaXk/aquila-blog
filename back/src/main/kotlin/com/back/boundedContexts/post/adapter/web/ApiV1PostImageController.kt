@@ -56,7 +56,6 @@ class ApiV1PostImageController(
      * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
      */
     @PostMapping("/posts/images", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
-    @Transactional
     fun uploadPostImage(
         @RequestPart("file") file: MultipartFile,
     ): RsData<UploadPostImageResBody> {

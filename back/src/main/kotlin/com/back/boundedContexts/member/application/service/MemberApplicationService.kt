@@ -191,6 +191,9 @@ class MemberApplicationService(
         member: Member,
         role: String,
         bio: String,
+        aboutRole: String?,
+        aboutBio: String?,
+        aboutDetails: String?,
         blogTitle: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
@@ -200,6 +203,15 @@ class MemberApplicationService(
         memberProfileHydrator.hydrate(member)
         member.profileRole = role
         member.profileBio = bio
+        if (aboutRole != null) {
+            member.aboutRole = aboutRole
+        }
+        if (aboutBio != null) {
+            member.aboutBio = aboutBio
+        }
+        if (aboutDetails != null) {
+            member.aboutDetails = aboutDetails
+        }
         member.blogTitle = blogTitle
         member.homeIntroTitle = homeIntroTitle
         member.homeIntroDescription = homeIntroDescription
@@ -207,6 +219,15 @@ class MemberApplicationService(
         member.contactLinks = contactLinks
         saveProfileRoleAttr(member)
         saveProfileBioAttr(member)
+        if (aboutRole != null) {
+            saveAboutRoleAttr(member)
+        }
+        if (aboutBio != null) {
+            saveAboutBioAttr(member)
+        }
+        if (aboutDetails != null) {
+            saveAboutDetailsAttr(member)
+        }
         saveBlogTitleAttr(member)
         saveHomeIntroTitleAttr(member)
         saveHomeIntroDescriptionAttr(member)
@@ -298,6 +319,18 @@ class MemberApplicationService(
 
     private fun saveProfileBioAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitProfileBioAttr())
+    }
+
+    private fun saveAboutRoleAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitAboutRoleAttr())
+    }
+
+    private fun saveAboutBioAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitAboutBioAttr())
+    }
+
+    private fun saveAboutDetailsAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitAboutDetailsAttr())
     }
 
     private fun saveBlogTitleAttr(member: Member) {

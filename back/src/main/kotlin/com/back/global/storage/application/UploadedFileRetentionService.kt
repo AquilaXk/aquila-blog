@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.application.port.output.PostRepositoryPort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
+import com.back.global.jpa.application.ProdSequenceGuardService
 import com.back.global.storage.application.port.output.UploadedFileRepositoryPort
 import com.back.global.storage.domain.UploadedFile
 import com.back.global.storage.domain.UploadedFileOwnerType
@@ -12,9 +13,14 @@ import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.global.storage.domain.UploadedFileRetentionReason
 import com.back.global.storage.domain.UploadedFileStatus
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 
 /**
@@ -46,27 +52,105 @@ class UploadedFileRetentionService(
     private val postImageStoragePort: PostImageStoragePort,
     private val storageProperties: PostImageStorageProperties,
     private val retentionProperties: UploadedFileRetentionProperties,
+    private val transactionManager: PlatformTransactionManager,
+    @param:Autowired(required = false)
+    private val prodSequenceGuardService: ProdSequenceGuardService? = null,
 ) {
     private val logger = LoggerFactory.getLogger(UploadedFileRetentionService::class.java)
     private val purgeCandidateStatuses = listOf(UploadedFileStatus.TEMP, UploadedFileStatus.PENDING_DELETE)
+    private val registerRetryLimit = 2
+    private val requiresNewTransactionTemplate =
+        TransactionTemplate(transactionManager).apply {
+            propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        }
 
-    @Transactional
     fun registerTempUpload(
         objectKey: String,
         contentType: String,
         fileSize: Long,
         purpose: UploadedFilePurpose,
     ) {
-        val uploadedFile =
-            findOrCreate(objectKey).apply {
-                bucket = storageProperties.bucket
-                this.contentType = contentType.ifBlank { "application/octet-stream" }
-                this.fileSize = fileSize.coerceAtLeast(0)
-                markTemporary(purpose, Instant.now().plusSeconds(retentionProperties.tempUploadSeconds))
-            }
+        val normalizedContentType = contentType.ifBlank { "application/octet-stream" }
+        val safeFileSize = fileSize.coerceAtLeast(0)
+        val purgeAfter = Instant.now().plusSeconds(retentionProperties.tempUploadSeconds)
 
-        uploadedFileRepository.save(uploadedFile)
+        for (attempt in 1..registerRetryLimit) {
+            try {
+                saveTempUploadInRequiresNewTransaction(
+                    objectKey = objectKey,
+                    normalizedContentType = normalizedContentType,
+                    safeFileSize = safeFileSize,
+                    purpose = purpose,
+                    purgeAfter = purgeAfter,
+                )
+                return
+            } catch (exception: DataIntegrityViolationException) {
+                if (
+                    recoverTempUploadFromExistingObjectKey(
+                        objectKey = objectKey,
+                        normalizedContentType = normalizedContentType,
+                        safeFileSize = safeFileSize,
+                        purpose = purpose,
+                        purgeAfter = purgeAfter,
+                    )
+                ) {
+                    return
+                }
+
+                val repaired = repairSequenceDriftInRequiresNewTransaction(exception)
+                logger.warn(
+                    "uploaded_file_register_conflict objectKey={} attempt={} repaired={}",
+                    objectKey,
+                    attempt,
+                    repaired,
+                )
+                if (!repaired || attempt >= registerRetryLimit) throw exception
+            }
+        }
     }
+
+    private fun saveTempUploadInRequiresNewTransaction(
+        objectKey: String,
+        normalizedContentType: String,
+        safeFileSize: Long,
+        purpose: UploadedFilePurpose,
+        purgeAfter: Instant,
+    ) {
+        requiresNewTransactionTemplate.executeWithoutResult {
+            val uploadedFile =
+                findOrCreate(objectKey).apply {
+                    bucket = storageProperties.bucket
+                    this.contentType = normalizedContentType
+                    this.fileSize = safeFileSize
+                    markTemporary(purpose, purgeAfter)
+                }
+            uploadedFileRepository.save(uploadedFile)
+            uploadedFileRepository.flush()
+        }
+    }
+
+    private fun recoverTempUploadFromExistingObjectKey(
+        objectKey: String,
+        normalizedContentType: String,
+        safeFileSize: Long,
+        purpose: UploadedFilePurpose,
+        purgeAfter: Instant,
+    ): Boolean =
+        requiresNewTransactionTemplate.execute<Boolean> {
+            val existing = uploadedFileRepository.findByObjectKey(objectKey) ?: return@execute false
+            existing.bucket = storageProperties.bucket
+            existing.contentType = normalizedContentType
+            existing.fileSize = safeFileSize
+            existing.markTemporary(purpose, purgeAfter)
+            uploadedFileRepository.save(existing)
+            uploadedFileRepository.flush()
+            true
+        } ?: false
+
+    private fun repairSequenceDriftInRequiresNewTransaction(exception: DataIntegrityViolationException): Boolean =
+        requiresNewTransactionTemplate.execute<Boolean> {
+            prodSequenceGuardService?.repairIfSequenceDrift(exception) == true
+        } ?: false
 
     /**
      * 데이터 동기화 또는 리밸리데이션 요청을 조정해 최신 상태를 유지합니다.

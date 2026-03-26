@@ -40,14 +40,77 @@ type AboutPageProps = {
   initialAdminProfile: AdminProfile | null
 }
 
+type AboutDetailSection = {
+  title: string
+  items: string[]
+}
+
+const parseAboutDetails = (raw: string): AboutDetailSection[] => {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim())
+  const sections: AboutDetailSection[] = []
+  let current: AboutDetailSection | null = null
+
+  const pushCurrent = () => {
+    if (!current) return
+    const normalizedTitle = current.title.trim()
+    const normalizedItems = current.items.map((item) => item.trim()).filter(Boolean)
+    if (!normalizedTitle || normalizedItems.length === 0) {
+      current = null
+      return
+    }
+    sections.push({ title: normalizedTitle, items: normalizedItems })
+    current = null
+  }
+
+  for (const line of lines) {
+    if (!line) continue
+    if (line === "---") {
+      pushCurrent()
+      continue
+    }
+
+    const markdownHeadingMatch = line.match(/^#{1,3}\s+(.+)$/)
+    if (markdownHeadingMatch) {
+      pushCurrent()
+      current = { title: markdownHeadingMatch[1].trim(), items: [] }
+      continue
+    }
+
+    if (!current) {
+      current = { title: line, items: [] }
+      continue
+    }
+
+    const plainHeadingLike =
+      !line.startsWith("- ") &&
+      current.items.length > 0 &&
+      line.length <= 24 &&
+      !/\d{4}[./-]\d{1,2}/.test(line) &&
+      !/[,:;)]$/.test(line)
+    if (plainHeadingLike) {
+      pushCurrent()
+      current = { title: line, items: [] }
+      continue
+    }
+
+    const itemText = line.startsWith("- ") ? line.slice(2).trim() : line
+    if (!itemText) continue
+    current.items.push(itemText)
+  }
+
+  pushCurrent()
+  return sections
+}
+
 const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
 
   const imageSrc =
     adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
-  const displayRole = adminProfile?.profileRole || CONFIG.profile.role
-  const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
+  const displayRole = adminProfile?.aboutRole || CONFIG.profile.role
+  const displayBio = adminProfile?.aboutBio || CONFIG.profile.bio
+  const aboutDetailSections = parseAboutDetails(adminProfile?.aboutDetails || "")
   const blogTitle = adminProfile?.blogTitle || CONFIG.blog.title
   const contactLinks = resolveContactLinks(adminProfile)
   const serviceLinks = resolveServiceLinks(adminProfile)
@@ -82,6 +145,25 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
             <p className="profile-role">{displayRole}</p>
             <p className="profile-bio">{displayBio}</p>
           </div>
+
+          {aboutDetailSections.length > 0 && (
+            <div className="about-detail-sections" aria-label="about 상세 정보">
+              {aboutDetailSections.map((section, index) => (
+                <section
+                  key={`${section.title}-${index}`}
+                  className="about-detail-section"
+                  data-has-divider={index > 0 ? "true" : "false"}
+                >
+                  <h3 className="about-detail-title">{section.title}</h3>
+                  <ul className="about-detail-items">
+                    {section.items.map((item, itemIndex) => (
+                      <li key={`${section.title}-${itemIndex}`}>{item}</li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
 
           <div className="section">
             <h3 className="section-title">Contact</h3>
@@ -185,6 +267,46 @@ const StyledWrapper = styled.div`
       }
     }
 
+    .about-detail-sections {
+      margin: 0 0 2.4rem;
+      border-radius: 14px;
+      border: 1px solid ${({ theme }) => theme.colors.gray5};
+      background: ${({ theme }) => theme.colors.gray2};
+      padding: 0.3rem 0.9rem;
+
+      .about-detail-section {
+        padding: 1.2rem 0.2rem 1.26rem;
+
+        &[data-has-divider="true"] {
+          border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+        }
+      }
+
+      .about-detail-title {
+        margin: 0;
+        font-size: 1.65rem;
+        line-height: 1.28;
+        letter-spacing: -0.02em;
+      }
+
+      .about-detail-items {
+        margin: 1.02rem 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.48rem;
+
+        li {
+          margin: 0;
+          font-size: 1.02rem;
+          line-height: 1.72;
+          color: ${({ theme }) => theme.colors.gray11};
+          white-space: pre-line;
+          word-break: keep-all;
+        }
+      }
+    }
+
     .section {
       margin-bottom: 3rem;
 
@@ -250,6 +372,32 @@ const StyledWrapper = styled.div`
             display: flex;
             align-items: center;
             gap: 0.5rem;
+          }
+        }
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    .about-content {
+      .about-detail-sections {
+        padding: 0 0.72rem;
+
+        .about-detail-section {
+          padding: 0.92rem 0.08rem 1rem;
+        }
+
+        .about-detail-title {
+          font-size: 1.28rem;
+        }
+
+        .about-detail-items {
+          margin-top: 0.72rem;
+          gap: 0.36rem;
+
+          li {
+            font-size: 0.95rem;
+            line-height: 1.63;
           }
         }
       }

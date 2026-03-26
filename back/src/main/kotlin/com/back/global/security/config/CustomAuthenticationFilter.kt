@@ -48,6 +48,8 @@ class CustomAuthenticationFilter(
         return filteredPrefixes.none { uri.startsWith(it) }
     }
 
+    override fun shouldNotFilterAsyncDispatch(): Boolean = false
+
     /**
      * doFilterInternal 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
      * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.

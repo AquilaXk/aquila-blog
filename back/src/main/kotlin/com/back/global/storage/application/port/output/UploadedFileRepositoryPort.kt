@@ -8,6 +8,8 @@ import java.time.Instant
 interface UploadedFileRepositoryPort {
     fun save(entity: UploadedFile): UploadedFile
 
+    fun flush()
+
     fun findByObjectKey(objectKey: String): UploadedFile?
 
     fun countByStatus(status: UploadedFileStatus): Long

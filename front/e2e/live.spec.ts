@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Page, type Response } from "@playwright/test"
 
 const adminEmail = process.env.E2E_ADMIN_EMAIL?.trim() || ""
 const adminLegacyLoginId = process.env.E2E_ADMIN_USERNAME?.trim() || ""
@@ -72,6 +72,73 @@ const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
   } catch {
     return false
   }
+}
+
+type UiLoginOutcome =
+  | { kind: "response"; response: Response }
+  | { kind: "admin-url" }
+  | { kind: "auth-cookie" }
+  | { kind: "error"; message: string }
+  | { kind: "timeout" }
+
+const getVisibleUiLoginError = async (page: Page) => {
+  const loginError = page
+    .locator("main")
+    .getByText(/로그인에 실패|이메일 또는 비밀번호|로그인 시도가 너무 많습니다|서버 오류/i)
+    .first()
+
+  if (!(await loginError.isVisible().catch(() => false))) return null
+  return (await loginError.textContent())?.trim() || "unknown error"
+}
+
+const waitForUiLoginOutcome = async (
+  page: Page,
+  getObservedLoginResponse: () => Response | null,
+  timeoutMs: number
+): Promise<UiLoginOutcome> => {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const observedLoginResponse = getObservedLoginResponse()
+    if (observedLoginResponse) {
+      return { kind: "response", response: observedLoginResponse }
+    }
+
+    if (/\/admin(\/|$)/.test(page.url())) {
+      return { kind: "admin-url" }
+    }
+
+    if (await hasAuthCookie(page)) {
+      return { kind: "auth-cookie" }
+    }
+
+    const loginError = await getVisibleUiLoginError(page)
+    if (loginError) {
+      return { kind: "error", message: loginError }
+    }
+
+    await page.waitForTimeout(250)
+  }
+
+  const observedLoginResponse = getObservedLoginResponse()
+  if (observedLoginResponse) {
+    return { kind: "response", response: observedLoginResponse }
+  }
+
+  if (/\/admin(\/|$)/.test(page.url())) {
+    return { kind: "admin-url" }
+  }
+
+  if (await hasAuthCookie(page)) {
+    return { kind: "auth-cookie" }
+  }
+
+  const loginError = await getVisibleUiLoginError(page)
+  if (loginError) {
+    return { kind: "error", message: loginError }
+  }
+
+  return { kind: "timeout" }
 }
 
 const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
@@ -199,47 +266,62 @@ const loginThroughUi = async (
 
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
     await page.goto("/login?next=%2Fadmin")
+    if (/\/admin(\/|$)/.test(page.url())) return
+
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
     await page.getByLabel("이메일").fill(loginEmail)
     await page.locator("#password").fill(password)
 
-    const loginResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        response.url().includes("/member/api/v1/auth/login"),
-      { timeout: liveLoginTimeoutMs }
-    )
+    let observedLoginResponse: Response | null = null
+    const loginResponsePromise = page
+      .waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().includes("/member/api/v1/auth/login"),
+        { timeout: liveLoginTimeoutMs }
+      )
+      .then((response) => {
+        observedLoginResponse = response
+        return response
+      })
+      .catch(() => null)
 
     await page.getByRole("button", { name: "로그인", exact: true }).click()
-    const loginResponse = await loginResponsePromise
-    const status = loginResponse.status()
 
-    if (!loginResponse.ok()) {
-      const bodyPreview = (await loginResponse.text().catch(() => "")).slice(0, 240)
-      lastFailure = `status=${status} body=${bodyPreview}`
+    const outcome = await waitForUiLoginOutcome(page, () => observedLoginResponse, liveLoginTimeoutMs)
+    await loginResponsePromise
 
-      // 운영 반영 타이밍 차이로 구형 로그인 payload가 섞인 경우, UI 테스트를 즉시 중단하지 않고
-      // API 경로로 세션을 복구해 이후 관리자 동선을 계속 검증한다.
-      if (isInvalidLoginRequestBody(status, bodyPreview)) {
-        await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
-        await page.goto("/admin")
-        await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
-        return
+    if (outcome.kind === "response") {
+      const status = outcome.response.status()
+
+      if (!outcome.response.ok()) {
+        const bodyPreview = (await outcome.response.text().catch(() => "")).slice(0, 240)
+        lastFailure = `status=${status} body=${bodyPreview}`
+
+        // 운영 반영 타이밍 차이로 구형 로그인 payload가 섞인 경우, UI 테스트를 즉시 중단하지 않고
+        // API 경로로 세션을 복구해 이후 관리자 동선을 계속 검증한다.
+        if (isInvalidLoginRequestBody(status, bodyPreview)) {
+          await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
+          await page.goto("/admin")
+          await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: liveUiRedirectTimeoutMs })
+          return
+        }
+
+        if (isRetriableLoginStatus(status) && attempt < liveLoginAttempts) {
+          await sleep(liveRetryBaseDelayMs * attempt)
+          continue
+        }
+        throw new Error(`UI login request failed. ${lastFailure}`)
       }
 
-      if (isRetriableLoginStatus(status) && attempt < liveLoginAttempts) {
-        await sleep(liveRetryBaseDelayMs * attempt)
-        continue
-      }
-      throw new Error(`UI login request failed. ${lastFailure}`)
+      if (/\/admin(\/|$)/.test(page.url())) return
     }
 
-    const currentUrl = page.url()
-    if (/\/admin(\/|$)/.test(currentUrl)) return
+    if (outcome.kind === "admin-url") return
 
     // 성공 쿠키가 있는데 리다이렉트가 지연되는 경우 /admin 재진입으로 판정한다.
     // 단, 쿠키가 만료/무효일 수 있으므로 즉시 실패시키지 않고 API 로그인 복구 경로를 탄다.
-    if (await hasAuthCookie(page)) {
+    if (outcome.kind === "auth-cookie") {
       if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
 
       await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
@@ -254,18 +336,12 @@ const loginThroughUi = async (
       throw new Error(`UI login did not establish valid admin session. ${lastFailure}`)
     }
 
-    const loginError = page
-      .locator("main")
-      .getByText(/로그인에 실패|이메일 또는 비밀번호|로그인 시도가 너무 많습니다|서버 오류/i)
-      .first()
-
-    if (await loginError.isVisible().catch(() => false)) {
-      const errorText = (await loginError.textContent())?.trim() || "unknown error"
-      lastFailure = `status=${status} error=${errorText}`
+    if (outcome.kind === "error") {
+      lastFailure = `error=${outcome.message}`
       throw new Error(`UI login did not establish session. ${lastFailure}`)
     }
 
-    lastFailure = `status=${status} url=${currentUrl}`
+    lastFailure = `timeout url=${page.url()}`
     if (attempt < liveLoginAttempts) {
       await sleep(liveRetryBaseDelayMs * attempt)
       continue
@@ -330,7 +406,7 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: "운영 도구" })).toBeVisible()
-    await expect(page.getByRole("button", { name: /^Task Queue 진단 실행$/ })).toBeVisible()
+    await expect(page.getByRole("button", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await page.goto("/admin/posts/new")
     await expect(page.getByRole("heading", { name: "글 작업실" })).toBeVisible()

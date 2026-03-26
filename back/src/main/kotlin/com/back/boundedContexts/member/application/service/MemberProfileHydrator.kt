@@ -3,6 +3,9 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.output.MemberAttrRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberAttr
+import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_BIO
+import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_DETAILS
+import com.back.boundedContexts.member.domain.shared.memberMixin.ABOUT_ROLE
 import com.back.boundedContexts.member.domain.shared.memberMixin.BLOG_TITLE
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_DESCRIPTION
 import com.back.boundedContexts.member.domain.shared.memberMixin.HOME_INTRO_TITLE
@@ -26,6 +29,9 @@ class MemberProfileHydrator(
             PROFILE_IMG_URL,
             PROFILE_ROLE,
             PROFILE_BIO,
+            ABOUT_ROLE,
+            ABOUT_BIO,
+            ABOUT_DETAILS,
             BLOG_TITLE,
             HOME_INTRO_TITLE,
             HOME_INTRO_DESCRIPTION,
@@ -57,6 +63,15 @@ class MemberProfileHydrator(
             }
             member.getOrInitProfileBioAttr {
                 attrsByKey["${member.id}:$PROFILE_BIO"] ?: MemberAttr(0, member, PROFILE_BIO, "")
+            }
+            member.getOrInitAboutRoleAttr {
+                attrsByKey["${member.id}:$ABOUT_ROLE"] ?: MemberAttr(0, member, ABOUT_ROLE, "")
+            }
+            member.getOrInitAboutBioAttr {
+                attrsByKey["${member.id}:$ABOUT_BIO"] ?: MemberAttr(0, member, ABOUT_BIO, "")
+            }
+            member.getOrInitAboutDetailsAttr {
+                attrsByKey["${member.id}:$ABOUT_DETAILS"] ?: MemberAttr(0, member, ABOUT_DETAILS, "")
             }
             member.getOrInitBlogTitleAttr {
                 attrsByKey["${member.id}:$BLOG_TITLE"] ?: MemberAttr(0, member, BLOG_TITLE, "")

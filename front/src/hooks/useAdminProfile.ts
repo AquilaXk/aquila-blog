@@ -11,6 +11,9 @@ export type AdminProfile = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutRole?: string
+  aboutBio?: string
+  aboutDetails?: string
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -26,6 +29,9 @@ type AdminProfileLike = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  aboutRole?: string
+  aboutBio?: string
+  aboutDetails?: string
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -41,6 +47,9 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   profileImageDirectUrl: value.profileImageDirectUrl,
   profileRole: value.profileRole,
   profileBio: value.profileBio,
+  aboutRole: value.aboutRole,
+  aboutBio: value.aboutBio,
+  aboutDetails: value.aboutDetails,
   blogTitle: value.blogTitle,
   homeIntroTitle: value.homeIntroTitle,
   homeIntroDescription: value.homeIntroDescription,

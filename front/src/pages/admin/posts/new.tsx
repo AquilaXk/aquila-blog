@@ -66,6 +66,9 @@ type MemberMe = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  blogTitle?: string
+  homeIntroTitle?: string
+  homeIntroDescription?: string
 }
 
 type PostForEditor = {
@@ -1271,6 +1274,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
+  const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false)
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
 
@@ -2960,6 +2964,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           body: JSON.stringify({
             role: profileRoleInput.trim(),
             bio: profileBioInput.trim(),
+            blogTitle: (sessionMember.blogTitle || "").trim(),
             homeIntroTitle: (sessionMember.homeIntroTitle || "").trim(),
             homeIntroDescription: (sessionMember.homeIntroDescription || "").trim(),
           }),
@@ -3641,13 +3646,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
     setMobileComposeStep(step)
   }
-  const heroPrimaryActionLabel =
-    studioSurface === "manage"
-      ? "목록 새로고침"
-      : editorMode === "edit" || hasDraftContent
-        ? "설정 열기"
-        : "새 글 시작"
-  const heroSecondaryActionLabel = studioSurface === "manage" ? "글 작성" : "목록 관리"
   const isCompactManageSurface = isCompactMobileLayout && studioSurface === "manage"
   const showSelectedPanelInManageSurface = !isCompactMobileLayout || activeMobileStudioStep !== "list" || hasSelectedManagedPost
   const closeToolbarMenus = () => {
@@ -3863,9 +3861,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <p>
             {studioSurface === "manage"
               ? isCompactManageSurface
-                ? "목록에서 고른 글만 이어서 수정할 수 있게 정리했습니다."
-                : "조회 → 선택 → 편집 흐름만 남겨 목록 작업을 더 빠르게 정리했습니다."
-              : "제목, 태그, 본문과 발행만 한 흐름으로 정리했습니다."}
+                ? "고른 글만 이어서 수정합니다."
+                : "조회·선택·편집만 남겼습니다."
+              : "제목, 태그, 본문부터 바로 씁니다."}
           </p>
           <StudioStatusStrip aria-label="글 작업실 상태 요약">
             <StudioStatusItem>
@@ -3886,43 +3884,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </StudioStatusItem>
           </StudioStatusStrip>
         </HeroIntro>
-        <HeroAside data-compact-manage={isCompactManageSurface}>
-          <ActionCluster data-hidden={isCompactMobileLayout}>
-            <HeroPrimaryActionButton
-              type="button"
-              disabled={studioSurface === "manage" ? disabled("postList") : loadingKey.length > 0}
-              onClick={() => {
-                if (studioSurface === "manage") {
-                  void loadAdminPosts()
-                  return
-                }
-
-                activateComposeSurface()
-                if (editorMode === "edit" || hasDraftContent) {
-                  openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                  return
-                }
-
-                switchToCreateMode({ keepContent: false })
-              }}
-            >
-              {heroPrimaryActionLabel}
-            </HeroPrimaryActionButton>
-            <HeroActionButton
-              type="button"
-              disabled={loadingKey.length > 0}
-              onClick={() => {
-                if (studioSurface === "manage") {
-                  activateComposeSurface()
-                  return
-                }
-                activateManageSurface()
-              }}
-            >
-              {heroSecondaryActionLabel}
-            </HeroActionButton>
-          </ActionCluster>
-        </HeroAside>
       </HeroCard>
 
       <StudioSurfaceCard id="studio-surface" data-compact-manage={isCompactManageSurface}>
@@ -4085,7 +4046,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionTop>
               <div>
                 <h2>글 목록 관리</h2>
-                <SectionDescription>조회 조건, 관리자 글 리스트, 선택한 글 작업만 모아 목록 점검과 운영 정리에 집중합니다.</SectionDescription>
+                <SectionDescription>조회·선택·편집만 남겨 정리에 집중합니다.</SectionDescription>
               </div>
             </SectionTop>
             {shouldShowGlobalNotice ? (
@@ -4143,7 +4104,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <p>
                       {listScope === "active"
                         ? "최근 글을 빠르게 다시 열고 필요한 경우만 고급 조건을 펼쳐 조회합니다."
-                        : "삭제 글을 확인하고 복구/영구삭제 대상을 정리합니다."}
+                        : "삭제 글만 확인하고 복구 대상을 고릅니다."}
                     </p>
                     <ListScopeTabs>
                       <ListScopeButton
@@ -4575,8 +4536,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <h3>{hasSelectedManagedPost ? "선택한 글" : "빠른 작업"}</h3>
                     <p>
                       {hasSelectedManagedPost
-                        ? "선택한 글을 바로 이어서 수정하고, 필요할 때만 보조 작업을 펼칩니다."
-                        : "목록에서 글을 고른 뒤 이어서 작업하는 흐름을 기본으로 둡니다."}
+                        ? "선택한 글만 바로 이어서 다룹니다."
+                        : "새 글 시작이나 직접 불러오기만 둡니다."}
                     </p>
                   </div>
                   <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
@@ -4592,7 +4553,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                           <VisibilityBadge data-tone={postVisibility}>{currentVisibilityText}</VisibilityBadge>
                         )}
                       </div>
-                      <p>기본 작업은 편집 계속 1개만 앞세우고, 삭제/진단은 필요할 때만 펼칩니다.</p>
+                      <p>추가 작업은 필요할 때만 엽니다.</p>
                       <div className="meta">
                         <span>{`post id #${postId}`}</span>
                         <span>{`버전 ${postVersion ?? "-"}`}</span>
@@ -4653,7 +4614,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               />
                             </FieldBox>
                           </SelectedPostGrid>
-                          <SelectedPostHint>목록 선택 없이 특정 post id를 바로 열어야 할 때만 사용합니다.</SelectedPostHint>
+                          <SelectedPostHint>번호를 알고 있을 때만 씁니다.</SelectedPostHint>
                           <ActionRow>
                             <Button
                               type="button"
@@ -4678,7 +4639,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       </summary>
                       {isSelectedToolsOpen && (
                         <div className="body">
-                          <SelectedPostHint>운영 확인이 필요할 때만 조회수/좋아요 테스트를 실행합니다.</SelectedPostHint>
+                          <SelectedPostHint>진단이 필요할 때만 실행합니다.</SelectedPostHint>
                           <SubActionRow>
                             <Button
                               type="button"
@@ -4706,8 +4667,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 ) : (
                   <>
                     <SelectedPostStateCard data-tone="idle">
-                      <strong>목록에서 글을 고르면 여기서 바로 편집을 이어갈 수 있습니다.</strong>
-                      <p>새 글 작성은 여기서 시작하고, 직접 불러오기는 필요할 때만 사용합니다.</p>
+                      <strong>목록에서 글을 고르면 여기서 편집을 이어갑니다.</strong>
+                      <p>새 글 시작이나 직접 불러오기만 둡니다.</p>
                     </SelectedPostStateCard>
                     <ActionRow>
                       <PrimaryButton
@@ -4749,7 +4710,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               />
                             </FieldBox>
                           </SelectedPostGrid>
-                          <SelectedPostHint>특정 글 번호를 이미 알고 있을 때만 사용합니다.</SelectedPostHint>
+                          <SelectedPostHint>특정 글 번호를 알고 있을 때만 씁니다.</SelectedPostHint>
                           <ActionRow>
                             <Button
                               type="button"
@@ -4818,8 +4779,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ComposeSurfaceSection>
             <SectionTop>
               <div>
-              <h2>글 작성</h2>
-              <SectionDescription>제목, 본문, 태그, 미리보기와 발행 설정만 남겨 작성 흐름이 끊기지 않도록 정리했습니다.</SectionDescription>
+                <h2>글 작성</h2>
+                <SectionDescription>제목, 태그, 본문, 미리보기만 먼저 보여줍니다.</SectionDescription>
               </div>
           </SectionTop>
           <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
@@ -4929,7 +4890,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       }}
                     />
                   </InlineTagList>
-                  <FieldHelp>쉼표 또는 Enter로 태그를 추가하고, 태그를 눌러 삭제할 수 있습니다.</FieldHelp>
+                  <FieldHelp>쉼표 또는 Enter로 추가합니다.</FieldHelp>
                   <InlineDisclosure open={isComposeAssistOpen}>
                     <summary
                       onClick={(event) => {
@@ -4994,7 +4955,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <CompactMetaPanelTop>
                 <div>
                   <h3>태그 관리</h3>
-                  <p>기존 태그를 선택하거나 새 태그를 추가할 수 있습니다. 사용 중인 태그는 삭제할 수 없습니다.</p>
+                  <p>기존 태그를 고르거나 새 태그를 더합니다.</p>
                 </div>
                 <MetadataBadge>
                   {metaCatalogLoading
@@ -5199,14 +5160,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </ToolbarIconButton>
               </ToolbarCluster>
             </ToolbarQuickBar>
-            <ToolbarHint>아이콘을 눌러 서식을 바로 적용할 수 있습니다.</ToolbarHint>
+            <ToolbarHint>자주 쓰는 서식만 바로 넣습니다.</ToolbarHint>
           </EditorToolbar>
           <EditorGrid>
             <EditorPane>
               <PaneHeader>
                 <div>
                   <PaneTitle>작성</PaneTitle>
-                  <PaneDescription>왼쪽에서 작성하고 오른쪽에서 바로 확인합니다.</PaneDescription>
+                  <PaneDescription>본문부터 먼저 쓰고 바로 확인합니다.</PaneDescription>
                 </div>
                 <PaneChip>{lineCount} lines</PaneChip>
               </PaneHeader>
@@ -5218,36 +5179,82 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 onPaste={handlePasteFromHtml}
               />
             </EditorPane>
-            <PreviewPane>
-              <PaneHeader>
-                <div>
-                  <PaneTitle>미리보기</PaneTitle>
-                  <PaneDescription>
-                    {isPreviewSyncPending
-                      ? "입력 반영 중입니다. 잠시 뒤 미리보기가 자동 갱신됩니다."
-                      : "오른쪽에서 최종 렌더링 형태를 바로 확인합니다."}
-                  </PaneDescription>
-                </div>
-                <PaneChip>
-                  {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
-                </PaneChip>
-              </PaneHeader>
-              <PreviewCard>
-                {isPreviewHeavyDocument ? (
-                  <PreviewHintNotice>
-                    긴 본문 보호 모드입니다. Mermaid는 코드 블록 형태로 렌더해 입력 중 브라우저 멈춤을
-                    방지합니다.
-                    {isPreviewSyncPending
-                      ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
-                      : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
-                  </PreviewHintNotice>
-                ) : null}
-                <MarkdownRenderer
-                  content={previewContent}
-                  disableMermaid={isPreviewHeavyDocument}
-                />
-              </PreviewCard>
-            </PreviewPane>
+            {isCompactMobileLayout ? (
+              <InlineDisclosure open={isMobilePreviewOpen}>
+                <summary
+                  onClick={(event) => {
+                    event.preventDefault()
+                    setIsMobilePreviewOpen((prev) => !prev)
+                  }}
+                >
+                  <strong>실시간 미리보기</strong>
+                  <span>{isMobilePreviewOpen ? "닫기" : "열기"}</span>
+                </summary>
+                {isMobilePreviewOpen && (
+                  <div className="body">
+                    <PreviewPane>
+                      <PaneHeader>
+                        <div>
+                          <PaneTitle>미리보기</PaneTitle>
+                          <PaneDescription>
+                            {isPreviewSyncPending
+                              ? "입력 반영 중입니다."
+                              : "최종 렌더링만 바로 봅니다."}
+                          </PaneDescription>
+                        </div>
+                        <PaneChip>
+                          {isPreviewSyncPending ? "updating" : `${imageCount} images`}
+                        </PaneChip>
+                      </PaneHeader>
+                      <PreviewCard>
+                        {isPreviewHeavyDocument ? (
+                          <PreviewHintNotice>
+                            긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
+                            {isPreviewSyncPending
+                              ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
+                              : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
+                          </PreviewHintNotice>
+                        ) : null}
+                        <MarkdownRenderer
+                          content={previewContent}
+                          disableMermaid={isPreviewHeavyDocument}
+                        />
+                      </PreviewCard>
+                    </PreviewPane>
+                  </div>
+                )}
+              </InlineDisclosure>
+            ) : (
+              <PreviewPane>
+                <PaneHeader>
+                  <div>
+                    <PaneTitle>미리보기</PaneTitle>
+                    <PaneDescription>
+                      {isPreviewSyncPending
+                        ? "입력 반영 중입니다."
+                        : "오른쪽에서 최종 렌더링만 확인합니다."}
+                    </PaneDescription>
+                  </div>
+                  <PaneChip>
+                    {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
+                  </PaneChip>
+                </PaneHeader>
+                <PreviewCard>
+                  {isPreviewHeavyDocument ? (
+                    <PreviewHintNotice>
+                      긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
+                      {isPreviewSyncPending
+                        ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
+                        : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
+                    </PreviewHintNotice>
+                  ) : null}
+                  <MarkdownRenderer
+                    content={previewContent}
+                    disableMermaid={isPreviewHeavyDocument}
+                  />
+                </PreviewCard>
+              </PreviewPane>
+            )}
           </EditorGrid>
           <WriterFooterBar>
             <WriterFooterSummary>
@@ -5306,13 +5313,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         onClick={clearLocalDraft}
                       >
                         임시저장 삭제
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={loadingKey.length > 0}
-                        onClick={() => switchToCreateMode({ keepContent: true })}
-                      >
-                        새 글 모드
                       </Button>
                     </SubActionRow>
                   </div>
@@ -5709,14 +5709,14 @@ const Main = styled.main`
 
 const HeroCard = styled.section`
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-  gap: 0.88rem;
+  grid-template-columns: 1fr;
+  gap: 0.72rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
-  padding: 1rem 1.05rem;
-  margin-bottom: 1.1rem;
+  padding: 0.88rem 0.96rem;
+  margin-bottom: 0.92rem;
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
@@ -5738,7 +5738,7 @@ const HeroCard = styled.section`
 
 const HeroIntro = styled.div`
   display: grid;
-  gap: 0.58rem;
+  gap: 0.42rem;
 
   h1 {
     margin: 0;
@@ -5753,10 +5753,10 @@ const HeroIntro = styled.div`
 
   p {
     margin: 0;
-    max-width: 38rem;
+    max-width: 32rem;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.92rem;
-    line-height: 1.6;
+    font-size: 0.84rem;
+    line-height: 1.5;
   }
 
   &[data-compact-manage="true"] {
@@ -5772,7 +5772,7 @@ const HeroIntro = styled.div`
 const StudioStatusStrip = styled.div`
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.42rem;
 
   @media (max-width: 1100px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5787,8 +5787,8 @@ const StudioStatusItem = styled.div`
   display: grid;
   gap: 0.18rem;
   min-width: 0;
-  padding: 0.58rem 0.7rem;
-  border-radius: 10px;
+  padding: 0.48rem 0.58rem;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -5800,7 +5800,7 @@ const StudioStatusItem = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
+    font-size: 0.82rem;
     line-height: 1.35;
     white-space: nowrap;
     overflow: hidden;
@@ -5814,49 +5814,13 @@ const StudioStatusItem = styled.div`
   }
 `
 
-const HeroAside = styled.aside`
-  display: grid;
-  align-content: start;
-  justify-items: end;
-  gap: 0.48rem;
-
-  &[data-compact-manage="true"] {
-    gap: 0.48rem;
-  }
-
-  @media (max-width: 1024px) {
-    justify-items: stretch;
-  }
-`
-
-const ActionCluster = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.45rem;
-
-  &[data-hidden="true"] {
-    display: none;
-  }
-
-  @media (max-width: 1024px) {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-  }
-`
-
 const StudioSurfaceCard = styled.section`
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.55rem;
-  padding: 0.68rem 0.78rem;
-  margin-bottom: 0.96rem;
+  padding: 0.58rem 0.68rem;
+  margin-bottom: 0.82rem;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 14px;
   background: ${({ theme }) => theme.colors.gray2};
@@ -5881,7 +5845,7 @@ const StudioSurfaceCard = styled.section`
 const SurfaceTabList = styled.div`
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.46rem;
+  gap: 0.36rem;
   width: fit-content;
   padding: 0.28rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -5894,13 +5858,13 @@ const SurfaceTabList = styled.div`
 `
 
 const SurfaceTabButton = styled.button`
-  min-height: 40px;
+  min-height: 36px;
   border: 0;
   border-radius: 999px;
   padding: 0 0.95rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -5971,9 +5935,10 @@ const SectionEyebrow = styled.span`
 `
 
 const SectionDescription = styled.p`
-  margin: 0.3rem 0 0;
+  margin: 0.22rem 0 0;
   color: ${({ theme }) => theme.colors.gray10};
-  line-height: 1.65;
+  font-size: 0.82rem;
+  line-height: 1.5;
 `
 
 const GlobalNoticeBar = styled.div`
@@ -6085,8 +6050,8 @@ const MobileStepGuide = styled.section`
 
     p {
       margin: 0;
-      font-size: 0.8rem;
-      line-height: 1.6;
+      font-size: 0.76rem;
+      line-height: 1.5;
       color: ${({ theme }) => theme.colors.gray10};
     }
 
@@ -6163,9 +6128,9 @@ const QueryHeader = styled.div`
   }
 
   p {
-    margin: 0.24rem 0 0;
-    font-size: 0.84rem;
-    line-height: 1.56;
+    margin: 0.18rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
     color: ${({ theme }) => theme.colors.gray10};
   }
 `
@@ -6274,7 +6239,7 @@ const InlineDisclosure = styled.details`
     list-style: none;
     cursor: pointer;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     line-height: 1.45;
 
     &::-webkit-details-marker {
@@ -6284,7 +6249,7 @@ const InlineDisclosure = styled.details`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     font-weight: 700;
   }
 
@@ -6704,32 +6669,6 @@ const PrimaryButton = styled(Button)`
     border-color: ${({ theme }) => theme.colors.blue10};
     background: ${({ theme }) => theme.colors.blue10};
     color: ${({ theme }) => theme.colors.gray1};
-  }
-`
-
-const HeroActionButton = styled(Button)`
-  border-radius: 8px;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-weight: 650;
-  min-height: 38px;
-  padding: 0.54rem 0.82rem;
-  font-size: 0.84rem;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.gray4};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-`
-
-const HeroPrimaryActionButton = styled(HeroActionButton)`
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue11};
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
   }
 `
 
@@ -7483,19 +7422,19 @@ const MetaActionRow = styled.div`
 const PublishSettingsSummary = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.36rem;
 `
 
 const SummaryPill = styled.span`
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
+  min-height: 30px;
   border-radius: 6px;
-  padding: 0 0.55rem;
+  padding: 0 0.48rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 600;
 `
 
@@ -7539,8 +7478,8 @@ const EditorContextChip = styled.span`
 
 const FieldHelp = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  line-height: 1.5;
+  font-size: 0.74rem;
+  line-height: 1.45;
 `
 
 const PublishNotice = styled.div`
@@ -7615,13 +7554,13 @@ const MetadataStatus = styled.div`
 const MetadataBadge = styled.span`
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 28px;
   border-radius: 999px;
-  padding: 0 0.72rem;
+  padding: 0 0.58rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.blue11};
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
   white-space: nowrap;
 `
@@ -7651,8 +7590,8 @@ const CompactMetaPanelTop = styled.div`
 
   p {
     margin: 0.24rem 0 0;
-    font-size: 0.8rem;
-    line-height: 1.55;
+    font-size: 0.76rem;
+    line-height: 1.45;
     color: ${({ theme }) => theme.colors.gray11};
   }
 `
@@ -8160,9 +8099,9 @@ const ReadOnlyHint = styled.span`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
-  min-height: 32px;
-  padding: 0 0.7rem;
-  font-size: 0.76rem;
+  min-height: 28px;
+  padding: 0 0.58rem;
+  font-size: 0.72rem;
   font-weight: 600;
 `
 
@@ -8210,7 +8149,7 @@ const SelectedPostPanel = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 10px;
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.82rem;
+  padding: 0.72rem;
   margin: 0;
   box-shadow: none;
 
@@ -8247,8 +8186,8 @@ const SelectedPostHeader = styled.div`
 
   p {
     margin: 0.24rem 0 0;
-    font-size: 0.8rem;
-    line-height: 1.5;
+    font-size: 0.76rem;
+    line-height: 1.45;
     color: ${({ theme }) => theme.colors.gray11};
   }
 
@@ -8339,9 +8278,9 @@ const SelectedPostStateCard = styled.div`
 
 const SelectedPostHint = styled.p`
   margin: 0.1rem 0 0;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.5;
+  line-height: 1.45;
 `
 
 const SubActionRow = styled.div`
@@ -9021,9 +8960,9 @@ const PaneTitle = styled.h3`
 
 const PaneDescription = styled.p`
   margin: 0.18rem 0 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.5;
+  line-height: 1.45;
 `
 
 const PaneChip = styled.span`
@@ -9098,18 +9037,18 @@ const WriterFooterBar = styled.div`
   justify-content: space-between;
   gap: 0.8rem;
   flex-wrap: wrap;
-  margin-top: 1rem;
-  padding-top: 0.8rem;
+  margin-top: 0.84rem;
+  padding-top: 0.72rem;
   border-top: 1px solid ${({ theme }) => theme.colors.gray6};
 `
 
 const WriterFooterSummary = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.8rem;
+  gap: 0.52rem 0.72rem;
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
-  line-height: 1.5;
+  font-size: 0.76rem;
+  line-height: 1.45;
 `
 
 const WriterFooterControls = styled.div`
@@ -9159,12 +9098,12 @@ const MobilePrimaryActionBar = styled.div`
     bottom: calc(0.72rem + env(safe-area-inset-bottom, 0px));
     z-index: 145;
     display: grid;
-    gap: 0.5rem;
+    gap: 0.42rem;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     border-radius: 12px;
     background: ${({ theme }) => theme.colors.gray2};
-    padding: 0.62rem;
-    box-shadow: 0 18px 38px rgba(2, 6, 23, 0.38);
+    padding: 0.54rem;
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.28);
 
     > button {
       width: 100%;

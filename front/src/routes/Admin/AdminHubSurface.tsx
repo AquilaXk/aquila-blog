@@ -34,7 +34,7 @@ const AdminHubSurface = ({
       <HeaderPanel>
         <HeaderCopy>
           <h1>관리자 작업 진입점</h1>
-          <p>지금 필요한 화면만 빠르게 열 수 있도록 핵심 작업만 남겼습니다.</p>
+          <p>지금 필요한 화면만 바로 엽니다.</p>
         </HeaderCopy>
         <StatusStrip aria-label="관리자 상태 요약">
           <StatusItem>
@@ -56,7 +56,7 @@ const AdminHubSurface = ({
         <TaskPanelHeader>
           <div>
             <h2>주요 작업</h2>
-            <p>프로필, 글 작업실, 운영 도구로 바로 이동합니다.</p>
+            <p>프로필, 글 작업실, 운영 도구만 둡니다.</p>
           </div>
         </TaskPanelHeader>
         <TaskList>
@@ -93,7 +93,7 @@ const AdminHubSurface = ({
           <p>{profileBio || "관리자 소개 문구가 없습니다."}</p>
         </ProfileCopy>
         <Link href="/admin/profile" passHref legacyBehavior>
-          <ProfileAction>프로필 정리</ProfileAction>
+          <ProfileAction>프로필 편집</ProfileAction>
         </Link>
       </ProfileCompact>
     </Main>
@@ -105,9 +105,9 @@ export default AdminHubSurface
 const Main = styled.main`
   max-width: 1080px;
   margin: 0 auto;
-  padding: 1.2rem 1rem 2.3rem;
+  padding: 1.1rem 1rem 2.2rem;
   display: grid;
-  gap: 0.78rem;
+  gap: 0.72rem;
 
   @media (max-width: 900px) {
     gap: 0.72rem;
@@ -117,8 +117,8 @@ const Main = styled.main`
 
 const HeaderPanel = styled.section`
   display: grid;
-  gap: 0.68rem;
-  padding: 0.84rem 0.92rem;
+  gap: 0.58rem;
+  padding: 0.76rem 0.84rem;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
@@ -139,15 +139,15 @@ const HeaderCopy = styled.div`
     margin: 0;
     max-width: 34rem;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.45;
   }
 `
 
 const StatusStrip = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.38rem;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -158,8 +158,8 @@ const StatusItem = styled.div`
   display: grid;
   gap: 0.2rem;
   min-width: 0;
-  padding: 0.48rem 0.56rem;
-  border-radius: 10px;
+  padding: 0.42rem 0.5rem;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 
@@ -171,7 +171,7 @@ const StatusItem = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     font-weight: 700;
     line-height: 1.35;
     overflow: hidden;
@@ -182,8 +182,8 @@ const StatusItem = styled.div`
 
 const TaskPanel = styled.section`
   display: grid;
-  gap: 0.7rem;
-  padding: 0.84rem 0.92rem;
+  gap: 0.58rem;
+  padding: 0.76rem 0.84rem;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
@@ -203,22 +203,22 @@ const TaskPanelHeader = styled.div`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.8rem;
-    line-height: 1.5;
+    font-size: 0.76rem;
+    line-height: 1.4;
   }
 `
 
 const TaskList = styled.div`
   display: grid;
-  gap: 0.5rem;
+  gap: 0.42rem;
 `
 
 const TaskLink = styled.a`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.7rem;
+  gap: 0.56rem;
   align-items: center;
-  padding: 0.72rem 0.78rem;
+  padding: 0.62rem 0.7rem;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -256,14 +256,14 @@ const TaskCopy = styled.div`
   gap: 0.22rem;
 
   strong {
-    font-size: 0.94rem;
+    font-size: 0.9rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     line-height: 1.45;
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -280,13 +280,13 @@ const TaskMeta = styled.div`
   span {
     display: inline-flex;
     align-items: center;
-    min-height: 30px;
+    min-height: 28px;
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    padding: 0 0.62rem;
-    font-size: 0.75rem;
+    padding: 0 0.54rem;
+    font-size: 0.72rem;
     font-weight: 700;
     white-space: nowrap;
   }
@@ -295,9 +295,9 @@ const TaskMeta = styled.div`
 const ProfileCompact = styled.section`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.65rem;
+  gap: 0.56rem;
   align-items: center;
-  padding: 0.72rem 0.84rem;
+  padding: 0.62rem 0.72rem;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
@@ -308,12 +308,14 @@ const ProfileCompact = styled.section`
 
   @media (max-width: 560px) {
     grid-template-columns: 1fr;
+    gap: 0.42rem;
+    padding: 0.5rem 0.62rem;
   }
 `
 
 const ProfileFrame = styled.div`
-  width: 60px;
-  height: 60px;
+  width: 52px;
+  height: 52px;
   border-radius: 999px;
   overflow: hidden;
 `
@@ -336,25 +338,31 @@ const ProfileCopy = styled.div`
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.88rem;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
     font-weight: 700;
-    font-size: 0.78rem;
+    font-size: 0.74rem;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    line-height: 1.45;
+    font-size: 0.74rem;
+    line-height: 1.4;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     overflow: hidden;
     overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 560px) {
+    p {
+      -webkit-line-clamp: 1;
+    }
   }
 `
 
@@ -362,14 +370,14 @@ const ProfileAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
+  min-height: 30px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
-  padding: 0 0.72rem;
-  font-size: 0.78rem;
+  padding: 0 0.62rem;
+  font-size: 0.74rem;
   font-weight: 700;
 
   @media (max-width: 760px) {

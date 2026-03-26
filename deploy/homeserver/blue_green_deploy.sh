@@ -524,6 +524,18 @@ require_back_image() {
     echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
     exit 1
   fi
+
+  if [[ "${BACK_IMAGE}" == *":latest" ]]; then
+    echo "BACK_IMAGE latest tag is forbidden: ${BACK_IMAGE}" >&2
+    echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
+    exit 1
+  fi
+
+  if [[ "${BACK_IMAGE}" != *@sha256:* && "${BACK_IMAGE}" != *:* ]]; then
+    echo "BACK_IMAGE must include tag or digest: ${BACK_IMAGE}" >&2
+    echo "set BACK_IMAGE=ghcr.io/<owner>/<repo>-back:sha-<commit7>" >&2
+    exit 1
+  fi
 }
 
 require_nonempty_env_key() {

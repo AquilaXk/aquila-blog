@@ -32,6 +32,9 @@ const MERMAID_DESKTOP_WIDE_MAX_PX = 1100
 const MERMAID_DESKTOP_SAFE_MARGIN_PX = 24
 const MERMAID_EXPAND_THRESHOLD_PX = 80
 
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 const createGithubMermaidConfig = (scheme: "dark" | "light") => {
   const isDark = scheme === "dark"
 
@@ -163,15 +166,51 @@ const useMermaidEffect = (
       return message.includes("attribute width") && message.includes("negative value")
     }
 
+    const isMermaidMutationTarget = (node: Node | null) => {
+      if (!node) return false
+      if (node.nodeType === Node.TEXT_NODE) {
+        return isMermaidMutationTarget(node.parentElement)
+      }
+      if (!(node instanceof Element)) return false
+      return Boolean(
+        node.closest(
+          "pre.aq-mermaid, pre[data-aq-mermaid='true'], pre[data-language='mermaid'], pre > code, figure[data-rehype-pretty-code-figure]"
+        )
+      )
+    }
+
+    const shouldScheduleFromMutations = (mutations: MutationRecord[]) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "characterData") {
+          if (isMermaidMutationTarget(mutation.target)) return true
+          continue
+        }
+
+        if (isMermaidMutationTarget(mutation.target)) return true
+
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (isMermaidMutationTarget(node)) return true
+        }
+        for (const node of Array.from(mutation.removedNodes)) {
+          if (isMermaidMutationTarget(node)) return true
+        }
+      }
+      return false
+    }
+
     let mermaidOverlayCleanup: (() => void) | null = null
 
     const openMermaidOverlay = (svgMarkup: string) => {
       if (typeof document === "undefined") return
 
       mermaidOverlayCleanup?.()
+      const previousFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
 
       const overlay = document.createElement("div")
       overlay.setAttribute("data-aq-mermaid-overlay", "true")
+      overlay.setAttribute("role", "dialog")
+      overlay.setAttribute("aria-modal", "true")
+      overlay.setAttribute("aria-label", "Mermaid 확대 보기")
       overlay.style.position = "fixed"
       overlay.style.inset = "0"
       overlay.style.zIndex = "180"
@@ -196,7 +235,7 @@ const useMermaidEffect = (
       closeButton.style.display = "inline-flex"
       closeButton.style.alignItems = "center"
       closeButton.style.justifyContent = "center"
-      closeButton.style.minHeight = "34px"
+      closeButton.style.minHeight = "44px"
       closeButton.style.padding = "0 0.8rem"
       closeButton.style.borderRadius = "999px"
       closeButton.style.border = "1px solid rgba(255, 255, 255, 0.2)"
@@ -232,24 +271,60 @@ const useMermaidEffect = (
       const closeOverlay = () => {
         releaseBodyScrollLock()
         overlay.remove()
-        document.removeEventListener("keydown", handleEscape)
+        document.removeEventListener("keydown", handleOverlayKeyDown)
+        closeButton.removeEventListener("click", closeOverlay)
+        overlay.removeEventListener("click", handleOverlayClick)
+        if (previousFocusedElement?.isConnected) {
+          previousFocusedElement.focus()
+        }
         mermaidOverlayCleanup = null
       }
 
-      const handleEscape = (event: KeyboardEvent) => {
+      const handleOverlayKeyDown = (event: KeyboardEvent) => {
         if (event.key === "Escape") {
           event.preventDefault()
+          closeOverlay()
+          return
+        }
+
+        if (event.key === "Tab") {
+          const focusable = Array.from(overlay.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+            (element) =>
+              !element.hasAttribute("disabled") &&
+              element.tabIndex !== -1 &&
+              element.offsetParent !== null
+          )
+          if (!focusable.length) return
+
+          const first = focusable[0]
+          const last = focusable[focusable.length - 1]
+          const active = document.activeElement as HTMLElement | null
+
+          if (event.shiftKey) {
+            if (!active || active === first || !overlay.contains(active)) {
+              event.preventDefault()
+              last.focus()
+            }
+            return
+          }
+
+          if (!active || active === last || !overlay.contains(active)) {
+            event.preventDefault()
+            first.focus()
+          }
+        }
+      }
+
+      const handleOverlayClick = (event: MouseEvent) => {
+        if (event.target === overlay) {
           closeOverlay()
         }
       }
 
-      overlay.addEventListener("click", (event) => {
-        if (event.target === overlay) {
-          closeOverlay()
-        }
-      })
+      closeButton.focus()
+      overlay.addEventListener("click", handleOverlayClick)
       closeButton.addEventListener("click", closeOverlay)
-      document.addEventListener("keydown", handleEscape)
+      document.addEventListener("keydown", handleOverlayKeyDown)
 
       mermaidOverlayCleanup = closeOverlay
     }
@@ -674,7 +749,10 @@ const useMermaidEffect = (
     resizeObserver?.observe(root)
     mutationObserver =
       typeof MutationObserver !== "undefined"
-        ? new MutationObserver(scheduleRun)
+        ? new MutationObserver((mutations) => {
+            if (!shouldScheduleFromMutations(mutations)) return
+            scheduleRun()
+          })
         : null
     mutationObserver?.observe(root, {
       childList: true,

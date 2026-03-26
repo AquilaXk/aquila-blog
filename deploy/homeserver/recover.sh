@@ -14,6 +14,41 @@ compose() {
   docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
 }
 
+env_value() {
+  local key="$1"
+  awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+}
+
+trim_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  echo "${value}"
+}
+
+require_back_image() {
+  local value
+  value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+
+  if [[ -z "${value}" ]]; then
+    echo "BACK_IMAGE is empty in ${ENV_FILE}. refusing recover to avoid latest rollback." >&2
+    exit 1
+  fi
+  if [[ "${value}" == *":latest" ]]; then
+    echo "BACK_IMAGE latest is forbidden in ${ENV_FILE}: ${value}" >&2
+    exit 1
+  fi
+  if [[ "${value}" != *@sha256:* && "${value}" != *:* ]]; then
+    echo "BACK_IMAGE must include tag or digest in ${ENV_FILE}: ${value}" >&2
+    exit 1
+  fi
+
+  BACK_IMAGE="${value}"
+  export BACK_IMAGE
+}
+
 section() {
   printf "\n== [%s] %s ==\n" "$1" "$2"
 }
@@ -31,7 +66,9 @@ health_of() {
 }
 
 active_upstream() {
-  awk '$1 == "reverse_proxy" && $2 ~ /^back-(blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${CADDY_HOST_FILE}" 2>/dev/null || true
+  local upstream
+  upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back[_-](blue|green):8080$/ {split($2, a, ":"); print a[1]; exit}' "${CADDY_HOST_FILE}" 2>/dev/null || true)"
+  echo "${upstream//-/_}"
 }
 
 switch_upstream() {
@@ -45,16 +82,18 @@ switch_upstream() {
   fi
 
   echo "[switch] ${current} -> ${target}"
-  sed -i "s/${current}:8080/${target}:8080/g" "${CADDY_HOST_FILE}"
+  local current_pattern
+  current_pattern="${current//_/[_-]}"
+  sed -i -E "s/${current_pattern}:8080/${target}:8080/g" "${CADDY_HOST_FILE}"
   compose up -d --force-recreate caddy
 }
 
 stop_inactive_backend() {
   local active="$1"
   local inactive
-  if [[ "${active}" == "back-blue" ]]; then
+  if [[ "${active}" == "back_blue" ]]; then
     inactive="back_green"
-  elif [[ "${active}" == "back-green" ]]; then
+  elif [[ "${active}" == "back_green" ]]; then
     inactive="back_blue"
   else
     return
@@ -69,6 +108,8 @@ main() {
     echo "missing env file: ${ENV_FILE}" >&2
     exit 1
   fi
+
+  require_back_image
 
   section "0" "start core services"
   compose up -d back_blue back_green caddy cloudflared uptime_kuma prometheus grafana
@@ -92,10 +133,10 @@ main() {
   green="$(health_of back_green)"
   echo "active=${active:-none} blue=${blue} green=${green}"
 
-  if [[ "${active}" == "back-blue" && "${blue}" != "healthy" && "${green}" == "healthy" ]]; then
-    switch_upstream "back-green"
-  elif [[ "${active}" == "back-green" && "${green}" != "healthy" && "${blue}" == "healthy" ]]; then
-    switch_upstream "back-blue"
+  if [[ "${active}" == "back_blue" && "${blue}" != "healthy" && "${green}" == "healthy" ]]; then
+    switch_upstream "back_green"
+  elif [[ "${active}" == "back_green" && "${green}" != "healthy" && "${blue}" == "healthy" ]]; then
+    switch_upstream "back_blue"
   else
     echo "[switch] no failover required"
   fi
@@ -125,10 +166,12 @@ main() {
   section "5" "final status"
   active="$(active_upstream)"
   local active_health
-  if [[ "${active}" == "back-blue" ]]; then
+  if [[ "${active}" == "back_blue" ]]; then
     active_health="$(health_of back_blue)"
-  else
+  elif [[ "${active}" == "back_green" ]]; then
     active_health="$(health_of back_green)"
+  else
+    active_health="unknown"
   fi
   if [[ "${active_health}" == "healthy" ]]; then
     stop_inactive_backend "${active}"

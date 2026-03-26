@@ -48,11 +48,12 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
   const displayRole = adminProfile?.profileRole || CONFIG.profile.role
   const displayBio = adminProfile?.profileBio || CONFIG.profile.bio
+  const blogTitle = adminProfile?.blogTitle || CONFIG.blog.title
   const contactLinks = resolveContactLinks(adminProfile)
   const serviceLinks = resolveServiceLinks(adminProfile)
 
   const meta = {
-    title: `About - ${CONFIG.blog.title}`,
+    title: `About - ${blogTitle}`,
     description: displayBio,
     type: "website",
     url: `${CONFIG.link}/about`,

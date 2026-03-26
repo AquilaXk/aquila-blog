@@ -13,10 +13,11 @@ const usePostQuery = () => {
       : typeof router.query.slug === "string"
         ? String(extractPostIdFromLegacySlug(router.query.slug) || "")
         : ""
+  const hasRouteId = routeId.length > 0
   const query = useQuery<PostDetail | null>({
     queryKey: queryKey.post(routeId),
     queryFn: () => getPostDetailById(routeId),
-    enabled: !!routeId,
+    enabled: hasRouteId,
     retry: 1,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -24,8 +25,8 @@ const usePostQuery = () => {
 
   return {
     post: query.data ?? undefined,
-    isLoading: query.isLoading || (query.isFetching && query.data === undefined),
-    isNotFound: query.status === "success" && query.data === null,
+    isLoading: !hasRouteId || query.isLoading || (query.isFetching && query.data === undefined),
+    isNotFound: hasRouteId && query.status === "success" && query.data === null,
   }
 }
 

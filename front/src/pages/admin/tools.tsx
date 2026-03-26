@@ -135,6 +135,7 @@ type PageDto<T> = {
 
 type ActionCardTone = "read" | "write" | "danger" | "infra"
 type InlineNoticeTone = "warning" | "danger" | "success"
+type AdvancedSectionKey = "comments" | "system" | "monitoring" | "mail" | "auth"
 
 const ACTION_LABELS: Record<string, string> = {
   commentList: "댓글 목록 조회",
@@ -218,6 +219,13 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [cleanupPanelOpen, setCleanupPanelOpen] = useState(false)
   const [isMobileLayout, setIsMobileLayout] = useState(false)
   const [advancedPanelsOpen, setAdvancedPanelsOpen] = useState(false)
+  const [mobileAdvancedSectionsOpen, setMobileAdvancedSectionsOpen] = useState<Record<AdvancedSectionKey, boolean>>({
+    comments: false,
+    system: false,
+    monitoring: false,
+    mail: false,
+    auth: false,
+  })
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
     tone: "warning",
@@ -627,24 +635,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }> = [
     {
       key: "mailStatus",
-      title: "메일 준비 상태 새로고침",
-      description: "설정 누락/준비 상태 재진단",
+      title: "메일 진단",
+      description: "설정 누락/준비 상태 재확인",
       chipLabel: "점검",
       tone: "infra",
       onClick: async () => void fetchSignupMailDiagnostics(false),
     },
     {
-      key: "mailConnectivity",
-      title: "SMTP 연결 확인",
-      description: "실제 SMTP 연결 가능 여부 점검",
-      chipLabel: "점검",
-      tone: "infra",
-      onClick: async () => void fetchSignupMailDiagnostics(true),
-    },
-    {
       key: "taskQueueStatus",
       title: "작업 큐 진단",
-      description: "적체·실패·stale processing 새로고침",
+      description: "적체·실패·stale processing 재확인",
       chipLabel: "진단",
       tone: "infra",
       onClick: async () => void fetchTaskQueueDiagnostics(),
@@ -652,7 +652,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     {
       key: "cleanupStatus",
       title: "파일 정리 진단",
-      description: "purge 후보/threshold 상태 새로고침",
+      description: "purge 후보와 threshold 상태 재확인",
       chipLabel: "진단",
       tone: "infra",
       onClick: async () => void fetchCleanupDiagnostics(),
@@ -660,12 +660,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     {
       key: "authSecurityEvents",
       title: "인증 보안 이벤트",
-      description: "로그인 정책/IP 보안 차단 이벤트 조회",
+      description: "로그인 정책과 IP 보안 차단 이벤트 재확인",
       chipLabel: "로그",
       tone: "infra",
       onClick: async () => void fetchAuthSecurityEvents(),
     },
   ]
+  const toggleMobileAdvancedSection = (section: AdvancedSectionKey) => {
+    setMobileAdvancedSectionsOpen((prev) => ({ ...prev, [section]: !prev[section] }))
+  }
+  const shouldShowAdvancedSection = (section: AdvancedSectionKey) => !isMobileLayout || mobileAdvancedSectionsOpen[section]
 
   const prioritizedActions: Array<{
     key: string
@@ -711,7 +715,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <HeaderCard>
         <HeaderCopy>
           <h1>운영 도구</h1>
-          <p>상태를 먼저 보고, 자주 쓰는 실행만 상단에 두고, 상세 진단은 필요할 때만 펼칩니다.</p>
+          <p>상태를 먼저 보고 필요한 실행만 바로 엽니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
@@ -723,11 +727,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </HeaderActions>
       </HeaderCard>
 
-      <OverviewCard>
+        <OverviewCard>
         <SectionTop>
           <div>
             <h2>운영 상태 보드</h2>
-            <SectionDescription>서버, 메일, 큐, 파일 정리, 보안 상태만 먼저 확인합니다.</SectionDescription>
+            <SectionDescription>서버, 메일, 큐, 파일 정리, 보안만 먼저 봅니다.</SectionDescription>
           </div>
         </SectionTop>
         <OverviewGrid>
@@ -759,11 +763,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </OverviewGrid>
       </OverviewCard>
 
-      <QuickActionsCard>
+        <QuickActionsCard>
         <SectionTop>
           <div>
             <h2>자주 쓰는 운영 액션</h2>
-            <SectionDescription>반복 점검이 잦은 작업만 먼저 둡니다.</SectionDescription>
+            <SectionDescription>반복 점검이 많은 작업만 먼저 둡니다.</SectionDescription>
           </div>
         </SectionTop>
         <QuickActionRow>
@@ -792,8 +796,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </AdvancedToggle>
         <AdvancedPanelHint>
           {advancedPanelsOpen
-            ? "상세 진단과 실행 결과를 펼친 상태입니다."
-            : "기본 화면에는 상태 요약과 자주 쓰는 액션만 남깁니다."}
+            ? "세부 점검과 실행 결과를 보고 있습니다."
+            : "기본 화면에는 상태 보드와 빠른 실행만 남깁니다."}
         </AdvancedPanelHint>
       </AdvancedPanelBar>
 
@@ -803,11 +807,18 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <h2>댓글 점검</h2>
-              <SectionDescription>댓글 조회/작성/수정/삭제 흐름만 빠르게 점검합니다.</SectionDescription>
+              <SectionDescription>댓글 흐름만 빠르게 점검합니다.</SectionDescription>
             </div>
+            {isMobileLayout ? (
+              <SectionToggleButton type="button" onClick={() => toggleMobileAdvancedSection("comments")}>
+                {shouldShowAdvancedSection("comments") ? "접기" : "열기"}
+              </SectionToggleButton>
+            ) : null}
           </SectionTop>
+          {shouldShowAdvancedSection("comments") && (
+            <>
           <InlineNotice data-tone="warning">
-            이 영역의 <strong>작성/수정/삭제</strong>는 실제 데이터에 적용됩니다. 운영 점검 시 테스트용 post/comment id 사용을 권장합니다.
+            작성·수정·삭제는 실제 데이터에 적용됩니다.
           </InlineNotice>
           <FieldGrid>
             <FieldBox>
@@ -830,47 +841,65 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </FieldGrid>
           <ActionCardGrid>
             {commentActions.map((action) => (
-              <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} onClick={() => void action.onClick()}>
+              <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} title={action.description} onClick={() => void action.onClick()}>
                 <ActionCardHeader>
                   <ActionCardTitle>{action.title}</ActionCardTitle>
                   <ActionStateChip data-tone={action.tone}>
                     {action.tone === "read" ? "조회" : action.tone === "danger" ? "주의" : "쓰기"}
                   </ActionStateChip>
                 </ActionCardHeader>
-                <ActionCardHint>{action.description}</ActionCardHint>
               </ActionCardButton>
             ))}
           </ActionCardGrid>
+            </>
+          )}
         </SectionCard>
 
         <SectionCard>
           <SectionTop>
             <div>
               <h2>시스템 점검</h2>
-              <SectionDescription>자주 확인하는 관리자 API만 모았습니다.</SectionDescription>
+              <SectionDescription>자주 보는 관리자 API만 남겼습니다.</SectionDescription>
             </div>
+            {isMobileLayout ? (
+              <SectionToggleButton type="button" onClick={() => toggleMobileAdvancedSection("system")}>
+                {shouldShowAdvancedSection("system") ? "접기" : "열기"}
+              </SectionToggleButton>
+            ) : null}
           </SectionTop>
+          {shouldShowAdvancedSection("system") && (
+            <>
           <ActionCardGrid data-columns="2">
             {systemActions.map((action) => (
-              <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} onClick={() => void action.onClick()}>
+              <ActionCardButton key={action.key} type="button" disabled={isBusy} data-tone={action.tone} title={action.description} onClick={() => void action.onClick()}>
                 <ActionCardHeader>
                   <ActionCardTitle>{action.title}</ActionCardTitle>
                   <ActionStateChip data-tone={action.tone}>{action.tone === "infra" ? "운영" : "조회"}</ActionStateChip>
                 </ActionCardHeader>
-                <ActionCardHint>{action.description}</ActionCardHint>
               </ActionCardButton>
             ))}
           </ActionCardGrid>
+            </>
+          )}
         </SectionCard>
 
         <SectionCard>
           <SectionTop>
             <div>
               <h2>모니터링</h2>
-              <SectionDescription>서버 상태와 외부 대시보드를 한 구역에서 확인합니다.</SectionDescription>
+              <SectionDescription>서버 상태와 대시보드만 확인합니다.</SectionDescription>
             </div>
-            <StatusBadge data-status={systemHealthStatus}>{systemHealthStatus}</StatusBadge>
+            <SectionTopActions>
+              <StatusBadge data-status={systemHealthStatus}>{systemHealthStatus}</StatusBadge>
+              {isMobileLayout ? (
+                <SectionToggleButton type="button" onClick={() => toggleMobileAdvancedSection("monitoring")}>
+                  {shouldShowAdvancedSection("monitoring") ? "접기" : "열기"}
+                </SectionToggleButton>
+              ) : null}
+            </SectionTopActions>
           </SectionTop>
+          {shouldShowAdvancedSection("monitoring") && (
+            <>
           <MonitoringActions>
             <BaseButton type="button" disabled={isBusy} onClick={() => void run("systemHealth", () => fetchSystemHealthCached())}>
               서버 상태 즉시 새로고침
@@ -924,16 +953,27 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               />
             )}
           </MonitoringResultCard>
+            </>
+          )}
         </SectionCard>
 
         <SectionCard>
           <SectionTop>
             <div>
               <h2>가입 메일</h2>
-              <SectionDescription>SMTP 준비 상태를 보고, 테스트 메일을 바로 발송할 수 있습니다.</SectionDescription>
+              <SectionDescription>SMTP 상태를 보고 테스트 메일을 보냅니다.</SectionDescription>
             </div>
-            <StatusBadge data-status={mailDiagnostics?.status || "unknown"}>{mailDiagnostics?.status || "LOADING"}</StatusBadge>
+            <SectionTopActions>
+              <StatusBadge data-status={mailDiagnostics?.status || "unknown"}>{mailDiagnostics?.status || "LOADING"}</StatusBadge>
+              {isMobileLayout ? (
+                <SectionToggleButton type="button" onClick={() => toggleMobileAdvancedSection("mail")}>
+                  {shouldShowAdvancedSection("mail") ? "접기" : "열기"}
+                </SectionToggleButton>
+              ) : null}
+            </SectionTopActions>
           </SectionTop>
+          {shouldShowAdvancedSection("mail") && (
+            <>
           <InlineNotice data-tone={mailDiagnostics?.status === "READY" ? "success" : "warning"}>{mailStatusMessage}</InlineNotice>
 
           <MetaGrid>
@@ -997,13 +1037,15 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </MailTestBox>
             {!!mailTestNotice.text && <InlineNotice data-tone={mailTestNotice.tone}>{mailTestNotice.text}</InlineNotice>}
           </MailTestSection>
+            </>
+          )}
         </SectionCard>
 
         <SectionCard>
           <SectionTop>
             <div>
               <h2>작업 큐</h2>
-              <SectionDescription>revalidate, 회원가입 메일 같은 비동기 작업 적체와 stale processing 상태를 봅니다.</SectionDescription>
+              <SectionDescription>비동기 작업 적체와 stale processing만 봅니다.</SectionDescription>
             </div>
             <SectionToggleButton type="button" onClick={() => setTaskQueuePanelOpen((prev) => !prev)}>
               {taskQueuePanelOpen ? "패널 접기" : "패널 펼치기"}
@@ -1237,12 +1279,21 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <SectionTop>
             <div>
               <h2>인증 보안</h2>
-              <SectionDescription>로그인 정책 적용·차단 이력을 최근 순으로 확인해 이상 징후를 빠르게 파악합니다.</SectionDescription>
+              <SectionDescription>로그인 정책과 차단 이력만 봅니다.</SectionDescription>
             </div>
-            <BaseButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
-              이벤트 새로고침
-            </BaseButton>
+            <SectionTopActions>
+              <BaseButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
+                이벤트 새로고침
+              </BaseButton>
+              {isMobileLayout ? (
+                <SectionToggleButton type="button" onClick={() => toggleMobileAdvancedSection("auth")}>
+                  {shouldShowAdvancedSection("auth") ? "접기" : "열기"}
+                </SectionToggleButton>
+              ) : null}
+            </SectionTopActions>
           </SectionTop>
+          {shouldShowAdvancedSection("auth") && (
+            <>
           <InlineNotice data-tone={authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED" ? "warning" : "success"}>
             {authSecurityEvents.length > 0
               ? `최근 이벤트: ${authSecurityEvents[0].eventType} · ${formatInstant(authSecurityEvents[0].createdAt)}`
@@ -1276,6 +1327,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           ) : (
             <InlineNotice>이벤트가 발생하면 이 영역에 표시됩니다.</InlineNotice>
           )}
+            </>
+          )}
         </SectionCard>
         </Grid>
       )}
@@ -1285,7 +1338,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <ConsoleHeader>
             <div>
               <h2>실행 결과 콘솔</h2>
-              <ConsoleDescription>메일, 작업 큐, 파일 정리 진단 결과와 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
+              <ConsoleDescription>메일, 작업 큐, 파일 정리, 인증 보안 결과를 한 자리에서 확인합니다.</ConsoleDescription>
             </div>
             <ConsoleStatus>{consoleStatus}</ConsoleStatus>
           </ConsoleHeader>
@@ -1320,13 +1373,13 @@ const Main = styled.main`
   margin: 0 auto;
   padding: 1.5rem 1rem 2.6rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.88rem;
 `
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 0.95rem;
-  padding: 1.05rem 1.1rem;
+  gap: 0.78rem;
+  padding: 0.9rem 0.98rem;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 16px;
   background: ${({ theme }) => theme.colors.gray2};
@@ -1342,20 +1395,21 @@ const HeaderCard = styled.section`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.75;
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
 `
 
 const HeaderCopy = styled.div`
   display: grid;
-  gap: 0.7rem;
+  gap: 0.5rem;
   max-width: 42rem;
 `
 
 const HeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.45rem;
 
   @media (max-width: 1024px) {
     width: 100%;
@@ -1390,14 +1444,14 @@ const AdvancedPanelBar = styled.div`
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.72rem;
+  gap: 0.56rem;
 `
 
 const AdvancedPanelHint = styled.p`
   margin: 0;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.82rem;
-  line-height: 1.6;
+  font-size: 0.78rem;
+  line-height: 1.45;
 `
 
 const BaseButton = styled.button`
@@ -1405,9 +1459,9 @@ const BaseButton = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.72rem 1rem;
-  min-height: 40px;
-  font-size: 0.92rem;
+  padding: 0.64rem 0.88rem;
+  min-height: 38px;
+  font-size: 0.86rem;
   font-weight: 700;
   cursor: pointer;
 
@@ -1444,9 +1498,9 @@ const NavLink = styled.a`
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   text-decoration: none;
-  padding: 0.72rem 1rem;
-  min-height: 40px;
-  font-size: 0.92rem;
+  padding: 0.64rem 0.88rem;
+  min-height: 38px;
+  font-size: 0.86rem;
   font-weight: 700;
 
   @media (max-width: 1024px) {
@@ -1456,7 +1510,7 @@ const NavLink = styled.a`
 
 const Grid = styled.section`
   display: grid;
-  gap: 1rem;
+  gap: 0.88rem;
 `
 
 const SectionCard = styled.section`
@@ -1465,17 +1519,17 @@ const SectionCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
-  padding: 1rem;
+  padding: 0.86rem;
 `
 
 const QuickActionsCard = styled(SectionCard)`
-  padding: 0.84rem 0.92rem;
+  padding: 0.76rem 0.84rem;
 `
 
 const QuickActionRow = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
+  gap: 0.5rem;
 
   @media (max-width: 720px) {
     grid-template-columns: 1fr;
@@ -1483,10 +1537,10 @@ const QuickActionRow = styled.div`
 `
 
 const SectionTop = styled.div`
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.72rem;
   display: flex;
   justify-content: space-between;
-  gap: 0.9rem;
+  gap: 0.72rem;
   align-items: flex-start;
 
   > div {
@@ -1495,7 +1549,7 @@ const SectionTop = styled.div`
 
   h2 {
     margin: 0;
-    font-size: 1.2rem;
+    font-size: 1.08rem;
   }
 
   @media (max-width: 760px) {
@@ -1527,9 +1581,18 @@ const SectionEyebrow = styled.span`
 `
 
 const SectionDescription = styled.p`
-  margin: 0.35rem 0 0;
+  margin: 0.22rem 0 0;
   color: ${({ theme }) => theme.colors.gray10};
-  line-height: 1.6;
+  font-size: 0.8rem;
+  line-height: 1.45;
+`
+
+const SectionTopActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.45rem;
 `
 
 const FieldGrid = styled.div`
@@ -1571,8 +1634,8 @@ const Input = styled.input`
 
 const ActionCardGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
-  gap: 0.72rem;
+  grid-template-columns: repeat(var(--columns, 1), minmax(0, 1fr));
+  gap: 0.48rem;
   margin-top: 0.25rem;
 
   &[data-columns="2"] {
@@ -1580,7 +1643,7 @@ const ActionCardGrid = styled.div`
   }
 
   @media (max-width: 980px) {
-    --columns: 2;
+    --columns: 1;
   }
 
   @media (max-width: 680px) {
@@ -1589,14 +1652,16 @@ const ActionCardGrid = styled.div`
 `
 
 const ActionCardButton = styled.button`
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.72rem 0.8rem;
+  padding: 0.66rem 0.74rem;
   text-align: left;
-  display: grid;
-  gap: 0.36rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
   cursor: pointer;
   transition:
     border-color 0.16s ease,
@@ -1620,20 +1685,16 @@ const ActionCardButton = styled.button`
 const ActionCardHeader = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
   min-width: 0;
-
-  @media (max-width: 760px) {
-    align-items: flex-start;
-  }
 `
 
 const ActionCardTitle = styled.span`
   display: block;
   min-width: 0;
-  font-size: 0.92rem;
-  font-weight: 800;
+  font-size: 0.88rem;
+  font-weight: 760;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 `
@@ -1648,13 +1709,13 @@ const ActionStateChip = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.55rem;
+  min-width: 2.28rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.2rem 0.5rem;
-  font-size: 0.74rem;
+  padding: 0.16rem 0.42rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.02em;
 
@@ -1697,7 +1758,7 @@ const MetaGrid = styled.div`
 const MetaBox = styled.div`
   display: grid;
   gap: 0.25rem;
-  padding: 0.58rem 0.68rem;
+  padding: 0.52rem 0.6rem;
   border-radius: 8px;
   border: 0;
   background: ${({ theme }) => theme.colors.gray3};
@@ -1718,10 +1779,10 @@ const StatusBadge = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 92px;
-  padding: 0.45rem 0.75rem;
+  min-width: 84px;
+  padding: 0.38rem 0.66rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 800;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
@@ -2074,9 +2135,9 @@ const MonitoringActions = styled.div`
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.62rem;
-  margin-top: 0.7rem;
-  margin-bottom: 0.6rem;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  margin-bottom: 0.5rem;
 
   a {
     text-decoration: none;
@@ -2148,8 +2209,8 @@ const ConsoleStatus = styled.span`
 const ConsoleQuickActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0.28rem 0 0.88rem;
+  gap: 0.42rem;
+  margin: 0.22rem 0 0.72rem;
 `
 
 const ConsoleQuickActionButton = styled.button`
@@ -2157,18 +2218,19 @@ const ConsoleQuickActionButton = styled.button`
   align-items: center;
   justify-content: space-between;
   gap: 0.42rem;
-  min-height: 2.3rem;
+  min-height: 2.12rem;
   flex: 0 1 auto;
   border-radius: 999px;
-  border: 0;
-  background: transparent;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
-  padding: 0 0.72rem;
+  padding: 0 0.64rem;
   cursor: pointer;
-  transition: background-color 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
 
   &:hover {
     background: ${({ theme }) => theme.colors.gray3};
+    border-color: ${({ theme }) => theme.colors.gray7};
   }
 
   &:disabled {
@@ -2195,8 +2257,8 @@ const ConsoleQuickActionButton = styled.button`
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    padding: 0.16rem 0.42rem;
-    font-size: 0.72rem;
+    padding: 0.14rem 0.36rem;
+    font-size: 0.68rem;
     font-weight: 800;
   }
 
@@ -2225,14 +2287,14 @@ const OverviewCard = styled.section`
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-  padding: 0.92rem 0.96rem;
+  padding: 0.8rem 0.88rem;
   box-shadow: none;
 `
 
 const OverviewGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.72rem;
+  gap: 0.5rem;
 
   @media (max-width: 980px) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2249,23 +2311,23 @@ const OverviewItem = styled.article`
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.6rem 0.68rem;
+  padding: 0.5rem 0.58rem;
 
   small {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.02em;
   }
 
   strong {
-    font-size: 0.96rem;
+    font-size: 0.9rem;
     letter-spacing: -0.01em;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     line-height: 1.45;
   }
 `

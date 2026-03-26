@@ -51,6 +51,7 @@ interface MemberUseCase {
         member: Member,
         role: String,
         bio: String,
+        blogTitle: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
         serviceLinks: List<MemberProfileLinkItem>,

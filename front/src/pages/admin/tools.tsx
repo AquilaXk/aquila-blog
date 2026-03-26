@@ -710,9 +710,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     <Main>
       <HeaderCard>
         <HeaderCopy>
-          <Eyebrow>운영 관리</Eyebrow>
           <h1>운영 도구</h1>
-          <p>상태 확인, 빠른 실행, 고급 진단을 필요한 순서대로 배치해 실무 점검 흐름이 바로 이어지게 정리했습니다.</p>
+          <p>상태를 먼저 보고, 자주 쓰는 실행만 상단에 남기고, 상세 진단은 필요할 때만 펼치도록 정리했습니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/admin" passHref legacyBehavior>
@@ -727,12 +726,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <OverviewCard>
         <SectionTop>
           <div>
-            <SectionEyebrow>운영 요약</SectionEyebrow>
-            <SectionTitleRow>
-              <SectionIcon aria-hidden="true">🧭</SectionIcon>
-              <h2>운영 상태 요약</h2>
-            </SectionTitleRow>
-            <SectionDescription>현재 상태를 먼저 확인하고 필요한 진단으로 바로 이어질 수 있게 구성했습니다.</SectionDescription>
+            <h2>운영 상태 보드</h2>
+            <SectionDescription>서버, 메일, 큐, 파일 정리, 보안 상태만 먼저 확인합니다.</SectionDescription>
           </div>
         </SectionTop>
         <OverviewGrid>
@@ -767,12 +762,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <QuickActionsCard>
         <SectionTop>
           <div>
-            <SectionEyebrow>빠른 실행</SectionEyebrow>
-            <SectionTitleRow>
-              <SectionIcon aria-hidden="true">⚡</SectionIcon>
-              <h2>자주 쓰는 운영 액션</h2>
-            </SectionTitleRow>
-            <SectionDescription>자주 쓰는 점검만 먼저 배치해 운영 중 클릭 수를 줄였습니다.</SectionDescription>
+            <h2>자주 쓰는 운영 액션</h2>
+            <SectionDescription>반복 점검이 잦은 작업만 먼저 둡니다.</SectionDescription>
           </div>
         </SectionTop>
         <QuickActionRow>
@@ -809,7 +800,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       {!advancedPanelsOpen ? (
         <CollapsedStateCard>
           <strong>고급 진단은 기본으로 접어둡니다.</strong>
-          <p>작업 큐, 파일 정리, 인증 보안 이벤트, 실행 로그는 필요할 때만 열어 정보 밀도를 낮춥니다.</p>
+          <p>상세 로그와 관리 작업은 필요할 때만 열어 화면 밀도를 낮춥니다.</p>
           <CollapsedStateAction type="button" onClick={() => setAdvancedPanelsOpen(true)}>
             고급 진단 펼치기
           </CollapsedStateAction>
@@ -821,11 +812,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>댓글 점검</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">💬</SectionIcon>
-                <h2>댓글 테스트 도구</h2>
-              </SectionTitleRow>
+              <h2>댓글 점검</h2>
               <SectionDescription>댓글 조회, 작성, 수정, 삭제 동작을 빠르게 점검합니다.</SectionDescription>
             </div>
           </SectionTop>
@@ -869,11 +856,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>시스템 점검</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">🩺</SectionIcon>
-                <h2>시스템 점검 도구</h2>
-              </SectionTitleRow>
+              <h2>시스템 점검</h2>
               <SectionDescription>자주 확인하는 관리자 API만 별도로 모았습니다.</SectionDescription>
             </div>
           </SectionTop>
@@ -893,11 +876,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>모니터링</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">📈</SectionIcon>
-                <h2>서비스 모니터링</h2>
-              </SectionTitleRow>
+              <h2>모니터링</h2>
               <SectionDescription>관리자 페이지 진입 시 서버 상태를 1회 조회하고, 10초 캐시를 재사용합니다.</SectionDescription>
             </div>
             <StatusBadge data-status={systemHealthStatus}>{systemHealthStatus}</StatusBadge>
@@ -958,11 +937,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>가입 메일</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">📧</SectionIcon>
-                <h2>회원가입 메일 진단</h2>
-              </SectionTitleRow>
+              <h2>가입 메일</h2>
               <SectionDescription>SMTP 준비 상태를 보고, 테스트 메일을 바로 발송할 수 있습니다.</SectionDescription>
             </div>
             <StatusBadge data-status={mailDiagnostics?.status || "unknown"}>{mailDiagnostics?.status || "LOADING"}</StatusBadge>
@@ -1035,11 +1010,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>작업 큐</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">⚙️</SectionIcon>
-                <h2>백그라운드 작업 상태</h2>
-              </SectionTitleRow>
+              <h2>작업 큐</h2>
               <SectionDescription>revalidate, 회원가입 메일 같은 비동기 작업 적체와 stale processing 상태를 봅니다.</SectionDescription>
             </div>
             <SectionToggleButton type="button" onClick={() => setTaskQueuePanelOpen((prev) => !prev)}>
@@ -1228,11 +1199,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>파일 정리</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">🧹</SectionIcon>
-                <h2>파일 정리 상태</h2>
-              </SectionTitleRow>
+              <h2>파일 정리</h2>
               <SectionDescription>TEMP/PENDING_DELETE 파일의 purge 대상과 safety threshold를 확인합니다.</SectionDescription>
             </div>
             <SectionToggleButton type="button" onClick={() => setCleanupPanelOpen((prev) => !prev)}>
@@ -1277,11 +1244,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <SectionCard>
           <SectionTop>
             <div>
-              <SectionEyebrow>인증 보안</SectionEyebrow>
-              <SectionTitleRow>
-                <SectionIcon aria-hidden="true">🔐</SectionIcon>
-                <h2>인증 보안 이벤트</h2>
-              </SectionTitleRow>
+              <h2>인증 보안</h2>
               <SectionDescription>로그인 정책 적용·차단 이력을 최근 순으로 확인해 이상 징후를 빠르게 파악합니다.</SectionDescription>
             </div>
             <BaseButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
@@ -1329,7 +1292,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <ConsoleCard>
           <ConsoleHeader>
             <div>
-              <SectionEyebrow>실행 로그</SectionEyebrow>
               <h2>실행 결과 콘솔</h2>
               <ConsoleDescription>메일, 작업 큐, 파일 정리 진단 결과와 API 원본 응답을 한 자리에서 확인합니다.</ConsoleDescription>
             </div>
@@ -1376,7 +1338,7 @@ const HeaderCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 16px;
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
 
   h1 {
     margin: 0;
@@ -1396,18 +1358,6 @@ const HeaderCopy = styled.div`
   display: grid;
   gap: 0.7rem;
   max-width: 42rem;
-`
-
-const Eyebrow = styled.span`
-  width: fit-content;
-  border-radius: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 `
 
 const HeaderActions = styled.div`
@@ -1465,6 +1415,7 @@ const CollapsedStateCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
   background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: none;
 
   strong {
     font-size: 0.9rem;
@@ -1556,7 +1507,7 @@ const SectionCard = styled.section`
   border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.14);
+  box-shadow: none;
   padding: 1rem;
 `
 
@@ -1566,7 +1517,7 @@ const QuickActionsCard = styled(SectionCard)`
 
 const QuickActionRow = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
 
   @media (max-width: 720px) {
@@ -1615,40 +1566,13 @@ const SectionToggleButton = styled.button`
 `
 
 const SectionEyebrow = styled.span`
-  width: fit-content;
-  display: inline-flex;
-  border-radius: 0;
-  padding: 0;
-  border: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  margin-bottom: 0.55rem;
+  display: none;
 `
 
 const SectionDescription = styled.p`
   margin: 0.35rem 0 0;
-  color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.7;
-`
-
-const SectionTitleRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-`
-
-const SectionIcon = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  font-size: 0.95rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  line-height: 1.6;
 `
 
 const FieldGrid = styled.div`
@@ -1710,7 +1634,7 @@ const ActionCardGrid = styled.div`
 const ActionCardButton = styled.button`
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0.8rem 0.88rem;
   text-align: left;
@@ -1725,7 +1649,7 @@ const ActionCardButton = styled.button`
   &:hover {
     transform: none;
     box-shadow: none;
-    background: ${({ theme }) => theme.colors.gray2};
+    background: ${({ theme }) => theme.colors.gray3};
     border-color: ${({ theme }) => theme.colors.gray7};
   }
 
@@ -1867,7 +1791,7 @@ const StatusBadge = styled.span`
 `
 
 const InlineNotice = styled.p`
-  margin: 0 0 0.9rem;
+  margin: 0 0 0.75rem;
   padding: 0.78rem 0.82rem;
   border-radius: 8px;
   border: 0;
@@ -2219,9 +2143,10 @@ const MonitoringFrame = styled.iframe`
 const ConsoleCard = styled.section`
   min-width: 0;
   border-radius: 12px;
-  border: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
+  box-shadow: none;
 `
 
 const ConsoleHeader = styled.div`
@@ -2276,7 +2201,7 @@ const ConsoleQuickActionButton = styled.button`
   flex: 0 1 auto;
   border-radius: 999px;
   border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
   padding: 0 0.72rem;
   cursor: pointer;
@@ -2326,8 +2251,8 @@ const ResultPanel = styled.pre`
   margin: 0;
   min-height: 220px;
   border-radius: 8px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.95rem;
   overflow: auto;
   color: ${({ theme }) => theme.colors.gray12};
@@ -2338,14 +2263,15 @@ const ResultPanel = styled.pre`
 const OverviewCard = styled.section`
   min-width: 0;
   border-radius: 12px;
-  border: 0;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   padding: 1rem;
+  box-shadow: none;
 `
 
 const OverviewGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.72rem;
 
   @media (max-width: 980px) {
@@ -2361,8 +2287,8 @@ const OverviewItem = styled.article`
   display: grid;
   gap: 0.2rem;
   border-radius: 10px;
-  border: 0;
-  background: ${({ theme }) => theme.colors.gray3};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   padding: 0.68rem 0.76rem;
 
   small {

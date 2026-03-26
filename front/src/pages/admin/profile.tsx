@@ -975,25 +975,27 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     <Main>
       <HeaderCard>
         <HeaderCopy>
-          <Eyebrow>Profile Studio</Eyebrow>
-          <h1>관리자 프로필 관리</h1>
-          <p>프로필 카드와 메인 소개 문구를 한 화면에서 정리합니다.</p>
-          <HeaderStatusBadge data-dirty={hasUnsavedChanges ? "true" : "false"}>
-            {hasUnsavedChanges ? "미저장 변경 있음" : "저장 상태 최신"}
-          </HeaderStatusBadge>
+          <h1>운영 프로필</h1>
+          <p>프로필 카드와 홈 소개 문구를 한 번에 정리하고, 저장은 하단 바에서 마무리합니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/" passHref legacyBehavior>
-            <LinkButton>메인으로 이동</LinkButton>
+            <LinkButton>메인</LinkButton>
           </Link>
           <Link href="/admin" passHref legacyBehavior>
-            <LinkButton>허브로 돌아가기</LinkButton>
+            <LinkButton>허브</LinkButton>
           </Link>
           <Link href="/admin/posts/new" passHref legacyBehavior>
-            <LinkButton>글 작업실로 이동</LinkButton>
+            <LinkButton>글 작업실</LinkButton>
           </Link>
         </HeaderActions>
       </HeaderCard>
+
+      <HeaderMetaStrip data-dirty={hasUnsavedChanges ? "true" : "false"}>
+        <span>현재 계정 {displayName}</span>
+        <span>최근 수정 {profileUpdatedText}</span>
+        <strong>{hasUnsavedChanges ? "미저장 변경 있음" : "저장 상태 최신"}</strong>
+      </HeaderMetaStrip>
 
       <ProfileGrid>
         <PreviewCard>
@@ -1007,6 +1009,10 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <strong>{displayName}</strong>
           <span>{profileRoleInput.trim() || "역할 미설정"}</span>
           <p>{profileBioInput.trim() || "소개 문구 미설정"}</p>
+          <PreviewMetaStrip>
+            <small>홈 타이틀</small>
+            <strong>{homeIntroTitleInput.trim() || "미설정"}</strong>
+          </PreviewMetaStrip>
           <input
             ref={profileImageFileInputRef}
             type="file"
@@ -1021,7 +1027,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           >
             {loadingKey === "upload" ? "업로드 중..." : "프로필 이미지 편집"}
           </PrimaryButton>
-          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "편집 모달에서 파일 선택 후 저장하세요."}</Hint>
+          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "이미지 편집은 모달에서만 진행합니다."}</Hint>
           {imageNotice.text ? <Notice data-tone={imageNotice.tone}>{imageNotice.text}</Notice> : null}
         </PreviewCard>
 
@@ -1036,56 +1042,72 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <strong>{profileUpdatedText}</strong>
             </MetaItem>
           </MetaBar>
-          <FieldGrid>
-            <FieldBox>
-              <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
-              <Input
-                id="profile-role"
-                placeholder="예: Backend Developer"
-                value={profileRoleInput}
-                onChange={(e) => setProfileRoleInput(e.target.value)}
-              />
-            </FieldBox>
-            <FieldBox>
-              <FieldLabel htmlFor="profile-bio">소개 문구</FieldLabel>
-              <TextArea
-                id="profile-bio"
-                placeholder="메인 프로필 카드에 노출할 소개 문구"
-                value={profileBioInput}
-                onChange={(e) => setProfileBioInput(e.target.value)}
-              />
-            </FieldBox>
-            <FieldBox>
-              <FieldLabel htmlFor="home-intro-title">메인 소개 카드 타이틀</FieldLabel>
-              <Input
-                id="home-intro-title"
-                placeholder="예: aquilaXk's Blog"
-                value={homeIntroTitleInput}
-                onChange={(e) => setHomeIntroTitleInput(e.target.value)}
-              />
-            </FieldBox>
-            <FieldBox>
-              <FieldLabel htmlFor="home-intro-description">메인 소개 카드 설명</FieldLabel>
-              <TextArea
-                id="home-intro-description"
-                placeholder="메인 페이지 소개 카드에 노출할 설명 문구"
-                value={homeIntroDescriptionInput}
-                onChange={(e) => setHomeIntroDescriptionInput(e.target.value)}
-              />
-            </FieldBox>
+          <FormSections>
+            <FormSection>
+              <SectionHeading>
+                <h2>기본 정보</h2>
+                <p>프로필 카드에 바로 노출되는 역할과 소개를 정리합니다.</p>
+              </SectionHeading>
+              <FieldGrid data-columns="2">
+                <FieldBox>
+                  <FieldLabel htmlFor="profile-role">프로필 역할</FieldLabel>
+                  <Input
+                    id="profile-role"
+                    placeholder="예: Backend Developer"
+                    value={profileRoleInput}
+                    onChange={(e) => setProfileRoleInput(e.target.value)}
+                  />
+                </FieldBox>
+                <FieldBox>
+                  <FieldLabel htmlFor="profile-bio">소개 문구</FieldLabel>
+                  <TextArea
+                    id="profile-bio"
+                    placeholder="메인 프로필 카드에 노출할 소개 문구"
+                    value={profileBioInput}
+                    onChange={(e) => setProfileBioInput(e.target.value)}
+                  />
+                </FieldBox>
+              </FieldGrid>
+            </FormSection>
+
+            <FormSection>
+              <SectionHeading>
+                <h2>홈 소개</h2>
+                <p>메인 페이지 상단 소개 카드에 보일 제목과 설명을 수정합니다.</p>
+              </SectionHeading>
+              <FieldGrid data-columns="2">
+                <FieldBox>
+                  <FieldLabel htmlFor="home-intro-title">메인 소개 카드 타이틀</FieldLabel>
+                  <Input
+                    id="home-intro-title"
+                    placeholder="예: aquilaXk's Blog"
+                    value={homeIntroTitleInput}
+                    onChange={(e) => setHomeIntroTitleInput(e.target.value)}
+                  />
+                </FieldBox>
+                <FieldBox>
+                  <FieldLabel htmlFor="home-intro-description">메인 소개 카드 설명</FieldLabel>
+                  <TextArea
+                    id="home-intro-description"
+                    placeholder="메인 페이지 소개 카드에 노출할 설명 문구"
+                    value={homeIntroDescriptionInput}
+                    onChange={(e) => setHomeIntroDescriptionInput(e.target.value)}
+                  />
+                </FieldBox>
+              </FieldGrid>
+            </FormSection>
+
             <LinkSectionCard>
+              <SectionHeading>
+                <h2>서비스 링크</h2>
+                <p>메인 페이지 Service 카드에 표시할 링크를 관리합니다.</p>
+              </SectionHeading>
               <LinkSectionHeader>
-                <div>
-                  <h3>Service 항목</h3>
-                  <p>메인 페이지 Service 카드에 표시할 링크를 순서대로 관리합니다.</p>
-                </div>
                 <Button type="button" onClick={() => appendLinkItem("service")}>
                   항목 추가
                 </Button>
               </LinkSectionHeader>
-              <LinkSectionHint>
-                아이콘은 목록에서 고르고, 표시 이름은 직접 입력합니다.
-              </LinkSectionHint>
+              <LinkSectionHint>아이콘을 고르고 표시 이름과 링크만 입력하면 됩니다.</LinkSectionHint>
               <LinkItemsWrap>
                 {serviceLinksInput.length > 0 ? (
                   serviceLinksInput.map((item, index) => (
@@ -1156,23 +1178,21 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </LinkItemRow>
                   ))
                 ) : (
-                  <InlineEmpty>Service 링크가 없습니다. 항목 추가를 눌러 시작하세요.</InlineEmpty>
+                  <InlineEmpty>서비스 링크가 없습니다. 항목 추가를 눌러 시작하세요.</InlineEmpty>
                 )}
               </LinkItemsWrap>
             </LinkSectionCard>
             <LinkSectionCard>
+              <SectionHeading>
+                <h2>연락 링크</h2>
+                <p>메인 페이지 Contact 카드에 노출할 연락처 링크를 관리합니다.</p>
+              </SectionHeading>
               <LinkSectionHeader>
-                <div>
-                  <h3>Contact 항목</h3>
-                  <p>메인 페이지 Contact 카드에 표시할 연락처 링크를 관리합니다.</p>
-                </div>
                 <Button type="button" onClick={() => appendLinkItem("contact")}>
                   항목 추가
                 </Button>
               </LinkSectionHeader>
-              <LinkSectionHint>
-                아이콘은 목록에서 고르고, 표시 이름은 직접 입력합니다.
-              </LinkSectionHint>
+              <LinkSectionHint>아이콘을 고르고 표시 이름과 링크만 입력하면 됩니다.</LinkSectionHint>
               <LinkItemsWrap>
                 {contactLinksInput.length > 0 ? (
                   contactLinksInput.map((item, index) => (
@@ -1243,11 +1263,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </LinkItemRow>
                   ))
                 ) : (
-                  <InlineEmpty>Contact 링크가 없습니다. 항목 추가를 눌러 시작하세요.</InlineEmpty>
+                  <InlineEmpty>연락 링크가 없습니다. 항목 추가를 눌러 시작하세요.</InlineEmpty>
                 )}
               </LinkItemsWrap>
             </LinkSectionCard>
-          </FieldGrid>
+          </FormSections>
           {profileNotice.text ? <Notice data-tone={profileNotice.tone}>{profileNotice.text}</Notice> : null}
         </FormCard>
       </ProfileGrid>
@@ -1406,7 +1426,7 @@ const HeaderCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 16px;
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
 
   h1 {
     margin: 0;
@@ -1428,38 +1448,6 @@ const HeaderCopy = styled.div`
   max-width: 38rem;
 `
 
-const HeaderStatusBadge = styled.span`
-  width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  border-radius: 999px;
-  padding: 0 0.78rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-  font-weight: 700;
-
-  &[data-dirty="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-`
-
-const Eyebrow = styled.span`
-  width: fit-content;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-`
-
 const HeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -1472,6 +1460,46 @@ const HeaderActions = styled.div`
   }
 
   @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const HeaderMetaStrip = styled.section`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  padding: 0.72rem 0.84rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  span,
+  strong {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border-radius: 999px;
+    padding: 0 0.72rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  strong {
+    justify-content: center;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &[data-dirty="true"] strong {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+
+  @media (max-width: 900px) {
     grid-template-columns: 1fr;
   }
 `
@@ -1558,7 +1586,7 @@ const PanelCard = styled.section`
   border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
   padding: 1rem;
 `
 
@@ -1640,12 +1668,66 @@ const Hint = styled.p`
   word-break: break-word;
 `
 
+const PreviewMetaStrip = styled.div`
+  width: 100%;
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.6rem 0.72rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  strong {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+`
+
 const FormCard = styled(PanelCard)`
   display: grid;
   gap: 1rem;
 
   @media (max-width: 760px) {
     order: 1;
+  }
+`
+
+const FormSections = styled.div`
+  display: grid;
+  gap: 1rem;
+`
+
+const FormSection = styled.section`
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+`
+
+const SectionHeading = styled.div`
+  display: grid;
+  gap: 0.22rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    line-height: 1.55;
   }
 `
 
@@ -1912,10 +1994,10 @@ const TextArea = styled.textarea`
 const LinkSectionCard = styled.section`
   display: grid;
   gap: 0.7rem;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.85rem;
+  padding: 0.9rem;
 `
 
 const LinkSectionHeader = styled.div`
@@ -1924,19 +2006,6 @@ const LinkSectionHeader = styled.div`
   gap: 0.6rem;
   justify-content: space-between;
   align-items: center;
-
-  h3 {
-    margin: 0;
-    font-size: 1rem;
-    line-height: 1.35;
-  }
-
-  p {
-    margin: 0.25rem 0 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    line-height: 1.55;
-  }
 `
 
 const LinkSectionHint = styled.p`

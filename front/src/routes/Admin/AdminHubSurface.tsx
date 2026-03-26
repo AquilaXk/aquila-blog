@@ -31,60 +31,71 @@ const AdminHubSurface = ({
 }: Props) => {
   return (
     <Main>
-      <HeroCard data-admin-hero="true">
-        <HeroIntro>
-          <Eyebrow>Admin Hub</Eyebrow>
-          <h1>운영 허브</h1>
-          <p>계정 상태를 확인한 뒤 필요한 작업실로 바로 이동할 수 있게 구성했습니다.</p>
-          <StatusRow>
-            <StatusItem>
-              <span>현재 계정</span>
-              <strong>{displayName}</strong>
-            </StatusItem>
-            <StatusItem>
-              <span>역할</span>
-              <strong>{profileRole || "미설정"}</strong>
-            </StatusItem>
-            <StatusItem>
-              <span>최근 수정</span>
-              <strong>{profileUpdatedText}</strong>
-            </StatusItem>
-          </StatusRow>
-          <HeroActions>
-            <Link href="/admin/profile" passHref legacyBehavior>
-              <ActionLink data-tone="ghost">프로필 관리</ActionLink>
-            </Link>
-            <Link href="/admin/posts/new" passHref legacyBehavior>
-              <ActionLink data-tone="primary">글 작업실 바로가기</ActionLink>
-            </Link>
-          </HeroActions>
-        </HeroIntro>
-        <ProfilePanel>
-          <ProfileFrame>
-            {profileSrc ? (
-              <ProfileImage src={profileSrc} alt={displayName} width={96} height={96} priority />
-            ) : (
-              <ProfileFallback>{displayNameInitial}</ProfileFallback>
-            )}
-          </ProfileFrame>
+      <HeaderPanel>
+        <HeaderCopy>
+          <h1>관리자 작업 진입점</h1>
+          <p>지금 필요한 화면만 빠르게 열고, 나머지 설명은 작업 안에서 확인하도록 정리했습니다.</p>
+        </HeaderCopy>
+        <StatusStrip aria-label="관리자 상태 요약">
+          <StatusItem>
+            <span>현재 계정</span>
+            <strong>{displayName}</strong>
+          </StatusItem>
+          <StatusItem>
+            <span>역할</span>
+            <strong>{profileRole || "미설정"}</strong>
+          </StatusItem>
+          <StatusItem>
+            <span>최근 수정</span>
+            <strong>{profileUpdatedText}</strong>
+          </StatusItem>
+        </StatusStrip>
+      </HeaderPanel>
+
+      <TaskPanel>
+        <TaskPanelHeader>
+          <div>
+            <h2>주요 작업</h2>
+            <p>프로필, 글 작업실, 운영 도구 순으로 바로 이동할 수 있습니다.</p>
+          </div>
+        </TaskPanelHeader>
+        <TaskList>
+          {quickLinks.map((item) => {
+            const isPrimary = item.href === "/admin/posts/new"
+            return (
+              <Link key={item.href} href={item.href} passHref legacyBehavior>
+                <TaskLink data-primary={isPrimary ? "true" : "false"}>
+                  <TaskCopy>
+                    <strong>{item.title}</strong>
+                    <p>{item.description}</p>
+                  </TaskCopy>
+                  <TaskMeta>
+                    <span>{item.cta}</span>
+                  </TaskMeta>
+                </TaskLink>
+              </Link>
+            )
+          })}
+        </TaskList>
+      </TaskPanel>
+
+      <ProfileCompact>
+        <ProfileFrame>
+          {profileSrc ? (
+            <ProfileImage src={profileSrc} alt={displayName} width={72} height={72} priority />
+          ) : (
+            <ProfileFallback>{displayNameInitial}</ProfileFallback>
+          )}
+        </ProfileFrame>
+        <ProfileCopy>
           <strong>{displayName}</strong>
           <span>{profileRole || "관리자 역할 미설정"}</span>
           <p>{profileBio || "관리자 소개 문구가 아직 없습니다."}</p>
-        </ProfilePanel>
-      </HeroCard>
-
-      <CardGrid data-admin-card-grid="true">
-        {quickLinks.map((item) => (
-          <Link key={item.href} href={item.href} passHref legacyBehavior>
-            <QuickCard>
-              <small>{item.eyebrow}</small>
-              <h2>{item.title}</h2>
-              <p>{item.description}</p>
-              <span>{item.cta}</span>
-            </QuickCard>
-          </Link>
-        ))}
-      </CardGrid>
+        </ProfileCopy>
+        <Link href="/admin/profile" passHref legacyBehavior>
+          <ProfileAction>프로필 정리</ProfileAction>
+        </Link>
+      </ProfileCompact>
     </Main>
   )
 }
@@ -94,232 +105,210 @@ export default AdminHubSurface
 const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
-  padding: 1.5rem 1rem 2.6rem;
-  display: grid;
-  gap: 1.1rem;
-
-  @media (max-width: 900px) {
-    gap: 0.92rem;
-    padding-top: 1.1rem;
-  }
-`
-
-const HeroCard = styled.section`
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) 320px;
-  gap: 1rem;
-  padding: ${({ theme }) => `${theme.variables.ui.card.paddingLg}px`};
-  border-radius: ${({ theme }) => `${theme.variables.ui.card.radiusLg}px`};
-  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray5}`};
-  background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 16px 34px rgba(15, 23, 42, 0.06)" : theme.variables.ui.card.shadow};
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-    padding: 0.84rem;
-    border-radius: 16px;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
-  }
-`
-
-const HeroIntro = styled.div`
+  padding: 1.4rem 1rem 2.5rem;
   display: grid;
   gap: 0.9rem;
 
+  @media (max-width: 900px) {
+    gap: 0.78rem;
+    padding-top: 1rem;
+  }
+`
+
+const HeaderPanel = styled.section`
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.96rem 1rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: none;
+`
+
+const HeaderCopy = styled.div`
+  display: grid;
+  gap: 0.42rem;
+
   h1 {
     margin: 0;
-    font-size: clamp(1.82rem, 3.5vw, 2.32rem);
+    font-size: clamp(1.62rem, 3vw, 2rem);
     letter-spacing: -0.03em;
   }
 
   p {
     margin: 0;
-    max-width: 44rem;
+    max-width: 42rem;
     color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
-  }
-
-  @media (max-width: 900px) {
-    gap: 0.68rem;
-
-    h1 {
-      font-size: clamp(1.56rem, 7vw, 1.88rem);
-    }
-
-    p {
-      font-size: 0.9rem;
-      line-height: 1.62;
-    }
+    line-height: 1.62;
   }
 `
 
-const Eyebrow = styled.span`
-  width: fit-content;
-  padding: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-`
-
-const HeroActions = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-
-  @media (max-width: 1024px) {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 560px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const ActionLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: ${({ theme }) => `${theme.variables.ui.button.radius}px`};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
-  padding: 0.66rem 0.92rem;
-  min-height: max(40px, ${({ theme }) => `${theme.variables.ui.button.minHeightSm}px`});
-  font-size: ${({ theme }) => `${theme.variables.ui.button.fontSize}rem`};
-  font-weight: 700;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.gray8};
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  &[data-tone="primary"] {
-    border-color: ${({ theme }) => theme.colors.accentBorder};
-    background: ${({ theme }) => theme.colors.accentControl};
-    color: ${({ theme }) => theme.colors.accentControlText};
-  }
-
-  &[data-tone="primary"]:hover {
-    border-color: ${({ theme }) => theme.colors.accentControlHover};
-    background: ${({ theme }) => theme.colors.accentControlHover};
-    color: ${({ theme }) => theme.colors.accentControlText};
-  }
-
-  @media (max-width: 1024px) {
-    width: 100%;
-  }
-`
-
-const ProfilePanel = styled.aside`
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 0.45rem;
-  padding: 1rem;
-  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
-  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray6}`};
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 8px 18px rgba(15, 23, 42, 0.04)" : "none"};
-  text-align: center;
-
-  strong {
-    font-size: 1.1rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.accentLink};
-    font-weight: 700;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.6;
-    white-space: pre-line;
-    word-break: break-word;
-  }
-
-  @media (max-width: 900px) {
-    grid-template-columns: auto minmax(0, 1fr);
-    justify-items: start;
-    text-align: left;
-    padding: 0.72rem;
-    gap: 0.3rem 0.62rem;
-
-    > div:first-of-type {
-      grid-row: span 3;
-      width: 76px;
-      height: 76px;
-    }
-
-    p {
-      display: none;
-    }
-  }
-`
-
-const StatusRow = styled.div`
+const StatusStrip = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
-  max-width: 44rem;
 
   @media (max-width: 900px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 560px) {
     grid-template-columns: 1fr;
   }
 `
 
 const StatusItem = styled.div`
-  min-width: 0;
   display: grid;
-  gap: 0.22rem;
-  padding: 0.56rem 0.64rem;
-  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
-  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray6}`};
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.58rem 0.64rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 1px 0 rgba(15, 23, 42, 0.03)" : "none"};
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.72rem;
     font-weight: 700;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
   }
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 700;
     line-height: 1.35;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+`
+
+const TaskPanel = styled.section`
+  display: grid;
+  gap: 0.78rem;
+  padding: 0.96rem 1rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+  box-shadow: none;
+`
+
+const TaskPanelHeader = styled.div`
+  display: grid;
+  gap: 0.25rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1.04rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+`
+
+const TaskList = styled.div`
+  display: grid;
+  gap: 0.6rem;
+`
+
+const TaskLink = styled.a`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.82rem 0.88rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+
+  &[data-primary="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.blue3};
+  }
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray3};
+  }
+
+  &[data-primary="true"]:hover {
+    border-color: ${({ theme }) => theme.colors.blue9};
+    background: ${({ theme }) => theme.colors.blue4};
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+`
+
+const TaskCopy = styled.div`
+  min-width: 0;
+  display: grid;
+  gap: 0.22rem;
+
+  strong {
+    font-size: 0.98rem;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+`
+
+const TaskMeta = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    padding: 0 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+`
+
+const ProfileCompact = styled.section`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.84rem 0.96rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  @media (max-width: 760px) {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
   }
 `
 
 const ProfileFrame = styled.div`
-  width: 96px;
-  height: 96px;
+  width: 72px;
+  height: 72px;
   border-radius: 999px;
   overflow: hidden;
 `
@@ -329,78 +318,53 @@ const ProfileFallback = styled.div`
   height: 100%;
   display: grid;
   place-items: center;
-  font-size: 1.4rem;
+  font-size: 1.1rem;
   font-weight: 800;
   background: ${({ theme }) => theme.colors.gray4};
   color: ${({ theme }) => theme.colors.gray11};
 `
 
-const CardGrid = styled.section`
+const ProfileCopy = styled.div`
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.95rem;
+  gap: 0.18rem;
 
-  @media (max-width: 960px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
   }
 
-  @media (max-width: 760px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const QuickCard = styled.a`
-  display: grid;
-  gap: 0.7rem;
-  padding: ${({ theme }) => `${theme.variables.ui.card.padding}px`};
-  border-radius: ${({ theme }) => `${theme.variables.ui.card.radius}px`};
-  border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray6}`};
-  background: ${({ theme }) => theme.colors.gray1};
-  text-decoration: none;
-  color: inherit;
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "light" ? "0 10px 22px rgba(15, 23, 42, 0.05)" : theme.variables.ui.card.shadow};
-  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray2};
-    transform: translateY(${({ theme }) => (theme.scheme === "light" ? "-1px" : "-4px")});
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "light" ? "0 10px 20px rgba(15, 23, 42, 0.06)" : theme.variables.ui.card.shadowHover};
-  }
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
+  span {
+    color: ${({ theme }) => theme.colors.accentLink};
     font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h2 {
-    margin: 0;
-    font-size: 1.16rem;
+    font-size: 0.82rem;
   }
 
   p {
     margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
-  }
-
-  span {
-    width: fit-content;
-    min-height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 0.78rem;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 700;
+    color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+`
+
+const ProfileAction = styled.a`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  text-decoration: none;
+  padding: 0 0.82rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+
+  @media (max-width: 760px) {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 `

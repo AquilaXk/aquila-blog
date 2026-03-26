@@ -101,33 +101,38 @@ Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오
 
 README에서는 전체 스키마를 모두 그리기보다, 서비스 구조를 빠르게 이해할 수 있도록 핵심 테이블만 표로 정리했습니다.
 
+핵심 관계는 아래 4줄로 이해하면 됩니다.
+
+- `member -> post -> post_comment / post_like`
+- `member -> member_notification`
+- `post -> post_attr / post_tag_index`
+- `uploaded_file -> post` 또는 `member profile`
+
 #### Core Identity & Content
 
-| Table | 역할 | 핵심 컬럼 | 주요 관계 |
-| --- | --- | --- | --- |
-| `member` | 사용자 계정, 관리자 판별, 로그인 정책 저장 | `login_id`, `nickname`, `email`, `api_key`, `remember_login_enabled`, `ip_security_enabled`, `deleted_at` | `post`, `post_comment`, `post_like`, `member_notification`의 기준 사용자 |
-| `member_attr` | 프로필 카드, 카운트, 확장 속성 저장 | `subject_id`, `name`, `int_value`, `str_value` | `member` 1:N 확장 테이블 |
-| `post` | 게시글 본문과 공개 상태 저장 | `author_id`, `title`, `content`, `content_html`, `published`, `listed`, `deleted_at` | `member` N:1, `post_comment`/`post_like`/`post_attr`/`post_tag_index` 1:N |
-| `post_attr` | 좋아요 수, 댓글 수, 조회수, 메타 파생값 저장 | `subject_id`, `name`, `int_value`, `str_value` | `post` 1:N 확장 테이블 |
-| `post_tag_index` | 태그 필터/검색용 인덱스 테이블 | `post_id`, `tag`, `created_at` | `post` 1:N, 발행 메타데이터에서 파생 생성 |
+| Entity | 설명 |
+| --- | --- |
+| `member` | 사용자 계정, 관리자 판별, 로그인 정책 저장<br>핵심: `login_id`, `nickname`, `email`, `api_key`, `remember_login_enabled`, `ip_security_enabled`, `deleted_at`<br>관계: `post`, `post_comment`, `post_like`, `member_notification`의 기준 사용자 |
+| `member_attr` | 프로필 카드, 카운트, 확장 속성 저장<br>핵심: `subject_id`, `name`, `int_value`, `str_value`<br>관계: `member` 1:N 확장 테이블 |
+| `post` | 게시글 본문과 공개 상태 저장<br>핵심: `author_id`, `title`, `content`, `content_html`, `published`, `listed`, `deleted_at`<br>관계: `member` N:1, `post_comment`/`post_like`/`post_attr`/`post_tag_index` 1:N |
+| `post_attr` | 좋아요 수, 댓글 수, 조회수, 메타 파생값 저장<br>핵심: `subject_id`, `name`, `int_value`, `str_value`<br>관계: `post` 1:N 확장 테이블 |
+| `post_tag_index` | 태그 필터와 검색용 인덱스 저장<br>핵심: `post_id`, `tag`, `created_at`<br>관계: `post` 1:N, 발행 메타데이터에서 파생 생성 |
 
 #### Engagement & Delivery
 
-| Table | 역할 | 핵심 컬럼 | 주요 관계 |
-| --- | --- | --- | --- |
-| `post_comment` | 댓글/대댓글 저장 | `author_id`, `post_id`, `parent_comment_id`, `content`, `deleted_at` | `member` N:1, `post` N:1, self-reference 1:N |
-| `post_like` | 사용자-게시글 좋아요 관계 저장 | `liker_id`, `post_id` | `member` N:1, `post` N:1, `(liker_id, post_id)` 유니크 |
-| `member_notification` | 댓글/답글 기반 알림 저장 | `receiver_id`, `actor_id`, `type`, `post_id`, `comment_id`, `read_at` | `member` 수신자/행위자 참조, `post`/`post_comment` 이벤트 기반 |
-| `uploaded_file` | MinIO 오브젝트 lifecycle 추적 | `object_key`, `purpose`, `status`, `owner_type`, `owner_id`, `purge_after`, `deleted_at` | 글 이미지/프로필 이미지와 연결되며 blob는 MinIO에 저장 |
+| Entity | 설명 |
+| --- | --- |
+| `post_comment` | 댓글과 대댓글 저장<br>핵심: `author_id`, `post_id`, `parent_comment_id`, `content`, `deleted_at`<br>관계: `member` N:1, `post` N:1, self-reference 1:N |
+| `post_like` | 사용자-게시글 좋아요 관계 저장<br>핵심: `liker_id`, `post_id`<br>관계: `member` N:1, `post` N:1, `(liker_id, post_id)` 유니크 |
+| `member_notification` | 댓글/답글 기반 알림 저장<br>핵심: `receiver_id`, `actor_id`, `type`, `post_id`, `comment_id`, `read_at`<br>관계: `member` 수신자/행위자 참조, `post`/`post_comment` 이벤트 기반 |
+| `uploaded_file` | MinIO 오브젝트 lifecycle 추적<br>핵심: `object_key`, `purpose`, `status`, `owner_type`, `owner_id`, `purge_after`, `deleted_at`<br>관계: 글 이미지/프로필 이미지와 연결되며 blob는 MinIO에 저장 |
 
 #### Operations & Security
 
-| Table | 역할 | 핵심 컬럼 | 주요 관계 |
-| --- | --- | --- | --- |
-| `task` | 비동기 작업 큐와 재시도 상태 저장 | `uid`, `aggregate_type`, `aggregate_id`, `task_type`, `status`, `retry_count`, `next_retry_at` | 배치/정리 작업의 운영 상태 추적 |
-| `auth_security_event` | 로그인/세션 보안 이벤트 저장 | `event_type`, `member_id`, `login_identifier`, `remember_login_enabled`, `ip_security_enabled`, `reason` | 인증 정책 변경과 보안 이벤트 관측 |
-
-핵심 관계를 문장으로 정리하면 `member -> post -> post_comment/post_like`, `member -> member_notification`, `post -> post_attr/post_tag_index`, `uploaded_file -> post/member profile` 흐름입니다.
+| Entity | 설명 |
+| --- | --- |
+| `task` | 비동기 작업 큐와 재시도 상태 저장<br>핵심: `uid`, `aggregate_type`, `aggregate_id`, `task_type`, `status`, `retry_count`, `next_retry_at`<br>관계: 배치/정리 작업의 운영 상태 추적 |
+| `auth_security_event` | 로그인/세션 보안 이벤트 저장<br>핵심: `event_type`, `member_id`, `login_identifier`, `remember_login_enabled`, `ip_security_enabled`, `reason`<br>관계: 인증 정책 변경과 보안 이벤트 관측 |
 
 ## 기술 스택
 

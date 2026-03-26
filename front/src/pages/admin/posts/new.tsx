@@ -3861,7 +3861,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     <Main>
       <HeroCard data-compact-manage={isCompactManageSurface}>
         <HeroIntro data-compact-manage={isCompactManageSurface}>
-          {!isCompactManageSurface ? <HeroEyebrow>콘텐츠 관리</HeroEyebrow> : null}
           <h1>글 작업실</h1>
           <p>
             {studioSurface === "manage"
@@ -3870,6 +3869,24 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 : "목록 점검과 선택 글 작업을 나눠 운영 정리와 편집 전환이 바로 이어지게 했습니다."
               : "제목, 본문, 태그, 발행 설정까지 한 흐름으로 이어지도록 정리했습니다."}
           </p>
+          <StudioStatusStrip aria-label="글 작업실 상태 요약">
+            <StudioStatusItem>
+              <span>현재 화면</span>
+              <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
+            </StudioStatusItem>
+            <StudioStatusItem>
+              <span>편집 대상</span>
+              <strong>{currentPostLabel}</strong>
+            </StudioStatusItem>
+            <StudioStatusItem data-optional="true">
+              <span>노출 상태</span>
+              <strong>{currentVisibilityText}</strong>
+            </StudioStatusItem>
+            <StudioStatusItem data-optional="true">
+              <span>목록 상태</span>
+              <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개 조회됨` : "아직 안 불러옴"}</strong>
+            </StudioStatusItem>
+          </StudioStatusStrip>
           {!isCompactManageSurface ? (
             <HeroNav>
               {adminTools.map((tool) => (
@@ -3881,24 +3898,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           ) : null}
         </HeroIntro>
         <HeroAside data-compact-manage={isCompactManageSurface}>
-          <MetricGrid>
-            <MetricCard>
-              <span>현재 화면</span>
-              <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
-            </MetricCard>
-            <MetricCard>
-              <span>편집 대상</span>
-              <strong>{currentPostLabel}</strong>
-            </MetricCard>
-            <MetricCard data-optional="true">
-              <span>공개 상태</span>
-              <strong>{currentVisibilityText}</strong>
-            </MetricCard>
-            <MetricCard data-optional="true">
-              <span>목록 상태</span>
-              <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개 조회됨` : "아직 안 불러옴"}</strong>
-            </MetricCard>
-          </MetricGrid>
           <ActionCluster data-hidden={isCompactMobileLayout}>
             <HeroPrimaryActionButton
               type="button"
@@ -3958,16 +3957,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             목록 관리
           </SurfaceTabButton>
         </SurfaceTabList>
-        {!isCompactManageSurface ? (
-          <SurfaceHintBar>
-            <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
-            <span>
-              {studioSurface === "compose"
-                ? "제목, 본문, 태그, 미리보기와 발행 설정까지 한 흐름으로 이어집니다."
-                : "조회 조건, 글 목록, 선택 글 작업을 나눠 목록 점검과 편집 전환이 바로 이어지게 합니다."}
-            </span>
-          </SurfaceHintBar>
-        ) : null}
+        {!isCompactManageSurface ? <SurfaceHintBar>{studioSurface === "compose" ? "작성 우선, 목록은 보조 흐름으로 유지합니다." : "조회 → 선택 → 편집 흐름에 맞춰 목록 작업을 정리합니다."}</SurfaceHintBar> : null}
       </StudioSurfaceCard>
 
       <WorkspaceGrid>
@@ -4106,7 +4096,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <Section id="content-studio">
             <SectionTop>
               <div>
-                <SectionEyebrow>목록 관리</SectionEyebrow>
                 <h2>글 목록 관리</h2>
                 <SectionDescription>조회 조건, 관리자 글 리스트, 선택한 글 작업만 모아 목록 점검과 운영 정리에 집중합니다.</SectionDescription>
               </div>
@@ -4438,15 +4427,21 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                         <AppIcon name="edit" />
                                         <span>{isLoadedRow ? "계속 편집" : "편집"}</span>
                                       </RowActionButton>
-                                      <RowActionButton
-                                        type="button"
-                                        data-variant="subtle-danger"
-                                        disabled={loadingKey.length > 0}
-                                        onClick={() => openDeleteConfirm([row.id], row.title)}
-                                      >
-                                        <AppIcon name="trash" />
-                                        <span>삭제</span>
-                                      </RowActionButton>
+                                      <RowActionMenu>
+                                        <summary>
+                                          <span>더보기</span>
+                                          <AppIcon name="chevron-down" />
+                                        </summary>
+                                        <div className="menu">
+                                          <button
+                                            type="button"
+                                            disabled={loadingKey.length > 0}
+                                            onClick={() => openDeleteConfirm([row.id], row.title)}
+                                          >
+                                            삭제
+                                          </button>
+                                        </div>
+                                      </RowActionMenu>
                                     </>
                                   ) : (
                                     <>
@@ -4459,15 +4454,21 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                         <AppIcon name="check-circle" />
                                         <span>복구</span>
                                       </RowActionButton>
-                                      <RowActionButton
-                                        type="button"
-                                        data-variant="subtle-danger"
-                                        disabled={loadingKey.length > 0}
-                                        onClick={() => void hardDeleteDeletedPostFromList(row)}
-                                      >
-                                        <AppIcon name="trash" />
-                                        <span>영구삭제</span>
-                                      </RowActionButton>
+                                      <RowActionMenu>
+                                        <summary>
+                                          <span>더보기</span>
+                                          <AppIcon name="chevron-down" />
+                                        </summary>
+                                        <div className="menu">
+                                          <button
+                                            type="button"
+                                            disabled={loadingKey.length > 0}
+                                            onClick={() => void hardDeleteDeletedPostFromList(row)}
+                                          >
+                                            영구삭제
+                                          </button>
+                                        </div>
+                                      </RowActionMenu>
                                     </>
                                   )}
                                 </InlineActions>
@@ -4524,15 +4525,21 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                   <AppIcon name="edit" />
                                   <span>{isLoadedRow ? "계속 편집" : "편집"}</span>
                                 </RowActionButton>
-                                <RowActionButton
-                                  type="button"
-                                  data-variant="subtle-danger"
-                                  disabled={loadingKey.length > 0}
-                                  onClick={() => openDeleteConfirm([row.id], row.title)}
-                                >
-                                  <AppIcon name="trash" />
-                                  <span>삭제</span>
-                                </RowActionButton>
+                                <RowActionMenu>
+                                  <summary>
+                                    <span>더보기</span>
+                                    <AppIcon name="chevron-down" />
+                                  </summary>
+                                  <div className="menu">
+                                    <button
+                                      type="button"
+                                      disabled={loadingKey.length > 0}
+                                      onClick={() => openDeleteConfirm([row.id], row.title)}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                </RowActionMenu>
                               </>
                             ) : (
                               <>
@@ -4545,15 +4552,21 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                                   <AppIcon name="check-circle" />
                                   <span>복구</span>
                                 </RowActionButton>
-                                <RowActionButton
-                                  type="button"
-                                  data-variant="subtle-danger"
-                                  disabled={loadingKey.length > 0}
-                                  onClick={() => void hardDeleteDeletedPostFromList(row)}
-                                >
-                                  <AppIcon name="trash" />
-                                  <span>영구삭제</span>
-                                </RowActionButton>
+                                <RowActionMenu>
+                                  <summary>
+                                    <span>더보기</span>
+                                    <AppIcon name="chevron-down" />
+                                  </summary>
+                                  <div className="menu">
+                                    <button
+                                      type="button"
+                                      disabled={loadingKey.length > 0}
+                                      onClick={() => void hardDeleteDeletedPostFromList(row)}
+                                    >
+                                      영구삭제
+                                    </button>
+                                  </div>
+                                </RowActionMenu>
                               </>
                             )}
                           </div>
@@ -4815,12 +4828,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         )}
         {studioSurface === "compose" && (
         <ComposeSurfaceSection>
-          <SectionTop>
-            <div>
-              <SectionEyebrow>글 작성</SectionEyebrow>
+            <SectionTop>
+              <div>
               <h2>글 작성</h2>
               <SectionDescription>제목, 본문, 태그, 미리보기와 발행 설정만 남겨 작성 흐름이 끊기지 않도록 정리했습니다.</SectionDescription>
-            </div>
+              </div>
           </SectionTop>
           <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
             {mobileStudioSurfaceSteps.map((step) => (
@@ -5682,7 +5694,7 @@ const HeroCard = styled.section`
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  box-shadow: none;
   padding: 1rem 1.05rem;
   margin-bottom: 1.1rem;
 
@@ -5690,7 +5702,7 @@ const HeroCard = styled.section`
     grid-template-columns: 1fr;
     gap: 0.78rem;
     border-radius: 16px;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    box-shadow: none;
     padding: 0.88rem 0.92rem;
   }
 
@@ -5706,7 +5718,7 @@ const HeroCard = styled.section`
 
 const HeroIntro = styled.div`
   display: grid;
-  gap: 0.8rem;
+  gap: 0.72rem;
 
   h1 {
     margin: 0;
@@ -5736,19 +5748,49 @@ const HeroIntro = styled.div`
   }
 `
 
-const HeroEyebrow = styled.span`
-  width: fit-content;
-  display: inline-block;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
+const StudioStatusStrip = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+
+  @media (max-width: 1100px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const StudioStatusItem = styled.div`
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+  padding: 0.58rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: 760px) {
+    &[data-optional="true"] {
+      display: none;
+    }
+  }
 `
 
 const HeroNav = styled.div`
@@ -5803,47 +5845,10 @@ const AnchorButton = styled.a`
 
 const HeroAside = styled.aside`
   display: grid;
-  gap: 0.85rem;
+  gap: 0.65rem;
 
   &[data-compact-manage="true"] {
     gap: 0.6rem;
-  }
-`
-
-const MetricGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-
-  @media (max-width: 420px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const MetricCard = styled.div`
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray1};
-  padding: 0.62rem 0.72rem;
-
-  span {
-    display: block;
-    font-size: 0.76rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    margin-bottom: 0.32rem;
-  }
-
-  strong {
-    display: block;
-    font-size: 0.98rem;
-    color: ${({ theme }) => theme.colors.gray12};
-    line-height: 1.45;
-  }
-
-  @media (max-width: 760px) {
-    &[data-optional="true"] {
-      display: none;
-    }
   }
 `
 
@@ -5869,13 +5874,13 @@ const ActionCluster = styled.div`
 
 const StudioSurfaceCard = styled.section`
   display: grid;
-  gap: 0.8rem;
-  padding: 0.82rem 0.9rem;
+  gap: 0.55rem;
+  padding: 0.76rem 0.84rem;
   margin-bottom: 1.1rem;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 14px;
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: none;
 
   @media (max-width: 420px) {
     padding: 0.72rem 0.74rem;
@@ -5935,29 +5940,9 @@ const SurfaceTabButton = styled.button`
 `
 
 const SurfaceHintBar = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
-  gap: 0.7rem 0.9rem;
-  align-items: start;
-  padding: 0.78rem 0.84rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.9rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.6;
-  }
-
-  @media (max-width: 760px) {
-    grid-template-columns: 1fr;
-  }
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.82rem;
+  line-height: 1.55;
 `
 
 const WorkspaceGrid = styled.div`
@@ -5974,7 +5959,7 @@ const Section = styled.section`
   padding: 0.9rem;
   margin-bottom: 1.2rem;
   background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 
   h2 {
     margin: 0;
@@ -5986,8 +5971,8 @@ const Section = styled.section`
     border: 1px solid ${({ theme }) => theme.colors.gray5};
     border-radius: 14px;
     padding: 0.96rem;
-    background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray2} 0%, ${({ theme }) => theme.colors.gray1} 100%);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+    background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: none;
     margin-bottom: 1.05rem;
   }
 
@@ -6007,12 +5992,7 @@ const SectionTop = styled.div`
 `
 
 const SectionEyebrow = styled.span`
-  display: inline-flex;
-  margin-bottom: 0.35rem;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  display: none;
 `
 
 const SectionDescription = styled.p`
@@ -6163,7 +6143,7 @@ const ContentStudioLeft = styled.div`
   border-radius: 12px;
   background: ${({ theme }) => theme.colors.gray1};
   padding: 0.9rem;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: none;
   overflow: hidden;
 
   @media (max-width: 720px) {
@@ -6181,7 +6161,7 @@ const ContentStudioLeft = styled.div`
 const QueryPanel = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 10px;
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray2};
   padding: 0.72rem 0.72rem 0.82rem;
   margin: 0;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -6774,12 +6754,6 @@ const HeroPrimaryActionButton = styled(HeroActionButton)`
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
   }
-`
-
-const VisibilityWrap = styled.div`
-  display: grid;
-  gap: 0.32rem;
-  min-width: 210px;
 `
 
 const VisibilitySelect = styled.select`
@@ -8261,7 +8235,7 @@ const ListTableWrap = styled.div`
   border-radius: 10px;
   overscroll-behavior: contain;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1100px) {
     display: none;
   }
 `
@@ -8272,7 +8246,7 @@ const SelectedPostPanel = styled.div`
   background: ${({ theme }) => theme.colors.gray1};
   padding: 0.9rem;
   margin: 0;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
 
   @media (min-width: 1320px) {
     position: sticky;
@@ -8352,7 +8326,7 @@ const SelectedPostStateCard = styled.div`
 
   &[data-tone="active"] {
     border-color: ${({ theme }) => theme.colors.blue7};
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(255, 255, 255, 0.02));
+    background: ${({ theme }) => theme.colors.blue3};
   }
 
   strong {
@@ -8433,9 +8407,9 @@ const SelectionStickyBar = styled.div`
   z-index: 2;
   margin: 0 0 0.68rem;
   padding: 0.55rem 0.62rem;
-  border: 1px dashed ${({ theme }) => theme.colors.gray6};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 10px;
-  background: transparent;
+  background: ${({ theme }) => theme.colors.gray2};
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -8533,15 +8507,15 @@ const ListTable = styled.table`
 
   th.actionsCell,
   td.actionsCell {
-    width: 168px;
-    min-width: 168px;
+    width: 132px;
+    min-width: 132px;
   }
 
   @media (max-width: 1520px) {
     th.actionsCell,
     td.actionsCell {
-      width: 156px;
-      min-width: 156px;
+      width: 124px;
+      min-width: 124px;
     }
   }
 `
@@ -8713,11 +8687,70 @@ const RowActionButton = styled(Button)`
   }
 `
 
+const RowActionMenu = styled.details`
+  position: relative;
+
+  summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    width: 100%;
+    min-height: 40px;
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  .menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.3rem);
+    z-index: 8;
+    display: grid;
+    min-width: 7rem;
+    padding: 0.32rem;
+    border-radius: 10px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    box-shadow: none;
+  }
+
+  .menu button {
+    min-height: 36px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.red11};
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .menu button:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.red3};
+  }
+
+  .menu button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+`
+
 const MobileListCards = styled.div`
   display: none;
   margin-top: 0.65rem;
 
-  @media (max-width: 900px) {
+  @media (max-width: 1100px) {
     display: grid;
     gap: 0.6rem;
   }
@@ -8736,8 +8769,8 @@ const MobileListCards = styled.div`
 
   article[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.blue7};
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(255, 255, 255, 0.02));
-    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18);
+    background: ${({ theme }) => theme.colors.blue3};
+    box-shadow: none;
   }
 
   header {

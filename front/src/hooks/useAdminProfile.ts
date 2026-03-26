@@ -11,6 +11,7 @@ export type AdminProfile = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
   serviceLinks?: ProfileCardLinkItem[]
@@ -25,6 +26,7 @@ type AdminProfileLike = {
   profileImageDirectUrl?: string
   profileRole?: string
   profileBio?: string
+  blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
   serviceLinks?: ProfileCardLinkItem[]
@@ -39,6 +41,7 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   profileImageDirectUrl: value.profileImageDirectUrl,
   profileRole: value.profileRole,
   profileBio: value.profileBio,
+  blogTitle: value.blogTitle,
   homeIntroTitle: value.homeIntroTitle,
   homeIntroDescription: value.homeIntroDescription,
   serviceLinks: value.serviceLinks || [],
@@ -50,6 +53,7 @@ export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminPro
 }
 
 export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
+  const isBrowser = typeof window !== "undefined"
   const query = useQuery<AdminProfile | null>({
     queryKey: queryKey.adminProfile(),
     queryFn: async () => {
@@ -60,6 +64,7 @@ export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
         return initialProfile ?? null
       }
     },
+    enabled: isBrowser,
     initialData: initialProfile,
     staleTime: initialProfile ? 60 * 1000 : 0,
     retry: false,

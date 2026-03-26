@@ -26,7 +26,7 @@ type Props = {
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
-  const introTitle = adminProfile?.homeIntroTitle || CONFIG.blog.title
+  const introTitle = adminProfile?.homeIntroTitle || adminProfile?.blogTitle || CONFIG.blog.title
   const introDescription = normalizeHomeIntroDescription(
     adminProfile?.homeIntroDescription || CONFIG.blog.description
   )

@@ -191,6 +191,7 @@ class MemberApplicationService(
         member: Member,
         role: String,
         bio: String,
+        blogTitle: String,
         homeIntroTitle: String,
         homeIntroDescription: String,
         serviceLinks: List<MemberProfileLinkItem>,
@@ -199,12 +200,14 @@ class MemberApplicationService(
         memberProfileHydrator.hydrate(member)
         member.profileRole = role
         member.profileBio = bio
+        member.blogTitle = blogTitle
         member.homeIntroTitle = homeIntroTitle
         member.homeIntroDescription = homeIntroDescription
         member.serviceLinks = serviceLinks
         member.contactLinks = contactLinks
         saveProfileRoleAttr(member)
         saveProfileBioAttr(member)
+        saveBlogTitleAttr(member)
         saveHomeIntroTitleAttr(member)
         saveHomeIntroDescriptionAttr(member)
         saveServiceLinksAttr(member)
@@ -295,6 +298,10 @@ class MemberApplicationService(
 
     private fun saveProfileBioAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitProfileBioAttr())
+    }
+
+    private fun saveBlogTitleAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitBlogTitleAttr())
     }
 
     private fun saveHomeIntroTitleAttr(member: Member) {

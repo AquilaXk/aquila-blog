@@ -99,7 +99,7 @@ const mockFeedEndpoints = async (page: Page) => {
 }
 
 const mockDetailEndpoint = async (page: Page) => {
-  await page.route("**/post/api/v1/posts/990", async (route) => {
+  await page.route("**/post/api/v1/posts/990**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -136,7 +136,7 @@ const mockDetailEndpoint = async (page: Page) => {
     })
   })
 
-  await page.route("**/post/api/v1/posts/990/hit", async (route) => {
+  await page.route("**/post/api/v1/posts/990/hit**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",

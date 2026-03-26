@@ -74,7 +74,7 @@ services:
       - prometheus
 
   back_blue:
-    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
@@ -107,7 +107,7 @@ services:
           - back-blue
 
   back_green:
-    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_MEM_LIMIT:-512m}
     mem_reservation: ${BACK_MEM_RESERVATION:-256m}
@@ -139,7 +139,7 @@ services:
 
   back_read:
     profiles: ["runtime-split"]
-    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_READ_MEM_LIMIT:-640m}
     mem_reservation: ${BACK_READ_MEM_RESERVATION:-320m}
@@ -171,7 +171,7 @@ services:
 
   back_admin:
     profiles: ["runtime-split"]
-    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_ADMIN_MEM_LIMIT:-384m}
     mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-192m}
@@ -202,7 +202,7 @@ services:
           - back-admin
 
   back_worker:
-    image: ${BACK_IMAGE:-ghcr.io/aquilaxk/aquila-blog-back:latest}
+    image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
     mem_limit: ${BACK_WORKER_MEM_LIMIT:-768m}
     mem_reservation: ${BACK_WORKER_MEM_RESERVATION:-768m}

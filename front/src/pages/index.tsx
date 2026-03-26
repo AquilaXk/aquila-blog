@@ -126,7 +126,7 @@ type FeedPageProps = {
 }
 
 const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
-  const feedTitle = initialAdminProfile?.homeIntroTitle || CONFIG.blog.title
+  const feedTitle = initialAdminProfile?.homeIntroTitle || initialAdminProfile?.blogTitle || CONFIG.blog.title
   const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.description
 
   const meta = {

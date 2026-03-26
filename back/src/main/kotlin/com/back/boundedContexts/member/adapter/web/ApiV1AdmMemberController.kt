@@ -73,13 +73,15 @@ class ApiV1AdmMemberController(
 
     data class UpdateProfileCardRequest(
         @field:Size(max = 100)
-        val role: String,
+        val role: String = "",
         @field:Size(max = 1000)
-        val bio: String,
+        val bio: String = "",
         @field:Size(max = 120)
-        val homeIntroTitle: String,
+        val blogTitle: String = "",
+        @field:Size(max = 120)
+        val homeIntroTitle: String = "",
         @field:Size(max = 500)
-        val homeIntroDescription: String,
+        val homeIntroDescription: String = "",
         @field:Size(max = 30)
         val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
         @field:Size(max = 30)
@@ -221,6 +223,7 @@ class ApiV1AdmMemberController(
             member = member,
             role = reqBody.role.trim(),
             bio = reqBody.bio.trim(),
+            blogTitle = reqBody.blogTitle.trim(),
             homeIntroTitle = reqBody.homeIntroTitle.trim(),
             homeIntroDescription = reqBody.homeIntroDescription.trim(),
             serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),

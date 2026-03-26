@@ -1240,6 +1240,7 @@ export interface components {
             profileImageDirectUrl?: string;
             profileRole?: string;
             profileBio?: string;
+            blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
             serviceLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
@@ -1257,6 +1258,7 @@ export interface components {
         UpdateProfileCardRequest: {
             role?: string;
             bio?: string;
+            blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
             serviceLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];

@@ -486,6 +486,19 @@ const MarkdownRendererRoot = styled.div`
     margin: 0;
   }
 
+  .aq-mermaid-stage > svg .nodeLabel,
+  .aq-mermaid-stage > svg .edgeLabel {
+    dominant-baseline: middle;
+    alignment-baseline: middle;
+  }
+
+  .aq-mermaid-stage > svg .nodeLabel > text,
+  .aq-mermaid-stage > svg .edgeLabel > text,
+  .aq-mermaid-stage > svg .label text {
+    dominant-baseline: middle;
+    alignment-baseline: middle;
+  }
+
   .aq-mermaid-error-state {
     border-radius: 12px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};

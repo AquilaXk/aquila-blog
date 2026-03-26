@@ -39,6 +39,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             val member = memberFacade.findByEmail("admin@test.com")!!
             val newRole = "Backend Developer"
             val newBio = "블로그 운영자 소개 문구"
+            val newBlogTitle = "aquilaXk's Archive"
             val newIntroTitle = "aquilaXk's Backend Log"
             val newIntroDescription = "실전 백엔드 운영과 개발 메모를 남기는 공간입니다."
             val newServiceLabel = "aquila-blog"
@@ -54,6 +55,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                         {
                             "role": "$newRole",
                             "bio": "$newBio",
+                            "blogTitle": "$newBlogTitle",
                             "homeIntroTitle": "$newIntroTitle",
                             "homeIntroDescription": "$newIntroDescription",
                             "serviceLinks": [
@@ -71,6 +73,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.id") { value(member.id) }
                     jsonPath("$.profileRole") { value(newRole) }
                     jsonPath("$.profileBio") { value(newBio) }
+                    jsonPath("$.blogTitle") { value(newBlogTitle) }
                     jsonPath("$.homeIntroTitle") { value(newIntroTitle) }
                     jsonPath("$.homeIntroDescription") { value(newIntroDescription) }
                     jsonPath("$.serviceLinks[0].label") { value(newServiceLabel) }
@@ -82,6 +85,7 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             val updatedMember = memberFacade.findById(member.id).orElseThrow()
             assertThat(updatedMember.profileRole).isEqualTo(newRole)
             assertThat(updatedMember.profileBio).isEqualTo(newBio)
+            assertThat(updatedMember.blogTitle).isEqualTo(newBlogTitle)
             assertThat(updatedMember.homeIntroTitle).isEqualTo(newIntroTitle)
             assertThat(updatedMember.homeIntroDescription).isEqualTo(newIntroDescription)
             assertThat(updatedMember.serviceLinks).hasSize(1)

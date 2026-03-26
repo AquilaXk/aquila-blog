@@ -12,6 +12,13 @@ BEGIN
     END IF;
 
     IF to_regclass('public.member') IS NOT NULL
+        AND EXISTS(
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'member'
+              AND column_name = 'login_id'
+        )
         AND EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'pgroonga') THEN
         IF EXISTS(SELECT 1 FROM pg_opclass WHERE opcname = 'pgroonga_text_array_full_text_search_ops_v2') THEN
             CREATE INDEX IF NOT EXISTS member_idx_pgroonga_login_id_nickname

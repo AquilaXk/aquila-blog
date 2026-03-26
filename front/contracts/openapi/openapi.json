@@ -2875,6 +2875,9 @@
           "profileBio" : {
             "type" : "string"
           },
+          "blogTitle" : {
+            "type" : "string"
+          },
           "homeIntroTitle" : {
             "type" : "string"
           },
@@ -2941,6 +2944,11 @@
           "bio" : {
             "type" : "string",
             "maxLength" : 1000,
+            "minLength" : 0
+          },
+          "blogTitle" : {
+            "type" : "string",
+            "maxLength" : 120,
             "minLength" : 0
           },
           "homeIntroTitle" : {

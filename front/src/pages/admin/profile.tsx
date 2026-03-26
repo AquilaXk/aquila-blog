@@ -6,6 +6,7 @@ import { useRouter } from "next/router"
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
+import BrandMark from "src/components/branding/BrandMark"
 import AppIcon, { IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
@@ -107,6 +108,7 @@ const buildMemberRevisionKey = (member: MemberMe) =>
     member.profileImageUrl || "",
     member.profileRole || "",
     member.profileBio || "",
+    member.blogTitle || "",
     member.homeIntroTitle || "",
     member.homeIntroDescription || "",
     JSON.stringify(resolveServiceLinks(member)),
@@ -199,6 +201,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   })
   const [profileRoleInput, setProfileRoleInput] = useState(initialMember.profileRole || "")
   const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
+  const [blogTitleInput, setBlogTitleInput] = useState(initialMember.blogTitle || "")
   const [homeIntroTitleInput, setHomeIntroTitleInput] = useState(initialMember.homeIntroTitle || "")
   const [homeIntroDescriptionInput, setHomeIntroDescriptionInput] = useState(initialMember.homeIntroDescription || "")
   const [serviceLinksInput, setServiceLinksInput] = useState<ProfileCardLinkItem[]>(
@@ -246,6 +249,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setAdminProfileCache(queryClient, toAdminProfile(member))
     setProfileRoleInput(member.profileRole || "")
     setProfileBioInput(member.profileBio || "")
+    setBlogTitleInput(member.blogTitle || "")
     setHomeIntroTitleInput(member.homeIntroTitle || "")
     setHomeIntroDescriptionInput(member.homeIntroDescription || "")
     setServiceLinksInput(resolveServiceLinks(member))
@@ -857,12 +861,13 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     try {
       setLoadingKey("save")
-      setProfileNotice({ tone: "loading", text: "프로필 카드와 메인 소개 카드 내용을 저장하고 있습니다..." })
+      setProfileNotice({ tone: "loading", text: "프로필 카드, 헤더 브랜드명, 메인 소개 카드 내용을 저장하고 있습니다..." })
       const updated = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${sessionMember.id}/profileCard`, {
         method: "PATCH",
         body: JSON.stringify({
           role: profileRoleInput.trim(),
           bio: profileBioInput.trim(),
+          blogTitle: blogTitleInput.trim(),
           homeIntroTitle: homeIntroTitleInput.trim(),
           homeIntroDescription: homeIntroDescriptionInput.trim(),
           serviceLinks: toPayloadLinks("service", serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON),
@@ -870,7 +875,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         }),
       })
       syncProfileState(updated)
-      setProfileNotice({ tone: "success", text: "프로필 카드와 메인 소개 카드 내용이 저장되었습니다." })
+      setProfileNotice({ tone: "success", text: "프로필 카드, 헤더 브랜드명, 메인 소개 카드 내용이 저장되었습니다." })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setProfileNotice({ tone: "error", text: `프로필 저장 실패: ${message}` })
@@ -888,6 +893,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     if (normalizeComparableText(profileRoleInput) !== normalizeComparableText(sessionMember.profileRole)) return true
     if (normalizeComparableText(profileBioInput) !== normalizeComparableText(sessionMember.profileBio)) return true
+    if (normalizeComparableText(blogTitleInput) !== normalizeComparableText(sessionMember.blogTitle)) return true
     if (normalizeComparableText(homeIntroTitleInput) !== normalizeComparableText(sessionMember.homeIntroTitle)) return true
     if (normalizeComparableText(homeIntroDescriptionInput) !== normalizeComparableText(sessionMember.homeIntroDescription)) {
       return true
@@ -910,6 +916,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     return currentContact !== savedContact
   }, [
+    blogTitleInput,
     contactLinksInput,
     homeIntroDescriptionInput,
     homeIntroTitleInput,
@@ -976,7 +983,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <HeaderCard>
         <HeaderCopy>
           <h1>운영 프로필</h1>
-          <p>프로필 카드와 홈 소개 문구를 한 흐름에서 정리합니다.</p>
+          <p>프로필 카드와 홈 소개만 한 화면에서 정리합니다.</p>
         </HeaderCopy>
         <HeaderActions>
           <Link href="/" passHref legacyBehavior>
@@ -1010,7 +1017,14 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <span>{profileRoleInput.trim() || "역할 미설정"}</span>
           <p>{profileBioInput.trim() || "소개 문구 미설정"}</p>
           <PreviewMetaStrip>
-            <small>홈 타이틀</small>
+            <small>헤더 브랜드</small>
+            <BrandTitlePreview>
+              <BrandMark className="brandMark" sizes="18px" />
+              <strong>{blogTitleInput.trim() || "미설정"}</strong>
+            </BrandTitlePreview>
+          </PreviewMetaStrip>
+          <PreviewMetaStrip>
+            <small>메인 소개 타이틀</small>
             <strong>{homeIntroTitleInput.trim() || "미설정"}</strong>
           </PreviewMetaStrip>
           <input
@@ -1027,7 +1041,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           >
             {loadingKey === "upload" ? "업로드 중..." : "프로필 이미지 편집"}
           </PrimaryButton>
-          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "이미지 편집은 모달에서만 진행합니다."}</Hint>
+          <Hint>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "이미지 편집은 모달에서만 엽니다."}</Hint>
           {imageNotice.text ? <Notice data-tone={imageNotice.tone}>{imageNotice.text}</Notice> : null}
         </PreviewCard>
 
@@ -1073,19 +1087,28 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <FormSection>
               <SectionHeading>
                 <h2>홈 소개</h2>
-                <p>메인 페이지 상단 소개 카드 문구를 수정합니다.</p>
+                <p>헤더 브랜드와 메인 소개 문구만 나눠 관리합니다.</p>
               </SectionHeading>
               <FieldGrid data-columns="2">
+                <FieldBox>
+                  <FieldLabel htmlFor="blog-title">헤더 브랜드명</FieldLabel>
+                  <Input
+                    id="blog-title"
+                    placeholder="예: aquilaXk's Blog"
+                    value={blogTitleInput}
+                    onChange={(e) => setBlogTitleInput(e.target.value)}
+                  />
+                </FieldBox>
                 <FieldBox>
                   <FieldLabel htmlFor="home-intro-title">메인 소개 카드 타이틀</FieldLabel>
                   <Input
                     id="home-intro-title"
-                    placeholder="예: aquilaXk's Blog"
+                    placeholder="예: 비밀스러운 IT 공작소"
                     value={homeIntroTitleInput}
                     onChange={(e) => setHomeIntroTitleInput(e.target.value)}
                   />
                 </FieldBox>
-                <FieldBox>
+                <FieldBox style={{ gridColumn: "1 / -1" }}>
                   <FieldLabel htmlFor="home-intro-description">메인 소개 카드 설명</FieldLabel>
                   <TextArea
                     id="home-intro-description"
@@ -1100,7 +1123,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <LinkSectionCard>
               <SectionHeading>
                 <h2>서비스 링크</h2>
-                <p>메인 페이지 Service 카드 링크를 관리합니다.</p>
+                <p>메인 Service 카드 링크를 관리합니다.</p>
               </SectionHeading>
               <LinkSectionHeader>
                 <Button type="button" onClick={() => appendLinkItem("service")}>
@@ -1185,7 +1208,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <LinkSectionCard>
               <SectionHeading>
                 <h2>연락 링크</h2>
-                <p>메인 페이지 Contact 카드 링크를 관리합니다.</p>
+                <p>메인 Contact 카드 링크를 관리합니다.</p>
               </SectionHeading>
               <LinkSectionHeader>
                 <Button type="button" onClick={() => appendLinkItem("contact")}>
@@ -1273,13 +1296,13 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       <StickySaveBar data-dirty={hasUnsavedChanges ? "true" : "false"}>
         <StickySaveCopy>
-          <strong>{hasUnsavedChanges ? "미저장 변경 사항이 있습니다." : "모든 변경 사항이 저장되어 있습니다."}</strong>
+          <strong>{hasUnsavedChanges ? "미저장 변경이 있습니다." : "저장 상태 최신"}</strong>
           <span>
             {profileNotice.tone !== "idle"
               ? profileNotice.text
               : hasUnsavedChanges
-                ? "스크롤 위치와 상관없이 하단에서 바로 저장할 수 있습니다."
-                : "항목을 수정하면 저장 버튼이 활성화됩니다."}
+                ? "하단 저장 바에서 바로 반영합니다."
+                : "항목을 바꾸면 저장 버튼이 켜집니다."}
           </span>
         </StickySaveCopy>
         <StickySaveActions>
@@ -1422,8 +1445,8 @@ const Main = styled.main`
 
 const HeaderCard = styled.section`
   display: grid;
-  gap: 0.8rem;
-  padding: 0.96rem 1rem;
+  gap: 0.68rem;
+  padding: 0.84rem 0.92rem;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   border-radius: 16px;
   background: ${({ theme }) => theme.colors.gray2};
@@ -1439,8 +1462,8 @@ const HeaderCard = styled.section`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    line-height: 1.55;
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
 `
 
@@ -1453,7 +1476,7 @@ const HeaderCopy = styled.div`
 const HeaderActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.45rem;
 
   @media (max-width: 1024px) {
     width: 100%;
@@ -1469,9 +1492,9 @@ const HeaderActions = styled.div`
 const HeaderMetaStrip = styled.section`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
-  padding: 0.58rem 0.7rem;
-  border-radius: 10px;
+  gap: 0.38rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
 
@@ -1480,12 +1503,13 @@ const HeaderMetaStrip = styled.section`
     display: inline-flex;
     align-items: center;
     min-height: 30px;
+    min-height: 28px;
     border-radius: 999px;
-    padding: 0 0.62rem;
+    padding: 0 0.56rem;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     font-weight: 700;
     white-space: nowrap;
   }
@@ -1575,8 +1599,8 @@ const LinkButton = styled.a`
 
 const ProfileGrid = styled.section`
   display: grid;
-  grid-template-columns: 292px minmax(0, 1fr);
-  gap: 0.92rem;
+  grid-template-columns: 268px minmax(0, 1fr);
+  gap: 0.82rem;
   align-items: start;
 
   @media (max-width: 760px) {
@@ -1589,14 +1613,14 @@ const PanelCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
   box-shadow: none;
-  padding: 0.88rem;
+  padding: 0.8rem;
 `
 
 const PreviewCard = styled(PanelCard)`
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: 0.55rem;
+  gap: 0.38rem;
   text-align: center;
   align-self: start;
   height: fit-content;
@@ -1612,7 +1636,7 @@ const PreviewCard = styled(PanelCard)`
   }
 
   strong {
-    font-size: 1.02rem;
+    font-size: 0.96rem;
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -1622,7 +1646,7 @@ const PreviewCard = styled(PanelCard)`
   span {
     color: ${({ theme }) => theme.colors.blue10};
     font-weight: 700;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -1632,19 +1656,22 @@ const PreviewCard = styled(PanelCard)`
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    line-height: 1.55;
-    white-space: pre-line;
+    font-size: 0.74rem;
+    line-height: 1.4;
     width: 100%;
     min-width: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 `
 
 const AvatarFrame = styled.div`
-  width: 108px;
-  height: 108px;
+  width: 84px;
+  height: 84px;
   border-radius: 999px;
   overflow: hidden;
   border: none;
@@ -1666,8 +1693,8 @@ const Hint = styled.p`
   width: 100%;
   min-width: 0;
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.86rem;
-  line-height: 1.5;
+  font-size: 0.74rem;
+  line-height: 1.4;
   overflow-wrap: anywhere;
   word-break: break-word;
 `
@@ -1676,21 +1703,42 @@ const PreviewMetaStrip = styled.div`
   width: 100%;
   display: grid;
   gap: 0.18rem;
-  padding: 0.5rem 0.6rem;
+  padding: 0.42rem 0.52rem;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
 
   small {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.02em;
   }
 
   strong {
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     line-height: 1.45;
+  }
+`
+
+const BrandTitlePreview = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+
+  .brandMark {
+    display: block;
+    flex-shrink: 0;
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 `
 
@@ -2015,8 +2063,8 @@ const LinkSectionHeader = styled.div`
 const LinkSectionHint = styled.p`
   margin: -0.15rem 0 0;
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: 0.74rem;
+  line-height: 1.4;
 `
 
 const LinkItemsWrap = styled.div`
@@ -2030,9 +2078,9 @@ const LinkItemRow = styled.div`
   grid-template-areas:
     "icon name remove"
     "url url remove";
-  gap: 0.65rem;
+  gap: 0.56rem;
   align-items: start;
-  padding: 0.78rem 0;
+  padding: 0.66rem 0;
   border-radius: 0;
   border: 0;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -2209,8 +2257,8 @@ const RemoveButton = styled(Button)`
   border-color: ${({ theme }) => theme.colors.red7};
   background: transparent;
   white-space: nowrap;
-  min-height: 2.85rem;
-  padding: 0 0.72rem;
+  min-height: 2.6rem;
+  padding: 0 0.58rem;
 `
 
 const InlineEmpty = styled.p`
@@ -2231,15 +2279,15 @@ const StickySaveBar = styled.section`
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.62rem 0.78rem;
+  gap: 0.62rem;
+  padding: 0.54rem 0.68rem;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: rgba(18, 21, 26, 0.94);
+  background: rgba(18, 21, 26, 0.88);
 
   &[data-dirty="true"] {
     border-color: ${({ theme }) => theme.colors.blue8};
-    background: rgba(27, 45, 74, 0.9);
+    background: rgba(27, 45, 74, 0.84);
   }
 
   @media (max-width: 760px) {
@@ -2260,15 +2308,15 @@ const StickySaveCopy = styled.div`
   gap: 0.12rem;
 
   strong {
-    font-size: 0.86rem;
+    font-size: 0.8rem;
     color: ${({ theme }) => theme.colors.gray12};
     line-height: 1.35;
   }
 
   span {
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.45;
+    line-height: 1.4;
   }
 `
 

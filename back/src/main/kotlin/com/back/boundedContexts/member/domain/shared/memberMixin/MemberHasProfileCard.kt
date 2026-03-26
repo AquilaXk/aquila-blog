@@ -7,6 +7,7 @@ import java.util.Locale
 
 const val PROFILE_ROLE = "profileRole"
 const val PROFILE_BIO = "profileBio"
+const val BLOG_TITLE = "blogTitle"
 const val HOME_INTRO_TITLE = "homeIntroTitle"
 const val HOME_INTRO_DESCRIPTION = "homeIntroDescription"
 const val PROFILE_SERVICE_LINKS = "profileServiceLinks"
@@ -14,6 +15,7 @@ const val PROFILE_CONTACT_LINKS = "profileContactLinks"
 
 private const val PROFILE_ROLE_DEFAULT_VALUE = ""
 private const val PROFILE_BIO_DEFAULT_VALUE = ""
+private const val BLOG_TITLE_DEFAULT_VALUE = ""
 private const val HOME_INTRO_TITLE_DEFAULT_VALUE = ""
 private const val HOME_INTRO_DESCRIPTION_DEFAULT_VALUE = ""
 const val PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE = "service"
@@ -169,6 +171,11 @@ interface MemberHasProfileCard : MemberAware {
             loader?.invoke() ?: MemberAttr(0, member, HOME_INTRO_TITLE, HOME_INTRO_TITLE_DEFAULT_VALUE)
         }
 
+    fun getOrInitBlogTitleAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(BLOG_TITLE) {
+            loader?.invoke() ?: MemberAttr(0, member, BLOG_TITLE, BLOG_TITLE_DEFAULT_VALUE)
+        }
+
     fun getOrInitHomeIntroDescriptionAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
         member.getOrPutAttr(HOME_INTRO_DESCRIPTION) {
             loader?.invoke() ?: MemberAttr(0, member, HOME_INTRO_DESCRIPTION, HOME_INTRO_DESCRIPTION_DEFAULT_VALUE)
@@ -194,6 +201,12 @@ interface MemberHasProfileCard : MemberAware {
         get() = getOrInitProfileBioAttr().strValue ?: PROFILE_BIO_DEFAULT_VALUE
         set(value) {
             getOrInitProfileBioAttr().strValue = value
+        }
+
+    var blogTitle: String
+        get() = getOrInitBlogTitleAttr().strValue ?: BLOG_TITLE_DEFAULT_VALUE
+        set(value) {
+            getOrInitBlogTitleAttr().strValue = value
         }
 
     var homeIntroTitle: String

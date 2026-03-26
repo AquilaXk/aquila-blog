@@ -79,6 +79,7 @@ class ApiV1MemberControllerWebMvcTest {
             val adminMember = sampleMember(id = 1, username = "admin", nickname = "관리자")
             adminMember.profileRole = "블로그 운영자"
             adminMember.profileBio = "소개"
+            adminMember.blogTitle = "aquilaXk's Archive"
             adminMember.homeIntroTitle = "aquilaXk's Blog"
             adminMember.homeIntroDescription = "welcome to my backend dev log!"
             given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
@@ -96,6 +97,7 @@ class ApiV1MemberControllerWebMvcTest {
                     jsonPath("$.nickname") { value(adminMember.nickname) }
                     jsonPath("$.profileRole") { value("블로그 운영자") }
                     jsonPath("$.profileBio") { value("소개") }
+                    jsonPath("$.blogTitle") { value("aquilaXk's Archive") }
                     jsonPath("$.homeIntroTitle") { value("aquilaXk's Blog") }
                     jsonPath("$.homeIntroDescription") { value("welcome to my backend dev log!") }
                     jsonPath("$.profileImageUrl") { value(startsWith(adminMember.redirectToProfileImgUrlOrDefault)) }

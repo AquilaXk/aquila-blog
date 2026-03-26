@@ -15,13 +15,13 @@
 Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오래 버틸 수 있는 콘텐츠 플랫폼을 직접 설계하고 운영해 보기 위해 만든 프로젝트입니다.
 
 - 프런트는 `Next.js 14 + SSR`, 백엔드는 `Spring Boot 4 + Kotlin`으로 구성했습니다.
-- 인프라는 `Vercel + Home Server` 하이브리드 구조로 나눴고, 홈서버에는 `Caddy + Cloudflare Tunnel + PostgreSQL + Redis + MinIO`를 올렸습니다.
+- 인프라는 `Vercel + Home Server` 하이브리드 구조로 나눴고, 홈서버에는 `Caddy + Cloudflare Tunnel + PostgreSQL + Redis + MinIO + Prometheus + Grafana`를 올렸습니다.
 - 기능보다 운영을 우선해 `Blue/Green 배포`, `runtime-split`, `OpenAPI 계약 검증`, `E2E/성능 회귀 테스트`, `트러블슈팅 문서화`를 핵심 자산으로 관리합니다.
 
 ## 왜 이 프로젝트가 차별점이 있는가
 
 - `운영 가능성`을 기능 수보다 앞에 두었습니다.
-  - Blue/Green 배포, steady-state guard, doctor/recover 스크립트, Prometheus metrics를 운영 경로에 포함했습니다.
+  - Blue/Green 배포, steady-state guard, doctor/recover 스크립트, Prometheus metrics, Grafana 대시보드를 운영 경로에 포함했습니다.
 - `문제가 터졌을 때 복구 가능한 구조`를 만들었습니다.
   - 공개 읽기 경로 fallback, 캐시 fail-open, degraded 응답, 권한/런타임 경계 테스트를 유지합니다.
 - `문서화와 검증`을 같은 레벨로 다룹니다.
@@ -60,6 +60,7 @@ Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오
 - Blue/Green 배포 + rollback
 - runtime-split(`read`, `admin`, `worker`) 운영
 - `doctor.sh`, `recover.sh`, `steady_state_guard.sh`
+- Grafana + Prometheus 모니터링 스택
 - OpenAPI 계약 드리프트 체크
 - Playwright smoke / perf / a11y / live 테스트
 
@@ -142,7 +143,7 @@ README에서는 전체 스키마를 모두 그리기보다, 서비스 구조를 
 | Content Rendering | react-markdown, Mermaid, rehype-pretty-code, Shiki |
 | Backend | Spring Boot 4, Kotlin, Spring Security, JPA, QueryDSL, Flyway |
 | Data | PostgreSQL, Redis, MinIO |
-| Infra | Vercel, Home Server, Caddy, Cloudflare Tunnel, GHCR |
+| Infra | Vercel, Home Server, Caddy, Cloudflare Tunnel, PostgreSQL, Redis, MinIO, Prometheus, Grafana, GHCR |
 | Quality | ktlint, ArchUnit, Playwright, Storybook, k6, OpenAPI contract check |
 
 ## 아키텍처 포인트

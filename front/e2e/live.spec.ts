@@ -11,6 +11,7 @@ const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS ||
 const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
 const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
 const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
+const adminLandingHeadingPattern = /관리자 (?:작업 진입점|운영 허브|허브)/
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -289,7 +290,7 @@ test.describe("live production e2e", () => {
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
     await loginThroughUi(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
-    await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: adminLandingHeadingPattern })).toBeVisible()
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)
@@ -311,7 +312,7 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin")
     await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })
-    await expect(page.getByRole("heading", { name: "운영 허브" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: adminLandingHeadingPattern })).toBeVisible()
 
     await page.goto("/admin/profile")
     await expect(page.getByRole("heading", { name: "관리자 프로필 관리" })).toBeVisible()

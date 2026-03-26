@@ -8,7 +8,7 @@
 - System Architecture: [docs/design/System-Architecture.md](docs/design/System-Architecture.md)
 - DevOps Guide: [docs/design/DevOps.md](docs/design/DevOps.md)
 
-![Aquila Blog System Architecture](docs/assets/portfolio/aquila-system-architecture.svg)
+![Aquila Blog System Architecture](docs/assets/portfolio/aquila-system-architecture.png)
 
 ## 프로젝트 개요
 

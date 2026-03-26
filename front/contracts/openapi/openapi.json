@@ -2875,6 +2875,15 @@
           "profileBio" : {
             "type" : "string"
           },
+          "aboutRole" : {
+            "type" : "string"
+          },
+          "aboutBio" : {
+            "type" : "string"
+          },
+          "aboutDetails" : {
+            "type" : "string"
+          },
           "blogTitle" : {
             "type" : "string"
           },
@@ -2944,6 +2953,21 @@
           "bio" : {
             "type" : "string",
             "maxLength" : 1000,
+            "minLength" : 0
+          },
+          "aboutRole" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "aboutBio" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "aboutDetails" : {
+            "type" : "string",
+            "maxLength" : 12000,
             "minLength" : 0
           },
           "blogTitle" : {

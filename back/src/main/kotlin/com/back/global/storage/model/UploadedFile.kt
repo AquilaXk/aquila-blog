@@ -67,7 +67,7 @@ enum class UploadedFileRetentionReason {
 )
 class UploadedFile(
     @field:Id
-    @field:SequenceGenerator(name = "uploaded_file_seq_gen", sequenceName = "uploaded_file_seq", allocationSize = 50)
+    @field:SequenceGenerator(name = "uploaded_file_seq_gen", sequenceName = "uploaded_file_seq", allocationSize = 1)
     @field:GeneratedValue(strategy = SEQUENCE, generator = "uploaded_file_seq_gen")
     override val id: Long = 0,
     @field:Column(nullable = false, unique = true, length = 1000)

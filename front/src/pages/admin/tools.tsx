@@ -1576,10 +1576,6 @@ const SectionToggleButton = styled.button`
   }
 `
 
-const SectionEyebrow = styled.span`
-  display: none;
-`
-
 const SectionDescription = styled.p`
   margin: 0.22rem 0 0;
   color: ${({ theme }) => theme.colors.gray10};
@@ -1697,12 +1693,6 @@ const ActionCardTitle = styled.span`
   font-weight: 760;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
-`
-
-const ActionCardHint = styled.span`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  line-height: 1.5;
 `
 
 const ActionStateChip = styled.span`

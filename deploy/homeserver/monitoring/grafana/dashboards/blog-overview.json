@@ -77,7 +77,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*\"}[5m])) by (le))",
+          "expr": "((histogram_quantile(0.95, sum(rate({__name__=~\"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) by (le))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) > bool 0.2)) or on() vector(0)",
           "legendFormat": "p95",
           "range": true,
           "refId": "A"
@@ -146,7 +146,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator.*\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m])), 0.001)",
+          "expr": "(((sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",status=~\"5..\",uri!~\"/actuator.*\"}[5m])) / clamp_min(sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])), 0.001))) and on() (sum(rate({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) > bool 0.2)) or on() vector(0)",
           "legendFormat": "5xx ratio",
           "range": true,
           "refId": "A"
@@ -193,21 +193,21 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(post_read_cache_result_total{result=\"hit\"}[5m]))",
+          "expr": "sum(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\",result=\"hit\"}[5m])) or on() vector(0)",
           "legendFormat": "cache hit",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(post_read_cache_result_total{result=\"miss\"}[5m]))",
+          "expr": "sum(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\",result=\"miss\"}[5m])) or on() vector(0)",
           "legendFormat": "cache miss",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "sum(rate(post_read_cache_evict_total[5m]))",
+          "expr": "sum(rate(post_read_cache_evict_total{job=\"back\",service=\"aquila-back\"}[5m])) or on() vector(0)",
           "legendFormat": "cache evict",
           "range": true,
           "refId": "C"
@@ -254,7 +254,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(post_read_cache_result_total{result=\"hit\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total[5m])), 0.001)",
+          "expr": "(sum(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\",result=\"hit\"}[5m])) / clamp_min(sum(rate(post_read_cache_result_total{job=\"back\",service=\"aquila-back\"}[5m])), 0.001)) or on() vector(0)",
           "legendFormat": "cache hit rate",
           "range": true,
           "refId": "A"
@@ -301,28 +301,28 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "task_queue_ready_pending",
+          "expr": "max(task_queue_ready_pending{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
           "legendFormat": "ready_pending",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "task_queue_processing",
+          "expr": "max(task_queue_processing{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
           "legendFormat": "processing",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "task_queue_failed",
+          "expr": "max(task_queue_failed{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
           "legendFormat": "failed",
           "range": true,
           "refId": "C"
         },
         {
           "editorMode": "code",
-          "expr": "task_queue_stale_processing",
+          "expr": "max(task_queue_stale_processing{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
           "legendFormat": "stale_processing",
           "range": true,
           "refId": "D"
@@ -330,6 +330,71 @@
       ],
       "title": "Task queue overview",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "min(up{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "min up",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Back scrape health (min up)",
+      "type": "stat"
     }
   ],
   "refresh": "30s",

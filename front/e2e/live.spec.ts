@@ -12,6 +12,7 @@ const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS
 const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
 const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
 const adminLandingHeadingPattern = /관리자 (?:작업 진입점|운영 허브|허브)/
+const adminProfileHeadingPattern = /(?:운영 프로필|관리자 프로필 관리|프로필 관리)/
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -315,7 +316,7 @@ test.describe("live production e2e", () => {
     await expect(page.getByRole("heading", { name: adminLandingHeadingPattern })).toBeVisible()
 
     await page.goto("/admin/profile")
-    await expect(page.getByRole("heading", { name: "관리자 프로필 관리" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: adminProfileHeadingPattern })).toBeVisible()
     const profileImage = page.locator("main img").first()
     await expect(profileImage).toBeVisible()
     await expect

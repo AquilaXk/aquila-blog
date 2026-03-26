@@ -1,0 +1,45 @@
+<svg width="1200" height="640" viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#0b1220" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="640" fill="url(#bg)" rx="28" />
+  <text x="64" y="84" fill="#e2e8f0" font-size="36" font-family="Inter, Arial, sans-serif" font-weight="700">Aquila Blog System Architecture</text>
+  <text x="64" y="126" fill="#94a3b8" font-size="18" font-family="Inter, Arial, sans-serif">Vercel Front · Home Server Back · PostgreSQL / Redis / MinIO · Cloudflare Tunnel</text>
+
+  <rect x="80" y="180" width="300" height="140" rx="18" fill="url(#card)" stroke="#1f2937" />
+  <text x="110" y="235" fill="#e2e8f0" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">User Browser</text>
+  <text x="110" y="270" fill="#94a3b8" font-size="14" font-family="Inter, Arial, sans-serif">Web / Mobile Clients</text>
+
+  <rect x="430" y="180" width="320" height="140" rx="18" fill="url(#card)" stroke="#1f2937" />
+  <text x="460" y="235" fill="#e2e8f0" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">Next.js Front</text>
+  <text x="460" y="270" fill="#94a3b8" font-size="14" font-family="Inter, Arial, sans-serif">SSR + CDN Cache (Vercel)</text>
+
+  <rect x="800" y="180" width="320" height="140" rx="18" fill="url(#card)" stroke="#1f2937" />
+  <text x="830" y="235" fill="#e2e8f0" font-size="20" font-family="Inter, Arial, sans-serif" font-weight="600">Spring Boot API</text>
+  <text x="830" y="270" fill="#94a3b8" font-size="14" font-family="Inter, Arial, sans-serif">Home Server / Docker</text>
+
+  <rect x="610" y="370" width="240" height="110" rx="16" fill="url(#card)" stroke="#1f2937" />
+  <text x="635" y="420" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">PostgreSQL</text>
+  <text x="635" y="448" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">Primary DB</text>
+
+  <rect x="880" y="370" width="240" height="110" rx="16" fill="url(#card)" stroke="#1f2937" />
+  <text x="905" y="420" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">Redis + MinIO</text>
+  <text x="905" y="448" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">Cache · Session · Media</text>
+
+  <rect x="310" y="370" width="240" height="110" rx="16" fill="url(#card)" stroke="#1f2937" />
+  <text x="335" y="420" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">Cloudflare Tunnel</text>
+  <text x="335" y="448" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">HTTPS Ingress</text>
+
+  <line x1="380" y1="250" x2="430" y2="250" stroke="#38bdf8" stroke-width="3" />
+  <line x1="750" y1="250" x2="800" y2="250" stroke="#38bdf8" stroke-width="3" />
+  <line x1="960" y1="320" x2="960" y2="370" stroke="#38bdf8" stroke-width="3" />
+  <line x1="720" y1="320" x2="720" y2="370" stroke="#38bdf8" stroke-width="3" />
+  <line x1="550" y1="250" x2="430" y2="400" stroke="#38bdf8" stroke-width="2" />
+</svg>

@@ -2,6 +2,7 @@ package com.back.boundedContexts.post.adapter.persistence
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.model.QPost.post
 import com.back.boundedContexts.post.model.QPostAttr.postAttr
 import com.back.standard.util.QueryDslUtil
@@ -83,6 +84,24 @@ class PostRepositoryImpl(
                     .and(post.published.isTrue)
                     .and(post.listed.isTrue),
             ).fetchOne()
+
+    override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? =
+        queryFactory
+            .select(post.content, post.contentHtml)
+            .from(post)
+            .where(
+                post.id
+                    .eq(id)
+                    .and(post.published.isTrue)
+                    .and(post.listed.isTrue),
+            ).fetchOne()
+            ?.let { tuple ->
+                val content = tuple.get(post.content) ?: return null
+                PublicPostDetailContentCacheDto(
+                    content = content,
+                    contentHtml = tuple.get(post.contentHtml),
+                )
+            }
 
     override fun findAllPublicListedContents(): List<String> =
         queryFactory

@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.AdmDeletedPostSnapshotDto
+import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import java.time.Instant
 import java.util.Optional
 
@@ -106,6 +107,8 @@ interface PostRepositoryPort {
     fun findPublicByTagCursor(query: TaggedCursorQuery): List<Post>
 
     fun findPublicDetailById(id: Long): Post?
+
+    fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?
 
     fun findAllPublicListedContents(): List<String>
 

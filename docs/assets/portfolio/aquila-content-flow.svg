@@ -1,0 +1,31 @@
+<svg width="1200" height="620" viewBox="0 0 1200 620" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="620" rx="28" fill="url(#bg)" />
+  <text x="64" y="84" fill="#e2e8f0" font-size="32" font-family="Inter, Arial, sans-serif" font-weight="700">Content Publish → Cache Refresh Flow</text>
+  <text x="64" y="124" fill="#94a3b8" font-size="16" font-family="Inter, Arial, sans-serif">Admin editor, backend save, revalidate queue, feed refresh</text>
+
+  <rect x="90" y="180" width="260" height="110" rx="16" fill="#111827" stroke="#1f2937" />
+  <text x="115" y="235" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">Admin Editor</text>
+  <text x="115" y="260" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">/admin/posts/new</text>
+
+  <rect x="390" y="180" width="260" height="110" rx="16" fill="#111827" stroke="#1f2937" />
+  <text x="415" y="235" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">Spring Boot API</text>
+  <text x="415" y="260" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">posts / images / tags</text>
+
+  <rect x="690" y="180" width="260" height="110" rx="16" fill="#111827" stroke="#1f2937" />
+  <text x="715" y="235" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">Revalidate Queue</text>
+  <text x="715" y="260" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">task + retry</text>
+
+  <rect x="540" y="360" width="260" height="110" rx="16" fill="#111827" stroke="#1f2937" />
+  <text x="565" y="415" fill="#e2e8f0" font-size="18" font-family="Inter, Arial, sans-serif" font-weight="600">Next.js Front</text>
+  <text x="565" y="440" fill="#94a3b8" font-size="13" font-family="Inter, Arial, sans-serif">feed / detail refresh</text>
+
+  <line x1="350" y1="235" x2="390" y2="235" stroke="#22c55e" stroke-width="3" />
+  <line x1="650" y1="235" x2="690" y2="235" stroke="#22c55e" stroke-width="3" />
+  <line x1="820" y1="290" x2="670" y2="360" stroke="#22c55e" stroke-width="3" />
+</svg>

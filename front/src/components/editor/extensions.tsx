@@ -1,16 +1,19 @@
 import styled from "@emotion/styled"
 import { Node, mergeAttributes } from "@tiptap/core"
-import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
+import CodeBlock from "@tiptap/extension-code-block"
+import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
+import AppIcon from "src/components/icons/AppIcon"
 import {
   PointerEvent as ReactPointerEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
 import type { CalloutKind } from "src/libs/markdown/rendering"
-import { clampImageWidthPx, normalizeImageAlign } from "src/libs/markdown/rendering"
+import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/libs/markdown/rendering"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 
 const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
@@ -27,19 +30,79 @@ const IMAGE_ALIGN_OPTIONS = [
   { value: "full", label: "전체 폭" },
 ] as const
 
-const CALLOUT_KIND_OPTIONS: Array<{ value: CalloutKind; label: string }> = [
-  { value: "tip", label: "TIP" },
-  { value: "info", label: "INFO" },
-  { value: "warning", label: "WARNING" },
-  { value: "outline", label: "OUTLINE" },
-  { value: "example", label: "EXAMPLE" },
-  { value: "summary", label: "SUMMARY" },
+const CALLOUT_KIND_OPTIONS: Array<{ value: CalloutKind; label: string; emoji: string }> = [
+  { value: "tip", label: "팁", emoji: "💡" },
+  { value: "info", label: "안내", emoji: "ℹ️" },
+  { value: "warning", label: "주의", emoji: "⚠️" },
+  { value: "outline", label: "정리", emoji: "📋" },
+  { value: "example", label: "예시", emoji: "✅" },
+  { value: "summary", label: "요약", emoji: "📚" },
 ]
 
 const DEFAULT_IMAGE_WIDTH = 720
 const RESIZE_MIN_WIDTH = 240
 const TEXTAREA_DEBOUNCE_MS = 180
 const MERMAID_PREVIEW_ROOT_MARGIN = "240px 0px"
+type CodeLanguageOption = {
+  value: string
+  label: string
+  keywords?: string[]
+}
+
+const CODE_LANGUAGE_STORAGE_KEY = "aq.editor.preferredCodeLanguage"
+let preferredCodeLanguage = "text"
+
+const CODE_LANGUAGE_OPTIONS: CodeLanguageOption[] = [
+  { value: "text", label: "일반 텍스트", keywords: ["plain text", "plaintext"] },
+  { value: "bash", label: "Bash", keywords: ["shell", "sh"] },
+  { value: "shell", label: "Shell", keywords: ["bash", "sh"] },
+  { value: "javascript", label: "JavaScript", keywords: ["js"] },
+  { value: "typescript", label: "TypeScript", keywords: ["ts"] },
+  { value: "jsx", label: "JSX" },
+  { value: "tsx", label: "TSX" },
+  { value: "json", label: "JSON" },
+  { value: "yaml", label: "YAML", keywords: ["yml"] },
+  { value: "markdown", label: "Markdown", keywords: ["md"] },
+  { value: "html", label: "HTML" },
+  { value: "css", label: "CSS" },
+  { value: "sql", label: "SQL" },
+  { value: "python", label: "Python", keywords: ["py"] },
+  { value: "java", label: "Java" },
+  { value: "kotlin", label: "Kotlin", keywords: ["kt"] },
+  { value: "go", label: "Go" },
+  { value: "rust", label: "Rust", keywords: ["rs"] },
+  { value: "php", label: "PHP" },
+  { value: "ruby", label: "Ruby", keywords: ["rb"] },
+  { value: "swift", label: "Swift" },
+  { value: "objectivec", label: "Objective-C", keywords: ["objc"] },
+  { value: "c", label: "C" },
+  { value: "cpp", label: "C++" },
+  { value: "csharp", label: "C#", keywords: ["cs"] },
+  { value: "matlab", label: "MATLAB" },
+  { value: "powershell", label: "PowerShell", keywords: ["ps1"] },
+  { value: "nix", label: "Nix" },
+  { value: "dockerfile", label: "Dockerfile", keywords: ["docker"] },
+  { value: "mermaid", label: "Mermaid" },
+]
+
+const normalizeCodeLanguage = (value?: string | null) => value?.trim().toLowerCase() || "text"
+
+export const getPreferredCodeLanguage = () => {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(CODE_LANGUAGE_STORAGE_KEY)
+    if (stored?.trim()) {
+      preferredCodeLanguage = normalizeCodeLanguage(stored)
+    }
+  }
+  return preferredCodeLanguage
+}
+
+const rememberPreferredCodeLanguage = (value?: string | null) => {
+  preferredCodeLanguage = normalizeCodeLanguage(value)
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CODE_LANGUAGE_STORAGE_KEY, preferredCodeLanguage)
+  }
+}
 const MERMAID_TEMPLATE = ["flowchart TD", "  A[사용자 요청] --> B{검증}", "  B -->|OK| C[처리]", "  B -->|Fail| D[오류 반환]"].join(
   "\n"
 )
@@ -176,6 +239,131 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   )
 }
 
+const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const menuId = useId()
+  const menuRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
+  const [languageSearch, setLanguageSearch] = useState("")
+
+  useEffect(() => {
+    setDraftLanguage(normalizeCodeLanguage(String(node.attrs?.language || "")))
+  }, [node.attrs?.language])
+
+  useEffect(() => {
+    if (!isLanguageMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && menuRef.current?.contains(target)) return
+      setIsLanguageMenuOpen(false)
+      setLanguageSearch("")
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setIsLanguageMenuOpen(false)
+      setLanguageSearch("")
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown)
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown)
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isLanguageMenuOpen])
+
+  useEffect(() => {
+    if (!isLanguageMenuOpen) return
+    window.requestAnimationFrame(() => searchInputRef.current?.focus())
+  }, [isLanguageMenuOpen])
+
+  const filteredLanguageOptions = useMemo(() => {
+    const keyword = languageSearch.trim().toLowerCase()
+    if (!keyword) return CODE_LANGUAGE_OPTIONS
+
+    return CODE_LANGUAGE_OPTIONS.filter((option) => {
+      const haystacks = [option.value, option.label, ...(option.keywords || [])]
+      return haystacks.some((candidate) => candidate.toLowerCase().includes(keyword))
+    })
+  }, [languageSearch])
+
+  const exactSearchMatch = filteredLanguageOptions.some(
+    (option) => option.value === languageSearch.trim().toLowerCase()
+  )
+
+  const applyLanguage = (value: string) => {
+    const normalizedLanguage = normalizeCodeLanguage(value)
+    setDraftLanguage(normalizedLanguage)
+    rememberPreferredCodeLanguage(normalizedLanguage)
+    updateAttributes({ language: normalizedLanguage || null })
+    setIsLanguageMenuOpen(false)
+    setLanguageSearch("")
+  }
+
+  return (
+    <CodeBlockEditorWrapper data-selected={selected}>
+      <CodeBlockEditorHeader>
+        <CodeWindowDots aria-hidden="true">
+          <span data-tone="red" />
+          <span data-tone="yellow" />
+          <span data-tone="green" />
+        </CodeWindowDots>
+        <CodeLanguagePicker ref={menuRef}>
+          <CodeLanguageButton
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={isLanguageMenuOpen}
+            aria-controls={`${menuId}-language-menu`}
+            onClick={() => {
+              setIsLanguageMenuOpen((prev) => !prev)
+              setLanguageSearch("")
+            }}
+          >
+            <span>{toLanguageLabel(draftLanguage)}</span>
+            <AppIcon name="chevron-down" aria-hidden="true" />
+          </CodeLanguageButton>
+          {isLanguageMenuOpen ? (
+            <CodeLanguagePopover id={`${menuId}-language-menu`} role="dialog" aria-label="코드 언어 선택">
+              <CodeLanguageSearchInput
+                ref={searchInputRef}
+                value={languageSearch}
+                placeholder="언어를 검색하세요"
+                aria-label="언어 검색"
+                onChange={(event) => setLanguageSearch(event.target.value)}
+              />
+              <CodeLanguageOptionList>
+                {filteredLanguageOptions.map((option) => (
+                  <CodeLanguageOptionButton
+                    key={option.value}
+                    type="button"
+                    data-active={draftLanguage === option.value}
+                    onClick={() => applyLanguage(option.value)}
+                  >
+                    <span>{option.label}</span>
+                    {draftLanguage === option.value ? <AppIcon name="check-circle" aria-hidden="true" /> : null}
+                  </CodeLanguageOptionButton>
+                ))}
+                {languageSearch.trim() && !exactSearchMatch ? (
+                  <CodeLanguageOptionButton type="button" onClick={() => applyLanguage(languageSearch)}>
+                    <span>{languageSearch.trim()}</span>
+                    <small>직접 입력</small>
+                  </CodeLanguageOptionButton>
+                ) : null}
+              </CodeLanguageOptionList>
+            </CodeLanguagePopover>
+          ) : null}
+        </CodeLanguagePicker>
+      </CodeBlockEditorHeader>
+      <CodeBlockEditorSurface>
+        <NodeViewContent className="aq-code-editor-content" />
+      </CodeBlockEditorSurface>
+    </CodeBlockEditorWrapper>
+  )
+}
+
 const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
@@ -202,60 +390,69 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
 
   return (
     <CalloutEditorWrapper data-selected={selected} data-kind={draftKind}>
-      <CalloutEditorMetaRow>
-        <CalloutEditorLabel>
-          <strong>콜아웃</strong>
-        </CalloutEditorLabel>
-        <BlockSelect
-          value={draftKind}
-          aria-label="콜아웃 종류"
-          onChange={(event) => {
-            const nextKind = event.target.value as CalloutKind
-            setDraftKind(nextKind)
-            commit({ kind: nextKind })
-          }}
-        >
-          {CALLOUT_KIND_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </BlockSelect>
-      </CalloutEditorMetaRow>
-      <BlockInput
-        value={draftTitle}
-        placeholder="제목"
-        onBlur={flushCommit}
-        onChange={(event) => {
-          const nextTitle = event.target.value
-          setDraftTitle(nextTitle)
-          commit({ title: nextTitle })
-        }}
-      />
-      <CompactBlockTextarea
-        ref={bodyRef}
-        value={draftBody}
-        placeholder="핵심 내용"
-        spellCheck={false}
-        rows={2}
-        onBlur={flushCommit}
-        onChange={(event) => {
-          const nextBody = event.target.value
-          setDraftBody(nextBody)
-          commit({ body: nextBody })
-        }}
-      />
-      <CalloutPreviewCard data-kind={draftKind}>
-        <CalloutPreviewBadge>{CALLOUT_KIND_OPTIONS.find((option) => option.value === draftKind)?.label}</CalloutPreviewBadge>
-        {draftTitle ? <h4>{draftTitle}</h4> : null}
-        <p>{draftBody || "핵심 내용을 입력하세요."}</p>
-      </CalloutPreviewCard>
+      <CalloutEditorCard data-kind={draftKind}>
+        <CalloutEditorHeader data-kind={draftKind}>
+          <CalloutEmojiPicker role="list" aria-label="콜아웃 종류">
+            {CALLOUT_KIND_OPTIONS.map((option) => (
+              <CalloutEmojiButton
+                key={option.value}
+                type="button"
+                data-active={draftKind === option.value}
+                aria-label={option.label}
+                title={option.label}
+                onClick={() => {
+                  setDraftKind(option.value)
+                  commit({ kind: option.value })
+                }}
+              >
+                <span aria-hidden="true">{option.emoji}</span>
+              </CalloutEmojiButton>
+            ))}
+          </CalloutEmojiPicker>
+          <CalloutTitleInput
+            value={draftTitle}
+            placeholder="제목"
+            onBlur={flushCommit}
+            onChange={(event) => {
+              const nextTitle = event.target.value
+              setDraftTitle(nextTitle)
+              commit({ title: nextTitle })
+            }}
+          />
+        </CalloutEditorHeader>
+        <CalloutEditorBody>
+          <CalloutBodyTextarea
+            ref={bodyRef}
+            value={draftBody}
+            placeholder="본문"
+            spellCheck={false}
+            rows={3}
+            onBlur={flushCommit}
+            onChange={(event) => {
+              const nextBody = event.target.value
+              setDraftBody(nextBody)
+              commit({ body: nextBody })
+            }}
+          />
+        </CalloutEditorBody>
+      </CalloutEditorCard>
+      <CalloutEditorLabel>
+        {CALLOUT_KIND_OPTIONS.map((option) => (
+          <CalloutToneHint
+            key={option.value}
+            data-active={draftKind === option.value}
+            aria-hidden={draftKind !== option.value}
+          >
+            {option.emoji} {option.label}
+          </CalloutToneHint>
+        ))}
+      </CalloutEditorLabel>
     </CalloutEditorWrapper>
   )
 }
 
 const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
-  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || "더 보기"))
+  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || "제목"))
   const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
@@ -264,7 +461,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   useAutosizeTextarea(bodyRef, draftBody)
 
   useEffect(() => {
-    setDraftTitle(String(node.attrs?.title || "더 보기"))
+    setDraftTitle(String(node.attrs?.title || "제목"))
     setDraftBody(String(node.attrs?.body || ""))
   }, [node.attrs?.title, node.attrs?.body])
 
@@ -277,43 +474,46 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
 
   return (
     <ToggleEditorWrapper data-selected={selected}>
-      <CalloutEditorLabel>
-        <strong>토글</strong>
-      </CalloutEditorLabel>
-      <BlockInput
-        value={draftTitle}
-        placeholder="토글 제목"
-        onBlur={flushCommit}
-        onChange={(event) => {
-          const nextTitle = event.target.value
-          setDraftTitle(nextTitle)
-          commit({ title: nextTitle })
-        }}
-      />
-      <CompactBlockTextarea
-        ref={bodyRef}
-        value={draftBody}
-        placeholder="토글 본문"
-        spellCheck={false}
-        rows={2}
-        onBlur={flushCommit}
-        onChange={(event) => {
-          const nextBody = event.target.value
-          setDraftBody(nextBody)
-          commit({ body: nextBody })
-        }}
-      />
-      <TogglePreviewCard open={isPreviewOpen}>
+      <ToggleEditorCard open={isPreviewOpen} data-selected={selected}>
         <summary
           onClick={(event) => {
             event.preventDefault()
             setIsPreviewOpen((prev) => !prev)
           }}
         >
-          {draftTitle || "더 보기"}
+          <ToggleSummaryInner>
+            <ToggleChevron aria-hidden="true">{isPreviewOpen ? "▾" : "▸"}</ToggleChevron>
+            <ToggleTitleInput
+              value={draftTitle}
+              placeholder="제목"
+              onClick={(event) => event.stopPropagation()}
+              onBlur={flushCommit}
+              onChange={(event) => {
+                const nextTitle = event.target.value
+                setDraftTitle(nextTitle)
+                commit({ title: nextTitle })
+              }}
+            />
+          </ToggleSummaryInner>
         </summary>
-        {isPreviewOpen ? <p>{draftBody || "토글 내부 본문을 입력하세요."}</p> : null}
-      </TogglePreviewCard>
+        <ToggleEditorBody data-open={isPreviewOpen}>
+          {isPreviewOpen ? (
+            <ToggleBodyTextarea
+              ref={bodyRef}
+              value={draftBody}
+              placeholder="본문"
+              spellCheck={false}
+              rows={3}
+              onBlur={flushCommit}
+              onChange={(event) => {
+                const nextBody = event.target.value
+                setDraftBody(nextBody)
+                commit({ body: nextBody })
+              }}
+            />
+          ) : null}
+        </ToggleEditorBody>
+      </ToggleEditorCard>
     </ToggleEditorWrapper>
   )
 }
@@ -653,6 +853,12 @@ export const ResizableImage = Node.create({
   },
 })
 
+export const EditorCodeBlock = CodeBlock.extend({
+  addNodeView() {
+    return ReactNodeViewRenderer(CodeBlockView)
+  },
+})
+
 const sharedTextareaStyles = ({ minHeight = "6rem" }: { minHeight?: string } = {}) => `
   min-height: ${minHeight};
   width: 100%;
@@ -691,18 +897,6 @@ const CompactBlockTextarea = styled(BlockTextarea)`
   padding: 0.9rem 1rem;
   font-size: 0.9rem;
   line-height: 1.55;
-`
-
-const BlockSelect = styled.select`
-  min-height: 2.2rem;
-  min-width: 8rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 12, 16, 0.92);
-  color: var(--color-gray12);
-  font-size: 0.82rem;
-  font-weight: 700;
-  padding: 0 0.95rem;
 `
 
 const RichBlockWrapper = styled(NodeViewWrapper)`
@@ -746,6 +940,173 @@ const MermaidPreviewCard = styled.div`
   }
 `
 
+const CodeBlockEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: #2b2d3a;
+
+  &[data-selected="true"] {
+    border-color: rgba(148, 163, 184, 0.28);
+    box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.12);
+  }
+`
+
+const CodeBlockEditorHeader = styled.div`
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.84rem 0.96rem 0.76rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, #3a3f59, #363b54);
+`
+
+const CodeWindowDots = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+
+  span {
+    width: 0.92rem;
+    height: 0.92rem;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  }
+
+  span[data-tone="red"] {
+    background: #ff5f56;
+  }
+
+  span[data-tone="yellow"] {
+    background: #ffbd2e;
+  }
+
+  span[data-tone="green"] {
+    background: #27c93f;
+  }
+`
+
+const CodeLanguagePicker = styled.div`
+  position: relative;
+  justify-self: end;
+  min-width: 0;
+`
+
+const CodeLanguageButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.1rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #ff9d62;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0 0.8rem;
+  text-transform: uppercase;
+
+  svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    color: rgba(255, 255, 255, 0.62);
+  }
+`
+
+const CodeLanguagePopover = styled.div`
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 20;
+  width: min(20rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(30, 31, 36, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
+`
+
+const CodeLanguageSearchInput = styled.input`
+  min-height: 2.6rem;
+  width: 100%;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  background: rgba(17, 24, 39, 0.88);
+  color: var(--color-gray12);
+  font-size: 0.96rem;
+  padding: 0 0.95rem;
+`
+
+const CodeLanguageOptionList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 18rem;
+  overflow-y: auto;
+`
+
+const CodeLanguageOptionButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.6rem;
+  border-radius: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-gray12);
+  font-size: 0.96rem;
+  font-weight: 600;
+  padding: 0 0.7rem;
+  text-align: left;
+
+  small {
+    color: var(--color-gray10);
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+    color: #e5e7eb;
+  }
+
+  &[data-active="true"],
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+`
+
+const CodeBlockEditorSurface = styled.div`
+  .aq-code-editor-content {
+    overflow: auto;
+    padding: 1.05rem 1.18rem 1.6rem;
+    background: transparent;
+    color: #a9b7c6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    font-size: 0.88rem;
+    line-height: 1.65;
+    white-space: pre;
+  }
+
+  .aq-code-editor-content > div {
+    display: block;
+    min-height: 5rem;
+    outline: none;
+    white-space: pre;
+  }
+`
+
 const MermaidPreviewPlaceholder = styled.div`
   display: flex;
   align-items: center;
@@ -756,147 +1117,134 @@ const MermaidPreviewPlaceholder = styled.div`
   text-align: center;
 `
 
-const CalloutPreviewCard = styled.div`
-  border-radius: 0.95rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 0.68rem 0.78rem;
-
-  h4 {
-    margin: 0.55rem 0 0.18rem;
-    font-size: 0.86rem;
-    color: var(--color-gray12);
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-gray10);
-    white-space: pre-wrap;
-    font-size: 0.82rem;
-    line-height: 1.5;
-  }
-
-  &[data-kind="tip"] {
-    background: rgba(34, 197, 94, 0.08);
-    border-color: rgba(34, 197, 94, 0.2);
-
-    strong {
-      background: rgba(34, 197, 94, 0.12);
-      color: #86efac;
-    }
-  }
-
-  &[data-kind="info"] {
-    background: rgba(59, 130, 246, 0.08);
-    border-color: rgba(59, 130, 246, 0.2);
-
-    strong {
-      background: rgba(59, 130, 246, 0.14);
-      color: #93c5fd;
-    }
-  }
-
-  &[data-kind="warning"] {
-    background: rgba(245, 158, 11, 0.08);
-    border-color: rgba(245, 158, 11, 0.2);
-
-    strong {
-      background: rgba(245, 158, 11, 0.14);
-      color: #fcd34d;
-    }
-  }
-
-  &[data-kind="outline"] {
-    background: rgba(148, 163, 184, 0.08);
-    border-color: rgba(148, 163, 184, 0.2);
-
-    strong {
-      background: rgba(148, 163, 184, 0.14);
-      color: #cbd5e1;
-    }
-  }
-
-  &[data-kind="example"] {
-    background: rgba(16, 185, 129, 0.08);
-    border-color: rgba(16, 185, 129, 0.2);
-
-    strong {
-      background: rgba(16, 185, 129, 0.14);
-      color: #6ee7b7;
-    }
-  }
-
-  &[data-kind="summary"] {
-    background: rgba(168, 85, 247, 0.08);
-    border-color: rgba(168, 85, 247, 0.2);
-
-    strong {
-      background: rgba(168, 85, 247, 0.14);
-      color: #d8b4fe;
-    }
-  }
-`
-
-const CalloutPreviewBadge = styled.strong`
-  display: inline-flex;
-  min-height: 1.65rem;
-  align-items: center;
-  border-radius: 999px;
-  padding: 0 0.62rem;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-`
-
 const CalloutEditorWrapper = styled(NodeViewWrapper)`
+  --ad-accent: #f6ad55;
+  --ad-header-bg: rgba(246, 173, 85, 0.15);
+  --ad-body-bg: rgba(246, 173, 85, 0.07);
+  --ad-border: rgba(246, 173, 85, 0.26);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.48rem;
   margin: 0.75rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0.95rem;
-  background: rgba(18, 21, 26, 0.68);
-  padding: 0.72rem 0.8rem;
 
   &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.28);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
+    filter: brightness(1.03);
   }
 
   &[data-kind="tip"] {
-    border-color: rgba(34, 197, 94, 0.22);
+    --ad-accent: #f6ad55;
+    --ad-header-bg: rgba(246, 173, 85, 0.15);
+    --ad-body-bg: rgba(246, 173, 85, 0.07);
+    --ad-border: rgba(246, 173, 85, 0.26);
   }
 
   &[data-kind="info"] {
-    border-color: rgba(59, 130, 246, 0.22);
+    --ad-accent: #38bdf8;
+    --ad-header-bg: rgba(56, 189, 248, 0.14);
+    --ad-body-bg: rgba(56, 189, 248, 0.06);
+    --ad-border: rgba(56, 189, 248, 0.24);
   }
 
   &[data-kind="warning"] {
-    border-color: rgba(245, 158, 11, 0.24);
+    --ad-accent: #fb7185;
+    --ad-header-bg: rgba(251, 113, 133, 0.15);
+    --ad-body-bg: rgba(251, 113, 133, 0.07);
+    --ad-border: rgba(251, 113, 133, 0.26);
   }
 
   &[data-kind="outline"] {
-    border-color: rgba(148, 163, 184, 0.22);
+    --ad-accent: #94a3b8;
+    --ad-header-bg: rgba(148, 163, 184, 0.14);
+    --ad-body-bg: rgba(148, 163, 184, 0.06);
+    --ad-border: rgba(148, 163, 184, 0.22);
   }
 
   &[data-kind="example"] {
-    border-color: rgba(16, 185, 129, 0.22);
+    --ad-accent: #4ade80;
+    --ad-header-bg: rgba(74, 222, 128, 0.14);
+    --ad-body-bg: rgba(74, 222, 128, 0.06);
+    --ad-border: rgba(74, 222, 128, 0.24);
   }
 
   &[data-kind="summary"] {
-    border-color: rgba(168, 85, 247, 0.22);
+    --ad-accent: #818cf8;
+    --ad-header-bg: rgba(129, 140, 248, 0.14);
+    --ad-body-bg: rgba(129, 140, 248, 0.06);
+    --ad-border: rgba(129, 140, 248, 0.24);
   }
 `
 
-const CalloutEditorMetaRow = styled.div`
+const CalloutEditorCard = styled.div`
+  overflow: hidden;
+  border: 1px solid var(--ad-border);
+  border-left: 8px solid var(--ad-accent);
+  border-radius: 0.95rem;
+  background: var(--ad-body-bg);
+`
+
+const CalloutEditorHeader = styled.div`
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.7rem;
+  gap: 0.9rem;
+  min-height: 3.3rem;
+  padding: 0.7rem 1rem;
+  background: var(--ad-header-bg);
+  border-bottom: 1px solid var(--ad-border);
+`
+
+const CalloutEmojiPicker = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+`
+
+const CalloutEmojiButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.02rem;
+  transition: background-color 140ms ease, transform 140ms ease, color 140ms ease;
+
+  &[data-active="true"] {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--ad-accent);
+    transform: translateY(-1px);
+  }
+`
+
+const CalloutTitleInput = styled.input`
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ad-accent);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+
+  &::placeholder {
+    color: color-mix(in srgb, var(--ad-accent) 70%, transparent);
+  }
+`
+
+const CalloutEditorBody = styled.div`
+  padding: 1rem 1.15rem 1.05rem;
 `
 
 const CalloutEditorLabel = styled.div`
+  min-height: 1rem;
+
   display: flex;
-  flex-direction: column;
-  gap: 0.08rem;
+  align-items: center;
+  gap: 0.5rem;
 
   strong {
     font-size: 0.82rem;
@@ -905,48 +1253,104 @@ const CalloutEditorLabel = styled.div`
   }
 `
 
-const TogglePreviewCard = styled.details`
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0.9rem;
-  background: rgba(13, 15, 18, 0.96);
-  padding: 0.08rem 0.08rem 0.48rem;
+const CalloutToneHint = styled.span`
+  display: none;
+  color: var(--color-gray10);
+  font-size: 0.78rem;
+
+  &[data-active="true"] {
+    display: inline-flex;
+  }
+`
+
+const CalloutBodyTextarea = styled(CompactBlockTextarea)`
+  min-height: 5rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-gray12);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  padding: 0;
+
+  &::placeholder {
+    color: var(--color-gray10);
+  }
+`
+
+const ToggleEditorWrapper = styled(NodeViewWrapper)`
+  margin: 0.75rem 0;
+`
+
+const ToggleEditorCard = styled.details`
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.95rem;
+  background: rgba(18, 21, 26, 0.72);
+  overflow: hidden;
+
+  &[data-selected="true"] {
+    border-color: rgba(148, 163, 184, 0.26);
+    box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.08);
+  }
 
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0.62rem 0.74rem;
-    font-size: 0.84rem;
-    font-weight: 700;
-    color: var(--color-gray12);
+    padding: 0.78rem 0.95rem;
 
     &::-webkit-details-marker {
       display: none;
     }
   }
+`
 
-  p {
-    margin: 0;
-    padding: 0 0.74rem 0.08rem;
+const ToggleSummaryInner = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+`
+
+const ToggleChevron = styled.span`
+  color: var(--color-gray10);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+`
+
+const ToggleTitleInput = styled.input`
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-gray12);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.45;
+  padding: 0;
+
+  &::placeholder {
     color: var(--color-gray10);
-    white-space: pre-wrap;
-    font-size: 0.8rem;
-    line-height: 1.5;
   }
 `
 
-const ToggleEditorWrapper = styled(NodeViewWrapper)`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0.75rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0.95rem;
-  background: rgba(18, 21, 26, 0.68);
-  padding: 0.72rem 0.8rem;
+const ToggleEditorBody = styled.div`
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 1rem 0.95rem;
+`
 
-  &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.28);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
+const ToggleBodyTextarea = styled(CompactBlockTextarea)`
+  min-height: 5.25rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-gray12);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  padding: 0.95rem 0 0;
+
+  &::placeholder {
+    color: var(--color-gray10);
   }
 `
 

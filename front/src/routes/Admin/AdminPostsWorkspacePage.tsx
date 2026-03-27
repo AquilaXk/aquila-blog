@@ -752,8 +752,6 @@ const Main = styled.main`
   }
 `
 
-const cardBorder = ({ theme }: { theme: any }) => theme.colors.gray5
-
 const PageHeader = styled.section`
   display: flex;
   align-items: center;

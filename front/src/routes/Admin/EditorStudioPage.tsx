@@ -392,8 +392,9 @@ const INLINE_TEXT_COLOR_OPTIONS = [
   { label: "슬레이트", value: "#94a3b8" },
 ] as const
 
-const SHOW_LEGACY_PROFILE_STUDIO = false
-const SHOW_LEGACY_UTILITY_STUDIO = false
+const SHOW_LEGACY_PROFILE_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_PROFILE_STUDIO === "true"
+const SHOW_LEGACY_CONTENT_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_CONTENT_STUDIO === "true"
+const SHOW_LEGACY_UTILITY_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_UTILITY_STUDIO === "true"
 
 export const getEditorStudioPageProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   return await getAdminPageProps(req)
@@ -1124,6 +1125,48 @@ const waitFor = (ms: number) =>
 const computeConflictRetryDelay = (attempt: number): number =>
   PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS * Math.max(1, attempt + 1)
 
+const TEMP_POST_CONFLICT_MAX_RETRIES = 2
+
+const requestTempPostWithConflictRetry = async (
+  resolveExistingTempPost: () => Promise<PostForEditor | null>,
+  maxRetries: number = TEMP_POST_CONFLICT_MAX_RETRIES
+): Promise<RsData<PostForEditor>> => {
+  let lastConflictBody = ""
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const response = await fetch(`${getApiBaseUrl()}/post/api/v1/posts/temp`, {
+      method: "POST",
+      credentials: "include",
+    })
+
+    if (response.status !== 409) {
+      if (!response.ok) {
+        const body = await parseResponseErrorBody(response)
+        throw new Error(body || `임시글 불러오기 실패 (${response.status})`)
+      }
+
+      return (await response.json()) as RsData<PostForEditor>
+    }
+
+    lastConflictBody = await parseResponseErrorBody(response)
+    if (attempt < maxRetries) {
+      await waitFor(computeConflictRetryDelay(attempt))
+      continue
+    }
+  }
+
+  const recoveredTempPost = await resolveExistingTempPost()
+  if (recoveredTempPost) {
+    return {
+      resultCode: "200-1",
+      msg: "기존 임시저장 글을 불러옵니다.",
+      data: recoveredTempPost,
+    }
+  }
+
+  throw new Error(lastConflictBody || "요청 충돌이 발생했습니다. 다시 시도해주세요.")
+}
+
 const uploadWithConflictRetry = async (
   requestUpload: () => Promise<Response>,
   maxRetries: number = IMAGE_UPLOAD_CONFLICT_MAX_RETRIES
@@ -1372,7 +1415,7 @@ const resolveEditorSyncSnippet = (content: string, selectionStart: number, topVi
   const lines = content.split(/\r?\n/)
   if (lines.length === 0) return ""
 
-  let lineIndex = 0
+  let lineIndex: number
   if (typeof topVisibleLineIndex === "number" && Number.isFinite(topVisibleLineIndex)) {
     lineIndex = Math.max(0, Math.min(lines.length - 1, topVisibleLineIndex))
   } else {
@@ -1924,10 +1967,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     )
   }, [setPublishStatus])
 
-  const syncEditorMeta = useCallback((content: string) => {
+  const syncEditorMeta = useCallback((content: string, contentHtml?: string) => {
     const parsed = parseEditorMeta(content)
+    const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
+    const markdownFromHtml = contentHtml?.trim() ? convertHtmlToMarkdown(contentHtml).trim() : ""
+    const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
     const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
-    const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(parsed.body))
+    const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
     const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
     const syncedThumbnailFocusX = parseThumbnailFocusXFromUrl(
       parsedThumbnail || fallbackThumbnail,
@@ -1938,8 +1984,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       DEFAULT_THUMBNAIL_FOCUS_Y
     )
     const syncedThumbnailZoom = parseThumbnailZoomFromUrl(parsedThumbnail || fallbackThumbnail, DEFAULT_THUMBNAIL_ZOOM)
-    setPostContent(parsed.body)
-    setPostSummary(parsed.summary || makePreviewSummary(parsed.body))
+    setPostContent(resolvedBody)
+    setPostSummary(parsed.summary || makePreviewSummary(resolvedBody))
     setPostThumbnailUrl(syncedThumbnail)
     setPostThumbnailFocusX(syncedThumbnailFocusX)
     setPostThumbnailFocusY(syncedThumbnailFocusY)
@@ -2306,7 +2352,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
 
       setPostTitle(post.title ?? "")
-      syncEditorMeta(post.content ?? "")
+      syncEditorMeta(post.content ?? "", post.contentHtml)
       setPostVisibility(toVisibility(!!post.published, !!post.listed))
       applyLoadedPostContext(post)
       setResult(pretty(post as unknown as JsonValue))
@@ -2317,6 +2363,17 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setLoadingKey("")
     }
   }, [applyLoadedPostContext, postId, syncEditorMeta])
+
+  const loadExistingTempPostForRecovery = useCallback(async (): Promise<PostForEditor | null> => {
+    try {
+      const data = await apiFetch<PageDto<AdminPostListItem>>("/post/api/v1/adm/posts?page=1&pageSize=30&kw=&sort=MODIFIED_AT")
+      const tempRow = (data.content || []).find((row) => row.title.trim() === "임시글" && !row.published)
+      if (!tempRow?.id) return null
+      return await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${tempRow.id}`)
+    } catch {
+      return null
+    }
+  }, [])
 
   const handleRecommendTags = useCallback(async () => {
     const content = postContent.trim()
@@ -2548,10 +2605,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     try {
       setLoadingKey("postTemp")
       setPublishStatus({ tone: "loading", text: "임시글을 불러오는 중입니다..." }, "page")
-      const response = await apiFetch<RsData<PostForEditor>>("/post/api/v1/posts/temp", { method: "POST" })
+      const response = await requestTempPostWithConflictRetry(loadExistingTempPostForRecovery)
       const tempPost = response.data
       setPostTitle(tempPost.title ?? "")
-      syncEditorMeta(tempPost.content ?? "")
+      syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
       setPostVisibility(toVisibility(!!tempPost.published, !!tempPost.listed))
       applyLoadedPostContext(tempPost)
       setIsTempDraftMode(true)
@@ -2579,7 +2636,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     } finally {
       setLoadingKey("")
     }
-  }, [applyLoadedPostContext, isCompactMobileLayout, router, setPublishStatus, syncEditorMeta])
+  }, [applyLoadedPostContext, isCompactMobileLayout, loadExistingTempPostForRecovery, router, setPublishStatus, syncEditorMeta])
 
   const handlePublishTempDraft = async (): Promise<boolean> => {
     if (editorMode !== "edit" || !postId.trim()) {
@@ -3811,7 +3868,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ? localDraftFingerprint === lastLocalDraftFingerprintRef.current && Boolean(localDraftSavedAt)
           ? "자동 저장됨"
           : "저장되지 않은 변경"
-        : "새 초안"
+        : ""
   const composeStatusTone =
     loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
       ? "loading"
@@ -4113,15 +4170,16 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     return (
       <EditorStudioRoot>
         <EditorStudioLoadingState>
-          <strong>새 초안을 준비하고 있습니다.</strong>
-          <span>잠시만 기다리면 전용 편집 화면으로 이어집니다.</span>
+          <strong>편집 화면을 준비하고 있습니다.</strong>
+          <span>잠시만 기다려 주세요.</span>
         </EditorStudioLoadingState>
       </EditorStudioRoot>
     )
   }
 
-  return (
-    <EditorStudioRoot>
+  if (isDedicatedEditorRoute) {
+    return (
+      <EditorStudioRoot>
       <input
         ref={postImageFileInputRef}
         type="file"
@@ -4142,7 +4200,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           ← 나가기
         </Button>
         <EditorStudioTopBarActions>
-          <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState>
+          {composeStatusText ? <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState> : null}
           <PrimaryButton
             type="button"
             disabled={publishActionButtonDisabled}
@@ -4245,45 +4303,47 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             )}
           </EditorStudioCanvas>
 
-          <InlineDisclosure open={isComposeUtilityOpen}>
-            <summary
-              onClick={(event) => {
-                event.preventDefault()
-                setIsComposeUtilityOpen((prev) => !prev)
-              }}
-            >
-              <strong>Markdown 편집</strong>
-              <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
-            </summary>
-            {isComposeUtilityOpen && (
-              <div className="body">
-                <RawEditorSection>
-                  <FieldLabel htmlFor="raw-markdown-editor">Markdown</FieldLabel>
-                  <RawMarkdownTextarea
-                    id="raw-markdown-editor"
-                    value={postContent}
-                    onChange={(e) => setPostContent(e.target.value)}
-                    placeholder="당신의 이야기를 적어보세요..."
-                  />
-                  <SubActionRow>
-                    <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                      임시 저장
-                    </Button>
-                    <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
-                      임시저장 불러오기
-                    </Button>
-                    <Button
-                      type="button"
-                      disabled={loadingKey.length > 0 || !localDraftSavedAt}
-                      onClick={clearLocalDraft}
-                    >
-                      임시저장 삭제
-                    </Button>
-                  </SubActionRow>
-                </RawEditorSection>
-              </div>
-            )}
-          </InlineDisclosure>
+          {!BLOCK_EDITOR_V2_ENABLED ? (
+            <InlineDisclosure open={isComposeUtilityOpen}>
+              <summary
+                onClick={(event) => {
+                  event.preventDefault()
+                  setIsComposeUtilityOpen((prev) => !prev)
+                }}
+              >
+                <strong>Markdown 편집</strong>
+                <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
+              </summary>
+              {isComposeUtilityOpen && (
+                <div className="body">
+                  <RawEditorSection>
+                    <FieldLabel htmlFor="raw-markdown-editor">Markdown</FieldLabel>
+                    <RawMarkdownTextarea
+                      id="raw-markdown-editor"
+                      value={postContent}
+                      onChange={(e) => setPostContent(e.target.value)}
+                      placeholder="당신의 이야기를 적어보세요..."
+                    />
+                    <SubActionRow>
+                      <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
+                        임시 저장
+                      </Button>
+                      <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
+                        임시저장 불러오기
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={loadingKey.length > 0 || !localDraftSavedAt}
+                        onClick={clearLocalDraft}
+                      >
+                        임시저장 삭제
+                      </Button>
+                    </SubActionRow>
+                  </RawEditorSection>
+                </div>
+              )}
+            </InlineDisclosure>
+          ) : null}
 
           {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
         </EditorStudioWritingColumn>
@@ -4572,8 +4632,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           </PublishModal>
         </ModalBackdrop>
       )}
-    </EditorStudioRoot>
-  )
+      </EditorStudioRoot>
+    )
+  }
 
   return (
     <Main>
@@ -4596,10 +4657,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               <span>공개 범위</span>
               <strong>{currentVisibilityText}</strong>
             </StudioStatusItem>
-            <StudioStatusItem data-optional="true">
-              <span>저장 상태</span>
-              <strong>{composeStatusText}</strong>
-            </StudioStatusItem>
+            {composeStatusText ? (
+              <StudioStatusItem data-optional="true">
+                <span>저장 상태</span>
+                <strong>{composeStatusText}</strong>
+              </StudioStatusItem>
+            ) : null}
           </StudioStatusStrip>
         </HeroIntro>
       </HeroCard>
@@ -4736,7 +4799,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           </Section>
           )}
 
-          {false && (
+          {SHOW_LEGACY_CONTENT_STUDIO && (
           <Section id="content-studio">
             <SectionTop>
               <div>
@@ -5482,10 +5545,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <p>{composeSurfaceSubtitle}</p>
                 </ComposeStudioHeaderCopy>
                 <ComposeStudioContextBar aria-label="원고 상태">
-                  <ComposeStudioContextItem data-tone={composeStatusTone}>
-                    <span>상태</span>
-                    <strong>{composeStatusText}</strong>
-                  </ComposeStudioContextItem>
+                  {composeStatusText ? (
+                    <ComposeStudioContextItem data-tone={composeStatusTone}>
+                      <span>상태</span>
+                      <strong>{composeStatusText}</strong>
+                    </ComposeStudioContextItem>
+                  ) : null}
                   <ComposeStudioContextItem>
                     <span>공개 범위</span>
                     <strong>{currentVisibilityText}</strong>
@@ -5852,7 +5917,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
                   <WriterFooterActions>
                     <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                      초안 저장
+                      임시 저장
                     </Button>
                     <PrimaryButton
                       type="button"
@@ -6055,48 +6120,46 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                     <strong>태그 정리</strong>
                     <span>{activeMetaPanel === "tag" ? "닫기" : "열기"}</span>
                   </summary>
-                  {activeMetaPanel === "tag" && (
-                    <div className="body">
-                      <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
-                      <MetadataPanel>
-                        <label>태그 선택</label>
-                        <SelectionRow>
-                          {knownTags.map((tag) => (
-                            <TagCatalogChipGroup
-                              key={tag}
+                  <div className="body">
+                    <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
+                    <MetadataPanel>
+                      <label>태그 선택</label>
+                      <SelectionRow>
+                        {knownTags.map((tag) => (
+                          <TagCatalogChipGroup
+                            key={tag}
+                            data-active={postTags.includes(tag)}
+                            style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
+                          >
+                            <TagCatalogToggle
+                              type="button"
                               data-active={postTags.includes(tag)}
-                              style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
+                              onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
                             >
-                              <TagCatalogToggle
-                                type="button"
-                                data-active={postTags.includes(tag)}
-                                onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
-                              >
-                                <span className="label">{tag}</span>
-                                {(tagUsageMap[tag] || 0) > 0 ? (
-                                  <span className="count">{tagUsageMap[tag] || 0}</span>
-                                ) : null}
-                              </TagCatalogToggle>
-                              <TagCatalogDeleteButton
-                                type="button"
-                                data-active={postTags.includes(tag)}
-                                disabled={(tagUsageMap[tag] || 0) > 0}
-                                title={
-                                  (tagUsageMap[tag] || 0) > 0
-                                    ? "사용 중인 태그는 삭제할 수 없습니다."
-                                    : "태그 삭제"
-                                }
-                                onClick={() => deleteTagFromCatalog(tag)}
-                              >
-                                ×
-                              </TagCatalogDeleteButton>
-                            </TagCatalogChipGroup>
-                          ))}
-                          {knownTags.length === 0 && <EmptyMetaText>아직 저장된 태그가 없습니다.</EmptyMetaText>}
-                        </SelectionRow>
-                      </MetadataPanel>
-                    </div>
-                  )}
+                              <span className="label">{tag}</span>
+                              {(tagUsageMap[tag] || 0) > 0 ? (
+                                <span className="count">{tagUsageMap[tag] || 0}</span>
+                              ) : null}
+                            </TagCatalogToggle>
+                            <TagCatalogDeleteButton
+                              type="button"
+                              data-active={postTags.includes(tag)}
+                              disabled={(tagUsageMap[tag] || 0) > 0}
+                              title={
+                                (tagUsageMap[tag] || 0) > 0
+                                  ? "사용 중인 태그는 삭제할 수 없습니다."
+                                  : "태그 삭제"
+                              }
+                              onClick={() => deleteTagFromCatalog(tag)}
+                            >
+                              ×
+                            </TagCatalogDeleteButton>
+                          </TagCatalogChipGroup>
+                        ))}
+                        {knownTags.length === 0 ? <EmptyMetaText>아직 저장된 태그가 없습니다.</EmptyMetaText> : null}
+                      </SelectionRow>
+                    </MetadataPanel>
+                  </div>
                 </InlineDisclosure>
 
                 <InlineDisclosure open={isComposePreviewOpen}>
@@ -10095,7 +10158,7 @@ const EditorStudioPreviewSurface = styled.section`
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow: visible;
+  overflow: hidden;
 `
 
 const EditorStudioPreviewArticle = styled.article`
@@ -10170,16 +10233,47 @@ const EditorStudioPreviewArticleHeader = styled.header`
 
 const EditorStudioPreviewArticleBody = styled.div`
   max-height: calc(100vh - 15rem);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 1.1rem 0 1.4rem;
+  min-width: 0;
 
   > div {
     width: min(100%, var(--preview-live-width));
+    min-width: 0;
   }
 
   > div > .aq-markdown {
     width: 100%;
     margin: 0 auto;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  > div > .aq-markdown table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    table-layout: auto;
+    box-sizing: border-box;
+    overscroll-behavior-x: contain;
+  }
+
+  > div > .aq-markdown table thead,
+  > div > .aq-markdown table tbody {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  > div > .aq-markdown th,
+  > div > .aq-markdown td {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   @media (max-width: 1200px) {
@@ -10309,7 +10403,9 @@ const ContentInput = styled.textarea`
 
 const PreviewContentFrame = styled.div`
   width: min(100%, var(--compose-pane-readable-width));
+  min-width: 0;
   margin-inline: auto;
+  overflow-x: hidden;
 `
 
 const PreviewCard = styled.div`

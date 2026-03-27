@@ -200,24 +200,6 @@ const toPayloadLinks = (
     }))
     .filter((item) => item.label && item.href)
 
-const formatWorkspaceRelativeTime = (value?: string | null) => {
-  if (!value) return ""
-
-  const date = new Date(value)
-  const time = date.getTime()
-  if (Number.isNaN(time)) return ""
-
-  const diffMs = Date.now() - time
-  if (diffMs < 60_000) return "방금"
-  if (diffMs < 3_600_000) return `${Math.max(1, Math.floor(diffMs / 60_000))}분 전`
-  if (diffMs < 86_400_000) return `${Math.max(1, Math.floor(diffMs / 3_600_000))}시간 전`
-
-  return date.toLocaleDateString("ko-KR", {
-    month: "short",
-    day: "numeric",
-  })
-}
-
 const buildWorkspaceFallback = (
   member: AuthMember,
   initialWorkspace: ProfileWorkspaceResponse | null
@@ -304,9 +286,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const [remoteDraft, setRemoteDraft] = useState<ProfileWorkspaceContent>(fallbackWorkspace.draft)
   const [publishedSnapshot, setPublishedSnapshot] = useState<ProfileWorkspaceContent>(fallbackWorkspace.published)
   const [draft, setDraft] = useState<ProfileWorkspaceContent>(fallbackWorkspace.draft)
-  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null | undefined>(
-    fallbackWorkspace.lastDraftSavedAt
-  )
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const [isProfileImageEditorOpen, setIsProfileImageEditorOpen] = useState(false)
   const [profileImageDraftFile, setProfileImageDraftFile] = useState<File | null>(null)
@@ -360,7 +339,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       setRemoteDraft(normalizedDraft)
       setPublishedSnapshot(normalizedPublished)
       setDraft(normalizedDraft)
-      setLastDraftSavedAt(workspace.lastDraftSavedAt || sessionMember?.modifiedAt || initialMember.modifiedAt || null)
       if (sessionMember?.id) {
         setProfileWorkspaceCache(queryClient, sessionMember.id, {
           ...workspace,
@@ -369,7 +347,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         })
       }
     },
-    [initialMember.modifiedAt, queryClient, sessionMember]
+    [queryClient, sessionMember]
   )
 
   useEffect(() => {

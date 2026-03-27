@@ -19,6 +19,8 @@ import {
 import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
 import {
   CalloutBlock,
+  EditorCodeBlock,
+  getPreferredCodeLanguage,
   MermaidBlock,
   RawMarkdownBlock,
   ResizableImage,
@@ -52,6 +54,7 @@ type SlashAction = {
   label: string
   helper?: string
   run: () => void | Promise<void>
+  disabled?: boolean
 }
 
 type ToolbarAction = {
@@ -60,6 +63,7 @@ type ToolbarAction = {
   ariaLabel: string
   run: () => void
   active: boolean
+  disabled?: boolean
 }
 
 type FloatingBubbleState = {
@@ -80,16 +84,17 @@ type TopLevelBlockHandleState = {
 
 type BlockMenuState =
   | {
-      kind: "insert" | "actions"
       blockIndex: number
       left: number
       top: number
     }
   | null
 
-type DragState = {
-  sourceIndex: number
-  insertionIndex: number
+type TableRowResizeState = {
+  row: HTMLTableRowElement
+  cells: HTMLTableCellElement[]
+  startY: number
+  startHeight: number
 }
 
 type InsertMenuAction = {
@@ -97,29 +102,15 @@ type InsertMenuAction = {
   label: string
   helper?: string
   insertAt: (blockIndex: number) => void
+  disabled?: boolean
 }
 
 const RAW_BLOCK_PLACEHOLDER = "```text\n원문 블록\n```"
 const MERMAID_RAW_PLACEHOLDER = "```mermaid\nflowchart TD\n  A[시작] --> B[처리]\n```"
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse), (max-width: 1024px)"
-const CODE_LANGUAGE_OPTIONS = [
-  "text",
-  "bash",
-  "shell",
-  "javascript",
-  "typescript",
-  "jsx",
-  "tsx",
-  "json",
-  "yaml",
-  "kotlin",
-  "java",
-  "sql",
-  "html",
-  "css",
-  "markdown",
-  "mermaid",
-] as const
+const TABLE_ROW_RESIZE_EDGE_PX = 6
+const TABLE_COLUMN_RESIZE_GUARD_PX = 12
+const TABLE_MIN_ROW_HEIGHT_PX = 44
 
 const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (!node) return false
@@ -164,6 +155,15 @@ const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
   }
   return position
 }
+
+const isTableSelectionActive = (editor?: TiptapEditor | null) =>
+  Boolean(
+    editor &&
+      (editor.isActive("table") ||
+        editor.isActive("tableRow") ||
+        editor.isActive("tableCell") ||
+        editor.isActive("tableHeader"))
+  )
 
 const extractPlainTextFromHtml = (html: string) => {
   if (typeof window === "undefined") return ""
@@ -311,10 +311,10 @@ const BlockEditorShell = ({
 }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
-  const dragStateRef = useRef<DragState | null>(null)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const editorRef = useRef<TiptapEditor | null>(null)
+  const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
   const [rawMarkdownDraft, setRawMarkdownDraft] = useState(value)
   const [isRawMarkdownOpen, setIsRawMarkdownOpen] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -324,7 +324,6 @@ const BlockEditorShell = ({
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
-  const [dragState, setDragState] = useState<DragState | null>(null)
   const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
     visible: false,
     blockIndex: 0,
@@ -383,6 +382,16 @@ const BlockEditorShell = ({
     return viewportRef.current?.querySelector(".aq-block-editor__content") as HTMLElement | null
   }, [])
 
+  const setViewportRowResizeHot = useCallback((enabled: boolean) => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    if (enabled) {
+      viewport.setAttribute("data-row-resize-hot", "true")
+      return
+    }
+    viewport.removeAttribute("data-row-resize-hot")
+  }, [])
+
   const getTopLevelBlockElements = useCallback(() => {
     const root = getContentRoot()
     return root ? Array.from(root.children) as HTMLElement[] : []
@@ -417,6 +426,62 @@ const BlockEditorShell = ({
       return getTopLevelBlockElements().indexOf(element as HTMLElement)
     },
     [getContentRoot, getTopLevelBlockElements]
+  )
+
+  const getTableCellFromTarget = useCallback((target: EventTarget | null) => {
+    if (!(target instanceof Element)) return null
+    const cell = target.closest("td, th")
+    if (!(cell instanceof HTMLTableCellElement)) return null
+    return cell
+  }, [])
+
+  const isRowResizeHandleTarget = useCallback(
+    (cell: HTMLTableCellElement | null, clientX: number, clientY: number) => {
+      if (!cell) return false
+      const rect = cell.getBoundingClientRect()
+      const distanceToBottom = rect.bottom - clientY
+      const distanceToRight = rect.right - clientX
+      return (
+        distanceToBottom >= -1 &&
+        distanceToBottom <= TABLE_ROW_RESIZE_EDGE_PX &&
+        distanceToRight > TABLE_COLUMN_RESIZE_GUARD_PX
+      )
+    },
+    []
+  )
+
+  const stopTableRowResize = useCallback(() => {
+    const state = tableRowResizeRef.current
+    if (state?.row) {
+      state.row.removeAttribute("data-row-resize-active")
+    }
+    tableRowResizeRef.current = null
+    setViewportRowResizeHot(false)
+    if (typeof document !== "undefined") {
+      document.body.style.removeProperty("cursor")
+    }
+  }, [setViewportRowResizeHot])
+
+  const startTableRowResize = useCallback(
+    (cell: HTMLTableCellElement, clientY: number) => {
+      const row = cell.parentElement
+      if (!(row instanceof HTMLTableRowElement)) return
+      const cells = Array.from(row.cells)
+      if (cells.length === 0) return
+
+      row.setAttribute("data-row-resize-active", "true")
+      tableRowResizeRef.current = {
+        row,
+        cells,
+        startY: clientY,
+        startHeight: row.getBoundingClientRect().height,
+      }
+      setViewportRowResizeHot(true)
+      if (typeof document !== "undefined") {
+        document.body.style.cursor = "row-resize"
+      }
+    },
+    [setViewportRowResizeHot]
   )
 
   const syncSerializedDoc = useCallback(
@@ -473,6 +538,7 @@ const BlockEditorShell = ({
     extensions: [
       StarterKit.configure({
         link: false,
+        codeBlock: false,
       }),
       Link.configure({
         openOnClick: false,
@@ -488,6 +554,7 @@ const BlockEditorShell = ({
       TableRow,
       TableHeader,
       TableCell,
+      EditorCodeBlock,
       RawMarkdownBlock,
       ResizableImage,
       CalloutBlock,
@@ -693,6 +760,39 @@ const BlockEditorShell = ({
   }, [editor])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const state = tableRowResizeRef.current
+      if (!state) return
+      const nextHeight = Math.max(
+        TABLE_MIN_ROW_HEIGHT_PX,
+        Math.round(state.startHeight + (event.clientY - state.startY))
+      )
+      state.row.style.height = `${nextHeight}px`
+      state.cells.forEach((cell) => {
+        cell.style.height = `${nextHeight}px`
+        cell.style.minHeight = `${nextHeight}px`
+      })
+    }
+
+    const handlePointerUp = () => {
+      stopTableRowResize()
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerUp)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+      stopTableRowResize()
+    }
+  }, [stopTableRowResize])
+
+  useEffect(() => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
 
@@ -817,7 +917,23 @@ const BlockEditorShell = ({
 
   const insertTableBlock = useCallback(() => {
     if (!editor) return
+    if (isTableSelectionActive(editor)) return
     editor.chain().focus().insertTable(DEFAULT_TABLE_CONFIG).run()
+  }, [editor])
+
+  const canInsertTable = !isTableSelectionActive(editor)
+
+  const insertCodeBlock = useCallback(() => {
+    if (!editor) return
+    if (editor.isActive("codeBlock")) {
+      editor.chain().focus().toggleCodeBlock().run()
+      return
+    }
+    editor
+      .chain()
+      .focus()
+      .setCodeBlock({ language: getPreferredCodeLanguage() })
+      .run()
   }, [editor])
 
   const buildStructuredInsertContent = useCallback(
@@ -885,10 +1001,11 @@ const BlockEditorShell = ({
             blockIndex + 1,
             buildStructuredInsertContent(["| 제목 | 값 |", "| --- | --- |", "| 항목 | 내용 |"].join("\n"))
           ),
+        disabled: !canInsertTable,
       },
       {
         id: "callout",
-        label: "설명 상자",
+        label: "콜아웃",
         helper: "핵심 내용을 강조합니다",
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
@@ -952,7 +1069,7 @@ const BlockEditorShell = ({
           ]),
       },
     ],
-    [buildStructuredInsertContent, enableMermaidBlocks, insertBlocksAtIndex]
+    [buildStructuredInsertContent, canInsertTable, enableMermaidBlocks, insertBlocksAtIndex]
   )
 
   const applyRawMarkdownDraft = useCallback(() => {
@@ -1060,17 +1177,18 @@ const BlockEditorShell = ({
         id: "code-block",
         label: "코드 블록",
         helper: "언어 지정 가능",
-        run: () => editor.chain().focus().toggleCodeBlock().run(),
+        run: insertCodeBlock,
       },
       {
         id: "table",
         label: "표",
         helper: "2열 헤더 포함",
         run: insertTableBlock,
+        disabled: !canInsertTable,
       },
       {
         id: "callout",
-        label: "설명 상자",
+        label: "콜아웃",
         helper: "핵심 내용을 강조합니다",
         run: insertCalloutBlock,
       },
@@ -1105,7 +1223,7 @@ const BlockEditorShell = ({
         run: () => insertRawMarkdownBlock(),
       },
     ]
-  }, [editor, enableMermaidBlocks, insertCalloutBlock, insertMermaidBlock, insertRawMarkdownBlock, insertTableBlock, insertToggleBlock])
+  }, [canInsertTable, editor, enableMermaidBlocks, insertCalloutBlock, insertCodeBlock, insertMermaidBlock, insertRawMarkdownBlock, insertTableBlock, insertToggleBlock])
 
   const toolbarActions: ToolbarAction[] = [
     { id: "heading-1", label: "H1", ariaLabel: "제목 1", run: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(), active: editor?.isActive("heading", { level: 1 }) ?? false },
@@ -1113,35 +1231,23 @@ const BlockEditorShell = ({
     { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
     { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => editor?.chain().focus().toggleHeading({ level: 4 }).run(), active: editor?.isActive("heading", { level: 4 }) ?? false },
     { id: "bold", label: "B", ariaLabel: "굵게", run: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") ?? false },
-    { id: "italic", label: "I", ariaLabel: "기울임", run: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") ?? false },
-    { id: "bullet-list", label: <span aria-hidden="true">≣</span>, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
+    { id: "italic", label: <AppIcon name="italic" aria-hidden="true" />, ariaLabel: "기울임", run: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") ?? false },
+    { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
     { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => fileInputRef.current?.click(), active: false },
-    { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
+    { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
   ]
 
   const toolbarMoreActions: ToolbarAction[] = [
     { id: "ordered-list", label: "번호 목록", ariaLabel: "번호 목록", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
-    { id: "table", label: "표", ariaLabel: "표", run: insertTableBlock, active: editor?.isActive("table") ?? false },
-    { id: "callout", label: "설명 상자", ariaLabel: "설명 상자", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
+    { id: "table", label: "표", ariaLabel: "표", run: insertTableBlock, active: editor?.isActive("table") ?? false, disabled: !canInsertTable },
+    { id: "callout", label: "콜아웃", ariaLabel: "콜아웃", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
     { id: "toggle", label: "토글", ariaLabel: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
     { id: "mermaid", label: "다이어그램", ariaLabel: "다이어그램", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
     { id: "divider", label: "구분선", ariaLabel: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
     { id: "raw", label: "원문 블록", ariaLabel: "원문 블록", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
   ]
-
-  const activeCodeLanguage = ((editor?.getAttributes("codeBlock").language as string | undefined) || "").trim()
-  const isCodeBlockActive = editor?.isActive("codeBlock") ?? false
-
-  const updateCodeBlockLanguage = useCallback(
-    (nextLanguage: string) => {
-      if (!editor) return
-      const normalizedLanguage = nextLanguage.trim()
-      editor.chain().focus().updateAttributes("codeBlock", { language: normalizedLanguage || null }).run()
-    },
-    [editor]
-  )
 
   const handleSlashMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -1168,21 +1274,17 @@ const BlockEditorShell = ({
 
   const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
 
-  const openBlockMenu = useCallback(
-    (kind: "insert" | "actions", blockIndex: number, anchorRect: DOMRect) => {
-      setBlockMenuState((prev) =>
-        prev && prev.kind === kind && prev.blockIndex === blockIndex
-          ? null
-          : {
-              kind,
-              blockIndex,
-              left: Math.round(anchorRect.left),
-              top: Math.round(anchorRect.bottom + 8),
-            }
-      )
-    },
-    []
-  )
+  const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
+    setBlockMenuState((prev) =>
+      prev && prev.blockIndex === blockIndex
+        ? null
+        : {
+            blockIndex,
+            left: Math.round(anchorRect.left),
+            top: Math.round(anchorRect.bottom + 8),
+          }
+    )
+  }, [])
 
   const moveBlockByStep = useCallback(
     (blockIndex: number, delta: -1 | 1) => {
@@ -1273,117 +1375,39 @@ const BlockEditorShell = ({
     selectionTick,
   ])
 
-  const getInsertionIndexFromClientY = useCallback(
-    (clientY: number) => {
-      const elements = getTopLevelBlockElements()
-      if (elements.length === 0) return 0
-      for (let index = 0; index < elements.length; index += 1) {
-        const rect = elements[index]?.getBoundingClientRect()
-        if (rect && clientY < rect.top + rect.height / 2) {
-          return index
-        }
-      }
-      return elements.length
-    },
-    [getTopLevelBlockElements]
-  )
-
-  const handleWindowPointerMove = useCallback(
-    (event: PointerEvent) => {
-      const activeDrag = dragStateRef.current
-      if (!activeDrag) return
-      const nextInsertionIndex = getInsertionIndexFromClientY(event.clientY)
-      if (nextInsertionIndex === activeDrag.insertionIndex) return
-      const nextState = { ...activeDrag, insertionIndex: nextInsertionIndex }
-      dragStateRef.current = nextState
-      setDragState(nextState)
-    },
-    [getInsertionIndexFromClientY]
-  )
-
-  const finalizeDrag = useCallback(() => {
-    const activeDrag = dragStateRef.current
-    dragStateRef.current = null
-    setDragState(null)
-    if (typeof window !== "undefined") {
-      window.removeEventListener("pointermove", handleWindowPointerMove)
-      window.removeEventListener("pointerup", finalizeDrag)
-      window.removeEventListener("pointercancel", finalizeDrag)
-    }
-    if (!activeDrag) return
-
-    const targetIndex =
-      activeDrag.insertionIndex > activeDrag.sourceIndex
-        ? activeDrag.insertionIndex - 1
-        : activeDrag.insertionIndex
-
-    if (targetIndex === activeDrag.sourceIndex) return
-
-    mutateTopLevelBlocks(
-      (doc) =>
-        moveTopLevelBlockToInsertionIndex(doc, activeDrag.sourceIndex, activeDrag.insertionIndex),
-      targetIndex
-    )
-  }, [handleWindowPointerMove, mutateTopLevelBlocks])
-
-  const startBlockDrag = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>, blockIndex: number) => {
-      if (isCoarsePointer) return
-      event.preventDefault()
-      event.stopPropagation()
-      const initialDragState = {
-        sourceIndex: blockIndex,
-        insertionIndex: blockIndex,
-      }
-      dragStateRef.current = initialDragState
-      setDragState(initialDragState)
-      closeBlockMenus()
-      if (typeof window !== "undefined") {
-        window.addEventListener("pointermove", handleWindowPointerMove)
-        window.addEventListener("pointerup", finalizeDrag)
-        window.addEventListener("pointercancel", finalizeDrag)
-      }
-    },
-    [closeBlockMenus, finalizeDrag, handleWindowPointerMove, isCoarsePointer]
-  )
-
   const handleViewportPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (isCoarsePointer || dragStateRef.current) return
+      const rowResizeState = tableRowResizeRef.current
+      if (rowResizeState) {
+        setViewportRowResizeHot(true)
+        return
+      }
+      if (isCoarsePointer) return
+      const cell = getTableCellFromTarget(event.target)
+      setViewportRowResizeHot(isRowResizeHandleTarget(cell, event.clientX, event.clientY))
       setHoveredBlockIndex(findTopLevelBlockIndexFromTarget(event.target))
     },
-    [findTopLevelBlockIndexFromTarget, isCoarsePointer]
+    [findTopLevelBlockIndexFromTarget, getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, setViewportRowResizeHot]
   )
 
   const handleViewportPointerLeave = useCallback(() => {
-    if (!dragStateRef.current) {
-      setHoveredBlockIndex(null)
+    setHoveredBlockIndex(null)
+    if (!tableRowResizeRef.current) {
+      setViewportRowResizeHot(false)
     }
-  }, [])
+  }, [setViewportRowResizeHot])
 
-  const insertionIndicatorStyle = useMemo(() => {
-    if (!dragState) return null
-    const elements = getTopLevelBlockElements()
-    if (elements.length === 0) return null
-
-    if (dragState.insertionIndex >= elements.length) {
-      const lastRect = elements[elements.length - 1]?.getBoundingClientRect()
-      if (!lastRect) return null
-      return {
-        left: Math.round(lastRect.left),
-        top: Math.round(lastRect.bottom + 8),
-        width: Math.round(lastRect.width),
-      }
-    }
-
-    const targetRect = elements[dragState.insertionIndex]?.getBoundingClientRect()
-    if (!targetRect) return null
-    return {
-      left: Math.round(targetRect.left),
-      top: Math.round(targetRect.top - 8),
-      width: Math.round(targetRect.width),
-    }
-  }, [dragState, getTopLevelBlockElements])
+  const handleViewportPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isCoarsePointer || tableRowResizeRef.current) return
+      const cell = getTableCellFromTarget(event.target)
+      if (!isRowResizeHandleTarget(cell, event.clientX, event.clientY) || !cell) return
+      event.preventDefault()
+      event.stopPropagation()
+      startTableRowResize(cell, event.clientY)
+    },
+    [getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, startTableRowResize]
+  )
 
   useEffect(() => {
     if (typeof window === "undefined" || !blockMenuState) return
@@ -1417,7 +1441,7 @@ const BlockEditorShell = ({
                 data-active={action.active}
                 data-tone="heading"
                 onClick={() => action.run()}
-                disabled={disabled}
+                disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
                 title={action.ariaLabel}
               >
@@ -1433,7 +1457,7 @@ const BlockEditorShell = ({
                 type="button"
                 data-active={action.active}
                 onClick={() => action.run()}
-                disabled={disabled}
+                disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
                 title={action.ariaLabel}
               >
@@ -1449,7 +1473,7 @@ const BlockEditorShell = ({
                 type="button"
                 data-active={action.active}
                 onClick={() => action.run()}
-                disabled={disabled}
+                disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
                 title={action.ariaLabel}
               >
@@ -1477,7 +1501,7 @@ const BlockEditorShell = ({
                     type="button"
                     data-active={action.active}
                     onClick={() => action.run()}
-                    disabled={disabled}
+                    disabled={disabled || action.disabled}
                     aria-label={action.ariaLabel}
                     title={action.ariaLabel}
                   >
@@ -1488,23 +1512,6 @@ const BlockEditorShell = ({
             ) : null}
           </ToolbarMoreDisclosure>
         </ToolbarActions>
-        {isCodeBlockActive ? (
-          <InlineControlRow>
-            <InlineControlLabel htmlFor="block-editor-code-language">코드 언어</InlineControlLabel>
-            <InlineControlInput
-              id="block-editor-code-language"
-              list="block-editor-code-language-options"
-              value={activeCodeLanguage}
-              onChange={(event) => updateCodeBlockLanguage(event.target.value)}
-              placeholder="예: typescript"
-            />
-            <datalist id="block-editor-code-language-options">
-              {CODE_LANGUAGE_OPTIONS.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          </InlineControlRow>
-        ) : null}
       </Toolbar>
 
       <HiddenFileInput
@@ -1529,7 +1536,9 @@ const BlockEditorShell = ({
               <SlashActionButton
                 key={action.id}
                 type="button"
+                disabled={disabled || action.disabled}
                 onClick={() => {
+                  if (action.disabled) return
                   void action.run()
                   setIsSlashMenuOpen(false)
                 }}
@@ -1546,6 +1555,7 @@ const BlockEditorShell = ({
         ref={viewportRef}
         onPointerMove={handleViewportPointerMove}
         onPointerLeave={handleViewportPointerLeave}
+        onPointerDown={handleViewportPointerDown}
       >
         {editor && bubbleState.visible ? (
           <FloatingBubbleToolbar
@@ -1637,30 +1647,13 @@ const BlockEditorShell = ({
           >
             <BlockHandleButton
               type="button"
-              aria-label="블록 추가"
+              aria-label="삽입"
               onClick={(event) => {
                 event.stopPropagation()
-                openBlockMenu("insert", blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+                openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
               }}
             >
               +
-            </BlockHandleButton>
-            <BlockHandleButton
-              type="button"
-              aria-label="블록 드래그"
-              onPointerDown={(event) => startBlockDrag(event, blockHandleState.blockIndex)}
-            >
-              ⋮⋮
-            </BlockHandleButton>
-            <BlockHandleButton
-              type="button"
-              aria-label="블록 더보기"
-              onClick={(event) => {
-                event.stopPropagation()
-                openBlockMenu("actions", blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
-              }}
-            >
-              ⋯
             </BlockHandleButton>
           </BlockHandleRail>
         ) : null}
@@ -1676,7 +1669,7 @@ const BlockEditorShell = ({
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
-                openBlockMenu("insert", blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+                openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
               }}
             >
               +
@@ -1704,54 +1697,43 @@ const BlockEditorShell = ({
             }}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            {blockMenuState.kind === "insert" ? (
-              <>
-                <FloatingBlockMenuHeader>삽입 메뉴</FloatingBlockMenuHeader>
-                <FloatingBlockMenuGrid>
-                  {insertMenuActions.map((action) => (
-                    <FloatingBlockMenuButton
-                      key={action.id}
-                      type="button"
-                      onClick={() => {
-                        action.insertAt(blockMenuState.blockIndex)
-                        closeBlockMenus()
-                      }}
-                    >
-                      <strong>{action.label}</strong>
-                      {action.helper ? <span>{action.helper}</span> : null}
-                    </FloatingBlockMenuButton>
-                  ))}
-                </FloatingBlockMenuGrid>
-              </>
-            ) : (
-              <>
-                <FloatingBlockMenuHeader>현재 블록</FloatingBlockMenuHeader>
-                <FloatingBlockActionList>
-                  <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, -1)}>
-                    위로 이동
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, 1)}>
-                    아래로 이동
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => duplicateBlock(blockMenuState.blockIndex)}>
-                    복제
-                  </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => deleteBlock(blockMenuState.blockIndex)}>
-                    삭제
-                  </FloatingBlockActionButton>
-                </FloatingBlockActionList>
-              </>
-            )}
+            <>
+              <FloatingBlockMenuHeader>삽입</FloatingBlockMenuHeader>
+              <FloatingBlockMenuGrid>
+                {insertMenuActions.map((action) => (
+                  <FloatingBlockMenuButton
+                    key={action.id}
+                    type="button"
+                    disabled={action.disabled}
+                    onClick={() => {
+                      if (action.disabled) return
+                      action.insertAt(blockMenuState.blockIndex)
+                      closeBlockMenus()
+                    }}
+                  >
+                    <strong>{action.label}</strong>
+                    {action.helper ? <span>{action.helper}</span> : null}
+                  </FloatingBlockMenuButton>
+                ))}
+              </FloatingBlockMenuGrid>
+              <FloatingBlockMenuDivider />
+              <FloatingBlockMenuHeader>이동 및 관리</FloatingBlockMenuHeader>
+              <FloatingBlockActionList>
+                <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, -1)}>
+                  위로 이동
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, 1)}>
+                  아래로 이동
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton type="button" onClick={() => duplicateBlock(blockMenuState.blockIndex)}>
+                  복제
+                </FloatingBlockActionButton>
+                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => deleteBlock(blockMenuState.blockIndex)}>
+                  삭제
+                </FloatingBlockActionButton>
+              </FloatingBlockActionList>
+            </>
           </FloatingBlockMenu>
-        ) : null}
-        {insertionIndicatorStyle ? (
-          <BlockInsertionIndicator
-            style={{
-              left: `${insertionIndicatorStyle.left}px`,
-              top: `${insertionIndicatorStyle.top}px`,
-              width: `${insertionIndicatorStyle.width}px`,
-            }}
-          />
         ) : null}
         <EditorContent editor={editor} />
       </EditorViewport>
@@ -1839,7 +1821,8 @@ const ToolbarGroup = styled.div`
 const ToolbarSeparator = styled.span`
   width: 1px;
   height: 1.7rem;
-  background: rgba(148, 163, 184, 0.18);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.18)" : "rgba(15, 23, 42, 0.12)"};
 `
 
 const ToolbarMoreDisclosure = styled.details`
@@ -1857,7 +1840,7 @@ const ToolbarMoreDisclosure = styled.details`
     border-radius: 0.8rem;
     border: 0;
     background: transparent;
-    color: rgba(203, 213, 225, 0.82);
+    color: ${({ theme }) => theme.colors.gray11};
     font-size: 1.3rem;
     font-weight: 700;
     cursor: pointer;
@@ -1865,7 +1848,8 @@ const ToolbarMoreDisclosure = styled.details`
   }
 
   summary:hover {
-    background: rgba(148, 163, 184, 0.08);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.08)" : "rgba(15, 23, 42, 0.05)"};
     color: var(--color-gray12);
   }
 
@@ -1884,9 +1868,13 @@ const ToolbarMoreDisclosure = styled.details`
     min-width: 16rem;
     padding: 0.8rem;
     border-radius: 1rem;
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    background: rgba(12, 16, 22, 0.96);
-    box-shadow: 0 18px 40px rgba(3, 7, 18, 0.32);
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(12, 16, 22, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "0 18px 40px rgba(3, 7, 18, 0.32)"
+        : "0 18px 40px rgba(15, 23, 42, 0.12)"};
   }
 `
 
@@ -1900,7 +1888,7 @@ const ToolbarRibbonButton = styled.button`
   border: 0;
   border-radius: 0.8rem;
   background: transparent;
-  color: rgba(203, 213, 225, 0.76);
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 1.02rem;
   font-weight: 700;
   line-height: 1;
@@ -1914,19 +1902,24 @@ const ToolbarRibbonButton = styled.button`
 
   &[data-tone="heading"] {
     min-width: 3.1rem;
-    color: rgba(203, 213, 225, 0.66);
+    color: ${({ theme }) => theme.colors.gray10};
     font-family: Georgia, "Times New Roman", serif;
     font-size: 1rem;
     font-weight: 700;
   }
 
   &[data-active="true"] {
-    background: rgba(148, 163, 184, 0.1);
-    color: var(--color-gray12);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.14)" : "rgba(15, 23, 42, 0.08)"};
+    color: ${({ theme }) => theme.colors.gray12};
+    box-shadow: inset 0 -1.5px 0
+      ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(226, 232, 240, 0.32)" : "rgba(15, 23, 42, 0.22)"};
   }
 
   &:hover {
-    background: rgba(148, 163, 184, 0.08);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.08)" : "rgba(15, 23, 42, 0.05)"};
     color: var(--color-gray12);
   }
 
@@ -1939,17 +1932,20 @@ const ToolbarRibbonButton = styled.button`
 const ToolbarButton = styled.button`
   min-height: 2rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(18, 21, 26, 0.42);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.42)" : "rgba(255, 255, 255, 0.96)"};
   color: var(--color-gray11);
   font-size: 0.78rem;
   font-weight: 700;
   padding: 0 0.82rem;
 
   &[data-active="true"] {
-    border-color: rgba(59, 130, 246, 0.32);
-    background: rgba(37, 99, 235, 0.12);
-    color: #bfdbfe;
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.32)" : "rgba(37, 99, 235, 0.24)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.12)" : "rgba(37, 99, 235, 0.08)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#bfdbfe" : theme.colors.blue8)};
   }
 
   &[data-variant="subtle-danger"] {
@@ -1969,30 +1965,6 @@ const ToolbarButton = styled.button`
   }
 `
 
-const InlineControlRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.65rem;
-`
-
-const InlineControlLabel = styled.label`
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--color-gray10);
-`
-
-const InlineControlInput = styled.input`
-  min-height: 2rem;
-  min-width: min(16rem, 100%);
-  border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(18, 21, 26, 0.42);
-  color: var(--color-gray12);
-  font-size: 0.84rem;
-  padding: 0 0.8rem;
-`
-
 const HiddenFileInput = styled.input`
   display: none;
 `
@@ -2002,9 +1974,10 @@ const SlashMenu = styled.div`
   flex-direction: column;
   gap: 0.7rem;
   padding: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 1rem;
-  background: rgba(15, 18, 24, 0.94);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.94)" : "rgba(255, 255, 255, 0.98)"};
 `
 
 const SlashMenuHeader = styled.div`
@@ -2040,8 +2013,9 @@ const SlashActionButton = styled.button`
   gap: 0.18rem;
   min-height: 3.1rem;
   border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(18, 21, 26, 0.48);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.48)" : "rgba(255, 255, 255, 0.96)"};
   color: var(--color-gray12);
   padding: 0.75rem 0.85rem;
   text-align: left;
@@ -2060,19 +2034,26 @@ const EditorViewport = styled.div`
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow: visible;
+  overflow: hidden;
+
+  &[data-row-resize-hot="true"] {
+    cursor: row-resize;
+  }
 
   .aq-block-editor__content {
+    min-width: 0;
     min-height: 32rem;
     padding: 1.1rem 0 1.8rem;
     color: var(--color-gray12);
     font-size: 1rem;
     line-height: 1.75;
     outline: none;
+    overflow-x: hidden;
   }
 
   .aq-block-editor__content > * {
     width: min(100%, var(--compose-pane-readable-width, var(--article-readable-width, 48rem)));
+    min-width: 0;
     margin-left: auto;
     margin-right: auto;
   }
@@ -2114,21 +2095,64 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content table {
-    width: 100%;
-    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: auto;
   }
 
   .aq-block-editor__content .tableWrapper {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    overflow-y: hidden;
+    margin: 1rem auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .aq-block-editor__content thead th {
+    background: rgba(255, 255, 255, 0.05);
+    font-weight: 700;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.16);
   }
 
   .aq-block-editor__content th,
   .aq-block-editor__content td {
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 0.7rem 0.8rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.72rem 0.9rem;
     text-align: left;
     vertical-align: top;
     position: relative;
+    min-width: 0;
+    min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    background: transparent;
+  }
+
+  .aq-block-editor__content tr > :is(th, td):last-child {
+    border-right: 0;
+  }
+
+  .aq-block-editor__content tbody tr:last-child > :is(td, th) {
+    border-bottom: 0;
+  }
+
+  .aq-block-editor__content tr[data-row-resize-active="true"] > :is(td, th) {
+    box-shadow: inset 0 -2px 0 rgba(148, 163, 184, 0.42);
+  }
+
+  .aq-block-editor__content .selectedCell::after {
+    background: rgba(148, 163, 184, 0.12);
   }
 
   .aq-block-editor__content .column-resize-handle {
@@ -2151,10 +2175,12 @@ const BubbleToolbar = styled.div`
   flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0.9rem;
-  background: rgba(15, 18, 24, 0.96);
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 10px 18px rgba(0, 0, 0, 0.16)" : "0 10px 18px rgba(15, 23, 42, 0.1)"};
 
   &[data-layout="table"] {
     max-width: min(92vw, 40rem);
@@ -2184,12 +2210,14 @@ const BlockHandleButton = styled.button`
   width: 1.9rem;
   height: 1.9rem;
   border-radius: 0.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(18, 21, 26, 0.62);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.62)" : "rgba(255, 255, 255, 0.98)"};
   color: var(--color-gray11);
   font-size: 0.76rem;
   font-weight: 800;
-  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 8px 14px rgba(0, 0, 0, 0.12)" : "0 8px 14px rgba(15, 23, 42, 0.08)"};
 `
 
 const MobileBlockActionBar = styled.div`
@@ -2200,9 +2228,11 @@ const MobileBlockActionBar = styled.div`
   gap: 0.45rem;
   padding: 0.5rem;
   border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(15, 18, 24, 0.96);
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.14);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 10px 18px rgba(0, 0, 0, 0.14)" : "0 10px 18px rgba(15, 23, 42, 0.1)"};
   transform: translateX(-50%);
 `
 
@@ -2215,14 +2245,22 @@ const FloatingBlockMenu = styled.div`
   gap: 0.6rem;
   padding: 0.75rem;
   border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(15, 18, 24, 0.96);
-  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.15);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 14px 22px rgba(0, 0, 0, 0.15)" : "0 14px 22px rgba(15, 23, 42, 0.1)"};
 `
 
 const FloatingBlockMenuHeader = styled.strong`
   font-size: 0.88rem;
   color: var(--color-gray12);
+`
+
+const FloatingBlockMenuDivider = styled.div`
+  height: 1px;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.08)"};
 `
 
 const FloatingBlockMenuGrid = styled.div`
@@ -2238,8 +2276,9 @@ const FloatingBlockMenuButton = styled.button`
   gap: 0.15rem;
   min-height: 3rem;
   border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(18, 21, 26, 0.72);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.72)" : "rgba(255, 255, 255, 0.96)"};
   color: var(--color-gray12);
   padding: 0.68rem 0.8rem;
   text-align: left;
@@ -2263,8 +2302,9 @@ const FloatingBlockActionList = styled.div`
 const FloatingBlockActionButton = styled.button`
   min-height: 2.25rem;
   border-radius: 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(18, 21, 26, 0.72);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.72)" : "rgba(255, 255, 255, 0.96)"};
   color: var(--color-gray12);
   font-size: 0.8rem;
   font-weight: 700;
@@ -2278,18 +2318,9 @@ const FloatingBlockActionButton = styled.button`
   }
 `
 
-const BlockInsertionIndicator = styled.div`
-  position: fixed;
-  z-index: 54;
-  height: 3px;
-  border-radius: 999px;
-  background: rgba(59, 130, 246, 0.9);
-  box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.24);
-`
-
 const AuxDisclosure = styled.details`
   border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
 
   > summary {
@@ -2325,9 +2356,10 @@ const RawMarkdownTextarea = styled.textarea`
   min-height: 14rem;
   width: 100%;
   resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 0.95rem;
-  background: rgba(11, 14, 20, 0.9);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(11, 14, 20, 0.9)" : "rgba(255, 255, 255, 0.98)"};
   color: var(--color-gray12);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -2346,16 +2378,19 @@ const RawMarkdownActions = styled.div`
 const RawMarkdownButton = styled.button`
   min-height: 2.25rem;
   border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.24);
-  background: rgba(37, 99, 235, 0.18);
-  color: #93c5fd;
+  border: 1px solid ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.24)" : "rgba(37, 99, 235, 0.22)"};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(37, 99, 235, 0.18)" : "rgba(37, 99, 235, 0.08)"};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "#93c5fd" : theme.colors.blue8)};
   font-size: 0.82rem;
   font-weight: 700;
   padding: 0 1rem;
 
   &[data-variant="ghost"] {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: rgba(13, 15, 18, 0.94);
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(13, 15, 18, 0.94)" : "rgba(255, 255, 255, 0.98)"};
     color: var(--color-gray11);
   }
 `

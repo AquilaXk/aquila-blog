@@ -33,6 +33,8 @@ export type IconName =
   | "rocket"
   | "globe"
   | "link"
+  | "italic"
+  | "list"
   | "share"
   | "phone"
 
@@ -181,6 +183,23 @@ const AppIcon: React.FC<Props> = ({ name, className, ...props }) => {
           <path d="M10.2 13.8 8.5 15.5a3.2 3.2 0 1 1-4.5-4.5l2.6-2.6a3.2 3.2 0 0 1 4.5 0" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M13.8 10.2 15.5 8.5a3.2 3.2 0 1 1 4.5 4.5l-2.6 2.6a3.2 3.2 0 0 1-4.5 0" strokeLinecap="round" strokeLinejoin="round" />
           <path d="m9 15 6-6" strokeLinecap="round" />
+        </svg>
+      )
+    case "italic":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.9" className={className} aria-hidden="true" {...props}>
+          <path d="M11 5h7" strokeLinecap="round" />
+          <path d="M6 19h7" strokeLinecap="round" />
+          <path d="M13 5 10 19" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case "list":
+      return (
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true" {...props}>
+          <circle cx="5.25" cy="7" r="1" fill="currentColor" stroke="none" />
+          <circle cx="5.25" cy="12" r="1" fill="currentColor" stroke="none" />
+          <circle cx="5.25" cy="17" r="1" fill="currentColor" stroke="none" />
+          <path d="M9 7h10M9 12h10M9 17h10" strokeLinecap="round" />
         </svg>
       )
     case "share":

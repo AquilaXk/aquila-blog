@@ -43,6 +43,7 @@ import {
   PROFILE_IMAGE_EDIT_MIN_ZOOM,
   resolveProfileImageEditDrawRatios,
 } from "src/libs/profileImageUpload"
+import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
@@ -703,21 +704,23 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     try {
       setLoadingKey("save")
       setProfileNotice({ tone: "loading", text: "프로필 카드, 헤더 브랜드명, 메인 소개 카드 내용을 저장하고 있습니다..." })
-      const updated = await apiFetch<MemberMe>(`/member/api/v1/adm/members/${sessionMember.id}/profileCard`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          role: profileRoleInput.trim(),
-          bio: profileBioInput.trim(),
-          aboutRole: aboutRoleInput.trim(),
-          aboutBio: aboutBioInput.trim(),
-          aboutDetails: aboutDetailsInput.trim(),
-          blogTitle: blogTitleInput.trim(),
-          homeIntroTitle: homeIntroTitleInput.trim(),
-          homeIntroDescription: homeIntroDescriptionInput.trim(),
-          serviceLinks: toPayloadLinks("service", serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON),
-          contactLinks: toPayloadLinks("contact", contactLinksInput, DEFAULT_CONTACT_ITEM_ICON),
-        }),
-      })
+      const updated = await saveProfileCardWithConflictRetry(() =>
+        apiFetch<MemberMe>(`/member/api/v1/adm/members/${sessionMember.id}/profileCard`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            role: profileRoleInput.trim(),
+            bio: profileBioInput.trim(),
+            aboutRole: aboutRoleInput.trim(),
+            aboutBio: aboutBioInput.trim(),
+            aboutDetails: aboutDetailsInput.trim(),
+            blogTitle: blogTitleInput.trim(),
+            homeIntroTitle: homeIntroTitleInput.trim(),
+            homeIntroDescription: homeIntroDescriptionInput.trim(),
+            serviceLinks: toPayloadLinks("service", serviceLinksInput, DEFAULT_SERVICE_ITEM_ICON),
+            contactLinks: toPayloadLinks("contact", contactLinksInput, DEFAULT_CONTACT_ITEM_ICON),
+          }),
+        })
+      )
       syncProfileState(updated)
       await refreshAdminProfile(sessionMember.id, updated)
       setProfileNotice({ tone: "success", text: "프로필 카드, 헤더 브랜드명, 메인 소개 카드 내용이 저장되었습니다." })

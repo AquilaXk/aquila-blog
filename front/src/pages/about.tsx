@@ -176,28 +176,27 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
             <h2 className="profile-name">{displayName}</h2>
             <p className="profile-role">{displayRole}</p>
             <p className="profile-bio">{displayBio}</p>
+            {aboutDetailSections.length > 0 && (
+              <div className="about-detail-sections" aria-label="about 상세 정보">
+                {aboutDetailSections.map((section, index) => (
+                  <section
+                    key={`${section.title}-${index}`}
+                    className="about-detail-section"
+                    data-has-divider={section.hasDivider ? "true" : "false"}
+                  >
+                    <h3 className="about-detail-title">{section.title}</h3>
+                    <ul className="about-detail-items">
+                      {section.items.map((item, itemIndex) => (
+                        <li key={`${section.title}-${itemIndex}`} data-bullet={item.bullet ? "true" : "false"}>
+                          {item.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
           </div>
-
-          {aboutDetailSections.length > 0 && (
-            <div className="about-detail-sections" aria-label="about 상세 정보">
-              {aboutDetailSections.map((section, index) => (
-                <section
-                  key={`${section.title}-${index}`}
-                  className="about-detail-section"
-                  data-has-divider={section.hasDivider ? "true" : "false"}
-                >
-                  <h3 className="about-detail-title">{section.title}</h3>
-                  <ul className="about-detail-items">
-                    {section.items.map((item, itemIndex) => (
-                      <li key={`${section.title}-${itemIndex}`} data-bullet={item.bullet ? "true" : "false"}>
-                        {item.text}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          )}
 
           <div className="section">
             <h3 className="section-title">Contact</h3>
@@ -299,58 +298,59 @@ const StyledWrapper = styled.div`
         max-width: 600px;
         margin: 0 auto;
       }
-    }
 
-    .about-detail-sections {
-      margin: 0 0 2.4rem;
-      border-radius: 14px;
-      border: 1px solid ${({ theme }) => theme.colors.gray5};
-      background: ${({ theme }) => theme.colors.gray2};
-      padding: 0.3rem 0.9rem;
+      .about-detail-sections {
+        margin: 2rem auto 0;
+        padding-top: 1.5rem;
+        border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+        max-width: 42rem;
+        text-align: left;
 
-      .about-detail-section {
-        padding: 1.2rem 0.2rem 1.26rem;
+        .about-detail-section {
+          padding: 1rem 0 1.08rem;
 
-        &[data-has-divider="true"] {
-          border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+          &[data-has-divider="true"] {
+            border-top: 1px solid ${({ theme }) => theme.colors.gray6};
+          }
         }
-      }
 
-      .about-detail-title {
-        margin: 0;
-        font-size: 1.65rem;
-        line-height: 1.28;
-        letter-spacing: -0.02em;
-      }
-
-      .about-detail-items {
-        margin: 1.02rem 0 0;
-        padding: 0;
-        list-style: none;
-        display: grid;
-        gap: 0.48rem;
-
-        li {
+        .about-detail-title {
           margin: 0;
-          font-size: 1.02rem;
-          line-height: 1.72;
-          color: ${({ theme }) => theme.colors.gray11};
-          white-space: pre-line;
-          word-break: keep-all;
+          font-size: 1.3rem;
+          line-height: 1.42;
+          letter-spacing: -0.01em;
+          color: ${({ theme }) => theme.colors.gray12};
+        }
 
-          &[data-bullet="true"] {
-            position: relative;
-            padding-left: 1rem;
+        .about-detail-items {
+          margin: 0.78rem 0 0;
+          padding: 0;
+          list-style: none;
+          display: grid;
+          gap: 0.42rem;
 
-            &::before {
-              content: "";
-              position: absolute;
-              left: 0.22rem;
-              top: 0.78rem;
-              width: 0.34rem;
-              height: 0.34rem;
-              border-radius: 999px;
-              background: ${({ theme }) => theme.colors.gray10};
+          li {
+            margin: 0;
+            font-size: 1.02rem;
+            line-height: 1.72;
+            color: ${({ theme }) => theme.colors.gray11};
+            white-space: pre-line;
+            word-break: keep-all;
+
+            &[data-bullet="true"] {
+              position: relative;
+              padding-left: 1rem;
+
+              &::before {
+                content: "";
+                position: absolute;
+                left: 0.22rem;
+                top: 0.78rem;
+                width: 0.34rem;
+                height: 0.34rem;
+                border-radius: 999px;
+                background: ${({ theme }) => theme.colors.gray10};
+              }
             }
           }
         }
@@ -431,14 +431,15 @@ const StyledWrapper = styled.div`
   @media (max-width: 768px) {
     .about-content {
       .about-detail-sections {
-        padding: 0 0.72rem;
+        margin-top: 1.52rem;
+        padding-top: 1.08rem;
 
         .about-detail-section {
-          padding: 0.92rem 0.08rem 1rem;
+          padding: 0.84rem 0 0.92rem;
         }
 
         .about-detail-title {
-          font-size: 1.28rem;
+          font-size: 1.08rem;
         }
 
         .about-detail-items {

@@ -1763,7 +1763,7 @@ const BlockEditorShell = ({
             toggleRawMarkdownDisclosure()
           }}
         >
-          <strong>고급 markdown 직접 편집</strong>
+          <strong>Markdown 편집</strong>
           <span>{isRawMarkdownOpen ? "닫기" : "열기"}</span>
         </summary>
         {isRawMarkdownOpen ? (
@@ -1775,10 +1775,10 @@ const BlockEditorShell = ({
             />
             <RawMarkdownActions>
               <RawMarkdownButton type="button" onClick={applyRawMarkdownDraft}>
-                원문 반영
+                변경 반영
               </RawMarkdownButton>
               <RawMarkdownButton type="button" data-variant="ghost" onClick={() => setRawMarkdownDraft(value)}>
-                원문 되돌리기
+                되돌리기
               </RawMarkdownButton>
             </RawMarkdownActions>
           </div>
@@ -2057,16 +2057,14 @@ const SlashActionButton = styled.button`
 `
 
 const EditorViewport = styled.div`
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 1.1rem;
-  background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.03), transparent 20%),
-    rgba(15, 18, 24, 0.88);
-  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 
   .aq-block-editor__content {
     min-height: 32rem;
-    padding: 1.75rem 1.6rem 2.2rem;
+    padding: 1.1rem 0 1.8rem;
     color: var(--color-gray12);
     font-size: 1rem;
     line-height: 1.75;
@@ -2100,8 +2098,9 @@ const EditorViewport = styled.div`
   .aq-block-editor__content pre {
     overflow: auto;
     border-radius: 1rem;
-    background: #0f1220;
-    color: #dbe4f0;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--color-gray12);
     padding: 1rem 1.1rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
@@ -2138,7 +2137,7 @@ const EditorViewport = styled.div`
     right: -2px;
     width: 4px;
     height: 100%;
-    background: rgba(59, 130, 246, 0.48);
+    background: rgba(148, 163, 184, 0.42);
     pointer-events: none;
   }
 

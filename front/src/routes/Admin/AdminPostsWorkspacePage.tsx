@@ -363,7 +363,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
     }
 
     if (recentPosts.length === 0) {
-      return <MutedText>아직 이어서 쓸 원고가 없습니다.</MutedText>
+      return <MutedText>이어 쓸 원고 없음</MutedText>
     }
 
     return (
@@ -406,12 +406,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
         <HeroLabel>지금 할 일</HeroLabel>
         <HeroLayout>
           <HeroCopy>
-            <h1>새 글 쓰기</h1>
-            <p>아이디어를 바로 초안으로 시작하고, 필요하면 최근 작업도 이어서 수정합니다.</p>
+            <h1>글 작성</h1>
           </HeroCopy>
           <HeroActions>
             <PrimaryCta type="button" onClick={() => void openWriteRoute()}>
-              글 쓰기 시작
+              새 글 작성
             </PrimaryCta>
             <SecondaryLinkButton
               type="button"
@@ -423,7 +422,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
               type="button"
               onClick={() => listSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
             >
-              기존 글 관리
+              글 관리
             </SecondaryLinkButton>
           </HeroActions>
         </HeroLayout>
@@ -460,7 +459,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                 </>
               ) : (
                 <EmptyInlineState>
-                  <strong>저장된 임시저장이 없습니다.</strong>
+                  <strong>저장된 임시 저장 없음</strong>
                 </EmptyInlineState>
               )}
             </ResumeCard>
@@ -475,9 +474,9 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           </ResumeGrid>
         ) : (
           <WorkspaceEmpty>
-            <strong>아직 이어서 쓸 원고가 없습니다.</strong>
+            <strong>이어 쓸 원고 없음</strong>
             <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-              새 글 쓰기
+              새 글 작성
             </PrimaryInlineButton>
           </WorkspaceEmpty>
         )}
@@ -599,7 +598,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             </p>
             <ActionRow>
               <PrimaryInlineButton type="button" onClick={() => void openWriteRoute()}>
-                새 글 쓰기
+                새 글 작성
               </PrimaryInlineButton>
               {listKw.trim() ? (
                 <GhostButton
@@ -648,18 +647,18 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                               이어서 수정
                             </RowPrimaryButton>
-                            <GhostButton type="button" onClick={() => void handleDeletePost(row)}>
+                            <DangerTextButton type="button" onClick={() => void handleDeletePost(row)}>
                               삭제
-                            </GhostButton>
+                            </DangerTextButton>
                           </>
                         ) : (
                           <>
                             <RowPrimaryButton type="button" onClick={() => void handleRestorePost(row)}>
                               복구
                             </RowPrimaryButton>
-                            <GhostButton type="button" onClick={() => void handleHardDeletePost(row)}>
+                            <DangerTextButton type="button" onClick={() => void handleHardDeletePost(row)}>
                               영구삭제
-                            </GhostButton>
+                            </DangerTextButton>
                           </>
                         )}
                       </RowActions>
@@ -687,18 +686,18 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                           이어서 수정
                         </RowPrimaryButton>
-                        <GhostButton type="button" onClick={() => void handleDeletePost(row)}>
+                        <DangerTextButton type="button" onClick={() => void handleDeletePost(row)}>
                           삭제
-                        </GhostButton>
+                        </DangerTextButton>
                       </>
                     ) : (
                       <>
                         <RowPrimaryButton type="button" onClick={() => void handleRestorePost(row)}>
                           복구
                         </RowPrimaryButton>
-                        <GhostButton type="button" onClick={() => void handleHardDeletePost(row)}>
+                        <DangerTextButton type="button" onClick={() => void handleHardDeletePost(row)}>
                           영구삭제
-                        </GhostButton>
+                        </DangerTextButton>
                       </>
                     )}
                   </div>
@@ -720,7 +719,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             <SupportLink>
               <SupportCopy>
                 <strong>프로필 정리</strong>
-                <p>사진, 소개, 링크를 다듬습니다.</p>
               </SupportCopy>
               <SupportMeta>프로필 열기</SupportMeta>
             </SupportLink>
@@ -729,7 +727,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             <SupportLink>
               <SupportCopy>
                 <strong>운영 진단</strong>
-                <p>상태 확인과 진단 작업을 엽니다.</p>
               </SupportCopy>
               <SupportMeta>진단 열기</SupportMeta>
             </SupportLink>
@@ -856,16 +853,13 @@ const baseButton = ({ theme }: { theme: any }) => `
 `
 
 const PrimaryCta = styled.button`
-  ${({ theme }) => baseButton({ theme })};
-  min-width: 180px;
-  padding: 0 1.1rem;
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue8};
-  color: ${({ theme }) => theme.colors.gray12};
-
-  @media (max-width: 900px) {
-    width: 100%;
-  }
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
 `
 
 const SecondaryLinkButton = styled.button`
@@ -1068,19 +1062,23 @@ const ActionRow = styled.div`
 `
 
 const PrimaryInlineButton = styled.button`
-  ${({ theme }) => baseButton({ theme })};
-  padding: 0 1rem;
-  border-color: ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue8};
-  color: ${({ theme }) => theme.colors.gray12};
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
+  padding: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  cursor: pointer;
 `
 
 const GhostButton = styled.button`
-  ${({ theme }) => baseButton({ theme })};
-  min-height: 40px;
-  padding: 0 0.88rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
 `
 
 const WorkspaceEmpty = styled.div`
@@ -1417,12 +1415,23 @@ const RowActions = styled.div`
 `
 
 const RowPrimaryButton = styled.button`
-  ${({ theme }) => baseButton({ theme })};
-  min-height: 40px;
-  padding: 0 0.85rem;
-  background: ${({ theme }) => theme.colors.blue8};
-  border-color: ${({ theme }) => theme.colors.blue8};
-  color: ${({ theme }) => theme.colors.gray12};
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
+  padding: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+  cursor: pointer;
+`
+
+const DangerTextButton = styled.button`
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.red11};
+  padding: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
 `
 
 const MobileCardList = styled.div`

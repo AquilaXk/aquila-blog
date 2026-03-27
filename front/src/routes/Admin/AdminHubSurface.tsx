@@ -43,8 +43,7 @@ const AdminHubSurface = ({
     <Main>
       <HeaderPanel>
         <HeaderCopy>
-          <h1>관리자 작업 공간</h1>
-          <p>가장 자주 하는 작업부터 바로 시작합니다.</p>
+          <h1>관리자 허브</h1>
         </HeaderCopy>
         <SummaryRail aria-label="관리자 상태 요약">
           <StatusItem>
@@ -67,7 +66,7 @@ const AdminHubSurface = ({
         <HeroBody>
           <HeroCopy>
             <h2>{primaryAction.title}</h2>
-            <p>{primaryAction.description}</p>
+            {primaryAction.description ? <p>{primaryAction.description}</p> : null}
           </HeroCopy>
           <HeroActions>
             <Link href={primaryAction.href} passHref legacyBehavior>
@@ -83,16 +82,15 @@ const AdminHubSurface = ({
       <ShortcutPanel>
         <SectionHeader>
           <h2>보조 작업</h2>
-          <p>프로필 정리와 운영 진단은 여기서 이어서 엽니다.</p>
         </SectionHeader>
         <ShortcutGrid>
           {secondaryLinks.map((item) => (
             <Link key={item.href} href={item.href} passHref legacyBehavior>
               <ShortcutLink>
-                <ShortcutCopy>
-                  <strong>{item.title}</strong>
-                  <p>{item.description}</p>
-                </ShortcutCopy>
+              <ShortcutCopy>
+                <strong>{item.title}</strong>
+                {item.description ? <p>{item.description}</p> : null}
+              </ShortcutCopy>
                 <ShortcutMeta>{item.cta}</ShortcutMeta>
               </ShortcutLink>
             </Link>
@@ -259,53 +257,58 @@ const HeroCopy = styled.div`
 `
 
 const HeroActions = styled.div`
-  display: grid;
-  gap: 0.58rem;
-  justify-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: flex-end;
 
   @media (max-width: 760px) {
-    width: 100%;
+    justify-content: flex-start;
   }
 `
 
 const PrimaryActionLink = styled.a`
   display: inline-flex;
-  min-height: 44px;
   align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  padding: 0 1rem;
-  border: 1px solid ${({ theme }) => theme.colors.blue8};
-  background: ${({ theme }) => theme.colors.blue8};
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.94rem;
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
+  font-size: 1rem;
   font-weight: 800;
   text-decoration: none;
+  line-height: 1.2;
   transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    background-color 0.16s ease;
+    color 0.16s ease,
+    opacity 0.16s ease;
 
   &:hover {
-    transform: translateY(-1px);
-    border-color: ${({ theme }) => theme.colors.blue9};
-    background: ${({ theme }) => theme.colors.blue9};
-  }
-
-  @media (max-width: 760px) {
-    width: 100%;
+    color: ${({ theme }) => theme.colors.blue10};
+    opacity: 0.92;
   }
 `
 
 const SecondaryActionLink = styled.a`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.95rem;
   font-weight: 700;
   text-decoration: none;
+  line-height: 1.2;
+  transition:
+    color 0.16s ease,
+    opacity 0.16s ease;
 
   &:hover {
     color: ${({ theme }) => theme.colors.gray12};
-    text-decoration: underline;
+    opacity: 0.92;
   }
 `
 
@@ -484,16 +487,19 @@ const ProfileCopy = styled.div`
 const ProfileAction = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
   text-decoration: none;
-  padding: 0 0.62rem;
   font-size: 0.74rem;
   font-weight: 700;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.blue10};
+  }
 
   @media (max-width: 760px) {
     grid-column: 1 / -1;

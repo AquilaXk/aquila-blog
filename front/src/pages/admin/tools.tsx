@@ -3,9 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
+import type { SimpleIcon } from "simple-icons"
+import { siGrafana, siPrometheus, siUptimekuma } from "simple-icons"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
+import AppIcon from "src/components/icons/AppIcon"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -137,6 +140,10 @@ type ActionCardTone = "read" | "write" | "danger" | "infra"
 type InlineNoticeTone = "warning" | "danger" | "success"
 type DiagnosticTab = "mail" | "queue" | "cleanup" | "auth"
 type ExecutionDomain = "overview" | "monitoring" | "diagnostics" | "execution" | "mutation"
+type MonitoringBrandIcon = {
+  icon?: SimpleIcon
+  fallbackIcon?: "service"
+}
 
 type ExecutionEntry = {
   id: string
@@ -212,6 +219,24 @@ const formatAge = (seconds: number | null | undefined) => {
 
 const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
+
+const MonitoringBrandMark = ({ brand, title }: { brand: MonitoringBrandIcon; title: string }) => {
+  if (brand.icon) {
+    return (
+      <ToolIcon aria-hidden="true" style={{ color: `#${brand.icon.hex}` }}>
+        <svg viewBox="0 0 24 24" focusable="false" aria-label={title}>
+          <path d={brand.icon.path} fill="currentColor" />
+        </svg>
+      </ToolIcon>
+    )
+  }
+
+  return (
+    <ToolIcon aria-hidden="true">
+      <AppIcon name={brand.fallbackIcon || "service"} />
+    </ToolIcon>
+  )
+}
 
 const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
   if (!health?.details || typeof health.details !== "object") return []
@@ -576,12 +601,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           : "미확인"
   const mailStatusMessage =
     mailDiagnostics?.status === "READY"
-      ? "회원가입 메일 발송 준비가 완료된 상태입니다."
+      ? "준비 완료"
       : mailDiagnostics?.status === "CONNECTION_FAILED"
-        ? "SMTP 연결 단계에서 실패했습니다. 호스트, 계정, 앱 비밀번호를 확인하세요."
+        ? "연결 실패"
         : mailDiagnostics?.status === "MISCONFIGURED"
-          ? "필수 메일 설정이 누락되어 있습니다."
-          : "메일 진단 정보를 불러오는 중입니다."
+          ? "설정 누락"
+          : "미확인"
   const queueStatusLabel =
     taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
       ? "오류"
@@ -595,11 +620,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       ? `stale processing ${taskQueueDiagnostics.staleProcessingCount}건 감지`
       : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
         ? `최근 실패 ${taskQueueDiagnostics.failedCount}건`
-        : "현재 큐는 안정 상태입니다."
+        : "이상 없음"
   const cleanupStatusLabel = cleanupDiagnostics?.blockedBySafetyThreshold ? "확인 필요" : cleanupDiagnostics ? "정상" : "미확인"
   const cleanupHealthMessage = cleanupDiagnostics?.blockedBySafetyThreshold
-    ? "safety threshold 초과로 purge가 보류되어 있습니다."
-    : "safety threshold 내에서 purge가 가능합니다."
+    ? "보류됨"
+    : "이상 없음"
   const authSecurityStatusLabel =
     authSecurityEvents.length > 0
       ? authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
@@ -608,10 +633,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       : "정상"
   const authSecurityHealthMessage =
     authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
-      ? "최근 IP 보안 차단 이벤트가 감지되었습니다."
+      ? "차단 기록 있음"
       : authSecurityEvents.length > 0
-        ? "최근 인증 보안 기록이 있습니다."
-        : "최근 인증 보안 이상 징후가 없습니다."
+        ? "최근 기록 있음"
+        : "이상 없음"
 
   const recentCheckedLabel = useMemo(() => {
     const values = [
@@ -705,9 +730,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     uptimeKumaUrl
       ? {
           key: "uptime",
-          icon: "UK",
+          brand: { icon: siUptimekuma },
           title: "Uptime Kuma",
-          description: "실시간 가용성과 상태 페이지를 확인합니다.",
+          description: "",
           href: uptimeKumaUrl,
           status: systemHealthStatus === "UP" ? "정상" : "확인 필요",
         }
@@ -715,9 +740,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     prometheusUrl
       ? {
           key: "prometheus",
-          icon: "PM",
+          brand: { icon: siPrometheus },
           title: "Prometheus",
-          description: "메트릭 쿼리와 시계열 지표를 확인합니다.",
+          description: "",
           href: prometheusUrl,
           status: "외부 대시보드",
         }
@@ -725,9 +750,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     monitoringEmbedUrl
       ? {
           key: "grafana",
-          icon: "GR",
+          brand: monitoringEmbedLooksLikeGrafana ? { icon: siGrafana } : { fallbackIcon: "service" as const },
           title: monitoringEmbedLooksLikeGrafana ? "Grafana" : "대시보드",
-          description: monitoringEmbedLooksLikeGrafana ? "운영 대시보드와 장기 추이를 확인합니다." : "임베드 대시보드를 확인합니다.",
+          description: "",
           href: monitoringEmbedUrl,
           status: monitoringEmbedLooksLikeGrafana ? "장기 추이 분석" : "외부 대시보드",
         }
@@ -740,7 +765,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <OverviewHeader>
           <div>
             <h1>운영 센터</h1>
-            <p>현재 상태, 진단, 실데이터 테스트를 한곳에서 관리합니다.</p>
           </div>
           <OverviewMeta>
             <StatusBadge data-tone={getStatusTone(overviewStatusLabel)}>{overviewStatusLabel}</StatusBadge>
@@ -784,13 +808,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         <AttentionRow>
           <SectionTitleBlock>
             <h2>주의 필요</h2>
-            <p>{attentionItems.length ? "바로 확인할 항목만 추렸습니다." : "즉시 확인이 필요한 항목은 없습니다."}</p>
           </SectionTitleBlock>
           <AttentionList>
             {attentionItems.length ? (
               attentionItems.map((item) => <AttentionItem key={item}>{item}</AttentionItem>)
             ) : (
-              <CalmMessage>현재 상태 기준으로 즉시 대응이 필요한 항목은 없습니다.</CalmMessage>
+              <CalmMessage>즉시 대응 항목 없음</CalmMessage>
             )}
           </AttentionList>
         </AttentionRow>
@@ -823,7 +846,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>모니터링</h2>
-                <p>외부 관측 도구는 별도 launchpad로 모아둡니다.</p>
               </SectionTitleBlock>
               <StatusBadge data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
                 {systemHealthStatus === "UP" ? "정상" : "확인 필요"}
@@ -833,10 +855,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <MonitoringGrid>
               {monitoringItems.map((item) => (
                 <MonitoringCard key={item.key}>
-                  <ToolIcon>{item.icon}</ToolIcon>
+                  <MonitoringBrandMark brand={item.brand} title={item.title} />
                   <MonitoringCopy>
                     <strong>{item.title}</strong>
-                    <span>{item.description}</span>
+                    {item.description ? <span>{item.description}</span> : null}
                   </MonitoringCopy>
                   <MonitoringMeta>
                     <ToolStatus>{item.status}</ToolStatus>
@@ -873,7 +895,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>진단</h2>
-                <p>한 번에 하나의 도메인만 집중해서 확인합니다.</p>
               </SectionTitleBlock>
               <ReadonlyPill>읽기 전용</ReadonlyPill>
             </SectionHeading>
@@ -1160,7 +1181,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>실행</h2>
-                <p>읽기 전용 점검과 운영성 실행만 분리해서 둡니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -1169,18 +1189,15 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <CardSectionHeading>
                   <div>
                     <h3>읽기 전용 실행</h3>
-                    <p>상태 확인과 단순 조회만 실행합니다.</p>
                   </div>
                   <ReadonlyPill>읽기 전용</ReadonlyPill>
                 </CardSectionHeading>
                 <ActionList>
                   <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("systemHealth", () => fetchSystemHealthCached())}>
                     <span>서비스 상태 조회</span>
-                    <small>최근 상태를 다시 가져옵니다</small>
                   </ActionRowButton>
                   <ActionRowButton type="button" disabled={isBusy} onClick={() => void executeAction("admPostCount", () => apiFetch("/post/api/v1/adm/posts/count"))}>
                     <span>전체 글 수 확인</span>
-                    <small>관리자 기준 총 게시글 수를 확인합니다</small>
                   </ActionRowButton>
                 </ActionList>
               </ActionGroupCard>
@@ -1189,7 +1206,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <CardSectionHeading>
                   <div>
                     <h3>메일 발송 확인</h3>
-                    <p>운영 메일이 실제로 전달되는지 최소 범위로 점검합니다.</p>
                   </div>
                   <ActionToneBadge data-tone="write">실행 가능</ActionToneBadge>
                 </CardSectionHeading>
@@ -1235,7 +1251,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>실데이터 테스트</h2>
-                <p>이 영역은 실제 데이터에 영향을 주는 작업만 다룹니다.</p>
               </SectionTitleBlock>
               <ActionToneBadge data-tone="danger">실데이터 변경</ActionToneBadge>
             </SectionHeading>
@@ -1291,7 +1306,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     }
                   >
                     <span>댓글 목록 조회</span>
-                    <small>대상 글의 전체 댓글 트리를 불러옵니다</small>
                   </ActionRowButton>
                   <ActionRowButton
                     type="button"
@@ -1305,7 +1319,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     }
                   >
                     <span>댓글 상세 조회</span>
-                    <small>삭제 전에 대상 댓글을 다시 확인합니다</small>
                   </ActionRowButton>
                 </ActionList>
               </SandboxSection>
@@ -1334,7 +1347,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     }
                   >
                     <span>댓글 생성</span>
-                    <small>입력한 내용을 새 댓글로 생성합니다</small>
                   </ActionRowButton>
                   <ActionRowButton
                     type="button"
@@ -1352,7 +1364,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     }
                   >
                     <span>댓글 수정</span>
-                    <small>대상 댓글의 내용을 현재 입력값으로 바꿉니다</small>
                   </ActionRowButton>
                 </ActionList>
               </SandboxSection>
@@ -1390,7 +1401,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>최근 실행 결과</h2>
-                <p>방금 실행한 작업과 최근 기록을 같은 자리에서 확인합니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
 
@@ -1430,7 +1440,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <CardSectionHeading>
                     <div>
                       <h3>최근 기록</h3>
-                      <p>최대 5건까지 유지합니다.</p>
                     </div>
                   </CardSectionHeading>
                   <HistoryList>
@@ -1451,7 +1460,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </ResultHistoryCard>
               </ResultsLayout>
             ) : (
-              <EmptyResultState>아직 실행한 작업이 없습니다. 상태 카드나 진단 섹션에서 확인을 시작하세요.</EmptyResultState>
+              <EmptyResultState>실행 기록 없음</EmptyResultState>
             )}
           </WorkspaceSection>
         </WorkspaceColumn>
@@ -1862,6 +1871,12 @@ const ToolIcon = styled.div`
   font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.04em;
+
+  svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    display: block;
+  }
 `
 
 const MonitoringCopy = styled.div`
@@ -1900,20 +1915,18 @@ const ToolStatus = styled.span`
 const LaunchLink = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 0.82rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray11};
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
   font-size: 0.82rem;
   font-weight: 700;
   text-decoration: none;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
-    color: ${({ theme }) => theme.colors.gray12};
+    color: ${({ theme }) => theme.colors.blue10};
   }
 `
 
@@ -2035,11 +2048,11 @@ const ActionRow = styled.div`
 `
 
 const QuietButton = styled.button`
-  min-height: 36px;
-  padding: 0 0.8rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.82rem;
   font-weight: 700;

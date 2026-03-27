@@ -4138,7 +4138,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       />
 
       <EditorStudioTopBar>
-        <Button type="button" onClick={() => void pushRoute(router, ADMIN_POSTS_WORKSPACE_ROUTE)}>
+        <Button type="button" data-variant="text" onClick={() => void pushRoute(router, ADMIN_POSTS_WORKSPACE_ROUTE)}>
           ← 나가기
         </Button>
         <EditorStudioTopBarActions>
@@ -4252,13 +4252,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 setIsComposeUtilityOpen((prev) => !prev)
               }}
             >
-              <strong>고급 원문 편집</strong>
+              <strong>Markdown 편집</strong>
               <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
             </summary>
             {isComposeUtilityOpen && (
               <div className="body">
                 <RawEditorSection>
-                  <FieldLabel htmlFor="raw-markdown-editor">원문</FieldLabel>
+                  <FieldLabel htmlFor="raw-markdown-editor">Markdown</FieldLabel>
                   <RawMarkdownTextarea
                     id="raw-markdown-editor"
                     value={postContent}
@@ -4267,7 +4267,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   />
                   <SubActionRow>
                     <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                      초안 저장
+                      임시 저장
                     </Button>
                     <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
                       임시저장 불러오기
@@ -7402,9 +7402,24 @@ const Button = styled.button`
     color: ${({ theme }) => theme.colors.red11};
   }
 
+  &[data-variant="text"] {
+    min-height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+  }
+
   &:hover:not(:disabled) {
     border-color: ${({ theme }) => theme.colors.gray8};
     background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &[data-variant="text"]:hover:not(:disabled) {
+    border-color: transparent;
+    background: transparent;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -7880,10 +7895,10 @@ const PreviewViewportButton = styled.button`
     box-shadow 0.18s ease;
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.blue6} inset;
+    border-color: ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray3};
+    color: ${({ theme }) => theme.colors.gray12};
+    box-shadow: 0 0 0 1px ${({ theme }) => theme.colors.gray5} inset;
   }
 
   &:hover:not([data-active="true"]) {
@@ -10077,10 +10092,10 @@ const EditorStudioPreviewHeader = styled.div`
 `
 
 const EditorStudioPreviewSurface = styled.section`
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 20px;
-  background: ${({ theme }) => theme.colors.gray2};
-  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 `
 
 const EditorStudioPreviewArticle = styled.article`
@@ -10091,7 +10106,7 @@ const EditorStudioPreviewArticle = styled.article`
 const EditorStudioPreviewArticleHeader = styled.header`
   display: grid;
   gap: 0.9rem;
-  padding: 1.2rem 1.2rem 1rem;
+  padding: 0 0 1rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 
   .cover {
@@ -10156,7 +10171,7 @@ const EditorStudioPreviewArticleHeader = styled.header`
 const EditorStudioPreviewArticleBody = styled.div`
   max-height: calc(100vh - 15rem);
   overflow: auto;
-  padding: 1.1rem 1.1rem 1.4rem;
+  padding: 1.1rem 0 1.4rem;
 
   > div {
     width: min(100%, var(--preview-live-width));
@@ -10322,9 +10337,9 @@ const PreviewHintNotice = styled.div`
   margin-bottom: 0.75rem;
   padding: 0.52rem 0.62rem;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: ${({ theme }) => theme.colors.blue3};
-  color: ${({ theme }) => theme.colors.blue11};
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.78rem;
   line-height: 1.5;
 `

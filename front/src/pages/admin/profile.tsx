@@ -4,7 +4,6 @@ import { GetServerSideProps, NextPage } from "next"
 import { useRouter } from "next/router"
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
-import BrandMark from "src/components/branding/BrandMark"
 import AppIcon, { IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
@@ -77,23 +76,23 @@ const WORKSPACE_SECTIONS: {
 }[] = [
   {
     id: "identity",
-    label: "아이덴티티",
-    description: "프로필 카드에 보이는 정보",
+    label: "프로필",
+    description: "",
   },
   {
     id: "about",
     label: "About 페이지",
-    description: "상단 소개와 상세 블록",
+    description: "",
   },
   {
     id: "home",
-    label: "홈 첫인상",
-    description: "헤더와 첫 화면 문구",
+    label: "헤더 문구",
+    description: "",
   },
   {
     id: "links",
     label: "외부 링크",
-    description: "서비스와 연락 채널",
+    description: "",
   },
 ]
 
@@ -894,7 +893,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
 
     try {
       setLoadingKey("save")
-      setWorkspaceNotice({ tone: "loading", text: "프로필 워크스페이스 초안을 저장하고 있습니다..." })
+      setWorkspaceNotice({ tone: "loading", text: "임시 저장 중..." })
       const normalizedDraft = normalizeProfileWorkspaceContent({
         ...draft,
         serviceLinks: toPayloadLinks("service", draft.serviceLinks, DEFAULT_SERVICE_ITEM_ICON),
@@ -907,11 +906,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         })
       )
       applyWorkspaceState(nextWorkspace)
-      setWorkspaceNotice({ tone: "success", text: "초안을 저장했습니다. 현재 작업 상태가 서버와 동기화되었습니다." })
+      setWorkspaceNotice({ tone: "success", text: "임시 저장했습니다." })
       setLastCompletedAction("saved")
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setWorkspaceNotice({ tone: "error", text: `초안 저장 실패: ${message}` })
+      setWorkspaceNotice({ tone: "error", text: `임시 저장 실패: ${message}` })
     } finally {
       setLoadingKey("")
     }
@@ -920,17 +919,17 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const handlePublish = useCallback(async () => {
     if (!sessionMember?.id) return
     if (hasUnsavedChanges) {
-      setWorkspaceNotice({ tone: "error", text: "로컬 변경 사항을 먼저 초안 저장한 뒤 공개할 수 있습니다." })
+      setWorkspaceNotice({ tone: "error", text: "로컬 변경 사항을 먼저 임시 저장한 뒤 공개할 수 있습니다." })
       return
     }
     if (!hasPublishedDiff) {
-      setWorkspaceNotice({ tone: "idle", text: "이미 공개본과 초안이 동일합니다." })
+      setWorkspaceNotice({ tone: "idle", text: "이미 공개본과 임시 저장본이 같습니다." })
       return
     }
 
     try {
       setLoadingKey("publish")
-      setWorkspaceNotice({ tone: "loading", text: "현재 초안을 공개본으로 반영하고 있습니다..." })
+      setWorkspaceNotice({ tone: "loading", text: "공개 중..." })
       const nextWorkspace = await apiFetch<ProfileWorkspaceResponse>(
         `/member/api/v1/adm/members/${sessionMember.id}/profileWorkspace/publish`,
         {
@@ -974,7 +973,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             ? "공개본과 차이 있음"
             : lastCompletedAction === "published"
               ? "방금 공개됨"
-              : "초안 저장됨"
+              : "임시 저장됨"
   const compactStatusTone =
     hasUnsavedChanges || loadingKey === "save" || loadingKey === "upload"
       ? "editing"
@@ -983,16 +982,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         : lastCompletedAction === "published" || loadingKey === "publish"
           ? "success"
           : "stable"
-  const actionStatusText =
-    loadingKey === "publish"
-      ? "공개 중입니다"
-      : loadingKey === "save" || loadingKey === "upload"
-        ? "저장 중입니다"
-        : hasUnsavedChanges
-          ? "저장 후 공개할 수 있습니다"
-          : lastDraftSavedAt
-            ? `초안 저장됨 ${formatWorkspaceRelativeTime(lastDraftSavedAt)}`
-            : "초안 저장됨"
   const pageToasts = [workspaceNotice, imageNotice].filter(
     (notice) => notice.tone !== "idle" && notice.text.trim().length > 0
   )
@@ -1004,34 +993,28 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       case "identity":
         return (
           <SectionStack>
-            <FeatureHeroCard>
-              <div className="heroCopy">
-                <h3>프로필 카드에 보이는 정보</h3>
-                <p>아바타와 소개만 먼저 다듬습니다.</p>
+            <AvatarWorkspaceCard>
+              <div className="avatarPreview">
+                {draft.profileImageUrl ? (
+                  <ProfileImage
+                    src={draft.profileImageUrl}
+                    alt={displayName}
+                    width={88}
+                    height={88}
+                    priority
+                  />
+                ) : (
+                  <AvatarFallback>{displayNameInitial}</AvatarFallback>
+                )}
               </div>
-              <AvatarWorkspaceCard>
-                <div className="avatarPreview">
-                  {draft.profileImageUrl ? (
-                    <ProfileImage
-                      src={draft.profileImageUrl}
-                      alt={displayName}
-                      width={88}
-                      height={88}
-                      priority
-                    />
-                  ) : (
-                    <AvatarFallback>{displayNameInitial}</AvatarFallback>
-                  )}
-                </div>
-                <div className="avatarMeta">
-                  <strong>{displayName}</strong>
-                  <span>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "현재 초안 이미지"}</span>
-                </div>
-                <PrimaryButton type="button" onClick={() => setIsProfileImageEditorOpen(true)} disabled={loadingKey === "upload"}>
-                  {loadingKey === "upload" ? "업로드 중..." : "이미지 바꾸기"}
-                </PrimaryButton>
-              </AvatarWorkspaceCard>
-            </FeatureHeroCard>
+              <div className="avatarMeta">
+                <strong>{displayName}</strong>
+                  <span>{profileImageFileName ? `선택 파일: ${profileImageFileName}` : "현재 이미지"}</span>
+              </div>
+              <GhostButton type="button" onClick={() => setIsProfileImageEditorOpen(true)} disabled={loadingKey === "upload"}>
+                {loadingKey === "upload" ? "업로드 중..." : "이미지 바꾸기"}
+              </GhostButton>
+            </AvatarWorkspaceCard>
 
             <FieldSectionCard>
               <SectionBlockHeader>
@@ -1077,7 +1060,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>상단 소개</h3>
-                  <p>페이지 첫 문단에 보이는 내용입니다.</p>
                 </div>
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
@@ -1106,7 +1088,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>상세 블록</h3>
-                  <p>주제별로 짧게 나눠 적습니다.</p>
                 </div>
                 <GhostButton type="button" onClick={addAboutSection}>
                   블록 추가
@@ -1217,7 +1198,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               ) : (
                 <EmptyStateCard>
                   <strong>아직 상세 블록이 없습니다</strong>
-                  <p>첫 블록을 추가해 내용을 정리하세요.</p>
                 </EmptyStateCard>
               )}
             </FieldSectionCard>
@@ -1230,12 +1210,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <FieldSectionCard>
               <SectionBlockHeader>
                 <div>
-                  <h3>헤더</h3>
-                  <p>상단 로고 옆 텍스트입니다.</p>
+                  <h3>헤더 문구</h3>
                 </div>
               </SectionBlockHeader>
               <FieldBox>
-                <FieldLabel htmlFor="blog-title">헤더 로고 텍스트</FieldLabel>
+                <FieldLabel htmlFor="blog-title">헤더 제목</FieldLabel>
                 <Input
                   id="blog-title"
                   value={draft.blogTitle}
@@ -1249,7 +1228,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>홈 인트로</h3>
-                  <p>메인 첫 카드 문구입니다.</p>
                 </div>
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
@@ -1263,11 +1241,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   />
                 </FieldBox>
                 <FieldBox data-span="full">
-                  <FieldLabel htmlFor="home-description">보조 설명</FieldLabel>
+                  <FieldLabel htmlFor="home-description">설명</FieldLabel>
                   <TextArea
                     id="home-description"
                     value={draft.homeIntroDescription}
-                    placeholder="메인 첫 카드 아래에 보이는 설명 문구를 적어주세요."
+                    placeholder="설명을 입력하세요"
                     onChange={(event) => updateDraft("homeIntroDescription", event.target.value)}
                   />
                 </FieldBox>
@@ -1283,7 +1261,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>외부 링크</h3>
-                  <p>서비스와 연락 채널을 정리합니다.</p>
                 </div>
                 <SegmentedControl>
                   <SegmentButton
@@ -1306,7 +1283,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <LinkManagerHeader>
                 <div>
                   <strong>{linkTab === "service" ? "서비스 링크" : "연락 채널"}</strong>
-                  <span>{linkTab === "service" ? "외부 서비스 연결" : "연락 가능한 채널 연결"}</span>
                 </div>
                 <GhostButton type="button" onClick={() => appendLinkItem(linkTab)}>
                   링크 추가
@@ -1421,7 +1397,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               ) : (
                 <EmptyStateCard>
                   <strong>아직 등록된 링크가 없습니다</strong>
-                  <p>첫 링크를 추가해 프로필을 완성하세요.</p>
                 </EmptyStateCard>
               )}
             </FieldSectionCard>
@@ -1441,11 +1416,33 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       />
 
       <CompactHeader>
-        <h1>프로필 워크스페이스</h1>
-        <CompactState data-tone={compactStatusTone}>
-          <span className="dot" />
-          {compactStatusLabel}
-        </CompactState>
+        <h1>프로필 설정</h1>
+        <CompactHeaderRight>
+          <CompactState data-tone={compactStatusTone}>
+            <span className="dot" />
+            {compactStatusLabel}
+          </CompactState>
+          <CompactHeaderActions>
+            <GhostButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
+              {loadingKey === "save" ? "저장 중..." : "임시 저장"}
+            </GhostButton>
+            <PublishButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
+              {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
+            </PublishButton>
+          </CompactHeaderActions>
+          <QuietButton
+            type="button"
+            disabled={!hasUnsavedChanges}
+            onClick={() => {
+              if (!window.confirm("저장되지 않은 로컬 변경을 버릴까요?")) return
+              setDraft(remoteDraft)
+              setWorkspaceNotice({ tone: "success", text: "저장된 임시 저장본으로 되돌렸습니다." })
+              setLastCompletedAction("idle")
+            }}
+          >
+            초안 되돌리기
+          </QuietButton>
+        </CompactHeaderRight>
       </CompactHeader>
 
       <MobileSectionRail role="tablist" aria-label="프로필 섹션">
@@ -1481,7 +1478,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           <EditorSurface>
             <EditorPaneHeader>
               <h2>{activeSectionMeta.label}</h2>
-              <p>{activeSectionMeta.description}</p>
+              {activeSectionMeta.description ? <p>{activeSectionMeta.description}</p> : null}
             </EditorPaneHeader>
             {renderActiveSection()}
           </EditorSurface>
@@ -1492,7 +1489,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <PreviewHeader>
               <div>
                 <span>미리보기</span>
-                <strong>{previewMode === "draft" ? "초안" : "공개본"}</strong>
               </div>
               <PreviewHeaderActions>
                 <SegmentedControl>
@@ -1572,14 +1568,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                 {activeSection === "home" ? (
                   <PreviewHomeCard>
                     <div className="topbar">
-                      <div className="brand">
-                        <BrandMark className="mark" priority />
-                        <span>{previewContent.blogTitle || "헤더 로고 텍스트"}</span>
-                      </div>
+                      <span className="brand">{previewContent.blogTitle || "헤더 제목"}</span>
                     </div>
                     <div className="heroCard">
                       <strong>{previewContent.homeIntroTitle || "첫 문장"}</strong>
-                      <p>{previewContent.homeIntroDescription || "보조 설명"}</p>
+                      <p>{previewContent.homeIntroDescription || "설명"}</p>
                     </div>
                   </PreviewHomeCard>
                 ) : null}
@@ -1612,29 +1605,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             </PreviewBody>
           </PreviewCardShell>
 
-          <ActionRailCard>
-            <RailActions>
-              <PublishButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
-                {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
-              </PublishButton>
-              <GhostButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-                {loadingKey === "save" ? "저장 중..." : "초안 저장"}
-              </GhostButton>
-            </RailActions>
-            <ActionMeta>{actionStatusText}</ActionMeta>
-            <QuietButton
-              type="button"
-              disabled={!hasUnsavedChanges}
-              onClick={() => {
-                if (!window.confirm("저장되지 않은 로컬 변경을 버릴까요?")) return
-                setDraft(remoteDraft)
-                setWorkspaceNotice({ tone: "success", text: "저장된 초안으로 되돌렸습니다." })
-                setLastCompletedAction("idle")
-              }}
-            >
-              초안 되돌리기
-            </QuietButton>
-          </ActionRailCard>
         </PreviewRail>
       </WorkspaceShell>
 
@@ -1662,7 +1632,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <ModalHeader>
               <div>
                 <h2>프로필 이미지 편집</h2>
-                <p>파일 선택 후 드래그와 확대/축소로 표시 영역을 맞춘 뒤 초안에 반영합니다.</p>
               </div>
               <ModalCloseButton
                 type="button"
@@ -1679,7 +1648,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <ModalConstraintList>
               <li>지원 형식: JPG/PNG/GIF/WebP</li>
               <li>업로드 기준: 자동 최적화 후 최대 2MB</li>
-              <li>움직이는 GIF는 원본 2MB 이하에서만 애니메이션을 유지합니다.</li>
             </ModalConstraintList>
 
             <ModalActions>
@@ -1818,7 +1786,21 @@ const BaseButton = styled.button`
   }
 `
 
-const GhostButton = styled(BaseButton)``
+const GhostButton = styled(BaseButton)`
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+
+  &:hover:not(:disabled) {
+    border-color: transparent;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    transform: none;
+  }
+`
 
 const PrimaryButton = styled(BaseButton)`
   border-color: ${({ theme }) => theme.colors.blue8};
@@ -1845,18 +1827,27 @@ const PublishButton = styled(PrimaryButton)`
 `
 
 const MiniButton = styled(BaseButton)`
-  min-height: 34px;
-  padding: 0.55rem 0.72rem;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.8rem;
+
+  &:hover:not(:disabled) {
+    border-color: transparent;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray12};
+    transform: none;
+  }
 `
 
 const DangerButton = styled(MiniButton)`
-  border-color: ${({ theme }) => theme.colors.red7};
   color: ${({ theme }) => theme.colors.red11};
 
   &:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.colors.red8};
-    background: ${({ theme }) => theme.colors.red3};
+    background: transparent;
     color: ${({ theme }) => theme.colors.red11};
   }
 `
@@ -1864,13 +1855,12 @@ const DangerButton = styled(MiniButton)`
 const PreviewAnchor = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0.55rem 0.72rem;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray12};
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
   font-size: 0.8rem;
   font-weight: 700;
   text-decoration: none;
@@ -1879,7 +1869,7 @@ const PreviewAnchor = styled.a`
 const CompactHeader = styled.section`
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.9rem;
   padding: 0.15rem 0 0.1rem;
 
@@ -1896,6 +1886,24 @@ const CompactHeader = styled.section`
     flex-direction: column;
     gap: 0.45rem;
   }
+`
+
+const CompactHeaderRight = styled.div`
+  display: grid;
+  justify-items: end;
+  gap: 0.32rem;
+
+  @media (max-width: 760px) {
+    width: 100%;
+    justify-items: start;
+  }
+`
+
+const CompactHeaderActions = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 `
 
 const CompactState = styled.div`
@@ -2065,35 +2073,6 @@ const SectionStack = styled.div`
   > * + * {
     border-top: 1px solid ${({ theme }) => theme.colors.gray5};
     padding-top: 1.1rem;
-  }
-`
-
-const FeatureHeroCard = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 0.9rem;
-
-  .heroCopy {
-    display: grid;
-    gap: 0.22rem;
-    align-content: start;
-  }
-
-  .heroCopy h3 {
-    margin: 0;
-    font-size: clamp(1.06rem, 1.8vw, 1.28rem);
-    line-height: 1.28;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .heroCopy p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.6;
-  }
-
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
   }
 `
 
@@ -2556,11 +2535,6 @@ const PreviewHeader = styled.div`
     letter-spacing: 0.08em;
   }
 
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
-  }
-
   @media (max-width: 760px) {
     flex-direction: column;
     align-items: flex-start;
@@ -2699,15 +2673,9 @@ const PreviewHomeCard = styled.div`
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: 0.46rem;
     color: ${({ theme }) => theme.colors.gray12};
     font-weight: 800;
     font-size: 1rem;
-  }
-
-  .mark {
-    width: 1.35rem;
-    height: 1.35rem;
   }
 
   .heroCard {
@@ -2768,26 +2736,8 @@ const PreviewLinksCard = styled.div`
   }
 `
 
-const ActionRailCard = styled(SurfaceCard)`
-  padding: 0.92rem;
-  display: grid;
-  gap: 0.6rem;
-`
-
-const RailActions = styled.div`
-  display: grid;
-  gap: 0.48rem;
-`
-
-const ActionMeta = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.8rem;
-  line-height: 1.5;
-`
-
 const QuietButton = styled.button`
-  justify-self: flex-start;
+  justify-self: flex-end;
   padding: 0;
   border: none;
   background: transparent;
@@ -2798,6 +2748,10 @@ const QuietButton = styled.button`
   &:disabled {
     cursor: not-allowed;
     opacity: 0.48;
+  }
+
+  @media (max-width: 760px) {
+    justify-self: flex-start;
   }
 `
 

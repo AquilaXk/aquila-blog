@@ -419,14 +419,20 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin/posts")
     const workspaceHeading = page.getByRole("heading", { name: "글 작업 공간" })
-    const titleInput = page.getByPlaceholder("제목을 입력하세요")
+    const titleInput = page.locator("#post-title").first()
+    const legacyTitleInput = page.getByPlaceholder("제목을 입력하세요").first()
     if (await workspaceHeading.isVisible().catch(() => false)) {
       await expect(page.getByRole("heading", { name: "새 글 쓰기" })).toBeVisible()
       await page.getByRole("button", { name: "글 쓰기 시작" }).first().click()
-      await expect(page).toHaveURL(/\/editor\/(new|[0-9]+)(\/|$|\?)/)
+      await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write)(\/|$|\?)/)
+    } else {
+      await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write|admin\/posts\/new)(\/|$|\?)/)
+    }
+
+    if (await titleInput.isVisible().catch(() => false)) {
       await expect(titleInput).toBeVisible()
     } else {
-      await expect(titleInput).toBeVisible()
+      await expect(legacyTitleInput).toBeVisible()
     }
     const blockEditor = page.locator(".aq-block-editor__content").first()
     await expect(blockEditor).toBeVisible()

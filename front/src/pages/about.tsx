@@ -4,7 +4,6 @@ import { dehydrate } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
-import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { parseLegacyAboutDetails } from "src/libs/profileWorkspace"
 import { createQueryClient } from "src/libs/react-query"
@@ -44,8 +43,6 @@ type AboutPageProps = {
 const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
 
-  const imageSrc =
-    adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
   const displayRole = adminProfile?.aboutRole || CONFIG.profile.role
   const displayBio = adminProfile?.aboutBio || CONFIG.profile.bio
@@ -80,17 +77,6 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
           <h1 className="page-title">About Me</h1>
 
           <div className="profile-section">
-            <div className="profile-image-wrapper">
-              <ProfileImage
-                src={imageSrc}
-                alt={displayName}
-                width={150}
-                height={150}
-                priority
-                fillContainer
-                className="profile-image"
-              />
-            </div>
             <h2 className="profile-name">{displayName}</h2>
             <p className="profile-role">{displayRole}</p>
             <p className="profile-bio">{displayBio}</p>
@@ -175,25 +161,11 @@ const StyledWrapper = styled.div`
     .profile-section {
       text-align: center;
       margin-bottom: 3rem;
-      padding: 1.15rem 1rem 1.3rem;
+      padding: 1.4rem 1rem 1.3rem;
       border: 1px solid ${({ theme }) => theme.colors.gray5};
       border-radius: 16px;
       background: ${({ theme }) => theme.colors.gray2};
       box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
-
-      .profile-image-wrapper {
-        position: relative;
-        width: 150px;
-        height: 150px;
-        margin: 0 auto 1.5rem;
-
-        .profile-image {
-          border-radius: 50%;
-          object-fit: cover;
-          object-position: center 38%;
-          border: 1px solid ${({ theme }) => theme.colors.gray6};
-        }
-      }
 
       .profile-name {
         font-size: 2rem;

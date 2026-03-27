@@ -1,14 +1,14 @@
 export const variables = {
   breakpoint: 960,
-  headerHeight: 56,
+  headerHeight: 60,
   paddingLg: 24,
   paddingMd: 20,
   widthLg: 1480,
   widthMd: 1280,
   navControl: {
-    height: 36,
-    radius: 8,
-    fontSize: 0.87,
+    height: 40,
+    radius: 10,
+    fontSize: 0.96,
   },
   ui: {
     card: {

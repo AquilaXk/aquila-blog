@@ -23,6 +23,12 @@ import {
   normalizeCategoryValue,
 } from "src/libs/utils"
 import {
+  consumeGuardOnExpectedUpdate,
+  createBlockEditorLoadGuardState,
+  shouldIgnoreBlockEditorEmptyUpdate,
+  type BlockEditorLoadGuardState,
+} from "./editorLoadSyncGuard"
+import {
   isNavigationCancelledError,
   pushRoute,
   replaceRoute,
@@ -1510,6 +1516,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
   const postContentLiveRef = useRef(postContent)
+  const blockEditorLoadGuardStateRef = useRef<BlockEditorLoadGuardState>({
+    expectedBody: "",
+    ignoreUntilMs: 0,
+  })
   const [previewContent, setPreviewContent] = useState(postContent)
   const [isPreviewSyncPending, setIsPreviewSyncPending] = useState(false)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
@@ -1550,6 +1560,21 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   useEffect(() => {
     postContentLiveRef.current = postContent
   }, [postContent])
+
+  const handleBlockEditorChange = useCallback((nextMarkdown: string) => {
+    const nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
+    blockEditorLoadGuardStateRef.current = nextGuardState
+
+    if (shouldIgnoreBlockEditorEmptyUpdate({
+      nextMarkdown,
+      currentMarkdown: postContentLiveRef.current,
+      guardState: nextGuardState,
+    })) {
+      return
+    }
+
+    setPostContent(nextMarkdown)
+  }, [])
 
   const isPreviewHeavyDocument = useMemo(() => {
     if (previewContentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return true
@@ -1985,6 +2010,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
     const markdownFromHtml = contentHtml?.trim() ? convertHtmlToMarkdown(contentHtml).trim() : ""
     const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
+    blockEditorLoadGuardStateRef.current = createBlockEditorLoadGuardState(resolvedBody)
     const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
     const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
     const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
@@ -3937,40 +3963,34 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     : `${PROFILE_IMAGE_UPLOAD_RULE_LABEL} (선택 즉시 업로드)`
   const publishActionTitle =
     publishActionType === "create"
-      ? "글 작성 설정"
+      ? "발행 설정"
       : publishActionType === "modify"
-        ? "글 수정 설정"
-        : "임시글 공개 설정"
+        ? "수정 설정"
+        : "공개 설정"
   const publishActionDescription =
     publishActionType === "create"
-      ? "노출 범위와 카드 결과를 한 번에 확인한 뒤 바로 작성합니다."
+      ? "공개 범위와 카드 결과를 확인한 뒤 발행합니다."
       : publishActionType === "modify"
-        ? "수정 저장 전 노출 범위와 카드 결과를 마지막으로 점검합니다."
-        : "임시글을 공개 글로 전환하기 전에 카드 노출 상태를 확인합니다."
+        ? "공개 범위와 카드 결과를 확인한 뒤 변경 내용을 반영합니다."
+        : "공개 글로 전환하기 전에 마지막으로 확인합니다."
   const publishActionButtonText =
     publishActionType === "create"
       ? loadingKey === "writePost"
-        ? "작성 중..."
-        : "글 작성"
+        ? "발행 중..."
+        : "발행하기"
       : publishActionType === "modify"
         ? loadingKey === "modifyPost"
-          ? "수정 중..."
-          : "수정 저장"
+          ? "반영 중..."
+          : "변경 반영"
         : loadingKey === "publishTempPost"
-          ? "발행 중..."
-          : "임시글 발행"
+          ? "공개 중..."
+          : "공개하기"
   const publishActionButtonDisabled =
     publishActionType === "create"
       ? editorMode !== "create" || disabled("writePost")
       : publishActionType === "modify"
         ? editorMode !== "edit" || disabled("modifyPost")
         : editorMode !== "edit" || disabled("publishTempPost")
-  const publishActionSummaryLabel =
-    publishActionType === "create"
-      ? "새 글 작성"
-      : publishActionType === "modify"
-        ? "기존 글 수정"
-        : "임시글 공개"
   const mobilePrimaryActionLabel =
     editorMode === "create"
       ? "발행 설정 열기"
@@ -4038,8 +4058,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           ? "링크 공개"
           : "전체 공개"
   const previewThumbnailSrc = safePreviewThumbnail && !isPreviewThumbnailError ? safePreviewThumbnail : ""
-  const previewThumbnailStatusLabel = previewThumbnailSrc ? "썸네일 설정됨" : "썸네일 자동 사용"
-  const previewSummaryStatusLabel = postSummary.trim() ? "요약 직접 입력" : "요약 자동 생성"
   const shouldShowPublishModalNotice = publishModalNotice.tone !== "idle"
   const previewAuthorAvatarSrc = (
     profileImgInputUrl.trim() ||
@@ -4303,7 +4321,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             {BLOCK_EDITOR_V2_ENABLED ? (
               <LazyBlockEditorShell
                 value={postContent}
-                onChange={setPostContent}
+                onChange={handleBlockEditorChange}
                 onUploadImage={handleBlockEditorImageUpload}
                 enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
                 disabled={loadingKey.length > 0}
@@ -4486,12 +4504,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 <h4>{publishActionTitle}</h4>
                 <p>{publishActionDescription}</p>
               </div>
-              <PublishSettingsSummary aria-label="현재 발행 설정 요약">
-                <SummaryPill>{publishActionSummaryLabel}</SummaryPill>
-                <SummaryPill>{`노출 ${previewVisibilityLabel}`}</SummaryPill>
-                <SummaryPill>{previewThumbnailStatusLabel}</SummaryPill>
-                <SummaryPill>{previewSummaryStatusLabel}</SummaryPill>
-              </PublishSettingsSummary>
             </PublishModalHeader>
             <PublishModalBody>
               {shouldShowPublishModalNotice ? (
@@ -4529,8 +4541,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <PreviewResultHeader>
                     <div>
                       <SectionKicker>카드 미리보기</SectionKicker>
-                      <strong>{previewViewportConfig.label} 기준</strong>
-                      <span>{previewViewportConfig.description} 폭에서 카드 결과를 점검합니다.</span>
+                      <strong>{previewViewportConfig.label}</strong>
+                      <span>제목, 요약, 썸네일 잘림만 확인합니다.</span>
                     </div>
                     <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
                       {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
@@ -4550,7 +4562,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                       })}
                     </PreviewViewportTabs>
                   </PreviewResultHeader>
-                  <PreviewResultFrame style={{ width: `min(100%, ${previewViewportConfig.cardWidth}px)` }}>
+                  <PreviewResultFrame style={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}>
                     <PreviewResultCard>
                       <div className="thumbnail">
                         {previewThumbnailSrc ? (
@@ -5709,7 +5721,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   </ComposeBodyHeader>
                   <LazyBlockEditorShell
                     value={postContent}
-                    onChange={setPostContent}
+                    onChange={handleBlockEditorChange}
                     onUploadImage={handleBlockEditorImageUpload}
                     enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
                     disabled={loadingKey.length > 0}
@@ -6282,12 +6294,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <h4>{publishActionTitle}</h4>
                   <p>{publishActionDescription}</p>
                 </div>
-                <PublishSettingsSummary aria-label="현재 발행 설정 요약">
-                  <SummaryPill>{publishActionSummaryLabel}</SummaryPill>
-                  <SummaryPill>{`노출 ${previewVisibilityLabel}`}</SummaryPill>
-                  <SummaryPill>{previewThumbnailStatusLabel}</SummaryPill>
-                  <SummaryPill>{previewSummaryStatusLabel}</SummaryPill>
-                </PublishSettingsSummary>
               </PublishModalHeader>
               <PublishModalBody>
                 {shouldShowPublishModalNotice ? (
@@ -6325,8 +6331,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                     <PreviewResultHeader>
                       <div>
                         <SectionKicker>실제 카드 결과</SectionKicker>
-                        <strong>{previewViewportConfig.label} 기준 미리보기</strong>
-                        <span>{previewViewportConfig.description} 폭에서 제목·요약·썸네일 잘림을 바로 확인합니다.</span>
+                        <strong>{previewViewportConfig.label}</strong>
+                        <span>제목, 요약, 썸네일 잘림만 확인합니다.</span>
                       </div>
                       <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
                         {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
@@ -6346,7 +6352,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                         })}
                       </PreviewViewportTabs>
                     </PreviewResultHeader>
-                    <PreviewResultFrame style={{ width: `min(100%, ${previewViewportConfig.cardWidth}px)` }}>
+                    <PreviewResultFrame style={{ maxWidth: `${previewViewportConfig.cardWidth}px` }}>
                       <PreviewResultCard>
                         <div className="thumbnail">
                           {previewThumbnailSrc ? (
@@ -7871,8 +7877,8 @@ const PublishOverviewGrid = styled.div`
   display: grid;
   gap: 0.8rem;
 
-  @media (min-width: 880px) {
-    grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  @media (min-width: 1080px) {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 368px);
     align-items: start;
   }
 `
@@ -7939,6 +7945,8 @@ const VisibilityOptionButton = styled.button`
 const PreviewResultPanel = styled.div`
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 14px;
   background:
@@ -7972,12 +7980,19 @@ const PreviewResultHeader = styled.div`
     font-size: 0.76rem;
     line-height: 1.45;
   }
+
+  @media (max-width: 1079px) {
+    flex-direction: column;
+  }
 `
 
 const PreviewViewportTabs = styled.div`
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.4rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
 `
 
 const PreviewViewportButton = styled.button`
@@ -8014,6 +8029,7 @@ const PreviewViewportButton = styled.button`
 
 const PreviewResultFrame = styled.div`
   width: 100%;
+  margin: 0 auto;
 `
 
 const PreviewVisibilityBadge = styled.span`
@@ -9935,7 +9951,7 @@ const ConfirmModal = styled.div`
 `
 
 const PublishModal = styled.div`
-  width: min(960px, 100%);
+  width: min(1120px, calc(100vw - 2rem));
   max-height: min(86vh, 920px);
   overflow: auto;
   border-radius: 18px;
@@ -9946,7 +9962,7 @@ const PublishModal = styled.div`
   gap: 0.8rem;
 
   &[data-variant="drawer"] {
-    width: min(440px, 100vw);
+    width: min(560px, 100vw);
     max-height: 100vh;
     height: 100vh;
     border-radius: 0;

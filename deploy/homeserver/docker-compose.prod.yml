@@ -88,9 +88,9 @@ services:
       # readiness(db 포함)는 트래픽 수용 판단용이며, autoheal 재기동 신호로 쓰면 재시작 루프가 발생할 수 있다.
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
     env_file:
       - ./.env.prod
     environment:
@@ -119,9 +119,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
     env_file:
       - ./.env.prod
     environment:
@@ -151,9 +151,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
     env_file:
       - ./.env.prod
     environment:
@@ -183,9 +183,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 -O /dev/null http://127.0.0.1:8080/actuator/health/liveness || exit 1"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
     env_file:
       - ./.env.prod
     environment:

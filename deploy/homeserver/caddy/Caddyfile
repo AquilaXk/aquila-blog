@@ -68,6 +68,29 @@ http://{$API_DOMAIN} {
     Permissions-Policy "camera=(), microphone=(), geolocation=()"
   }
 
+  @corsAllowed {
+    header_regexp Origin Origin ^https://(www\.)?aquilaxk\.site$
+  }
+  @corsPreflight {
+    method OPTIONS
+    header_regexp Origin Origin ^https://(www\.)?aquilaxk\.site$
+  }
+  handle @corsPreflight {
+    header {
+      Access-Control-Allow-Origin "{http.request.header.Origin}"
+      Access-Control-Allow-Credentials "true"
+      Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+      Access-Control-Allow-Headers "{http.request.header.Access-Control-Request-Headers}"
+      Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
+    }
+    respond 204
+  }
+  header @corsAllowed {
+    ?Access-Control-Allow-Origin "{http.request.header.Origin}"
+    ?Access-Control-Allow-Credentials "true"
+    ?Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
+  }
+
   @notificationSse path /member/api/v1/notifications/stream
   log_skip @notificationSse
   handle @notificationSse {

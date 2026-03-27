@@ -31,11 +31,11 @@ const StyledWrapper = styled.button`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 40px;
+  min-height: 40px;
   border: none;
-  border-radius: 8px;
-  padding: 0 0.42rem;
+  border-radius: 10px;
+  padding: 0 0.5rem;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
   cursor: pointer;
@@ -48,20 +48,20 @@ const StyledWrapper = styled.button`
   }
 
   svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     display: block;
     transform: translateY(-0.3px);
   }
 
   @media (max-width: 720px) {
-    min-width: 34px;
-    min-height: 34px;
-    padding: 0 0.34rem;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0 0.42rem;
 
     svg {
-      width: 17px;
-      height: 17px;
+      width: 18px;
+      height: 18px;
     }
   }
 `

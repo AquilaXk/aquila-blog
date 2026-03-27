@@ -1,7 +1,7 @@
 import { CONFIG } from "site.config"
 import React from "react"
 import styled from "@emotion/styled"
-import AppIcon from "src/components/icons/AppIcon"
+import { Emoji } from "src/components/Emoji"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { useState } from "react"
@@ -24,7 +24,7 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
     <StyledWrapper>
       <div className="top">
         <span className="title">
-          <AppIcon name="laptop" className="titleIcon" /> Profile
+          <Emoji className="titleEmoji">💻</Emoji> Profile
         </span>
         <button type="button" onClick={() => setExpanded((prev) => !prev)}>
           {expanded ? "접기" : "보기"}
@@ -79,11 +79,14 @@ const StyledWrapper = styled.div`
     .title {
       display: inline-flex;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.45rem;
+      font-size: 1rem;
+      line-height: 1.3;
+      font-weight: 800;
     }
 
-    .titleIcon {
-      font-size: 0.96rem;
+    .titleEmoji {
+      font-size: 1.1rem;
       flex: 0 0 auto;
     }
 

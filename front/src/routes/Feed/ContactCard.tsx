@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import React from "react"
 import AppIcon from "src/components/icons/AppIcon"
+import { Emoji } from "src/components/Emoji"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { resolveContactLinks } from "src/libs/utils/profileCardLinks"
 
@@ -16,7 +17,7 @@ const ContactCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
   return (
     <>
       <StyledTitle>
-        <AppIcon name="message" className="titleIcon" /> Contact
+        <Emoji className="titleEmoji">💬</Emoji> Contact
       </StyledTitle>
       <StyledWrapper>
         {links.map((item) => (
@@ -41,12 +42,15 @@ export default ContactCard
 const StyledTitle = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.5rem;
   padding: 0.25rem;
   margin-bottom: 0.75rem;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  font-weight: 800;
 
-  .titleIcon {
-    font-size: 1rem;
+  .titleEmoji {
+    font-size: 1.15rem;
     flex: 0 0 auto;
   }
 `
@@ -58,7 +62,7 @@ const StyledWrapper = styled.div`
   background: transparent;
   a {
     display: flex;
-    padding: 0.65rem 0.1rem;
+    padding: 0.75rem 0.1rem;
     gap: 0.75rem;
     align-items: center;
     border-radius: 0;
@@ -76,8 +80,9 @@ const StyledWrapper = styled.div`
       line-height: 2rem;
     }
     .name {
-      font-size: 0.875rem;
-      line-height: 1.25rem;
+      font-size: 0.95rem;
+      line-height: 1.35rem;
+      font-weight: 500;
     }
   }
 `

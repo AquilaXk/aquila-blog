@@ -52,14 +52,26 @@ class ProdSequenceGuardService(
 
     private fun repairSequence(target: SequenceTarget): Boolean =
         runCatching {
+            jdbcTemplate.execute("ALTER SEQUENCE IF EXISTS public.${target.sequence} INCREMENT BY ${target.allocationSize}")
             jdbcTemplate.execute(
-                "SELECT setval('public.${target.sequence}', COALESCE((SELECT MAX(id) + 1 FROM public.${target.table}), 1), false)",
+                "SELECT setval('public.${target.sequence}', COALESCE((SELECT MAX(id) FROM public.${target.table}), 0) + ${target.allocationSize}, false)",
             )
             true
         }.onSuccess {
-            log.warn("Repaired sequence drift: table={}, sequence={}", target.table, target.sequence)
+            log.warn(
+                "Repaired sequence drift: table={}, sequence={}, allocationSize={}",
+                target.table,
+                target.sequence,
+                target.allocationSize,
+            )
         }.onFailure { exception ->
-            log.error("Failed to repair sequence drift: table={}, sequence={}", target.table, target.sequence, exception)
+            log.error(
+                "Failed to repair sequence drift: table={}, sequence={}, allocationSize={}",
+                target.table,
+                target.sequence,
+                target.allocationSize,
+                exception,
+            )
         }.getOrElse { false }
 
     /**
@@ -75,6 +87,7 @@ class ProdSequenceGuardService(
     private data class SequenceTarget(
         val table: String,
         val sequence: String,
+        val allocationSize: Int,
     )
 
     companion object {
@@ -82,16 +95,34 @@ class ProdSequenceGuardService(
         private val CONSTRAINT_NAME_PATTERN = Pattern.compile("constraint\\s+\"([^\"]+)\"", Pattern.CASE_INSENSITIVE)
         private val sequenceTargetsByConstraint: Map<String, SequenceTarget> =
             mapOf(
-                "member_pkey" to SequenceTarget("member", "member_seq"),
-                "member_attr_pkey" to SequenceTarget("member_attr", "member_attr_seq"),
-                "member_notification_pkey" to SequenceTarget("member_notification", "member_notification_seq"),
-                "member_action_log_pkey" to SequenceTarget("member_action_log", "member_action_log_seq"),
-                "post_pkey" to SequenceTarget("post", "post_seq"),
-                "post_attr_pkey" to SequenceTarget("post_attr", "post_attr_seq"),
-                "post_like_pkey" to SequenceTarget("post_like", "post_like_seq"),
-                "post_comment_pkey" to SequenceTarget("post_comment", "post_comment_seq"),
-                "task_pkey" to SequenceTarget("task", "task_seq"),
-                "uploaded_file_pkey" to SequenceTarget("uploaded_file", "uploaded_file_seq"),
+                "member_pkey" to SequenceTarget("member", "member_seq", 50),
+                "pk_member" to SequenceTarget("member", "member_seq", 50),
+                "member_attr_pkey" to SequenceTarget("member_attr", "member_attr_seq", 50),
+                "pk_member_attr" to SequenceTarget("member_attr", "member_attr_seq", 50),
+                "member_notification_pkey" to SequenceTarget("member_notification", "member_notification_seq", 50),
+                "pk_member_notification" to SequenceTarget("member_notification", "member_notification_seq", 50),
+                "member_action_log_pkey" to SequenceTarget("member_action_log", "member_action_log_seq", 50),
+                "pk_member_action_log" to SequenceTarget("member_action_log", "member_action_log_seq", 50),
+                "member_signup_verification_pkey" to
+                    SequenceTarget("member_signup_verification", "member_signup_verification_seq", 20),
+                "pk_member_signup_verification" to
+                    SequenceTarget("member_signup_verification", "member_signup_verification_seq", 20),
+                "post_pkey" to SequenceTarget("post", "post_seq", 50),
+                "pk_post" to SequenceTarget("post", "post_seq", 50),
+                "post_attr_pkey" to SequenceTarget("post_attr", "post_attr_seq", 50),
+                "pk_post_attr" to SequenceTarget("post_attr", "post_attr_seq", 50),
+                "post_like_pkey" to SequenceTarget("post_like", "post_like_seq", 50),
+                "pk_post_like" to SequenceTarget("post_like", "post_like_seq", 50),
+                "post_comment_pkey" to SequenceTarget("post_comment", "post_comment_seq", 50),
+                "pk_post_comment" to SequenceTarget("post_comment", "post_comment_seq", 50),
+                "post_write_request_idempotency_pkey" to
+                    SequenceTarget("post_write_request_idempotency", "post_write_request_idempotency_seq", 50),
+                "pk_post_write_request_idempotency" to
+                    SequenceTarget("post_write_request_idempotency", "post_write_request_idempotency_seq", 50),
+                "task_pkey" to SequenceTarget("task", "task_seq", 50),
+                "pk_task" to SequenceTarget("task", "task_seq", 50),
+                "uploaded_file_pkey" to SequenceTarget("uploaded_file", "uploaded_file_seq", 1),
+                "pk_uploaded_file" to SequenceTarget("uploaded_file", "uploaded_file_seq", 1),
             )
     }
 }

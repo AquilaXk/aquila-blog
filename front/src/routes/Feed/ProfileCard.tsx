@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import React from "react"
 import { CONFIG } from "site.config"
-import AppIcon from "src/components/icons/AppIcon"
+import { Emoji } from "src/components/Emoji"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 
@@ -19,9 +19,9 @@ const ProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
 
   return (
     <StyledWrapper>
-        <div className="title">
-          <AppIcon name="laptop" className="titleIcon" /> Profile
-        </div>
+      <div className="title">
+        <Emoji className="titleEmoji">💻</Emoji> Profile
+      </div>
       <div className="content">
         <div className="top">
           <ProfileImage src={imageSrc} width={132} height={132} alt={`${displayName} profile`} priority fillContainer />
@@ -42,17 +42,20 @@ const StyledWrapper = styled.div`
   > .title {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.5rem;
     padding: 0.25rem;
     margin-bottom: 0.75rem;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    font-weight: 800;
 
-    .titleIcon {
-      font-size: 1rem;
+    .titleEmoji {
+      font-size: 1.15rem;
       flex: 0 0 auto;
     }
   }
   > .content {
-    margin-bottom: 1.25rem;
+    margin-bottom: 2.25rem;
     width: 100%;
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
     background: transparent;
@@ -87,22 +90,23 @@ const StyledWrapper = styled.div`
       text-align: center;
 
       .name {
-        font-size: 1.22rem;
-        line-height: 1.3;
-        font-weight: 740;
+        font-size: 1.25rem;
+        line-height: 1.75rem;
+        font-style: italic;
+        font-weight: 700;
         letter-spacing: -0.02em;
       }
       .role {
-        margin: 0.6rem 0 0.85rem;
+        margin: 0.55rem 0 1rem;
         font-size: 0.9rem;
-        line-height: 1.4;
-        color: ${({ theme }) => theme.colors.blue11};
-        font-weight: 700;
+        line-height: 1.25rem;
+        color: ${({ theme }) => theme.colors.gray11};
+        font-weight: 600;
       }
       .bio {
-        margin-bottom: 0.15rem;
+        margin-bottom: 0.25rem;
         font-size: 0.875rem;
-        line-height: 1.65;
+        line-height: 1.55;
         color: ${({ theme }) => theme.colors.gray11};
         white-space: pre-line;
         word-break: break-word;

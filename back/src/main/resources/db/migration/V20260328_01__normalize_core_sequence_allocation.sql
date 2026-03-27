@@ -1,13 +1,3 @@
--- NOTE:
--- This script intentionally avoids DO $$ ... $$ blocks because
--- Spring's SQL initializer can split statements by ';' and break
--- dollar-quoted blocks in some runtime paths.
---
--- Each statement is a plain SELECT/ALTER and safe for Spring SQL init.
--- Sequence values are aligned to allocation size, not MAX(id)+1:
--- nextval = MAX(id) + allocation_size (is_called=false).
--- This keeps pooled/pooled-lo generators from reusing existing PK ranges.
-
 ALTER SEQUENCE IF EXISTS member_seq INCREMENT BY 50;
 SELECT setval('public.member_seq', COALESCE((SELECT MAX(id) FROM public.member), 0) + 50, false);
 

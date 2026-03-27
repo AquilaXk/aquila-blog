@@ -21,21 +21,21 @@ export default Logo
 const StyledWrapper = styled(Link)`
   display: inline-flex;
   align-items: center;
-  gap: clamp(0.34rem, 0.22rem + 0.26vw, 0.52rem);
+  gap: clamp(0.4rem, 0.24rem + 0.32vw, 0.6rem);
   min-width: 0;
   max-width: 100%;
-  min-height: 34px;
+  min-height: 40px;
   color: ${({ theme }) => theme.colors.gray12};
   font-weight: 760;
-  font-size: clamp(1.28rem, 1.04rem + 0.72vw, 1.72rem);
+  font-size: clamp(1.42rem, 1.12rem + 0.8vw, 1.9rem);
   letter-spacing: -0.03em;
   line-height: 1.1;
 
   .brandMark {
     display: block;
     flex-shrink: 0;
-    width: clamp(1.42rem, 1.18rem + 0.48vw, 1.8rem);
-    height: clamp(1.42rem, 1.18rem + 0.48vw, 1.8rem);
+    width: clamp(1.58rem, 1.24rem + 0.56vw, 1.96rem);
+    height: clamp(1.58rem, 1.24rem + 0.56vw, 1.96rem);
   }
 
   .brandText {
@@ -46,11 +46,12 @@ const StyledWrapper = styled(Link)`
   }
 
   @media (max-width: 720px) {
-    font-size: clamp(1.08rem, 0.95rem + 0.5vw, 1.32rem);
+    min-height: 36px;
+    font-size: clamp(1.18rem, 1.02rem + 0.56vw, 1.46rem);
 
     .brandMark {
-      width: 1.32rem;
-      height: 1.32rem;
+      width: 1.42rem;
+      height: 1.42rem;
     }
   }
 `

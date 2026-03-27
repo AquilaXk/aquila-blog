@@ -733,6 +733,17 @@ const BlockEditorShell = ({
     onUpdate: ({ editor: nextEditor }) => {
       const markdown = serializeEditorDocToMarkdown(nextEditor.getJSON() as BlockEditorDoc)
       const normalized = normalizeMarkdown(markdown)
+      const normalizedExternal = normalizeMarkdown(value)
+
+      if (!nextEditor.isFocused && normalized.length === 0 && normalizedExternal.length > 0) {
+        return
+      }
+
+      if (normalized === lastCommittedMarkdownRef.current) {
+        setRawMarkdownDraft(markdown)
+        return
+      }
+
       lastCommittedMarkdownRef.current = normalized
       setRawMarkdownDraft(markdown)
       onChange(markdown)

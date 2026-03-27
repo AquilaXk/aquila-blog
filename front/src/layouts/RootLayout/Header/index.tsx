@@ -193,11 +193,11 @@ const StyledWrapper = styled.div`
     box-sizing: border-box;
     padding-left: 1rem;
     padding-right: 1rem;
-    gap: 0.75rem;
+    gap: 0.9rem;
     justify-content: space-between;
     align-items: center;
     width: min(100%, ${CONTENT_MAX_WIDTH_PX}px);
-    min-height: 3.45rem;
+    min-height: 3.75rem;
     margin: 0 auto;
 
     @media (max-width: ${WIDE_CONTENT_BREAKPOINT_PX}px) {
@@ -212,7 +212,7 @@ const StyledWrapper = styled.div`
       width: 100%;
       padding-left: 1rem;
       padding-right: 1rem;
-      min-height: 3.35rem;
+      min-height: 3.6rem;
     }
 
     &[data-full-width="true"] {
@@ -223,7 +223,7 @@ const StyledWrapper = styled.div`
     }
     .nav {
       display: flex;
-      gap: 0.36rem;
+      gap: 0.48rem;
       align-items: center;
       flex-shrink: 0;
       min-width: 0;
@@ -245,7 +245,7 @@ const StyledWrapper = styled.div`
       }
 
       .nav {
-        gap: 0.18rem;
+        gap: 0.26rem;
         max-width: calc(100vw - 7.8rem);
         overflow: hidden;
         justify-content: flex-end;

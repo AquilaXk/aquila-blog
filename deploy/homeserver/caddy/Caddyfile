@@ -69,6 +69,7 @@ http://{$API_DOMAIN} {
   }
 
   @notificationSse path /member/api/v1/notifications/stream
+  log_skip @notificationSse
   handle @notificationSse {
     header {
       Cache-Control "no-cache, no-transform"

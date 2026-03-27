@@ -303,7 +303,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>([])
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
   const [dashboardOpen, setDashboardOpen] = useState(false)
-  const [isMobileLayout, setIsMobileLayout] = useState(false)
+  const [, setIsMobileLayout] = useState(false)
   const [activeSection, setActiveSection] = useState<SectionKey>("overview")
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab>("mail")
   const [testEmail, setTestEmail] = useState("")

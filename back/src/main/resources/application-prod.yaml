@@ -78,6 +78,7 @@ custom:
   member:
     notification:
       sse:
+        heartbeatSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__HEARTBEAT_SECONDS:30}
         replayProbeSeconds: ${CUSTOM__MEMBER__NOTIFICATION__SSE__REPLAY_PROBE_SECONDS:60}
   post:
     read:

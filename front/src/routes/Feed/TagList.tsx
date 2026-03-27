@@ -108,7 +108,10 @@ const TagList: React.FC = () => {
         className="desktopPanel"
         aria-label="태그 목록"
       >
-        <h2 className="panelTitle">태그 목록</h2>
+        <h2 className="panelTitle">
+          <span className="panelEmoji" aria-hidden="true">🏷️</span>
+          <span>태그 목록</span>
+        </h2>
         <ul className="desktopList">
           <li>
             <button
@@ -223,6 +226,19 @@ const StyledWrapper = styled.div`
     line-height: 1.5;
     padding: 0 0 0.42rem;
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+    display: inline-flex;
+    align-items: center;
+    gap: 0.44rem;
+  }
+
+  .panelEmoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.02rem;
+    line-height: 1;
+    transform: rotate(-12deg);
+    transform-origin: 50% 58%;
   }
 
   .desktopList {

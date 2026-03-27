@@ -8,7 +8,7 @@ const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const INLINE_CODE_REGEX = /`([^`]+)`/g
 const MARKDOWN_LINK_REGEX = /\[(.*?)\]\((.*?)\)/g
 const MARKDOWN_PUNCTUATION_REGEX = /[#>*_~|-]/g
-const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:요약|summary)\b/i
+const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:요약|summary)\b/i
 
 export const CARD_SUMMARY_PREVIEW_LIMIT = 150
 export const DEFAULT_CARD_SUMMARY_FALLBACK = "핵심 내용을 정리 중입니다."

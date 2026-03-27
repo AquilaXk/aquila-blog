@@ -7,6 +7,15 @@ const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/profile", "/admin/posts/new", "/admin/tools"]
 
+const mockTagCounts = [
+  { tag: "perf", count: 10 },
+  { tag: "frontend", count: 8 },
+  { tag: "backend", count: 7 },
+  { tag: "architecture", count: 6 },
+  { tag: "testing", count: 5 },
+  { tag: "deploy", count: 4 },
+] as const
+
 const buildMockExploreItem = (id: number) => ({
   id,
   createdAt: "2026-03-17T00:00:00Z",
@@ -137,7 +146,7 @@ const mockFeedEndpoints = async (
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([{ tag: "perf", count: 1 }]),
+      body: JSON.stringify(mockTagCounts),
     })
   })
 
@@ -392,6 +401,35 @@ const getDesktopTagRailMetrics = async (page: Page) =>
       panelBottom: Math.round(panelRect.bottom),
     }
   })
+
+const waitForHomeTagRailReady = async (page: Page, viewportWidth: number) => {
+  if (viewportWidth > 1200) {
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            const list = document.querySelector(".desktopList")
+            if (!list) return 0
+            return list.querySelectorAll("li").length
+          }),
+        { timeout: 5000 }
+      )
+      .toBeGreaterThanOrEqual(4)
+    return
+  }
+
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const rail = document.querySelector(".chipRail")
+          if (!rail) return 0
+          return rail.querySelectorAll("button").length
+        }),
+      { timeout: 5000 }
+    )
+    .toBeGreaterThanOrEqual(4)
+}
 
 const applySchemePreference = async (page: Page, scheme: "light" | "dark") => {
   await page.context().clearCookies()
@@ -675,6 +713,9 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
     await gotoForPerf(page, scenario.route, {
       readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
     })
+    if (scenario.route === "/") {
+      await waitForHomeTagRailReady(page, scenario.viewport.width)
+    }
     await page.waitForTimeout(160)
     const snapshot = await getVisualLayoutFingerprint(page)
 

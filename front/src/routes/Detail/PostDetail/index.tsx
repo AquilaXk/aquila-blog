@@ -831,8 +831,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               <details>
                 <summary>
                   <div className="summaryCopy">
-                    <strong>이 글에서 다루는 내용</strong>
-                    <span>{visibleTocItems.length}개 섹션을 빠르게 이동합니다.</span>
+                    <strong>목차</strong>
+                    <span>{visibleTocItems.length}개 섹션</span>
                   </div>
                   <span className="summaryChevron" aria-hidden="true">
                     <AppIcon name="chevron-down" />

@@ -145,7 +145,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
       <RichBlockHeader>
         <div>
           <strong>Mermaid</strong>
-          <span>본문에 저장될 원문과 미리보기를 함께 관리합니다.</span>
         </div>
       </RichBlockHeader>
       <BlockTextarea
@@ -206,7 +205,6 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
       <CalloutEditorMetaRow>
         <CalloutEditorLabel>
           <strong>콜아웃</strong>
-          <span>GitHub callout</span>
         </CalloutEditorLabel>
         <BlockSelect
           value={draftKind}
@@ -281,7 +279,6 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
     <ToggleEditorWrapper data-selected={selected}>
       <CalloutEditorLabel>
         <strong>토글</strong>
-        <span>접기/펼치기 블록</span>
       </CalloutEditorLabel>
       <BlockInput
         value={draftTitle}
@@ -337,7 +334,6 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
     <RawBlockWrapper data-selected={selected}>
       <RawBlockHeader>
         <strong>{RAW_BLOCK_REASON_LABELS[reason] || "원문 블록"}</strong>
-        <span>지원되지 않는 문법은 원문 그대로 보존합니다.</span>
       </RawBlockHeader>
       <BlockTextarea
         ref={textareaRef}
@@ -712,16 +708,16 @@ const BlockSelect = styled.select`
 const RichBlockWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  margin: 1rem 0;
-  border: 1px solid rgba(96, 165, 250, 0.18);
-  border-radius: 1rem;
-  background: rgba(18, 21, 26, 0.94);
-  padding: 1rem;
+  gap: 0.65rem;
+  margin: 0.85rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.95rem;
+  background: rgba(18, 21, 26, 0.72);
+  padding: 0.82rem 0.88rem;
 
   &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.44);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.14);
+    border-color: rgba(59, 130, 246, 0.28);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
   }
 `
 
@@ -733,24 +729,17 @@ const RichBlockHeader = styled.div`
 
   strong {
     display: block;
-    font-size: 0.95rem;
+    font-size: 0.86rem;
     color: var(--color-gray12);
-  }
-
-  span {
-    display: block;
-    margin-top: 0.2rem;
-    font-size: 0.82rem;
-    color: var(--color-gray10);
   }
 `
 
 const MermaidPreviewCard = styled.div`
   min-height: 8rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.9rem;
   background: rgba(13, 15, 18, 0.96);
-  padding: 0.85rem;
+  padding: 0.7rem;
 
   .aq-mermaid {
     margin: 0;
@@ -763,18 +752,18 @@ const MermaidPreviewPlaceholder = styled.div`
   justify-content: center;
   min-height: 6rem;
   color: var(--color-gray10);
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   text-align: center;
 `
 
 const CalloutPreviewCard = styled.div`
   border-radius: 0.95rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.68rem 0.78rem;
 
   h4 {
     margin: 0.55rem 0 0.18rem;
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     color: var(--color-gray12);
   }
 
@@ -782,7 +771,7 @@ const CalloutPreviewCard = styled.div`
     margin: 0;
     color: var(--color-gray10);
     white-space: pre-wrap;
-    font-size: 0.86rem;
+    font-size: 0.82rem;
     line-height: 1.5;
   }
 
@@ -852,24 +841,24 @@ const CalloutPreviewBadge = styled.strong`
   min-height: 1.65rem;
   align-items: center;
   border-radius: 999px;
-  padding: 0 0.7rem;
-  font-size: 0.74rem;
+  padding: 0 0.62rem;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
 `
 
 const CalloutEditorWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin: 0.85rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: rgba(18, 21, 26, 0.92);
-  padding: 0.85rem 0.9rem;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.95rem;
+  background: rgba(18, 21, 26, 0.68);
+  padding: 0.72rem 0.8rem;
 
   &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.42);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.28);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
   }
 
   &[data-kind="tip"] {
@@ -910,29 +899,23 @@ const CalloutEditorLabel = styled.div`
   gap: 0.08rem;
 
   strong {
-    font-size: 0.88rem;
+    font-size: 0.82rem;
     color: var(--color-gray12);
-    line-height: 1.1;
-  }
-
-  span {
-    font-size: 0.74rem;
-    color: var(--color-gray10);
     line-height: 1.1;
   }
 `
 
 const TogglePreviewCard = styled.details`
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.9rem;
   background: rgba(13, 15, 18, 0.96);
-  padding: 0.1rem 0.1rem 0.55rem;
+  padding: 0.08rem 0.08rem 0.48rem;
 
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0.72rem 0.82rem;
-    font-size: 0.88rem;
+    padding: 0.62rem 0.74rem;
+    font-size: 0.84rem;
     font-weight: 700;
     color: var(--color-gray12);
 
@@ -943,10 +926,10 @@ const TogglePreviewCard = styled.details`
 
   p {
     margin: 0;
-    padding: 0 0.82rem 0.08rem;
+    padding: 0 0.74rem 0.08rem;
     color: var(--color-gray10);
     white-space: pre-wrap;
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     line-height: 1.5;
   }
 `
@@ -954,49 +937,43 @@ const TogglePreviewCard = styled.details`
 const ToggleEditorWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin: 0.85rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: rgba(18, 21, 26, 0.92);
-  padding: 0.85rem 0.9rem;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.95rem;
+  background: rgba(18, 21, 26, 0.68);
+  padding: 0.72rem 0.8rem;
 
   &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.42);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.28);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
   }
 `
 
 const RawBlockWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin: 1rem 0;
-  border: 1px solid rgba(96, 165, 250, 0.22);
-  border-radius: 1rem;
-  background: rgba(18, 21, 26, 0.94);
-  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.06);
-  padding: 1rem;
+  gap: 0.55rem;
+  margin: 0.85rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0.95rem;
+  background: rgba(18, 21, 26, 0.68);
+  padding: 0.78rem 0.85rem;
 
   &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.54);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.16);
+    border-color: rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
   }
 `
 
 const RawBlockHeader = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.35rem;
 
   strong {
-    font-size: 0.95rem;
-    color: var(--color-gray12);
-  }
-
-  span {
     font-size: 0.82rem;
-    color: var(--color-gray10);
+    color: var(--color-gray12);
   }
 `
 

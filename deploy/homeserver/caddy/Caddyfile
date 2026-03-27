@@ -21,7 +21,10 @@ http://{$MONITOR_DOMAIN:status.localhost} {
 # Grafana dashboard endpoint (optional).
 # Set GRAFANA_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
 http://{$GRAFANA_DOMAIN:grafana.localhost} {
-  reverse_proxy grafana:3000
+  reverse_proxy grafana:3000 {
+    # Admin UI iframe embed compatibility.
+    header_down -X-Frame-Options
+  }
 
   header {
     X-Content-Type-Options "nosniff"

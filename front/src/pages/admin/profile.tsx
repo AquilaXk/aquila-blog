@@ -3,10 +3,18 @@ import { GetServerSideProps, NextPage } from "next"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  ChangeEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
-import BrandMark from "src/components/branding/BrandMark"
 import AppIcon, { IconName } from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 import {
@@ -78,6 +86,13 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)
   })
+
+const restoreTextAreaCursor = (textarea: HTMLTextAreaElement, position: number) => {
+  window.requestAnimationFrame(() => {
+    textarea.focus()
+    textarea.setSelectionRange(position, position)
+  })
+}
 
 const readImageSourceSizeFromFile = (file: File): Promise<ProfileImageSourceSize> =>
   new Promise((resolve, reject) => {
@@ -266,6 +281,38 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setProfileImgInputUrl((member.profileImageDirectUrl || member.profileImageUrl || "").trim())
     lastSyncedRevisionRef.current = buildMemberRevisionKey(member)
   }, [queryClient, setMe])
+
+  const handleAboutDetailsKeyDown = useCallback((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+
+    const textarea = event.currentTarget
+    const { selectionStart, selectionEnd, value } = textarea
+    if (selectionStart !== selectionEnd) return
+
+    const lineStart = value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1
+    const line = value.slice(lineStart, selectionStart)
+    const bulletMatch = line.match(/^(\s*)-\s?(.*)$/)
+    if (!bulletMatch) return
+
+    event.preventDefault()
+
+    const [, indent, content] = bulletMatch
+    const nextLineStart = value.indexOf("\n", selectionStart)
+    const lineTail = nextLineStart === -1 ? value.length : nextLineStart
+
+    if (!content.trim()) {
+      const nextValue = `${value.slice(0, lineStart)}${value.slice(lineTail)}`
+      setAboutDetailsInput(nextValue)
+      restoreTextAreaCursor(textarea, lineStart)
+      return
+    }
+
+    const insertion = `\n${indent}- `
+    const nextValue = `${value.slice(0, selectionStart)}${insertion}${value.slice(selectionEnd)}`
+    const nextCursor = selectionStart + insertion.length
+    setAboutDetailsInput(nextValue)
+    restoreTextAreaCursor(textarea, nextCursor)
+  }, [])
 
   const refreshAdminProfile = useCallback(async (memberId: number, fallback?: MemberMe) => {
     try {
@@ -1036,10 +1083,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <p>{profileBioInput.trim() || "소개 문구 미설정"}</p>
           <PreviewMetaStrip>
             <small>블로그 명</small>
-            <BrandTitlePreview>
-              {blogTitleInput.trim() ? <BrandMark className="brandMark" /> : null}
-              <strong>{blogTitleInput.trim() || "미설정"}</strong>
-            </BrandTitlePreview>
+            <strong>{blogTitleInput.trim() || "미설정"}</strong>
           </PreviewMetaStrip>
           <PreviewMetaStrip>
             <small>메인 소개 타이틀</small>
@@ -1130,11 +1174,12 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <FieldLabel htmlFor="about-details">About 상세 섹션</FieldLabel>
                   <TextArea
                     id="about-details"
-                    placeholder={"예시)\n## 경력\n2021.07 - 2022.04 SpaceWalk(DE Chapter) Intern\n2020.09 - 2021.02 세종대학교 NLP 학부 연구생\n\n## 수상이력\n2021.06 세종대학교 창의설계경진대회 인기상\n2020.12 세종대학교 해커톤 장려상\n\n## 논문\n2020.12 텍스트 마이닝을 이용한 ESG 요소 분석"}
+                    placeholder={"## 경력\n- 2024.01 - 현재 회사명 / 역할\n- 2022.03 - 2023.12 프로젝트명 / 담당 업무\n\n---\n\n## 수상이력\n- 2024.06 대회명 / 수상 내용"}
                     value={aboutDetailsInput}
                     onChange={(e) => setAboutDetailsInput(e.target.value)}
+                    onKeyDown={handleAboutDetailsKeyDown}
                   />
-                  <Hint>형식: `## 섹션명` 제목 아래 줄마다 항목을 입력하면 About 페이지에 구분선 스타일로 렌더링됩니다.</Hint>
+                  <Hint>`## 섹션명`, `- 항목`, `---`만 사용합니다. 글머리에서 Enter로 다음 항목, 빈 글머리에서 Enter로 종료합니다.</Hint>
                 </FieldBox>
               </FieldGrid>
             </FormSection>
@@ -1758,11 +1803,9 @@ const Hint = styled.p`
 const PreviewMetaStrip = styled.div`
   width: 100%;
   display: grid;
-  gap: 0.18rem;
-  padding: 0.42rem 0.52rem;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  gap: 0.24rem;
+  justify-items: center;
+  text-align: center;
 
   small {
     color: ${({ theme }) => theme.colors.gray10};
@@ -1772,31 +1815,11 @@ const PreviewMetaStrip = styled.div`
   }
 
   strong {
-    font-size: 0.84rem;
-    line-height: 1.45;
-  }
-`
-
-const BrandTitlePreview = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.38rem;
-  width: 100%;
-  min-width: 0;
-
-  .brandMark {
-    display: block;
-    flex-shrink: 0;
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-
-  strong {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 0.96rem;
+    line-height: 1.4;
+    color: ${({ theme }) => theme.colors.gray12};
+    letter-spacing: -0.02em;
+    word-break: break-word;
   }
 `
 

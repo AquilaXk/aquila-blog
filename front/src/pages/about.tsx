@@ -42,23 +42,35 @@ type AboutPageProps = {
 
 type AboutDetailSection = {
   title: string
-  items: string[]
+  items: {
+    text: string
+    bullet: boolean
+  }[]
+  hasDivider: boolean
 }
 
 const parseAboutDetails = (raw: string): AboutDetailSection[] => {
   const lines = raw.split(/\r?\n/).map((line) => line.trim())
   const sections: AboutDetailSection[] = []
   let current: AboutDetailSection | null = null
+  let nextSectionHasDivider = false
 
   const pushCurrent = () => {
     if (!current) return
     const normalizedTitle = current.title.trim()
-    const normalizedItems = current.items.map((item) => item.trim()).filter(Boolean)
+    const normalizedItems = current.items.map((item) => ({
+      text: item.text.trim(),
+      bullet: item.bullet,
+    })).filter((item) => Boolean(item.text))
     if (!normalizedTitle || normalizedItems.length === 0) {
       current = null
       return
     }
-    sections.push({ title: normalizedTitle, items: normalizedItems })
+    sections.push({
+      title: normalizedTitle,
+      items: normalizedItems,
+      hasDivider: current.hasDivider,
+    })
     current = null
   }
 
@@ -66,18 +78,29 @@ const parseAboutDetails = (raw: string): AboutDetailSection[] => {
     if (!line) continue
     if (line === "---") {
       pushCurrent()
+      nextSectionHasDivider = true
       continue
     }
 
     const markdownHeadingMatch = line.match(/^#{1,3}\s+(.+)$/)
     if (markdownHeadingMatch) {
       pushCurrent()
-      current = { title: markdownHeadingMatch[1].trim(), items: [] }
+      current = {
+        title: markdownHeadingMatch[1].trim(),
+        items: [],
+        hasDivider: nextSectionHasDivider,
+      }
+      nextSectionHasDivider = false
       continue
     }
 
     if (!current) {
-      current = { title: line, items: [] }
+      current = {
+        title: line,
+        items: [],
+        hasDivider: nextSectionHasDivider,
+      }
+      nextSectionHasDivider = false
       continue
     }
 
@@ -89,13 +112,22 @@ const parseAboutDetails = (raw: string): AboutDetailSection[] => {
       !/[,:;)]$/.test(line)
     if (plainHeadingLike) {
       pushCurrent()
-      current = { title: line, items: [] }
+      current = {
+        title: line,
+        items: [],
+        hasDivider: nextSectionHasDivider,
+      }
+      nextSectionHasDivider = false
       continue
     }
 
-    const itemText = line.startsWith("- ") ? line.slice(2).trim() : line
+    const isBullet = line.startsWith("- ")
+    const itemText = isBullet ? line.slice(2).trim() : line
     if (!itemText) continue
-    current.items.push(itemText)
+    current.items.push({
+      text: itemText,
+      bullet: isBullet,
+    })
   }
 
   pushCurrent()
@@ -152,12 +184,14 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                 <section
                   key={`${section.title}-${index}`}
                   className="about-detail-section"
-                  data-has-divider={index > 0 ? "true" : "false"}
+                  data-has-divider={section.hasDivider ? "true" : "false"}
                 >
                   <h3 className="about-detail-title">{section.title}</h3>
                   <ul className="about-detail-items">
                     {section.items.map((item, itemIndex) => (
-                      <li key={`${section.title}-${itemIndex}`}>{item}</li>
+                      <li key={`${section.title}-${itemIndex}`} data-bullet={item.bullet ? "true" : "false"}>
+                        {item.text}
+                      </li>
                     ))}
                   </ul>
                 </section>
@@ -303,6 +337,22 @@ const StyledWrapper = styled.div`
           color: ${({ theme }) => theme.colors.gray11};
           white-space: pre-line;
           word-break: keep-all;
+
+          &[data-bullet="true"] {
+            position: relative;
+            padding-left: 1rem;
+
+            &::before {
+              content: "";
+              position: absolute;
+              left: 0.22rem;
+              top: 0.78rem;
+              width: 0.34rem;
+              height: 0.34rem;
+              border-radius: 999px;
+              background: ${({ theme }) => theme.colors.gray10};
+            }
+          }
         }
       }
     }

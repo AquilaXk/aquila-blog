@@ -33,6 +33,79 @@ env_value() {
   grep -E "^${key}=" "${ENV_FILE}" 2>/dev/null | tail -n 1 | cut -d '=' -f2-
 }
 
+trim_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "${value}"
+}
+
+monitoring_embed_candidate_url() {
+  local url
+  url="$(trim_quotes "$(env_value "NEXT_PUBLIC_MONITORING_EMBED_URL")")"
+  if [[ -z "${url}" ]]; then
+    url="$(trim_quotes "$(env_value "NEXT_PUBLIC_GRAFANA_EMBED_URL")")"
+  fi
+  if [[ -z "${url}" ]]; then
+    local grafana_domain
+    grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
+    if [[ -n "${grafana_domain}" ]]; then
+      url="https://${grafana_domain}/d/blog-overview/main?orgId=1&kiosk"
+    fi
+  fi
+  printf '%s' "${url}"
+}
+
+is_grafana_embed_url() {
+  local url="$1"
+  [[ "${url}" == *"grafana"* || "${url}" == *"/d/"* || "${url}" == *"/public-dashboards/"* ]]
+}
+
+inspect_grafana_embed_headers() {
+  local url="$1"
+  curl -I -s --max-time 10 "${url}" 2>/dev/null || true
+}
+
+print_grafana_embed_status() {
+  local url="$1"
+  if [[ -z "${url}" ]]; then
+    echo "grafana embed: skip (no NEXT_PUBLIC_MONITORING_EMBED_URL / GRAFANA_DOMAIN)"
+    return 0
+  fi
+
+  if ! is_grafana_embed_url "${url}"; then
+    echo "grafana embed: skip (non-grafana embed url: ${url})"
+    return 0
+  fi
+
+  local headers status location xfo csp
+  headers="$(inspect_grafana_embed_headers "${url}")"
+  status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
+  location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
+  xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
+  csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
+
+  echo "grafana embed url: ${url}"
+  echo "grafana embed status: ${status:-none}"
+  echo "grafana embed location: ${location:-<none>}"
+  echo "grafana embed x-frame-options: ${xfo:-<none>}"
+  if [[ -n "${csp}" ]]; then
+    echo "grafana embed csp: ${csp}"
+  fi
+
+  if [[ -n "${location}" && "${location}" == *"/login"* ]]; then
+    echo "WARN: grafana embed url redirects to /login (anonymous/public dashboard not active)"
+  fi
+  if [[ -n "${xfo}" && "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
+    echo "WARN: grafana embed response still sends frame-blocking X-Frame-Options=${xfo}"
+  fi
+  if [[ -n "${csp}" && "${csp}" == *"frame-ancestors"* ]]; then
+    echo "WARN: grafana embed response includes frame-ancestors CSP; verify admin origin is allowed"
+  fi
+}
+
 extract_host() {
   local raw="$1"
   echo "${raw}" | sed -E 's#^[a-zA-Z]+://##; s#/.*$##; s#:[0-9]+$##'
@@ -148,6 +221,9 @@ fi
 if [[ -n "${api_site}" && -n "${back_site}" && "${api_site}" != "${back_site}" ]]; then
   echo "WARN: API_DOMAIN does not match BACKURL site (${api_site} vs ${back_site})"
 fi
+
+print_section "Grafana Embed Route"
+print_grafana_embed_status "$(monitoring_embed_candidate_url)"
 
 print_section "Env AI Summary Sanity"
 ai_summary_enabled_raw="$(env_value "CUSTOM__AI__SUMMARY__ENABLED" | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')"

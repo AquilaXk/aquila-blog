@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
@@ -26,6 +27,7 @@ import java.net.URI
 @RequestMapping("/member/api/v1/members")
 class ApiV1MemberController(
     private val memberUseCase: MemberUseCase,
+    private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val securityTipProvider: SecurityTipProvider,
 ) {
     companion object {
@@ -54,7 +56,7 @@ class ApiV1MemberController(
                 ?.let(memberUseCase::findByEmail)
                 ?: throw AppException("404-1", "관리자 프로필을 찾을 수 없습니다.")
 
-        return MemberWithUsernameDto(adminMember)
+        return currentMemberProfileQueryUseCase.getById(adminMember.id)
     }
 
     /**

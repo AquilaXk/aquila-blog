@@ -1,5 +1,6 @@
 package com.back.boundedContexts.member.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_ICON_ALLOWED
@@ -48,6 +49,7 @@ import java.nio.charset.StandardCharsets
 @RequestMapping("/member/api/v1/adm/members")
 class ApiV1AdmMemberController(
     private val memberUseCase: MemberUseCase,
+    private val currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase,
     private val postImageStorageService: PostImageStoragePort,
     private val postImageStorageProperties: PostImageStorageProperties,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
@@ -141,11 +143,7 @@ class ApiV1AdmMemberController(
         @PathVariable
         @Positive
         id: Long,
-    ): MemberWithUsernameDto {
-        val member = memberUseCase.findById(id).orElseThrow()
-
-        return MemberWithUsernameDto(member)
-    }
+    ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(id)
 
     /**
      * ProfileImg 항목을 수정한다.

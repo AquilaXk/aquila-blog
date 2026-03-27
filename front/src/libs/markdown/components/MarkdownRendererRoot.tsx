@@ -497,6 +497,16 @@ const MarkdownRendererRoot = styled.div`
   .aq-mermaid-stage > svg .label text {
     dominant-baseline: middle;
     alignment-baseline: middle;
+    transform: translateY(-0.06em);
+    transform-origin: center;
+  }
+
+  .aq-mermaid-stage > svg .nodeLabel > text > tspan,
+  .aq-mermaid-stage > svg .edgeLabel > text > tspan,
+  .aq-mermaid-stage > svg .label text > tspan {
+    dominant-baseline: middle;
+    alignment-baseline: middle;
+    transform: translateY(-0.06em);
   }
 
   .aq-mermaid-error-state {

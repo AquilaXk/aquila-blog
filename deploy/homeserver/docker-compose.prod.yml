@@ -63,7 +63,9 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change_me_grafana_password}
       GF_SECURITY_ALLOW_EMBEDDING: "true"
-      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_AUTH_ANONYMOUS_HIDE_VERSION: "true"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.localhost}
       GF_SERVER_SERVE_FROM_SUB_PATH: "false"

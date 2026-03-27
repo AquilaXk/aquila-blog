@@ -13,6 +13,7 @@ LOCK_DIR="${SCRIPT_DIR}/.steady-state-guard.lock"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
 GRAFANA_DS_STATE_FILE="${SCRIPT_DIR}/.grafana-datasource-state"
+GRAFANA_EMBED_STATE_FILE="${SCRIPT_DIR}/.grafana-embed-state"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -25,6 +26,15 @@ compose() {
 env_value() {
   local key="$1"
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+}
+
+trim_quotes() {
+  local value="$1"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "${value}"
 }
 
 normalize_positive_int() {
@@ -49,6 +59,8 @@ normalize_non_negative_int() {
 
 GRAFANA_DS_FAIL_COUNT=0
 GRAFANA_DS_LAST_RECREATE_EPOCH=0
+GRAFANA_EMBED_FAIL_COUNT=0
+GRAFANA_EMBED_LAST_RECREATE_EPOCH=0
 
 load_grafana_ds_state() {
   GRAFANA_DS_FAIL_COUNT=0
@@ -69,6 +81,78 @@ load_grafana_ds_state() {
 
 save_grafana_ds_state() {
   printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${GRAFANA_DS_FAIL_COUNT}" "${GRAFANA_DS_LAST_RECREATE_EPOCH}" > "${GRAFANA_DS_STATE_FILE}"
+}
+
+load_grafana_embed_state() {
+  GRAFANA_EMBED_FAIL_COUNT=0
+  GRAFANA_EMBED_LAST_RECREATE_EPOCH=0
+  [[ -f "${GRAFANA_EMBED_STATE_FILE}" ]] || return 0
+
+  local fail_count_raw last_recreate_raw
+  fail_count_raw="$(awk -F= '$1 == "fail_count" {print $2; exit}' "${GRAFANA_EMBED_STATE_FILE}" 2>/dev/null || true)"
+  last_recreate_raw="$(awk -F= '$1 == "last_recreate_epoch" {print $2; exit}' "${GRAFANA_EMBED_STATE_FILE}" 2>/dev/null || true)"
+
+  if [[ "${fail_count_raw}" =~ ^[0-9]+$ ]]; then
+    GRAFANA_EMBED_FAIL_COUNT="${fail_count_raw}"
+  fi
+  if [[ "${last_recreate_raw}" =~ ^[0-9]+$ ]]; then
+    GRAFANA_EMBED_LAST_RECREATE_EPOCH="${last_recreate_raw}"
+  fi
+}
+
+save_grafana_embed_state() {
+  printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${GRAFANA_EMBED_FAIL_COUNT}" "${GRAFANA_EMBED_LAST_RECREATE_EPOCH}" > "${GRAFANA_EMBED_STATE_FILE}"
+}
+
+monitoring_embed_candidate_url() {
+  local url
+  url="$(trim_quotes "$(env_value "NEXT_PUBLIC_MONITORING_EMBED_URL")")"
+  if [[ -z "${url}" ]]; then
+    url="$(trim_quotes "$(env_value "NEXT_PUBLIC_GRAFANA_EMBED_URL")")"
+  fi
+  if [[ -z "${url}" ]]; then
+    local grafana_domain
+    grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
+    if [[ -n "${grafana_domain}" ]]; then
+      url="https://${grafana_domain}/d/blog-overview/main?orgId=1&kiosk"
+    fi
+  fi
+  printf '%s' "${url}"
+}
+
+is_grafana_embed_url() {
+  local url="$1"
+  [[ "${url}" == *"grafana"* || "${url}" == *"/d/"* || "${url}" == *"/public-dashboards/"* ]]
+}
+
+inspect_grafana_embed_headers() {
+  local url="$1"
+  curl -I -s --max-time 10 "${url}" 2>/dev/null || true
+}
+
+grafana_embed_headers_are_healthy() {
+  local url="$1"
+  local headers status location xfo csp
+  headers="$(inspect_grafana_embed_headers "${url}")"
+  status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
+  location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
+  xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
+  csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
+
+  if [[ -z "${status}" || "${status}" == "none" ]]; then
+    return 1
+  fi
+  if [[ -n "${location}" && "${location}" == *"/login"* ]]; then
+    return 1
+  fi
+  if [[ -n "${xfo}" && "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
+    return 1
+  fi
+  if [[ -n "${csp}" && "${csp}" == *"frame-ancestors"* && "${csp}" != *"aquilaxk.site"* && "${csp}" != *"*"* ]]; then
+    return 1
+  fi
+
+  return 0
 }
 
 host_caddy_sha256() {
@@ -271,6 +355,66 @@ check_grafana_prometheus_datasource() {
   return 1
 }
 
+check_grafana_embed_route() {
+  local url
+  url="$(monitoring_embed_candidate_url)"
+  if [[ -z "${url}" ]] || ! is_grafana_embed_url "${url}"; then
+    log "skip grafana embed route check (no grafana monitoring embed url configured)"
+    return 0
+  fi
+
+  local fail_threshold cooldown_seconds
+  fail_threshold="$(normalize_positive_int "$(env_value "GRAFANA_EMBED_FAIL_THRESHOLD")" "3")"
+  cooldown_seconds="$(normalize_non_negative_int "$(env_value "GRAFANA_EMBED_RECREATE_COOLDOWN_SECONDS")" "900")"
+
+  load_grafana_embed_state
+
+  if grafana_embed_headers_are_healthy "${url}"; then
+    if (( GRAFANA_EMBED_FAIL_COUNT > 0 )); then
+      log "OK grafana embed route recovered consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} url=${url}"
+    else
+      log "OK grafana embed route url=${url}"
+    fi
+    GRAFANA_EMBED_FAIL_COUNT=0
+    save_grafana_embed_state
+    return 0
+  fi
+
+  GRAFANA_EMBED_FAIL_COUNT=$(( GRAFANA_EMBED_FAIL_COUNT + 1 ))
+  save_grafana_embed_state
+  log "WARN grafana embed unhealthy consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} threshold=${fail_threshold} url=${url}"
+
+  if (( GRAFANA_EMBED_FAIL_COUNT < fail_threshold )); then
+    return 1
+  fi
+
+  local now elapsed_since_recreate
+  now="$(date +%s)"
+  elapsed_since_recreate=$(( now - GRAFANA_EMBED_LAST_RECREATE_EPOCH ))
+  if (( GRAFANA_EMBED_LAST_RECREATE_EPOCH > 0 && elapsed_since_recreate < cooldown_seconds )); then
+    local cooldown_remaining
+    cooldown_remaining=$(( cooldown_seconds - elapsed_since_recreate ))
+    log "WARN grafana embed recreate skipped due cooldown remaining_seconds=${cooldown_remaining}"
+    return 1
+  fi
+
+  log "WARN grafana embed threshold reached; recreating caddy and grafana"
+  compose up -d --force-recreate caddy grafana >/dev/null || true
+  GRAFANA_EMBED_LAST_RECREATE_EPOCH="${now}"
+  save_grafana_embed_state
+  sleep 3
+
+  if grafana_embed_headers_are_healthy "${url}"; then
+    GRAFANA_EMBED_FAIL_COUNT=0
+    save_grafana_embed_state
+    log "OK grafana embed repaired url=${url}"
+    return 0
+  fi
+
+  log "FAIL grafana embed route still unhealthy after_recreate=true url=${url}"
+  return 1
+}
+
 deploy_lock_is_active() {
   if [[ ! -d "${DEPLOY_LOCK_DIR}" ]]; then
     return 1
@@ -311,8 +455,9 @@ main() {
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi
   if check_api_readiness; then ok=$((ok + 1)); fi
   if check_grafana_prometheus_datasource; then ok=$((ok + 1)); fi
+  if check_grafana_embed_route; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 4 ]]; then
+  if [[ "${ok}" -ne 5 ]]; then
     compose logs --no-color --tail=80 caddy grafana >&2 || true
     exit 1
   fi

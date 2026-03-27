@@ -104,6 +104,8 @@ NEXT_PUBLIC_PROMETHEUS_URL=https://prometheus.<your-domain>
 - `front/next.config.js` rewrites가 `/status/*`, `/assets/*`, `/api/status-page/*`를 `UPTIME_KUMA_PROXY_ORIGIN`으로 전달한다.
 - 기본 임베드 URL은 `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH`이며, 필요 시 `NEXT_PUBLIC_MONITORING_EMBED_URL`로 수동 override 가능하다.
 - `NEXT_PUBLIC_GRAFANA_EMBED_URL`은 하위호환 fallback으로만 유지한다.
+- Grafana iframe 임베드 URL은 `/login`으로 리다이렉트되지 않는 읽기 전용(public/anonymous viewer) 대시보드 URL이어야 한다.
+- Grafana를 iframe으로 직접 넣을 때는 `GF_SECURITY_ALLOW_EMBEDDING=true`, `GF_AUTH_ANONYMOUS_ENABLED=true`, `GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`를 유지하고 Caddy가 `X-Frame-Options`/`Content-Security-Policy` frame 차단 헤더를 제거해야 한다.
 
 ## Grafana + Prometheus 최소 운영 구성
 

@@ -1,7 +1,9 @@
 package com.back.boundedContexts.member.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.global.app.AppConfig
 import com.back.global.security.application.SecurityTipProvider
 import com.back.global.security.config.CustomAuthenticationFilter
@@ -53,6 +55,9 @@ class ApiV1MemberControllerWebMvcTest {
     private lateinit var memberUseCase: MemberUseCase
 
     @MockitoBean
+    private lateinit var currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase
+
+    @MockitoBean
     private lateinit var securityTipProvider: SecurityTipProvider
 
     @MockitoBean(name = "jpaMappingContext")
@@ -79,10 +84,13 @@ class ApiV1MemberControllerWebMvcTest {
             val adminMember = sampleMember(id = 1, username = "admin", nickname = "관리자")
             adminMember.profileRole = "블로그 운영자"
             adminMember.profileBio = "소개"
+            adminMember.aboutRole = "Platform Engineer"
+            adminMember.aboutBio = "상세 About 소개"
             adminMember.blogTitle = "aquilaXk's Archive"
             adminMember.homeIntroTitle = "aquilaXk's Blog"
             adminMember.homeIntroDescription = "welcome to my backend dev log!"
             given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
+            given(currentMemberProfileQueryUseCase.getById(adminMember.id)).willReturn(MemberWithUsernameDto(adminMember))
 
             mvc
                 .get("/member/api/v1/members/adminProfile") {
@@ -97,6 +105,8 @@ class ApiV1MemberControllerWebMvcTest {
                     jsonPath("$.nickname") { value(adminMember.nickname) }
                     jsonPath("$.profileRole") { value("블로그 운영자") }
                     jsonPath("$.profileBio") { value("소개") }
+                    jsonPath("$.aboutRole") { value("Platform Engineer") }
+                    jsonPath("$.aboutBio") { value("상세 About 소개") }
                     jsonPath("$.blogTitle") { value("aquilaXk's Archive") }
                     jsonPath("$.homeIntroTitle") { value("aquilaXk's Blog") }
                     jsonPath("$.homeIntroDescription") { value("welcome to my backend dev log!") }

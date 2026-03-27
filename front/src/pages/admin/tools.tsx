@@ -755,7 +755,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <Link href="/admin" passHref legacyBehavior>
             <NavLink>관리자 허브</NavLink>
           </Link>
-          <Link href="/admin/posts/new" passHref legacyBehavior>
+          <Link href="/admin/posts" passHref legacyBehavior>
             <NavLink>글 작업 공간</NavLink>
           </Link>
         </HeaderLinks>

@@ -5,7 +5,7 @@ const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
-const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/profile", "/admin/posts/new", "/admin/tools"]
+const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/profile", "/admin/posts", "/admin/tools"]
 
 const mockTagCounts = [
   { tag: "perf", count: 10 },

@@ -44,7 +44,7 @@ const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClear
             초기화
           </button>
         ) : (
-          <Link href={isAdmin ? "/admin/posts/write" : "/admin"} className="actionBtn actionBtn--primary">
+          <Link href={isAdmin ? "/editor/new" : "/admin"} className="actionBtn actionBtn--primary">
             <AppIcon name="edit" />
             글 작성
           </Link>

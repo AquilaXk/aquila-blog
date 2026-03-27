@@ -1,5 +1,6 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import styled from "@emotion/styled"
+import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Table } from "@tiptap/extension-table"
@@ -55,7 +56,8 @@ type SlashAction = {
 
 type ToolbarAction = {
   id: string
-  label: string
+  label: ReactNode
+  ariaLabel: string
   run: () => void
   active: boolean
 }
@@ -478,7 +480,7 @@ const BlockEditorShell = ({
         linkOnPaste: true,
       }),
       Placeholder.configure({
-        placeholder: "본문을 시작하세요",
+        placeholder: "당신의 이야기를 적어보세요...",
       }),
       Table.configure({
         resizable: true,
@@ -1106,23 +1108,27 @@ const BlockEditorShell = ({
   }, [editor, enableMermaidBlocks, insertCalloutBlock, insertMermaidBlock, insertRawMarkdownBlock, insertTableBlock, insertToggleBlock])
 
   const toolbarActions: ToolbarAction[] = [
-    { id: "paragraph", label: "문단", run: () => editor?.chain().focus().setParagraph().run(), active: editor?.isActive("paragraph") ?? false },
-    { id: "heading-2", label: "소제목", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
-    { id: "heading-3", label: "작은 소제목", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
-    { id: "bullet-list", label: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
-    { id: "code-block", label: "코드 블록", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
-    { id: "mermaid", label: "다이어그램", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
+    { id: "heading-1", label: "H1", ariaLabel: "제목 1", run: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(), active: editor?.isActive("heading", { level: 1 }) ?? false },
+    { id: "heading-2", label: "H2", ariaLabel: "제목 2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
+    { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
+    { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => editor?.chain().focus().toggleHeading({ level: 4 }).run(), active: editor?.isActive("heading", { level: 4 }) ?? false },
+    { id: "bold", label: "B", ariaLabel: "굵게", run: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") ?? false },
+    { id: "italic", label: "I", ariaLabel: "기울임", run: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") ?? false },
+    { id: "bullet-list", label: <span aria-hidden="true">≣</span>, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
+    { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
+    { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
+    { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => fileInputRef.current?.click(), active: false },
+    { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
   ]
 
   const toolbarMoreActions: ToolbarAction[] = [
-    { id: "ordered-list", label: "번호 목록", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
-    { id: "quote", label: "인용", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
-    { id: "table", label: "표", run: insertTableBlock, active: editor?.isActive("table") ?? false },
-    { id: "callout", label: "설명 상자", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
-    { id: "toggle", label: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
-    { id: "link", label: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
-    { id: "divider", label: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
-    { id: "raw", label: "원문 블록", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
+    { id: "ordered-list", label: "번호 목록", ariaLabel: "번호 목록", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
+    { id: "table", label: "표", ariaLabel: "표", run: insertTableBlock, active: editor?.isActive("table") ?? false },
+    { id: "callout", label: "설명 상자", ariaLabel: "설명 상자", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
+    { id: "toggle", label: "토글", ariaLabel: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
+    { id: "mermaid", label: "다이어그램", ariaLabel: "다이어그램", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
+    { id: "divider", label: "구분선", ariaLabel: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
+    { id: "raw", label: "원문 블록", ariaLabel: "원문 블록", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
   ]
 
   const activeCodeLanguage = ((editor?.getAttributes("codeBlock").language as string | undefined) || "").trim()
@@ -1403,29 +1409,65 @@ const BlockEditorShell = ({
     <Shell className={className}>
       <Toolbar>
         <ToolbarActions>
-          {toolbarActions.map((action) => (
-            <ToolbarButton
-              key={action.id}
-              type="button"
-              data-active={action.active}
-              onClick={() => action.run()}
-              disabled={disabled}
-            >
-              {action.label}
-            </ToolbarButton>
-          ))}
-          <ToolbarButton type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
-            이미지 추가
-          </ToolbarButton>
+          <ToolbarGroup>
+            {toolbarActions.slice(0, 4).map((action) => (
+              <ToolbarRibbonButton
+                key={action.id}
+                type="button"
+                data-active={action.active}
+                data-tone="heading"
+                onClick={() => action.run()}
+                disabled={disabled}
+                aria-label={action.ariaLabel}
+                title={action.ariaLabel}
+              >
+                {action.label}
+              </ToolbarRibbonButton>
+            ))}
+          </ToolbarGroup>
+          <ToolbarSeparator aria-hidden="true" />
+          <ToolbarGroup>
+            {toolbarActions.slice(4, 7).map((action) => (
+              <ToolbarRibbonButton
+                key={action.id}
+                type="button"
+                data-active={action.active}
+                onClick={() => action.run()}
+                disabled={disabled}
+                aria-label={action.ariaLabel}
+                title={action.ariaLabel}
+              >
+                {action.label}
+              </ToolbarRibbonButton>
+            ))}
+          </ToolbarGroup>
+          <ToolbarSeparator aria-hidden="true" />
+          <ToolbarGroup>
+            {toolbarActions.slice(7).map((action) => (
+              <ToolbarRibbonButton
+                key={action.id}
+                type="button"
+                data-active={action.active}
+                onClick={() => action.run()}
+                disabled={disabled}
+                aria-label={action.ariaLabel}
+                title={action.ariaLabel}
+              >
+                {action.label}
+              </ToolbarRibbonButton>
+            ))}
+          </ToolbarGroup>
+          <ToolbarSeparator aria-hidden="true" />
           <ToolbarMoreDisclosure open={isToolbarMoreOpen}>
             <summary
+              aria-label="추가 도구"
+              title="추가 도구"
               onClick={(event) => {
                 event.preventDefault()
                 setIsToolbarMoreOpen((prev) => !prev)
               }}
             >
-              <strong>도구</strong>
-              <span>{isToolbarMoreOpen ? "닫기" : "열기"}</span>
+              <span aria-hidden="true">⋯</span>
             </summary>
             {isToolbarMoreOpen ? (
               <div className="body">
@@ -1436,6 +1478,8 @@ const BlockEditorShell = ({
                     data-active={action.active}
                     onClick={() => action.run()}
                     disabled={disabled}
+                    aria-label={action.ariaLabel}
+                    title={action.ariaLabel}
                   >
                     {action.label}
                   </ToolbarButton>
@@ -1771,37 +1815,58 @@ const Toolbar = styled.div`
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.6rem;
-  padding: 0;
-  border: 0;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 0 0 0.7rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
   background: transparent;
 `
 
 const ToolbarActions = styled.div`
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.42rem;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+`
+
+const ToolbarGroup = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.14rem;
+`
+
+const ToolbarSeparator = styled.span`
+  width: 1px;
+  height: 1.7rem;
+  background: rgba(148, 163, 184, 0.18);
 `
 
 const ToolbarMoreDisclosure = styled.details`
+  position: relative;
   display: inline-flex;
   flex-direction: column;
-  gap: 0.55rem;
 
   summary {
     list-style: none;
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
-    min-height: 2rem;
-    padding: 0 0.82rem;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    background: rgba(18, 21, 26, 0.42);
-    color: var(--color-gray11);
-    font-size: 0.78rem;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 0.8rem;
+    border: 0;
+    background: transparent;
+    color: rgba(203, 213, 225, 0.82);
+    font-size: 1.3rem;
     font-weight: 700;
     cursor: pointer;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+
+  summary:hover {
+    background: rgba(148, 163, 184, 0.08);
+    color: var(--color-gray12);
   }
 
   summary::-webkit-details-marker {
@@ -1809,9 +1874,65 @@ const ToolbarMoreDisclosure = styled.details`
   }
 
   .body {
+    position: absolute;
+    top: calc(100% + 0.55rem);
+    right: 0;
+    z-index: 30;
     display: flex;
     flex-wrap: wrap;
     gap: 0.55rem;
+    min-width: 16rem;
+    padding: 0.8rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(12, 16, 22, 0.96);
+    box-shadow: 0 18px 40px rgba(3, 7, 18, 0.32);
+  }
+`
+
+const ToolbarRibbonButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  height: 2.4rem;
+  padding: 0 0.58rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: rgba(203, 213, 225, 0.76);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  transition: background-color 160ms ease, color 160ms ease;
+
+  svg {
+    width: 1.2rem;
+    height: 1.2rem;
+  }
+
+  &[data-tone="heading"] {
+    min-width: 3.1rem;
+    color: rgba(203, 213, 225, 0.66);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  &[data-active="true"] {
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--color-gray12);
+  }
+
+  &:hover {
+    background: rgba(148, 163, 184, 0.08);
+    color: var(--color-gray12);
+  }
+
+  &:disabled {
+    opacity: 0.44;
+    cursor: not-allowed;
   }
 `
 

@@ -417,13 +417,13 @@ test.describe("live production e2e", () => {
     await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()
     await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()
 
-    await page.goto("/admin/posts/new")
+    await page.goto("/admin/posts")
     const workspaceHeading = page.getByRole("heading", { name: "글 작업 공간" })
     const titleInput = page.getByPlaceholder("제목을 입력하세요")
     if (await workspaceHeading.isVisible().catch(() => false)) {
       await expect(page.getByRole("heading", { name: "새 글 쓰기" })).toBeVisible()
-      await page.getByRole("button", { name: "새 글 쓰기" }).first().click()
-      await expect(page).toHaveURL(/\/admin\/posts\/write(\/|$|\?)/)
+      await page.getByRole("button", { name: "글 쓰기 시작" }).first().click()
+      await expect(page).toHaveURL(/\/editor\/(new|[0-9]+)(\/|$|\?)/)
       await expect(titleInput).toBeVisible()
     } else {
       await expect(titleInput).toBeVisible()

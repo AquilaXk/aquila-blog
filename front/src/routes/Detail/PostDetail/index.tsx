@@ -678,7 +678,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
   const handleEditPost = async () => {
     if (!data) return
-    await pushRoute(router, `/admin/posts/write?postId=${encodeURIComponent(String(data.id))}`)
+    await pushRoute(router, `/editor/${encodeURIComponent(String(data.id))}`)
   }
 
   const handleDeletePost = async () => {

@@ -24,11 +24,11 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     : "확인 전"
 
   const primaryAction = {
-    href: "/admin/posts/write",
+    href: "/editor/new",
     title: "새 글 쓰기",
-    description: "아이디어를 바로 초안으로 시작하고, 필요하면 목록 관리로 이어갑니다.",
+    description: "전용 편집 화면에서 초안을 시작하고, 작업 공간에서 이어서 관리합니다.",
     cta: "글 쓰기 시작",
-    secondaryHref: "/admin/posts/new?surface=manage",
+    secondaryHref: "/admin/posts",
     secondaryLabel: "기존 글 관리",
   }
 

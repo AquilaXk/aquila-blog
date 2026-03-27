@@ -1,7 +1,6 @@
 import styled from "@emotion/styled"
 import { dehydrate, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
-import Link from "next/link"
 import { useRouter } from "next/router"
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
@@ -75,31 +74,26 @@ const WORKSPACE_SECTIONS: {
   id: WorkspaceSectionId
   label: string
   description: string
-  impact: string[]
 }[] = [
   {
     id: "identity",
     label: "아이덴티티",
-    description: "프로필 카드에 바로 보이는 핵심 인상을 다듬습니다.",
-    impact: ["프로필 카드", "관리자 소개"],
+    description: "프로필 카드에 보이는 정보",
   },
   {
     id: "about",
     label: "About 페이지",
-    description: "About 페이지 전용 역할과 상세 블록을 구성합니다.",
-    impact: ["About 페이지"],
+    description: "상단 소개와 상세 블록",
   },
   {
     id: "home",
     label: "홈 첫인상",
-    description: "헤더 로고 텍스트와 홈 첫 문장을 관리합니다.",
-    impact: ["상단 로고", "메인 첫 카드"],
+    description: "헤더와 첫 화면 문구",
   },
   {
     id: "links",
     label: "외부 링크",
-    description: "서비스와 연락 채널을 카드형 리스트로 정리합니다.",
-    impact: ["Service 카드", "Contact 카드"],
+    description: "서비스와 연락 채널",
   },
 ]
 
@@ -207,15 +201,21 @@ const toPayloadLinks = (
     }))
     .filter((item) => item.label && item.href)
 
-const formatWorkspaceTime = (value?: string | null) => {
-  if (!value) return "아직 기록 없음"
+const formatWorkspaceRelativeTime = (value?: string | null) => {
+  if (!value) return ""
+
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "아직 기록 없음"
-  return date.toLocaleString("ko-KR", {
+  const time = date.getTime()
+  if (Number.isNaN(time)) return ""
+
+  const diffMs = Date.now() - time
+  if (diffMs < 60_000) return "방금"
+  if (diffMs < 3_600_000) return `${Math.max(1, Math.floor(diffMs / 60_000))}분 전`
+  if (diffMs < 86_400_000) return `${Math.max(1, Math.floor(diffMs / 3_600_000))}시간 전`
+
+  return date.toLocaleDateString("ko-KR", {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   })
 }
 
@@ -290,6 +290,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const [activeSection, setActiveSection] = useState<WorkspaceSectionId>("identity")
   const [linkTab, setLinkTab] = useState<LinkTab>("service")
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft")
+  const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
+  const [lastCompletedAction, setLastCompletedAction] = useState<"idle" | "saved" | "published">("idle")
   const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const [loadingKey, setLoadingKey] = useState("")
   const [workspaceNotice, setWorkspaceNotice] = useState<{ tone: NoticeTone; text: string }>({
@@ -305,9 +307,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const [draft, setDraft] = useState<ProfileWorkspaceContent>(fallbackWorkspace.draft)
   const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null | undefined>(
     fallbackWorkspace.lastDraftSavedAt
-  )
-  const [lastPublishedAt, setLastPublishedAt] = useState<string | null | undefined>(
-    fallbackWorkspace.lastPublishedAt
   )
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const [isProfileImageEditorOpen, setIsProfileImageEditorOpen] = useState(false)
@@ -363,9 +362,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       setPublishedSnapshot(normalizedPublished)
       setDraft(normalizedDraft)
       setLastDraftSavedAt(workspace.lastDraftSavedAt || sessionMember?.modifiedAt || initialMember.modifiedAt || null)
-      setLastPublishedAt(
-        workspace.lastPublishedAt || sessionMember?.modifiedAt || initialMember.modifiedAt || null
-      )
       if (sessionMember?.id) {
         setProfileWorkspaceCache(queryClient, sessionMember.id, {
           ...workspace,
@@ -381,6 +377,22 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     if (!workspaceQuery.data) return
     applyWorkspaceState(workspaceQuery.data)
   }, [applyWorkspaceState, workspaceQuery.data])
+
+  useEffect(() => {
+    if (workspaceNotice.tone !== "success" && workspaceNotice.tone !== "error") return
+    const timeout = window.setTimeout(() => {
+      setWorkspaceNotice({ tone: "idle", text: "" })
+    }, 3600)
+    return () => window.clearTimeout(timeout)
+  }, [workspaceNotice])
+
+  useEffect(() => {
+    if (imageNotice.tone !== "success" && imageNotice.tone !== "error") return
+    const timeout = window.setTimeout(() => {
+      setImageNotice({ tone: "idle", text: "" })
+    }, 3600)
+    return () => window.clearTimeout(timeout)
+  }, [imageNotice])
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -813,6 +825,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         const successMessage = `프로필 이미지가 초안에 반영되었습니다. ${buildImageOptimizationSummary(prepared)}`
         setImageNotice({ tone: "success", text: successMessage })
         setProfileImageDraftNotice({ tone: "success", text: successMessage })
+        setLastCompletedAction("saved")
         return true
       } catch (error) {
         const message = normalizeProfileImageUploadError(error)
@@ -895,6 +908,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       )
       applyWorkspaceState(nextWorkspace)
       setWorkspaceNotice({ tone: "success", text: "초안을 저장했습니다. 현재 작업 상태가 서버와 동기화되었습니다." })
+      setLastCompletedAction("saved")
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setWorkspaceNotice({ tone: "error", text: `초안 저장 실패: ${message}` })
@@ -927,6 +941,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))
       setPreviewMode("published")
       setWorkspaceNotice({ tone: "success", text: "지금 공개하기가 완료되었습니다. 공개 사이트가 최신 상태를 사용합니다." })
+      setLastCompletedAction("published")
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setWorkspaceNotice({ tone: "error", text: `공개 실패: ${message}` })
@@ -941,22 +956,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     syncPublishedAdminProfileCache,
   ])
 
-  const handleRefreshStoredDraft = useCallback(async () => {
-    if (!sessionMember?.id) return
-
-    try {
-      setLoadingKey("refresh")
-      setWorkspaceNotice({ tone: "loading", text: "서버에 저장된 초안을 다시 불러오는 중입니다..." })
-      await refreshWorkspace(sessionMember.id)
-      setWorkspaceNotice({ tone: "success", text: "서버 초안을 다시 불러왔습니다." })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setWorkspaceNotice({ tone: "error", text: `불러오기 실패: ${message}` })
-    } finally {
-      setLoadingKey("")
-    }
-  }, [refreshWorkspace, sessionMember?.id])
-
   if (!sessionMember) return null
 
   const displayName = sessionMember.nickname || sessionMember.username || "관리자"
@@ -964,6 +963,39 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
   const activeSectionMeta = WORKSPACE_SECTIONS.find((section) => section.id === activeSection) || WORKSPACE_SECTIONS[0]
   const visibleLinks = linkTab === "service" ? draft.serviceLinks : draft.contactLinks
+  const compactStatusLabel =
+    loadingKey === "publish"
+      ? "공개 중"
+      : loadingKey === "save" || loadingKey === "upload"
+        ? "저장 중"
+        : hasUnsavedChanges
+          ? "편집 중"
+          : hasPublishedDiff
+            ? "공개본과 차이 있음"
+            : lastCompletedAction === "published"
+              ? "방금 공개됨"
+              : "초안 저장됨"
+  const compactStatusTone =
+    hasUnsavedChanges || loadingKey === "save" || loadingKey === "upload"
+      ? "editing"
+      : hasPublishedDiff
+        ? "attention"
+        : lastCompletedAction === "published" || loadingKey === "publish"
+          ? "success"
+          : "stable"
+  const actionStatusText =
+    loadingKey === "publish"
+      ? "공개 중입니다"
+      : loadingKey === "save" || loadingKey === "upload"
+        ? "저장 중입니다"
+        : hasUnsavedChanges
+          ? "저장 후 공개할 수 있습니다"
+          : lastDraftSavedAt
+            ? `초안 저장됨 ${formatWorkspaceRelativeTime(lastDraftSavedAt)}`
+            : "초안 저장됨"
+  const pageToasts = [workspaceNotice, imageNotice].filter(
+    (notice) => notice.tone !== "idle" && notice.text.trim().length > 0
+  )
   const canPublish = !hasUnsavedChanges && hasPublishedDiff && loadingKey !== "publish" && loadingKey !== "save"
   const canSave = hasUnsavedChanges && loadingKey !== "save"
 
@@ -974,9 +1006,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
           <SectionStack>
             <FeatureHeroCard>
               <div className="heroCopy">
-                <span>프로필 카드 기준</span>
-                <h2>아바타, 한 줄 역할, 짧은 소개를 먼저 정리하세요.</h2>
-                <p>이 섹션은 프로필 카드의 첫인상을 다듬는 영역입니다.</p>
+                <h3>프로필 카드에 보이는 정보</h3>
+                <p>아바타와 소개만 먼저 다듬습니다.</p>
               </div>
               <AvatarWorkspaceCard>
                 <div className="avatarPreview">
@@ -1005,16 +1036,15 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <FieldSectionCard>
               <SectionBlockHeader>
                 <div>
-                  <h3>기본 텍스트</h3>
-                  <p>표시 이름은 계정 정보라 여기서 바꾸지 않습니다.</p>
+                  <h3>텍스트</h3>
                 </div>
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
                 <FieldBox>
-                  <FieldLabel>표시 이름</FieldLabel>
+                  <FieldLabel>계정 이름</FieldLabel>
                   <LockedField>
                     <strong>{displayName}</strong>
-                    <span>계정 이름은 여기서 바꾸지 않습니다.</span>
+                    <span>읽기 전용</span>
                   </LockedField>
                 </FieldBox>
                 <FieldBox>
@@ -1046,8 +1076,8 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             <FieldSectionCard>
               <SectionBlockHeader>
                 <div>
-                  <h3>About 페이지 기본 소개</h3>
-                  <p>페이지 상단 역할과 소개 문단을 분리해 작성합니다.</p>
+                  <h3>상단 소개</h3>
+                  <p>페이지 첫 문단에 보이는 내용입니다.</p>
                 </div>
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
@@ -1076,7 +1106,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>상세 블록</h3>
-                  <p>경력, 수상이력, 관심사처럼 주제별 블록을 카드로 정리합니다.</p>
+                  <p>주제별로 짧게 나눠 적습니다.</p>
                 </div>
                 <GhostButton type="button" onClick={addAboutSection}>
                   블록 추가
@@ -1187,7 +1217,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               ) : (
                 <EmptyStateCard>
                   <strong>아직 상세 블록이 없습니다</strong>
-                  <p>첫 블록을 추가해 About 페이지에 경력이나 강점을 구조적으로 보여주세요.</p>
+                  <p>첫 블록을 추가해 내용을 정리하세요.</p>
                 </EmptyStateCard>
               )}
             </FieldSectionCard>
@@ -1201,7 +1231,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>헤더</h3>
-                  <p>상단 로고 옆에 보이는 브랜드 텍스트를 관리합니다.</p>
+                  <p>상단 로고 옆 텍스트입니다.</p>
                 </div>
               </SectionBlockHeader>
               <FieldBox>
@@ -1219,7 +1249,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>홈 인트로</h3>
-                  <p>메인 첫 카드에서 보이는 첫 문장과 보조 설명을 다듬습니다.</p>
+                  <p>메인 첫 카드 문구입니다.</p>
                 </div>
               </SectionBlockHeader>
               <FieldGrid data-columns="2">
@@ -1253,7 +1283,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <SectionBlockHeader>
                 <div>
                   <h3>외부 링크</h3>
-                  <p>서비스와 연락 채널을 카드형 리스트로 정리합니다.</p>
+                  <p>서비스와 연락 채널을 정리합니다.</p>
                 </div>
                 <SegmentedControl>
                   <SegmentButton
@@ -1276,11 +1306,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <LinkManagerHeader>
                 <div>
                   <strong>{linkTab === "service" ? "서비스 링크" : "연락 채널"}</strong>
-                  <span>
-                    {linkTab === "service"
-                      ? "프로젝트, 포트폴리오, 서비스 페이지를 연결합니다."
-                      : "이메일, SNS, 메신저처럼 연락 가능한 채널을 연결합니다."}
-                  </span>
+                  <span>{linkTab === "service" ? "외부 서비스 연결" : "연락 가능한 채널 연결"}</span>
                 </div>
                 <GhostButton type="button" onClick={() => appendLinkItem(linkTab)}>
                   링크 추가
@@ -1363,11 +1389,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                         <InlineActionRow className="linkActions">
                           {previewHref && isAllowedProfileLinkHref(section, item.href) ? (
                             <PreviewAnchor href={previewHref} target="_blank" rel="noreferrer">
-                              미리 보기
+                              열기
                             </PreviewAnchor>
                           ) : (
                             <MiniButton type="button" disabled>
-                              미리 보기
+                              열기
                             </MiniButton>
                           )}
                           <MiniButton
@@ -1414,36 +1440,13 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         onChange={handleDraftFileChange}
       />
 
-      <WorkspaceHero>
-        <HeroText>
-          <span className="eyebrow">Profile Content Workspace</span>
-          <h1>프로필 워크스페이스</h1>
-          <p>내 프로필, About 페이지, 홈 첫인상을 한 곳에서 관리합니다.</p>
-        </HeroText>
-
-        <HeroStatus>
-          <StatusPill data-tone={hasUnsavedChanges ? "draft" : "stable"}>
-            {hasUnsavedChanges ? "초안 편집 중" : "저장 상태 최신"}
-          </StatusPill>
-          <StatusPill data-tone={hasPublishedDiff ? "attention" : "stable"}>
-            {hasPublishedDiff ? "공개본과 다른 초안이 있습니다" : "현재 공개 중"}
-          </StatusPill>
-          <StatusPill>마지막 초안 저장 {formatWorkspaceTime(lastDraftSavedAt)}</StatusPill>
-          <StatusPill>현재 공개본 {formatWorkspaceTime(lastPublishedAt)}</StatusPill>
-        </HeroStatus>
-
-        <HeroLinks>
-          <Link href="/admin" passHref legacyBehavior>
-            <NavLink>관리자 허브</NavLink>
-          </Link>
-          <Link href="/admin/posts/new" passHref legacyBehavior>
-            <NavLink>글 작업 공간</NavLink>
-          </Link>
-          <Link href="/" passHref legacyBehavior>
-            <NavLink>메인 보기</NavLink>
-          </Link>
-        </HeroLinks>
-      </WorkspaceHero>
+      <CompactHeader>
+        <h1>프로필 워크스페이스</h1>
+        <CompactState data-tone={compactStatusTone}>
+          <span className="dot" />
+          {compactStatusLabel}
+        </CompactState>
+      </CompactHeader>
 
       <MobileSectionRail role="tablist" aria-label="프로필 섹션">
         {WORKSPACE_SECTIONS.map((section) => (
@@ -1461,207 +1464,189 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       </MobileSectionRail>
 
       <WorkspaceShell>
-        <SidebarCard>
-          <SidebarTitle>
-            <strong>편집 영역</strong>
-            <span>한 번에 하나씩 집중 편집합니다.</span>
-          </SidebarTitle>
-          <SidebarNav>
-            {WORKSPACE_SECTIONS.map((section) => (
-              <SidebarButton
-                key={section.id}
-                type="button"
-                data-active={activeSection === section.id}
-                onClick={() => setActiveSection(section.id)}
-              >
-                <strong>{section.label}</strong>
-                <span>{section.description}</span>
-              </SidebarButton>
-            ))}
-          </SidebarNav>
-        </SidebarCard>
+        <SectionRail aria-label="프로필 섹션">
+          {WORKSPACE_SECTIONS.map((section) => (
+            <SectionRailButton
+              key={section.id}
+              type="button"
+              data-active={activeSection === section.id}
+              onClick={() => setActiveSection(section.id)}
+            >
+              {section.label}
+            </SectionRailButton>
+          ))}
+        </SectionRail>
 
         <EditorColumn>
-          <EditorSurfaceHeader>
-            <div>
-              <span className="eyebrow">{activeSectionMeta.label}</span>
-              <h2>{activeSectionMeta.description}</h2>
-            </div>
-            <ImpactChips>
-              {activeSectionMeta.impact.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </ImpactChips>
-          </EditorSurfaceHeader>
-
-          <EditorSurface>{renderActiveSection()}</EditorSurface>
+          <EditorSurface>
+            <EditorPaneHeader>
+              <h2>{activeSectionMeta.label}</h2>
+              <p>{activeSectionMeta.description}</p>
+            </EditorPaneHeader>
+            {renderActiveSection()}
+          </EditorSurface>
         </EditorColumn>
 
         <PreviewRail>
           <PreviewCardShell>
             <PreviewHeader>
               <div>
-                <span>라이브 프리뷰</span>
-                <strong>{previewMode === "draft" ? "초안 미리보기" : "현재 공개본"}</strong>
+                <span>미리보기</span>
+                <strong>{previewMode === "draft" ? "초안" : "공개본"}</strong>
               </div>
-              <SegmentedControl>
-                <SegmentButton
+              <PreviewHeaderActions>
+                <SegmentedControl>
+                  <SegmentButton
+                    type="button"
+                    data-active={previewMode === "draft"}
+                    onClick={() => setPreviewMode("draft")}
+                  >
+                    초안
+                  </SegmentButton>
+                  <SegmentButton
+                    type="button"
+                    data-active={previewMode === "published"}
+                    onClick={() => setPreviewMode("published")}
+                  >
+                    공개본
+                  </SegmentButton>
+                </SegmentedControl>
+                <PreviewToggleButton
                   type="button"
-                  data-active={previewMode === "draft"}
-                  onClick={() => setPreviewMode("draft")}
+                  aria-expanded={isPreviewExpanded}
+                  onClick={() => setIsPreviewExpanded((current) => !current)}
                 >
-                  초안
-                </SegmentButton>
-                <SegmentButton
-                  type="button"
-                  data-active={previewMode === "published"}
-                  onClick={() => setPreviewMode("published")}
-                >
-                  공개본
-                </SegmentButton>
-              </SegmentedControl>
+                  {isPreviewExpanded ? "닫기" : "열기"}
+                </PreviewToggleButton>
+              </PreviewHeaderActions>
             </PreviewHeader>
 
-            <PreviewViewport>
-              {activeSection === "identity" ? (
-                <PreviewProfileCard>
-                  <div className="avatar">
-                    {previewContent.profileImageUrl ? (
-                      <ProfileImage
-                        src={previewContent.profileImageUrl}
-                        alt={displayName}
-                        width={88}
-                        height={88}
-                        priority
-                      />
-                    ) : (
-                      <AvatarFallback>{displayNameInitial}</AvatarFallback>
-                    )}
-                  </div>
-                  <strong>{displayName}</strong>
-                  <span>{previewContent.profileRole || "한 줄 역할이 여기에 표시됩니다."}</span>
-                  <p>{previewContent.profileBio || "짧은 소개를 입력하면 프로필 카드가 이렇게 보입니다."}</p>
-                </PreviewProfileCard>
-              ) : null}
-
-              {activeSection === "about" ? (
-                <PreviewAboutCard>
-                  <header>
-                    <span>About Me</span>
+            <PreviewBody data-expanded={isPreviewExpanded}>
+              <PreviewViewport>
+                {activeSection === "identity" ? (
+                  <PreviewProfileCard>
+                    <div className="avatar">
+                      {previewContent.profileImageUrl ? (
+                        <ProfileImage
+                          src={previewContent.profileImageUrl}
+                          alt={displayName}
+                          width={88}
+                          height={88}
+                          priority
+                        />
+                      ) : (
+                        <AvatarFallback>{displayNameInitial}</AvatarFallback>
+                      )}
+                    </div>
                     <strong>{displayName}</strong>
-                  </header>
-                  <h4>{previewContent.aboutRole || "페이지 역할 문구"}</h4>
-                  <p>{previewContent.aboutBio || "소개 문단이 여기에 표시됩니다."}</p>
-                  {previewContent.aboutSections.length > 0 ? (
-                    <div className="sections">
-                      {previewContent.aboutSections.map((section) => (
-                        <section key={section.id}>
-                          <strong>{section.title || "블록 제목"}</strong>
+                    <span>{previewContent.profileRole || "한 줄 역할"}</span>
+                    <p>{previewContent.profileBio || "짧은 소개"}</p>
+                  </PreviewProfileCard>
+                ) : null}
+
+                {activeSection === "about" ? (
+                  <PreviewAboutCard>
+                    <header>
+                      <span>About</span>
+                      <strong>{displayName}</strong>
+                    </header>
+                    <h4>{previewContent.aboutRole || "페이지 역할 문구"}</h4>
+                    <p>{previewContent.aboutBio || "소개 문단"}</p>
+                    {previewContent.aboutSections.length > 0 ? (
+                      <div className="sections">
+                        {previewContent.aboutSections.map((section) => (
+                          <section key={section.id}>
+                            <strong>{section.title || "블록 제목"}</strong>
+                            <ul>
+                              {section.items.slice(0, 3).map((item, index) => (
+                                <li key={`${section.id}-${index}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </section>
+                        ))}
+                      </div>
+                    ) : null}
+                  </PreviewAboutCard>
+                ) : null}
+
+                {activeSection === "home" ? (
+                  <PreviewHomeCard>
+                    <div className="topbar">
+                      <div className="brand">
+                        <BrandMark className="mark" priority />
+                        <span>{previewContent.blogTitle || "헤더 로고 텍스트"}</span>
+                      </div>
+                    </div>
+                    <div className="heroCard">
+                      <strong>{previewContent.homeIntroTitle || "첫 문장"}</strong>
+                      <p>{previewContent.homeIntroDescription || "보조 설명"}</p>
+                    </div>
+                  </PreviewHomeCard>
+                ) : null}
+
+                {activeSection === "links" ? (
+                  <PreviewLinksCard>
+                    {([
+                      ["Service", previewContent.serviceLinks],
+                      ["Contact", previewContent.contactLinks],
+                    ] as const).map(([title, items]) => (
+                      <section key={title}>
+                        <strong>{title}</strong>
+                        {items.length > 0 ? (
                           <ul>
-                            {section.items.slice(0, 3).map((item, index) => (
-                              <li key={`${section.id}-${index}`}>{item}</li>
+                            {items.map((item) => (
+                              <li key={`${title}-${item.icon}-${item.label}-${item.href}`}>
+                                <AppIcon name={item.icon} />
+                                <span>{item.label}</span>
+                              </li>
                             ))}
                           </ul>
-                        </section>
-                      ))}
-                    </div>
-                  ) : null}
-                </PreviewAboutCard>
-              ) : null}
-
-              {activeSection === "home" ? (
-                <PreviewHomeCard>
-                  <div className="topbar">
-                    <div className="brand">
-                      <BrandMark className="mark" priority />
-                      <span>{previewContent.blogTitle || "헤더 로고 텍스트"}</span>
-                    </div>
-                  </div>
-                  <div className="heroCard">
-                    <strong>{previewContent.homeIntroTitle || "첫 문장이 여기에 표시됩니다."}</strong>
-                    <p>{previewContent.homeIntroDescription || "보조 설명이 이 카드 아래에 반영됩니다."}</p>
-                  </div>
-                </PreviewHomeCard>
-              ) : null}
-
-              {activeSection === "links" ? (
-                <PreviewLinksCard>
-                  {([
-                    ["Service", previewContent.serviceLinks],
-                    ["Contact", previewContent.contactLinks],
-                  ] as const).map(([title, items]) => (
-                    <section key={title}>
-                      <strong>{title}</strong>
-                      {items.length > 0 ? (
-                        <ul>
-                          {items.map((item) => (
-                            <li key={`${title}-${item.icon}-${item.label}-${item.href}`}>
-                              <AppIcon name={item.icon} />
-                              <span>{item.label}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>아직 등록된 링크가 없습니다.</p>
-                      )}
-                    </section>
-                  ))}
-                </PreviewLinksCard>
-              ) : null}
-            </PreviewViewport>
+                        ) : (
+                          <p>등록된 링크 없음</p>
+                        )}
+                      </section>
+                    ))}
+                  </PreviewLinksCard>
+                ) : null}
+              </PreviewViewport>
+            </PreviewBody>
           </PreviewCardShell>
 
           <ActionRailCard>
-            <RailSummary>
-              <strong>{hasUnsavedChanges ? "로컬 변경이 있습니다" : "서버 초안과 동기화됨"}</strong>
-              <span>
-                {hasUnsavedChanges
-                  ? "먼저 초안 저장을 마친 뒤 공개할 수 있습니다."
-                  : hasPublishedDiff
-                    ? "저장된 초안이 현재 공개본과 다릅니다."
-                    : "공개본과 초안이 동일합니다."}
-              </span>
-            </RailSummary>
-
             <RailActions>
-              <GhostButton
-                type="button"
-                disabled={loadingKey === "refresh"}
-                onClick={() => void handleRefreshStoredDraft()}
-              >
-                {loadingKey === "refresh" ? "불러오는 중..." : "초안 새로고침"}
-              </GhostButton>
-              <PrimaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-                {loadingKey === "save" ? "저장 중..." : "초안 저장"}
-              </PrimaryButton>
               <PublishButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
                 {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
               </PublishButton>
-              <GhostButton
-                type="button"
-                disabled={!hasUnsavedChanges}
-                onClick={() => {
-                  setDraft(remoteDraft)
-                  setWorkspaceNotice({ tone: "success", text: "로컬 변경을 버리고 저장된 초안으로 되돌렸습니다." })
-                }}
-              >
-                초안 되돌리기
+              <GhostButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
+                {loadingKey === "save" ? "저장 중..." : "초안 저장"}
               </GhostButton>
             </RailActions>
-
-            {workspaceNotice.text ? <Notice data-tone={workspaceNotice.tone}>{workspaceNotice.text}</Notice> : null}
-            {imageNotice.text ? <Notice data-tone={imageNotice.tone}>{imageNotice.text}</Notice> : null}
-
-            <QuickCtaCard>
-              <strong>글 작업 공간 프로필 빠른 수정은 종료합니다</strong>
-              <p>이제 프로필 변경은 여기서 집중 관리하고, 글 작업 공간에서는 읽기 전용 요약만 남깁니다.</p>
-              <Link href="/admin/posts/new" passHref legacyBehavior>
-                <PreviewAnchor>글 작업 공간 확인</PreviewAnchor>
-              </Link>
-            </QuickCtaCard>
+            <ActionMeta>{actionStatusText}</ActionMeta>
+            <QuietButton
+              type="button"
+              disabled={!hasUnsavedChanges}
+              onClick={() => {
+                if (!window.confirm("저장되지 않은 로컬 변경을 버릴까요?")) return
+                setDraft(remoteDraft)
+                setWorkspaceNotice({ tone: "success", text: "저장된 초안으로 되돌렸습니다." })
+                setLastCompletedAction("idle")
+              }}
+            >
+              초안 되돌리기
+            </QuietButton>
           </ActionRailCard>
         </PreviewRail>
       </WorkspaceShell>
+
+      {pageToasts.length > 0 ? (
+        <ToastStack role="status" aria-live="polite">
+          {pageToasts.map((notice, index) => (
+            <ToastCard key={`${notice.tone}-${index}-${notice.text}`} data-tone={notice.tone}>
+              {notice.text}
+            </ToastCard>
+          ))}
+        </ToastStack>
+      ) : null}
 
       {isProfileImageEditorOpen ? (
         <ModalOverlay
@@ -1759,7 +1744,9 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               <ModalEmptyState>먼저 프로필 이미지를 선택해주세요.</ModalEmptyState>
             )}
 
-            {profileImageDraftNotice.text ? <Notice data-tone={profileImageDraftNotice.tone}>{profileImageDraftNotice.text}</Notice> : null}
+            {profileImageDraftNotice.text ? (
+              <ModalNotice data-tone={profileImageDraftNotice.tone}>{profileImageDraftNotice.text}</ModalNotice>
+            ) : null}
 
             <ModalFooter>
               <GhostButton
@@ -1874,20 +1861,6 @@ const DangerButton = styled(MiniButton)`
   }
 `
 
-const NavLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  padding: 0.68rem 0.94rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  text-decoration: none;
-  font-weight: 700;
-`
-
 const PreviewAnchor = styled.a`
   display: inline-flex;
   align-items: center;
@@ -1903,89 +1876,81 @@ const PreviewAnchor = styled.a`
   text-decoration: none;
 `
 
-const WorkspaceHero = styled.section`
-  display: grid;
+const CompactHeader = styled.section`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 0.9rem;
-  padding: 1.2rem 1.24rem;
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at top left, rgba(71, 112, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray2}, ${({ theme }) => theme.colors.gray1});
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-`
-
-const HeroText = styled.div`
-  display: grid;
-  gap: 0.42rem;
-
-  .eyebrow {
-    color: ${({ theme }) => theme.colors.blue10};
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
+  padding: 0.15rem 0 0.1rem;
 
   h1 {
     margin: 0;
-    font-size: clamp(2rem, 3vw, 2.8rem);
-    line-height: 1.04;
+    font-size: clamp(1.5rem, 2vw, 1.9rem);
+    line-height: 1.08;
     letter-spacing: -0.04em;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.96rem;
-    line-height: 1.6;
+  @media (max-width: 760px) {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.45rem;
   }
 `
 
-const HeroStatus = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-`
-
-const StatusPill = styled.span`
+const CompactState = styled.div`
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  border-radius: 999px;
-  padding: 0 0.82rem;
-  background: ${({ theme }) => theme.colors.gray2};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
+  gap: 0.46rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.84rem;
   font-weight: 700;
 
-  &[data-tone="draft"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray8};
+  }
+
+  &[data-tone="editing"] {
     color: ${({ theme }) => theme.colors.blue11};
   }
 
+  &[data-tone="editing"] .dot {
+    background: ${({ theme }) => theme.colors.blue8};
+  }
+
   &[data-tone="attention"] {
-    border-color: ${({ theme }) => theme.colors.green8};
-    background: ${({ theme }) => theme.colors.green3};
     color: ${({ theme }) => theme.colors.green11};
   }
-`
 
-const HeroLinks = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.48rem;
+  &[data-tone="attention"] .dot {
+    background: ${({ theme }) => theme.colors.green8};
+  }
+
+  &[data-tone="success"] {
+    color: ${({ theme }) => theme.colors.green11};
+  }
+
+  &[data-tone="success"] .dot {
+    background: ${({ theme }) => theme.colors.green8};
+  }
 `
 
 const MobileSectionRail = styled.div`
   display: none;
 
   @media (max-width: 760px) {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    overflow-x: auto;
     gap: 0.48rem;
+    padding-bottom: 0.15rem;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 `
 
@@ -1996,6 +1961,8 @@ const SectionSwitchButton = styled.button`
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray11};
   font-weight: 700;
+  white-space: nowrap;
+  padding: 0 0.9rem;
 
   &[data-active="true"] {
     border-color: ${({ theme }) => theme.colors.blue8};
@@ -2006,12 +1973,12 @@ const SectionSwitchButton = styled.button`
 
 const WorkspaceShell = styled.section`
   display: grid;
-  grid-template-columns: 228px minmax(0, 1fr) 328px;
-  gap: 0.9rem;
+  grid-template-columns: 188px minmax(0, 1fr) 312px;
+  gap: 1rem;
   align-items: start;
 
   @media (max-width: 1180px) {
-    grid-template-columns: 196px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   @media (max-width: 760px) {
@@ -2025,61 +1992,37 @@ const SurfaceCard = styled.section`
   border: 1px solid ${({ theme }) => theme.colors.gray5};
 `
 
-const SidebarCard = styled(SurfaceCard)`
+const SectionRail = styled.nav`
   position: sticky;
   top: 0.88rem;
-  padding: 0.92rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 0.24rem;
 
-  @media (max-width: 760px) {
+  @media (max-width: 1180px) {
     display: none;
   }
 `
 
-const SidebarTitle = styled.div`
-  display: grid;
-  gap: 0.16rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.5;
-  }
-`
-
-const SidebarNav = styled.div`
-  display: grid;
-  gap: 0.48rem;
-`
-
-const SidebarButton = styled.button`
+const SectionRailButton = styled.button`
   text-align: left;
-  padding: 0.9rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  display: grid;
-  gap: 0.3rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-    line-height: 1.5;
-  }
+  padding: 0.82rem 0.9rem 0.82rem 1rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.94rem;
+  font-weight: 700;
 
   &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
+    border-color: ${({ theme }) => theme.colors.gray6};
+    border-left-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.gray12};
   }
 `
 
@@ -2088,81 +2031,57 @@ const EditorColumn = styled.div`
   gap: 0.8rem;
 `
 
-const EditorSurfaceHeader = styled(SurfaceCard)`
-  padding: 1rem 1.06rem;
+const EditorPaneHeader = styled.div`
   display: grid;
-  gap: 0.72rem;
-
-  .eyebrow {
-    color: ${({ theme }) => theme.colors.blue10};
-    font-size: 0.8rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
+  gap: 0.22rem;
+  padding-bottom: 0.95rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
 
   h2 {
-    margin: 0.22rem 0 0;
-    font-size: clamp(1.24rem, 2vw, 1.6rem);
-    line-height: 1.24;
+    margin: 0;
+    font-size: clamp(1.24rem, 2vw, 1.5rem);
+    line-height: 1.2;
     color: ${({ theme }) => theme.colors.gray12};
   }
-`
 
-const ImpactChips = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.42rem;
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 30px;
-    border-radius: 999px;
-    padding: 0 0.7rem;
-    background: ${({ theme }) => theme.colors.gray1};
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.78rem;
-    font-weight: 700;
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.86rem;
+    line-height: 1.55;
   }
 `
 
 const EditorSurface = styled(SurfaceCard)`
-  padding: 1rem;
+  padding: 1.1rem 1.14rem 1.18rem;
+  display: grid;
+  gap: 1rem;
 `
 
 const SectionStack = styled.div`
   display: grid;
-  gap: 0.9rem;
+  gap: 1.1rem;
+
+  > * + * {
+    border-top: 1px solid ${({ theme }) => theme.colors.gray5};
+    padding-top: 1.1rem;
+  }
 `
 
 const FeatureHeroCard = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: 0.9rem;
-  padding: 1rem;
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(71, 112, 255, 0.08), transparent),
-    ${({ theme }) => theme.colors.gray1};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
 
   .heroCopy {
     display: grid;
-    gap: 0.36rem;
+    gap: 0.22rem;
     align-content: start;
   }
 
-  .heroCopy span {
-    color: ${({ theme }) => theme.colors.blue10};
-    font-size: 0.82rem;
-    font-weight: 800;
-  }
-
-  .heroCopy h2 {
+  .heroCopy h3 {
     margin: 0;
-    font-size: clamp(1.2rem, 2vw, 1.56rem);
+    font-size: clamp(1.06rem, 1.8vw, 1.28rem);
     line-height: 1.28;
     color: ${({ theme }) => theme.colors.gray12};
   }
@@ -2182,9 +2101,9 @@ const AvatarWorkspaceCard = styled.div`
   display: grid;
   justify-items: center;
   gap: 0.58rem;
-  padding: 1rem;
+  padding: 0.92rem;
   border-radius: 18px;
-  background: ${({ theme }) => theme.colors.gray2};
+  background: ${({ theme }) => theme.colors.gray1};
   border: 1px solid ${({ theme }) => theme.colors.gray6};
 
   .avatarPreview {
@@ -2213,10 +2132,6 @@ const AvatarWorkspaceCard = styled.div`
 const FieldSectionCard = styled.div`
   display: grid;
   gap: 0.82rem;
-  padding: 1rem;
-  border-radius: 18px;
-  background: ${({ theme }) => theme.colors.gray1};
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
 `
 
 const SectionBlockHeader = styled.div`
@@ -2232,10 +2147,10 @@ const SectionBlockHeader = styled.div`
   }
 
   p {
-    margin: 0.22rem 0 0;
+    margin: 0.12rem 0 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
+    font-size: 0.8rem;
+    line-height: 1.45;
   }
 
   @media (max-width: 760px) {
@@ -2652,6 +2567,38 @@ const PreviewHeader = styled.div`
   }
 `
 
+const PreviewHeaderActions = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+`
+
+const PreviewToggleButton = styled.button`
+  display: none;
+
+  @media (max-width: 760px) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 0.82rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray1};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+`
+
+const PreviewBody = styled.div<{ "data-expanded"?: boolean }>`
+  display: grid;
+
+  @media (max-width: 760px) {
+    display: ${({ ["data-expanded"]: expanded }) => (expanded ? "grid" : "none")};
+  }
+`
+
 const PreviewViewport = styled.div`
   min-height: 300px;
   border-radius: 18px;
@@ -2824,22 +2771,7 @@ const PreviewLinksCard = styled.div`
 const ActionRailCard = styled(SurfaceCard)`
   padding: 0.92rem;
   display: grid;
-  gap: 0.78rem;
-`
-
-const RailSummary = styled.div`
-  display: grid;
-  gap: 0.18rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.55;
-  }
+  gap: 0.6rem;
 `
 
 const RailActions = styled.div`
@@ -2847,31 +2779,46 @@ const RailActions = styled.div`
   gap: 0.48rem;
 `
 
-const QuickCtaCard = styled.div`
-  display: grid;
-  gap: 0.26rem;
-  padding: 0.86rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+const ActionMeta = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.8rem;
+  line-height: 1.5;
+`
 
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-  }
+const QuietButton = styled.button`
+  justify-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.red11};
+  font-size: 0.84rem;
+  font-weight: 700;
 
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    line-height: 1.55;
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
   }
 `
 
-const Notice = styled.div`
+const ToastStack = styled.div`
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  z-index: 1200;
+  display: grid;
+  gap: 0.5rem;
+  max-width: min(360px, calc(100vw - 2rem));
+`
+
+const ToastCard = styled.div`
   border-radius: 14px;
   padding: 0.78rem 0.9rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray12};
   line-height: 1.58;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
 
   &[data-tone="success"] {
     border-color: ${({ theme }) => theme.colors.green8};
@@ -2890,6 +2837,10 @@ const Notice = styled.div`
     background: ${({ theme }) => theme.colors.blue3};
     color: ${({ theme }) => theme.colors.blue11};
   }
+`
+
+const ModalNotice = styled(ToastCard)`
+  box-shadow: none;
 `
 
 const AvatarFallback = styled.div`

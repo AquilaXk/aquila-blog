@@ -9,15 +9,13 @@ import TableRow from "@tiptap/extension-table-row"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
 import {
-  ChangeEvent,
-  KeyboardEvent,
-  ReactNode,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
+import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
 import {
   CalloutBlock,
   MermaidBlock,
@@ -25,6 +23,12 @@ import {
   ResizableImage,
   ToggleBlock,
 } from "./extensions"
+import {
+  deleteTopLevelBlockAt,
+  duplicateTopLevelBlockAt,
+  insertTopLevelBlockAt,
+  moveTopLevelBlockToInsertionIndex,
+} from "./blockDocumentOps"
 import {
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
@@ -63,8 +67,39 @@ type FloatingBubbleState = {
   top: number
 }
 
+type TopLevelBlockHandleState = {
+  visible: boolean
+  blockIndex: number
+  left: number
+  top: number
+  bottom: number
+  width: number
+}
+
+type BlockMenuState =
+  | {
+      kind: "insert" | "actions"
+      blockIndex: number
+      left: number
+      top: number
+    }
+  | null
+
+type DragState = {
+  sourceIndex: number
+  insertionIndex: number
+}
+
+type InsertMenuAction = {
+  id: string
+  label: string
+  helper?: string
+  insertAt: (blockIndex: number) => void
+}
+
 const RAW_BLOCK_PLACEHOLDER = "```text\n원문 블록\n```"
 const MERMAID_RAW_PLACEHOLDER = "```mermaid\nflowchart TD\n  A[시작] --> B[처리]\n```"
+const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse), (max-width: 1024px)"
 const CODE_LANGUAGE_OPTIONS = [
   "text",
   "bash",
@@ -87,8 +122,24 @@ const DEFAULT_TABLE_CONFIG = { rows: 3, cols: 2, withHeaderRow: true } as const
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
 
-const isPrimaryModifierPressed = (event: KeyboardEvent | globalThis.KeyboardEvent) =>
+const isPrimaryModifierPressed = (event: ReactKeyboardEvent | globalThis.KeyboardEvent) =>
   event.metaKey || event.ctrlKey
+
+const getTopLevelBlockIndexFromSelection = (editor: TiptapEditor) => {
+  const { selection } = editor.state
+  return Math.max(0, selection.$from.index(0))
+}
+
+const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
+  const { doc } = editor.state
+  if (doc.childCount === 0) return 1
+  const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
+  let position = 1
+  for (let index = 0; index < clampedIndex; index += 1) {
+    position += doc.child(index).nodeSize
+  }
+  return position
+}
 
 const extractPlainTextFromHtml = (html: string) => {
   if (typeof window === "undefined") return ""
@@ -233,6 +284,9 @@ const BlockEditorShell = ({
   enableMermaidBlocks = false,
 }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const dragStateRef = useRef<DragState | null>(null)
+  const pendingImageInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const editorRef = useRef<TiptapEditor | null>(null)
   const [rawMarkdownDraft, setRawMarkdownDraft] = useState(value)
@@ -240,13 +294,26 @@ const BlockEditorShell = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
+  const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false)
+  const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
+  const [dragState, setDragState] = useState<DragState | null>(null)
+  const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
+    visible: false,
+    blockIndex: 0,
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 0,
+  })
   const [bubbleState, setBubbleState] = useState<FloatingBubbleState>({
     visible: false,
     mode: "text",
     left: 0,
     top: 0,
   })
-  const [, setSelectionTick] = useState(0)
+  const [selectionTick, setSelectionTick] = useState(0)
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
   )
@@ -286,6 +353,86 @@ const BlockEditorShell = ({
     [isSelectionInEmptyParagraph]
   )
 
+  const getContentRoot = useCallback(() => {
+    return viewportRef.current?.querySelector(".aq-block-editor__content") as HTMLElement | null
+  }, [])
+
+  const getTopLevelBlockElements = useCallback(() => {
+    const root = getContentRoot()
+    return root ? Array.from(root.children) as HTMLElement[] : []
+  }, [getContentRoot])
+
+  const getTopLevelBlockElementByIndex = useCallback(
+    (blockIndex: number) => getTopLevelBlockElements()[blockIndex] ?? null,
+    [getTopLevelBlockElements]
+  )
+
+  const findTopLevelBlockIndexFromTarget = useCallback(
+    (target: EventTarget | null) => {
+      const root = getContentRoot()
+      if (!root || !(target instanceof Element)) return null
+
+      let element: Element | null = target
+      while (element && element.parentElement !== root) {
+        element = element.parentElement
+      }
+
+      if (!element || element.parentElement !== root) return null
+      return getTopLevelBlockElements().indexOf(element as HTMLElement)
+    },
+    [getContentRoot, getTopLevelBlockElements]
+  )
+
+  const syncSerializedDoc = useCallback(
+    (nextDoc: BlockEditorDoc) => {
+      const serialized = serializeEditorDocToMarkdown(nextDoc)
+      lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
+      setRawMarkdownDraft(serialized)
+      onChange(serialized)
+    },
+    [onChange]
+  )
+
+  const focusTopLevelBlock = useCallback((blockIndex: number) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+    const position = getTopLevelBlockPosition(currentEditor, blockIndex)
+    currentEditor.commands.focus(position)
+  }, [])
+
+  const replaceEditorDoc = useCallback(
+    (nextDoc: BlockEditorDoc, focusIndex?: number | null) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+      currentEditor.commands.setContent(nextDoc, { emitUpdate: false })
+      syncSerializedDoc(nextDoc)
+
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          if (typeof focusIndex === "number") {
+            focusTopLevelBlock(focusIndex)
+          } else {
+            currentEditor.commands.focus()
+          }
+        })
+      }
+    },
+    [focusTopLevelBlock, syncSerializedDoc]
+  )
+
+  const mutateTopLevelBlocks = useCallback(
+    (
+      mutator: (doc: BlockEditorDoc) => BlockEditorDoc,
+      focusIndex?: number | null
+    ) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+      const nextDoc = mutator(currentEditor.getJSON() as BlockEditorDoc)
+      replaceEditorDoc(nextDoc, focusIndex)
+    },
+    [replaceEditorDoc]
+  )
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -300,7 +447,7 @@ const BlockEditorShell = ({
         placeholder: "당신의 이야기를 블록 단위로 정리해보세요...",
       }),
       Table.configure({
-        resizable: false,
+        resizable: true,
       }),
       TableRow,
       TableHeader,
@@ -496,7 +643,11 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
-    const notifySelection = () => setSelectionTick((prev) => prev + 1)
+    const notifySelection = () => {
+      setSelectionTick((prev) => prev + 1)
+      setSelectedBlockIndex(getTopLevelBlockIndexFromSelection(editor))
+    }
+    notifySelection()
     editor.on("selectionUpdate", notifySelection)
     editor.on("transaction", notifySelection)
     return () => {
@@ -633,6 +784,141 @@ const BlockEditorShell = ({
     editor.chain().focus().insertTable(DEFAULT_TABLE_CONFIG).run()
   }, [editor])
 
+  const buildStructuredInsertContent = useCallback(
+    (markdown: string) => {
+      const parsedDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(markdown), enableMermaidBlocks)
+      return (parsedDoc.content?.length ? parsedDoc.content : [{ type: "paragraph" }]) as NonNullable<
+        BlockEditorDoc["content"]
+      >
+    },
+    [enableMermaidBlocks]
+  )
+
+  const insertBlocksAtIndex = useCallback(
+    (insertionIndex: number, blocks: NonNullable<BlockEditorDoc["content"]>, focusIndex = insertionIndex) => {
+      mutateTopLevelBlocks((doc) => insertTopLevelBlockAt(doc, insertionIndex, blocks), focusIndex)
+    },
+    [mutateTopLevelBlocks]
+  )
+
+  const insertMenuActions = useMemo<InsertMenuAction[]>(
+    () => [
+      {
+        id: "heading-2",
+        label: "제목 2",
+        helper: "큰 섹션 제목",
+        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("## 제목")),
+      },
+      {
+        id: "heading-3",
+        label: "제목 3",
+        helper: "작은 섹션 제목",
+        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("### 제목")),
+      },
+      {
+        id: "bullet-list",
+        label: "불릿 리스트",
+        helper: "순서 없는 항목",
+        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("- 항목")),
+      },
+      {
+        id: "ordered-list",
+        label: "번호 리스트",
+        helper: "순서 있는 항목",
+        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("1. 항목")),
+      },
+      {
+        id: "quote",
+        label: "인용문",
+        helper: "본문 인용",
+        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("> 인용문")),
+      },
+      {
+        id: "code-block",
+        label: "코드 블록",
+        helper: "언어 지정 가능",
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("```text\n코드를 입력하세요.\n```")),
+      },
+      {
+        id: "table",
+        label: "테이블",
+        helper: "2열 헤더 포함",
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(
+            blockIndex + 1,
+            buildStructuredInsertContent(["| 제목 | 값 |", "| --- | --- |", "| 항목 | 내용 |"].join("\n"))
+          ),
+      },
+      {
+        id: "callout",
+        label: "콜아웃",
+        helper: "TIP/INFO/WARNING",
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(
+            blockIndex + 1,
+            buildStructuredInsertContent(["> [!TIP] 핵심 포인트", "> 콜아웃 본문을 입력하세요."].join("\n"))
+          ),
+      },
+      {
+        id: "toggle",
+        label: "토글",
+        helper: "접기/펼치기 블록",
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(
+            blockIndex + 1,
+            buildStructuredInsertContent([":::toggle 더 보기", "토글 내부 본문을 입력하세요.", ":::"].join("\n"))
+          ),
+      },
+      {
+        id: "mermaid",
+        label: "Mermaid",
+        helper: enableMermaidBlocks ? "다이어그램 블록" : "원문 블록으로 보존",
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(
+            blockIndex + 1,
+            buildStructuredInsertContent(
+              enableMermaidBlocks
+                ? ["```mermaid", "flowchart TD", "  A[시작] --> B[처리]", "```"].join("\n")
+                : MERMAID_RAW_PLACEHOLDER
+            )
+          ),
+      },
+      {
+        id: "image",
+        label: "이미지",
+        helper: "업로드 후 즉시 삽입",
+        insertAt: (blockIndex) => {
+          pendingImageInsertIndexRef.current = blockIndex + 1
+          fileInputRef.current?.click()
+        },
+      },
+      {
+        id: "divider",
+        label: "구분선",
+        helper: "섹션 구분",
+        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("---")),
+      },
+      {
+        id: "raw",
+        label: "원문 블록",
+        helper: "지원되지 않는 markdown 유지",
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, [
+            {
+              type: "rawMarkdownBlock",
+              attrs: {
+                markdown: RAW_BLOCK_PLACEHOLDER,
+                reason: "manual-raw",
+              },
+            },
+            { type: "paragraph" },
+          ]),
+      },
+    ],
+    [buildStructuredInsertContent, enableMermaidBlocks, insertBlocksAtIndex]
+  )
+
   const applyRawMarkdownDraft = useCallback(() => {
     if (!editor) return
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(rawMarkdownDraft), enableMermaidBlocks)
@@ -661,6 +947,26 @@ const BlockEditorShell = ({
     if (!file || !editor) return
 
     const imageAttrs = await onUploadImage(file)
+    const pendingInsertIndex = pendingImageInsertIndexRef.current
+    pendingImageInsertIndexRef.current = null
+
+    if (typeof pendingInsertIndex === "number") {
+      insertBlocksAtIndex(pendingInsertIndex, [
+        {
+          type: "resizableImage",
+          attrs: {
+            src: imageAttrs.src,
+            alt: imageAttrs.alt || "",
+            title: imageAttrs.title || "",
+            widthPx: imageAttrs.widthPx ?? null,
+            align: imageAttrs.align || "center",
+          },
+        },
+        { type: "paragraph" },
+      ])
+      return
+    }
+
     editor
       .chain()
       .focus()
@@ -797,7 +1103,7 @@ const BlockEditorShell = ({
     [editor]
   )
 
-  const handleSlashMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleSlashMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault()
       setIsSlashMenuOpen(false)
@@ -819,6 +1125,236 @@ const BlockEditorShell = ({
       return next
     })
   }
+
+  const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
+
+  const openBlockMenu = useCallback(
+    (kind: "insert" | "actions", blockIndex: number, anchorRect: DOMRect) => {
+      setBlockMenuState((prev) =>
+        prev && prev.kind === kind && prev.blockIndex === blockIndex
+          ? null
+          : {
+              kind,
+              blockIndex,
+              left: Math.round(anchorRect.left),
+              top: Math.round(anchorRect.bottom + 8),
+            }
+      )
+    },
+    []
+  )
+
+  const moveBlockByStep = useCallback(
+    (blockIndex: number, delta: -1 | 1) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+      const contentLength = (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
+      const nextIndex = Math.max(0, Math.min(blockIndex + delta, Math.max(contentLength - 1, 0)))
+      if (nextIndex === blockIndex) return
+      mutateTopLevelBlocks(
+        (doc) => moveTopLevelBlockToInsertionIndex(doc, blockIndex, delta > 0 ? nextIndex + 1 : nextIndex),
+        nextIndex
+      )
+      closeBlockMenus()
+    },
+    [closeBlockMenus, mutateTopLevelBlocks]
+  )
+
+  const duplicateBlock = useCallback(
+    (blockIndex: number) => {
+      mutateTopLevelBlocks((doc) => duplicateTopLevelBlockAt(doc, blockIndex), blockIndex + 1)
+      closeBlockMenus()
+    },
+    [closeBlockMenus, mutateTopLevelBlocks]
+  )
+
+  const deleteBlock = useCallback(
+    (blockIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+      const contentLength = (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
+      const nextFocusIndex = Math.max(0, Math.min(blockIndex, Math.max(contentLength - 2, 0)))
+      mutateTopLevelBlocks((doc) => deleteTopLevelBlockAt(doc, blockIndex), nextFocusIndex)
+      closeBlockMenus()
+    },
+    [closeBlockMenus, mutateTopLevelBlocks]
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mediaQuery = window.matchMedia(BLOCK_HANDLE_MEDIA_QUERY)
+    const sync = () => setIsCoarsePointer(mediaQuery.matches)
+    sync()
+    mediaQuery.addEventListener?.("change", sync)
+    return () => mediaQuery.removeEventListener?.("change", sync)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const sync = () => setSelectionTick((prev) => prev + 1)
+    window.addEventListener("scroll", sync, true)
+    window.addEventListener("resize", sync)
+    return () => {
+      window.removeEventListener("scroll", sync, true)
+      window.removeEventListener("resize", sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!editor) return
+    const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex ?? selectedBlockIndex
+    const blockElement = getTopLevelBlockElementByIndex(blockIndex)
+    const shouldShow = Boolean(
+      blockElement && (isCoarsePointer || hoveredBlockIndex !== null || editor.isFocused)
+    )
+
+    if (!shouldShow || !blockElement) {
+      setBlockHandleState((prev) => ({ ...prev, visible: false }))
+      return
+    }
+
+    const rect = blockElement.getBoundingClientRect()
+    setBlockHandleState({
+      visible: true,
+      blockIndex,
+      left: Math.max(16, Math.round(rect.left - 54)),
+      top: Math.round(rect.top + 8),
+      bottom: Math.round(rect.bottom + 12),
+      width: Math.round(rect.width),
+    })
+  }, [editor, getTopLevelBlockElementByIndex, hoveredBlockIndex, isCoarsePointer, selectedBlockIndex, selectionTick])
+
+  const getInsertionIndexFromClientY = useCallback(
+    (clientY: number) => {
+      const elements = getTopLevelBlockElements()
+      if (elements.length === 0) return 0
+      for (let index = 0; index < elements.length; index += 1) {
+        const rect = elements[index]?.getBoundingClientRect()
+        if (rect && clientY < rect.top + rect.height / 2) {
+          return index
+        }
+      }
+      return elements.length
+    },
+    [getTopLevelBlockElements]
+  )
+
+  const handleWindowPointerMove = useCallback(
+    (event: PointerEvent) => {
+      const activeDrag = dragStateRef.current
+      if (!activeDrag) return
+      const nextInsertionIndex = getInsertionIndexFromClientY(event.clientY)
+      if (nextInsertionIndex === activeDrag.insertionIndex) return
+      const nextState = { ...activeDrag, insertionIndex: nextInsertionIndex }
+      dragStateRef.current = nextState
+      setDragState(nextState)
+    },
+    [getInsertionIndexFromClientY]
+  )
+
+  const finalizeDrag = useCallback(() => {
+    const activeDrag = dragStateRef.current
+    dragStateRef.current = null
+    setDragState(null)
+    if (typeof window !== "undefined") {
+      window.removeEventListener("pointermove", handleWindowPointerMove)
+      window.removeEventListener("pointerup", finalizeDrag)
+      window.removeEventListener("pointercancel", finalizeDrag)
+    }
+    if (!activeDrag) return
+
+    const targetIndex =
+      activeDrag.insertionIndex > activeDrag.sourceIndex
+        ? activeDrag.insertionIndex - 1
+        : activeDrag.insertionIndex
+
+    if (targetIndex === activeDrag.sourceIndex) return
+
+    mutateTopLevelBlocks(
+      (doc) =>
+        moveTopLevelBlockToInsertionIndex(doc, activeDrag.sourceIndex, activeDrag.insertionIndex),
+      targetIndex
+    )
+  }, [handleWindowPointerMove, mutateTopLevelBlocks])
+
+  const startBlockDrag = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>, blockIndex: number) => {
+      if (isCoarsePointer) return
+      event.preventDefault()
+      event.stopPropagation()
+      const initialDragState = {
+        sourceIndex: blockIndex,
+        insertionIndex: blockIndex,
+      }
+      dragStateRef.current = initialDragState
+      setDragState(initialDragState)
+      closeBlockMenus()
+      if (typeof window !== "undefined") {
+        window.addEventListener("pointermove", handleWindowPointerMove)
+        window.addEventListener("pointerup", finalizeDrag)
+        window.addEventListener("pointercancel", finalizeDrag)
+      }
+    },
+    [closeBlockMenus, finalizeDrag, handleWindowPointerMove, isCoarsePointer]
+  )
+
+  const handleViewportPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isCoarsePointer || dragStateRef.current) return
+      setHoveredBlockIndex(findTopLevelBlockIndexFromTarget(event.target))
+    },
+    [findTopLevelBlockIndexFromTarget, isCoarsePointer]
+  )
+
+  const handleViewportPointerLeave = useCallback(() => {
+    if (!dragStateRef.current) {
+      setHoveredBlockIndex(null)
+    }
+  }, [])
+
+  const insertionIndicatorStyle = useMemo(() => {
+    if (!dragState) return null
+    const elements = getTopLevelBlockElements()
+    if (elements.length === 0) return null
+
+    if (dragState.insertionIndex >= elements.length) {
+      const lastRect = elements[elements.length - 1]?.getBoundingClientRect()
+      if (!lastRect) return null
+      return {
+        left: Math.round(lastRect.left),
+        top: Math.round(lastRect.bottom + 8),
+        width: Math.round(lastRect.width),
+      }
+    }
+
+    const targetRect = elements[dragState.insertionIndex]?.getBoundingClientRect()
+    if (!targetRect) return null
+    return {
+      left: Math.round(targetRect.left),
+      top: Math.round(targetRect.top - 8),
+      width: Math.round(targetRect.width),
+    }
+  }, [dragState, getTopLevelBlockElements])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !blockMenuState) return
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof PointerEvent) {
+        const target = event.target
+        if (target instanceof Element && target.closest("[data-block-menu-root='true']")) {
+          return
+        }
+      }
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return
+      setBlockMenuState(null)
+    }
+    window.addEventListener("pointerdown", close)
+    window.addEventListener("keydown", close)
+    return () => {
+      window.removeEventListener("pointerdown", close)
+      window.removeEventListener("keydown", close)
+    }
+  }, [blockMenuState])
 
   return (
     <Shell className={className}>
@@ -923,7 +1459,11 @@ const BlockEditorShell = ({
         </SlashMenu>
       ) : null}
 
-      <EditorViewport>
+      <EditorViewport
+        ref={viewportRef}
+        onPointerMove={handleViewportPointerMove}
+        onPointerLeave={handleViewportPointerLeave}
+      >
         {editor && bubbleState.visible ? (
           <FloatingBubbleToolbar
             style={{
@@ -978,6 +1518,20 @@ const BlockEditorShell = ({
                 <ToolbarButton type="button" data-active={editor.isActive("tableHeader")} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
                   헤더
                 </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  disabled={!editor.can().chain().focus().mergeCells().run()}
+                  onClick={() => editor.chain().focus().mergeCells().run()}
+                >
+                  셀 병합
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  disabled={!editor.can().chain().focus().splitCell().run()}
+                  onClick={() => editor.chain().focus().splitCell().run()}
+                >
+                  셀 분할
+                </ToolbarButton>
                 <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteRow().run()}>
                   행 삭제
                 </ToolbarButton>
@@ -990,6 +1544,131 @@ const BlockEditorShell = ({
               </BubbleToolbar>
             )}
           </FloatingBubbleToolbar>
+        ) : null}
+        {!isCoarsePointer && blockHandleState.visible ? (
+          <BlockHandleRail
+            style={{
+              left: `${blockHandleState.left}px`,
+              top: `${blockHandleState.top}px`,
+            }}
+          >
+            <BlockHandleButton
+              type="button"
+              aria-label="블록 추가"
+              onClick={(event) => {
+                event.stopPropagation()
+                openBlockMenu("insert", blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              +
+            </BlockHandleButton>
+            <BlockHandleButton
+              type="button"
+              aria-label="블록 드래그"
+              onPointerDown={(event) => startBlockDrag(event, blockHandleState.blockIndex)}
+            >
+              ⋮⋮
+            </BlockHandleButton>
+            <BlockHandleButton
+              type="button"
+              aria-label="블록 더보기"
+              onClick={(event) => {
+                event.stopPropagation()
+                openBlockMenu("actions", blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              ⋯
+            </BlockHandleButton>
+          </BlockHandleRail>
+        ) : null}
+        {isCoarsePointer && blockHandleState.visible ? (
+          <MobileBlockActionBar
+            style={{
+              left: `${Math.max(16, blockHandleState.left + 54 + blockHandleState.width / 2)}px`,
+              top: `${blockHandleState.bottom}px`,
+              width: `${Math.min(blockHandleState.width, 520)}px`,
+            }}
+          >
+            <ToolbarButton
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                openBlockMenu("insert", blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              +
+            </ToolbarButton>
+            <ToolbarButton type="button" onClick={() => moveBlockByStep(blockHandleState.blockIndex, -1)}>
+              위로
+            </ToolbarButton>
+            <ToolbarButton type="button" onClick={() => moveBlockByStep(blockHandleState.blockIndex, 1)}>
+              아래로
+            </ToolbarButton>
+            <ToolbarButton type="button" onClick={() => duplicateBlock(blockHandleState.blockIndex)}>
+              복제
+            </ToolbarButton>
+            <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => deleteBlock(blockHandleState.blockIndex)}>
+              삭제
+            </ToolbarButton>
+          </MobileBlockActionBar>
+        ) : null}
+        {blockMenuState ? (
+          <FloatingBlockMenu
+            data-block-menu-root="true"
+            style={{
+              left: `${blockMenuState.left}px`,
+              top: `${blockMenuState.top}px`,
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {blockMenuState.kind === "insert" ? (
+              <>
+                <FloatingBlockMenuHeader>블록 추가</FloatingBlockMenuHeader>
+                <FloatingBlockMenuGrid>
+                  {insertMenuActions.map((action) => (
+                    <FloatingBlockMenuButton
+                      key={action.id}
+                      type="button"
+                      onClick={() => {
+                        action.insertAt(blockMenuState.blockIndex)
+                        closeBlockMenus()
+                      }}
+                    >
+                      <strong>{action.label}</strong>
+                      {action.helper ? <span>{action.helper}</span> : null}
+                    </FloatingBlockMenuButton>
+                  ))}
+                </FloatingBlockMenuGrid>
+              </>
+            ) : (
+              <>
+                <FloatingBlockMenuHeader>블록 작업</FloatingBlockMenuHeader>
+                <FloatingBlockActionList>
+                  <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, -1)}>
+                    위로 이동
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, 1)}>
+                    아래로 이동
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => duplicateBlock(blockMenuState.blockIndex)}>
+                    복제
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => deleteBlock(blockMenuState.blockIndex)}>
+                    삭제
+                  </FloatingBlockActionButton>
+                </FloatingBlockActionList>
+              </>
+            )}
+          </FloatingBlockMenu>
+        ) : null}
+        {insertionIndicatorStyle ? (
+          <BlockInsertionIndicator
+            style={{
+              left: `${insertionIndicatorStyle.left}px`,
+              top: `${insertionIndicatorStyle.top}px`,
+              width: `${insertionIndicatorStyle.width}px`,
+            }}
+          />
         ) : null}
         <EditorContent editor={editor} />
       </EditorViewport>
@@ -1294,12 +1973,31 @@ const EditorViewport = styled.div`
     border-collapse: collapse;
   }
 
+  .aq-block-editor__content .tableWrapper {
+    overflow-x: auto;
+  }
+
   .aq-block-editor__content th,
   .aq-block-editor__content td {
     border: 1px solid rgba(255, 255, 255, 0.1);
     padding: 0.7rem 0.8rem;
     text-align: left;
     vertical-align: top;
+    position: relative;
+  }
+
+  .aq-block-editor__content .column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 4px;
+    height: 100%;
+    background: rgba(59, 130, 246, 0.48);
+    pointer-events: none;
+  }
+
+  .aq-block-editor__content.resize-cursor {
+    cursor: col-resize;
   }
 `
 
@@ -1327,6 +2025,121 @@ const FloatingBubbleToolbar = styled.div`
   > * {
     pointer-events: auto;
   }
+`
+
+const BlockHandleRail = styled.div`
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+`
+
+const BlockHandleButton = styled.button`
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 15, 18, 0.96);
+  color: var(--color-gray11);
+  font-size: 0.82rem;
+  font-weight: 800;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+`
+
+const MobileBlockActionBar = styled.div`
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.5rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 15, 18, 0.98);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+  transform: translateX(-50%);
+`
+
+const FloatingBlockMenu = styled.div`
+  position: fixed;
+  z-index: 65;
+  width: min(30rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 15, 18, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+`
+
+const FloatingBlockMenuHeader = styled.strong`
+  font-size: 0.88rem;
+  color: var(--color-gray12);
+`
+
+const FloatingBlockMenuGrid = styled.div`
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+`
+
+const FloatingBlockMenuButton = styled.button`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  min-height: 3.35rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 21, 26, 0.94);
+  color: var(--color-gray12);
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+
+  strong {
+    font-size: 0.86rem;
+  }
+
+  span {
+    color: var(--color-gray10);
+    font-size: 0.77rem;
+  }
+`
+
+const FloatingBlockActionList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+`
+
+const FloatingBlockActionButton = styled.button`
+  min-height: 2.5rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 21, 26, 0.94);
+  color: var(--color-gray12);
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0 0.95rem;
+
+  &[data-variant="danger"] {
+    border-color: rgba(248, 113, 113, 0.28);
+    color: #fecaca;
+    background: rgba(127, 29, 29, 0.2);
+  }
+`
+
+const BlockInsertionIndicator = styled.div`
+  position: fixed;
+  z-index: 54;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.9);
+  box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.24);
 `
 
 const AuxDisclosure = styled.details`

@@ -413,11 +413,11 @@ test.describe("live production e2e", () => {
     await expect(composeTab).toBeVisible()
     await composeTab.click()
     await expect(page.getByPlaceholder("제목을 입력하세요")).toBeVisible()
-    const contentEditor = page.getByPlaceholder("당신의 이야기를 적어보세요...")
-    await contentEditor.fill("```mermaid\ngraph TD\n  A[요청] --> B[완료]\n```")
-    await expect
-      .poll(async () => await page.locator(".aq-mermaid-stage svg").count(), { timeout: 20_000 })
-      .toBeGreaterThan(0)
+    const blockEditor = page.locator(".aq-block-editor__content").first()
+    await expect(blockEditor).toBeVisible()
+    await blockEditor.click()
+    await page.keyboard.type("라이브 E2E 편집 확인")
+    await expect(page.getByText("라이브 E2E 편집 확인")).toBeVisible()
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)

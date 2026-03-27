@@ -41,49 +41,60 @@ export default ServiceCard
 const StyledTitle = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem;
-  margin-bottom: 0.75rem;
-  font-size: 1.05rem;
-  line-height: 1.35;
+  gap: 0.68rem;
+  padding: 0.1rem 0;
+  margin-bottom: 1rem;
+  font-size: 1.22rem;
+  line-height: 1.3;
   font-weight: 800;
 
   .titleEmoji {
-    font-size: 1.15rem;
+    font-size: 1.38rem;
     flex: 0 0 auto;
   }
 `
 
 const StyledWrapper = styled.div`
-  display: flex;
-  padding: 0.15rem 0 0.2rem;
-  margin-bottom: 2.25rem;
-  flex-direction: column;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
+  display: grid;
+  gap: 0.72rem;
+  padding: 1rem 1.05rem;
+  margin-bottom: 2.15rem;
+  border-radius: 24px;
+  background: ${({ theme }) => theme.colors.gray2};
+
   > a {
     display: flex;
-    padding: 0.75rem 0.1rem;
-    gap: 0.75rem;
+    min-height: 56px;
+    padding: 0.5rem 0.35rem;
+    gap: 0.88rem;
     align-items: center;
-    border-radius: 0;
+    border-radius: 16px;
     color: ${({ theme }) => theme.colors.gray11};
     cursor: pointer;
+    text-decoration: none;
 
     &:hover {
       color: ${({ theme }) => theme.colors.gray12};
-      background: transparent;
+      background: rgba(255, 255, 255, 0.02);
       text-decoration: underline;
       text-underline-offset: 3px;
     }
     .icon {
-      font-size: 1.5rem;
-      line-height: 2rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.9rem;
+      height: 2.9rem;
+      flex: 0 0 2.9rem;
+      border-radius: 999px;
+      background: ${({ theme }) => theme.colors.gray3};
+      font-size: 1.42rem;
+      line-height: 1;
     }
     .name {
-      font-size: 0.95rem;
-      line-height: 1.35rem;
-      font-weight: 500;
+      font-size: 0.98rem;
+      line-height: 1.4rem;
+      font-weight: 600;
     }
   }
 `

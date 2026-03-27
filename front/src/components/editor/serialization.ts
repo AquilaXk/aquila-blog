@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
+import type { CalloutKind } from "src/libs/markdown/rendering"
 import {
   clampImageWidthPx,
   normalizeImageAlign,
@@ -14,6 +15,21 @@ export type ImageBlockAttrs = {
   title?: string
   widthPx?: number | null
   align?: "left" | "center" | "wide" | "full"
+}
+
+export type MermaidBlockAttrs = {
+  source: string
+}
+
+export type CalloutBlockAttrs = {
+  kind: CalloutKind
+  title: string
+  body: string
+}
+
+export type ToggleBlockAttrs = {
+  title: string
+  body: string
 }
 
 export type RawMarkdownBlockPayload = {
@@ -37,6 +53,27 @@ type EditorTextNode = {
 const EMPTY_DOC: BlockEditorDoc = {
   type: "doc",
   content: [{ type: "paragraph" }],
+}
+
+const CALL_OUT_KIND_MAP: Record<string, CalloutKind> = {
+  TIP: "tip",
+  INFO: "info",
+  NOTE: "info",
+  WARNING: "warning",
+  CAUTION: "warning",
+  OUTLINE: "outline",
+  EXAMPLE: "example",
+  SUMMARY: "summary",
+  IMPORTANT: "summary",
+}
+
+const CALL_OUT_KIND_LABELS: Record<CalloutKind, string> = {
+  tip: "TIP",
+  info: "INFO",
+  warning: "WARNING",
+  outline: "OUTLINE",
+  example: "EXAMPLE",
+  summary: "SUMMARY",
 }
 
 const isBlankLine = (line: string) => line.trim().length === 0
@@ -88,9 +125,26 @@ const isBlockquoteLine = (line: string) => {
   return match ? match[1] : null
 }
 
-const isToggleStart = (line: string) => /^:::toggle\b/i.test(line.trim())
+const parseToggleStart = (line: string) => {
+  const match = line.trim().match(/^:::toggle(?:\s+(.*))?$/i)
+  if (!match) return null
+  return {
+    title: (match[1] || "").trim(),
+  }
+}
 
-const isCalloutStart = (line: string) => /^\s*>\s*\[![A-Z]+\]/.test(line)
+const parseCalloutStart = (line: string) => {
+  const match = line.match(/^\s*>\s*\[!([A-Za-z]+)\](?:\s*(.*))?$/)
+  if (!match) return null
+
+  const kind = CALL_OUT_KIND_MAP[(match[1] || "").toUpperCase()]
+  if (!kind) return null
+
+  return {
+    kind,
+    title: (match[2] || "").trim(),
+  }
+}
 
 const isTableSeparatorLine = (line: string) =>
   /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line)
@@ -203,44 +257,50 @@ const buildParagraphNode = (text: string): JSONContent => ({
   content: buildInlineContent(text),
 })
 
-const collectUntil = (
-  lines: string[],
-  startIndex: number,
-  predicate: (line: string) => boolean
-) => {
-  const collected: string[] = []
-  let index = startIndex
-
-  while (index < lines.length) {
-    const line = lines[index]
-    collected.push(line)
-    index += 1
-    if (predicate(line)) break
+const promoteCalloutTitle = (headerTitle: string, bodyLines: string[]) => {
+  if (headerTitle) {
+    return {
+      title: headerTitle,
+      bodyLines,
+    }
   }
 
-  return { lines: collected, nextIndex: index }
+  const firstBodyLineIndex = bodyLines.findIndex((line) => line.trim().length > 0)
+  if (firstBodyLineIndex < 0) {
+    return {
+      title: "",
+      bodyLines,
+    }
+  }
+
+  const originalLine = bodyLines[firstBodyLineIndex]
+  const trimmedLine = originalLine.trim()
+  const headingMatch = trimmedLine.match(/^#{1,6}\s+(.+)$/)
+  if (headingMatch) {
+    return {
+      title: (headingMatch[1] || "").trim(),
+      bodyLines: bodyLines.filter((_, index) => index !== firstBodyLineIndex),
+    }
+  }
+
+  const boldMatch = trimmedLine.match(/^(?:[-*+]\s+)?(?:\*\*(.+?)\*\*|__(.+?)__)(.*)$/)
+  const promotedTitle = (boldMatch?.[1] || boldMatch?.[2] || "").trim()
+  if (!promotedTitle) {
+    return {
+      title: "",
+      bodyLines,
+    }
+  }
+
+  const remainingLine = (boldMatch?.[3] || "").trim()
+
+  return {
+    title: promotedTitle,
+    bodyLines: remainingLine
+      ? bodyLines.map((line, index) => (index === firstBodyLineIndex ? remainingLine : line))
+      : bodyLines.filter((_, index) => index !== firstBodyLineIndex),
+  }
 }
-
-const toRawBlockNode = (markdown: string, reason: string): JSONContent => ({
-  type: "rawMarkdownBlock",
-  attrs: {
-    markdown,
-    reason,
-  },
-})
-
-const isSupportedBlockStart = (line: string, nextLine?: string) =>
-  isBlankLine(line) ||
-  Boolean(isFenceStart(line)) ||
-  Boolean(isHeadingLine(line)) ||
-  isDividerLine(line) ||
-  Boolean(parseStandaloneMarkdownImageLine(line)) ||
-  Boolean(isBulletListItem(line)) ||
-  Boolean(isOrderedListItem(line)) ||
-  Boolean(isBlockquoteLine(line)) ||
-  (isLikelyTableRow(line) && Boolean(nextLine && isTableSeparatorLine(nextLine))) ||
-  isToggleStart(line) ||
-  isCalloutStart(line)
 
 const collectParagraphLines = (lines: string[], startIndex: number) => {
   const collected: string[] = []
@@ -261,6 +321,14 @@ const collectParagraphLines = (lines: string[], startIndex: number) => {
     nextIndex: index,
   }
 }
+
+const toRawBlockNode = (markdown: string, reason: string): JSONContent => ({
+  type: "rawMarkdownBlock",
+  attrs: {
+    markdown,
+    reason,
+  },
+})
 
 const createListNode = (
   type: "bulletList" | "orderedList",
@@ -299,6 +367,36 @@ const createTableNode = (rows: string[][]): JSONContent => {
   }
 }
 
+const createMermaidNode = (source: string): JSONContent => ({
+  type: "mermaidBlock",
+  attrs: {
+    source,
+  },
+})
+
+const createCalloutNode = (attrs: CalloutBlockAttrs): JSONContent => ({
+  type: "calloutBlock",
+  attrs,
+})
+
+const createToggleNode = (attrs: ToggleBlockAttrs): JSONContent => ({
+  type: "toggleBlock",
+  attrs,
+})
+
+const isSupportedBlockStart = (line: string, nextLine?: string) =>
+  isBlankLine(line) ||
+  Boolean(isFenceStart(line)) ||
+  Boolean(isHeadingLine(line)) ||
+  isDividerLine(line) ||
+  Boolean(parseStandaloneMarkdownImageLine(line)) ||
+  Boolean(isBulletListItem(line)) ||
+  Boolean(isOrderedListItem(line)) ||
+  Boolean(isBlockquoteLine(line)) ||
+  (isLikelyTableRow(line) && Boolean(nextLine && isTableSeparatorLine(nextLine))) ||
+  Boolean(parseToggleStart(line)) ||
+  Boolean(parseCalloutStart(line))
+
 export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
   const normalizedMarkdown = markdown.replace(/\r\n?/g, "\n").trim()
   if (!normalizedMarkdown) return EMPTY_DOC
@@ -320,11 +418,13 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
     if (fence) {
       const collected = [line]
       let pointer = index + 1
+      let closed = false
 
       while (pointer < lines.length) {
         collected.push(lines[pointer])
         if (isFenceEnd(lines[pointer], fence.marker, fence.fence.length)) {
           pointer += 1
+          closed = true
           break
         }
         pointer += 1
@@ -334,7 +434,14 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       const language = fence.info.split(/\s+/)[0]?.trim() || ""
 
       if (language.toLowerCase() === "mermaid") {
-        content.push(toRawBlockNode(markdownBlock, "unsupported-mermaid"))
+        if (!closed) {
+          content.push(toRawBlockNode(markdownBlock, "unsupported-mermaid"))
+        } else {
+          const source = collected.slice(1, -1).join("\n").trim()
+          content.push(createMermaidNode(source))
+        }
+      } else if (!closed) {
+        content.push(toRawBlockNode(markdownBlock, "manual-raw"))
       } else {
         const codeContent = collected.slice(1, -1).join("\n")
         content.push({
@@ -350,20 +457,71 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       continue
     }
 
-    if (isToggleStart(line)) {
-      const collected = collectUntil(lines, index, (candidate) => candidate.trim() === ":::")
-      content.push(toRawBlockNode(collected.lines.join("\n"), "unsupported-toggle"))
-      index = collected.nextIndex
+    const toggleStart = parseToggleStart(line)
+    if (toggleStart) {
+      const collected = [line]
+      const bodyLines: string[] = []
+      let pointer = index + 1
+      let closed = false
+
+      while (pointer < lines.length) {
+        const current = lines[pointer]
+        collected.push(current)
+        if (current.trim() === ":::") {
+          closed = true
+          pointer += 1
+          break
+        }
+        bodyLines.push(current)
+        pointer += 1
+      }
+
+      if (!closed) {
+        content.push(toRawBlockNode(collected.join("\n"), "unsupported-toggle"))
+      } else {
+        content.push(
+          createToggleNode({
+            title: toggleStart.title,
+            body: bodyLines.join("\n").trim(),
+          })
+        )
+      }
+
+      index = pointer
       continue
     }
 
-    if (isCalloutStart(line)) {
-      const collected = collectUntil(lines, index, (candidate) => {
-        const nextCandidate = lines[lines.indexOf(candidate) + 1]
-        return !nextCandidate || (!nextCandidate.trim().startsWith(">") && !isBlankLine(nextCandidate))
-      })
-      content.push(toRawBlockNode(collected.lines.join("\n"), "unsupported-callout"))
-      index = collected.nextIndex
+    const calloutStart = parseCalloutStart(line)
+    if (calloutStart) {
+      const collected = [line]
+      const bodyLines: string[] = []
+      let pointer = index + 1
+
+      while (pointer < lines.length) {
+        const current = lines[pointer]
+        if (isBlankLine(current)) {
+          collected.push(current)
+          bodyLines.push("")
+          pointer += 1
+          continue
+        }
+
+        const blockquoteText = isBlockquoteLine(current)
+        if (blockquoteText === null) break
+        collected.push(current)
+        bodyLines.push(blockquoteText)
+        pointer += 1
+      }
+
+      const promoted = promoteCalloutTitle(calloutStart.title, bodyLines)
+      content.push(
+        createCalloutNode({
+          kind: calloutStart.kind,
+          title: promoted.title,
+          body: promoted.bodyLines.join("\n").trim(),
+        })
+      )
+      index = pointer
       continue
     }
 
@@ -526,7 +684,9 @@ const serializeTable = (node: JSONContent) => {
   if (rows.length === 0) return ""
 
   const serializedRows = rows.map((row) =>
-    (row.content || []).map((cell) => serializeParagraphLikeNode(cell.content?.[0] || cell)).map(escapePipeText)
+    (row.content || [])
+      .map((cell) => serializeParagraphLikeNode(cell.content?.[0] || cell))
+      .map(escapePipeText)
   )
   const header = serializedRows[0]
   const separator = header.map(() => "---")
@@ -537,6 +697,28 @@ const serializeTable = (node: JSONContent) => {
     `| ${separator.join(" | ")} |`,
     ...body.map((row) => `| ${row.join(" | ")} |`),
   ].join("\n")
+}
+
+const serializeCalloutBlock = (attrs: Partial<CalloutBlockAttrs>) => {
+  const kind = attrs.kind ? CALL_OUT_KIND_LABELS[attrs.kind] : "TIP"
+  const title = String(attrs.title || "").trim()
+  const header = title ? `> [!${kind}] ${title}` : `> [!${kind}]`
+  const bodyLines = String(attrs.body || "").replace(/\r\n?/g, "\n").split("\n")
+  const normalizedBodyLines =
+    bodyLines.length === 1 && bodyLines[0].trim().length === 0 ? [] : bodyLines
+
+  return [header, ...normalizedBodyLines.map((line) => (line ? `> ${line}` : ">"))].join("\n")
+}
+
+const serializeToggleBlock = (attrs: Partial<ToggleBlockAttrs>) => {
+  const title = String(attrs.title || "").trim()
+  const body = String(attrs.body || "").trim()
+  return [`:::toggle ${title}`.trimEnd(), body, ":::"].filter(Boolean).join("\n")
+}
+
+const serializeMermaidBlock = (attrs: Partial<MermaidBlockAttrs>) => {
+  const source = String(attrs.source || "").trim()
+  return ["```mermaid", source, "```"].join("\n")
 }
 
 export const serializeNode = (node: JSONContent): string => {
@@ -577,6 +759,12 @@ export const serializeNode = (node: JSONContent): string => {
         widthPx: node.attrs?.widthPx ? clampImageWidthPx(Number(node.attrs.widthPx)) : undefined,
         align: normalizeImageAlign(String(node.attrs?.align || "")),
       })
+    case "mermaidBlock":
+      return serializeMermaidBlock(node.attrs as MermaidBlockAttrs)
+    case "calloutBlock":
+      return serializeCalloutBlock(node.attrs as CalloutBlockAttrs)
+    case "toggleBlock":
+      return serializeToggleBlock(node.attrs as ToggleBlockAttrs)
     case "rawMarkdownBlock":
       return String(node.attrs?.markdown || "")
     default:

@@ -2,12 +2,14 @@
 
 ## 0. 현재 적용 상태
 
-- 2026-03-27 기준 1차 block editor가 `/admin/posts/new`에 feature flag 병행 방식으로 도입되었다.
+- 2026-03-27 기준 `/admin/posts/new`에는 block editor 2차 범위가 feature flag 병행 방식으로 도입되었다.
 - flag:
   - `NEXT_PUBLIC_EDITOR_V2_ENABLED=false` 또는 미설정: 기존 `textarea + preview`
   - `NEXT_PUBLIC_EDITOR_V2_ENABLED=true`: `TipTap + ProseMirror` 기반 block editor
-- 현재 v2는 `paragraph / heading / list / blockquote / link / divider / code block / table / image`를 직접 편집한다.
-- `mermaid / callout / toggle / 기타 커스텀 문법`은 문서 전체 fallback이 아니라 block-level `raw markdown block` 카드로 보존한다.
+  - `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED=true`: Mermaid node view + lazy preview 활성화
+- 현재 v2는 `paragraph / heading / list / blockquote / link / divider / code block(language) / table / image / callout / toggle`를 직접 편집한다.
+- Mermaid는 별도 flag가 꺼져 있으면 `raw markdown block`으로 유지하고, 켜져 있으면 node view로 승격한다.
+- 미지원 커스텀 문법은 문서 전체 fallback이 아니라 block-level `raw markdown block` 카드로 보존한다.
 - canonical 저장 포맷은 계속 markdown string이며, 공개 상세 렌더러와 저장 API는 변경하지 않았다.
 
 ## 1. 목적
@@ -145,7 +147,7 @@
 - divider
 - 링크
 
-### Phase 2에서 지원
+### Phase 2에서 지원(현재 반영)
 
 - callout (`TIP`, `INFO`, `WARNING`, `OUTLINE`, `EXAMPLE`, `SUMMARY`)
 - toggle
@@ -273,7 +275,8 @@ toggle 예시
 
 종료 조건
 
-- 현재 markdown guide 기능을 block editor에서 모두 대체
+- callout/toggle/code language picker/slash command가 block editor 기본 surface에서 직접 동작
+- Mermaid는 별도 flag on 시 node view + lazy preview로 동작
 
 ### Phase 3. 기본값 전환
 
@@ -296,7 +299,6 @@ toggle 예시
 권장 flag
 
 - `NEXT_PUBLIC_EDITOR_V2_ENABLED`
-- `NEXT_PUBLIC_EDITOR_V2_IMAGE_RESIZE_ENABLED`
 - `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED`
 
 규칙
@@ -349,17 +351,14 @@ toggle 예시
 - iPhone 15 Pro / iPad mini E2E를 기본 회귀로 포함
 - resize/pan은 pointer + touch 공통 계층으로 구현
 
-## 12. 가장 현실적인 1차 구현 범위
+## 12. 현재 권장 운영 범위
 
-바로 시작한다면 1차 범위는 여기까지가 적절하다.
+현재 기준으로 운영에 권장하는 범위는 다음이다.
 
-1. TipTap shell 도입
-2. paragraph/heading/list/code/table/link/image/divider 구현
-3. 이미지 업로드 + 드래그 리사이즈 + markdown `{width=... align=...}` 저장
-4. 기존 상세 렌더러와 결과 동일성 검증
-5. textarea 모드는 fallback으로 유지
-
-이 범위를 넘어서 `callout/toggle/mermaid`까지 한 번에 옮기면 일정과 회귀 리스크가 커진다.
+1. `NEXT_PUBLIC_EDITOR_V2_ENABLED`는 기본 `false` 유지
+2. callout/toggle/code language picker/slash command는 2차 범위로 관찰
+3. Mermaid node는 `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED`로 별도 관찰
+4. textarea 모드는 3차 기본값 전환 전까지 fallback으로 유지
 
 ## 13. 결론
 

@@ -60,6 +60,7 @@ import {
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 
 const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED === "true"
+const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
@@ -5094,7 +5095,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PaneHeader>
                   <div>
                     <PaneTitle>블록 작성</PaneTitle>
-                    <PaneDescription>기본 블록은 바로 편집하고, Mermaid/콜아웃/토글은 원문 블록으로 안전하게 보존합니다.</PaneDescription>
+                    <PaneDescription>
+                      콜아웃·토글은 바로 편집하고, Mermaid는 {BLOCK_EDITOR_V2_MERMAID_ENABLED ? "다이어그램 블록" : "원문 블록"}으로 관리합니다.
+                    </PaneDescription>
                   </div>
                   <PaneChip>{lineCount} lines</PaneChip>
                 </PaneHeader>
@@ -5102,6 +5105,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   value={postContent}
                   onChange={setPostContent}
                   onUploadImage={handleBlockEditorImageUpload}
+                  enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
                   disabled={loadingKey.length > 0}
                   preview={
                     <PreviewCard>

@@ -1,8 +1,17 @@
+import styled from "@emotion/styled"
 import { Node, mergeAttributes } from "@tiptap/core"
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
-import styled from "@emotion/styled"
-import { PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react"
+import {
+  PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
+import type { CalloutKind } from "src/libs/markdown/rendering"
 import { clampImageWidthPx, normalizeImageAlign } from "src/libs/markdown/rendering"
+import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 
 const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
   "unsupported-mermaid": "Mermaid 원문 블록",
@@ -18,16 +27,37 @@ const IMAGE_ALIGN_OPTIONS = [
   { value: "full", label: "전체 폭" },
 ] as const
 
+const CALLOUT_KIND_OPTIONS: Array<{ value: CalloutKind; label: string }> = [
+  { value: "tip", label: "TIP" },
+  { value: "info", label: "INFO" },
+  { value: "warning", label: "WARNING" },
+  { value: "outline", label: "OUTLINE" },
+  { value: "example", label: "EXAMPLE" },
+  { value: "summary", label: "SUMMARY" },
+]
+
 const DEFAULT_IMAGE_WIDTH = 720
+const RESIZE_MIN_WIDTH = 240
+const TEXTAREA_DEBOUNCE_MS = 180
+const MERMAID_PREVIEW_ROOT_MARGIN = "240px 0px"
+const MERMAID_TEMPLATE = ["flowchart TD", "  A[사용자 요청] --> B{검증}", "  B -->|OK| C[처리]", "  B -->|Fail| D[오류 반환]"].join(
+  "\n"
+)
 
-const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
-  const [draft, setDraft] = useState(String(node.attrs?.markdown || ""))
-  const debounceRef = useRef<number | null>(null)
-  const reason = String(node.attrs?.reason || "manual-raw")
-
+const useAutosizeTextarea = (ref: { current: HTMLTextAreaElement | null }, value: string) => {
   useEffect(() => {
-    setDraft(String(node.attrs?.markdown || ""))
-  }, [node.attrs?.markdown])
+    const element = ref.current
+    if (!element) return
+    element.style.height = "0px"
+    element.style.height = `${Math.max(element.scrollHeight, 88)}px`
+  }, [ref, value])
+}
+
+const useDebouncedAttributeCommit = (
+  updateAttributes: NodeViewProps["updateAttributes"],
+  delay = TEXTAREA_DEBOUNCE_MS
+) => {
+  const debounceRef = useRef<number | null>(null)
 
   useEffect(() => {
     return () => {
@@ -37,10 +67,9 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
     }
   }, [])
 
-  const scheduleCommit = (nextValue: string) => {
-    setDraft(nextValue)
+  return (attrs: Record<string, unknown>) => {
     if (typeof window === "undefined") {
-      updateAttributes({ markdown: nextValue })
+      updateAttributes(attrs)
       return
     }
 
@@ -49,10 +78,231 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
     }
 
     debounceRef.current = window.setTimeout(() => {
-      updateAttributes({ markdown: nextValue })
+      updateAttributes(attrs)
       debounceRef.current = null
-    }, 220)
+    }, delay)
   }
+}
+
+const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const previewRootRef = useRef<HTMLDivElement>(null)
+  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes)
+
+  useAutosizeTextarea(textareaRef, draftSource)
+
+  useEffect(() => {
+    setDraftSource(String(node.attrs?.source || MERMAID_TEMPLATE))
+  }, [node.attrs?.source])
+
+  useEffect(() => {
+    const target = previewRootRef.current
+    if (!target || typeof window === "undefined") return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setIsPreviewVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: MERMAID_PREVIEW_ROOT_MARGIN }
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [])
+
+  const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
+  useMermaidEffect(previewRootRef, `editor-mermaid:${normalizedSource}`, isPreviewVisible && normalizedSource.length > 0)
+
+  return (
+    <RichBlockWrapper data-selected={selected}>
+      <RichBlockHeader>
+        <div>
+          <strong>Mermaid</strong>
+          <span>본문에 저장될 원문과 미리보기를 함께 관리합니다.</span>
+        </div>
+      </RichBlockHeader>
+      <BlockTextarea
+        ref={textareaRef}
+        value={draftSource}
+        spellCheck={false}
+        onChange={(event) => {
+          const nextValue = event.target.value
+          setDraftSource(nextValue)
+          scheduleCommit({ source: nextValue })
+        }}
+      />
+      <MermaidPreviewCard ref={previewRootRef}>
+        {normalizedSource ? (
+          isPreviewVisible ? (
+            <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending">
+              <code>{normalizedSource}</code>
+              <div className="aq-mermaid-stage" />
+            </pre>
+          ) : (
+            <MermaidPreviewPlaceholder>스크롤 구간에 들어오면 다이어그램 미리보기를 렌더합니다.</MermaidPreviewPlaceholder>
+          )
+        ) : (
+          <MermaidPreviewPlaceholder>Mermaid 원문을 입력하면 다이어그램 미리보기가 표시됩니다.</MermaidPreviewPlaceholder>
+        )}
+      </MermaidPreviewCard>
+    </RichBlockWrapper>
+  )
+}
+
+const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
+  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
+  const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes)
+
+  useAutosizeTextarea(bodyRef, draftBody)
+
+  useEffect(() => {
+    setDraftKind((node.attrs?.kind as CalloutKind) || "tip")
+    setDraftTitle(String(node.attrs?.title || ""))
+    setDraftBody(String(node.attrs?.body || ""))
+  }, [node.attrs?.kind, node.attrs?.title, node.attrs?.body])
+
+  const commit = (next: Partial<{ kind: CalloutKind; title: string; body: string }>) => {
+    const nextAttrs = {
+      kind: next.kind ?? draftKind,
+      title: next.title ?? draftTitle,
+      body: next.body ?? draftBody,
+    }
+    scheduleCommit(nextAttrs)
+  }
+
+  return (
+    <RichBlockWrapper data-selected={selected}>
+      <RichBlockHeader>
+        <div>
+          <strong>콜아웃</strong>
+          <span>GitHub callout canonical markdown로 저장됩니다.</span>
+        </div>
+        <BlockSelect
+          value={draftKind}
+          onChange={(event) => {
+            const nextKind = event.target.value as CalloutKind
+            setDraftKind(nextKind)
+            commit({ kind: nextKind })
+          }}
+        >
+          {CALLOUT_KIND_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </BlockSelect>
+      </RichBlockHeader>
+      <BlockInput
+        value={draftTitle}
+        placeholder="콜아웃 제목"
+        onChange={(event) => {
+          const nextTitle = event.target.value
+          setDraftTitle(nextTitle)
+          commit({ title: nextTitle })
+        }}
+      />
+      <BlockTextarea
+        ref={bodyRef}
+        value={draftBody}
+        placeholder="콜아웃 본문"
+        spellCheck={false}
+        onChange={(event) => {
+          const nextBody = event.target.value
+          setDraftBody(nextBody)
+          commit({ body: nextBody })
+        }}
+      />
+      <CalloutPreviewCard data-kind={draftKind}>
+        <strong>{CALLOUT_KIND_OPTIONS.find((option) => option.value === draftKind)?.label}</strong>
+        {draftTitle ? <h4>{draftTitle}</h4> : null}
+        <p>{draftBody || "콜아웃 본문을 입력하세요."}</p>
+      </CalloutPreviewCard>
+    </RichBlockWrapper>
+  )
+}
+
+const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || "더 보기"))
+  const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes)
+
+  useAutosizeTextarea(bodyRef, draftBody)
+
+  useEffect(() => {
+    setDraftTitle(String(node.attrs?.title || "더 보기"))
+    setDraftBody(String(node.attrs?.body || ""))
+  }, [node.attrs?.title, node.attrs?.body])
+
+  const commit = (next: Partial<{ title: string; body: string }>) => {
+    scheduleCommit({
+      title: next.title ?? draftTitle,
+      body: next.body ?? draftBody,
+    })
+  }
+
+  return (
+    <RichBlockWrapper data-selected={selected}>
+      <RichBlockHeader>
+        <div>
+          <strong>토글</strong>
+          <span>`:::toggle 제목` canonical markdown로 저장됩니다.</span>
+        </div>
+      </RichBlockHeader>
+      <BlockInput
+        value={draftTitle}
+        placeholder="토글 제목"
+        onChange={(event) => {
+          const nextTitle = event.target.value
+          setDraftTitle(nextTitle)
+          commit({ title: nextTitle })
+        }}
+      />
+      <BlockTextarea
+        ref={bodyRef}
+        value={draftBody}
+        placeholder="토글 내부 본문"
+        spellCheck={false}
+        onChange={(event) => {
+          const nextBody = event.target.value
+          setDraftBody(nextBody)
+          commit({ body: nextBody })
+        }}
+      />
+      <TogglePreviewCard open={isPreviewOpen}>
+        <summary
+          onClick={(event) => {
+            event.preventDefault()
+            setIsPreviewOpen((prev) => !prev)
+          }}
+        >
+          {draftTitle || "더 보기"}
+        </summary>
+        {isPreviewOpen ? <p>{draftBody || "토글 내부 본문을 입력하세요."}</p> : null}
+      </TogglePreviewCard>
+    </RichBlockWrapper>
+  )
+}
+
+const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draft, setDraft] = useState(String(node.attrs?.markdown || ""))
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const reason = String(node.attrs?.reason || "manual-raw")
+  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes, 220)
+
+  useAutosizeTextarea(textareaRef, draft)
+
+  useEffect(() => {
+    setDraft(String(node.attrs?.markdown || ""))
+  }, [node.attrs?.markdown])
 
   return (
     <RawBlockWrapper data-selected={selected}>
@@ -60,9 +310,14 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
         <strong>{RAW_BLOCK_REASON_LABELS[reason] || "원문 블록"}</strong>
         <span>지원되지 않는 문법은 원문 그대로 보존합니다.</span>
       </RawBlockHeader>
-      <RawBlockTextarea
+      <BlockTextarea
+        ref={textareaRef}
         value={draft}
-        onChange={(event) => scheduleCommit(event.target.value)}
+        onChange={(event) => {
+          const nextValue = event.target.value
+          setDraft(nextValue)
+          scheduleCommit({ markdown: nextValue })
+        }}
         spellCheck={false}
       />
     </RawBlockWrapper>
@@ -112,7 +367,10 @@ const ResizableImageView = ({ node, updateAttributes, selected }: NodeViewProps)
     if (!activeDrag) return
     const frameWidth = frameRef.current?.clientWidth || DEFAULT_IMAGE_WIDTH
     const nextWidth = clampImageWidthPx(
-      Math.min(frameWidth, Math.max(240, activeDrag.startWidth + (event.clientX - activeDrag.startX)))
+      Math.min(
+        frameWidth,
+        Math.max(RESIZE_MIN_WIDTH, activeDrag.startWidth + (event.clientX - activeDrag.startX))
+      )
     )
     draftWidthRef.current = nextWidth
     if (typeof window !== "undefined" && rafRef.current === null) {
@@ -201,6 +459,102 @@ const ResizableImageView = ({ node, updateAttributes, selected }: NodeViewProps)
   )
 }
 
+export const MermaidBlock = Node.create({
+  name: "mermaidBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  isolating: true,
+
+  addAttributes() {
+    return {
+      source: {
+        default: MERMAID_TEMPLATE,
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-mermaid-block]" }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-mermaid-block": "true" })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(MermaidBlockView)
+  },
+})
+
+export const CalloutBlock = Node.create({
+  name: "calloutBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  isolating: true,
+
+  addAttributes() {
+    return {
+      kind: {
+        default: "tip",
+      },
+      title: {
+        default: "",
+      },
+      body: {
+        default: "",
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-callout-block]" }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-callout-block": "true" })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(CalloutBlockView)
+  },
+})
+
+export const ToggleBlock = Node.create({
+  name: "toggleBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  isolating: true,
+
+  addAttributes() {
+    return {
+      title: {
+        default: "더 보기",
+      },
+      body: {
+        default: "",
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-toggle-block]" }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-toggle-block": "true" })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ToggleBlockView)
+  },
+})
+
 export const RawMarkdownBlock = Node.create({
   name: "rawMarkdownBlock",
   group: "block",
@@ -273,6 +627,223 @@ export const ResizableImage = Node.create({
   },
 })
 
+const sharedTextareaStyles = ({ minHeight = "6rem" }: { minHeight?: string } = {}) => `
+  min-height: ${minHeight};
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.95rem;
+  background: rgba(10, 12, 16, 0.92);
+  color: var(--color-gray12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  padding: 1rem;
+`
+
+const BlockInput = styled.input`
+  min-height: 2.75rem;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.95rem;
+  background: rgba(10, 12, 16, 0.92);
+  color: var(--color-gray12);
+  font-size: 0.94rem;
+  font-weight: 600;
+  padding: 0 1rem;
+`
+
+const BlockTextarea = styled.textarea<{ rows?: number }>`
+  ${({ rows }) =>
+    sharedTextareaStyles({ minHeight: rows ? `${Math.max(Number(rows) * 1.8, 6)}rem` : "6rem" })}
+`
+
+const BlockSelect = styled.select`
+  min-height: 2.2rem;
+  min-width: 8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 16, 0.92);
+  color: var(--color-gray12);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0 0.95rem;
+`
+
+const RichBlockWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 1rem 0;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 1rem;
+  background: rgba(18, 21, 26, 0.94);
+  padding: 1rem;
+
+  &[data-selected="true"] {
+    border-color: rgba(59, 130, 246, 0.44);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.14);
+  }
+`
+
+const RichBlockHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+
+  strong {
+    display: block;
+    font-size: 0.95rem;
+    color: var(--color-gray12);
+  }
+
+  span {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.82rem;
+    color: var(--color-gray10);
+  }
+`
+
+const MermaidPreviewCard = styled.div`
+  min-height: 8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(13, 15, 18, 0.96);
+  padding: 0.85rem;
+
+  .aq-mermaid {
+    margin: 0;
+  }
+`
+
+const MermaidPreviewPlaceholder = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6rem;
+  color: var(--color-gray10);
+  font-size: 0.84rem;
+  text-align: center;
+`
+
+const CalloutPreviewCard = styled.div`
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.95rem 1rem;
+
+  strong {
+    display: inline-flex;
+    min-height: 1.8rem;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0 0.75rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+  }
+
+  h4 {
+    margin: 0.75rem 0 0.3rem;
+    font-size: 1rem;
+    color: var(--color-gray12);
+  }
+
+  p {
+    margin: 0;
+    color: var(--color-gray11);
+    white-space: pre-wrap;
+  }
+
+  &[data-kind="tip"] {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.2);
+
+    strong {
+      background: rgba(34, 197, 94, 0.12);
+      color: #86efac;
+    }
+  }
+
+  &[data-kind="info"] {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.2);
+
+    strong {
+      background: rgba(59, 130, 246, 0.14);
+      color: #93c5fd;
+    }
+  }
+
+  &[data-kind="warning"] {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.2);
+
+    strong {
+      background: rgba(245, 158, 11, 0.14);
+      color: #fcd34d;
+    }
+  }
+
+  &[data-kind="outline"] {
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.2);
+
+    strong {
+      background: rgba(148, 163, 184, 0.14);
+      color: #cbd5e1;
+    }
+  }
+
+  &[data-kind="example"] {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.2);
+
+    strong {
+      background: rgba(16, 185, 129, 0.14);
+      color: #6ee7b7;
+    }
+  }
+
+  &[data-kind="summary"] {
+    background: rgba(168, 85, 247, 0.08);
+    border-color: rgba(168, 85, 247, 0.2);
+
+    strong {
+      background: rgba(168, 85, 247, 0.14);
+      color: #d8b4fe;
+    }
+  }
+`
+
+const TogglePreviewCard = styled.details`
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(13, 15, 18, 0.96);
+  padding: 0.15rem 0.15rem 0.65rem;
+
+  summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.85rem 0.95rem;
+    font-weight: 700;
+    color: var(--color-gray12);
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  p {
+    margin: 0;
+    padding: 0 0.95rem 0.1rem;
+    color: var(--color-gray11);
+    white-space: pre-wrap;
+  }
+`
+
 const RawBlockWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
@@ -306,30 +877,11 @@ const RawBlockHeader = styled.div`
   }
 `
 
-const RawBlockTextarea = styled.textarea`
-  min-height: 10rem;
-  width: 100%;
-  resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.85rem;
-  background: rgba(10, 12, 16, 0.92);
-  color: var(--color-gray12);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-  font-size: 0.88rem;
-  line-height: 1.6;
-  padding: 0.95rem 1rem;
-`
-
 const ImageBlockWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   margin: 1.25rem 0;
-
-  &[data-selected="true"] {
-    ${"" /* visual cue only */}
-  }
 `
 
 const ImageToolbar = styled.div`

@@ -7,9 +7,29 @@ import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
-import { ChangeEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { parseMarkdownToEditorDoc, serializeEditorDocToMarkdown, type BlockEditorDoc, type ImageBlockAttrs } from "./serialization"
-import { RawMarkdownBlock, ResizableImage } from "./extensions"
+import {
+  ChangeEvent,
+  KeyboardEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import {
+  CalloutBlock,
+  MermaidBlock,
+  RawMarkdownBlock,
+  ResizableImage,
+  ToggleBlock,
+} from "./extensions"
+import {
+  parseMarkdownToEditorDoc,
+  serializeEditorDocToMarkdown,
+  type BlockEditorDoc,
+  type ImageBlockAttrs,
+} from "./serialization"
 
 type Props = {
   value: string
@@ -18,6 +38,7 @@ type Props = {
   disabled?: boolean
   className?: string
   preview?: ReactNode
+  enableMermaidBlocks?: boolean
 }
 
 type SlashAction = {
@@ -27,18 +48,75 @@ type SlashAction = {
   run: () => void | Promise<void>
 }
 
-const RAW_BLOCK_PLACEHOLDER = "```mermaid\ngraph TD\n  A[시작] --> B[원문 블록]\n```"
+type ToolbarAction = {
+  id: string
+  label: string
+  run: () => void
+  active: boolean
+}
+
+const RAW_BLOCK_PLACEHOLDER = "```text\n원문 블록\n```"
+const MERMAID_RAW_PLACEHOLDER = "```mermaid\nflowchart TD\n  A[시작] --> B[처리]\n```"
+const CODE_LANGUAGE_OPTIONS = [
+  "text",
+  "bash",
+  "shell",
+  "javascript",
+  "typescript",
+  "jsx",
+  "tsx",
+  "json",
+  "yaml",
+  "kotlin",
+  "java",
+  "sql",
+  "html",
+  "css",
+  "markdown",
+  "mermaid",
+] as const
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
 
-const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, className, preview }: Props) => {
+const downgradeDisabledFeatureNodes = (node: BlockEditorDoc, enableMermaidBlocks: boolean): BlockEditorDoc => {
+  if (!enableMermaidBlocks && node.type === "mermaidBlock") {
+    const source = String(node.attrs?.source || "").trim()
+    return {
+      type: "rawMarkdownBlock",
+      attrs: {
+        markdown: ["```mermaid", source, "```"].join("\n"),
+        reason: "unsupported-mermaid",
+      },
+    }
+  }
+
+  if (!node.content?.length) return node
+
+  return {
+    ...node,
+    content: node.content.map((child) => downgradeDisabledFeatureNodes(child as BlockEditorDoc, enableMermaidBlocks)),
+  }
+}
+
+const BlockEditorShell = ({
+  value,
+  onChange,
+  onUploadImage,
+  disabled = false,
+  className,
+  preview,
+  enableMermaidBlocks = false,
+}: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const [rawMarkdownDraft, setRawMarkdownDraft] = useState(value)
   const [isRawMarkdownOpen, setIsRawMarkdownOpen] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
-  const initialDocRef = useRef(parseMarkdownToEditorDoc(value))
+  const [, setSelectionTick] = useState(0)
+  const initialDocRef = useRef(
+    downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
+  )
 
   const editor = useEditor({
     extensions: [
@@ -59,6 +137,9 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
       TableCell,
       RawMarkdownBlock,
       ResizableImage,
+      CalloutBlock,
+      ToggleBlock,
+      ...(enableMermaidBlocks ? [MermaidBlock] : []),
     ],
     content: initialDocRef.current,
     editable: !disabled,
@@ -100,55 +181,102 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
 
   useEffect(() => {
     if (!editor) return
+    const notifySelection = () => setSelectionTick((prev) => prev + 1)
+    editor.on("selectionUpdate", notifySelection)
+    editor.on("transaction", notifySelection)
+    return () => {
+      editor.off("selectionUpdate", notifySelection)
+      editor.off("transaction", notifySelection)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
     const normalizedIncoming = normalizeMarkdown(value)
     if (normalizedIncoming === lastCommittedMarkdownRef.current) {
       setRawMarkdownDraft(value)
       return
     }
 
-    const nextDoc = parseMarkdownToEditorDoc(value)
+    const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
     editor.commands.setContent(nextDoc, { emitUpdate: false })
     lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
     setRawMarkdownDraft(value)
-  }, [editor, value])
+  }, [editor, enableMermaidBlocks, value])
 
   const focusEditor = useCallback(() => {
     editor?.chain().focus().run()
     setIsSlashMenuOpen(false)
   }, [editor])
 
+  const insertParagraphAfterBlock = useCallback((block: BlockEditorDoc) => {
+    if (!editor) return
+    editor
+      .chain()
+      .focus()
+      .insertContent([block, { type: "paragraph" }])
+      .run()
+    setIsSlashMenuOpen(false)
+  }, [editor])
+
   const insertRawMarkdownBlock = useCallback(
     (markdown = RAW_BLOCK_PLACEHOLDER, reason = "manual-raw") => {
-      if (!editor) return
-      editor
-        .chain()
-        .focus()
-        .insertContent([
-          {
-            type: "rawMarkdownBlock",
-            attrs: {
-              markdown,
-              reason,
-            },
-          },
-          { type: "paragraph" },
-        ])
-        .run()
+      insertParagraphAfterBlock({
+        type: "rawMarkdownBlock",
+        attrs: {
+          markdown,
+          reason,
+        },
+      })
       setIsRawMarkdownOpen(false)
-      setIsSlashMenuOpen(false)
     },
-    [editor]
+    [insertParagraphAfterBlock]
   )
+
+  const insertMermaidBlock = useCallback(() => {
+    if (enableMermaidBlocks) {
+      insertParagraphAfterBlock({
+        type: "mermaidBlock",
+        attrs: {
+          source: "flowchart TD\n  A[시작] --> B[처리]",
+        },
+      })
+      return
+    }
+
+    insertRawMarkdownBlock(MERMAID_RAW_PLACEHOLDER, "unsupported-mermaid")
+  }, [enableMermaidBlocks, insertParagraphAfterBlock, insertRawMarkdownBlock])
+
+  const insertCalloutBlock = useCallback(() => {
+    insertParagraphAfterBlock({
+      type: "calloutBlock",
+      attrs: {
+        kind: "tip",
+        title: "핵심 포인트",
+        body: "콜아웃 본문을 입력하세요.",
+      },
+    })
+  }, [insertParagraphAfterBlock])
+
+  const insertToggleBlock = useCallback(() => {
+    insertParagraphAfterBlock({
+      type: "toggleBlock",
+      attrs: {
+        title: "더 보기",
+        body: "토글 내부 본문을 입력하세요.",
+      },
+    })
+  }, [insertParagraphAfterBlock])
 
   const applyRawMarkdownDraft = useCallback(() => {
     if (!editor) return
-    const nextDoc = parseMarkdownToEditorDoc(rawMarkdownDraft)
+    const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(rawMarkdownDraft), enableMermaidBlocks)
     const serialized = serializeEditorDocToMarkdown(nextDoc)
     editor.commands.setContent(nextDoc, { emitUpdate: false })
     lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
     setRawMarkdownDraft(serialized)
     onChange(serialized)
-  }, [editor, onChange, rawMarkdownDraft])
+  }, [editor, enableMermaidBlocks, onChange, rawMarkdownDraft])
 
   const openLinkPrompt = useCallback(() => {
     if (!editor || typeof window === "undefined") return
@@ -224,7 +352,7 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
       {
         id: "code-block",
         label: "코드 블록",
-        helper: "펜스 코드 블록",
+        helper: "언어 지정 가능",
         run: () => editor.chain().focus().toggleCodeBlock().run(),
       },
       {
@@ -232,6 +360,30 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
         label: "테이블",
         helper: "2열 헤더 포함",
         run: () => editor.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run(),
+      },
+      {
+        id: "callout",
+        label: "콜아웃",
+        helper: "TIP/INFO/WARNING",
+        run: insertCalloutBlock,
+      },
+      {
+        id: "toggle",
+        label: "토글",
+        helper: "접기/펼치기 블록",
+        run: insertToggleBlock,
+      },
+      {
+        id: "mermaid",
+        label: "Mermaid",
+        helper: enableMermaidBlocks ? "다이어그램 블록" : "원문 블록으로 보존",
+        run: insertMermaidBlock,
+      },
+      {
+        id: "image",
+        label: "이미지",
+        helper: "업로드 후 즉시 삽입",
+        run: () => fileInputRef.current?.click(),
       },
       {
         id: "divider",
@@ -242,27 +394,39 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
       {
         id: "raw",
         label: "원문 블록",
-        helper: "Mermaid/토글/콜아웃 보존",
+        helper: "지원되지 않는 markdown 유지",
         run: () => insertRawMarkdownBlock(),
       },
     ]
-  }, [editor, insertRawMarkdownBlock])
+  }, [editor, enableMermaidBlocks, insertCalloutBlock, insertMermaidBlock, insertRawMarkdownBlock, insertToggleBlock])
 
-  const toolbarActions = useMemo(
-    () => [
-      { id: "paragraph", label: "본문", run: () => editor?.chain().focus().setParagraph().run(), active: editor?.isActive("paragraph") },
-      { id: "heading-2", label: "H2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) },
-      { id: "heading-3", label: "H3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) },
-      { id: "bullet-list", label: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") },
-      { id: "ordered-list", label: "번호", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") },
-      { id: "quote", label: "인용", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") },
-      { id: "code-block", label: "코드", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") },
-      { id: "table", label: "테이블", run: () => editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run(), active: editor?.isActive("table") },
-      { id: "link", label: "링크", run: openLinkPrompt, active: editor?.isActive("link") },
-      { id: "divider", label: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
-      { id: "raw", label: "원문", run: () => insertRawMarkdownBlock(), active: false },
-    ],
-    [editor, insertRawMarkdownBlock, openLinkPrompt]
+  const toolbarActions: ToolbarAction[] = [
+    { id: "paragraph", label: "본문", run: () => editor?.chain().focus().setParagraph().run(), active: editor?.isActive("paragraph") ?? false },
+    { id: "heading-2", label: "H2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
+    { id: "heading-3", label: "H3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
+    { id: "bullet-list", label: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
+    { id: "ordered-list", label: "번호", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
+    { id: "quote", label: "인용", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
+    { id: "code-block", label: "코드", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
+    { id: "table", label: "테이블", run: () => editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run(), active: editor?.isActive("table") ?? false },
+    { id: "callout", label: "콜아웃", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
+    { id: "toggle", label: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
+    { id: "mermaid", label: "Mermaid", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
+    { id: "link", label: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
+    { id: "divider", label: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
+    { id: "raw", label: "원문", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
+  ]
+
+  const activeCodeLanguage = ((editor?.getAttributes("codeBlock").language as string | undefined) || "").trim()
+  const isCodeBlockActive = editor?.isActive("codeBlock") ?? false
+
+  const updateCodeBlockLanguage = useCallback(
+    (nextLanguage: string) => {
+      if (!editor) return
+      const normalizedLanguage = nextLanguage.trim()
+      editor.chain().focus().updateAttributes("codeBlock", { language: normalizedLanguage || null }).run()
+    },
+    [editor]
   )
 
   const handleSlashMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -278,7 +442,9 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
       <Toolbar>
         <ToolbarHint>
           <strong>블록 작성기</strong>
-          <span>기본 블록은 바로 편집하고, Mermaid/콜아웃/토글은 원문 블록으로 보존합니다.</span>
+          <span>
+            콜아웃·토글은 직접 편집하고, Mermaid는 {enableMermaidBlocks ? "미리보기 블록" : "원문 블록"}으로 다룹니다.
+          </span>
         </ToolbarHint>
         <ToolbarActions>
           {toolbarActions.map((action) => (
@@ -296,6 +462,23 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
             이미지
           </ToolbarButton>
         </ToolbarActions>
+        {isCodeBlockActive ? (
+          <InlineControlRow>
+            <InlineControlLabel htmlFor="block-editor-code-language">코드 언어</InlineControlLabel>
+            <InlineControlInput
+              id="block-editor-code-language"
+              list="block-editor-code-language-options"
+              value={activeCodeLanguage}
+              onChange={(event) => updateCodeBlockLanguage(event.target.value)}
+              placeholder="예: typescript"
+            />
+            <datalist id="block-editor-code-language-options">
+              {CODE_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+          </InlineControlRow>
+        ) : null}
       </Toolbar>
 
       <HiddenFileInput
@@ -358,11 +541,7 @@ const BlockEditorShell = ({ value, onChange, onUploadImage, disabled = false, cl
               <RawMarkdownButton type="button" onClick={applyRawMarkdownDraft}>
                 원문 반영
               </RawMarkdownButton>
-              <RawMarkdownButton
-                type="button"
-                data-variant="ghost"
-                onClick={() => setRawMarkdownDraft(value)}
-              >
+              <RawMarkdownButton type="button" data-variant="ghost" onClick={() => setRawMarkdownDraft(value)}>
                 원문 되돌리기
               </RawMarkdownButton>
             </RawMarkdownActions>
@@ -443,6 +622,30 @@ const ToolbarButton = styled.button`
     background: rgba(37, 99, 235, 0.16);
     color: #93c5fd;
   }
+`
+
+const InlineControlRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+`
+
+const InlineControlLabel = styled.label`
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-gray10);
+`
+
+const InlineControlInput = styled.input`
+  min-height: 2.2rem;
+  min-width: min(16rem, 100%);
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 15, 18, 0.94);
+  color: var(--color-gray12);
+  font-size: 0.84rem;
+  padding: 0 0.85rem;
 `
 
 const HiddenFileInput = styled.input`
@@ -623,30 +826,30 @@ const RawMarkdownTextarea = styled.textarea`
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   font-size: 0.88rem;
-  line-height: 1.6;
+  line-height: 1.65;
   padding: 1rem;
 `
 
 const RawMarkdownActions = styled.div`
   display: flex;
-  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.6rem;
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
 `
 
 const RawMarkdownButton = styled.button`
-  min-height: 2.2rem;
+  min-height: 2.25rem;
   border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.42);
-  background: rgba(37, 99, 235, 0.16);
-  color: #bfdbfe;
+  border: 1px solid rgba(59, 130, 246, 0.24);
+  background: rgba(37, 99, 235, 0.18);
+  color: #93c5fd;
   font-size: 0.82rem;
   font-weight: 700;
-  padding: 0 0.95rem;
+  padding: 0 1rem;
 
   &[data-variant="ghost"] {
     border-color: rgba(255, 255, 255, 0.08);
     background: rgba(13, 15, 18, 0.94);
-    color: var(--color-gray10);
+    color: var(--color-gray11);
   }
 `

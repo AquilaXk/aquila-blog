@@ -176,8 +176,8 @@ services:
     profiles: ["runtime-split"]
     image: ${BACK_IMAGE:?BACK_IMAGE is required (sha-pinned; latest forbidden)}
     restart: unless-stopped
-    mem_limit: ${BACK_ADMIN_MEM_LIMIT:-384m}
-    mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-192m}
+    mem_limit: ${BACK_ADMIN_MEM_LIMIT:-512m}
+    mem_reservation: ${BACK_ADMIN_MEM_RESERVATION:-256m}
     labels:
       autoheal: "${BACK_AUTOHEAL_ENABLED:-true}"
     healthcheck:

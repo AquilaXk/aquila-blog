@@ -272,7 +272,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const [linkTab, setLinkTab] = useState<LinkTab>("service")
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft")
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
-  const [lastCompletedAction, setLastCompletedAction] = useState<"idle" | "saved" | "published">("idle")
   const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const [loadingKey, setLoadingKey] = useState("")
   const [workspaceNotice, setWorkspaceNotice] = useState<{ tone: NoticeTone; text: string }>({
@@ -802,7 +801,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         const successMessage = `프로필 이미지가 초안에 반영되었습니다. ${buildImageOptimizationSummary(prepared)}`
         setImageNotice({ tone: "success", text: successMessage })
         setProfileImageDraftNotice({ tone: "success", text: successMessage })
-        setLastCompletedAction("saved")
         return true
       } catch (error) {
         const message = normalizeProfileImageUploadError(error)
@@ -885,7 +883,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       )
       applyWorkspaceState(nextWorkspace)
       setWorkspaceNotice({ tone: "success", text: "임시 저장했습니다." })
-      setLastCompletedAction("saved")
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setWorkspaceNotice({ tone: "error", text: `임시 저장 실패: ${message}` })
@@ -918,7 +915,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       syncPublishedAdminProfileCache(normalizeProfileWorkspaceContent(nextWorkspace.published))
       setPreviewMode("published")
       setWorkspaceNotice({ tone: "success", text: "지금 공개하기가 완료되었습니다. 공개 사이트가 최신 상태를 사용합니다." })
-      setLastCompletedAction("published")
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setWorkspaceNotice({ tone: "error", text: `공개 실패: ${message}` })
@@ -938,28 +934,9 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const displayName = sessionMember.nickname || sessionMember.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewContent = previewMode === "published" ? publishedSnapshot : draft
+  const isHomeSection = activeSection === "home"
   const activeSectionMeta = WORKSPACE_SECTIONS.find((section) => section.id === activeSection) || WORKSPACE_SECTIONS[0]
   const visibleLinks = linkTab === "service" ? draft.serviceLinks : draft.contactLinks
-  const compactStatusLabel =
-    loadingKey === "publish"
-      ? "공개 중"
-      : loadingKey === "save" || loadingKey === "upload"
-        ? "저장 중"
-        : hasUnsavedChanges
-          ? "편집 중"
-          : hasPublishedDiff
-            ? "공개본과 차이 있음"
-            : lastCompletedAction === "published"
-              ? "방금 공개됨"
-              : "임시 저장됨"
-  const compactStatusTone =
-    hasUnsavedChanges || loadingKey === "save" || loadingKey === "upload"
-      ? "editing"
-      : hasPublishedDiff
-        ? "attention"
-        : lastCompletedAction === "published" || loadingKey === "publish"
-          ? "success"
-          : "stable"
   const pageToasts = [workspaceNotice, imageNotice].filter(
     (notice) => notice.tone !== "idle" && notice.text.trim().length > 0
   )
@@ -1395,32 +1372,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
 
       <CompactHeader>
         <h1>프로필 설정</h1>
-        <CompactHeaderRight>
-          <CompactState data-tone={compactStatusTone}>
-            <span className="dot" />
-            {compactStatusLabel}
-          </CompactState>
-          <CompactHeaderActions>
-            <GhostButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
-              {loadingKey === "save" ? "저장 중..." : "임시 저장"}
-            </GhostButton>
-            <PublishButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
-              {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
-            </PublishButton>
-          </CompactHeaderActions>
-          <QuietButton
-            type="button"
-            disabled={!hasUnsavedChanges}
-            onClick={() => {
-              if (!window.confirm("저장되지 않은 로컬 변경을 버릴까요?")) return
-              setDraft(remoteDraft)
-              setWorkspaceNotice({ tone: "success", text: "저장된 임시 저장본으로 되돌렸습니다." })
-              setLastCompletedAction("idle")
-            }}
-          >
-            초안 되돌리기
-          </QuietButton>
-        </CompactHeaderRight>
       </CompactHeader>
 
       <MobileSectionRail role="tablist" aria-label="프로필 섹션">
@@ -1460,9 +1411,22 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             </EditorPaneHeader>
             {renderActiveSection()}
           </EditorSurface>
+          {isHomeSection ? (
+            <PreviewActionDock>
+              <ActionDockInner>
+                <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
+                  {loadingKey === "save" ? "저장 중..." : "임시 저장"}
+                </DockSecondaryButton>
+                <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
+                  {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
+                </DockPrimaryButton>
+              </ActionDockInner>
+            </PreviewActionDock>
+          ) : null}
         </EditorColumn>
 
-        <PreviewRail>
+        {!isHomeSection ? (
+          <PreviewRail>
           <PreviewCardShell>
             <PreviewHeader>
               <div>
@@ -1543,18 +1507,6 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   </PreviewAboutCard>
                 ) : null}
 
-                {activeSection === "home" ? (
-                  <PreviewHomeCard>
-                    <div className="topbar">
-                      <span className="brand">{previewContent.blogTitle || "헤더 제목"}</span>
-                    </div>
-                    <div className="heroCard">
-                      <strong>{previewContent.homeIntroTitle || "첫 문장"}</strong>
-                      <p>{previewContent.homeIntroDescription || "설명"}</p>
-                    </div>
-                  </PreviewHomeCard>
-                ) : null}
-
                 {activeSection === "links" ? (
                   <PreviewLinksCard>
                     {([
@@ -1581,9 +1533,19 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                 ) : null}
               </PreviewViewport>
             </PreviewBody>
+            <PreviewActionDock>
+              <ActionDockInner>
+                <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
+                  {loadingKey === "save" ? "저장 중..." : "임시 저장"}
+                </DockSecondaryButton>
+                <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
+                  {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
+                </DockPrimaryButton>
+              </ActionDockInner>
+            </PreviewActionDock>
           </PreviewCardShell>
-
-        </PreviewRail>
+          </PreviewRail>
+        ) : null}
       </WorkspaceShell>
 
       {pageToasts.length > 0 ? (
@@ -1846,9 +1808,7 @@ const PreviewAnchor = styled.a`
 
 const CompactHeader = styled.section`
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.9rem;
+  align-items: center;
   padding: 0.15rem 0 0.1rem;
 
   h1 {
@@ -1861,66 +1821,6 @@ const CompactHeader = styled.section`
 
   @media (max-width: 760px) {
     align-items: flex-start;
-    flex-direction: column;
-    gap: 0.45rem;
-  }
-`
-
-const CompactHeaderRight = styled.div`
-  display: grid;
-  justify-items: end;
-  gap: 0.32rem;
-
-  @media (max-width: 760px) {
-    width: 100%;
-    justify-items: start;
-  }
-`
-
-const CompactHeaderActions = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-`
-
-const CompactState = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.46rem;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
-  font-weight: 700;
-
-  .dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 999px;
-    background: ${({ theme }) => theme.colors.gray8};
-  }
-
-  &[data-tone="editing"] {
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &[data-tone="editing"] .dot {
-    background: ${({ theme }) => theme.colors.blue8};
-  }
-
-  &[data-tone="attention"] {
-    color: ${({ theme }) => theme.colors.green11};
-  }
-
-  &[data-tone="attention"] .dot {
-    background: ${({ theme }) => theme.colors.green8};
-  }
-
-  &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-  }
-
-  &[data-tone="success"] .dot {
-    background: ${({ theme }) => theme.colors.green8};
   }
 `
 
@@ -2551,6 +2451,42 @@ const PreviewBody = styled.div<{ "data-expanded"?: boolean }>`
   }
 `
 
+const PreviewActionDock = styled.div`
+  display: grid;
+  justify-items: center;
+`
+
+const ActionDockInner = styled.div`
+  width: min(100%, 560px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 20px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  @media (max-width: 760px) {
+    width: 100%;
+    justify-content: space-between;
+  }
+`
+
+const DockSecondaryButton = styled(BaseButton)`
+  min-height: 40px;
+  padding: 0 1rem;
+  border-radius: 999px;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+`
+
+const DockPrimaryButton = styled(PublishButton)`
+  min-height: 40px;
+  padding: 0 1rem;
+  border-radius: 999px;
+`
+
 const PreviewViewport = styled.div`
   min-height: 300px;
   border-radius: 18px;
@@ -2711,25 +2647,6 @@ const PreviewLinksCard = styled.div`
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
     line-height: 1.55;
-  }
-`
-
-const QuietButton = styled.button`
-  justify-self: flex-end;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.red11};
-  font-size: 0.84rem;
-  font-weight: 700;
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.48;
-  }
-
-  @media (max-width: 760px) {
-    justify-self: flex-start;
   }
 `
 

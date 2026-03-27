@@ -189,8 +189,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   const listRequestIdRef = useRef(0)
   const recentRequestIdRef = useRef(0)
 
-  const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
-
   const loadRecentPosts = useCallback(async () => {
     const requestId = recentRequestIdRef.current + 1
     recentRequestIdRef.current = requestId
@@ -396,10 +394,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   return (
     <Main>
       <PageHeader>
-        <ContextLine aria-label="현재 위치">
-          <span>글 작업</span>
-          <span>{displayName} 계정</span>
-        </ContextLine>
+        <ContextLine aria-label="현재 위치" />
       </PageHeader>
 
       <HeroSection>
@@ -645,7 +640,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                         {listScope === "active" ? (
                           <>
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                              이어서 수정
+                              수정
                             </RowPrimaryButton>
                             <DangerTextButton type="button" onClick={() => void handleDeletePost(row)}>
                               삭제
@@ -684,7 +679,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                     {listScope === "active" ? (
                       <>
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
-                          이어서 수정
+                          수정
                         </RowPrimaryButton>
                         <DangerTextButton type="button" onClick={() => void handleDeletePost(row)}>
                           삭제
@@ -760,24 +755,7 @@ const PageHeader = styled.section`
 `
 
 const ContextLine = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 0.8rem;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  font-weight: 700;
-
-  span:last-of-type {
-    color: ${({ theme }) => theme.colors.gray11};
-  }
-
-  @media (max-width: 767px) {
-    span:last-of-type {
-      display: none;
-    }
-  }
+  display: none;
 `
 
 const HeroSection = styled.section`
@@ -883,6 +861,7 @@ const SectionHeading = styled.div`
   h2 {
     margin: 0;
     font-size: 1.22rem;
+    font-weight: 800;
     letter-spacing: -0.03em;
   }
 
@@ -901,6 +880,10 @@ const SectionHeading = styled.div`
 const SupportSection = styled.section`
   display: grid;
   gap: 0.8rem;
+
+  h2 {
+    font-weight: 800;
+  }
 `
 
 const SupportList = styled.div`
@@ -1363,15 +1346,18 @@ const DesktopListTable = styled.table`
   .idCell {
     width: 88px;
     white-space: nowrap;
+    vertical-align: middle;
   }
 
   .dateCell {
     width: 144px;
     white-space: nowrap;
+    vertical-align: middle;
   }
 
   .actionCell {
     width: 220px;
+    vertical-align: middle;
   }
 
   tbody tr:last-of-type td {

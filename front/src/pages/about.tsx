@@ -4,6 +4,7 @@ import { dehydrate } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
+import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { parseLegacyAboutDetails } from "src/libs/profileWorkspace"
 import { createQueryClient } from "src/libs/react-query"
@@ -46,6 +47,8 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
   const displayRole = adminProfile?.aboutRole || CONFIG.profile.role
   const displayBio = adminProfile?.aboutBio || CONFIG.profile.bio
+  const profileImageSrc =
+    adminProfile?.profileImageDirectUrl || adminProfile?.profileImageUrl || CONFIG.profile.image
   const aboutDetailSections =
     adminProfile?.aboutSections && adminProfile.aboutSections.length > 0
       ? adminProfile.aboutSections.map((section) => ({
@@ -77,9 +80,23 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
           <h1 className="page-title">About Me</h1>
 
           <div className="profile-section">
-            <h2 className="profile-name">{displayName}</h2>
-            <p className="profile-role">{displayRole}</p>
-            <p className="profile-bio">{displayBio}</p>
+            <div className="profile-identity">
+              <div className="profile-avatar">
+                <ProfileImage
+                  src={profileImageSrc}
+                  width={108}
+                  height={108}
+                  alt={`${displayName} profile`}
+                  priority
+                  fillContainer
+                />
+              </div>
+              <div className="profile-copy">
+                <h2 className="profile-name">{displayName}</h2>
+                <p className="profile-role">{displayRole}</p>
+                <p className="profile-bio">{displayBio}</p>
+              </div>
+            </div>
             {aboutDetailSections.length > 0 && (
               <div className="about-detail-sections" aria-label="about 상세 정보">
                 {aboutDetailSections.map((section, index) => (
@@ -159,7 +176,6 @@ const StyledWrapper = styled.div`
     }
 
     .profile-section {
-      text-align: center;
       margin-bottom: 3rem;
       padding: 1.4rem 1rem 1.3rem;
       border: 1px solid ${({ theme }) => theme.colors.gray5};
@@ -167,17 +183,49 @@ const StyledWrapper = styled.div`
       background: ${({ theme }) => theme.colors.gray2};
       box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
 
+      .profile-identity {
+        width: fit-content;
+        max-width: 100%;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+      }
+
+      .profile-avatar {
+        position: relative;
+        width: 108px;
+        flex: 0 0 108px;
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid ${({ theme }) => theme.colors.gray6};
+        background: ${({ theme }) => theme.colors.gray1};
+
+        &::after {
+          content: "";
+          display: block;
+          padding-bottom: 100%;
+        }
+      }
+
+      .profile-copy {
+        display: grid;
+        gap: 0.48rem;
+        text-align: left;
+      }
+
       .profile-name {
         font-size: 2rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
+        font-weight: 800;
+        margin: 0;
         color: ${({ theme }) => theme.colors.gray12};
       }
 
       .profile-role {
         color: ${({ theme }) => theme.colors.gray11};
         font-size: 1.125rem;
-        margin-bottom: 1rem;
+        margin: 0;
         font-weight: 500;
       }
 
@@ -186,7 +234,7 @@ const StyledWrapper = styled.div`
         line-height: 1.75;
         color: ${({ theme }) => theme.colors.gray11};
         max-width: 600px;
-        margin: 0 auto;
+        margin: 0;
       }
 
       .about-detail-sections {
@@ -245,6 +293,25 @@ const StyledWrapper = styled.div`
           }
         }
       }
+
+      @media (max-width: 768px) {
+        .profile-identity {
+          gap: 1rem;
+        }
+
+        .profile-avatar {
+          width: 88px;
+          flex-basis: 88px;
+        }
+
+        .profile-name {
+          font-size: 1.7rem;
+        }
+
+        .profile-role {
+          font-size: 1rem;
+        }
+      }
     }
 
     .section {
@@ -252,7 +319,7 @@ const StyledWrapper = styled.div`
 
       .section-title {
         font-size: 1.5rem;
-        font-weight: 700;
+        font-weight: 800;
         margin-bottom: 1.5rem;
         color: ${({ theme }) => theme.colors.gray12};
         padding-bottom: 0.58rem;

@@ -958,25 +958,20 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 export default PostDetail
 
 const StyledWrapper = styled.div`
-  width: min(100%, 76rem);
-  max-width: 76rem;
+  width: 100%;
+  max-width: none;
   box-sizing: border-box;
   margin: 0 auto;
   min-width: 0;
-  padding: 0 0.5rem;
-
-  @media (min-width: 1057px) and (max-width: 1440px) {
-    width: min(calc(100vw - 2rem), 76rem);
-    max-width: none;
-    margin-left: calc((1024px - min(calc(100vw - 2rem), 76rem)) / 2);
-    margin-right: 0;
-  }
+  padding: 0;
 
   .detailLayout {
     display: grid;
-    grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem)) minmax(0, 12.5rem);
-    justify-content: center;
-    gap: 2.5rem;
+    width: 74rem;
+    margin-left: calc(50% - 32rem);
+    grid-template-columns: 80px minmax(0, var(--article-readable-width, 48rem)) minmax(0, 15rem);
+    justify-content: start;
+    gap: 3rem;
     min-width: 0;
     overflow: visible;
   }
@@ -1025,8 +1020,8 @@ const StyledWrapper = styled.div`
   }
 
   .floatingActionButton {
-    width: 3.2rem;
-    height: 3.2rem;
+    width: 3.5rem;
+    height: 3.5rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1039,7 +1034,7 @@ const StyledWrapper = styled.div`
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 
     svg {
-      font-size: 1.14rem;
+      font-size: 1.22rem;
     }
 
     &:hover {
@@ -1098,7 +1093,7 @@ const StyledWrapper = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
 
     svg {
-      font-size: 1.02rem;
+      font-size: 1.08rem;
     }
   }
 
@@ -1121,7 +1116,7 @@ const StyledWrapper = styled.div`
   }
 
   .floatingLikeCount {
-    font-size: 0.8rem;
+    font-size: 0.88rem;
     line-height: 1;
     font-weight: 720;
     color: ${({ theme }) => theme.colors.gray10};
@@ -1157,7 +1152,7 @@ const StyledWrapper = styled.div`
     .rightRailTitle {
       margin: 0;
       color: ${({ theme }) => theme.colors.gray12};
-      font-size: 0.88rem;
+      font-size: 0.96rem;
       line-height: 1.2;
       font-weight: 780;
       letter-spacing: -0.02em;
@@ -1165,7 +1160,7 @@ const StyledWrapper = styled.div`
 
     .rightRailMeta {
       color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.69rem;
+      font-size: 0.76rem;
       line-height: 1.2;
       font-weight: 620;
     }
@@ -1221,20 +1216,17 @@ const StyledWrapper = styled.div`
       min-height: 38px;
       box-sizing: border-box;
       max-width: 100%;
-      padding: 0.52rem 0.82rem 0.52rem 0.28rem;
+      padding: 0.52rem 0.82rem 0.52rem 0.12rem;
       background: transparent;
       color: ${({ theme }) => theme.colors.gray9};
-      font-size: 0.82rem;
-      line-height: 1.42;
+      font-size: 0.875rem;
+      line-height: 1.5;
       cursor: pointer;
       white-space: normal;
-      overflow: hidden;
       overflow-wrap: anywhere;
       word-break: keep-all;
       position: relative;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
+      display: block;
       transition: color 0.15s ease, background-color 0.15s ease;
     }
 
@@ -1268,6 +1260,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1439px) {
     .detailLayout {
+      width: auto;
+      margin-left: 0;
       grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem));
       gap: 2rem;
     }
@@ -1279,6 +1273,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1279px) {
     .detailLayout {
+      width: auto;
+      margin-left: 0;
       grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem));
       gap: 1.6rem;
     }
@@ -1286,6 +1282,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1200px) {
     .detailLayout {
+      width: auto;
+      margin-left: 0;
       grid-template-columns: minmax(0, 49rem);
       gap: 0;
     }
@@ -1301,6 +1299,8 @@ const StyledWrapper = styled.div`
     padding: 0;
 
     .detailLayout {
+      width: auto;
+      margin-left: 0;
       grid-template-columns: minmax(0, 50rem);
       gap: 0;
     }

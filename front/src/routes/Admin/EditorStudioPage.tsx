@@ -151,6 +151,11 @@ type PostWriteResult = {
   listed: boolean
 }
 
+type PublicPostContentFallback = {
+  content?: string
+  contentHtml?: string
+}
+
 type RecommendTagsPayload = {
   tags?: string[]
   provider?: string
@@ -998,6 +1003,13 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
   }
 }
 
+const shouldHydrateEditorBodyFallback = (content: string, contentHtml?: string) => {
+  const parsed = parseEditorMeta(content)
+  if (parsed.body.trim().length > 0) return false
+  if (contentHtml?.trim()) return false
+  return true
+}
+
 const serializeMetaItems = (items: string[]) => items.map((item) => JSON.stringify(item)).join(", ")
 
 const composeEditorContent = (
@@ -1585,6 +1597,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const hydratedAdminIdRef = useRef<number | null>(null)
   const autoLoadedPostIdRef = useRef<string | null>(null)
   const autoCreatedTempDraftRef = useRef(false)
+  const tempPostRequestRef = useRef<Promise<RsData<PostForEditor>> | null>(null)
   const lastWriteFingerprintRef = useRef<string>("")
   const lastWriteIdempotencyKeyRef = useRef<string>("")
   const lastLocalDraftFingerprintRef = useRef("")
@@ -2350,12 +2363,28 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     try {
       setLoadingKey("postOne")
       const post = await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${targetPostId}`)
+      let resolvedPost = post
 
-      setPostTitle(post.title ?? "")
-      syncEditorMeta(post.content ?? "", post.contentHtml)
-      setPostVisibility(toVisibility(!!post.published, !!post.listed))
-      applyLoadedPostContext(post)
-      setResult(pretty(post as unknown as JsonValue))
+      if (shouldHydrateEditorBodyFallback(post.content ?? "", post.contentHtml)) {
+        try {
+          const publicPost = await apiFetch<PublicPostContentFallback>(`/post/api/v1/posts/${targetPostId}`)
+          if (!shouldHydrateEditorBodyFallback(publicPost.content ?? "", publicPost.contentHtml)) {
+            resolvedPost = {
+              ...post,
+              content: publicPost.content ?? post.content,
+              contentHtml: publicPost.contentHtml ?? post.contentHtml,
+            }
+          }
+        } catch {
+          // 비공개/삭제 글 등 공개 읽기 폴백이 불가능한 경우 admin payload를 그대로 사용한다.
+        }
+      }
+
+      setPostTitle(resolvedPost.title ?? "")
+      syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
+      setPostVisibility(toVisibility(!!resolvedPost.published, !!resolvedPost.listed))
+      applyLoadedPostContext(resolvedPost)
+      setResult(pretty(resolvedPost as unknown as JsonValue))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setResult(pretty({ error: message }))
@@ -2366,8 +2395,16 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   const loadExistingTempPostForRecovery = useCallback(async (): Promise<PostForEditor | null> => {
     try {
-      const data = await apiFetch<PageDto<AdminPostListItem>>("/post/api/v1/adm/posts?page=1&pageSize=30&kw=&sort=MODIFIED_AT")
-      const tempRow = (data.content || []).find((row) => row.title.trim() === "임시글" && !row.published)
+      const data = await apiFetch<PageDto<AdminPostListItem>>(
+        "/post/api/v1/adm/posts?page=1&pageSize=100&kw=%EC%9E%84%EC%8B%9C%EA%B8%80&sort=MODIFIED_AT"
+      )
+      const tempRow = (data.content || []).find(
+        (row) =>
+          row.title.trim() === "임시글" &&
+          !row.published &&
+          !row.listed &&
+          !row.deletedAt
+      )
       if (!tempRow?.id) return null
       return await apiFetch<PostForEditor>(`/post/api/v1/adm/posts/${tempRow.id}`)
     } catch {
@@ -2605,7 +2642,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     try {
       setLoadingKey("postTemp")
       setPublishStatus({ tone: "loading", text: "임시글을 불러오는 중입니다..." }, "page")
-      const response = await requestTempPostWithConflictRetry(loadExistingTempPostForRecovery)
+      if (!tempPostRequestRef.current) {
+        tempPostRequestRef.current = requestTempPostWithConflictRetry(loadExistingTempPostForRecovery).finally(() => {
+          tempPostRequestRef.current = null
+        })
+      }
+      const response = await tempPostRequestRef.current
       const tempPost = response.data
       setPostTitle(tempPost.title ?? "")
       syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)

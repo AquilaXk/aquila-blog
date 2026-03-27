@@ -1611,8 +1611,9 @@ const CardMainLine = styled.div`
 `
 
 const StatusDot = styled.span`
-  width: 0.72rem;
-  height: 0.72rem;
+  width: 0.96rem;
+  height: 0.96rem;
+  flex: 0 0 auto;
   border-radius: 999px;
   background: ${({ theme }) => theme.colors.indigo8};
 

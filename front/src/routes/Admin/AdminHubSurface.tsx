@@ -1,5 +1,6 @@
 import styled from "@emotion/styled"
 import Link from "next/link"
+import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
 
 export type AdminHubPrimaryAction = {
@@ -70,10 +71,15 @@ const AdminHubSurface = ({
           </HeroCopy>
           <HeroActions>
             <Link href={primaryAction.href} passHref legacyBehavior>
-              <PrimaryActionLink>{primaryAction.cta}</PrimaryActionLink>
+              <PrimaryActionLink>
+                <AppIcon name="edit" aria-hidden="true" />
+                <span>{primaryAction.cta}</span>
+              </PrimaryActionLink>
             </Link>
             <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
-              <SecondaryActionLink>{primaryAction.secondaryLabel}</SecondaryActionLink>
+              <SecondaryActionLink>
+                <span>{primaryAction.secondaryLabel}</span>
+              </SecondaryActionLink>
             </Link>
           </HeroActions>
         </HeroBody>
@@ -87,10 +93,13 @@ const AdminHubSurface = ({
           {secondaryLinks.map((item) => (
             <Link key={item.href} href={item.href} passHref legacyBehavior>
               <ShortcutLink>
-              <ShortcutCopy>
-                <strong>{item.title}</strong>
-                {item.description ? <p>{item.description}</p> : null}
-              </ShortcutCopy>
+                <ShortcutCopy>
+                  <ShortcutTitleRow>
+                    <strong>{item.title}</strong>
+                    <AppIcon name="chevron-down" aria-hidden="true" className="chevron" />
+                  </ShortcutTitleRow>
+                  {item.description ? <p>{item.description}</p> : null}
+                </ShortcutCopy>
                 <ShortcutMeta>{item.cta}</ShortcutMeta>
               </ShortcutLink>
             </Link>
@@ -122,51 +131,38 @@ const AdminHubSurface = ({
 export default AdminHubSurface
 
 const Main = styled.main`
-  max-width: 1080px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 1.2rem 1rem 2.4rem;
+  padding: 1.35rem 1rem 2.6rem;
   display: grid;
-  gap: 1.15rem;
+  gap: 1.2rem;
 
   @media (max-width: 900px) {
-    gap: 0.88rem;
+    gap: 0.92rem;
     padding-top: 1rem;
   }
 `
 
 const HeaderPanel = styled.section`
   display: grid;
-  gap: 0.58rem;
-  padding: 0.76rem 0.84rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: none;
+  gap: 0.9rem;
 `
 
 const HeaderCopy = styled.div`
   display: grid;
-  gap: 0.32rem;
 
   h1 {
     margin: 0;
-    font-size: clamp(1.62rem, 3vw, 2rem);
+    font-size: clamp(1.72rem, 3vw, 2.15rem);
+    font-weight: 800;
     letter-spacing: -0.03em;
-  }
-
-  p {
-    margin: 0;
-    max-width: 34rem;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.82rem;
-    line-height: 1.45;
   }
 `
 
 const SummaryRail = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.38rem;
+  gap: 0.78rem;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -175,24 +171,29 @@ const SummaryRail = styled.div`
 
 const StatusItem = styled.div`
   display: grid;
-  gap: 0.2rem;
+  gap: 0.42rem;
   min-width: 0;
-  padding: 0.4rem 0.48rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
+  background: linear-gradient(180deg, rgba(58, 86, 122, 0.28) 0%, rgba(31, 43, 65, 0.38) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(59, 130, 246, 0.08),
+    0 16px 34px rgba(17, 24, 39, 0.18);
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.72rem;
+    font-size: 0.84rem;
     font-weight: 700;
   }
 
   strong {
+    min-width: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.8rem;
-    font-weight: 700;
-    line-height: 1.35;
+    font-size: 1.18rem;
+    font-weight: 800;
+    line-height: 1.32;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -202,25 +203,23 @@ const StatusItem = styled.div`
 const HeroPanel = styled.section`
   display: grid;
   gap: 0.72rem;
-  padding: 1.08rem 1rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background:
-    linear-gradient(180deg, ${({ theme }) => theme.colors.gray3} 0%, ${({ theme }) => theme.colors.gray2} 100%);
-  box-shadow: none;
+  padding: 1.18rem 1.2rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(32, 39, 52, 0.76) 100%);
 `
 
 const HeroLabel = styled.span`
   display: inline-flex;
   width: fit-content;
-  min-height: 28px;
+  min-height: 30px;
   align-items: center;
-  padding: 0 0.6rem;
+  padding: 0 0.72rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-weight: 800;
 `
 
@@ -238,11 +237,12 @@ const HeroBody = styled.div`
 
 const HeroCopy = styled.div`
   display: grid;
-  gap: 0.32rem;
+  gap: 0.2rem;
 
   h2 {
     margin: 0;
-    font-size: clamp(1.72rem, 3vw, 2rem);
+    font-size: clamp(1.9rem, 3vw, 2.3rem);
+    font-weight: 800;
     color: ${({ theme }) => theme.colors.gray12};
     letter-spacing: -0.03em;
   }
@@ -259,7 +259,7 @@ const HeroCopy = styled.div`
 const HeroActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.85rem;
   align-items: center;
   justify-content: flex-end;
 
@@ -271,50 +271,61 @@ const HeroActions = styled.div`
 const PrimaryActionLink = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
-  font-size: 1rem;
+  justify-content: center;
+  gap: 0.46rem;
+  min-height: 48px;
+  padding: 0 1.2rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.blue8};
+  background: ${({ theme }) => theme.colors.blue8};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.96rem;
   font-weight: 800;
   text-decoration: none;
   line-height: 1.2;
   transition:
-    color 0.16s ease,
-    opacity 0.16s ease;
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    transform 0.16s ease;
+
+  svg {
+    font-size: 0.98rem;
+  }
 
   &:hover {
-    color: ${({ theme }) => theme.colors.blue10};
-    opacity: 0.92;
+    background: ${({ theme }) => theme.colors.blue9};
+    border-color: ${({ theme }) => theme.colors.blue9};
+    transform: translateY(-1px);
   }
 `
 
 const SecondaryActionLink = styled.a`
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  padding: 0;
-  border: 0;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 1.2rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.blue7};
   background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.95rem;
+  color: ${({ theme }) => theme.colors.blue9};
+  font-size: 0.94rem;
   font-weight: 700;
   text-decoration: none;
   line-height: 1.2;
   transition:
-    color 0.16s ease,
-    opacity 0.16s ease;
+    border-color 0.16s ease,
+    background-color 0.16s ease;
 
   &:hover {
-    color: ${({ theme }) => theme.colors.gray12};
-    opacity: 0.92;
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: rgba(59, 130, 246, 0.08);
   }
 `
 
 const ShortcutPanel = styled.section`
   display: grid;
-  gap: 0.62rem;
+  gap: 0.72rem;
 `
 
 const SectionHeader = styled.div`
@@ -324,6 +335,7 @@ const SectionHeader = styled.div`
   h2 {
     margin: 0;
     font-size: 1rem;
+    font-weight: 800;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -338,7 +350,7 @@ const SectionHeader = styled.div`
 const ShortcutGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.58rem;
+  gap: 0.75rem;
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;
@@ -348,12 +360,12 @@ const ShortcutGrid = styled.div`
 const ShortcutLink = styled.a`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.56rem;
+  gap: 0.8rem;
   align-items: center;
-  padding: 0.72rem 0.76rem;
-  border-radius: 10px;
+  padding: 1rem 1.08rem;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
+  background: linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.85) 100%);
   color: inherit;
   text-decoration: none;
   transition:
@@ -362,8 +374,8 @@ const ShortcutLink = styled.a`
     color 0.16s ease;
 
   &:hover {
-    border-color: ${({ theme }) => theme.colors.gray7};
-    background: ${({ theme }) => theme.colors.gray3};
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(34, 41, 54, 0.92) 100%);
   }
 
   @media (max-width: 640px) {
@@ -375,10 +387,11 @@ const ShortcutLink = styled.a`
 const ShortcutCopy = styled.div`
   min-width: 0;
   display: grid;
-  gap: 0.22rem;
+  gap: 0.12rem;
 
   strong {
-    font-size: 0.9rem;
+    font-size: 1rem;
+    font-weight: 800;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
@@ -394,17 +407,29 @@ const ShortcutCopy = styled.div`
   }
 `
 
+const ShortcutTitleRow = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+
+  .chevron {
+    font-size: 0.92rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    transform: rotate(-90deg);
+  }
+`
+
 const ShortcutMeta = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
+  min-height: 32px;
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: transparent;
   color: ${({ theme }) => theme.colors.gray11};
-  padding: 0 0.54rem;
-  font-size: 0.72rem;
+  padding: 0 0.74rem;
+  font-size: 0.76rem;
   font-weight: 700;
   white-space: nowrap;
 `
@@ -412,12 +437,12 @@ const ShortcutMeta = styled.span`
 const ProfileCompact = styled.section`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.56rem;
+  gap: 1rem;
   align-items: center;
-  padding: 0.62rem 0.72rem;
-  border-radius: 12px;
+  padding: 1rem 1.08rem;
+  border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
+  background: linear-gradient(180deg, rgba(58, 86, 122, 0.14) 0%, rgba(30, 35, 46, 0.9) 100%);
 
   @media (max-width: 760px) {
     grid-template-columns: auto minmax(0, 1fr);
@@ -432,8 +457,8 @@ const ProfileCompact = styled.section`
 
 const ProfileFrame = styled.div`
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 84px;
+  height: 84px;
   border-radius: 999px;
   overflow: hidden;
 `
@@ -452,24 +477,25 @@ const ProfileFallback = styled.div`
 const ProfileCopy = styled.div`
   min-width: 0;
   display: grid;
-  gap: 0.18rem;
+  gap: 0.24rem;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.88rem;
+    font-size: 1.35rem;
+    font-weight: 800;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
     font-weight: 700;
-    font-size: 0.74rem;
+    font-size: 1rem;
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    line-height: 1.4;
+    font-size: 0.94rem;
+    line-height: 1.5;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -488,17 +514,19 @@ const ProfileAction = styled.a`
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  min-height: 0;
+  min-height: 40px;
   padding: 0;
   border: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.blue9};
   text-decoration: none;
-  font-size: 0.74rem;
-  font-weight: 700;
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.2;
 
   &:hover {
     color: ${({ theme }) => theme.colors.blue10};
+    opacity: 0.92;
   }
 
   @media (max-width: 760px) {

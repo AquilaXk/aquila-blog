@@ -278,13 +278,11 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   }
 
   return (
-    <RichBlockWrapper data-selected={selected}>
-      <RichBlockHeader>
-        <div>
-          <strong>토글</strong>
-          <span>`:::toggle 제목` canonical markdown로 저장됩니다.</span>
-        </div>
-      </RichBlockHeader>
+    <ToggleEditorWrapper data-selected={selected}>
+      <CalloutEditorLabel>
+        <strong>토글</strong>
+        <span>접기/펼치기 블록</span>
+      </CalloutEditorLabel>
       <BlockInput
         value={draftTitle}
         placeholder="토글 제목"
@@ -295,11 +293,12 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
           commit({ title: nextTitle })
         }}
       />
-      <BlockTextarea
+      <CompactBlockTextarea
         ref={bodyRef}
         value={draftBody}
-        placeholder="토글 내부 본문"
+        placeholder="토글 본문"
         spellCheck={false}
+        rows={2}
         onBlur={flushCommit}
         onChange={(event) => {
           const nextBody = event.target.value
@@ -318,7 +317,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
         </summary>
         {isPreviewOpen ? <p>{draftBody || "토글 내부 본문을 입력하세요."}</p> : null}
       </TogglePreviewCard>
-    </RichBlockWrapper>
+    </ToggleEditorWrapper>
   )
 }
 
@@ -925,14 +924,15 @@ const CalloutEditorLabel = styled.div`
 
 const TogglePreviewCard = styled.details`
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
+  border-radius: 0.95rem;
   background: rgba(13, 15, 18, 0.96);
-  padding: 0.15rem 0.15rem 0.65rem;
+  padding: 0.1rem 0.1rem 0.55rem;
 
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0.85rem 0.95rem;
+    padding: 0.72rem 0.82rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: var(--color-gray12);
 
@@ -943,9 +943,27 @@ const TogglePreviewCard = styled.details`
 
   p {
     margin: 0;
-    padding: 0 0.95rem 0.1rem;
-    color: var(--color-gray11);
+    padding: 0 0.82rem 0.08rem;
+    color: var(--color-gray10);
     white-space: pre-wrap;
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+`
+
+const ToggleEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.85rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(18, 21, 26, 0.92);
+  padding: 0.85rem 0.9rem;
+
+  &[data-selected="true"] {
+    border-color: rgba(59, 130, 246, 0.42);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
   }
 `
 

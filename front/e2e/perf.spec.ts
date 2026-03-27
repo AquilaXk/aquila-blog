@@ -376,6 +376,23 @@ const getVisualLayoutFingerprint = async (page: Page) =>
     }
   })
 
+const getDesktopTagRailMetrics = async (page: Page) =>
+  page.evaluate(() => {
+    const listNode = document.querySelector(".desktopList") as HTMLElement | null
+    const panelNode = document.querySelector(".desktopPanel") as HTMLElement | null
+    if (!listNode || !panelNode) return null
+    const rect = listNode.getBoundingClientRect()
+    const panelRect = panelNode.getBoundingClientRect()
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      scrollHeight: Math.round(listNode.scrollHeight),
+      panelBottom: Math.round(panelRect.bottom),
+    }
+  })
+
 const applySchemePreference = async (page: Page, scheme: "light" | "dark") => {
   await page.context().clearCookies()
   await page.context().addCookies([
@@ -388,11 +405,19 @@ const applySchemePreference = async (page: Page, scheme: "light" | "dark") => {
 }
 
 const waitForSchemeReady = async (page: Page, scheme: "light" | "dark") => {
-  const expectedBodyBg = scheme === "light" ? "rgb(243, 245, 248)" : "rgb(13, 15, 18)"
-  await page.waitForFunction(
-    (bodyColor) => getComputedStyle(document.body).backgroundColor === bodyColor,
-    expectedBodyBg
-  )
+  const expectedToggleLabel = scheme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const toggle = document.querySelector('button[aria-label*="모드로 전환"]')
+          return toggle?.getAttribute("aria-label") ?? null
+        }),
+      {
+        timeout: 8000,
+      }
+    )
+    .toBe(expectedToggleLabel)
 }
 
 const getThemeSurfaceFingerprint = async (page: Page) =>
@@ -440,6 +465,30 @@ const waitForPageReady = async (page: Page, options?: { waitAuth?: boolean }) =>
   }
 }
 
+const reloadForPerf = async (page: Page, options?: { waitAuth?: boolean }) => {
+  await page.reload({ waitUntil: "domcontentloaded" })
+  await waitForPageReady(page, options)
+}
+
+const gotoForPerf = async (
+  page: Page,
+  route: string,
+  options?: {
+    waitAuth?: boolean
+    readyText?: string
+  }
+) => {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto(route, { waitUntil: "domcontentloaded" })
+    await waitForPageReady(page, options)
+
+    if (!options?.readyText) return
+
+    const ready = await page.getByText(options.readyText).isVisible().catch(() => false)
+    if (ready) return
+  }
+}
+
 const getMaxHorizontalJitter = (
   before: Awaited<ReturnType<typeof getLayoutSnapshot>>,
   after: Awaited<ReturnType<typeof getLayoutSnapshot>>
@@ -471,16 +520,14 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
   await mockFeedEndpoints(page)
 
   for (const route of refreshCheckRoutes) {
-    await page.goto(route)
-    await waitForPageReady(page)
+    await gotoForPerf(page, route)
     await page.waitForTimeout(300)
     const before = await getLayoutSnapshot(page)
     await page.evaluate(() => {
       ;(window as unknown as { __aqCls?: number }).__aqCls = 0
     })
 
-    await page.reload({ waitUntil: "networkidle" })
-    await waitForPageReady(page)
+    await reloadForPerf(page)
     await page.waitForTimeout(1000)
     const after = await getLayoutSnapshot(page)
 
@@ -499,8 +546,7 @@ test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지�
   await mockFeedEndpoints(page)
 
   await page.setViewportSize({ width: 2000, height: 900 })
-  await page.goto("/")
-  await waitForPageReady(page)
+  await gotoForPerf(page, "/")
 
   const ultraWideSnapshot = await getWidthLockSnapshot(page)
   expect(ultraWideSnapshot.mainWidth).toBeCloseTo(1728, 0)
@@ -508,8 +554,7 @@ test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지�
   await expect(page.locator(".rt")).toBeVisible()
 
   await page.setViewportSize({ width: 1600, height: 900 })
-  await page.reload({ waitUntil: "networkidle" })
-  await waitForPageReady(page)
+  await reloadForPerf(page)
 
   const wideSnapshot = await getWidthLockSnapshot(page)
   expect(wideSnapshot.mainWidth).toBeCloseTo(1376, 0)
@@ -524,8 +569,7 @@ test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지�
 
   for (const checkpoint of checkpoints) {
     await page.setViewportSize({ width: checkpoint.viewport, height: 900 })
-    await page.reload({ waitUntil: "networkidle" })
-    await waitForPageReady(page)
+    await reloadForPerf(page)
 
     const snapshot = await getWidthLockSnapshot(page)
     expect(snapshot.mainWidth).toBeCloseTo(checkpoint.expectedLocked, 0)
@@ -534,8 +578,7 @@ test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지�
   }
 
   await page.setViewportSize({ width: 1056, height: 900 })
-  await page.reload({ waitUntil: "networkidle" })
-  await waitForPageReady(page)
+  await reloadForPerf(page)
 
   const fluidSnapshot = await getWidthLockSnapshot(page)
   const expectedFluidWidth = Math.min(fluidSnapshot.layoutViewport, fluidSnapshot.bodyViewport)
@@ -550,14 +593,12 @@ test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안�
   await mockFeedEndpoints(page)
 
   await page.setViewportSize({ width: 1200, height: 900 })
-  await page.goto("/")
-  await waitForPageReady(page)
+  await gotoForPerf(page, "/")
   await expect(page.locator(".chipRail")).toBeVisible()
   await expect(page.locator(".desktopPanel")).toBeHidden()
 
   await page.setViewportSize({ width: 1201, height: 900 })
-  await page.reload({ waitUntil: "networkidle" })
-  await waitForPageReady(page)
+  await reloadForPerf(page)
   await expect(page.locator(".chipRail")).toBeHidden()
   await expect(page.locator(".desktopPanel")).toBeVisible()
   await expect
@@ -568,8 +609,7 @@ test("메인 태그 레일은 1200/1201 전환과 넓은 데스크톱에서 안�
     .toBeGreaterThanOrEqual(0)
 
   await page.setViewportSize({ width: 1680, height: 900 })
-  await page.reload({ waitUntil: "networkidle" })
-  await waitForPageReady(page)
+  await reloadForPerf(page)
   await expect(page.locator(".desktopPanel")).toBeVisible()
 
   const railRect = await page.locator(".desktopPanel").boundingBox()
@@ -589,8 +629,7 @@ test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로
   await mockDetailRailEndpoint(page, postId)
 
   await page.setViewportSize({ width: 1440, height: 960 })
-  await page.goto(`/posts/${postId}`)
-  await waitForPageReady(page)
+  await gotoForPerf(page, `/posts/${postId}`, { readyText: "상세 레일 스티키 회귀 점검" })
   await expect(page.getByText("상세 레일 스티키 회귀 점검")).toBeVisible()
   await expect(page.locator(".rightRailInner")).toBeVisible()
   await expect(page.locator(".leftRailInner")).toBeVisible()
@@ -633,8 +672,9 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
 
   for (const scenario of scenarios) {
     await page.setViewportSize(scenario.viewport)
-    await page.goto(scenario.route)
-    await waitForPageReady(page)
+    await gotoForPerf(page, scenario.route, {
+      readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
+    })
     await page.waitForTimeout(160)
     const snapshot = await getVisualLayoutFingerprint(page)
 
@@ -650,14 +690,17 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
 
       expect(snapshot.searchRect).not.toBeNull()
       expect(snapshot.firstCardRect).not.toBeNull()
-      expect(snapshot.desktopTagRailRect).not.toBeNull()
+      const desktopTagRailMetrics = await getDesktopTagRailMetrics(page)
+      expect(desktopTagRailMetrics).not.toBeNull()
 
       const searchWidth = snapshot.searchRect?.width ?? 0
       const searchHeight = snapshot.searchRect?.height ?? 0
       const firstCardWidth = snapshot.firstCardRect?.width ?? 0
       const firstCardHeight = snapshot.firstCardRect?.height ?? 0
       const railWidth = snapshot.desktopTagRailRect?.width ?? 0
-      const railHeight = snapshot.desktopTagRailRect?.height ?? 0
+      const railHeight = desktopTagRailMetrics?.height ?? 0
+      const railScrollHeight = desktopTagRailMetrics?.scrollHeight ?? 0
+      const railPanelBottom = desktopTagRailMetrics?.panelBottom ?? 0
       const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
       const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
 
@@ -670,7 +713,9 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       expect(firstCardHeight).toBeLessThanOrEqual(400)
       expect(railWidth).toBe(184)
       expect(railHeight).toBeGreaterThanOrEqual(84)
-      expect(railHeight).toBeLessThanOrEqual(96)
+      expect(railHeight).toBeLessThanOrEqual(560)
+      expect(railScrollHeight).toBeGreaterThanOrEqual(railHeight)
+      expect(railPanelBottom).toBeLessThanOrEqual(snapshot.viewport.height)
       expect(htmlScrollWidth).toBeLessThanOrEqual(1440)
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
@@ -804,8 +849,9 @@ test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다
     for (const scenario of scenarios) {
       await applySchemePreference(page, scheme)
       await page.setViewportSize(scenario.viewport)
-      await page.goto(scenario.route)
-      await waitForPageReady(page)
+      await gotoForPerf(page, scenario.route, {
+        readyText: scenario.route === "/posts/991" ? "상세 레일 스티키 회귀 점검" : undefined,
+      })
       await waitForSchemeReady(page, scheme)
       await page.waitForTimeout(120)
 

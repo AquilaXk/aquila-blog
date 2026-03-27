@@ -853,8 +853,68 @@ const formatTagRecommendationReason = (rawReason?: string | null) => {
   }
 }
 
+const FRONTMATTER_DELIMITER_REGEX = /^\s*---\s*$/
+const LEADING_EDITOR_METADATA_LINE_REGEX =
+  /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
+
+const splitFrontmatterBlock = (content: string) => {
+  const normalized = content.replace(/\r\n?/g, "\n").trimStart()
+  const lines = normalized.split("\n")
+  if (!FRONTMATTER_DELIMITER_REGEX.test(lines[0] || "")) {
+    return {
+      metadataLines: [] as string[],
+      body: normalized,
+    }
+  }
+
+  for (let index = 1; index < lines.length; index += 1) {
+    if (!FRONTMATTER_DELIMITER_REGEX.test(lines[index] || "")) continue
+    return {
+      metadataLines: lines.slice(1, index),
+      body: lines
+        .slice(index + 1)
+        .join("\n")
+        .replace(/^\n+/, ""),
+    }
+  }
+
+  return {
+    metadataLines: [] as string[],
+    body: normalized,
+  }
+}
+
+const stripLeadingEditorMetadataLines = (content: string) => {
+  const normalized = content.replace(/\r\n?/g, "\n")
+  const lines = normalized.split("\n")
+  let consumed = 0
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      consumed += 1
+      break
+    }
+    if (!LEADING_EDITOR_METADATA_LINE_REGEX.test(line)) break
+    consumed += 1
+  }
+
+  return {
+    consumed,
+    body: consumed > 0 ? lines.slice(consumed).join("\n").trimStart() : normalized,
+  }
+}
+
+const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
+  const normalized = content.replace(/\r\n?/g, "\n").trimStart()
+  if (parsedBody.trim().length > 0 || normalized.trim().length === 0) return parsedBody
+
+  const frontmatterSplit = splitFrontmatterBlock(normalized)
+  const inlineMetadataSplit = stripLeadingEditorMetadataLines(frontmatterSplit.body)
+  return inlineMetadataSplit.body.trim().length > 0 ? inlineMetadataSplit.body : parsedBody
+}
+
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
-  let trimmed = content.trimStart()
+  let trimmed = content.replace(/\r\n?/g, "\n").trimStart()
   const tags: string[] = []
   let category = ""
   let summary = ""
@@ -871,58 +931,48 @@ const parseEditorMeta = (content: string): ParsedEditorMeta => {
     if (nextCategory) category = nextCategory
   }
 
-  if (trimmed.startsWith("---\n")) {
-    const closingIndex = trimmed.indexOf("\n---", 4)
-    if (closingIndex > 0) {
-      const block = trimmed.slice(4, closingIndex).split("\n")
-      block.forEach((line) => {
-        const [rawKey, ...rest] = line.split(":")
-        if (!rawKey || rest.length === 0) return
-        const key = rawKey.trim().toLowerCase()
-        const value = rest.join(":").trim()
-        if (!value) return
+  const frontmatterSplit = splitFrontmatterBlock(trimmed)
+  if (frontmatterSplit.metadataLines.length > 0) {
+    frontmatterSplit.metadataLines.forEach((line) => {
+      const [rawKey, ...rest] = line.split(":")
+      if (!rawKey || rest.length === 0) return
+      const key = rawKey.trim().toLowerCase()
+      const value = rest.join(":").trim()
+      if (!value) return
 
-        if (key === "tags" || key === "tag") pushTags(normalizeMetaItems(value))
+      if (key === "tags" || key === "tag") pushTags(normalizeMetaItems(value))
+      if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
+      if (key === "summary") summary = normalizeMetaScalar(value)
+      if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
+        thumbnail = normalizeMetaScalar(value)
+      }
+    })
+    trimmed = frontmatterSplit.body.trimStart()
+  }
+
+  const leadingMetadataSplit = stripLeadingEditorMetadataLines(trimmed)
+  if (leadingMetadataSplit.consumed > 0) {
+    trimmed
+      .split("\n")
+      .slice(0, leadingMetadataSplit.consumed)
+      .forEach((line) => {
+        const match = line.match(LEADING_EDITOR_METADATA_LINE_REGEX)
+        if (!match) return
+
+        const key = match[1].toLowerCase()
+        const value = match[2]
+        if (key === "tag" || key === "tags") pushTags(normalizeMetaItems(value))
         if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
         if (key === "summary") summary = normalizeMetaScalar(value)
         if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
           thumbnail = normalizeMetaScalar(value)
         }
       })
-      trimmed = trimmed.slice(closingIndex + 4).trimStart()
-    }
-  }
-
-  const lines = trimmed.split("\n")
-  const metadataLineRegex = /^\s*(tags?|categories?|summary|thumbnail|thumb|cover|coverimage|cover_image)\s*:\s*(.+)\s*$/i
-  let consumed = 0
-
-  for (const line of lines) {
-    if (!line.trim()) {
-      consumed += 1
-      break
-    }
-
-    const match = line.match(metadataLineRegex)
-    if (!match) break
-
-    const key = match[1].toLowerCase()
-    const value = match[2]
-    if (key === "tag" || key === "tags") pushTags(normalizeMetaItems(value))
-    if (key === "category" || key === "categories") setCategory(normalizeMetaItems(value))
-    if (key === "summary") summary = normalizeMetaScalar(value)
-    if (key === "thumbnail" || key === "thumb" || key === "cover" || key === "coverimage" || key === "cover_image") {
-      thumbnail = normalizeMetaScalar(value)
-    }
-    consumed += 1
-  }
-
-  if (consumed > 0) {
-    trimmed = lines.slice(consumed).join("\n").trimStart()
+    trimmed = leadingMetadataSplit.body
   }
 
   return {
-    body: trimmed,
+    body: resolveEditorBodyFallback(content, trimmed),
     tags,
     category,
     summary,

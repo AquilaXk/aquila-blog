@@ -90,7 +90,8 @@ class ApiV1MemberControllerWebMvcTest {
             adminMember.homeIntroTitle = "aquilaXk's Blog"
             adminMember.homeIntroDescription = "welcome to my backend dev log!"
             given(memberUseCase.findByEmail("admin@test.com")).willReturn(adminMember)
-            given(currentMemberProfileQueryUseCase.getById(adminMember.id)).willReturn(MemberWithUsernameDto(adminMember))
+            given(currentMemberProfileQueryUseCase.getPublishedById(adminMember.id))
+                .willReturn(MemberWithUsernameDto(adminMember))
 
             mvc
                 .get("/member/api/v1/members/adminProfile") {

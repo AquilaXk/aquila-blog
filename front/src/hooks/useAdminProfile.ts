@@ -2,6 +2,7 @@ import { QueryClient, useQuery } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import { queryKey } from "src/constants/queryKey"
+import type { AboutSectionBlock } from "src/libs/profileWorkspace"
 
 export type AdminProfile = {
   username: string
@@ -14,6 +15,7 @@ export type AdminProfile = {
   aboutRole?: string
   aboutBio?: string
   aboutDetails?: string
+  aboutSections?: AboutSectionBlock[]
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -32,6 +34,7 @@ type AdminProfileLike = {
   aboutRole?: string
   aboutBio?: string
   aboutDetails?: string
+  aboutSections?: AboutSectionBlock[]
   blogTitle?: string
   homeIntroTitle?: string
   homeIntroDescription?: string
@@ -50,6 +53,7 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   aboutRole: value.aboutRole,
   aboutBio: value.aboutBio,
   aboutDetails: value.aboutDetails,
+  aboutSections: value.aboutSections || [],
   blogTitle: value.blogTitle,
   homeIntroTitle: value.homeIntroTitle,
   homeIntroDescription: value.homeIntroDescription,

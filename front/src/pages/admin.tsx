@@ -23,27 +23,27 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
     : "확인 전"
 
-  const quickLinks = [
+  const primaryAction = {
+    href: "/admin/posts/write",
+    title: "새 글 쓰기",
+    description: "아이디어를 바로 초안으로 시작하고, 필요하면 목록 관리로 이어갑니다.",
+    cta: "글 쓰기 시작",
+    secondaryHref: "/admin/posts/new?surface=manage",
+    secondaryLabel: "기존 글 관리",
+  }
+
+  const secondaryLinks = [
     {
       href: "/admin/profile",
       title: "프로필 관리",
-      description: "사진, 역할, 소개 문구를 정리합니다.",
-      eyebrow: "Profile",
-      cta: "프로필 열기",
-    },
-    {
-      href: "/admin/posts/new",
-      title: "글 작업실",
-      description: "목록 관리와 작성/발행 흐름을 나눠 다룹니다.",
-      eyebrow: "Content",
-      cta: "글 작업실 열기",
+      description: "사진, 소개, 링크를 정리합니다.",
+      cta: "프로필 정리",
     },
     {
       href: "/admin/tools",
-      title: "운영 도구",
-      description: "요약, 빠른 실행, 고급 진단을 확인합니다.",
-      eyebrow: "Tools",
-      cta: "도구 열기",
+      title: "운영 진단",
+      description: "상태 확인과 진단 작업을 엽니다.",
+      cta: "진단 열기",
     },
   ]
 
@@ -57,7 +57,8 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       profileRole={sessionMember.profileRole}
       profileBio={sessionMember.profileBio}
       profileUpdatedText={profileUpdatedText}
-      quickLinks={quickLinks}
+      primaryAction={primaryAction}
+      secondaryLinks={secondaryLinks}
     />
   )
 }

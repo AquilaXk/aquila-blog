@@ -3,6 +3,7 @@ export const queryKey = {
   authMe: () => ["auth", "me"] as const,
   authMeProbe: () => ["auth", "me", "probe"] as const,
   adminProfile: () => ["member", "adminProfile"] as const,
+  adminProfileWorkspace: (memberId: number) => ["member", "adminProfile", "workspace", memberId] as const,
   postsExplore: (params: {
     kw: string
     tag?: string

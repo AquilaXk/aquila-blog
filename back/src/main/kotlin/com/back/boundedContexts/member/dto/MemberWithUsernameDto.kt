@@ -2,6 +2,9 @@ package com.back.boundedContexts.member.dto
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
+import com.back.boundedContexts.member.domain.shared.memberMixin.convertAboutSectionsToLegacyDetails
+import com.back.boundedContexts.member.domain.shared.memberMixin.parseLegacyAboutDetailsToBlocks
 import java.time.Instant
 
 /**
@@ -41,13 +44,20 @@ data class MemberWithUsernameDto(
     val aboutRole: String,
     val aboutBio: String,
     val aboutDetails: String,
+    val aboutSections: List<MemberProfileAboutSectionBlockDto>,
     val blogTitle: String,
     val homeIntroTitle: String,
     val homeIntroDescription: String,
     val serviceLinks: List<MemberProfileLinkItemDto>,
     val contactLinks: List<MemberProfileLinkItemDto>,
 ) {
-    constructor(member: Member) : this(
+    constructor(member: Member) : this(member, null, null)
+
+    constructor(
+        member: Member,
+        workspaceContent: MemberProfileWorkspaceContent?,
+        workspaceModifiedAt: Instant?,
+    ) : this(
         id = member.id,
         createdAt = member.createdAt,
         modifiedAt = member.modifiedAt,
@@ -56,17 +66,68 @@ data class MemberWithUsernameDto(
         username = member.name,
         name = member.name,
         nickname = member.nickname,
-        profileImageUrl = member.redirectToProfileImgUrlVersionedOrDefault,
-        profileImageDirectUrl = member.profileImgUrlVersionedOrDefault,
-        profileRole = member.profileRole,
-        profileBio = member.profileBio,
-        aboutRole = member.aboutRole,
-        aboutBio = member.aboutBio,
-        aboutDetails = member.aboutDetails,
-        blogTitle = member.blogTitle,
-        homeIntroTitle = member.homeIntroTitle,
-        homeIntroDescription = member.homeIntroDescription,
-        serviceLinks = member.serviceLinks.map(::MemberProfileLinkItemDto),
-        contactLinks = member.contactLinks.map(::MemberProfileLinkItemDto),
+        profileImageUrl = resolveProfileImageUrl(member, workspaceContent, workspaceModifiedAt),
+        profileImageDirectUrl = resolveProfileImageDirectUrl(member, workspaceContent, workspaceModifiedAt),
+        profileRole = workspaceContent?.profileRole ?: member.profileRole,
+        profileBio = workspaceContent?.profileBio ?: member.profileBio,
+        aboutRole = workspaceContent?.aboutRole ?: member.aboutRole,
+        aboutBio = workspaceContent?.aboutBio ?: member.aboutBio,
+        aboutDetails =
+            workspaceContent?.let {
+                convertAboutSectionsToLegacyDetails(it.aboutSections)
+            } ?: member.aboutDetails,
+        aboutSections =
+            (
+                workspaceContent?.aboutSections
+                    ?: parseLegacyAboutDetailsToBlocks(member.aboutDetails)
+            ).map(::MemberProfileAboutSectionBlockDto),
+        blogTitle = workspaceContent?.blogTitle ?: member.blogTitle,
+        homeIntroTitle = workspaceContent?.homeIntroTitle ?: member.homeIntroTitle,
+        homeIntroDescription = workspaceContent?.homeIntroDescription ?: member.homeIntroDescription,
+        serviceLinks =
+            (
+                workspaceContent?.serviceLinks
+                    ?: member.serviceLinks
+            ).map(::MemberProfileLinkItemDto),
+        contactLinks =
+            (
+                workspaceContent?.contactLinks
+                    ?: member.contactLinks
+            ).map(::MemberProfileLinkItemDto),
     )
+
+    companion object {
+        private fun appendVersion(
+            url: String,
+            modifiedAt: Instant?,
+        ): String {
+            if (url.isBlank() || modifiedAt == null || url.startsWith("https://placehold.co/")) return url
+            val separator = if (url.contains("?")) "&" else "?"
+            return "$url${separator}v=${modifiedAt.toEpochMilli()}"
+        }
+
+        private fun resolveProfileImageDirectUrl(
+            member: Member,
+            workspaceContent: MemberProfileWorkspaceContent?,
+            workspaceModifiedAt: Instant?,
+        ): String =
+            workspaceContent
+                ?.profileImageUrl
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
+                ?: member.profileImgUrlVersionedOrDefault
+
+        private fun resolveProfileImageUrl(
+            member: Member,
+            workspaceContent: MemberProfileWorkspaceContent?,
+            workspaceModifiedAt: Instant?,
+        ): String =
+            workspaceContent
+                ?.profileImageUrl
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let { appendVersion(it, workspaceModifiedAt ?: member.modifiedAt) }
+                ?: member.redirectToProfileImgUrlVersionedOrDefault
+    }
 }

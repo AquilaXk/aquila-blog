@@ -11,8 +11,9 @@ const liveLoginAttempts = Number.parseInt(process.env.E2E_LIVE_LOGIN_ATTEMPTS ||
 const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS || "30000", 10)
 const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
 const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
-const adminLandingHeadingPattern = /관리자 (?:작업 진입점|운영 허브|허브)/
+const adminLandingHeadingPattern = /관리자 (?:작업 공간|작업 진입점|운영 허브|허브)/
 const adminProfileHeadingPattern = /(?:운영 프로필|관리자 프로필 관리|프로필 관리)/
+const adminToolsHeadingPattern = /운영 (?:센터|도구|진단)/
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -385,7 +386,11 @@ test.describe("live production e2e", () => {
 
     const apiBaseUrl = resolveApiBaseUrl(page.url())
     await waitForApiReachability(page, apiBaseUrl)
-    await loginWithRetry(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
+    if (hasUiLoginCredentials) {
+      await loginThroughUi(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
+    } else {
+      await loginWithRetry(page, apiBaseUrl, adminEmail, adminLegacyLoginId, adminPassword)
+    }
 
     await page.goto("/admin")
     await expect(page).toHaveURL(/\/admin(\/|$)/, { timeout: 20_000 })
@@ -405,14 +410,20 @@ test.describe("live production e2e", () => {
       .toBeTruthy()
 
     await page.goto("/admin/tools")
-    await expect(page.getByRole("heading", { name: "운영 도구" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()
     await expect(page.getByRole("button", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await page.goto("/admin/posts/new")
-    const composeTab = page.getByRole("tab", { name: "글 작성" })
-    await expect(composeTab).toBeVisible()
-    await composeTab.click()
-    await expect(page.getByPlaceholder("제목을 입력하세요")).toBeVisible()
+    const workspaceHeading = page.getByRole("heading", { name: "글 작업 공간" })
+    const titleInput = page.getByPlaceholder("제목을 입력하세요")
+    if (await workspaceHeading.isVisible().catch(() => false)) {
+      await expect(page.getByRole("heading", { name: "새 글 쓰기" })).toBeVisible()
+      await page.getByRole("button", { name: "새 글 쓰기" }).first().click()
+      await expect(page).toHaveURL(/\/admin\/posts\/write(\/|$|\?)/)
+      await expect(titleInput).toBeVisible()
+    } else {
+      await expect(titleInput).toBeVisible()
+    }
     const blockEditor = page.locator(".aq-block-editor__content").first()
     await expect(blockEditor).toBeVisible()
     await blockEditor.click()

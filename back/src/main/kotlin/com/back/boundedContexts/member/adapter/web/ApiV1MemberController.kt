@@ -56,7 +56,7 @@ class ApiV1MemberController(
                 ?.let(memberUseCase::findByEmail)
                 ?: throw AppException("404-1", "관리자 프로필을 찾을 수 없습니다.")
 
-        return currentMemberProfileQueryUseCase.getById(adminMember.id)
+        return currentMemberProfileQueryUseCase.getPublishedById(adminMember.id)
     }
 
     /**

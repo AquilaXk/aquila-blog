@@ -4,6 +4,7 @@ import com.back.boundedContexts.member.application.port.output.MemberAttrReposit
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.storage.application.UploadedFileRetentionService
@@ -174,11 +175,18 @@ class MemberApplicationService(
         profileImgUrl: String?,
     ) {
         memberProfileHydrator.hydrate(member)
+        ensureProfileWorkspaceSnapshotsInitialized(member)
         val previousProfileImgUrl = member.profileImgUrl
+        val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
         member.modify(nickname, profileImgUrl)
         if (profileImgUrl != null) {
             saveProfileImgUrlAttr(member)
-            uploadedFileRetentionService.syncProfileImage(member.id, previousProfileImgUrl, member.profileImgUrl)
+            syncDraftWorkspaceFromLegacy(member)
+            uploadedFileRetentionService.syncProfileImage(
+                member.id,
+                previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
+                member.profileImgUrl,
+            )
         }
     }
 
@@ -201,6 +209,7 @@ class MemberApplicationService(
         contactLinks: List<MemberProfileLinkItem>,
     ) {
         memberProfileHydrator.hydrate(member)
+        ensureProfileWorkspaceSnapshotsInitialized(member)
         member.profileRole = role
         member.profileBio = bio
         if (aboutRole != null) {
@@ -233,6 +242,55 @@ class MemberApplicationService(
         saveHomeIntroDescriptionAttr(member)
         saveServiceLinksAttr(member)
         saveContactLinksAttr(member)
+        syncDraftWorkspaceFromLegacy(member)
+    }
+
+    @Transactional
+    fun saveProfileWorkspaceDraft(
+        member: Member,
+        content: MemberProfileWorkspaceContent,
+    ) {
+        memberProfileHydrator.hydrate(member)
+        ensureProfileWorkspaceSnapshotsInitialized(member)
+        val previousProfileImgUrl = member.profileImgUrl
+        val publishedProfileImgUrl = member.getProfileWorkspacePublishedContent().profileImageUrl
+        member.applyProfileWorkspaceContent(content)
+        saveProfileImgUrlAttr(member)
+        saveProfileRoleAttr(member)
+        saveProfileBioAttr(member)
+        saveAboutRoleAttr(member)
+        saveAboutBioAttr(member)
+        saveAboutDetailsAttr(member)
+        saveBlogTitleAttr(member)
+        saveHomeIntroTitleAttr(member)
+        saveHomeIntroDescriptionAttr(member)
+        saveServiceLinksAttr(member)
+        saveContactLinksAttr(member)
+        syncDraftWorkspaceFromLegacy(member)
+        if (previousProfileImgUrl != member.profileImgUrl) {
+            uploadedFileRetentionService.syncProfileImage(
+                member.id,
+                previousProfileImgUrl.takeUnless { it == publishedProfileImgUrl },
+                member.profileImgUrl,
+            )
+        }
+    }
+
+    @Transactional
+    fun publishProfileWorkspace(member: Member) {
+        memberProfileHydrator.hydrate(member)
+        ensureProfileWorkspaceSnapshotsInitialized(member)
+        val previousPublished = member.getProfileWorkspacePublishedContent()
+        val draft = member.getProfileWorkspaceDraftContent()
+        member.setProfileWorkspacePublishedContent(draft)
+        saveProfileWorkspacePublishedAttr(member)
+        if (previousPublished.profileImageUrl != draft.profileImageUrl) {
+            uploadedFileRetentionService.syncProfileImage(
+                member.id,
+                previousPublished.profileImageUrl,
+                draft.profileImageUrl,
+            )
+        }
     }
 
     @Transactional
@@ -351,6 +409,31 @@ class MemberApplicationService(
 
     private fun saveContactLinksAttr(member: Member) {
         memberAttrRepository.save(member.getOrInitContactLinksAttr())
+    }
+
+    private fun saveProfileWorkspaceDraftAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitProfileWorkspaceDraftAttr())
+    }
+
+    private fun saveProfileWorkspacePublishedAttr(member: Member) {
+        memberAttrRepository.save(member.getOrInitProfileWorkspacePublishedAttr())
+    }
+
+    private fun ensureProfileWorkspaceSnapshotsInitialized(member: Member) {
+        val legacyContent = member.currentProfileWorkspaceContent
+        if (!member.hasPersistedProfileWorkspacePublished()) {
+            member.setProfileWorkspacePublishedContent(legacyContent)
+            saveProfileWorkspacePublishedAttr(member)
+        }
+        if (!member.hasPersistedProfileWorkspaceDraft()) {
+            member.setProfileWorkspaceDraftContent(legacyContent)
+            saveProfileWorkspaceDraftAttr(member)
+        }
+    }
+
+    private fun syncDraftWorkspaceFromLegacy(member: Member) {
+        member.setProfileWorkspaceDraftContent(member.currentProfileWorkspaceContent)
+        saveProfileWorkspaceDraftAttr(member)
     }
 
     private fun normalizeEmailOrNull(email: String?): String? =

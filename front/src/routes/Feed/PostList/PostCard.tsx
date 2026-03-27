@@ -1,5 +1,4 @@
 import Link from "next/link"
-import Image from "next/image"
 import { CONFIG } from "site.config"
 import { formatDate } from "src/libs/utils"
 import { TPost } from "../../../types"
@@ -9,6 +8,7 @@ import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import AppIcon from "src/components/icons/AppIcon"
 import { memo, useCallback, useEffect, useMemo, useRef } from "react"
 import Router from "next/router"
+import ProfileImage from "src/components/ProfileImage"
 import {
   parseThumbnailFocusXFromUrl,
   parseThumbnailFocusYFromUrl,
@@ -30,27 +30,15 @@ const FEED_CARD_RADIUS_PX = 4
 const FEED_CARD_SHADOW = "0 8px 20px rgba(2, 6, 23, 0.14)"
 const FEED_CARD_SHADOW_HOVER = "0 18px 34px rgba(2, 6, 23, 0.2)"
 const FEED_CARD_HOVER_TRANSLATE_PX = -8
+const PREFETCH_DELAY_MS = 1200
 
 type NavigatorConnectionLike = {
   saveData?: boolean
   effectiveType?: string
-  addEventListener?: (type: "change", listener: () => void) => void
-  removeEventListener?: (type: "change", listener: () => void) => void
-  onchange?: (() => void) | null
 }
 
-const PREFETCH_CONCURRENCY = 1
-const PREFETCH_CONCURRENCY_FAST_NETWORK = 2
-const MAX_PREFETCH_QUEUE_SIZE = 16
-const MAX_PREFETCH_QUEUE_SIZE_MID_MEMORY = 12
-const MAX_PREFETCH_QUEUE_SIZE_LOW_MEMORY = 8
-const MAX_PREFETCHED_PATHS = 256
-const POST_CARD_THUMBNAIL_SIZES =
-  "(min-width: 1520px) 420px, (min-width: 1201px) 320px, (min-width: 1057px) 368px, (min-width: 768px) 46vw, 94vw"
-const prefetchedPostPathLRU = new Map<string, true>()
-const queuedPrefetchListeners = new Map<string, Array<(success: boolean) => void>>()
-const pendingPrefetchPaths: string[] = []
-let prefetchInFlightCount = 0
+const prefetchedPostPaths = new Set<string>()
+const inflightPrefetchPaths = new Set<string>()
 
 const getNavigatorConnection = (): NavigatorConnectionLike | undefined => {
   if (typeof navigator === "undefined") return undefined
@@ -62,174 +50,18 @@ const isNavigatorOnline = () => {
   return navigator.onLine !== false
 }
 
-const getNavigatorDeviceMemory = () => {
-  if (typeof navigator === "undefined") return undefined
-  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
-  return typeof memory === "number" && Number.isFinite(memory) ? memory : undefined
-}
+const hasPrefetchedPostPath = (path: string) => prefetchedPostPaths.has(path)
 
-const hasPrefetchedPostPath = (path: string) => prefetchedPostPathLRU.has(path)
+const requestIntentPrefetch = async (path: string) => {
+  if (prefetchedPostPaths.has(path) || inflightPrefetchPaths.has(path)) return
 
-const markPrefetchedPostPath = (path: string) => {
-  if (prefetchedPostPathLRU.has(path)) {
-    prefetchedPostPathLRU.delete(path)
+  inflightPrefetchPaths.add(path)
+  try {
+    await Router.prefetch(path)
+    prefetchedPostPaths.add(path)
+  } finally {
+    inflightPrefetchPaths.delete(path)
   }
-  prefetchedPostPathLRU.set(path, true)
-
-  if (prefetchedPostPathLRU.size <= MAX_PREFETCHED_PATHS) return
-
-  const oldestPath = prefetchedPostPathLRU.keys().next().value
-  if (!oldestPath) return
-  prefetchedPostPathLRU.delete(oldestPath)
-}
-
-const notifyPrefetchListeners = (path: string, success: boolean) => {
-  const listeners = queuedPrefetchListeners.get(path)
-  queuedPrefetchListeners.delete(path)
-  if (!listeners || listeners.length === 0) return
-  listeners.forEach((listener) => listener(success))
-}
-
-const isQueuedForPrefetch = (path: string) => queuedPrefetchListeners.has(path)
-
-const resolvePrefetchConcurrency = () => {
-  if (typeof navigator === "undefined") return PREFETCH_CONCURRENCY
-  const deviceMemory = getNavigatorDeviceMemory()
-  if (typeof deviceMemory === "number" && deviceMemory <= 2) return PREFETCH_CONCURRENCY
-
-  const connection = getNavigatorConnection()
-  if (!connection || connection.saveData) return PREFETCH_CONCURRENCY
-  if (connection.effectiveType === "4g") {
-    if (typeof deviceMemory === "number" && deviceMemory < 8) return PREFETCH_CONCURRENCY
-    return PREFETCH_CONCURRENCY_FAST_NETWORK
-  }
-  return PREFETCH_CONCURRENCY
-}
-
-const resolvePrefetchQueueLimit = () => {
-  const deviceMemory = getNavigatorDeviceMemory()
-  if (typeof deviceMemory !== "number") return MAX_PREFETCH_QUEUE_SIZE
-  if (deviceMemory <= 2) return MAX_PREFETCH_QUEUE_SIZE_LOW_MEMORY
-  if (deviceMemory <= 4) return MAX_PREFETCH_QUEUE_SIZE_MID_MEMORY
-  return MAX_PREFETCH_QUEUE_SIZE
-}
-
-const dropOldestPendingPrefetch = () => {
-  const droppedPath = pendingPrefetchPaths.shift()
-  if (!droppedPath) return
-  notifyPrefetchListeners(droppedPath, false)
-}
-
-const trimPendingPrefetchQueueToCurrentLimit = () => {
-  const limit = resolvePrefetchQueueLimit()
-  while (pendingPrefetchPaths.length > limit) {
-    dropOldestPendingPrefetch()
-  }
-}
-
-const flushPrefetchQueue = () => {
-  if (!isNavigatorOnline()) return
-
-  while (prefetchInFlightCount < resolvePrefetchConcurrency() && pendingPrefetchPaths.length > 0) {
-    if (typeof document !== "undefined" && document.visibilityState !== "visible") return
-
-    const path = pendingPrefetchPaths.shift()
-    if (!path) break
-
-    if (hasPrefetchedPostPath(path)) {
-      notifyPrefetchListeners(path, true)
-      continue
-    }
-
-    prefetchInFlightCount += 1
-    Router.prefetch(path)
-      .then(() => {
-        markPrefetchedPostPath(path)
-        notifyPrefetchListeners(path, true)
-      })
-      .catch(() => {
-        notifyPrefetchListeners(path, false)
-      })
-      .finally(() => {
-        prefetchInFlightCount -= 1
-        flushPrefetchQueue()
-      })
-  }
-}
-
-const enqueuePostPrefetch = (path: string, listener: (success: boolean) => void) => {
-  ensurePrefetchRuntimeListeners()
-
-  if (hasPrefetchedPostPath(path)) {
-    listener(true)
-    return
-  }
-
-  const queuedListeners = queuedPrefetchListeners.get(path)
-  if (queuedListeners) {
-    queuedListeners.push(listener)
-    return
-  }
-
-  if (pendingPrefetchPaths.length >= resolvePrefetchQueueLimit()) {
-    dropOldestPendingPrefetch()
-  }
-
-  queuedPrefetchListeners.set(path, [listener])
-  pendingPrefetchPaths.push(path)
-  flushPrefetchQueue()
-}
-
-let hasRegisteredVisibilityListener = false
-let hasRegisteredConnectionListener = false
-let hasRegisteredOnlineListener = false
-
-const registerPrefetchVisibilityListener = () => {
-  if (hasRegisteredVisibilityListener) return
-  if (typeof document === "undefined") return
-  hasRegisteredVisibilityListener = true
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") return
-    flushPrefetchQueue()
-  })
-}
-
-const registerPrefetchConnectionListener = () => {
-  if (hasRegisteredConnectionListener) return
-  const connection = getNavigatorConnection()
-  if (!connection) return
-  hasRegisteredConnectionListener = true
-
-  const handleConnectionChange = () => {
-    trimPendingPrefetchQueueToCurrentLimit()
-    flushPrefetchQueue()
-  }
-
-  if (typeof connection.addEventListener === "function") {
-    connection.addEventListener("change", handleConnectionChange)
-    return
-  }
-
-  connection.onchange = handleConnectionChange
-}
-
-const registerPrefetchOnlineListener = () => {
-  if (hasRegisteredOnlineListener) return
-  if (typeof window === "undefined") return
-  hasRegisteredOnlineListener = true
-
-  const handleOnline = () => {
-    trimPendingPrefetchQueueToCurrentLimit()
-    flushPrefetchQueue()
-  }
-
-  window.addEventListener("online", handleOnline)
-}
-
-const ensurePrefetchRuntimeListeners = () => {
-  registerPrefetchVisibilityListener()
-  registerPrefetchConnectionListener()
-  registerPrefetchOnlineListener()
 }
 
 const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
@@ -260,15 +92,6 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
     prefetchTimeoutRef.current = null
   }, [])
 
-  const prefetchPost = useCallback(() => {
-    if (hasPrefetchedRef.current) return
-    hasPrefetchedRef.current = true
-    enqueuePostPrefetch(postPath, (success) => {
-      if (success) return
-      hasPrefetchedRef.current = false
-    })
-  }, [postPath])
-
   const canPrefetchOnCurrentNetwork = useCallback(() => {
     if (!isNavigatorOnline()) return false
     if (typeof navigator === "undefined") return true
@@ -280,16 +103,24 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
     return true
   }, [])
 
+  const prefetchPost = useCallback(() => {
+    if (hasPrefetchedRef.current) return
+    if (!canPrefetchOnCurrentNetwork()) return
+    hasPrefetchedRef.current = true
+    void requestIntentPrefetch(postPath).catch(() => {
+      hasPrefetchedRef.current = false
+    })
+  }, [canPrefetchOnCurrentNetwork, postPath])
+
   const handleMouseEnter = useCallback(() => {
     if (hasPrefetchedRef.current) return
     if (hasPrefetchedPostPath(postPath)) {
       hasPrefetchedRef.current = true
       return
     }
-    if (isQueuedForPrefetch(postPath)) return
     if (!canPrefetchOnCurrentNetwork()) return
     clearPrefetchTimer()
-    prefetchTimeoutRef.current = window.setTimeout(prefetchPost, 1800)
+    prefetchTimeoutRef.current = window.setTimeout(prefetchPost, PREFETCH_DELAY_MS)
   }, [canPrefetchOnCurrentNetwork, clearPrefetchTimer, postPath, prefetchPost])
 
   const handleMouseLeave = useCallback(() => {
@@ -313,14 +144,13 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
       <article>
         {thumbnailSrc && (
           <div className="thumbnail">
-            <Image
+            <ProfileImage
               src={thumbnailSrc}
               alt=""
               aria-hidden
-              fill
+              fillContainer
               priority={layout === "pinned"}
-              loading={layout === "pinned" ? undefined : "lazy"}
-              sizes={POST_CARD_THUMBNAIL_SIZES}
+              loading={layout === "pinned" ? "eager" : "lazy"}
               style={{
                 objectFit: "cover",
                 objectPosition: `${thumbnailFocusX}% ${thumbnailFocusY}%`,
@@ -350,15 +180,7 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
             <div className="author">
               <span className="avatar" aria-hidden="true">
                 {author?.profile_photo ? (
-                  <Image
-                    src={author.profile_photo}
-                    alt=""
-                    fill
-                    sizes="32px"
-                    style={{
-                      objectFit: "cover",
-                    }}
-                  />
+                  <ProfileImage src={author.profile_photo} alt="" fillContainer width={24} height={24} />
                 ) : (
                   <span className="initial">{(author?.name || "A").slice(0, 1).toUpperCase()}</span>
                 )}

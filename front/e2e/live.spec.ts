@@ -409,7 +409,9 @@ test.describe("live production e2e", () => {
     await expect(page.getByRole("button", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await page.goto("/admin/posts/new")
-    await expect(page.getByRole("heading", { name: "글 작업실" })).toBeVisible()
+    const composeTab = page.getByRole("tab", { name: "글 작성" })
+    await expect(composeTab).toBeVisible()
+    await composeTab.click()
     await expect(page.getByPlaceholder("제목을 입력하세요")).toBeVisible()
     const contentEditor = page.getByPlaceholder("당신의 이야기를 적어보세요...")
     await contentEditor.fill("```mermaid\ngraph TD\n  A[요청] --> B[완료]\n```")

@@ -31,6 +31,7 @@ const DESKTOP_MERMAID_MIN_VIEWPORT_PX = 1201
 const MERMAID_DESKTOP_WIDE_MAX_PX = 1100
 const MERMAID_DESKTOP_SAFE_MARGIN_PX = 24
 const MERMAID_EXPAND_THRESHOLD_PX = 80
+const MERMAID_VIEWPORT_ROOT_MARGIN = "360px 0px"
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -147,6 +148,7 @@ const useMermaidEffect = (
     let running = false
     let rerunRequested = false
     let mutationObserver: MutationObserver | null = null
+    let intersectionObserver: IntersectionObserver | null = null
     const retryTimers = new Set<number>()
     const loggedErrorSignatures = new Set<string>()
     let scheduledRunFrame: number | null = null
@@ -154,6 +156,8 @@ const useMermaidEffect = (
     const maxRetryCount = 6
     const retryBaseDelayMs = 150
     const maxRunRetryCount = 3
+    const preset = resolveMermaidPreset(scheme === "dark" ? "dark" : "light")
+    let mermaidPromise: Promise<any> | null = null
 
     const stripRiskyFlowchartDirectives = (source: string) =>
       source
@@ -199,6 +203,29 @@ const useMermaidEffect = (
     }
 
     let mermaidOverlayCleanup: (() => void) | null = null
+
+    const getMermaid = async () => {
+      if (!mermaidPromise) {
+        mermaidPromise = import("mermaid").then(({ default: mermaid }) => {
+          ;(
+            mermaid as unknown as {
+              parseError?: (error: unknown, hash: unknown) => void
+            }
+          ).parseError = (error) => {
+            throw new Error(String(error))
+          }
+
+          mermaid.initialize({
+            startOnLoad: false,
+            ...preset.config,
+          })
+
+          return mermaid
+        })
+      }
+
+      return mermaidPromise
+    }
 
     const openMermaidOverlay = (svgMarkup: string) => {
       if (typeof document === "undefined") return
@@ -369,24 +396,6 @@ const useMermaidEffect = (
       const blocks = Array.from(mergedBlocks.values())
       if (!blocks.length) return
 
-      const mermaid = (await import("mermaid")).default
-      const preset = resolveMermaidPreset(scheme === "dark" ? "dark" : "light")
-
-      // Mermaid 기본 parseError 핸들러가 브라우저 알림을 띄우는 환경이 있어
-      // 렌더 에러를 훅 내부 catch 경로로 모아 조용히 처리한다.
-      ;(
-        mermaid as unknown as {
-          parseError?: (error: unknown, hash: unknown) => void
-        }
-      ).parseError = (error) => {
-        throw new Error(String(error))
-      }
-
-      mermaid.initialize({
-        startOnLoad: false,
-        ...preset.config,
-      })
-
       let renderQueue = Promise.resolve()
       const renderingIndices = new Set<number>()
       let enqueueRender: (index: number) => void = () => {}
@@ -411,6 +420,7 @@ const useMermaidEffect = (
         if (disposed) return
         const block = blocks[i]
         if (!block) return
+        const mermaid = await getMermaid()
         const codeBlock =
           block.querySelector<HTMLElement>("code.language-mermaid, code[data-language='mermaid'], code") || null
         const codeClassName = codeBlock?.className?.toLowerCase() || ""
@@ -695,12 +705,42 @@ const useMermaidEffect = (
           })
       }
 
-      // 미리보기/상세에서 "가끔 안 나옴"을 제거하기 위해 viewport 관찰 의존을 없애고 즉시 렌더한다.
-      // 다이어그램 수가 많은 글에서도 renderQueue(직렬)로 스파이크를 제어한다.
-      for (let i = 0; i < blocks.length; i += 1) {
-        enqueueRender(i)
+      intersectionObserver?.disconnect()
+      intersectionObserver = null
+
+      if (typeof IntersectionObserver === "undefined") {
+        for (let i = 0; i < blocks.length; i += 1) {
+          enqueueRender(i)
+        }
+        await renderQueue
+        return
       }
-      await renderQueue
+
+      const indicesByBlock = new Map(blocks.map((block, index) => [block, index] as const))
+      intersectionObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting && entry.intersectionRatio <= 0) return
+            const index = indicesByBlock.get(entry.target as HTMLElement)
+            if (typeof index !== "number") return
+            enqueueRender(index)
+            intersectionObserver?.unobserve(entry.target)
+          })
+        },
+        {
+          root: null,
+          rootMargin: MERMAID_VIEWPORT_ROOT_MARGIN,
+          threshold: 0.01,
+        }
+      )
+
+      blocks.forEach((block) => {
+        const alreadyRendered =
+          (block.dataset.mermaidRendered === "true" || block.dataset.mermaidRendered === "error") &&
+          block.dataset.mermaidTheme === preset.themeKey
+        if (alreadyRendered) return
+        intersectionObserver?.observe(block)
+      })
     }
 
     const run = async () => {
@@ -765,6 +805,7 @@ const useMermaidEffect = (
       mermaidOverlayCleanup?.()
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
+      intersectionObserver?.disconnect()
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
       if (scheduledRunFrame !== null) {

@@ -19,6 +19,7 @@ type Params = {
 }
 
 const EMPTY_POSTS: TPost[] = []
+const EMPTY_TOKENS: string[] = []
 const OFFSET_INITIAL_PAGE_PARAM = 1
 type ExplorePageParam = number
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -75,6 +76,10 @@ const useExplorePostsQuery = ({
   const normalizedTag = typeof tag === "string" ? tag.trim() || undefined : undefined
   const searchMode = normalizedKw.length > 0 && !normalizedTag
   const feedMode = normalizedKw.length === 0 && !normalizedTag
+  const keywordTokens = useMemo(
+    () => (searchMode ? tokenizeSearchKeyword(normalizedKw) : EMPTY_TOKENS),
+    [normalizedKw, searchMode]
+  )
 
   const query = useInfiniteQuery({
     enabled,
@@ -165,11 +170,15 @@ const useExplorePostsQuery = ({
       }
     }
 
-    if (searchMode) {
-      const tokens = tokenizeSearchKeyword(normalizedKw)
-      if (tokens.length) {
-        regular.sort((left, right) => {
-          const scoreDiff = toSearchRelevanceScore(right, tokens) - toSearchRelevanceScore(left, tokens)
+    if (searchMode && keywordTokens.length) {
+      const relevanceScores = new Map<string, number>()
+      regular.forEach((post) => {
+        relevanceScores.set(String(post.id), toSearchRelevanceScore(post, keywordTokens))
+      })
+
+      regular.sort((left, right) => {
+          const scoreDiff =
+            (relevanceScores.get(String(right.id)) ?? 0) - (relevanceScores.get(String(left.id)) ?? 0)
           if (Math.abs(scoreDiff) > 0.0001) return scoreDiff
 
           const leftCreatedAt = toSafeTimestamp(left.createdTime || left.date?.start_date)
@@ -181,15 +190,14 @@ const useExplorePostsQuery = ({
             return rightId - leftId
           }
           return String(right.id).localeCompare(String(left.id))
-        })
-      }
+      })
     }
 
     return {
       pinnedPosts: pinned,
       regularPosts: regular,
     }
-  }, [normalizedKw, query.data, searchMode])
+  }, [keywordTokens, query.data, searchMode])
 
   return {
     pinnedPosts,

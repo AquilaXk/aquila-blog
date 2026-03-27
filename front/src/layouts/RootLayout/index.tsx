@@ -58,6 +58,7 @@ const RootLayout = ({ children }: Props) => {
 
   useEffect(() => {
     if (typeof window === "undefined") return
+    if (process.env.NODE_ENV !== "production") return
 
     const isBenignRouteCancellationMessage = (value: unknown): boolean => {
       if (typeof value === "string") {

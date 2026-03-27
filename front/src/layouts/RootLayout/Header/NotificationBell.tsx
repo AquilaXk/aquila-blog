@@ -136,6 +136,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const [items, setItems] = useState<TMemberNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isReady, setIsReady] = useState(false)
+  const [isRealtimeActive, setIsRealtimeActive] = useState(false)
   const [isSnapshotFallback, setIsSnapshotFallback] = useState(false)
   const [notificationAccessState, setNotificationAccessState] = useState<"pending" | "ready" | "blocked">(
     "pending"
@@ -247,6 +248,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setUnreadCount(0)
       setOpen(false)
       setIsReady(false)
+      setIsRealtimeActive(false)
       setIsSnapshotFallback(false)
       setNotificationAccessState("pending")
       reconnectAttemptRef.current = 0
@@ -256,10 +258,57 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       return
     }
 
-    if (isDocumentVisible) {
+    const stored = loadStoredSnapshot()
+    if (stored) {
+      setItems(stored.items)
+      setUnreadCount(stored.unreadCount)
+      setLastNotificationEventId(toLatestNotificationEventId(stored.items))
+      setIsReady(true)
+      setIsSnapshotFallback(true)
+      setNotificationAccessState("ready")
+    } else {
+      setItems([])
+      setUnreadCount(0)
+      setIsReady(false)
+      setIsSnapshotFallback(false)
+      setNotificationAccessState("pending")
+    }
+  }, [enabled, preferPolling, setLastNotificationEventId])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!enabled || isRealtimeActive || open || !isDocumentVisible || notificationAccessState === "blocked") return
+
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+    let disposed = false
+    let fallbackTimer: number | null = null
+    let idleHandle: number | null = null
+
+    const activateRealtime = () => {
+      if (disposed) return
+      setIsRealtimeActive(true)
       void loadSnapshot()
     }
-  }, [enabled, isDocumentVisible, loadSnapshot, preferPolling, setLastNotificationEventId])
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      idleHandle = idleWindow.requestIdleCallback(activateRealtime, { timeout: 4000 })
+    } else {
+      fallbackTimer = window.setTimeout(activateRealtime, 2400)
+    }
+
+    return () => {
+      disposed = true
+      if (idleHandle !== null && typeof idleWindow.cancelIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleHandle)
+      }
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer)
+      }
+    }
+  }, [enabled, isDocumentVisible, isRealtimeActive, loadSnapshot, notificationAccessState, open])
 
   useEffect(() => {
     if (!enabled || !isReady) return
@@ -267,7 +316,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }, [enabled, isReady, items, unreadCount])
 
   useEffect(() => {
-    if (!enabled || streamMode !== "sse" || !isDocumentVisible || notificationAccessState !== "ready") return
+    if (!enabled || !isRealtimeActive || streamMode !== "sse" || !isDocumentVisible || notificationAccessState !== "ready") return
 
     let disposed = false
 
@@ -367,6 +416,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }, [
     enabled,
     isDocumentVisible,
+    isRealtimeActive,
     loadSnapshot,
     notificationAccessState,
     pushNotification,
@@ -375,7 +425,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   ])
 
   useEffect(() => {
-    if (!enabled || streamMode !== "poll" || !isDocumentVisible || notificationAccessState !== "ready") return
+    if (!enabled || !isRealtimeActive || streamMode !== "poll" || !isDocumentVisible || notificationAccessState !== "ready") return
 
     let disposed = false
     let timer: number | null = null
@@ -398,10 +448,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         window.clearTimeout(timer)
       }
     }
-  }, [enabled, isDocumentVisible, loadSnapshot, notificationAccessState, streamMode])
+  }, [enabled, isDocumentVisible, isRealtimeActive, loadSnapshot, notificationAccessState, streamMode])
 
   useEffect(() => {
     if (!enabled) return
+    if (!isRealtimeActive) return
     if (!isDocumentVisible) return
     if (preferPolling) return
     if (streamMode !== "poll") return
@@ -415,7 +466,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [enabled, isDocumentVisible, notificationAccessState, preferPolling, streamMode])
+  }, [enabled, isDocumentVisible, isRealtimeActive, notificationAccessState, preferPolling, streamMode])
 
   useEffect(() => {
     if (!open) return
@@ -535,6 +586,12 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     }
     const nextOpen = !open
     setOpen(nextOpen)
+
+    if (nextOpen && !isRealtimeActive) {
+      setIsRealtimeActive(true)
+      await loadSnapshot()
+      return
+    }
 
     if (nextOpen && !isReady) {
       await loadSnapshot()

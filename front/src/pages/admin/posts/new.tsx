@@ -53,6 +53,10 @@ import {
 } from "src/libs/profileImageUpload"
 import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
+import {
+  parseStandaloneMarkdownImageLine,
+  serializeStandaloneMarkdownImageLine,
+} from "src/libs/markdown/rendering"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 
 const LazyMarkdownRenderer = dynamic(() => import("src/routes/Detail/components/MarkdownRenderer"), {
@@ -464,6 +468,56 @@ const countMarkdownMermaidBlocks = (content: string): number =>
 
 const countMarkdownImages = (content: string): number =>
   (content.match(markdownImageGlobalPattern) || []).length
+
+const updateStandaloneImageWidthInMarkdown = (
+  content: string,
+  targetImageIndex: number,
+  widthPx: number
+) => {
+  const lines = content.split("\n")
+  let activeFenceMarker: "`" | "~" | null = null
+  let imageIndex = 0
+
+  const parseFenceMarker = (line: string): "`" | "~" | null => {
+    const match = line.trim().match(/^([`~]{3,})(.*)$/)
+    if (!match) return null
+    const marker = match[1][0] as "`" | "~"
+    if (!match[1].split("").every((char) => char === marker)) return null
+    return marker
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const fenceMarker = parseFenceMarker(line)
+
+    if (activeFenceMarker) {
+      if (fenceMarker === activeFenceMarker) {
+        activeFenceMarker = null
+      }
+      continue
+    }
+
+    if (fenceMarker) {
+      activeFenceMarker = fenceMarker
+      continue
+    }
+
+    const parsed = parseStandaloneMarkdownImageLine(line)
+    if (!parsed) continue
+
+    if (imageIndex === targetImageIndex) {
+      lines[index] = serializeStandaloneMarkdownImageLine({
+        ...parsed,
+        widthPx,
+      })
+      return lines.join("\n")
+    }
+
+    imageIndex += 1
+  }
+
+  return content
+}
 
 const resolveEditorPreviewDelay = (
   contentLength: number,
@@ -1232,6 +1286,35 @@ const buildListCacheKey = (params: {
     sort: params.sort.trim(),
   })
 
+const normalizePreviewSyncText = (value: string) =>
+  value
+    .replace(/^(?:[#>*-]|\d+\.)+\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+
+const resolveEditorSyncSnippet = (content: string, selectionStart: number, topVisibleLineIndex?: number) => {
+  const lines = content.split(/\r?\n/)
+  if (lines.length === 0) return ""
+
+  let lineIndex = 0
+  if (typeof topVisibleLineIndex === "number" && Number.isFinite(topVisibleLineIndex)) {
+    lineIndex = Math.max(0, Math.min(lines.length - 1, topVisibleLineIndex))
+  } else {
+    const safeSelectionStart = Math.max(0, Math.min(content.length, selectionStart))
+    lineIndex = content.slice(0, safeSelectionStart).split(/\r?\n/).length - 1
+  }
+
+  const candidateIndexes = [lineIndex, lineIndex + 1, lineIndex - 1]
+  for (const candidateIndex of candidateIndexes) {
+    if (candidateIndex < 0 || candidateIndex >= lines.length) continue
+    const normalized = normalizePreviewSyncText(lines[candidateIndex] || "")
+    if (normalized.length >= 3) return normalized
+  }
+
+  return ""
+}
+
 const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -1295,6 +1378,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
+  const postContentLiveRef = useRef(postContent)
   const [previewContent, setPreviewContent] = useState(postContent)
   const [isPreviewSyncPending, setIsPreviewSyncPending] = useState(false)
   const postImageFileInputRef = useRef<HTMLInputElement>(null)
@@ -1331,6 +1415,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     () => countMarkdownMermaidBlocks(previewContent),
     [previewContent]
   )
+
+  useEffect(() => {
+    postContentLiveRef.current = postContent
+  }, [postContent])
+
   const isPreviewHeavyDocument = useMemo(() => {
     if (previewContentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return true
     if (
@@ -1487,8 +1576,32 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       return
     }
 
+    if (editor) {
+      const computedStyle = window.getComputedStyle(editor)
+      const lineHeight =
+        Number.parseFloat(computedStyle.lineHeight) ||
+        Number.parseFloat(computedStyle.fontSize) * 1.6 ||
+        24
+      const paddingTop = Number.parseFloat(computedStyle.paddingTop) || 0
+      const topVisibleLineIndex = Math.max(0, Math.floor(Math.max(0, editor.scrollTop - paddingTop) / Math.max(lineHeight, 1)))
+      const syncSnippet = resolveEditorSyncSnippet(postContent, editor.selectionStart, topVisibleLineIndex)
+
+      if (syncSnippet) {
+        const previewBlocks = Array.from(
+          preview.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, p, li, blockquote, summary, pre, td, th")
+        )
+        const matchedBlock = previewBlocks.find((block) => normalizePreviewSyncText(block.textContent || "").includes(syncSnippet))
+
+        if (matchedBlock) {
+          const targetOffset = Math.max(0, matchedBlock.offsetTop - preview.clientHeight * 0.18)
+          preview.scrollTop = Math.min(targetOffset, previewScrollableHeight)
+          return
+        }
+      }
+    }
+
     preview.scrollTop = nextScrollRatio * previewScrollableHeight
-  }, [])
+  }, [postContent])
 
   const schedulePreviewScrollSync = useCallback(() => {
     if (typeof window === "undefined") return
@@ -1541,6 +1654,26 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (composeViewMode === "editor") return
     schedulePreviewScrollSync()
   }, [composeViewMode, previewContent, schedulePreviewScrollSync])
+
+  const handlePreviewImageWidthCommit = useCallback(
+    (payload: { src: string; alt: string; index: number; widthPx: number }) => {
+      const currentContent = postContentLiveRef.current
+      const nextContent = updateStandaloneImageWidthInMarkdown(currentContent, payload.index, payload.widthPx)
+      if (nextContent === currentContent) return
+
+      postContentLiveRef.current = nextContent
+      setPostContent(nextContent)
+      setPreviewContent(nextContent)
+      setIsPreviewSyncPending(false)
+
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          schedulePreviewScrollSync()
+        })
+      }
+    },
+    [schedulePreviewScrollSync]
+  )
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setListPage(sanitizeNumberInput(e.target.value))
@@ -4455,7 +4588,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <p>
                       {hasSelectedManagedPost
                         ? "선택한 글만 바로 이어서 다룹니다."
-                        : "새 글 시작이나 직접 불러오기만 둡니다."}
+                        : "새 글 작성이나 번호 불러오기만 남깁니다."}
                     </p>
                   </div>
                   <SelectedPostBadge>{`${editorModeLabel} · ${selectedPostLabel}`}</SelectedPostBadge>
@@ -4585,8 +4718,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 ) : (
                   <>
                     <SelectedPostStateCard data-tone="idle">
-                      <strong>목록에서 글을 고르면 여기서 편집을 이어갑니다.</strong>
-                      <p>새 글 시작이나 직접 불러오기만 둡니다.</p>
+                      <strong>목록에서 글을 고르면 바로 이어집니다.</strong>
+                      <p>새 글 작성이나 번호 불러오기만 사용합니다.</p>
                     </SelectedPostStateCard>
                     <ActionRow>
                       <PrimaryButton
@@ -4698,7 +4831,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionTop>
               <div>
                 <h2>글 작성</h2>
-                <SectionDescription>제목, 태그, 본문, 미리보기만 먼저 보여줍니다.</SectionDescription>
+                <SectionDescription>제목, 태그, 본문부터 먼저 씁니다.</SectionDescription>
               </div>
           </SectionTop>
           <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
@@ -4722,39 +4855,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               </button>
             ))}
           </MobileStudioStepper>
-          {isCompactMobileLayout ? (
-            <MobileStepGuide role="status" aria-live="polite">
-              <strong>{`현재 단계: ${MOBILE_STUDIO_STEP_LABEL[activeMobileStudioStep]}`}</strong>
-              <p>{MOBILE_STUDIO_STEP_DESCRIPTION[activeMobileStudioStep]}</p>
-              <div>
-                <Button
-                  type="button"
-                  disabled={!mobileStudioPrevStep}
-                  onClick={() => {
-                    if (!mobileStudioPrevStep) return
-                    setActiveMobileStudioStep(mobileStudioPrevStep)
-                  }}
-                >
-                  {mobileStudioPrevStep ? getMobileStudioStepMoveLabel(mobileStudioPrevStep) : "이전 단계 없음"}
-                </Button>
-                <PrimaryButton
-                  type="button"
-                    disabled={!mobileStudioNextStep}
-                    onClick={() => {
-                      if (!mobileStudioNextStep) return
-                      if (mobileStudioNextStep === "publish") {
-                        setMobileComposeStep("publish")
-                        openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                        return
-                      }
-                      setActiveMobileStudioStep(mobileStudioNextStep)
-                    }}
-                  >
-                  {mobileStudioNextStep ? `${MOBILE_STUDIO_STEP_LABEL[mobileStudioNextStep]} 단계로 이동` : "마지막 단계"}
-                </PrimaryButton>
-              </div>
-            </MobileStepGuide>
-          ) : null}
         <EditorSection data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "edit" || activeMobileStudioStep === "publish"}>
           <WriterHeader>
             <div className="titleField">
@@ -4846,15 +4946,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                             공개/미리보기 설정
                           </MetaToggleButton>
                         </MetaActionRow>
-                        <PublishSettingsSummary>
-                          <SummaryPill>노출 설정: {currentVisibilityText}</SummaryPill>
-                          <SummaryPill>
-                            썸네일: {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "수동 지정" : "본문 첫 이미지 자동") : "없음"}
-                          </SummaryPill>
-                          <SummaryPill>
-                            요약: {postSummary.trim() ? `${postSummary.trim().length}자` : "자동 생성"}
-                          </SummaryPill>
-                        </PublishSettingsSummary>
                         {shouldShowTagRecommendationNotice ? (
                           <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
                             {tagRecommendationNotice.text}
@@ -4868,6 +4959,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             </div>
           </WriterHeader>
           <EditorContextChip>{`${editorModeLabel} · ${currentPostLabel}`}</EditorContextChip>
+          <ComposePublishStatusStrip aria-label="현재 글 설정 요약">
+            <SummaryPill>노출 {currentVisibilityText}</SummaryPill>
+            <SummaryPill>
+              썸네일 {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "직접 지정" : "본문 첫 이미지") : "없음"}
+            </SummaryPill>
+            <SummaryPill>요약 {postSummary.trim() ? `${postSummary.trim().length}자` : "자동"}</SummaryPill>
+          </ComposePublishStatusStrip>
           {activeMetaPanel && (
             <CompactMetaPanel>
               <CompactMetaPanelTop>
@@ -5078,7 +5176,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </ToolbarIconButton>
               </ToolbarCluster>
             </ToolbarQuickBar>
-            <ToolbarHint>자주 쓰는 서식만 바로 넣습니다.</ToolbarHint>
+            <ToolbarHint>핵심 서식만 바로 넣습니다.</ToolbarHint>
           </EditorToolbar>
           <ComposeViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
             {composeViewModeOptions.map((option) => (
@@ -5108,7 +5206,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <PaneHeader>
                 <div>
                   <PaneTitle>작성</PaneTitle>
-                  <PaneDescription>스크롤 위치에 맞춰 미리보기도 같은 구간을 따라갑니다.</PaneDescription>
+                    <PaneDescription>현재 줄을 기준으로 미리보기도 같은 구간을 따라갑니다.</PaneDescription>
                 </div>
                 <PaneChip>{lineCount} lines</PaneChip>
               </PaneHeader>
@@ -5118,6 +5216,9 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
                 onScroll={schedulePreviewScrollSync}
+                onClick={schedulePreviewScrollSync}
+                onKeyUp={schedulePreviewScrollSync}
+                onSelect={schedulePreviewScrollSync}
                 onPaste={handlePasteFromHtml}
               />
             </EditorPane>
@@ -5130,7 +5231,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <PaneDescription>
                       {isPreviewSyncPending
                         ? "입력 반영 중입니다."
-                        : "작성 중인 위치와 같은 구간을 바로 확인합니다."}
+                        : "작성 중인 줄과 같은 본문 구간을 바로 확인합니다."}
                     </PaneDescription>
                   </div>
                   <PaneChip>
@@ -5138,18 +5239,22 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   </PaneChip>
                 </PaneHeader>
                 <PreviewCard ref={previewScrollRef}>
-                  {isPreviewHeavyDocument ? (
-                    <PreviewHintNotice>
-                      긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
-                      {isPreviewSyncPending
-                        ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
-                        : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
-                    </PreviewHintNotice>
-                  ) : null}
-                  <LazyMarkdownRenderer
-                    content={previewContent}
-                    disableMermaid={isPreviewHeavyDocument}
-                  />
+                  <PreviewContentFrame>
+                    {isPreviewHeavyDocument ? (
+                      <PreviewHintNotice>
+                        긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
+                        {isPreviewSyncPending
+                          ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
+                          : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
+                      </PreviewHintNotice>
+                    ) : null}
+                    <LazyMarkdownRenderer
+                      content={previewContent}
+                      disableMermaid={isPreviewHeavyDocument}
+                      editableImages
+                      onImageWidthCommit={handlePreviewImageWidthCommit}
+                    />
+                  </PreviewContentFrame>
                 </PreviewCard>
               </PreviewPane>
             ) : null}
@@ -5158,7 +5263,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <WriterFooterSummary>
                 <span>{currentPostLabel}</span>
                 <span>{tagSummaryText}</span>
-                <span>{contentLength}자 · {lineCount}줄 · 이미지 {imageCount}개 · 코드 {codeBlockCount}개</span>
+                <span>{contentLength}자 · {lineCount}줄</span>
                 <span>{localDraftStatusText}</span>
               </WriterFooterSummary>
             <WriterFooterControls>
@@ -7365,6 +7470,29 @@ const EditorContextChip = styled.span`
   margin-bottom: 0.65rem;
 `
 
+const ComposePublishStatusStrip = styled(PublishSettingsSummary)`
+  margin: -0.1rem 0 0.75rem;
+
+  ${SummaryPill} {
+    min-height: 28px;
+    font-size: 0.72rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
+  @media (max-width: 720px) {
+    margin-bottom: 0.62rem;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.1rem;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+`
+
 const FieldHelp = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
@@ -7943,6 +8071,8 @@ const SplitViewGlyph = styled.span`
 
 const EditorGrid = styled.div`
   --pane-body-height: clamp(28rem, calc(100vh - 20rem), 46rem);
+  --compose-readable-width: var(--article-readable-width, 48rem);
+  --compose-pane-readable-width: var(--compose-readable-width);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.85rem;
@@ -7952,12 +8082,20 @@ const EditorGrid = styled.div`
   overflow: visible;
   align-items: stretch;
 
+  &[data-view-mode="editor"],
+  &[data-view-mode="preview"] {
+    width: min(100%, calc(var(--compose-pane-readable-width) + 2rem));
+    margin-inline: auto;
+  }
+
   &[data-view-mode="split"] {
+    --compose-pane-readable-width: min(var(--editor-split-readable-width, 42rem), calc((100vw - 7rem) / 2));
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   @media (max-width: 1024px) {
     --pane-body-height: clamp(18rem, 52vh, 34rem);
+    --compose-pane-readable-width: var(--compose-readable-width);
     grid-template-columns: 1fr;
     gap: 0.78rem;
   }
@@ -8933,7 +9071,7 @@ const PaneChip = styled.span`
 `
 
 const ContentInput = styled.textarea`
-  width: min(100%, 48rem);
+  width: min(100%, var(--compose-pane-readable-width));
   height: var(--pane-body-height);
   min-height: var(--pane-body-height);
   max-height: var(--pane-body-height);
@@ -8948,6 +9086,8 @@ const ContentInput = styled.textarea`
   font-family: inherit;
   resize: none;
   overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  box-sizing: border-box;
   box-shadow: none;
 
   &:focus {
@@ -8959,6 +9099,11 @@ const ContentInput = styled.textarea`
   }
 `
 
+const PreviewContentFrame = styled.div`
+  width: min(100%, var(--compose-pane-readable-width));
+  margin-inline: auto;
+`
+
 const PreviewCard = styled.div`
   height: var(--pane-body-height);
   min-height: var(--pane-body-height);
@@ -8966,12 +9111,17 @@ const PreviewCard = styled.div`
   overflow: auto;
   scrollbar-gutter: stable both-edges;
   padding: 1rem 1rem 1.15rem;
+  box-sizing: border-box;
   background: transparent;
 
-  > .aq-markdown {
-    width: min(100%, 48rem);
+  > ${PreviewContentFrame} {
+    min-width: 0;
+  }
+
+  > ${PreviewContentFrame} > .aq-markdown {
+    width: 100%;
     margin-top: 0;
-    margin-inline: auto;
+    margin-inline: 0;
   }
 `
 

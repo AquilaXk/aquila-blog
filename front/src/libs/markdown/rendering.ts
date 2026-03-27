@@ -11,6 +11,7 @@ export type MarkdownSegment =
   | { type: "markdown"; content: string }
   | { type: "toggle"; title: string; content: string }
   | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string }
+  | { type: "image"; alt: string; src: string; title: string; widthPx?: number }
 
 export type MarkdownRenderModel = {
   normalizedContent: string
@@ -141,6 +142,8 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 
 const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}[\w-]*[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/
 const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/i
+const STANDALONE_MARKDOWN_IMAGE_REGEX =
+  /^!\[([^\]]*)\]\((.+?)(?:\s+"([^"]*)")?\)(?:\s*\{width=(\d{2,4})\})?\s*$/
 
 const containsTokenByCharCodes = (text: string, token: number[]) => {
   if (!text || token.length === 0 || text.length < token.length) return false
@@ -472,6 +475,55 @@ export const hashString = (value: string) => {
   return (hash >>> 0).toString(36)
 }
 
+const clampImageWidthPx = (value: number) => Math.min(960, Math.max(180, Math.round(value)))
+
+export type ParsedStandaloneMarkdownImage = {
+  alt: string
+  src: string
+  title: string
+  widthPx?: number
+}
+
+export const parseStandaloneMarkdownImageLine = (
+  line: string
+): ParsedStandaloneMarkdownImage | null => {
+  const match = line.trim().match(STANDALONE_MARKDOWN_IMAGE_REGEX)
+  if (!match) return null
+
+  const alt = match[1] || ""
+  const src = (match[2] || "").trim()
+  const title = (match[3] || "").trim()
+  const widthFromSuffix = Number.parseInt(match[4] || "", 10)
+  const widthFromTitleMatch = title.match(/(?:^|\s)width=(\d{2,4})(?:$|\s)/i)
+  const widthFromTitle = Number.parseInt(widthFromTitleMatch?.[1] || "", 10)
+  const resolvedWidth = Number.isFinite(widthFromSuffix)
+    ? widthFromSuffix
+    : Number.isFinite(widthFromTitle)
+      ? widthFromTitle
+      : NaN
+
+  if (!src) return null
+
+  return {
+    alt,
+    src,
+    title,
+    widthPx: Number.isFinite(resolvedWidth) ? clampImageWidthPx(resolvedWidth) : undefined,
+  }
+}
+
+export const serializeStandaloneMarkdownImageLine = ({
+  alt,
+  src,
+  title,
+  widthPx,
+}: ParsedStandaloneMarkdownImage) => {
+  const trimmedTitle = title.trim().replace(/\s*width=\d{2,4}\s*/gi, " ").replace(/\s+/g, " ").trim()
+  const titlePart = trimmedTitle ? ` "${trimmedTitle}"` : ""
+  const widthPart = widthPx ? ` {width=${clampImageWidthPx(widthPx)}}` : ""
+  return `![${alt}](${src}${titlePart})${widthPart}`
+}
+
 const parseFenceMarker = (line: string): "`" | "~" | null => {
   const match = line.trim().match(/^([`~]{3,})(.*)$/)
   if (!match) return null
@@ -511,6 +563,20 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
     if (fenceMarker) {
       markdownBuffer.push(line)
       activeFenceMarker = fenceMarker
+      i += 1
+      continue
+    }
+
+    const standaloneImage = parseStandaloneMarkdownImageLine(line)
+    if (standaloneImage) {
+      flushMarkdown()
+      segments.push({
+        type: "image",
+        alt: standaloneImage.alt,
+        src: standaloneImage.src,
+        title: standaloneImage.title,
+        widthPx: standaloneImage.widthPx,
+      })
       i += 1
       continue
     }

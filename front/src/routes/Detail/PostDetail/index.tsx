@@ -974,7 +974,7 @@ const StyledWrapper = styled.div`
 
   .detailLayout {
     display: grid;
-    grid-template-columns: 72px minmax(0, 48rem) minmax(0, 12.5rem);
+    grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem)) minmax(0, 12.5rem);
     justify-content: center;
     gap: 2.5rem;
     min-width: 0;
@@ -983,7 +983,7 @@ const StyledWrapper = styled.div`
 
   article {
     margin: 0 auto;
-    max-width: 48rem;
+    max-width: var(--article-readable-width, 48rem);
     display: grid;
     gap: 1.15rem;
     min-width: 0;
@@ -1268,7 +1268,7 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1439px) {
     .detailLayout {
-      grid-template-columns: 72px minmax(0, 48rem);
+      grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem));
       gap: 2rem;
     }
 
@@ -1279,7 +1279,7 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1279px) {
     .detailLayout {
-      grid-template-columns: 72px minmax(0, 48rem);
+      grid-template-columns: 72px minmax(0, var(--article-readable-width, 48rem));
       gap: 1.6rem;
     }
   }

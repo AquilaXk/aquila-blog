@@ -80,8 +80,14 @@ const MarkdownRendererRoot = styled.div`
   }
 
   .aq-image-frame {
-    width: min(100%, 50rem);
+    width: min(100%, var(--article-readable-width, 48rem));
     margin: 0 auto;
+    position: relative;
+    min-width: 0;
+  }
+
+  .aq-image-frame[data-width-mode="custom"] {
+    width: min(100%, var(--aq-image-width));
   }
 
   .aq-image-frame img {
@@ -95,6 +101,38 @@ const MarkdownRendererRoot = styled.div`
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  }
+
+  .aq-image-frame[data-editable="true"] .aq-image-resize-handle {
+    position: absolute;
+    right: 0.85rem;
+    bottom: 0.85rem;
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(15, 23, 42, 0.82)" : "rgba(255, 255, 255, 0.92)")};
+    color: ${({ theme }) => theme.colors.gray12};
+    cursor: ew-resize;
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.2);
+    backdrop-filter: blur(8px);
+  }
+
+  .aq-image-frame[data-editable="true"] .aq-image-resize-handle span {
+    display: inline-block;
+    width: 0.95rem;
+    height: 0.95rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(0deg);
+    opacity: 0.92;
+  }
+
+  .aq-image-frame[data-editable="true"] .aq-image-resize-handle:hover {
+    transform: translateY(-1px);
   }
 
   .aq-image-frame figcaption {

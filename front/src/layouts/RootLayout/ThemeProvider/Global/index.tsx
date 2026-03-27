@@ -19,6 +19,8 @@ export const Global = () => {
           -webkit-text-size-adjust: 100%;
           text-size-adjust: 100%;
           overflow-x: visible;
+          --article-readable-width: 48rem;
+          --editor-split-readable-width: 42rem;
         }
 
         body {

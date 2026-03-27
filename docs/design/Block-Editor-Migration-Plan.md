@@ -8,6 +8,8 @@
   - 미설정 또는 `true`: `TipTap + ProseMirror` 기반 block editor
   - `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED=true`: Mermaid node view + lazy preview 활성화
 - 현재 v2는 `paragraph / heading / list / blockquote / link / divider / code block(language) / table / image / callout / toggle`를 직접 편집한다.
+- 표는 본문 내 context toolbar로 `행/열 추가`, `헤더 토글`, `행/열/표 삭제`를 직접 지원한다.
+- 콜아웃은 큰 설정 패널 대신 compact 카드 편집기로 유지하고, 종류/제목/본문/미니 preview만 노출한다.
 - Mermaid는 별도 flag가 꺼져 있으면 `raw markdown block`으로 유지하고, 켜져 있으면 node view로 승격한다.
 - 미지원 커스텀 문법은 문서 전체 fallback이 아니라 block-level `raw markdown block` 카드로 보존한다.
 - canonical 저장 포맷은 계속 markdown string이며, 공개 상세 렌더러와 저장 API는 변경하지 않았다.

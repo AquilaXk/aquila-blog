@@ -4886,194 +4886,175 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionTop>
               <div>
                 <h2>글 작성</h2>
-                <SectionDescription>제목, 태그, 본문부터 먼저 씁니다.</SectionDescription>
+                <SectionDescription>제목과 본문부터 씁니다.</SectionDescription>
               </div>
           </SectionTop>
-          <MobileStudioStepper role="tablist" aria-label="모바일 작업 단계">
-            {mobileStudioSurfaceSteps.map((step) => (
-              <button
-                key={step}
-                type="button"
-                role="tab"
-                aria-selected={activeMobileStudioStep === step}
-                data-active={activeMobileStudioStep === step}
-                onClick={() => {
-                  if (step === "publish") {
-                    setMobileComposeStep("publish")
-                    openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                    return
-                  }
-                  setActiveMobileStudioStep(step)
-                }}
-              >
-                {MOBILE_STUDIO_STEP_LABEL[step]}
-              </button>
-            ))}
-          </MobileStudioStepper>
-        <EditorSection data-mobile-visible={!isCompactMobileLayout || activeMobileStudioStep === "edit" || activeMobileStudioStep === "publish"}>
-          <WriterHeader>
-            <div className="titleField">
-              <TitleInput
-                id="post-title"
-                placeholder="제목을 입력하세요"
-                value={postTitle}
-                onChange={(e) => setPostTitle(e.target.value)}
-              />
-              <WriterAccent />
-              <WriterMetaStrip>
-                <InlineTagComposer>
-                  <div className="headerRow">
-                    <span className="label">태그</span>
-                    <span className="status">
-                      {postTags.length > 0 ? `${postTags.length}개 선택됨` : "선택된 태그 없음"}
-                    </span>
-                  </div>
-                  <InlineTagList>
-                    {postTags.map((tag) => (
-                      <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
-                        <span className="label">{tag}</span>
-                        <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
-                          ×
-                        </button>
-                      </SelectedTagChip>
-                    ))}
-                    <InlineMetaInput
-                      placeholder={postTags.length > 0 ? "태그를 입력하고 Enter" : "태그를 입력하세요"}
-                      value={tagDraft}
-                      onChange={(e) => {
-                        const nextValue = e.target.value
-                        const commaSeparated = /[,，]/
-                        if (!commaSeparated.test(nextValue)) {
-                          setTagDraft(nextValue)
-                          return
-                        }
+        <EditorSection data-mobile-visible={!isCompactMobileLayout || studioSurface === "compose"}>
+          <ComposeReadableIntro>
+            <WriterHeader>
+              <div className="titleField">
+                <TitleInput
+                  id="post-title"
+                  placeholder="제목을 입력하세요"
+                  value={postTitle}
+                  onChange={(e) => setPostTitle(e.target.value)}
+                />
+                <WriterAccent />
+                <WriterMetaStrip>
+                  <InlineTagComposer>
+                    <div className="headerRow">
+                      <span className="label">태그</span>
+                      <span className="status">
+                        {postTags.length > 0 ? `${postTags.length}개 선택됨` : "선택된 태그 없음"}
+                      </span>
+                    </div>
+                    <InlineTagList>
+                      {postTags.map((tag) => (
+                        <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
+                          <span className="label">{tag}</span>
+                          <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
+                            ×
+                          </button>
+                        </SelectedTagChip>
+                      ))}
+                      <InlineMetaInput
+                        placeholder={postTags.length > 0 ? "태그를 입력하고 Enter" : "태그를 입력하세요"}
+                        value={tagDraft}
+                        onChange={(e) => {
+                          const nextValue = e.target.value
+                          const commaSeparated = /[,，]/
+                          if (!commaSeparated.test(nextValue)) {
+                            setTagDraft(nextValue)
+                            return
+                          }
 
-                        const fragments = nextValue.split(commaSeparated)
-                        const tailDraft = fragments.pop() ?? ""
-                        const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
-                        if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
-                        setTagDraft(tailDraft)
-                      }}
-                      onKeyDown={(e) => {
-                        if (isComposingKeyboardEvent(e)) return
-                        if (e.key === "Enter" || e.key === ",") {
-                          e.preventDefault()
-                          addTagToPost(e.currentTarget.value)
-                        }
-                      }}
-                    />
-                  </InlineTagList>
-                  <FieldHelp>쉼표 또는 Enter로 추가합니다.</FieldHelp>
-                  <InlineDisclosure open={isComposeAssistOpen}>
-                    <summary
-                      onClick={(event) => {
-                        event.preventDefault()
-                        setIsComposeAssistOpen((prev) => !prev)
-                      }}
-                    >
-                      <strong>보조 설정</strong>
-                      <span>{isComposeAssistOpen ? "닫기" : "열기"}</span>
-                    </summary>
-                    {isComposeAssistOpen && (
-                      <div className="body">
-                        <MetaActionRow>
-                          <Button
-                            type="button"
-                            disabled={disabled("recommendTags") || !postContent.trim()}
-                            onClick={() => void handleRecommendTags()}
-                          >
-                            {loadingKey === "recommendTags" ? "AI 태그 추천 중..." : "AI 태그 추천"}
-                          </Button>
-                          <MetaToggleButton
-                            type="button"
-                            data-active={activeMetaPanel === "tag"}
-                            onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
-                          >
-                            태그 관리
-                          </MetaToggleButton>
-                          <MetaToggleButton
-                            type="button"
-                            data-active={isPublishModalOpen}
-                            onClick={() =>
-                              openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                            }
-                          >
-                            공개/미리보기 설정
-                          </MetaToggleButton>
-                        </MetaActionRow>
-                        {shouldShowTagRecommendationNotice ? (
-                          <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
-                            {tagRecommendationNotice.text}
-                          </SummaryActionStatus>
-                        ) : null}
-                      </div>
-                    )}
-                  </InlineDisclosure>
-                </InlineTagComposer>
-              </WriterMetaStrip>
-            </div>
-          </WriterHeader>
-          <EditorContextChip>{`${editorModeLabel} · ${currentPostLabel}`}</EditorContextChip>
-          <ComposePublishStatusStrip aria-label="현재 글 설정 요약">
-            <SummaryPill>노출 {currentVisibilityText}</SummaryPill>
-            <SummaryPill>
-              썸네일 {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "직접 지정" : "본문 첫 이미지") : "없음"}
-            </SummaryPill>
-            <SummaryPill>요약 {postSummary.trim() ? `${postSummary.trim().length}자` : "자동"}</SummaryPill>
-          </ComposePublishStatusStrip>
-          {activeMetaPanel && (
-            <CompactMetaPanel>
-              <CompactMetaPanelTop>
-                <div>
-                  <h3>태그 관리</h3>
-                  <p>기존 태그를 고르거나 새 태그를 더합니다.</p>
-                </div>
-                <MetadataBadge>
-                  {metaCatalogLoading
-                    ? "메타데이터 불러오는 중"
-                    : `기존 태그 ${knownTags.length}개`}
-                </MetadataBadge>
-              </CompactMetaPanelTop>
-              <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
-              <MetadataPanel>
-                <label>태그 선택</label>
-                <SelectionRow>
-                  {knownTags.map((tag) => (
-                    <TagCatalogChipGroup
-                      key={tag}
-                      data-active={postTags.includes(tag)}
-                      style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
-                    >
-                      <TagCatalogToggle
-                        type="button"
-                        data-active={postTags.includes(tag)}
-                        onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
+                          const fragments = nextValue.split(commaSeparated)
+                          const tailDraft = fragments.pop() ?? ""
+                          const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
+                          if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
+                          setTagDraft(tailDraft)
+                        }}
+                        onKeyDown={(e) => {
+                          if (isComposingKeyboardEvent(e)) return
+                          if (e.key === "Enter" || e.key === ",") {
+                            e.preventDefault()
+                            addTagToPost(e.currentTarget.value)
+                          }
+                        }}
+                      />
+                    </InlineTagList>
+                    <FieldHelp>쉼표 또는 Enter로 추가합니다.</FieldHelp>
+                    <InlineDisclosure open={isComposeAssistOpen}>
+                      <summary
+                        onClick={(event) => {
+                          event.preventDefault()
+                          setIsComposeAssistOpen((prev) => !prev)
+                        }}
                       >
-                        <span className="label">{tag}</span>
-                        {(tagUsageMap[tag] || 0) > 0 ? (
-                          <span className="count">{tagUsageMap[tag] || 0}</span>
-                        ) : null}
-                      </TagCatalogToggle>
-                      <TagCatalogDeleteButton
-                        type="button"
+                        <strong>보조 설정</strong>
+                        <span>{isComposeAssistOpen ? "닫기" : "열기"}</span>
+                      </summary>
+                      {isComposeAssistOpen && (
+                        <div className="body">
+                          <MetaActionRow>
+                            <Button
+                              type="button"
+                              disabled={disabled("recommendTags") || !postContent.trim()}
+                              onClick={() => void handleRecommendTags()}
+                            >
+                              {loadingKey === "recommendTags" ? "AI 태그 추천 중..." : "AI 태그 추천"}
+                            </Button>
+                            <MetaToggleButton
+                              type="button"
+                              data-active={activeMetaPanel === "tag"}
+                              onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
+                            >
+                              태그 관리
+                            </MetaToggleButton>
+                            <MetaToggleButton
+                              type="button"
+                              data-active={isPublishModalOpen}
+                              onClick={() =>
+                                openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
+                              }
+                            >
+                              발행 상태 편집
+                            </MetaToggleButton>
+                          </MetaActionRow>
+                          {shouldShowTagRecommendationNotice ? (
+                            <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
+                              {tagRecommendationNotice.text}
+                            </SummaryActionStatus>
+                          ) : null}
+                        </div>
+                      )}
+                    </InlineDisclosure>
+                  </InlineTagComposer>
+                </WriterMetaStrip>
+              </div>
+            </WriterHeader>
+            <EditorContextChip>{`${editorModeLabel} · ${currentPostLabel}`}</EditorContextChip>
+            <ComposePublishStatusStrip aria-label="현재 글 설정 요약">
+              <SummaryPill>노출 {currentVisibilityText}</SummaryPill>
+              <SummaryPill>
+                썸네일 {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "직접 지정" : "본문 첫 이미지") : "없음"}
+              </SummaryPill>
+              <SummaryPill>요약 {postSummary.trim() ? `${postSummary.trim().length}자` : "자동"}</SummaryPill>
+            </ComposePublishStatusStrip>
+            {activeMetaPanel && (
+              <CompactMetaPanel>
+                <CompactMetaPanelTop>
+                  <div>
+                    <h3>태그 관리</h3>
+                    <p>기존 태그를 고르거나 새 태그를 더합니다.</p>
+                  </div>
+                  <MetadataBadge>
+                    {metaCatalogLoading
+                      ? "메타데이터 불러오는 중"
+                      : `기존 태그 ${knownTags.length}개`}
+                  </MetadataBadge>
+                </CompactMetaPanelTop>
+                <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
+                <MetadataPanel>
+                  <label>태그 선택</label>
+                  <SelectionRow>
+                    {knownTags.map((tag) => (
+                      <TagCatalogChipGroup
+                        key={tag}
                         data-active={postTags.includes(tag)}
-                        disabled={(tagUsageMap[tag] || 0) > 0}
-                        title={
-                          (tagUsageMap[tag] || 0) > 0
-                            ? "사용 중인 태그는 삭제할 수 없습니다."
-                            : "태그 삭제"
-                        }
-                        onClick={() => deleteTagFromCatalog(tag)}
+                        style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
                       >
-                        ×
-                      </TagCatalogDeleteButton>
-                    </TagCatalogChipGroup>
-                  ))}
-                  {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
-                </SelectionRow>
-              </MetadataPanel>
-            </CompactMetaPanel>
-          )}
+                        <TagCatalogToggle
+                          type="button"
+                          data-active={postTags.includes(tag)}
+                          onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
+                        >
+                          <span className="label">{tag}</span>
+                          {(tagUsageMap[tag] || 0) > 0 ? (
+                            <span className="count">{tagUsageMap[tag] || 0}</span>
+                          ) : null}
+                        </TagCatalogToggle>
+                        <TagCatalogDeleteButton
+                          type="button"
+                          data-active={postTags.includes(tag)}
+                          disabled={(tagUsageMap[tag] || 0) > 0}
+                          title={
+                            (tagUsageMap[tag] || 0) > 0
+                              ? "사용 중인 태그는 삭제할 수 없습니다."
+                              : "태그 삭제"
+                          }
+                          onClick={() => deleteTagFromCatalog(tag)}
+                        >
+                          ×
+                        </TagCatalogDeleteButton>
+                      </TagCatalogChipGroup>
+                    ))}
+                    {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
+                  </SelectionRow>
+                </MetadataPanel>
+              </CompactMetaPanel>
+            )}
+          </ComposeReadableIntro>
 
         <input
           ref={postImageFileInputRef}
@@ -5095,9 +5076,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PaneHeader>
                   <div>
                     <PaneTitle>블록 작성</PaneTitle>
-                    <PaneDescription>
-                      콜아웃·토글은 바로 편집하고, Mermaid는 {BLOCK_EDITOR_V2_MERMAID_ENABLED ? "다이어그램 블록" : "원문 블록"}으로 관리합니다.
-                    </PaneDescription>
+                    <PaneDescription>자주 쓰는 블록만 바로 넣습니다.</PaneDescription>
                   </div>
                   <PaneChip>{lineCount} lines</PaneChip>
                 </PaneHeader>
@@ -5356,10 +5335,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <WriterFooterControls>
               {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
               <WriterFooterActions>
-                {editorMode === "edit" ? (
-                  <PrimaryButton
-                    type="button"
-                    disabled={isTempDraftMode ? disabled("publishTempPost") : disabled("modifyPost")}
+              {editorMode === "edit" ? (
+                <PrimaryButton
+                  type="button"
+                  disabled={isTempDraftMode ? disabled("publishTempPost") : disabled("modifyPost")}
                     onClick={() => openPublishModal(isTempDraftMode ? "temp" : "modify")}
                   >
                     {isTempDraftMode
@@ -5403,6 +5382,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         onClick={clearLocalDraft}
                       >
                         임시저장 삭제
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={loadingKey.length > 0}
+                        onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
+                      >
+                        발행 상태 열기
                       </Button>
                     </SubActionRow>
                   </div>
@@ -7555,6 +7541,16 @@ const EditorContextChip = styled.span`
   font-size: 0.76rem;
   font-weight: 600;
   margin-bottom: 0.65rem;
+
+  @media (max-width: 720px) {
+    display: none;
+  }
+`
+
+const ComposeReadableIntro = styled.div`
+  width: min(100%, var(--article-readable-width, 48rem));
+  max-width: 100%;
+  margin-inline: auto;
 `
 
 const ComposePublishStatusStrip = styled(PublishSettingsSummary)`
@@ -7568,15 +7564,7 @@ const ComposePublishStatusStrip = styled(PublishSettingsSummary)`
   }
 
   @media (max-width: 720px) {
-    margin-bottom: 0.62rem;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding-bottom: 0.1rem;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    display: none;
   }
 `
 
@@ -7584,6 +7572,10 @@ const FieldHelp = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   line-height: 1.45;
+
+  @media (max-width: 720px) {
+    display: none;
+  }
 `
 
 const PublishNotice = styled.div`
@@ -9267,16 +9259,7 @@ const WriterFooterActions = styled.div`
   align-items: center;
 
   @media (max-width: 720px) {
-    width: 100%;
-    display: grid;
-    grid-template-columns: 1fr;
-    justify-content: stretch;
-
-    > button {
-      width: 100%;
-      min-height: 38px;
-      justify-content: center;
-    }
+    display: none;
   }
 `
 

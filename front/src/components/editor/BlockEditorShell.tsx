@@ -58,7 +58,7 @@ type ToolbarAction = {
 
 type FloatingBubbleState = {
   visible: boolean
-  mode: "text" | "image"
+  mode: "text" | "image" | "table"
   left: number
   top: number
 }
@@ -83,6 +83,7 @@ const CODE_LANGUAGE_OPTIONS = [
   "markdown",
   "mermaid",
 ] as const
+const DEFAULT_TABLE_CONFIG = { rows: 3, cols: 2, withHeaderRow: true } as const
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
 
@@ -238,6 +239,7 @@ const BlockEditorShell = ({
   const [isRawMarkdownOpen, setIsRawMarkdownOpen] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
+  const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
   const [bubbleState, setBubbleState] = useState<FloatingBubbleState>({
     visible: false,
     mode: "text",
@@ -286,7 +288,9 @@ const BlockEditorShell = ({
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        link: false,
+      }),
       Link.configure({
         openOnClick: false,
         autolink: false,
@@ -514,13 +518,14 @@ const BlockEditorShell = ({
 
       const selection = activeEditor.state.selection
       const isImageNodeSelected = activeEditor.isActive("resizableImage")
+      const isTableActive = activeEditor.isActive("table")
       const canShowTextToolbar =
         !selection.empty &&
         !isImageNodeSelected &&
         !activeEditor.isActive("codeBlock") &&
         !activeEditor.isActive("rawMarkdownBlock")
 
-      if (!isImageNodeSelected && !canShowTextToolbar) {
+      if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
         setBubbleState((prev) => ({ ...prev, visible: false }))
         return
       }
@@ -530,7 +535,7 @@ const BlockEditorShell = ({
 
       setBubbleState({
         visible: true,
-        mode: isImageNodeSelected ? "image" : "text",
+        mode: isImageNodeSelected ? "image" : canShowTextToolbar ? "text" : "table",
         left: Math.round((startCoords.left + endCoords.right) / 2),
         top: Math.round(Math.min(startCoords.top, endCoords.top)),
       })
@@ -623,6 +628,11 @@ const BlockEditorShell = ({
     })
   }, [insertParagraphAfterBlock])
 
+  const insertTableBlock = useCallback(() => {
+    if (!editor) return
+    editor.chain().focus().insertTable(DEFAULT_TABLE_CONFIG).run()
+  }, [editor])
+
   const applyRawMarkdownDraft = useCallback(() => {
     if (!editor) return
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(rawMarkdownDraft), enableMermaidBlocks)
@@ -714,7 +724,7 @@ const BlockEditorShell = ({
         id: "table",
         label: "테이블",
         helper: "2열 헤더 포함",
-        run: () => editor.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run(),
+        run: insertTableBlock,
       },
       {
         id: "callout",
@@ -753,20 +763,23 @@ const BlockEditorShell = ({
         run: () => insertRawMarkdownBlock(),
       },
     ]
-  }, [editor, enableMermaidBlocks, insertCalloutBlock, insertMermaidBlock, insertRawMarkdownBlock, insertToggleBlock])
+  }, [editor, enableMermaidBlocks, insertCalloutBlock, insertMermaidBlock, insertRawMarkdownBlock, insertTableBlock, insertToggleBlock])
 
   const toolbarActions: ToolbarAction[] = [
     { id: "paragraph", label: "본문", run: () => editor?.chain().focus().setParagraph().run(), active: editor?.isActive("paragraph") ?? false },
     { id: "heading-2", label: "H2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
     { id: "heading-3", label: "H3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
     { id: "bullet-list", label: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
+    { id: "code-block", label: "코드", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
+    { id: "mermaid", label: "Mermaid", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
+  ]
+
+  const toolbarMoreActions: ToolbarAction[] = [
     { id: "ordered-list", label: "번호", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
     { id: "quote", label: "인용", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
-    { id: "code-block", label: "코드", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
-    { id: "table", label: "테이블", run: () => editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run(), active: editor?.isActive("table") ?? false },
+    { id: "table", label: "테이블", run: insertTableBlock, active: editor?.isActive("table") ?? false },
     { id: "callout", label: "콜아웃", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
     { id: "toggle", label: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
-    { id: "mermaid", label: "Mermaid", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
     { id: "link", label: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
     { id: "divider", label: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
     { id: "raw", label: "원문", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
@@ -812,9 +825,7 @@ const BlockEditorShell = ({
       <Toolbar>
         <ToolbarHint>
           <strong>블록 작성기</strong>
-          <span>
-            콜아웃·토글은 직접 편집하고, Mermaid는 {enableMermaidBlocks ? "미리보기 블록" : "원문 블록"}으로 다룹니다.
-          </span>
+          <span>자주 쓰는 블록만 바로 넣습니다.</span>
         </ToolbarHint>
         <ToolbarActions>
           {toolbarActions.map((action) => (
@@ -831,6 +842,32 @@ const BlockEditorShell = ({
           <ToolbarButton type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
             이미지
           </ToolbarButton>
+          <ToolbarMoreDisclosure open={isToolbarMoreOpen}>
+            <summary
+              onClick={(event) => {
+                event.preventDefault()
+                setIsToolbarMoreOpen((prev) => !prev)
+              }}
+            >
+              <strong>더보기</strong>
+              <span>{isToolbarMoreOpen ? "닫기" : "열기"}</span>
+            </summary>
+            {isToolbarMoreOpen ? (
+              <div className="body">
+                {toolbarMoreActions.map((action) => (
+                  <ToolbarButton
+                    key={action.id}
+                    type="button"
+                    data-active={action.active}
+                    onClick={() => action.run()}
+                    disabled={disabled}
+                  >
+                    {action.label}
+                  </ToolbarButton>
+                ))}
+              </div>
+            ) : null}
+          </ToolbarMoreDisclosure>
         </ToolbarActions>
         {isCodeBlockActive ? (
           <InlineControlRow>
@@ -909,7 +946,7 @@ const BlockEditorShell = ({
                   인라인 코드
                 </ToolbarButton>
               </BubbleToolbar>
-            ) : (
+            ) : bubbleState.mode === "image" ? (
               <BubbleToolbar>
                 <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "left"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "left" }).run()}>
                   좌측
@@ -922,6 +959,33 @@ const BlockEditorShell = ({
                 </ToolbarButton>
                 <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "full"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "full" }).run()}>
                   전체 폭
+                </ToolbarButton>
+              </BubbleToolbar>
+            ) : (
+              <BubbleToolbar data-layout="table">
+                <ToolbarButton type="button" onClick={() => editor.chain().focus().addRowBefore().run()}>
+                  행 위
+                </ToolbarButton>
+                <ToolbarButton type="button" onClick={() => editor.chain().focus().addRowAfter().run()}>
+                  행 아래
+                </ToolbarButton>
+                <ToolbarButton type="button" onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                  열 왼쪽
+                </ToolbarButton>
+                <ToolbarButton type="button" onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                  열 오른쪽
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.isActive("tableHeader")} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+                  헤더
+                </ToolbarButton>
+                <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteRow().run()}>
+                  행 삭제
+                </ToolbarButton>
+                <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteColumn().run()}>
+                  열 삭제
+                </ToolbarButton>
+                <ToolbarButton type="button" data-variant="danger" onClick={() => editor.chain().focus().deleteTable().run()}>
+                  표 삭제
                 </ToolbarButton>
               </BubbleToolbar>
             )}
@@ -1017,6 +1081,38 @@ const ToolbarActions = styled.div`
   gap: 0.55rem;
 `
 
+const ToolbarMoreDisclosure = styled.details`
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.55rem;
+
+  summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.1rem;
+    padding: 0 0.9rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(13, 15, 18, 0.94);
+    color: var(--color-gray11);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+`
+
 const ToolbarButton = styled.button`
   min-height: 2.1rem;
   border-radius: 999px;
@@ -1031,6 +1127,22 @@ const ToolbarButton = styled.button`
     border-color: rgba(59, 130, 246, 0.52);
     background: rgba(37, 99, 235, 0.16);
     color: #93c5fd;
+  }
+
+  &[data-variant="subtle-danger"] {
+    border-color: rgba(248, 113, 113, 0.2);
+    color: #fca5a5;
+  }
+
+  &[data-variant="danger"] {
+    border-color: rgba(248, 113, 113, 0.36);
+    background: rgba(127, 29, 29, 0.22);
+    color: #fecaca;
+  }
+
+  &:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
   }
 `
 
@@ -1197,9 +1309,13 @@ const BubbleToolbar = styled.div`
   gap: 0.45rem;
   padding: 0.45rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
+  border-radius: 1rem;
   background: rgba(13, 15, 18, 0.98);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+
+  &[data-layout="table"] {
+    max-width: min(92vw, 40rem);
+  }
 `
 
 const FloatingBubbleToolbar = styled.div`

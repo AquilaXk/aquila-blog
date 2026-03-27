@@ -202,14 +202,15 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   }
 
   return (
-    <RichBlockWrapper data-selected={selected}>
-      <RichBlockHeader>
-        <div>
+    <CalloutEditorWrapper data-selected={selected} data-kind={draftKind}>
+      <CalloutEditorMetaRow>
+        <CalloutEditorLabel>
           <strong>콜아웃</strong>
-          <span>GitHub callout canonical markdown로 저장됩니다.</span>
-        </div>
+          <span>GitHub callout</span>
+        </CalloutEditorLabel>
         <BlockSelect
           value={draftKind}
+          aria-label="콜아웃 종류"
           onChange={(event) => {
             const nextKind = event.target.value as CalloutKind
             setDraftKind(nextKind)
@@ -222,10 +223,10 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
             </option>
           ))}
         </BlockSelect>
-      </RichBlockHeader>
+      </CalloutEditorMetaRow>
       <BlockInput
         value={draftTitle}
-        placeholder="콜아웃 제목"
+        placeholder="제목"
         onBlur={flushCommit}
         onChange={(event) => {
           const nextTitle = event.target.value
@@ -233,11 +234,12 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
           commit({ title: nextTitle })
         }}
       />
-      <BlockTextarea
+      <CompactBlockTextarea
         ref={bodyRef}
         value={draftBody}
-        placeholder="콜아웃 본문"
+        placeholder="핵심 내용"
         spellCheck={false}
+        rows={2}
         onBlur={flushCommit}
         onChange={(event) => {
           const nextBody = event.target.value
@@ -246,11 +248,11 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         }}
       />
       <CalloutPreviewCard data-kind={draftKind}>
-        <strong>{CALLOUT_KIND_OPTIONS.find((option) => option.value === draftKind)?.label}</strong>
+        <CalloutPreviewBadge>{CALLOUT_KIND_OPTIONS.find((option) => option.value === draftKind)?.label}</CalloutPreviewBadge>
         {draftTitle ? <h4>{draftTitle}</h4> : null}
-        <p>{draftBody || "콜아웃 본문을 입력하세요."}</p>
+        <p>{draftBody || "핵심 내용을 입력하세요."}</p>
       </CalloutPreviewCard>
-    </RichBlockWrapper>
+    </CalloutEditorWrapper>
   )
 }
 
@@ -689,6 +691,13 @@ const BlockTextarea = styled.textarea<{ rows?: number }>`
     sharedTextareaStyles({ minHeight: rows ? `${Math.max(Number(rows) * 1.8, 6)}rem` : "6rem" })}
 `
 
+const CompactBlockTextarea = styled(BlockTextarea)`
+  min-height: 4.5rem;
+  padding: 0.9rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+`
+
 const BlockSelect = styled.select`
   min-height: 2.2rem;
   min-width: 8rem;
@@ -760,30 +769,22 @@ const MermaidPreviewPlaceholder = styled.div`
 `
 
 const CalloutPreviewCard = styled.div`
-  border-radius: 1rem;
+  border-radius: 0.95rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.95rem 1rem;
-
-  strong {
-    display: inline-flex;
-    min-height: 1.8rem;
-    align-items: center;
-    border-radius: 999px;
-    padding: 0 0.75rem;
-    font-size: 0.78rem;
-    letter-spacing: 0.04em;
-  }
+  padding: 0.8rem 0.9rem;
 
   h4 {
-    margin: 0.75rem 0 0.3rem;
-    font-size: 1rem;
+    margin: 0.55rem 0 0.18rem;
+    font-size: 0.92rem;
     color: var(--color-gray12);
   }
 
   p {
     margin: 0;
-    color: var(--color-gray11);
+    color: var(--color-gray10);
     white-space: pre-wrap;
+    font-size: 0.86rem;
+    line-height: 1.5;
   }
 
   &[data-kind="tip"] {
@@ -844,6 +845,81 @@ const CalloutPreviewCard = styled.div`
       background: rgba(168, 85, 247, 0.14);
       color: #d8b4fe;
     }
+  }
+`
+
+const CalloutPreviewBadge = styled.strong`
+  display: inline-flex;
+  min-height: 1.65rem;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 0.7rem;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+`
+
+const CalloutEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.85rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(18, 21, 26, 0.92);
+  padding: 0.85rem 0.9rem;
+
+  &[data-selected="true"] {
+    border-color: rgba(59, 130, 246, 0.42);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+  }
+
+  &[data-kind="tip"] {
+    border-color: rgba(34, 197, 94, 0.22);
+  }
+
+  &[data-kind="info"] {
+    border-color: rgba(59, 130, 246, 0.22);
+  }
+
+  &[data-kind="warning"] {
+    border-color: rgba(245, 158, 11, 0.24);
+  }
+
+  &[data-kind="outline"] {
+    border-color: rgba(148, 163, 184, 0.22);
+  }
+
+  &[data-kind="example"] {
+    border-color: rgba(16, 185, 129, 0.22);
+  }
+
+  &[data-kind="summary"] {
+    border-color: rgba(168, 85, 247, 0.22);
+  }
+`
+
+const CalloutEditorMetaRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+`
+
+const CalloutEditorLabel = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+
+  strong {
+    font-size: 0.88rem;
+    color: var(--color-gray12);
+    line-height: 1.1;
+  }
+
+  span {
+    font-size: 0.74rem;
+    color: var(--color-gray10);
+    line-height: 1.1;
   }
 `
 

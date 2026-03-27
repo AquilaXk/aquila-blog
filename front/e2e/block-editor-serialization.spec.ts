@@ -4,6 +4,7 @@ import {
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
 } from "src/components/editor/serialization"
+import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 
 test.describe("block editor serialization", () => {
   test("mermaid 블록은 parse/serialize round-trip을 유지한다", () => {
@@ -16,6 +17,24 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("```mermaid")
     expect(serialized).toContain("flowchart TD")
     expect(serialized).toContain("A[시작] --> B[처리]")
+  })
+
+  test("mermaid 라벨의 HTML 줄바꿈은 저장값을 유지한 채 파싱된다", () => {
+    const markdown = ["```mermaid", "flowchart TD", "  A[첫 줄<br>둘째 줄] --> B[완료]", "```"].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(doc.content?.some((node) => node.type === "mermaidBlock")).toBe(true)
+    expect(serialized).toContain("A[첫 줄<br>둘째 줄] --> B[완료]")
+  })
+
+  test("mermaid 렌더 소스는 HTML 줄바꿈을 개행으로 정규화한다", () => {
+    const source = extractNormalizedMermaidSource(
+      ["```mermaid", "flowchart TD", "  A[첫 줄<br>둘째 줄] --> B[완료]", "```"].join("\n")
+    )
+
+    expect(source).toContain("A[첫 줄\n둘째 줄] --> B[완료]")
   })
 
   test("callout 과 toggle 블록은 canonical markdown 로 round-trip 된다", () => {
@@ -83,5 +102,22 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("```kotlin")
     expect(serialized).toContain("fun main() = println(\"hello\")")
     expect(serialized).toContain("![diagram](https://example.com/image.png \"sample\") {width=640 align=wide}")
+  })
+
+  test("GFM 테이블은 parse/serialize round-trip 을 유지한다", () => {
+    const markdown = [
+      "| 항목 | 값 |",
+      "| --- | --- |",
+      "| 이름 | aquila |",
+      "| 역할 | Backend Developer |",
+    ].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(serialized).toContain("| 항목 | 값 |")
+    expect(serialized).toContain("| --- | --- |")
+    expect(serialized).toContain("| 이름 | aquila |")
+    expect(serialized).toContain("| 역할 | Backend Developer |")
   })
 })

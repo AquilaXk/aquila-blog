@@ -227,6 +227,17 @@ type ParsedEditorMeta = {
   thumbnail: string
 }
 
+type ResolvedEditorMetaSnapshot = {
+  body: string
+  tags: string[]
+  category: string
+  summary: string
+  thumbnailUrl: string
+  thumbnailFocusX: number
+  thumbnailFocusY: number
+  thumbnailZoom: number
+}
+
 type MetaUsageMap = Record<string, number>
 type LocalDraftPayload = {
   title: string
@@ -942,6 +953,72 @@ const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
   return inlineMetadataSplit.body.trim().length > 0 ? inlineMetadataSplit.body : parsedBody
 }
 
+const resolveEditorMetaSnapshot = (content: string, contentHtml?: string): ResolvedEditorMetaSnapshot => {
+  const parsed = parseEditorMeta(content)
+  const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
+  const markdownFromHtml = contentHtml?.trim() ? convertHtmlToMarkdown(contentHtml).trim() : ""
+  const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
+  const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
+  const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
+  const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
+  const syncedThumbnailFocusX = parseThumbnailFocusXFromUrl(
+    parsedThumbnail || fallbackThumbnail,
+    DEFAULT_THUMBNAIL_FOCUS_X
+  )
+  const syncedThumbnailFocusY = parseThumbnailFocusYFromUrl(
+    parsedThumbnail || fallbackThumbnail,
+    DEFAULT_THUMBNAIL_FOCUS_Y
+  )
+  const syncedThumbnailZoom = parseThumbnailZoomFromUrl(parsedThumbnail || fallbackThumbnail, DEFAULT_THUMBNAIL_ZOOM)
+
+  return {
+    body: resolvedBody,
+    tags: parsed.tags,
+    category: parsed.category,
+    summary: parsed.summary || makePreviewSummary(resolvedBody),
+    thumbnailUrl: syncedThumbnail,
+    thumbnailFocusX: syncedThumbnailFocusX,
+    thumbnailFocusY: syncedThumbnailFocusY,
+    thumbnailZoom: syncedThumbnailZoom,
+  }
+}
+
+const buildEditorStateFingerprint = ({
+  title,
+  content,
+  summary,
+  thumbnailUrl,
+  thumbnailFocusX,
+  thumbnailFocusY,
+  thumbnailZoom,
+  tags,
+  category,
+  visibility,
+}: {
+  title: string
+  content: string
+  summary: string
+  thumbnailUrl: string
+  thumbnailFocusX: number
+  thumbnailFocusY: number
+  thumbnailZoom: number
+  tags: string[]
+  category: string
+  visibility: PostVisibility
+}) =>
+  JSON.stringify({
+    title,
+    content,
+    summary,
+    thumbnailUrl,
+    thumbnailFocusX,
+    thumbnailFocusY,
+    thumbnailZoom,
+    tags: dedupeStrings(tags),
+    category: category ? normalizeCategoryValue(category) : "",
+    visibility,
+  })
+
 const parseEditorMeta = (content: string): ParsedEditorMeta => {
   let trimmed = content.replace(/\r\n?/g, "\n").trimStart()
   const tags: string[] = []
@@ -1626,6 +1703,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const lastWriteFingerprintRef = useRef<string>("")
   const lastWriteIdempotencyKeyRef = useRef<string>("")
   const lastLocalDraftFingerprintRef = useRef("")
+  const lastPersistedEditorFingerprintRef = useRef("")
   const listCacheRef = useRef(
     new Map<string, { rows: AdminPostListItem[]; total: number; storedAt: number }>()
   )
@@ -2006,33 +2084,19 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [setPublishStatus])
 
   const syncEditorMeta = useCallback((content: string, contentHtml?: string) => {
-    const parsed = parseEditorMeta(content)
-    const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
-    const markdownFromHtml = contentHtml?.trim() ? convertHtmlToMarkdown(contentHtml).trim() : ""
-    const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
-    blockEditorLoadGuardStateRef.current = createBlockEditorLoadGuardState(resolvedBody)
-    const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
-    const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
-    const syncedThumbnail = stripThumbnailFocusFromUrl(parsedThumbnail || fallbackThumbnail)
-    const syncedThumbnailFocusX = parseThumbnailFocusXFromUrl(
-      parsedThumbnail || fallbackThumbnail,
-      DEFAULT_THUMBNAIL_FOCUS_X
-    )
-    const syncedThumbnailFocusY = parseThumbnailFocusYFromUrl(
-      parsedThumbnail || fallbackThumbnail,
-      DEFAULT_THUMBNAIL_FOCUS_Y
-    )
-    const syncedThumbnailZoom = parseThumbnailZoomFromUrl(parsedThumbnail || fallbackThumbnail, DEFAULT_THUMBNAIL_ZOOM)
-    setPostContent(resolvedBody)
-    setPostSummary(parsed.summary || makePreviewSummary(resolvedBody))
-    setPostThumbnailUrl(syncedThumbnail)
-    setPostThumbnailFocusX(syncedThumbnailFocusX)
-    setPostThumbnailFocusY(syncedThumbnailFocusY)
-    setPostThumbnailZoom(syncedThumbnailZoom)
-    setPreviewThumbnailSourceUrl(syncedThumbnail)
-    setPostTags(parsed.tags)
-    setPostCategory(parsed.category)
-    setKnownTags((prev) => dedupeStrings([...prev, ...parsed.tags]).sort((a, b) => a.localeCompare(b)))
+    const snapshot = resolveEditorMetaSnapshot(content, contentHtml)
+    blockEditorLoadGuardStateRef.current = createBlockEditorLoadGuardState(snapshot.body)
+    setPostContent(snapshot.body)
+    setPostSummary(snapshot.summary)
+    setPostThumbnailUrl(snapshot.thumbnailUrl)
+    setPostThumbnailFocusX(snapshot.thumbnailFocusX)
+    setPostThumbnailFocusY(snapshot.thumbnailFocusY)
+    setPostThumbnailZoom(snapshot.thumbnailZoom)
+    setPreviewThumbnailSourceUrl(snapshot.thumbnailUrl)
+    setPostTags(snapshot.tags)
+    setPostCategory(snapshot.category)
+    setKnownTags((prev) => dedupeStrings([...prev, ...snapshot.tags]).sort((a, b) => a.localeCompare(b)))
+    return snapshot
   }, [])
 
   const resolvedPreviewSummary = useMemo(() => {
@@ -2347,6 +2411,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setPostId("")
     setPostVersion(null)
     setPreviewThumbnailSourceUrl("")
+    lastPersistedEditorFingerprintRef.current = ""
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     if (!keepContent) {
@@ -2406,9 +2471,23 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         }
       }
 
-      setPostTitle(resolvedPost.title ?? "")
-      syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
-      setPostVisibility(toVisibility(!!resolvedPost.published, !!resolvedPost.listed))
+      const nextTitle = resolvedPost.title ?? ""
+      const nextVisibility = toVisibility(!!resolvedPost.published, !!resolvedPost.listed)
+      const snapshot = syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
+      setPostTitle(nextTitle)
+      setPostVisibility(nextVisibility)
+      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+        title: nextTitle,
+        content: snapshot.body,
+        summary: snapshot.summary,
+        thumbnailUrl: snapshot.thumbnailUrl,
+        thumbnailFocusX: snapshot.thumbnailFocusX,
+        thumbnailFocusY: snapshot.thumbnailFocusY,
+        thumbnailZoom: snapshot.thumbnailZoom,
+        tags: snapshot.tags,
+        category: snapshot.category,
+        visibility: nextVisibility,
+      })
       applyLoadedPostContext(resolvedPost)
       setResult(pretty(resolvedPost as unknown as JsonValue))
     } catch (error) {
@@ -2566,6 +2645,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         setPostVersion(typeof response.data.version === "number" ? response.data.version : null)
         setEditorMode("edit")
         setIsTempDraftMode(false)
+        lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+          title: postTitle,
+          content: postContent,
+          summary: postSummary,
+          thumbnailUrl: postThumbnailUrl,
+          thumbnailFocusX: postThumbnailFocusX,
+          thumbnailFocusY: postThumbnailFocusY,
+          thumbnailZoom: postThumbnailZoom,
+          tags: postTags,
+          category: postCategory,
+          visibility: postVisibility,
+        })
         lastWriteFingerprintRef.current = ""
         lastWriteIdempotencyKeyRef.current = ""
       }
@@ -2650,6 +2741,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
+      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+        title: postTitle,
+        content: postContent,
+        summary: postSummary,
+        thumbnailUrl: postThumbnailUrl,
+        thumbnailFocusX: postThumbnailFocusX,
+        thumbnailFocusY: postThumbnailFocusY,
+        thumbnailZoom: postThumbnailZoom,
+        tags: postTags,
+        category: postCategory,
+        visibility: postVisibility,
+      })
       await refreshPublicPostReadViews(postId)
       setPublishStatus({ tone: "success", text: `수정 완료: ${response.msg}` }, "page")
       setResult(pretty(response as unknown as JsonValue))
@@ -2675,9 +2778,23 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       }
       const response = await tempPostRequestRef.current
       const tempPost = response.data
-      setPostTitle(tempPost.title ?? "")
-      syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
-      setPostVisibility(toVisibility(!!tempPost.published, !!tempPost.listed))
+      const nextTitle = tempPost.title ?? ""
+      const nextVisibility = toVisibility(!!tempPost.published, !!tempPost.listed)
+      const snapshot = syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
+      setPostTitle(nextTitle)
+      setPostVisibility(nextVisibility)
+      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+        title: nextTitle,
+        content: snapshot.body,
+        summary: snapshot.summary,
+        thumbnailUrl: snapshot.thumbnailUrl,
+        thumbnailFocusX: snapshot.thumbnailFocusX,
+        thumbnailFocusY: snapshot.thumbnailFocusY,
+        thumbnailZoom: snapshot.thumbnailZoom,
+        tags: snapshot.tags,
+        category: snapshot.category,
+        visibility: nextVisibility,
+      })
       applyLoadedPostContext(tempPost)
       setIsTempDraftMode(true)
       setPublishStatus(
@@ -2756,6 +2873,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setPostVisibility("PUBLIC_LISTED")
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(false)
+      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+        title: postTitle,
+        content: postContent,
+        summary: postSummary,
+        thumbnailUrl: postThumbnailUrl,
+        thumbnailFocusX: postThumbnailFocusX,
+        thumbnailFocusY: postThumbnailFocusY,
+        thumbnailZoom: postThumbnailZoom,
+        tags: postTags,
+        category: postCategory,
+        visibility: "PUBLIC_LISTED",
+      })
       await refreshPublicPostReadViews(postId)
       setPublishStatus({ tone: "success", text: "임시글 발행이 완료되었습니다." }, "page")
       setResult(pretty(response as unknown as JsonValue))
@@ -3879,9 +4008,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }
 
   const currentFlags = toFlags(postVisibility)
-  const localDraftFingerprint = useMemo(
+  const editorStateFingerprint = useMemo(
     () =>
-      JSON.stringify({
+      buildEditorStateFingerprint({
         title: postTitle,
         content: postContent,
         summary: postSummary,
@@ -3889,8 +4018,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         thumbnailFocusX: postThumbnailFocusX,
         thumbnailFocusY: postThumbnailFocusY,
         thumbnailZoom: postThumbnailZoom,
-        tags: dedupeStrings(postTags),
-        category: postCategory ? normalizeCategoryValue(postCategory) : "",
+        tags: postTags,
+        category: postCategory,
         visibility: postVisibility,
       }),
     [
@@ -3929,18 +4058,29 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const composeSurfaceSubtitle = hasSelectedManagedPost
     ? `#${postId} 원고를 다듬고 있습니다.`
     : "기술 원고를 차분하게 다듬는 공간입니다."
+  const hasEditorDraftContent = Boolean(postTitle.trim() || postContent.trim())
+  const isPersistedEditBaseline =
+    editorMode === "edit" &&
+    hasSelectedManagedPost &&
+    editorStateFingerprint === lastPersistedEditorFingerprintRef.current
+  const isAutoSavedCreateDraft =
+    editorMode === "create" &&
+    editorStateFingerprint === lastLocalDraftFingerprintRef.current &&
+    Boolean(localDraftSavedAt)
   const composeStatusText =
     loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
       ? "저장 중"
-      : postTitle.trim() || postContent.trim()
-        ? localDraftFingerprint === lastLocalDraftFingerprintRef.current && Boolean(localDraftSavedAt)
-          ? "자동 저장됨"
-          : "저장되지 않은 변경"
+      : hasEditorDraftContent
+        ? isPersistedEditBaseline
+          ? "저장됨"
+          : isAutoSavedCreateDraft
+            ? "자동 저장됨"
+            : "저장되지 않은 변경"
         : ""
   const composeStatusTone =
     loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
       ? "loading"
-      : publishNotice.tone === "success"
+      : composeStatusText === "저장됨" || composeStatusText === "자동 저장됨" || publishNotice.tone === "success"
         ? "success"
         : "idle"
   const composeHeroSummary = [

@@ -64,9 +64,9 @@ const StyledWrapper = styled.div`
 
   > a {
     display: flex;
-    min-height: 56px;
-    padding: 0.5rem 0.35rem;
-    gap: 0.88rem;
+    min-height: 50px;
+    padding: 0.42rem 0.3rem;
+    gap: 0.72rem;
     align-items: center;
     border-radius: 16px;
     color: ${({ theme }) => theme.colors.gray11};
@@ -83,17 +83,17 @@ const StyledWrapper = styled.div`
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 2.9rem;
-      height: 2.9rem;
-      flex: 0 0 2.9rem;
+      width: 2.35rem;
+      height: 2.35rem;
+      flex: 0 0 2.35rem;
       border-radius: 999px;
       background: ${({ theme }) => theme.colors.gray3};
-      font-size: 1.42rem;
+      font-size: 1.08rem;
       line-height: 1;
     }
     .name {
-      font-size: 0.98rem;
-      line-height: 1.4rem;
+      font-size: 0.95rem;
+      line-height: 1.32rem;
       font-weight: 600;
     }
   }

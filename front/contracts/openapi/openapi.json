@@ -272,6 +272,44 @@
         }
       }
     },
+    "/member/api/v1/adm/members/{id}/profileWorkspace/draft" : {
+      "put" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "saveProfileWorkspaceDraft",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateProfileWorkspaceDraftRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberProfileWorkspaceResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/tasks/replay-failed" : {
       "post" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -840,6 +878,34 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/RsDataMemberLoginResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/member/api/v1/adm/members/{id}/profileWorkspace/publish" : {
+      "post" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "publishProfileWorkspace",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberProfileWorkspaceResponseDto"
                 }
               }
             }
@@ -1904,6 +1970,34 @@
         }
       }
     },
+    "/member/api/v1/adm/members/{id}/profileWorkspace" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "getProfileWorkspace",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MemberProfileWorkspaceResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/" : {
       "get" : {
         "tags" : [ "HomeController" ],
@@ -2087,6 +2181,225 @@
           },
           "data" : {
             "$ref" : "#/components/schemas/PostLikeToggleResBody"
+          }
+        }
+      },
+      "ProfileCardLinkItemRequest" : {
+        "type" : "object",
+        "properties" : {
+          "icon" : {
+            "type" : "string",
+            "maxLength" : 40,
+            "minLength" : 0
+          },
+          "label" : {
+            "type" : "string",
+            "maxLength" : 80,
+            "minLength" : 0
+          },
+          "href" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "href", "label" ]
+      },
+      "ProfileWorkspaceSectionRequest" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "maxLength" : 80,
+            "minLength" : 0
+          },
+          "title" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            },
+            "maxItems" : 20,
+            "minItems" : 0
+          },
+          "dividerBefore" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "UpdateProfileWorkspaceDraftRequest" : {
+        "type" : "object",
+        "properties" : {
+          "profileImageUrl" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "profileRole" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "profileBio" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          },
+          "aboutRole" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "aboutBio" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "aboutSections" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileWorkspaceSectionRequest"
+            },
+            "maxItems" : 20,
+            "minItems" : 0
+          },
+          "blogTitle" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "homeIntroTitle" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "homeIntroDescription" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          },
+          "serviceLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileCardLinkItemRequest"
+            },
+            "maxItems" : 30,
+            "minItems" : 0
+          },
+          "contactLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProfileCardLinkItemRequest"
+            },
+            "maxItems" : 30,
+            "minItems" : 0
+          }
+        }
+      },
+      "MemberProfileAboutSectionBlockDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "dividerBefore" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "MemberProfileLinkItemDto" : {
+        "type" : "object",
+        "properties" : {
+          "icon" : {
+            "type" : "string"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "href" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MemberProfileWorkspaceContentDto" : {
+        "type" : "object",
+        "properties" : {
+          "profileImageUrl" : {
+            "type" : "string"
+          },
+          "profileRole" : {
+            "type" : "string"
+          },
+          "profileBio" : {
+            "type" : "string"
+          },
+          "aboutRole" : {
+            "type" : "string"
+          },
+          "aboutBio" : {
+            "type" : "string"
+          },
+          "aboutSections" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileAboutSectionBlockDto"
+            }
+          },
+          "blogTitle" : {
+            "type" : "string"
+          },
+          "homeIntroTitle" : {
+            "type" : "string"
+          },
+          "homeIntroDescription" : {
+            "type" : "string"
+          },
+          "serviceLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileLinkItemDto"
+            }
+          },
+          "contactLinks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileLinkItemDto"
+            }
+          }
+        }
+      },
+      "MemberProfileWorkspaceResponseDto" : {
+        "type" : "object",
+        "properties" : {
+          "draft" : {
+            "$ref" : "#/components/schemas/MemberProfileWorkspaceContentDto"
+          },
+          "published" : {
+            "$ref" : "#/components/schemas/MemberProfileWorkspaceContentDto"
+          },
+          "lastDraftSavedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lastPublishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "dirtyFromPublished" : {
+            "type" : "boolean"
           }
         }
       },
@@ -2825,20 +3138,6 @@
           }
         }
       },
-      "MemberProfileLinkItemDto" : {
-        "type" : "object",
-        "properties" : {
-          "icon" : {
-            "type" : "string"
-          },
-          "label" : {
-            "type" : "string"
-          },
-          "href" : {
-            "type" : "string"
-          }
-        }
-      },
       "MemberWithUsernameDto" : {
         "type" : "object",
         "properties" : {
@@ -2884,6 +3183,12 @@
           "aboutDetails" : {
             "type" : "string"
           },
+          "aboutSections" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MemberProfileAboutSectionBlockDto"
+            }
+          },
           "blogTitle" : {
             "type" : "string"
           },
@@ -2920,27 +3225,6 @@
           }
         },
         "required" : [ "profileImgUrl" ]
-      },
-      "ProfileCardLinkItemRequest" : {
-        "type" : "object",
-        "properties" : {
-          "icon" : {
-            "type" : "string",
-            "maxLength" : 40,
-            "minLength" : 0
-          },
-          "label" : {
-            "type" : "string",
-            "maxLength" : 80,
-            "minLength" : 0
-          },
-          "href" : {
-            "type" : "string",
-            "maxLength" : 2000,
-            "minLength" : 0
-          }
-        },
-        "required" : [ "href", "label" ]
       },
       "UpdateProfileCardRequest" : {
         "type" : "object",

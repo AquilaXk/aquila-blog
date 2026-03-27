@@ -52,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/adm/members/{id}/profileWorkspace/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["saveProfileWorkspaceDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/tasks/replay-failed": {
         parameters: {
             query?: never;
@@ -320,6 +336,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/member/api/v1/adm/members/{id}/profileWorkspace/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishProfileWorkspace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -859,6 +891,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/adm/members/{id}/profileWorkspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getProfileWorkspace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -953,6 +1001,63 @@ export interface components {
             resultCode?: string;
             msg?: string;
             data?: components["schemas"]["PostLikeToggleResBody"];
+        };
+        ProfileCardLinkItemRequest: {
+            icon?: string;
+            label: string;
+            href: string;
+        };
+        ProfileWorkspaceSectionRequest: {
+            id?: string;
+            title?: string;
+            items?: string[];
+            dividerBefore?: boolean;
+        };
+        UpdateProfileWorkspaceDraftRequest: {
+            profileImageUrl?: string;
+            profileRole?: string;
+            profileBio?: string;
+            aboutRole?: string;
+            aboutBio?: string;
+            aboutSections?: components["schemas"]["ProfileWorkspaceSectionRequest"][];
+            blogTitle?: string;
+            homeIntroTitle?: string;
+            homeIntroDescription?: string;
+            serviceLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
+            contactLinks?: components["schemas"]["ProfileCardLinkItemRequest"][];
+        };
+        MemberProfileAboutSectionBlockDto: {
+            id?: string;
+            title?: string;
+            items?: string[];
+            dividerBefore?: boolean;
+        };
+        MemberProfileLinkItemDto: {
+            icon?: string;
+            label?: string;
+            href?: string;
+        };
+        MemberProfileWorkspaceContentDto: {
+            profileImageUrl?: string;
+            profileRole?: string;
+            profileBio?: string;
+            aboutRole?: string;
+            aboutBio?: string;
+            aboutSections?: components["schemas"]["MemberProfileAboutSectionBlockDto"][];
+            blogTitle?: string;
+            homeIntroTitle?: string;
+            homeIntroDescription?: string;
+            serviceLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
+            contactLinks?: components["schemas"]["MemberProfileLinkItemDto"][];
+        };
+        MemberProfileWorkspaceResponseDto: {
+            draft?: components["schemas"]["MemberProfileWorkspaceContentDto"];
+            published?: components["schemas"]["MemberProfileWorkspaceContentDto"];
+            /** Format: date-time */
+            lastDraftSavedAt?: string;
+            /** Format: date-time */
+            lastPublishedAt?: string;
+            dirtyFromPublished?: boolean;
         };
         TaskDlqReplayRequest: {
             taskType?: string;
@@ -1221,11 +1326,6 @@ export interface components {
             msg?: string;
             data?: components["schemas"]["MemberLoginResBody"];
         };
-        MemberProfileLinkItemDto: {
-            icon?: string;
-            label?: string;
-            href?: string;
-        };
         MemberWithUsernameDto: {
             /** Format: int64 */
             id?: number;
@@ -1243,6 +1343,7 @@ export interface components {
             aboutRole?: string;
             aboutBio?: string;
             aboutDetails?: string;
+            aboutSections?: components["schemas"]["MemberProfileAboutSectionBlockDto"][];
             blogTitle?: string;
             homeIntroTitle?: string;
             homeIntroDescription?: string;
@@ -1252,11 +1353,6 @@ export interface components {
         };
         UpdateProfileImgRequest: {
             profileImgUrl: string;
-        };
-        ProfileCardLinkItemRequest: {
-            icon?: string;
-            label: string;
-            href: string;
         };
         UpdateProfileCardRequest: {
             role?: string;
@@ -1753,6 +1849,32 @@ export interface operations {
             };
         };
     };
+    saveProfileWorkspaceDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileWorkspaceDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MemberProfileWorkspaceResponseDto"];
+                };
+            };
+        };
+    };
     replayFailedTasks: {
         parameters: {
             query?: never;
@@ -2199,6 +2321,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["RsDataMemberLoginResBody"];
+                };
+            };
+        };
+    };
+    publishProfileWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MemberProfileWorkspaceResponseDto"];
                 };
             };
         };
@@ -2939,6 +3083,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["MemberWithUsernameDto"];
+                };
+            };
+        };
+    };
+    getProfileWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MemberProfileWorkspaceResponseDto"];
                 };
             };
         };

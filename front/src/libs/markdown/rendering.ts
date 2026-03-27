@@ -11,7 +11,14 @@ export type MarkdownSegment =
   | { type: "markdown"; content: string }
   | { type: "toggle"; title: string; content: string }
   | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string }
-  | { type: "image"; alt: string; src: string; title: string; widthPx?: number }
+  | {
+      type: "image"
+      alt: string
+      src: string
+      title: string
+      widthPx?: number
+      align?: "left" | "center" | "wide" | "full"
+    }
 
 export type MarkdownRenderModel = {
   normalizedContent: string
@@ -143,7 +150,7 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 const HAS_FENCED_CODE_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}[\w-]*[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/
 const HAS_MERMAID_BLOCK_REGEX = /(^|\n)\s*[`~]{3,}\s*mermaid\b[\t ]*\n[\s\S]*?\n[`~]{3,}(?=\n|$)/i
 const STANDALONE_MARKDOWN_IMAGE_REGEX =
-  /^!\[([^\]]*)\]\((.+?)(?:\s+"([^"]*)")?\)(?:\s*\{width=(\d{2,4})\})?\s*$/
+  /^!\[([^\]]*)\]\((.+?)(?:\s+"([^"]*)")?\)(?:\s*\{([^}]*)\})?\s*$/
 
 const containsTokenByCharCodes = (text: string, token: number[]) => {
   if (!text || token.length === 0 || text.length < token.length) return false
@@ -475,13 +482,27 @@ export const hashString = (value: string) => {
   return (hash >>> 0).toString(36)
 }
 
-const clampImageWidthPx = (value: number) => Math.min(960, Math.max(180, Math.round(value)))
+export const clampImageWidthPx = (value: number) => Math.min(960, Math.max(180, Math.round(value)))
+
+export const normalizeImageAlign = (
+  value: string | null | undefined
+): "left" | "center" | "wide" | "full" | undefined => {
+  if (!value) return undefined
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "left" || normalized === "center" || normalized === "wide" || normalized === "full") {
+    return normalized
+  }
+
+  return undefined
+}
 
 export type ParsedStandaloneMarkdownImage = {
   alt: string
   src: string
   title: string
   widthPx?: number
+  align?: "left" | "center" | "wide" | "full"
 }
 
 export const parseStandaloneMarkdownImageLine = (
@@ -493,7 +514,10 @@ export const parseStandaloneMarkdownImageLine = (
   const alt = match[1] || ""
   const src = (match[2] || "").trim()
   const title = (match[3] || "").trim()
-  const widthFromSuffix = Number.parseInt(match[4] || "", 10)
+  const metadata = (match[4] || "").trim()
+  const widthFromSuffixMatch = metadata.match(/(?:^|\s)width=(\d{2,4})(?:$|\s)/i)
+  const alignFromSuffixMatch = metadata.match(/(?:^|\s)align=(left|center|wide|full)(?:$|\s)/i)
+  const widthFromSuffix = Number.parseInt(widthFromSuffixMatch?.[1] || "", 10)
   const widthFromTitleMatch = title.match(/(?:^|\s)width=(\d{2,4})(?:$|\s)/i)
   const widthFromTitle = Number.parseInt(widthFromTitleMatch?.[1] || "", 10)
   const resolvedWidth = Number.isFinite(widthFromSuffix)
@@ -509,6 +533,7 @@ export const parseStandaloneMarkdownImageLine = (
     src,
     title,
     widthPx: Number.isFinite(resolvedWidth) ? clampImageWidthPx(resolvedWidth) : undefined,
+    align: normalizeImageAlign(alignFromSuffixMatch?.[1]),
   }
 }
 
@@ -517,11 +542,16 @@ export const serializeStandaloneMarkdownImageLine = ({
   src,
   title,
   widthPx,
+  align,
 }: ParsedStandaloneMarkdownImage) => {
   const trimmedTitle = title.trim().replace(/\s*width=\d{2,4}\s*/gi, " ").replace(/\s+/g, " ").trim()
   const titlePart = trimmedTitle ? ` "${trimmedTitle}"` : ""
-  const widthPart = widthPx ? ` {width=${clampImageWidthPx(widthPx)}}` : ""
-  return `![${alt}](${src}${titlePart})${widthPart}`
+  const metadataParts = [
+    widthPx ? `width=${clampImageWidthPx(widthPx)}` : "",
+    normalizeImageAlign(align) ? `align=${normalizeImageAlign(align)}` : "",
+  ].filter(Boolean)
+  const metadataPart = metadataParts.length > 0 ? ` {${metadataParts.join(" ")}}` : ""
+  return `![${alt}](${src}${titlePart})${metadataPart}`
 }
 
 const parseFenceMarker = (line: string): "`" | "~" | null => {

@@ -1,5 +1,15 @@
 # Block Editor 전환 계획서
 
+## 0. 현재 적용 상태
+
+- 2026-03-27 기준 1차 block editor가 `/admin/posts/new`에 feature flag 병행 방식으로 도입되었다.
+- flag:
+  - `NEXT_PUBLIC_EDITOR_V2_ENABLED=false` 또는 미설정: 기존 `textarea + preview`
+  - `NEXT_PUBLIC_EDITOR_V2_ENABLED=true`: `TipTap + ProseMirror` 기반 block editor
+- 현재 v2는 `paragraph / heading / list / blockquote / link / divider / code block / table / image`를 직접 편집한다.
+- `mermaid / callout / toggle / 기타 커스텀 문법`은 문서 전체 fallback이 아니라 block-level `raw markdown block` 카드로 보존한다.
+- canonical 저장 포맷은 계속 markdown string이며, 공개 상세 렌더러와 저장 API는 변경하지 않았다.
+
 ## 1. 목적
 
 현재 `/admin/posts/new`는 `textarea + markdown preview` 구조를 사용한다. 이 구조는 다음 장점이 있다.

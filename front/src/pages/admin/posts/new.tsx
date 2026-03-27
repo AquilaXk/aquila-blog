@@ -59,6 +59,13 @@ import {
 } from "src/libs/markdown/rendering"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 
+const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED === "true"
+
+const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
+  ssr: false,
+  loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>블록 에디터 준비 중...</div>,
+})
+
 const LazyMarkdownRenderer = dynamic(() => import("src/routes/Detail/components/MarkdownRenderer"), {
   ssr: false,
   loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>미리보기 렌더 준비 중...</div>,
@@ -1631,6 +1638,14 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [])
 
   useEffect(() => {
+    if (BLOCK_EDITOR_V2_ENABLED) {
+      if (previewContent !== postContent) {
+        setPreviewContent(postContent)
+      }
+      setIsPreviewSyncPending(false)
+      return
+    }
+
     if (previewContent === postContent) {
       setIsPreviewSyncPending(false)
       return
@@ -3419,7 +3434,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     insertSnippet(markdown)
   }
 
-  const uploadPostImageFile = async (file: File): Promise<UploadPostImageResult> => {
+  const uploadPostImageFile = useCallback(async (file: File): Promise<UploadPostImageResult> => {
     const prepared = await preparePostImageForUpload(file)
     const requestUpload = async () => {
       const formData = new FormData()
@@ -3439,7 +3454,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         summary: buildImageOptimizationSummary(prepared),
       },
     }
-  }
+  }, [])
 
   const handlePostImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -3472,6 +3487,45 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
     })
   }
+
+  const handleBlockEditorImageUpload = useCallback(
+    async (file: File) => {
+      setPublishStatus({
+        tone: "loading",
+        text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 블록에 바로 삽입됩니다.`,
+      })
+
+      try {
+        const uploaded = await uploadPostImageFile(file)
+        const markdown = uploaded.uploaded.data?.markdown
+        if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+
+        const parsed = parseStandaloneMarkdownImageLine(markdown)
+        if (!parsed) throw new Error("이미지 markdown 메타데이터를 해석하지 못했습니다.")
+
+        setPublishStatus({
+          tone: "success",
+          text: `이미지 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
+        })
+
+        return {
+          src: parsed.src,
+          alt: parsed.alt,
+          title: parsed.title,
+          widthPx: parsed.widthPx,
+          align: parsed.align || "center",
+        }
+      } catch (error) {
+        const message = normalizeProfileImageUploadError(error)
+        setPublishStatus({
+          tone: "error",
+          text: `이미지 업로드 실패: ${message}`,
+        })
+        throw error
+      }
+    },
+    [setPublishStatus, uploadPostImageFile]
+  )
 
   const handleUploadThumbnailImage = async (file: File) => {
     try {
@@ -5034,231 +5088,260 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           onChange={handleThumbnailImageFileChange}
           style={{ display: "none" }}
         />
-          <EditorToolbar>
-            <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
-              <ToolbarCluster>
-                <ToolbarIconButton type="button" title="제목1" aria-label="제목1" onClick={() => runToolbarAction(() => applyHeadingStyle(1))}>
-                  <span className="textIcon">H1</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="제목2" aria-label="제목2" onClick={() => runToolbarAction(() => applyHeadingStyle(2))}>
-                  <span className="textIcon">H2</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="제목3" aria-label="제목3" onClick={() => runToolbarAction(() => applyHeadingStyle(3))}>
-                  <span className="textIcon">H3</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="일반 텍스트" aria-label="일반 텍스트" onClick={() => runToolbarAction(() => applyHeadingStyle(0))}>
-                  <span className="textIcon">T</span>
-                </ToolbarIconButton>
-              </ToolbarCluster>
-
-              <ToolbarDivider aria-hidden="true" />
-
-              <ToolbarCluster>
-                <ToolbarIconButton type="button" title="굵게" aria-label="굵게" onClick={() => runToolbarAction(() => wrapSelection("**", "**", "굵은 텍스트"))}>
-                  <span className="textIcon strong">B</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="기울임" aria-label="기울임" onClick={() => runToolbarAction(() => wrapSelection("*", "*", "기울임 텍스트"))}>
-                  <span className="textIcon italic">I</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="취소선" aria-label="취소선" onClick={() => runToolbarAction(() => wrapSelection("~~", "~~", "취소선 텍스트"))}>
-                  <span className="textIcon strike">S</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="인라인 코드" aria-label="인라인 코드" onClick={() => runToolbarAction(() => wrapSelection("`", "`", "코드"))}>
-                  <span className="textIcon code">&lt;/&gt;</span>
-                </ToolbarIconButton>
-              </ToolbarCluster>
-
-              <ToolbarDivider aria-hidden="true" />
-
-              <ToolbarCluster>
-                <ToolbarIconButton type="button" title="체크리스트" aria-label="체크리스트" onClick={() => runToolbarAction(applyChecklist)}>
-                  <AppIcon name="check-circle" />
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="구분선" aria-label="구분선" onClick={() => runToolbarAction(insertDivider)}>
-                  <span className="textIcon">—</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="토글 블록" aria-label="토글 블록" onClick={() => runToolbarAction(insertToggle)}>
-                  <AppIcon name="chevron-down" />
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="링크" aria-label="링크" onClick={() => runToolbarAction(insertLink)}>
-                  <AppIcon name="link" />
-                </ToolbarIconButton>
-                <ColorDropdown>
-                  <ToolbarIconButton
-                    type="button"
-                    title="글자색"
-                    aria-label="글자색"
-                    data-active={isColorMenuOpen}
-                    onClick={() => {
-                      setIsColorMenuOpen((prev) => !prev)
-                      setIsCalloutMenuOpen(false)
-                    }}
-                  >
-                    <span className="textIcon">A</span>
-                  </ToolbarIconButton>
-                  {isColorMenuOpen && (
-                    <ColorMenu>
-                      {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
-                        <button
-                          type="button"
-                          key={option.value}
-                          onClick={() => applyInlineTextColor(option.value)}
-                        >
-                          <ColorSwatch style={{ background: option.value }} aria-hidden="true" />
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
-                    </ColorMenu>
-                  )}
-                </ColorDropdown>
-                <CalloutDropdown>
-                  <ToolbarIconButton
-                    type="button"
-                    title="콜아웃"
-                    aria-label="콜아웃"
-                    data-active={isCalloutMenuOpen}
-                    onClick={() => {
-                      setIsCalloutMenuOpen((prev) => !prev)
-                      setIsColorMenuOpen(false)
-                    }}
-                  >
-                    <span className="textIcon">❝</span>
-                  </ToolbarIconButton>
-                  {isCalloutMenuOpen && (
-                    <CalloutMenu>
-                      <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
-                        TIP
-                      </button>
-                      <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
-                        INFO
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
-                      >
-                        WARNING
-                      </button>
-                      <button type="button" onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}>
-                        OUTLINE
-                      </button>
-                      <button type="button" onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}>
-                        EXAMPLE
-                      </button>
-                      <button type="button" onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}>
-                        SUMMARY
-                      </button>
-                    </CalloutMenu>
-                  )}
-                </CalloutDropdown>
-              </ToolbarCluster>
-
-              <ToolbarDivider aria-hidden="true" />
-
-              <ToolbarCluster>
-                <ToolbarIconButton
-                  type="button"
-                  title={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
-                  aria-label={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
-                  data-variant="primary"
-                  disabled={disabled("uploadPostImage")}
-                  onClick={() => runToolbarAction(() => postImageFileInputRef.current?.click())}
-                >
-                  <AppIcon name="camera" />
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="코드 블록" aria-label="코드 블록" onClick={() => runToolbarAction(() => insertBlockSnippet(codeBlockTemplate))}>
-                  <span className="textIcon code">{"{ }"}</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="Mermaid" aria-label="Mermaid 다이어그램" onClick={() => runToolbarAction(() => insertBlockSnippet(mermaidTemplate))}>
-                  <span className="textIcon">◇</span>
-                </ToolbarIconButton>
-                <ToolbarIconButton type="button" title="테이블" aria-label="테이블" onClick={() => runToolbarAction(() => insertBlockSnippet(tableTemplate))}>
-                  <span className="textIcon">▦</span>
-                </ToolbarIconButton>
-              </ToolbarCluster>
-            </ToolbarQuickBar>
-            <ToolbarHint>핵심 서식만 바로 넣습니다.</ToolbarHint>
-          </EditorToolbar>
-          <ComposeViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
-            {composeViewModeOptions.map((option) => (
-              <ComposeViewSwitchButton
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={composeViewMode === option.value}
-                data-active={composeViewMode === option.value}
-                onClick={() => setComposeViewMode(option.value)}
-              >
-                {option.icon === "split" ? (
-                  <SplitViewGlyph aria-hidden="true">
-                    <span />
-                    <span />
-                  </SplitViewGlyph>
-                ) : (
-                  <AppIcon name={option.icon} aria-hidden="true" />
-                )}
-                <span>{option.label}</span>
-              </ComposeViewSwitchButton>
-            ))}
-          </ComposeViewSwitch>
-          <EditorGrid data-view-mode={composeViewMode}>
-            {composeViewMode !== "preview" ? (
-            <EditorPane>
-              <PaneHeader>
-                <div>
-                  <PaneTitle>작성</PaneTitle>
-                    <PaneDescription>현재 줄을 기준으로 미리보기도 같은 구간을 따라갑니다.</PaneDescription>
-                </div>
-                <PaneChip>{lineCount} lines</PaneChip>
-              </PaneHeader>
-              <ContentInput
-                ref={postContentRef}
-                placeholder="당신의 이야기를 적어보세요..."
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                onScroll={schedulePreviewScrollSync}
-                onClick={schedulePreviewScrollSync}
-                onKeyUp={schedulePreviewScrollSync}
-                onSelect={schedulePreviewScrollSync}
-                onPaste={handlePasteFromHtml}
-              />
-            </EditorPane>
-            ) : null}
-            {composeViewMode !== "editor" ? (
-              <PreviewPane>
+          {BLOCK_EDITOR_V2_ENABLED ? (
+            <EditorGrid data-view-mode="editor">
+              <EditorPane>
                 <PaneHeader>
                   <div>
-                    <PaneTitle>미리보기</PaneTitle>
-                    <PaneDescription>
-                      {isPreviewSyncPending
-                        ? "입력 반영 중입니다."
-                        : "작성 중인 줄과 같은 본문 구간을 바로 확인합니다."}
-                    </PaneDescription>
+                    <PaneTitle>블록 작성</PaneTitle>
+                    <PaneDescription>기본 블록은 바로 편집하고, Mermaid/콜아웃/토글은 원문 블록으로 안전하게 보존합니다.</PaneDescription>
                   </div>
-                  <PaneChip>
-                    {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
-                  </PaneChip>
+                  <PaneChip>{lineCount} lines</PaneChip>
                 </PaneHeader>
-                <PreviewCard ref={previewScrollRef}>
-                  <PreviewContentFrame>
-                    {isPreviewHeavyDocument ? (
-                      <PreviewHintNotice>
-                        긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
-                        {isPreviewSyncPending
-                          ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
-                          : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
-                      </PreviewHintNotice>
-                    ) : null}
-                    <LazyMarkdownRenderer
-                      content={previewContent}
-                      disableMermaid={isPreviewHeavyDocument}
-                      editableImages
-                      onImageWidthCommit={handlePreviewImageWidthCommit}
-                    />
-                  </PreviewContentFrame>
-                </PreviewCard>
-              </PreviewPane>
-            ) : null}
-          </EditorGrid>
+                <LazyBlockEditorShell
+                  value={postContent}
+                  onChange={setPostContent}
+                  onUploadImage={handleBlockEditorImageUpload}
+                  disabled={loadingKey.length > 0}
+                  preview={
+                    <PreviewCard>
+                      <PreviewContentFrame>
+                        <LazyMarkdownRenderer content={postContent} />
+                      </PreviewContentFrame>
+                    </PreviewCard>
+                  }
+                />
+              </EditorPane>
+            </EditorGrid>
+          ) : (
+            <>
+              <EditorToolbar>
+                <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
+                  <ToolbarCluster>
+                    <ToolbarIconButton type="button" title="제목1" aria-label="제목1" onClick={() => runToolbarAction(() => applyHeadingStyle(1))}>
+                      <span className="textIcon">H1</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="제목2" aria-label="제목2" onClick={() => runToolbarAction(() => applyHeadingStyle(2))}>
+                      <span className="textIcon">H2</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="제목3" aria-label="제목3" onClick={() => runToolbarAction(() => applyHeadingStyle(3))}>
+                      <span className="textIcon">H3</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="일반 텍스트" aria-label="일반 텍스트" onClick={() => runToolbarAction(() => applyHeadingStyle(0))}>
+                      <span className="textIcon">T</span>
+                    </ToolbarIconButton>
+                  </ToolbarCluster>
+
+                  <ToolbarDivider aria-hidden="true" />
+
+                  <ToolbarCluster>
+                    <ToolbarIconButton type="button" title="굵게" aria-label="굵게" onClick={() => runToolbarAction(() => wrapSelection("**", "**", "굵은 텍스트"))}>
+                      <span className="textIcon strong">B</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="기울임" aria-label="기울임" onClick={() => runToolbarAction(() => wrapSelection("*", "*", "기울임 텍스트"))}>
+                      <span className="textIcon italic">I</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="취소선" aria-label="취소선" onClick={() => runToolbarAction(() => wrapSelection("~~", "~~", "취소선 텍스트"))}>
+                      <span className="textIcon strike">S</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="인라인 코드" aria-label="인라인 코드" onClick={() => runToolbarAction(() => wrapSelection("`", "`", "코드"))}>
+                      <span className="textIcon code">&lt;/&gt;</span>
+                    </ToolbarIconButton>
+                  </ToolbarCluster>
+
+                  <ToolbarDivider aria-hidden="true" />
+
+                  <ToolbarCluster>
+                    <ToolbarIconButton type="button" title="체크리스트" aria-label="체크리스트" onClick={() => runToolbarAction(applyChecklist)}>
+                      <AppIcon name="check-circle" />
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="구분선" aria-label="구분선" onClick={() => runToolbarAction(insertDivider)}>
+                      <span className="textIcon">—</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="토글 블록" aria-label="토글 블록" onClick={() => runToolbarAction(insertToggle)}>
+                      <AppIcon name="chevron-down" />
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="링크" aria-label="링크" onClick={() => runToolbarAction(insertLink)}>
+                      <AppIcon name="link" />
+                    </ToolbarIconButton>
+                    <ColorDropdown>
+                      <ToolbarIconButton
+                        type="button"
+                        title="글자색"
+                        aria-label="글자색"
+                        data-active={isColorMenuOpen}
+                        onClick={() => {
+                          setIsColorMenuOpen((prev) => !prev)
+                          setIsCalloutMenuOpen(false)
+                        }}
+                      >
+                        <span className="textIcon">A</span>
+                      </ToolbarIconButton>
+                      {isColorMenuOpen && (
+                        <ColorMenu>
+                          {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
+                            <button
+                              type="button"
+                              key={option.value}
+                              onClick={() => applyInlineTextColor(option.value)}
+                            >
+                              <ColorSwatch style={{ background: option.value }} aria-hidden="true" />
+                              <span>{option.label}</span>
+                            </button>
+                          ))}
+                        </ColorMenu>
+                      )}
+                    </ColorDropdown>
+                    <CalloutDropdown>
+                      <ToolbarIconButton
+                        type="button"
+                        title="콜아웃"
+                        aria-label="콜아웃"
+                        data-active={isCalloutMenuOpen}
+                        onClick={() => {
+                          setIsCalloutMenuOpen((prev) => !prev)
+                          setIsColorMenuOpen(false)
+                        }}
+                      >
+                        <span className="textIcon">❝</span>
+                      </ToolbarIconButton>
+                      {isCalloutMenuOpen && (
+                        <CalloutMenu>
+                          <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
+                            TIP
+                          </button>
+                          <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
+                            INFO
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
+                          >
+                            WARNING
+                          </button>
+                          <button type="button" onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}>
+                            OUTLINE
+                          </button>
+                          <button type="button" onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}>
+                            EXAMPLE
+                          </button>
+                          <button type="button" onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}>
+                            SUMMARY
+                          </button>
+                        </CalloutMenu>
+                      )}
+                    </CalloutDropdown>
+                  </ToolbarCluster>
+
+                  <ToolbarDivider aria-hidden="true" />
+
+                  <ToolbarCluster>
+                    <ToolbarIconButton
+                      type="button"
+                      title={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
+                      aria-label={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
+                      data-variant="primary"
+                      disabled={disabled("uploadPostImage")}
+                      onClick={() => runToolbarAction(() => postImageFileInputRef.current?.click())}
+                    >
+                      <AppIcon name="camera" />
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="코드 블록" aria-label="코드 블록" onClick={() => runToolbarAction(() => insertBlockSnippet(codeBlockTemplate))}>
+                      <span className="textIcon code">{"{ }"}</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="Mermaid" aria-label="Mermaid 다이어그램" onClick={() => runToolbarAction(() => insertBlockSnippet(mermaidTemplate))}>
+                      <span className="textIcon">◇</span>
+                    </ToolbarIconButton>
+                    <ToolbarIconButton type="button" title="테이블" aria-label="테이블" onClick={() => runToolbarAction(() => insertBlockSnippet(tableTemplate))}>
+                      <span className="textIcon">▦</span>
+                    </ToolbarIconButton>
+                  </ToolbarCluster>
+                </ToolbarQuickBar>
+                <ToolbarHint>핵심 서식만 바로 넣습니다.</ToolbarHint>
+              </EditorToolbar>
+              <ComposeViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
+                {composeViewModeOptions.map((option) => (
+                  <ComposeViewSwitchButton
+                    key={option.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={composeViewMode === option.value}
+                    data-active={composeViewMode === option.value}
+                    onClick={() => setComposeViewMode(option.value)}
+                  >
+                    {option.icon === "split" ? (
+                      <SplitViewGlyph aria-hidden="true">
+                        <span />
+                        <span />
+                      </SplitViewGlyph>
+                    ) : (
+                      <AppIcon name={option.icon} aria-hidden="true" />
+                    )}
+                    <span>{option.label}</span>
+                  </ComposeViewSwitchButton>
+                ))}
+              </ComposeViewSwitch>
+              <EditorGrid data-view-mode={composeViewMode}>
+                {composeViewMode !== "preview" ? (
+                <EditorPane>
+                  <PaneHeader>
+                    <div>
+                      <PaneTitle>작성</PaneTitle>
+                        <PaneDescription>현재 줄을 기준으로 미리보기도 같은 구간을 따라갑니다.</PaneDescription>
+                    </div>
+                    <PaneChip>{lineCount} lines</PaneChip>
+                  </PaneHeader>
+                  <ContentInput
+                    ref={postContentRef}
+                    placeholder="당신의 이야기를 적어보세요..."
+                    value={postContent}
+                    onChange={(e) => setPostContent(e.target.value)}
+                    onScroll={schedulePreviewScrollSync}
+                    onClick={schedulePreviewScrollSync}
+                    onKeyUp={schedulePreviewScrollSync}
+                    onSelect={schedulePreviewScrollSync}
+                    onPaste={handlePasteFromHtml}
+                  />
+                </EditorPane>
+                ) : null}
+                {composeViewMode !== "editor" ? (
+                  <PreviewPane>
+                    <PaneHeader>
+                      <div>
+                        <PaneTitle>미리보기</PaneTitle>
+                        <PaneDescription>
+                          {isPreviewSyncPending
+                            ? "입력 반영 중입니다."
+                            : "작성 중인 줄과 같은 본문 구간을 바로 확인합니다."}
+                        </PaneDescription>
+                      </div>
+                      <PaneChip>
+                        {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
+                      </PaneChip>
+                    </PaneHeader>
+                    <PreviewCard ref={previewScrollRef}>
+                      <PreviewContentFrame>
+                        {isPreviewHeavyDocument ? (
+                          <PreviewHintNotice>
+                            긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
+                            {isPreviewSyncPending
+                              ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
+                              : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
+                          </PreviewHintNotice>
+                        ) : null}
+                        <LazyMarkdownRenderer
+                          content={previewContent}
+                          disableMermaid={isPreviewHeavyDocument}
+                          editableImages
+                          onImageWidthCommit={handlePreviewImageWidthCommit}
+                        />
+                      </PreviewContentFrame>
+                    </PreviewCard>
+                  </PreviewPane>
+                ) : null}
+              </EditorGrid>
+            </>
+          )}
           <WriterFooterBar>
             <WriterFooterSummary>
                 <span>{currentPostLabel}</span>

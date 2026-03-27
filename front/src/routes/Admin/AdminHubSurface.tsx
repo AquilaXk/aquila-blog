@@ -2,11 +2,19 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import ProfileImage from "src/components/ProfileImage"
 
-export type AdminHubQuickLink = {
+export type AdminHubPrimaryAction = {
   href: string
   title: string
   description: string
-  eyebrow: string
+  cta: string
+  secondaryHref: string
+  secondaryLabel: string
+}
+
+export type AdminHubSecondaryLink = {
+  href: string
+  title: string
+  description: string
   cta: string
 }
 
@@ -17,7 +25,8 @@ type Props = {
   profileRole?: string
   profileBio?: string
   profileUpdatedText: string
-  quickLinks: AdminHubQuickLink[]
+  primaryAction: AdminHubPrimaryAction
+  secondaryLinks: AdminHubSecondaryLink[]
 }
 
 const AdminHubSurface = ({
@@ -27,16 +36,17 @@ const AdminHubSurface = ({
   profileRole,
   profileBio,
   profileUpdatedText,
-  quickLinks,
+  primaryAction,
+  secondaryLinks,
 }: Props) => {
   return (
     <Main>
       <HeaderPanel>
         <HeaderCopy>
-          <h1>관리자 작업 진입점</h1>
-          <p>지금 필요한 화면만 바로 엽니다.</p>
+          <h1>관리자 작업 공간</h1>
+          <p>가장 자주 하는 작업부터 바로 시작합니다.</p>
         </HeaderCopy>
-        <StatusStrip aria-label="관리자 상태 요약">
+        <SummaryRail aria-label="관리자 상태 요약">
           <StatusItem>
             <span>현재 계정</span>
             <strong>{displayName}</strong>
@@ -46,38 +56,49 @@ const AdminHubSurface = ({
             <strong>{profileRole || "미설정"}</strong>
           </StatusItem>
           <StatusItem>
-            <span>최근 수정</span>
+            <span>마지막 업데이트</span>
             <strong>{profileUpdatedText}</strong>
           </StatusItem>
-        </StatusStrip>
+        </SummaryRail>
       </HeaderPanel>
 
-      <TaskPanel>
-        <TaskPanelHeader>
-          <div>
-            <h2>주요 작업</h2>
-            <p>프로필, 글 작업실, 운영 도구만 둡니다.</p>
-          </div>
-        </TaskPanelHeader>
-        <TaskList>
-          {quickLinks.map((item) => {
-            const isPrimary = item.href === "/admin/posts/new"
-            return (
-              <Link key={item.href} href={item.href} passHref legacyBehavior>
-                <TaskLink data-primary={isPrimary ? "true" : "false"}>
-                  <TaskCopy>
-                    <strong>{item.title}</strong>
-                    <p>{item.description}</p>
-                  </TaskCopy>
-                  <TaskMeta>
-                    <span>{item.cta}</span>
-                  </TaskMeta>
-                </TaskLink>
-              </Link>
-            )
-          })}
-        </TaskList>
-      </TaskPanel>
+      <HeroPanel>
+        <HeroLabel>지금 할 일</HeroLabel>
+        <HeroBody>
+          <HeroCopy>
+            <h2>{primaryAction.title}</h2>
+            <p>{primaryAction.description}</p>
+          </HeroCopy>
+          <HeroActions>
+            <Link href={primaryAction.href} passHref legacyBehavior>
+              <PrimaryActionLink>{primaryAction.cta}</PrimaryActionLink>
+            </Link>
+            <Link href={primaryAction.secondaryHref} passHref legacyBehavior>
+              <SecondaryActionLink>{primaryAction.secondaryLabel}</SecondaryActionLink>
+            </Link>
+          </HeroActions>
+        </HeroBody>
+      </HeroPanel>
+
+      <ShortcutPanel>
+        <SectionHeader>
+          <h2>보조 작업</h2>
+          <p>프로필 정리와 운영 진단은 여기서 이어서 엽니다.</p>
+        </SectionHeader>
+        <ShortcutGrid>
+          {secondaryLinks.map((item) => (
+            <Link key={item.href} href={item.href} passHref legacyBehavior>
+              <ShortcutLink>
+                <ShortcutCopy>
+                  <strong>{item.title}</strong>
+                  <p>{item.description}</p>
+                </ShortcutCopy>
+                <ShortcutMeta>{item.cta}</ShortcutMeta>
+              </ShortcutLink>
+            </Link>
+          ))}
+        </ShortcutGrid>
+      </ShortcutPanel>
 
       <ProfileCompact>
         <ProfileFrame>
@@ -105,12 +126,12 @@ export default AdminHubSurface
 const Main = styled.main`
   max-width: 1080px;
   margin: 0 auto;
-  padding: 1.1rem 1rem 2.2rem;
+  padding: 1.2rem 1rem 2.4rem;
   display: grid;
-  gap: 0.72rem;
+  gap: 1.15rem;
 
   @media (max-width: 900px) {
-    gap: 0.72rem;
+    gap: 0.88rem;
     padding-top: 1rem;
   }
 `
@@ -139,12 +160,12 @@ const HeaderCopy = styled.div`
     margin: 0;
     max-width: 34rem;
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     line-height: 1.45;
   }
 `
 
-const StatusStrip = styled.div`
+const SummaryRail = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.38rem;
@@ -158,7 +179,7 @@ const StatusItem = styled.div`
   display: grid;
   gap: 0.2rem;
   min-width: 0;
-  padding: 0.42rem 0.5rem;
+  padding: 0.4rem 0.48rem;
   border-radius: 8px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -180,45 +201,153 @@ const StatusItem = styled.div`
   }
 `
 
-const TaskPanel = styled.section`
+const HeroPanel = styled.section`
   display: grid;
-  gap: 0.58rem;
-  padding: 0.76rem 0.84rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: ${({ theme }) => theme.colors.gray2};
+  gap: 0.72rem;
+  padding: 1.08rem 1rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background:
+    linear-gradient(180deg, ${({ theme }) => theme.colors.gray3} 0%, ${({ theme }) => theme.colors.gray2} 100%);
   box-shadow: none;
 `
 
-const TaskPanelHeader = styled.div`
+const HeroLabel = styled.span`
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
+  font-weight: 800;
+`
+
+const HeroBody = styled.div`
   display: grid;
-  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: end;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+`
+
+const HeroCopy = styled.div`
+  display: grid;
+  gap: 0.32rem;
 
   h2 {
     margin: 0;
-    font-size: 1.04rem;
+    font-size: clamp(1.72rem, 3vw, 2rem);
+    color: ${({ theme }) => theme.colors.gray12};
+    letter-spacing: -0.03em;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.92rem;
+    line-height: 1.4;
+    max-width: 34rem;
+  }
+`
+
+const HeroActions = styled.div`
+  display: grid;
+  gap: 0.58rem;
+  justify-items: start;
+
+  @media (max-width: 760px) {
+    width: 100%;
+  }
+`
+
+const PrimaryActionLink = styled.a`
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  padding: 0 1rem;
+  border: 1px solid ${({ theme }) => theme.colors.blue8};
+  background: ${({ theme }) => theme.colors.blue8};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.94rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: ${({ theme }) => theme.colors.blue9};
+    background: ${({ theme }) => theme.colors.blue9};
+  }
+
+  @media (max-width: 760px) {
+    width: 100%;
+  }
+`
+
+const SecondaryActionLink = styled.a`
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.gray12};
+    text-decoration: underline;
+  }
+`
+
+const ShortcutPanel = styled.section`
+  display: grid;
+  gap: 0.62rem;
+`
+
+const SectionHeader = styled.div`
+  display: grid;
+  gap: 0.24rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
     color: ${({ theme }) => theme.colors.gray12};
   }
 
   p {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     line-height: 1.4;
   }
 `
 
-const TaskList = styled.div`
+const ShortcutGrid = styled.div`
   display: grid;
-  gap: 0.42rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.58rem;
+
+  @media (max-width: 760px) {
+    grid-template-columns: 1fr;
+  }
 `
 
-const TaskLink = styled.a`
+const ShortcutLink = styled.a`
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.56rem;
   align-items: center;
-  padding: 0.62rem 0.7rem;
+  padding: 0.72rem 0.76rem;
   border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray1};
@@ -229,19 +358,9 @@ const TaskLink = styled.a`
     background-color 0.16s ease,
     color 0.16s ease;
 
-  &[data-primary="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue2};
-  }
-
   &:hover {
     border-color: ${({ theme }) => theme.colors.gray7};
     background: ${({ theme }) => theme.colors.gray3};
-  }
-
-  &[data-primary="true"]:hover {
-    border-color: ${({ theme }) => theme.colors.blue9};
-    background: ${({ theme }) => theme.colors.blue4};
   }
 
   @media (max-width: 640px) {
@@ -250,7 +369,7 @@ const TaskLink = styled.a`
   }
 `
 
-const TaskCopy = styled.div`
+const ShortcutCopy = styled.div`
   min-width: 0;
   display: grid;
   gap: 0.22rem;
@@ -272,24 +391,19 @@ const TaskCopy = styled.div`
   }
 `
 
-const TaskMeta = styled.div`
+const ShortcutMeta = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 28px;
-    border-radius: 999px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray11};
-    padding: 0 0.54rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
+  min-height: 28px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0 0.54rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
 `
 
 const ProfileCompact = styled.section`

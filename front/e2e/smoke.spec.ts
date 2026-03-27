@@ -368,11 +368,14 @@ test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", a
   await page.goto("/posts/909")
   await expect(page.getByRole("button", { name: /좋아요/i })).toBeVisible()
   await expect(page.getByRole("button", { name: "게시글 공유" })).toBeVisible()
-  await expect(page.getByText("이 글에서 다루는 내용")).toBeVisible()
+  const compactTocSummary = page.locator('[aria-label="접이식 목차"] summary')
+  await expect(compactTocSummary).toBeVisible()
+  await expect(compactTocSummary.getByText("목차")).toBeVisible()
+  await expect(compactTocSummary.getByText("2개 섹션")).toBeVisible()
   await page.getByRole("button", { name: "게시글 공유" }).click()
   await expect(page.getByText("링크를 복사했습니다.")).toBeVisible()
 
-  await page.getByText("이 글에서 다루는 내용").click()
+  await compactTocSummary.click()
   await expect(page.getByRole("button", { name: "첫 섹션" })).toBeVisible()
 })
 

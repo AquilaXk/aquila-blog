@@ -476,7 +476,7 @@ const BlockEditorShell = ({
         linkOnPaste: true,
       }),
       Placeholder.configure({
-        placeholder: "내용을 입력하세요",
+        placeholder: "본문을 시작하세요",
       }),
       Table.configure({
         resizable: true,
@@ -884,8 +884,8 @@ const BlockEditorShell = ({
       },
       {
         id: "callout",
-        label: "콜아웃",
-        helper: "TIP/INFO/WARNING",
+        label: "설명 상자",
+        helper: "핵심 내용을 강조합니다",
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
@@ -895,7 +895,7 @@ const BlockEditorShell = ({
       {
         id: "toggle",
         label: "토글",
-        helper: "접기/펼치기 블록",
+        helper: "긴 보충 설명을 접어 둡니다",
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
@@ -904,8 +904,8 @@ const BlockEditorShell = ({
       },
       {
         id: "mermaid",
-        label: "Mermaid",
-        helper: enableMermaidBlocks ? "다이어그램 블록" : "원문 블록으로 보존",
+        label: "다이어그램",
+        helper: enableMermaidBlocks ? "Mermaid" : "원문 블록으로 유지",
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
@@ -919,7 +919,7 @@ const BlockEditorShell = ({
       {
         id: "image",
         label: "이미지",
-        helper: "업로드 후 즉시 삽입",
+        helper: "업로드 후 본문에 삽입",
         insertAt: (blockIndex) => {
           pendingImageInsertIndexRef.current = blockIndex + 1
           fileInputRef.current?.click()
@@ -934,7 +934,7 @@ const BlockEditorShell = ({
       {
         id: "raw",
         label: "원문 블록",
-        helper: "지원되지 않는 markdown 유지",
+        helper: "특수 markdown을 그대로 유지",
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, [
             {
@@ -1024,25 +1024,25 @@ const BlockEditorShell = ({
     return [
       {
         id: "heading-2",
-        label: "제목 2",
-        helper: "큰 섹션 제목",
+        label: "소제목",
+        helper: "큰 흐름을 나눕니다",
         run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
       },
       {
         id: "heading-3",
-        label: "제목 3",
-        helper: "작은 섹션 제목",
+        label: "작은 소제목",
+        helper: "짧은 소단락을 나눕니다",
         run: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
       },
       {
         id: "bullet-list",
-        label: "불릿 리스트",
+        label: "목록",
         helper: "순서 없는 항목",
         run: () => editor.chain().focus().toggleBulletList().run(),
       },
       {
         id: "ordered-list",
-        label: "번호 리스트",
+        label: "번호 목록",
         helper: "순서 있는 항목",
         run: () => editor.chain().focus().toggleOrderedList().run(),
       },
@@ -1060,26 +1060,26 @@ const BlockEditorShell = ({
       },
       {
         id: "table",
-        label: "테이블",
+        label: "표",
         helper: "2열 헤더 포함",
         run: insertTableBlock,
       },
       {
         id: "callout",
-        label: "콜아웃",
-        helper: "TIP/INFO/WARNING",
+        label: "설명 상자",
+        helper: "핵심 내용을 강조합니다",
         run: insertCalloutBlock,
       },
       {
         id: "toggle",
         label: "토글",
-        helper: "접기/펼치기 블록",
+        helper: "긴 보충 설명을 접어 둡니다",
         run: insertToggleBlock,
       },
       {
         id: "mermaid",
-        label: "Mermaid",
-        helper: enableMermaidBlocks ? "다이어그램 블록" : "원문 블록으로 보존",
+        label: "다이어그램",
+        helper: enableMermaidBlocks ? "Mermaid" : "원문 블록으로 유지",
         run: insertMermaidBlock,
       },
       {
@@ -1097,30 +1097,30 @@ const BlockEditorShell = ({
       {
         id: "raw",
         label: "원문 블록",
-        helper: "지원되지 않는 markdown 유지",
+        helper: "특수 markdown을 그대로 유지",
         run: () => insertRawMarkdownBlock(),
       },
     ]
   }, [editor, enableMermaidBlocks, insertCalloutBlock, insertMermaidBlock, insertRawMarkdownBlock, insertTableBlock, insertToggleBlock])
 
   const toolbarActions: ToolbarAction[] = [
-    { id: "paragraph", label: "본문", run: () => editor?.chain().focus().setParagraph().run(), active: editor?.isActive("paragraph") ?? false },
-    { id: "heading-2", label: "H2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
-    { id: "heading-3", label: "H3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
+    { id: "paragraph", label: "문단", run: () => editor?.chain().focus().setParagraph().run(), active: editor?.isActive("paragraph") ?? false },
+    { id: "heading-2", label: "소제목", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
+    { id: "heading-3", label: "작은 소제목", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
     { id: "bullet-list", label: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
-    { id: "code-block", label: "코드", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
-    { id: "mermaid", label: "Mermaid", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
+    { id: "code-block", label: "코드 블록", run: () => editor?.chain().focus().toggleCodeBlock().run(), active: editor?.isActive("codeBlock") ?? false },
+    { id: "mermaid", label: "다이어그램", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
   ]
 
   const toolbarMoreActions: ToolbarAction[] = [
-    { id: "ordered-list", label: "번호", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
+    { id: "ordered-list", label: "번호 목록", run: () => editor?.chain().focus().toggleOrderedList().run(), active: editor?.isActive("orderedList") ?? false },
     { id: "quote", label: "인용", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
-    { id: "table", label: "테이블", run: insertTableBlock, active: editor?.isActive("table") ?? false },
-    { id: "callout", label: "콜아웃", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
+    { id: "table", label: "표", run: insertTableBlock, active: editor?.isActive("table") ?? false },
+    { id: "callout", label: "설명 상자", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
     { id: "toggle", label: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
     { id: "link", label: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
     { id: "divider", label: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
-    { id: "raw", label: "원문", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
+    { id: "raw", label: "원문 블록", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
   ]
 
   const activeCodeLanguage = ((editor?.getAttributes("codeBlock").language as string | undefined) || "").trim()
@@ -1400,7 +1400,6 @@ const BlockEditorShell = ({
   return (
     <Shell className={className}>
       <Toolbar>
-        <ToolbarSectionTitle>블록 작성기</ToolbarSectionTitle>
         <ToolbarActions>
           {toolbarActions.map((action) => (
             <ToolbarButton
@@ -1414,7 +1413,7 @@ const BlockEditorShell = ({
             </ToolbarButton>
           ))}
           <ToolbarButton type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
-            이미지
+            이미지 추가
           </ToolbarButton>
           <ToolbarMoreDisclosure open={isToolbarMoreOpen}>
             <summary
@@ -1423,7 +1422,7 @@ const BlockEditorShell = ({
                 setIsToolbarMoreOpen((prev) => !prev)
               }}
             >
-              <strong>더보기</strong>
+              <strong>도구</strong>
               <span>{isToolbarMoreOpen ? "닫기" : "열기"}</span>
             </summary>
             {isToolbarMoreOpen ? (
@@ -1474,7 +1473,7 @@ const BlockEditorShell = ({
       {isSlashMenuOpen ? (
         <SlashMenu role="dialog" aria-label="블록 삽입 메뉴" onKeyDown={handleSlashMenuKeyDown}>
           <SlashMenuHeader>
-            <strong>/ 블록 메뉴</strong>
+            <strong>/ 삽입</strong>
             <button type="button" onClick={() => setIsSlashMenuOpen(false)}>
               닫기
             </button>
@@ -1661,7 +1660,7 @@ const BlockEditorShell = ({
           >
             {blockMenuState.kind === "insert" ? (
               <>
-                <FloatingBlockMenuHeader>블록 추가</FloatingBlockMenuHeader>
+                <FloatingBlockMenuHeader>삽입 메뉴</FloatingBlockMenuHeader>
                 <FloatingBlockMenuGrid>
                   {insertMenuActions.map((action) => (
                     <FloatingBlockMenuButton
@@ -1680,7 +1679,7 @@ const BlockEditorShell = ({
               </>
             ) : (
               <>
-                <FloatingBlockMenuHeader>블록 작업</FloatingBlockMenuHeader>
+                <FloatingBlockMenuHeader>현재 블록</FloatingBlockMenuHeader>
                 <FloatingBlockActionList>
                   <FloatingBlockActionButton type="button" onClick={() => moveBlockByStep(blockMenuState.blockIndex, -1)}>
                     위로 이동
@@ -1770,23 +1769,16 @@ const Toolbar = styled.div`
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.55rem 0.65rem;
+  gap: 0.5rem 0.6rem;
   padding: 0;
   border: 0;
   background: transparent;
 `
 
-const ToolbarSectionTitle = styled.strong`
-  margin-right: 0.15rem;
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--color-gray10);
-`
-
 const ToolbarActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.42rem;
 `
 
 const ToolbarMoreDisclosure = styled.details`
@@ -1799,11 +1791,11 @@ const ToolbarMoreDisclosure = styled.details`
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    min-height: 1.95rem;
-    padding: 0 0.78rem;
+    min-height: 2rem;
+    padding: 0 0.82rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(18, 21, 26, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(18, 21, 26, 0.42);
     color: var(--color-gray11);
     font-size: 0.78rem;
     font-weight: 700;
@@ -1822,10 +1814,10 @@ const ToolbarMoreDisclosure = styled.details`
 `
 
 const ToolbarButton = styled.button`
-  min-height: 1.95rem;
+  min-height: 2rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(18, 21, 26, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 21, 26, 0.42);
   color: var(--color-gray11);
   font-size: 0.78rem;
   font-weight: 700;
@@ -1871,8 +1863,8 @@ const InlineControlInput = styled.input`
   min-height: 2rem;
   min-width: min(16rem, 100%);
   border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(18, 21, 26, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 21, 26, 0.42);
   color: var(--color-gray12);
   font-size: 0.84rem;
   padding: 0 0.8rem;
@@ -1887,9 +1879,9 @@ const SlashMenu = styled.div`
   flex-direction: column;
   gap: 0.7rem;
   padding: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.95rem;
-  background: rgba(18, 21, 26, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem;
+  background: rgba(15, 18, 24, 0.94);
 `
 
 const SlashMenuHeader = styled.div`
@@ -1923,10 +1915,10 @@ const SlashActionButton = styled.button`
   flex-direction: column;
   align-items: flex-start;
   gap: 0.18rem;
-  min-height: 3.3rem;
+  min-height: 3.1rem;
   border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(18, 21, 26, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 21, 26, 0.48);
   color: var(--color-gray12);
   padding: 0.75rem 0.85rem;
   text-align: left;
@@ -1942,14 +1934,16 @@ const SlashActionButton = styled.button`
 `
 
 const EditorViewport = styled.div`
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 1rem;
-  background: rgba(13, 15, 18, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 1.1rem;
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.03), transparent 20%),
+    rgba(15, 18, 24, 0.88);
   overflow: hidden;
 
   .aq-block-editor__content {
     min-height: 32rem;
-    padding: 1.65rem 1.5rem 2rem;
+    padding: 1.75rem 1.6rem 2.2rem;
     color: var(--color-gray12);
     font-size: 1rem;
     line-height: 1.75;
@@ -1963,7 +1957,7 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content > * + * {
-    margin-top: 1rem;
+    margin-top: 1.05rem;
   }
 
   .aq-block-editor__content p.is-editor-empty:first-of-type::before {
@@ -2035,10 +2029,10 @@ const BubbleToolbar = styled.div`
   flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 0.9rem;
-  background: rgba(13, 15, 18, 0.98);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+  background: rgba(15, 18, 24, 0.96);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
 
   &[data-layout="table"] {
     max-width: min(92vw, 40rem);
@@ -2068,12 +2062,12 @@ const BlockHandleButton = styled.button`
   width: 1.9rem;
   height: 1.9rem;
   border-radius: 0.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(18, 21, 26, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(18, 21, 26, 0.62);
   color: var(--color-gray11);
   font-size: 0.76rem;
   font-weight: 800;
-  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.12);
 `
 
 const MobileBlockActionBar = styled.div`
@@ -2085,8 +2079,8 @@ const MobileBlockActionBar = styled.div`
   padding: 0.5rem;
   border-radius: 0.9rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(13, 15, 18, 0.98);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+  background: rgba(15, 18, 24, 0.96);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.14);
   transform: translateX(-50%);
 `
 
@@ -2100,8 +2094,8 @@ const FloatingBlockMenu = styled.div`
   padding: 0.75rem;
   border-radius: 0.9rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(13, 15, 18, 0.98);
-  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.2);
+  background: rgba(15, 18, 24, 0.96);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.15);
 `
 
 const FloatingBlockMenuHeader = styled.strong`
@@ -2191,7 +2185,7 @@ const AuxDisclosure = styled.details`
   }
 
   strong {
-    font-size: 0.84rem;
+    font-size: 0.82rem;
     color: var(--color-gray11);
   }
 
@@ -2209,9 +2203,9 @@ const RawMarkdownTextarea = styled.textarea`
   min-height: 14rem;
   width: 100%;
   resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 0.95rem;
-  background: rgba(10, 12, 16, 0.92);
+  background: rgba(11, 14, 20, 0.9);
   color: var(--color-gray12);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;

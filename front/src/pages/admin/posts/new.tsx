@@ -1433,6 +1433,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
   const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
   const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
+  const [isComposePreviewOpen, setIsComposePreviewOpen] = useState(false)
   const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
   const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
   const postContentRef = useRef<HTMLTextAreaElement>(null)
@@ -1453,7 +1454,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
-  const [composeViewMode, setComposeViewMode] = useState<ComposeViewMode>("split")
+  const [composeViewMode, setComposeViewMode] = useState<ComposeViewMode>("editor")
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement>(null)
@@ -3698,7 +3699,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   const currentFlags = toFlags(postVisibility)
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
-  const editorModeLabel = editorMode === "edit" ? "수정 모드" : "새 글 모드"
+  const editorModeLabel = editorMode === "edit" ? "원고 편집" : "새 글"
   const hasSelectedManagedPost = editorMode === "edit" && postId.trim().length > 0
   const currentPostLabel =
     hasSelectedManagedPost
@@ -3717,6 +3718,32 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
+  const composePageTitle = editorMode === "edit" ? "원고 편집" : "새 글"
+  const composeSurfaceSubtitle = hasSelectedManagedPost
+    ? `#${postId} 원고를 다듬고 있습니다.`
+    : "기술 원고를 차분하게 다듬는 공간입니다."
+  const composeStatusText =
+    loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
+      ? "저장 중"
+      : publishNotice.tone === "success"
+        ? "방금 저장됨"
+        : postTitle.trim() || postContent.trim()
+          ? "초안"
+          : "새 초안"
+  const composeStatusTone =
+    loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
+      ? "loading"
+      : publishNotice.tone === "success"
+        ? "success"
+        : "idle"
+  const composeHeroSummary = [
+    currentVisibilityText,
+    postSummary.trim() ? `요약 ${postSummary.trim().length}자` : "요약 자동",
+    postTags.length > 0 ? `태그 ${postTags.length}개` : "태그 미설정",
+  ]
+  const composeCallToActionLabel =
+    editorMode === "create" ? "발행 준비" : isTempDraftMode ? "임시글 발행 준비" : "수정 사항 확인"
+  const composeSummaryPreview = postSummary.trim() || makePreviewSummary(postContent)
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
@@ -3921,8 +3948,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const previewMetaEditorPanel = (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
-        <strong>카드 메타 편집</strong>
-        <span>썸네일 소스와 카드 요약을 이 구역에서 조정합니다.</span>
+        <strong>썸네일 소스</strong>
+        <span>카드에 사용할 대표 이미지를 정리합니다.</span>
       </PreviewEditorSectionHeader>
       <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
       <Input
@@ -3978,31 +4005,11 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
             setPreviewThumbnailSourceUrl("")
           }}
-        >
+      >
           자동 모드로 되돌리기
         </Button>
       </MetaActionRow>
       {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
-      <FieldLabel htmlFor="post-preview-summary-modal">미리보기 요약</FieldLabel>
-      <PreviewSummaryInput
-        id="post-preview-summary-modal"
-        placeholder="피드 카드에 표시될 요약을 입력하세요. 비우면 본문에서 자동 생성됩니다."
-        value={postSummary}
-        maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
-        onChange={(e) => setPostSummary(e.target.value)}
-      />
-      <SummaryCounter>
-        {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
-      </SummaryCounter>
-      <MetaActionRow>
-        <Button
-          type="button"
-          onClick={() => setPostSummary(makePreviewSummary(postContent))}
-          disabled={!postContent.trim()}
-        >
-          본문 기반 요약 채우기
-        </Button>
-      </MetaActionRow>
     </PreviewEditorSection>
   )
 
@@ -4010,28 +4017,38 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     <Main>
       <HeroCard data-compact-manage={isCompactManageSurface}>
         <HeroIntro data-compact-manage={isCompactManageSurface}>
-          <h1>글 작업실</h1>
-          {studioSurface === "manage" ? (
-            <p>{isCompactManageSurface ? "고른 글만 이어서 수정합니다." : "조회·선택·편집만 남겼습니다."}</p>
-          ) : null}
+          <h1>{studioSurface === "compose" ? composePageTitle : "글 작업실"}</h1>
+          <p>
+            {studioSurface === "compose"
+              ? "제목과 본문에 집중하고, 발행 전 설정은 오른쪽에서 차분하게 마무리합니다."
+              : isCompactManageSurface
+                ? "고른 글만 이어서 수정합니다."
+                : "조회·선택·편집만 남겼습니다."}
+          </p>
           <StudioStatusStrip aria-label="글 작업실 상태 요약">
             <StudioStatusItem>
-              <span>현재 화면</span>
-              <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
+              <span>{studioSurface === "compose" ? "현재 작업" : "현재 화면"}</span>
+              <strong>{studioSurface === "compose" ? composePageTitle : "목록 관리"}</strong>
             </StudioStatusItem>
             {currentPostLabel ? (
               <StudioStatusItem>
-                <span>편집 대상</span>
+                <span>{studioSurface === "compose" ? "원고" : "편집 대상"}</span>
                 <strong>{currentPostLabel}</strong>
               </StudioStatusItem>
             ) : null}
             <StudioStatusItem data-optional="true">
-              <span>노출 상태</span>
-              <strong>{currentVisibilityText}</strong>
+              <span>{studioSurface === "compose" ? "공개 범위" : "노출 상태"}</span>
+              <strong>{studioSurface === "compose" ? currentVisibilityText : currentVisibilityText}</strong>
             </StudioStatusItem>
             <StudioStatusItem data-optional="true">
-              <span>목록 상태</span>
-              <strong>{adminPostRows.length > 0 ? `${adminPostRows.length}개 조회됨` : "아직 안 불러옴"}</strong>
+              <span>{studioSurface === "compose" ? "저장 상태" : "목록 상태"}</span>
+              <strong>
+                {studioSurface === "compose"
+                  ? composeStatusText
+                  : adminPostRows.length > 0
+                    ? `${adminPostRows.length}개 조회됨`
+                    : "아직 안 불러옴"}
+              </strong>
             </StudioStatusItem>
           </StudioStatusStrip>
         </HeroIntro>
@@ -4928,220 +4945,157 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         )}
         {studioSurface === "compose" && (
         <ComposeSurfaceSection>
-            <SectionTop>
-              <div>
-                <h2>글 작성</h2>
-              </div>
-          </SectionTop>
         <EditorSection data-mobile-visible={!isCompactMobileLayout || studioSurface === "compose"}>
-          <ComposeReadableIntro>
-            <WriterHeader>
-              <div className="titleField">
-                <TitleInput
-                  id="post-title"
-                  placeholder="제목을 입력하세요"
-                  value={postTitle}
-                  onChange={(e) => setPostTitle(e.target.value)}
-                />
-                <WriterAccent />
-                <WriterMetaStrip>
-                  <InlineTagComposer>
-                    <div className="headerRow">
-                      <span className="label">태그</span>
-                      <span className="status">
-                        {postTags.length > 0 ? `${postTags.length}개 선택됨` : "선택된 태그 없음"}
-                      </span>
-                    </div>
-                    <InlineTagList>
-                      {postTags.map((tag) => (
-                        <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
-                          <span className="label">{tag}</span>
-                          <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
-                            ×
-                          </button>
-                        </SelectedTagChip>
-                      ))}
-                      <InlineMetaInput
-                        placeholder={postTags.length > 0 ? "태그를 입력하고 Enter" : "태그를 입력하세요"}
-                        value={tagDraft}
-                        onChange={(e) => {
-                          const nextValue = e.target.value
-                          const commaSeparated = /[,，]/
-                          if (!commaSeparated.test(nextValue)) {
-                            setTagDraft(nextValue)
-                            return
-                          }
+          <ComposeStudioLayout>
+            <ComposeMainColumn>
+              <ComposeStudioHeader>
+                <ComposeStudioHeaderCopy>
+                  <ComposeStudioKicker>{editorModeLabel}</ComposeStudioKicker>
+                  <h2>{composePageTitle}</h2>
+                  <p>{composeSurfaceSubtitle}</p>
+                </ComposeStudioHeaderCopy>
+                <ComposeStudioContextBar aria-label="원고 상태">
+                  <ComposeStudioContextItem data-tone={composeStatusTone}>
+                    <span>상태</span>
+                    <strong>{composeStatusText}</strong>
+                  </ComposeStudioContextItem>
+                  <ComposeStudioContextItem>
+                    <span>공개 범위</span>
+                    <strong>{currentVisibilityText}</strong>
+                  </ComposeStudioContextItem>
+                  <ComposeStudioContextItem>
+                    <span>카드 요약</span>
+                    <strong>{postSummary.trim() ? `${postSummary.trim().length}자` : "자동 생성"}</strong>
+                  </ComposeStudioContextItem>
+                </ComposeStudioContextBar>
+              </ComposeStudioHeader>
 
-                          const fragments = nextValue.split(commaSeparated)
-                          const tailDraft = fragments.pop() ?? ""
-                          const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
-                          if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
-                          setTagDraft(tailDraft)
-                        }}
-                        onKeyDown={(e) => {
-                          if (isComposingKeyboardEvent(e)) return
-                          if (e.key === "Enter" || e.key === ",") {
-                            e.preventDefault()
-                            addTagToPost(e.currentTarget.value)
-                          }
-                        }}
-                      />
-                    </InlineTagList>
-                    <FieldHelp>쉼표 또는 Enter로 추가합니다.</FieldHelp>
-                    <InlineDisclosure open={isComposeAssistOpen}>
-                      <summary
-                        onClick={(event) => {
-                          event.preventDefault()
-                          setIsComposeAssistOpen((prev) => !prev)
-                        }}
-                      >
-                        <strong>보조 설정</strong>
-                        <span>{isComposeAssistOpen ? "닫기" : "열기"}</span>
-                      </summary>
-                      {isComposeAssistOpen && (
-                        <div className="body">
-                          <MetaActionRow>
-                            <Button
-                              type="button"
-                              disabled={disabled("recommendTags") || !postContent.trim()}
-                              onClick={() => void handleRecommendTags()}
-                            >
-                              {loadingKey === "recommendTags" ? "AI 태그 추천 중..." : "AI 태그 추천"}
-                            </Button>
-                            <MetaToggleButton
-                              type="button"
-                              data-active={activeMetaPanel === "tag"}
-                              onClick={() => setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))}
-                            >
-                              태그 관리
-                            </MetaToggleButton>
-                            <MetaToggleButton
-                              type="button"
-                              data-active={isPublishModalOpen}
-                              onClick={() =>
-                                openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")
-                              }
-                            >
-                              발행 상태 편집
-                            </MetaToggleButton>
-                          </MetaActionRow>
-                          {shouldShowTagRecommendationNotice ? (
-                            <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
-                              {tagRecommendationNotice.text}
-                            </SummaryActionStatus>
-                          ) : null}
-                        </div>
-                      )}
-                    </InlineDisclosure>
-                  </InlineTagComposer>
-                </WriterMetaStrip>
-              </div>
-            </WriterHeader>
-            <ComposePublishStatusStrip aria-label="현재 글 설정 요약">
-              <SummaryPill>노출 {currentVisibilityText}</SummaryPill>
-              <SummaryPill>
-                썸네일 {effectiveThumbnailUrl ? (postThumbnailUrl.trim() ? "직접 지정" : "본문 첫 이미지") : "없음"}
-              </SummaryPill>
-              <SummaryPill>요약 {postSummary.trim() ? `${postSummary.trim().length}자` : "자동"}</SummaryPill>
-            </ComposePublishStatusStrip>
-            {activeMetaPanel && (
-              <CompactMetaPanel>
-                <CompactMetaPanelTop>
-                  <div>
-                    <h3>태그 관리</h3>
-                    <p>기존 태그를 고르거나 새 태그를 더합니다.</p>
+              <ComposeReadableIntro>
+                <WriterHeader>
+                  <div className="titleField">
+                    <TitleInput
+                      id="post-title"
+                      placeholder="제목을 입력하세요"
+                      value={postTitle}
+                      onChange={(e) => setPostTitle(e.target.value)}
+                    />
+                    <WriterAccent />
                   </div>
-                  <MetadataBadge>
-                    {metaCatalogLoading
-                      ? "메타데이터 불러오는 중"
-                      : `기존 태그 ${knownTags.length}개`}
-                  </MetadataBadge>
-                </CompactMetaPanelTop>
-                <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
-                <MetadataPanel>
-                  <label>태그 선택</label>
-                  <SelectionRow>
-                    {knownTags.map((tag) => (
-                      <TagCatalogChipGroup
-                        key={tag}
-                        data-active={postTags.includes(tag)}
-                        style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
-                      >
-                        <TagCatalogToggle
-                          type="button"
-                          data-active={postTags.includes(tag)}
-                          onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
-                        >
-                          <span className="label">{tag}</span>
-                          {(tagUsageMap[tag] || 0) > 0 ? (
-                            <span className="count">{tagUsageMap[tag] || 0}</span>
-                          ) : null}
-                        </TagCatalogToggle>
-                        <TagCatalogDeleteButton
-                          type="button"
-                          data-active={postTags.includes(tag)}
-                          disabled={(tagUsageMap[tag] || 0) > 0}
-                          title={
-                            (tagUsageMap[tag] || 0) > 0
-                              ? "사용 중인 태그는 삭제할 수 없습니다."
-                              : "태그 삭제"
-                          }
-                          onClick={() => deleteTagFromCatalog(tag)}
-                        >
+                </WriterHeader>
+                <ComposeSummaryField>
+                  <FieldLabel htmlFor="post-summary-inline">요약</FieldLabel>
+                  <ComposeSummaryInput
+                    id="post-summary-inline"
+                    placeholder="이 글의 핵심을 짧게 정리하세요"
+                    value={postSummary}
+                    maxLength={PREVIEW_SUMMARY_MAX_LENGTH}
+                    onChange={(e) => setPostSummary(e.target.value)}
+                  />
+                  <ComposeSummaryMeta>
+                    <SummaryCounter>
+                      {postSummary.length}/{PREVIEW_SUMMARY_MAX_LENGTH}
+                    </SummaryCounter>
+                    <Button
+                      type="button"
+                      disabled={!postContent.trim()}
+                      onClick={() => setPostSummary(makePreviewSummary(postContent))}
+                    >
+                      본문 기준으로 채우기
+                    </Button>
+                  </ComposeSummaryMeta>
+                </ComposeSummaryField>
+                <InlineTagComposer>
+                  <div className="headerRow">
+                    <span className="label">태그</span>
+                  </div>
+                  <InlineTagList>
+                    {postTags.map((tag) => (
+                      <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
+                        <span className="label">{tag}</span>
+                        <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
                           ×
-                        </TagCatalogDeleteButton>
-                      </TagCatalogChipGroup>
+                        </button>
+                      </SelectedTagChip>
                     ))}
-                    {knownTags.length === 0 && <EmptyMetaText>아직 추출된 태그가 없습니다.</EmptyMetaText>}
-                  </SelectionRow>
-                </MetadataPanel>
-              </CompactMetaPanel>
-            )}
-          </ComposeReadableIntro>
+                    <InlineMetaInput
+                      placeholder="태그 입력 후 Enter"
+                      value={tagDraft}
+                      onChange={(e) => {
+                        const nextValue = e.target.value
+                        const commaSeparated = /[,，]/
+                        if (!commaSeparated.test(nextValue)) {
+                          setTagDraft(nextValue)
+                          return
+                        }
 
-        <input
-          ref={postImageFileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handlePostImageFileChange}
-          style={{ display: "none" }}
-        />
-        <input
-          ref={thumbnailImageFileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleThumbnailImageFileChange}
-          style={{ display: "none" }}
-        />
-          {BLOCK_EDITOR_V2_ENABLED ? (
-            <EditorGrid data-view-mode="editor">
-              <EditorPane>
-                <PaneHeader>
-                  <div>
-                    <PaneTitle>블록 작성</PaneTitle>
-                  </div>
-                  <PaneChip>{lineCount} lines</PaneChip>
-                </PaneHeader>
-                <LazyBlockEditorShell
-                  value={postContent}
-                  onChange={setPostContent}
-                  onUploadImage={handleBlockEditorImageUpload}
-                  enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-                  disabled={loadingKey.length > 0}
-                  preview={
-                    <PreviewCard>
-                      <PreviewContentFrame>
-                        <LazyMarkdownRenderer content={postContent} />
-                      </PreviewContentFrame>
-                    </PreviewCard>
-                  }
-                />
-              </EditorPane>
-            </EditorGrid>
-          ) : (
-            <>
-              <EditorToolbar>
-                <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
+                        const fragments = nextValue.split(commaSeparated)
+                        const tailDraft = fragments.pop() ?? ""
+                        const tagsToAdd = fragments.map((fragment) => fragment.trim()).filter(Boolean)
+                        if (tagsToAdd.length > 0) addTagsToPost(tagsToAdd)
+                        setTagDraft(tailDraft)
+                      }}
+                      onKeyDown={(e) => {
+                        if (isComposingKeyboardEvent(e)) return
+                        if (e.key === "Enter" || e.key === ",") {
+                          e.preventDefault()
+                          addTagToPost(e.currentTarget.value)
+                        }
+                      }}
+                    />
+                  </InlineTagList>
+                </InlineTagComposer>
+              </ComposeReadableIntro>
+
+              <input
+                ref={postImageFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handlePostImageFileChange}
+                style={{ display: "none" }}
+              />
+              <input
+                ref={thumbnailImageFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleThumbnailImageFileChange}
+                style={{ display: "none" }}
+              />
+
+              {BLOCK_EDITOR_V2_ENABLED ? (
+                <ComposeBodySection>
+                  <ComposeBodyHeader>
+                    <ComposeBodyTitleGroup>
+                      <h3>본문</h3>
+                    </ComposeBodyTitleGroup>
+                    <ComposeBodyMetrics>
+                      <span>{contentLength.toLocaleString()}자</span>
+                      <span>{lineCount}줄</span>
+                      <span>{imageCount}개 이미지</span>
+                    </ComposeBodyMetrics>
+                  </ComposeBodyHeader>
+                  <LazyBlockEditorShell
+                    value={postContent}
+                    onChange={setPostContent}
+                    onUploadImage={handleBlockEditorImageUpload}
+                    enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+                    disabled={loadingKey.length > 0}
+                  />
+                </ComposeBodySection>
+              ) : (
+                <>
+                  <ComposeBodySection>
+                    <ComposeBodyHeader>
+                      <ComposeBodyTitleGroup>
+                        <h3>본문</h3>
+                      </ComposeBodyTitleGroup>
+                      <ComposeBodyMetrics>
+                        <span>{contentLength.toLocaleString()}자</span>
+                        <span>{lineCount}줄</span>
+                        <span>{imageCount}개 이미지</span>
+                      </ComposeBodyMetrics>
+                    </ComposeBodyHeader>
+                    <EditorToolbar>
+              <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
                   <ToolbarCluster>
                     <ToolbarIconButton type="button" title="제목1" aria-label="제목1" onClick={() => runToolbarAction(() => applyHeadingStyle(1))}>
                       <span className="textIcon">H1</span>
@@ -5310,13 +5264,13 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <EditorPane>
                   <PaneHeader>
                     <div>
-                      <PaneTitle>작성</PaneTitle>
+                      <PaneTitle>본문</PaneTitle>
                     </div>
-                    <PaneChip>{lineCount} lines</PaneChip>
+                    <PaneChip>{lineCount}줄</PaneChip>
                   </PaneHeader>
                   <ContentInput
                     ref={postContentRef}
-                    placeholder="내용을 입력하세요"
+                    placeholder="본문을 시작하세요"
                     value={postContent}
                     onChange={(e) => setPostContent(e.target.value)}
                     onScroll={schedulePreviewScrollSync}
@@ -5331,10 +5285,10 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <PreviewPane>
                     <PaneHeader>
                       <div>
-                        <PaneTitle>미리보기</PaneTitle>
+                        <PaneTitle>공개 결과 미리보기</PaneTitle>
                       </div>
                       <PaneChip>
-                        {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
+                        {isPreviewSyncPending ? "갱신 중" : `${imageCount}개 이미지`}
                       </PaneChip>
                     </PaneHeader>
                     <PreviewCard ref={previewScrollRef}>
@@ -5358,77 +5312,320 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   </PreviewPane>
                 ) : null}
               </EditorGrid>
-            </>
-          )}
-          <WriterFooterBar>
-            <WriterFooterSummary>
-                <span>{tagSummaryText}</span>
-                <span>{contentLength}자 · {lineCount}줄</span>
-              </WriterFooterSummary>
-            <WriterFooterControls>
-              {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
-              <WriterFooterActions>
-              {editorMode === "edit" ? (
-                <PrimaryButton
-                  type="button"
-                  disabled={isTempDraftMode ? disabled("publishTempPost") : disabled("modifyPost")}
-                    onClick={() => openPublishModal(isTempDraftMode ? "temp" : "modify")}
+                  </ComposeBodySection>
+                </>
+              )}
+
+              <WriterFooterBar>
+                <WriterFooterSummary>
+                  <span>{tagSummaryText}</span>
+                  <span>{contentLength}자 · {lineCount}줄</span>
+                </WriterFooterSummary>
+                <WriterFooterControls>
+                  {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
+                  <WriterFooterActions>
+                    <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
+                      초안 저장
+                    </Button>
+                    <PrimaryButton
+                      type="button"
+                      disabled={mobilePrimaryActionDisabled}
+                      onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
+                    >
+                      {composeCallToActionLabel}
+                    </PrimaryButton>
+                  </WriterFooterActions>
+                </WriterFooterControls>
+              </WriterFooterBar>
+            </ComposeMainColumn>
+
+            <ComposeAssistantColumn>
+              <ComposeAssistantPanel>
+                <ComposeAssistantGroup>
+                  <ComposeAssistantGroupHeader>
+                    <div>
+                      <strong>발행 상태</strong>
+                      <span>지금 상태를 확인하고 발행 전 마지막 설정을 정리합니다.</span>
+                    </div>
+                  </ComposeAssistantGroupHeader>
+                  <PublishSettingsSummary aria-label="현재 발행 설정 요약">
+                    {composeHeroSummary.map((item) => (
+                      <SummaryPill key={item}>{item}</SummaryPill>
+                    ))}
+                  </PublishSettingsSummary>
+                  <ComposeAssistantActionBar>
+                    <PrimaryButton
+                      type="button"
+                      disabled={mobilePrimaryActionDisabled}
+                      onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
+                    >
+                      {composeCallToActionLabel}
+                    </PrimaryButton>
+                    <Button
+                      type="button"
+                      disabled={disabled("recommendTags") || !postContent.trim()}
+                      onClick={() => void handleRecommendTags()}
+                    >
+                      {loadingKey === "recommendTags" ? "태그 제안 중..." : "태그 제안"}
+                    </Button>
+                  </ComposeAssistantActionBar>
+                  {shouldShowTagRecommendationNotice ? (
+                    <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
+                      {tagRecommendationNotice.text}
+                    </SummaryActionStatus>
+                  ) : null}
+                </ComposeAssistantGroup>
+
+                <ComposeAssistantGroup>
+                  <ComposeAssistantGroupHeader>
+                    <div>
+                      <strong>공개 범위</strong>
+                      <span>발행 전 노출 범위를 정합니다.</span>
+                    </div>
+                  </ComposeAssistantGroupHeader>
+                  {publishActionType !== "temp" ? (
+                    <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
+                      {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
+                        <VisibilityOptionButton
+                          key={option.value}
+                          type="button"
+                          data-active={postVisibility === option.value}
+                          aria-pressed={postVisibility === option.value}
+                          onClick={() => setPostVisibility(option.value)}
+                        >
+                          <strong>{option.label}</strong>
+                          <span>{option.description}</span>
+                        </VisibilityOptionButton>
+                      ))}
+                    </VisibilityOptionGrid>
+                  ) : (
+                    <PublishModeHint>임시글은 공개 글로 전환될 때 전체 공개로 반영됩니다.</PublishModeHint>
+                  )}
+                </ComposeAssistantGroup>
+
+                <ComposeAssistantGroup>
+                  <PreviewResultHeader>
+                    <div>
+                      <strong>카드 미리보기</strong>
+                      <span>{previewViewportConfig.label} 폭에서 결과를 확인합니다.</span>
+                    </div>
+                    <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
+                      {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
+                        const viewportConfig = PREVIEW_CARD_VIEWPORTS[viewport]
+                        return (
+                          <PreviewViewportButton
+                            key={viewport}
+                            type="button"
+                            role="tab"
+                            aria-selected={previewViewport === viewport}
+                            data-active={previewViewport === viewport}
+                            onClick={() => setPreviewViewport(viewport)}
+                          >
+                            {viewportConfig.label}
+                          </PreviewViewportButton>
+                        )
+                      })}
+                    </PreviewViewportTabs>
+                  </PreviewResultHeader>
+                  <PreviewResultFrame style={{ width: `min(100%, ${previewViewportConfig.cardWidth}px)` }}>
+                    <PreviewResultCard>
+                      <div className="thumbnail">
+                        {previewThumbnailSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={previewThumbnailSrc}
+                            alt="실제 카드 기준 포스트 썸네일 미리보기"
+                            style={{
+                              objectFit: "cover",
+                              objectPosition: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
+                              transform: `scale(${postThumbnailZoom})`,
+                              transformOrigin: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
+                            }}
+                            onError={() => setIsPreviewThumbnailError(true)}
+                          />
+                        ) : (
+                          <div className="thumbnail-placeholder">
+                            <em>썸네일 없음</em>
+                            <span>본문 첫 이미지가 있으면 자동으로 반영됩니다.</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="content">
+                        <PreviewVisibilityBadge>{previewVisibilityLabel}</PreviewVisibilityBadge>
+                        <h4>{postTitle.trim() || "제목을 입력하면 카드 결과가 여기에 표시됩니다."}</h4>
+                        <p className="summary">
+                          {composeSummaryPreview || "요약을 비워두면 본문에서 자동 생성한 요약이 반영됩니다."}
+                        </p>
+                        <div className="meta">
+                          <span>{previewDateText}</span>
+                          <span className="dot">·</span>
+                          <span className="comment">
+                            <AppIcon name="message" />
+                            0개의 댓글
+                          </span>
+                        </div>
+                        <div className="footer">
+                          <div className="author">
+                            <span className="avatar" aria-hidden="true">
+                              {previewAuthorAvatarSrc ? (
+                                <ProfileImage src={previewAuthorAvatarSrc} alt="" fillContainer />
+                              ) : (
+                                <span className="initial">{displayNameInitial}</span>
+                              )}
+                            </span>
+                            <span className="by">by</span>
+                            <strong>{displayName}</strong>
+                          </div>
+                          <div className="like">
+                            <AppIcon name="heart" />
+                            <span>0</span>
+                          </div>
+                        </div>
+                      </div>
+                    </PreviewResultCard>
+                  </PreviewResultFrame>
+                </ComposeAssistantGroup>
+
+                <ComposeAssistantGroup>
+                  <ComposeAssistantGroupHeader>
+                    <div>
+                      <strong>카드 요약</strong>
+                      <span>{postSummary.trim() ? `${postSummary.trim().length}/${PREVIEW_SUMMARY_MAX_LENGTH}` : "본문 기준 자동"}</span>
+                    </div>
+                  </ComposeAssistantGroupHeader>
+                  <ComposeSidebarSummaryText>
+                    {composeSummaryPreview || "요약을 입력하면 카드 결과와 발행 요약에 함께 반영됩니다."}
+                  </ComposeSidebarSummaryText>
+                </ComposeAssistantGroup>
+
+                <InlineDisclosure open={isComposeAssistOpen}>
+                  <summary
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsComposeAssistOpen((prev) => !prev)
+                    }}
                   >
-                    {isTempDraftMode
-                      ? loadingKey === "publishTempPost"
-                        ? "발행 중..."
-                        : "임시글 발행"
-                      : "선택 글 수정"}
-                  </PrimaryButton>
-                ) : (
-                  <PrimaryButton
-                    type="button"
-                    disabled={disabled("writePost")}
-                    onClick={handleClickCreatePost}
+                    <strong>썸네일과 카드 설정</strong>
+                    <span>{isComposeAssistOpen ? "닫기" : "열기"}</span>
+                  </summary>
+                  {isComposeAssistOpen && (
+                    <div className="body">
+                      <PreviewEditorGrid>
+                        {thumbnailEditorPanel}
+                        {previewMetaEditorPanel}
+                      </PreviewEditorGrid>
+                    </div>
+                  )}
+                </InlineDisclosure>
+
+                <InlineDisclosure open={activeMetaPanel === "tag"}>
+                  <summary
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setActiveMetaPanel((prev) => (prev === "tag" ? null : "tag"))
+                    }}
                   >
-                    {loadingKey === "writePost" ? "작성 중..." : "글 작성"}
-                  </PrimaryButton>
-                )}
-              </WriterFooterActions>
-              <InlineDisclosure open={isComposeUtilityOpen}>
-                <summary
-                  onClick={(event) => {
-                    event.preventDefault()
-                    setIsComposeUtilityOpen((prev) => !prev)
-                  }}
-                >
-                  <strong>보조 작업</strong>
-                  <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
-                </summary>
-                {isComposeUtilityOpen && (
-                  <div className="body">
-                    <SubActionRow>
-                      <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                        브라우저 임시저장
-                      </Button>
-                      <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
-                        임시저장 불러오기
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={loadingKey.length > 0 || !localDraftSavedAt}
-                        onClick={clearLocalDraft}
-                      >
-                        임시저장 삭제
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={loadingKey.length > 0}
-                        onClick={() => openPublishModal(editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify")}
-                      >
-                        발행 상태 열기
-                      </Button>
-                    </SubActionRow>
-                  </div>
-                )}
-              </InlineDisclosure>
-            </WriterFooterControls>
-          </WriterFooterBar>
+                    <strong>태그 정리</strong>
+                    <span>{activeMetaPanel === "tag" ? "닫기" : "열기"}</span>
+                  </summary>
+                  {activeMetaPanel === "tag" && (
+                    <div className="body">
+                      <MetadataStatus data-tone={metaNotice.tone}>{metaNotice.text}</MetadataStatus>
+                      <MetadataPanel>
+                        <label>태그 선택</label>
+                        <SelectionRow>
+                          {knownTags.map((tag) => (
+                            <TagCatalogChipGroup
+                              key={tag}
+                              data-active={postTags.includes(tag)}
+                              style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
+                            >
+                              <TagCatalogToggle
+                                type="button"
+                                data-active={postTags.includes(tag)}
+                                onClick={() => (postTags.includes(tag) ? removeTagFromPost(tag) : addTagToPost(tag))}
+                              >
+                                <span className="label">{tag}</span>
+                                {(tagUsageMap[tag] || 0) > 0 ? (
+                                  <span className="count">{tagUsageMap[tag] || 0}</span>
+                                ) : null}
+                              </TagCatalogToggle>
+                              <TagCatalogDeleteButton
+                                type="button"
+                                data-active={postTags.includes(tag)}
+                                disabled={(tagUsageMap[tag] || 0) > 0}
+                                title={
+                                  (tagUsageMap[tag] || 0) > 0
+                                    ? "사용 중인 태그는 삭제할 수 없습니다."
+                                    : "태그 삭제"
+                                }
+                                onClick={() => deleteTagFromCatalog(tag)}
+                              >
+                                ×
+                              </TagCatalogDeleteButton>
+                            </TagCatalogChipGroup>
+                          ))}
+                          {knownTags.length === 0 && <EmptyMetaText>아직 저장된 태그가 없습니다.</EmptyMetaText>}
+                        </SelectionRow>
+                      </MetadataPanel>
+                    </div>
+                  )}
+                </InlineDisclosure>
+
+                <InlineDisclosure open={isComposePreviewOpen}>
+                  <summary
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsComposePreviewOpen((prev) => !prev)
+                    }}
+                  >
+                    <strong>공개 결과 미리보기</strong>
+                    <span>{isComposePreviewOpen ? "닫기" : "열기"}</span>
+                  </summary>
+                  {isComposePreviewOpen && (
+                    <div className="body">
+                      <PreviewCard>
+                        <PreviewContentFrame>
+                          <LazyMarkdownRenderer content={postContent} />
+                        </PreviewContentFrame>
+                      </PreviewCard>
+                    </div>
+                  )}
+                </InlineDisclosure>
+
+                <InlineDisclosure open={isComposeUtilityOpen}>
+                  <summary
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsComposeUtilityOpen((prev) => !prev)
+                    }}
+                  >
+                    <strong>보조 작업</strong>
+                    <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
+                  </summary>
+                  {isComposeUtilityOpen && (
+                    <div className="body">
+                      <SubActionRow>
+                        <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
+                          브라우저 임시저장
+                        </Button>
+                        <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
+                          임시저장 불러오기
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={loadingKey.length > 0 || !localDraftSavedAt}
+                          onClick={clearLocalDraft}
+                        >
+                          임시저장 삭제
+                        </Button>
+                      </SubActionRow>
+                    </div>
+                  )}
+                </InlineDisclosure>
+              </ComposeAssistantPanel>
+            </ComposeAssistantColumn>
+          </ComposeStudioLayout>
         </EditorSection>
         </ComposeSurfaceSection>
         )}
@@ -6802,16 +6999,181 @@ const EditorSection = styled.div`
 
 const ComposeSurfaceSection = styled(Section)`
   display: grid;
-  gap: 0.8rem;
-  padding: 0.96rem;
-  background: linear-gradient(
-    180deg,
-    ${({ theme }) => theme.colors.gray2} 0%,
-    ${({ theme }) => theme.colors.gray1} 100%
-  );
+  gap: 1.2rem;
+  padding: 1.1rem 1.1rem 1.3rem;
+  border-color: ${({ theme }) => theme.colors.gray4};
+  background:
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.04), transparent 24%),
+    ${({ theme }) => theme.colors.gray1};
 
   @media (max-width: 420px) {
-    padding: 0.78rem;
+    gap: 1rem;
+    padding: 0.82rem 0.82rem 1rem;
+  }
+`
+
+const ComposeStudioLayout = styled.div`
+  display: grid;
+  gap: 1.4rem;
+  align-items: start;
+
+  @media (min-width: 1180px) {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  }
+
+  @media (max-width: 720px) {
+    gap: 1rem;
+  }
+`
+
+const ComposeMainColumn = styled.div`
+  display: grid;
+  gap: 1.1rem;
+  min-width: 0;
+`
+
+const ComposeAssistantColumn = styled.aside`
+  min-width: 0;
+`
+
+const ComposeAssistantPanel = styled.div`
+  display: grid;
+  gap: 0.85rem;
+
+  @media (min-width: 1180px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 56px) + 1rem);
+  }
+`
+
+const ComposeAssistantGroup = styled.section`
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.9rem 0.95rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 16px;
+  background: ${({ theme }) => theme.colors.gray2};
+`
+
+const ComposeAssistantGroupHeader = styled.div`
+  display: grid;
+  gap: 0.16rem;
+
+  > div {
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 760;
+    line-height: 1.28;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+`
+
+const ComposeAssistantActionBar = styled.div`
+  display: grid;
+  gap: 0.56rem;
+
+  > button {
+    width: 100%;
+  }
+`
+
+const ComposeStudioHeader = styled.div`
+  display: grid;
+  gap: 0.9rem;
+
+  @media (min-width: 960px) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+`
+
+const ComposeStudioHeaderCopy = styled.div`
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+
+  h2 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: clamp(1.45rem, 2.3vw, 2rem);
+    line-height: 1.15;
+    font-weight: 760;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.92rem;
+    line-height: 1.58;
+    max-width: 34rem;
+  }
+`
+
+const ComposeStudioKicker = styled.span`
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+`
+
+const ComposeStudioContextBar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-start;
+
+  @media (min-width: 960px) {
+    justify-content: flex-end;
+  }
+`
+
+const ComposeStudioContextItem = styled.div`
+  display: grid;
+  gap: 0.08rem;
+  min-width: 7rem;
+  padding: 0.5rem 0.68rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 12px;
+  background: ${({ theme }) => theme.colors.gray2};
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.82rem;
+    font-weight: 720;
+    line-height: 1.35;
+  }
+
+  &[data-tone="loading"] strong {
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+
+  &[data-tone="success"] strong {
+    color: ${({ theme }) => theme.colors.green11};
+  }
+
+  &[data-tone="error"] strong {
+    color: ${({ theme }) => theme.colors.red11};
   }
 `
 
@@ -7567,6 +7929,96 @@ const ComposeReadableIntro = styled.div`
   width: min(100%, var(--article-readable-width, 48rem));
   max-width: 100%;
   margin-inline: auto;
+  display: grid;
+  gap: 1rem;
+`
+
+const ComposeSummaryField = styled.div`
+  display: grid;
+  gap: 0.45rem;
+`
+
+const ComposeSummaryInput = styled.textarea`
+  width: 100%;
+  min-height: 5.6rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  border-radius: 16px;
+  padding: 0.95rem 1rem;
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 1rem;
+  line-height: 1.7;
+  resize: vertical;
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.gray10};
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.gray7};
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+  }
+`
+
+const ComposeSummaryMeta = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+`
+
+const ComposeBodySection = styled.section`
+  display: grid;
+  gap: 0.82rem;
+`
+
+const ComposeBodyHeader = styled.div`
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: min(100%, var(--article-readable-width, 48rem));
+  max-width: 100%;
+  margin-inline: auto;
+  padding-top: 0.2rem;
+
+  @media (max-width: 720px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+`
+
+const ComposeBodyTitleGroup = styled.div`
+  display: grid;
+  gap: 0.14rem;
+
+  h3 {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.98rem;
+    font-weight: 760;
+    line-height: 1.3;
+  }
+`
+
+const ComposeBodyMetrics = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.76rem;
+  line-height: 1.4;
+`
+
+const ComposeSidebarSummaryText = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.84rem;
+  line-height: 1.65;
+  white-space: pre-line;
 `
 
 const ComposePublishStatusStrip = styled(PublishSettingsSummary)`

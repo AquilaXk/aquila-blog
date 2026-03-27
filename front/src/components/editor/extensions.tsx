@@ -58,6 +58,7 @@ const useDebouncedAttributeCommit = (
   delay = TEXTAREA_DEBOUNCE_MS
 ) => {
   const debounceRef = useRef<number | null>(null)
+  const latestAttrsRef = useRef<Record<string, unknown> | null>(null)
 
   useEffect(() => {
     return () => {
@@ -67,20 +68,42 @@ const useDebouncedAttributeCommit = (
     }
   }, [])
 
-  return (attrs: Record<string, unknown>) => {
+  const cancel = () => {
+    if (typeof window !== "undefined" && debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
+  }
+
+  const flush = () => {
+    if (!latestAttrsRef.current) return
+    cancel()
+    updateAttributes(latestAttrsRef.current)
+    latestAttrsRef.current = null
+  }
+
+  const schedule = (attrs: Record<string, unknown>) => {
+    latestAttrsRef.current = attrs
     if (typeof window === "undefined") {
       updateAttributes(attrs)
       return
     }
 
-    if (debounceRef.current !== null) {
-      window.clearTimeout(debounceRef.current)
-    }
+    cancel()
 
     debounceRef.current = window.setTimeout(() => {
-      updateAttributes(attrs)
+      if (latestAttrsRef.current) {
+        updateAttributes(latestAttrsRef.current)
+        latestAttrsRef.current = null
+      }
       debounceRef.current = null
     }, delay)
+  }
+
+  return {
+    schedule,
+    flush,
+    cancel,
   }
 }
 
@@ -89,7 +112,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
-  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
   useAutosizeTextarea(textareaRef, draftSource)
 
@@ -129,6 +152,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         ref={textareaRef}
         value={draftSource}
         spellCheck={false}
+        onBlur={flushCommit}
         onChange={(event) => {
           const nextValue = event.target.value
           setDraftSource(nextValue)
@@ -158,7 +182,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
   const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
   const bodyRef = useRef<HTMLTextAreaElement>(null)
-  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
   useAutosizeTextarea(bodyRef, draftBody)
 
@@ -202,6 +226,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
       <BlockInput
         value={draftTitle}
         placeholder="콜아웃 제목"
+        onBlur={flushCommit}
         onChange={(event) => {
           const nextTitle = event.target.value
           setDraftTitle(nextTitle)
@@ -213,6 +238,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         value={draftBody}
         placeholder="콜아웃 본문"
         spellCheck={false}
+        onBlur={flushCommit}
         onChange={(event) => {
           const nextBody = event.target.value
           setDraftBody(nextBody)
@@ -233,7 +259,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
-  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
   useAutosizeTextarea(bodyRef, draftBody)
 
@@ -260,6 +286,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
       <BlockInput
         value={draftTitle}
         placeholder="토글 제목"
+        onBlur={flushCommit}
         onChange={(event) => {
           const nextTitle = event.target.value
           setDraftTitle(nextTitle)
@@ -271,6 +298,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
         value={draftBody}
         placeholder="토글 내부 본문"
         spellCheck={false}
+        onBlur={flushCommit}
         onChange={(event) => {
           const nextBody = event.target.value
           setDraftBody(nextBody)
@@ -296,7 +324,7 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
   const [draft, setDraft] = useState(String(node.attrs?.markdown || ""))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const reason = String(node.attrs?.reason || "manual-raw")
-  const scheduleCommit = useDebouncedAttributeCommit(updateAttributes, 220)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes, 220)
 
   useAutosizeTextarea(textareaRef, draft)
 
@@ -313,6 +341,7 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
       <BlockTextarea
         ref={textareaRef}
         value={draft}
+        onBlur={flushCommit}
         onChange={(event) => {
           const nextValue = event.target.value
           setDraft(nextValue)

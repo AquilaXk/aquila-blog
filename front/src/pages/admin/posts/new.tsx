@@ -59,7 +59,7 @@ import {
 } from "src/libs/markdown/rendering"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 
-const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED === "true"
+const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED !== "false"
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {

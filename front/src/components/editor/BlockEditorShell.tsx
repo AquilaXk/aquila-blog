@@ -1,3 +1,4 @@
+import type { Editor as TiptapEditor } from "@tiptap/core"
 import styled from "@emotion/styled"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
@@ -55,6 +56,13 @@ type ToolbarAction = {
   active: boolean
 }
 
+type FloatingBubbleState = {
+  visible: boolean
+  mode: "text" | "image"
+  left: number
+  top: number
+}
+
 const RAW_BLOCK_PLACEHOLDER = "```text\n원문 블록\n```"
 const MERMAID_RAW_PLACEHOLDER = "```mermaid\nflowchart TD\n  A[시작] --> B[처리]\n```"
 const CODE_LANGUAGE_OPTIONS = [
@@ -77,6 +85,122 @@ const CODE_LANGUAGE_OPTIONS = [
 ] as const
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
+
+const isPrimaryModifierPressed = (event: KeyboardEvent | globalThis.KeyboardEvent) =>
+  event.metaKey || event.ctrlKey
+
+const extractPlainTextFromHtml = (html: string) => {
+  if (typeof window === "undefined") return ""
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, "text/html")
+  return doc.body.textContent?.replace(/\r\n?/g, "\n").trim() || ""
+}
+
+const convertHtmlNodeToMarkdown = (node: ChildNode): string => {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent || ""
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) return ""
+
+  const element = node as HTMLElement
+  const tagName = element.tagName.toLowerCase()
+
+  if (tagName === "br") return "\n"
+
+  if (tagName === "pre") {
+    const codeElement = element.querySelector("code")
+    const source = (codeElement?.textContent || element.textContent || "").replace(/\r\n?/g, "\n").trimEnd()
+    const className = codeElement?.className || ""
+    const languageMatch = className.match(/language-([\w-]+)/i)
+    const language = languageMatch?.[1] || ""
+    return `\`\`\`${language}\n${source}\n\`\`\``
+  }
+
+  if (tagName === "table") {
+    const rows = Array.from(element.querySelectorAll("tr"))
+      .map((row) =>
+        Array.from(row.querySelectorAll("th,td")).map((cell) =>
+          (cell.textContent || "").replace(/\s+/g, " ").trim().replace(/\|/g, "\\|")
+        )
+      )
+      .filter((row) => row.length > 0)
+
+    if (rows.length >= 2) {
+      const [header, ...body] = rows
+      const separator = header.map(() => "---")
+      return [
+        `| ${header.join(" | ")} |`,
+        `| ${separator.join(" | ")} |`,
+        ...body.map((row) => `| ${row.join(" | ")} |`),
+      ].join("\n")
+    }
+  }
+
+  if (tagName === "ul" || tagName === "ol") {
+    const items = Array.from(element.children)
+      .filter((child) => child.tagName.toLowerCase() === "li")
+      .map((child, index) => {
+        const text = Array.from(child.childNodes)
+          .map((childNode) => convertHtmlNodeToMarkdown(childNode))
+          .join("")
+          .replace(/\n{2,}/g, "\n")
+          .trim()
+        return tagName === "ol" ? `${index + 1}. ${text}` : `- ${text}`
+      })
+    return items.join("\n")
+  }
+
+  if (/^h[1-6]$/.test(tagName)) {
+    const level = Number.parseInt(tagName.replace("h", ""), 10)
+    const text = Array.from(element.childNodes)
+      .map((child) => convertHtmlNodeToMarkdown(child))
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim()
+    return `${"#".repeat(level)} ${text}`.trim()
+  }
+
+  if (tagName === "blockquote") {
+    const text = Array.from(element.childNodes)
+      .map((child) => convertHtmlNodeToMarkdown(child))
+      .join("")
+      .replace(/\n{2,}/g, "\n")
+      .trim()
+    return text
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n")
+  }
+
+  if (tagName === "code") {
+    const text = (element.textContent || "").replace(/\r\n?/g, "\n")
+    return `\`${text}\``
+  }
+
+  const inlineText = Array.from(element.childNodes)
+    .map((child) => convertHtmlNodeToMarkdown(child))
+    .join("")
+    .replace(/[ \t]+\n/g, "\n")
+
+  if (tagName === "p" || tagName === "div" || tagName === "section" || tagName === "article") {
+    return inlineText.trim()
+  }
+
+  return inlineText
+}
+
+const convertHtmlToMarkdown = (html: string) => {
+  if (typeof window === "undefined") return ""
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, "text/html")
+  return Array.from(doc.body.childNodes)
+    .map((node) => convertHtmlNodeToMarkdown(node))
+    .filter((section) => section.trim().length > 0)
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
 
 const downgradeDisabledFeatureNodes = (node: BlockEditorDoc, enableMermaidBlocks: boolean): BlockEditorDoc => {
   if (!enableMermaidBlocks && node.type === "mermaidBlock") {
@@ -109,13 +233,55 @@ const BlockEditorShell = ({
 }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
+  const editorRef = useRef<TiptapEditor | null>(null)
   const [rawMarkdownDraft, setRawMarkdownDraft] = useState(value)
   const [isRawMarkdownOpen, setIsRawMarkdownOpen] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
+  const [bubbleState, setBubbleState] = useState<FloatingBubbleState>({
+    visible: false,
+    mode: "text",
+    left: 0,
+    top: 0,
+  })
   const [, setSelectionTick] = useState(0)
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
+  )
+
+  const isSelectionInEmptyParagraph = useCallback(() => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
+    const { selection } = currentEditor.state
+    if (!selection.empty) return false
+    const parent = selection.$from.parent
+    return parent.type.name === "paragraph" && parent.textContent.length === 0
+  }, [])
+
+  const insertDocContent = useCallback(
+    (doc: BlockEditorDoc, replaceCurrentEmptyParagraph = false) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      const nextContent = doc.content?.length ? doc.content : [{ type: "paragraph" }]
+
+      if (replaceCurrentEmptyParagraph && isSelectionInEmptyParagraph()) {
+        const { $from } = currentEditor.state.selection
+        currentEditor
+          .chain()
+          .focus()
+          .deleteRange({
+            from: $from.before($from.depth),
+            to: $from.after($from.depth),
+          })
+          .insertContent(nextContent)
+          .run()
+        return true
+      }
+
+      currentEditor.chain().focus().insertContent(nextContent).run()
+      return true
+    },
+    [isSelectionInEmptyParagraph]
   )
 
   const editor = useEditor({
@@ -143,25 +309,170 @@ const BlockEditorShell = ({
     ],
     content: initialDocRef.current,
     editable: !disabled,
+    onCreate: ({ editor: createdEditor }) => {
+      editorRef.current = createdEditor
+    },
+    onDestroy: () => {
+      editorRef.current = null
+    },
     editorProps: {
       attributes: {
         class: "aq-block-editor__content",
       },
       handleKeyDown: (_, event) => {
+        const currentEditor = editorRef.current
+        if (!currentEditor) return false
+        const normalizedKey = event.key.toLowerCase()
+        const hasPrimaryModifier = isPrimaryModifierPressed(event)
+
+        if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "b") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleBold().run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "i") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleItalic().run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "k") {
+          event.preventDefault()
+          openLinkPrompt()
+          return true
+        }
+
+        if (hasPrimaryModifier && event.altKey && !event.shiftKey && normalizedKey === "2") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleHeading({ level: 2 }).run()
+          return true
+        }
+
+        if (hasPrimaryModifier && event.altKey && !event.shiftKey && normalizedKey === "3") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleHeading({ level: 3 }).run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "7") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleOrderedList().run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "8") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleBulletList().run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "9") {
+          event.preventDefault()
+          currentEditor.chain().focus().toggleBlockquote().run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "z") {
+          event.preventDefault()
+          currentEditor.chain().focus().undo().run()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "z") {
+          event.preventDefault()
+          currentEditor.chain().focus().redo().run()
+          return true
+        }
+
         if (
           event.key === "/" &&
-          !event.metaKey &&
-          !event.ctrlKey &&
+          !hasPrimaryModifier &&
           !event.altKey &&
           !event.shiftKey &&
-          editor?.isActive("paragraph") &&
-          editor.state.selection.empty &&
-          editor.state.selection.$from.parent.textContent.length === 0
+          currentEditor.isActive("paragraph") &&
+          currentEditor.state.selection.empty &&
+          currentEditor.state.selection.$from.parent.textContent.length === 0
         ) {
           event.preventDefault()
           setIsSlashMenuOpen(true)
           return true
         }
+        return false
+      },
+      handlePaste: (_, event) => {
+        const currentEditor = editorRef.current
+        if (!currentEditor) return false
+
+        const imageFile = Array.from(event.clipboardData?.files || []).find((file) =>
+          file.type.startsWith("image/")
+        )
+        if (imageFile) {
+          event.preventDefault()
+          void (async () => {
+            const imageAttrs = await onUploadImage(imageFile)
+            currentEditor
+              .chain()
+              .focus()
+              .insertContent([
+                {
+                  type: "resizableImage",
+                  attrs: {
+                    src: imageAttrs.src,
+                    alt: imageAttrs.alt || "",
+                    title: imageAttrs.title || "",
+                    widthPx: imageAttrs.widthPx ?? null,
+                    align: imageAttrs.align || "center",
+                  },
+                },
+                { type: "paragraph" },
+              ])
+              .run()
+          })()
+          return true
+        }
+
+        const plainText = event.clipboardData?.getData("text/plain") || ""
+        const html = event.clipboardData?.getData("text/html") || ""
+        const normalizedPlainText = plainText.replace(/\r\n?/g, "\n").trim()
+        const normalizedHtmlMarkdown = html ? convertHtmlToMarkdown(html) : ""
+
+        if (isSelectionInEmptyParagraph() && normalizedPlainText) {
+          const looksLikeStructuredBlock =
+            normalizedPlainText.startsWith("```mermaid") ||
+            normalizedPlainText.startsWith(":::toggle") ||
+            normalizedPlainText.startsWith("> [!") ||
+            normalizedPlainText.startsWith("| ") ||
+            normalizedPlainText.startsWith("```")
+
+          if (looksLikeStructuredBlock) {
+            event.preventDefault()
+            const parsedDoc = downgradeDisabledFeatureNodes(
+              parseMarkdownToEditorDoc(normalizedPlainText),
+              enableMermaidBlocks
+            )
+            return insertDocContent(parsedDoc, true)
+          }
+        }
+
+        if (html && normalizedHtmlMarkdown) {
+          event.preventDefault()
+          const parsedDoc = downgradeDisabledFeatureNodes(
+            parseMarkdownToEditorDoc(normalizedHtmlMarkdown),
+            enableMermaidBlocks
+          )
+          return insertDocContent(parsedDoc, isSelectionInEmptyParagraph())
+        }
+
+        if (html && !plainText.trim()) {
+          const extracted = extractPlainTextFromHtml(html)
+          if (extracted) {
+            event.preventDefault()
+            currentEditor.chain().focus().insertContent(extracted).run()
+            return true
+          }
+        }
+
         return false
       },
     },
@@ -187,6 +498,50 @@ const BlockEditorShell = ({
     return () => {
       editor.off("selectionUpdate", notifySelection)
       editor.off("transaction", notifySelection)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+
+    const syncBubble = () => {
+      const activeEditor = editorRef.current
+      if (!activeEditor) {
+        setBubbleState((prev) => ({ ...prev, visible: false }))
+        return
+      }
+
+      const selection = activeEditor.state.selection
+      const isImageNodeSelected = activeEditor.isActive("resizableImage")
+      const canShowTextToolbar =
+        !selection.empty &&
+        !isImageNodeSelected &&
+        !activeEditor.isActive("codeBlock") &&
+        !activeEditor.isActive("rawMarkdownBlock")
+
+      if (!isImageNodeSelected && !canShowTextToolbar) {
+        setBubbleState((prev) => ({ ...prev, visible: false }))
+        return
+      }
+
+      const startCoords = activeEditor.view.coordsAtPos(selection.from)
+      const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
+
+      setBubbleState({
+        visible: true,
+        mode: isImageNodeSelected ? "image" : "text",
+        left: Math.round((startCoords.left + endCoords.right) / 2),
+        top: Math.round(Math.min(startCoords.top, endCoords.top)),
+      })
+    }
+
+    syncBubble()
+    currentEditor.on("selectionUpdate", syncBubble)
+    currentEditor.on("transaction", syncBubble)
+    return () => {
+      currentEditor.off("selectionUpdate", syncBubble)
+      currentEditor.off("transaction", syncBubble)
     }
   }, [editor])
 
@@ -437,6 +792,21 @@ const BlockEditorShell = ({
     }
   }
 
+  const toggleRawMarkdownDisclosure = () => {
+    if (!editor) {
+      setIsRawMarkdownOpen((prev) => !prev)
+      return
+    }
+
+    setIsRawMarkdownOpen((prev) => {
+      const next = !prev
+      if (next) {
+        setRawMarkdownDraft(serializeEditorDocToMarkdown(editor.getJSON() as BlockEditorDoc))
+      }
+      return next
+    })
+  }
+
   return (
     <Shell className={className}>
       <Toolbar>
@@ -517,14 +887,54 @@ const BlockEditorShell = ({
       ) : null}
 
       <EditorViewport>
+        {editor && bubbleState.visible ? (
+          <FloatingBubbleToolbar
+            style={{
+              left: `${bubbleState.left}px`,
+              top: `${bubbleState.top}px`,
+            }}
+          >
+            {bubbleState.mode === "text" ? (
+              <BubbleToolbar>
+                <ToolbarButton type="button" data-active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+                  굵게
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+                  기울임
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.isActive("link")} onClick={openLinkPrompt}>
+                  링크
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
+                  인라인 코드
+                </ToolbarButton>
+              </BubbleToolbar>
+            ) : (
+              <BubbleToolbar>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "left"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "left" }).run()}>
+                  좌측
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "center"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "center" }).run()}>
+                  가운데
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "wide"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "wide" }).run()}>
+                  와이드
+                </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "full"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "full" }).run()}>
+                  전체 폭
+                </ToolbarButton>
+              </BubbleToolbar>
+            )}
+          </FloatingBubbleToolbar>
+        ) : null}
         <EditorContent editor={editor} />
       </EditorViewport>
 
-      <AuxDisclosure open={isRawMarkdownOpen}>
-        <summary
+        <AuxDisclosure open={isRawMarkdownOpen}>
+          <summary
           onClick={(event) => {
             event.preventDefault()
-            setIsRawMarkdownOpen((prev) => !prev)
+            toggleRawMarkdownDisclosure()
           }}
         >
           <strong>고급 markdown 직접 편집</strong>
@@ -778,6 +1188,28 @@ const EditorViewport = styled.div`
     padding: 0.7rem 0.8rem;
     text-align: left;
     vertical-align: top;
+  }
+`
+
+const BubbleToolbar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(13, 15, 18, 0.98);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+`
+
+const FloatingBubbleToolbar = styled.div`
+  position: fixed;
+  z-index: 60;
+  transform: translate(-50%, calc(-100% - 0.65rem));
+  pointer-events: none;
+
+  > * {
+    pointer-events: auto;
   }
 `
 

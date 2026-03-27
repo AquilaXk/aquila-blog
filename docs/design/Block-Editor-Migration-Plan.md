@@ -2,15 +2,17 @@
 
 ## 0. 현재 적용 상태
 
-- 2026-03-27 기준 `/admin/posts/new`에는 block editor 2차 범위가 feature flag 병행 방식으로 도입되었다.
+- 2026-03-27 기준 `/admin/posts/new`에는 block editor 3차 범위가 feature flag 병행 방식으로 도입되었다.
 - flag:
-  - `NEXT_PUBLIC_EDITOR_V2_ENABLED=false` 또는 미설정: 기존 `textarea + preview`
-  - `NEXT_PUBLIC_EDITOR_V2_ENABLED=true`: `TipTap + ProseMirror` 기반 block editor
+  - `NEXT_PUBLIC_EDITOR_V2_ENABLED=false`: 기존 `textarea + preview`
+  - 미설정 또는 `true`: `TipTap + ProseMirror` 기반 block editor
   - `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED=true`: Mermaid node view + lazy preview 활성화
 - 현재 v2는 `paragraph / heading / list / blockquote / link / divider / code block(language) / table / image / callout / toggle`를 직접 편집한다.
 - Mermaid는 별도 flag가 꺼져 있으면 `raw markdown block`으로 유지하고, 켜져 있으면 node view로 승격한다.
 - 미지원 커스텀 문법은 문서 전체 fallback이 아니라 block-level `raw markdown block` 카드로 보존한다.
 - canonical 저장 포맷은 계속 markdown string이며, 공개 상세 렌더러와 저장 API는 변경하지 않았다.
+- 기본 작성 surface는 block editor이고, `고급 markdown 직접 편집`과 `공개 결과 미리보기`는 보조 disclosure로 축소되었다.
+- block editor 기본 경로는 bubble toolbar, keyboard shortcut, block-level 붙여넣기 정규화, clipboard 이미지 업로드를 제공한다.
 
 ## 1. 목적
 
@@ -355,10 +357,10 @@ toggle 예시
 
 현재 기준으로 운영에 권장하는 범위는 다음이다.
 
-1. `NEXT_PUBLIC_EDITOR_V2_ENABLED`는 기본 `false` 유지
-2. callout/toggle/code language picker/slash command는 2차 범위로 관찰
-3. Mermaid node는 `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED`로 별도 관찰
-4. textarea 모드는 3차 기본값 전환 전까지 fallback으로 유지
+1. `NEXT_PUBLIC_EDITOR_V2_ENABLED`는 기본 on(미설정/true)으로 운영하고, `false`를 kill-switch로 유지
+2. callout/toggle/code language picker/slash command는 기본 block editor surface에 포함한다
+3. Mermaid node는 `NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED`로 별도 관찰한다
+4. textarea 모드는 `고급 markdown 직접 편집` 및 kill-switch fallback 경로로만 유지한다
 
 ## 13. 결론
 

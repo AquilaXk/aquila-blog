@@ -146,6 +146,9 @@ const parseCalloutStart = (line: string) => {
   }
 }
 
+const isUnsupportedCalloutStart = (line: string) =>
+  /^\s*>\s*\[![A-Za-z]+\]/.test(line) && !parseCalloutStart(line)
+
 const isTableSeparatorLine = (line: string) =>
   /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line)
 
@@ -395,7 +398,8 @@ const isSupportedBlockStart = (line: string, nextLine?: string) =>
   Boolean(isBlockquoteLine(line)) ||
   (isLikelyTableRow(line) && Boolean(nextLine && isTableSeparatorLine(nextLine))) ||
   Boolean(parseToggleStart(line)) ||
-  Boolean(parseCalloutStart(line))
+  Boolean(parseCalloutStart(line)) ||
+  isUnsupportedCalloutStart(line)
 
 export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
   const normalizedMarkdown = markdown.replace(/\r\n?/g, "\n").trim()
@@ -521,6 +525,29 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
           body: promoted.bodyLines.join("\n").trim(),
         })
       )
+      index = pointer
+      continue
+    }
+
+    if (isUnsupportedCalloutStart(line)) {
+      const collected = [line]
+      let pointer = index + 1
+
+      while (pointer < lines.length) {
+        const current = lines[pointer]
+        if (isBlankLine(current)) {
+          collected.push(current)
+          pointer += 1
+          continue
+        }
+
+        const blockquoteText = isBlockquoteLine(current)
+        if (blockquoteText === null) break
+        collected.push(current)
+        pointer += 1
+      }
+
+      content.push(toRawBlockNode(collected.join("\n"), "unsupported-callout"))
       index = pointer
       continue
     }

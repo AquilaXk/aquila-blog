@@ -59,6 +59,15 @@ test.describe("block editor serialization", () => {
     expect(unsupported[0]?.markdown).toContain(":::toggle 덜 닫힌 토글")
   })
 
+  test("지원하지 않는 callout 타입은 raw block 으로 보존된다", () => {
+    const markdown = ["> [!CUSTOM] 알 수 없는 콜아웃", "> 본문은 유지되어야 합니다."].join("\n")
+
+    const unsupported = detectUnsupportedMarkdownBlocks(markdown)
+    expect(unsupported).toHaveLength(1)
+    expect(unsupported[0]?.reason).toBe("unsupported-callout")
+    expect(unsupported[0]?.markdown).toContain("> [!CUSTOM] 알 수 없는 콜아웃")
+  })
+
   test("code block 언어와 image width/align 메타를 유지한다", () => {
     const markdown = [
       "```kotlin",

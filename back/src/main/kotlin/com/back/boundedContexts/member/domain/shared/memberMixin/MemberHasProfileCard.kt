@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.domain.shared.memberMixin
 import com.back.boundedContexts.member.domain.shared.MemberAttr
 import com.back.standard.util.Ut
 import java.net.URI
+import java.time.Instant
 import java.util.Locale
 
 const val PROFILE_ROLE = "profileRole"
@@ -212,6 +213,16 @@ interface MemberHasProfileCard : MemberAware {
             loader?.invoke() ?: MemberAttr(0, member, PROFILE_CONTACT_LINKS, "")
         }
 
+    fun getOrInitProfileWorkspaceDraftAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(PROFILE_WORKSPACE_DRAFT) {
+            loader?.invoke() ?: MemberAttr(0, member, PROFILE_WORKSPACE_DRAFT, "")
+        }
+
+    fun getOrInitProfileWorkspacePublishedAttr(loader: (() -> MemberAttr)? = null): MemberAttr =
+        member.getOrPutAttr(PROFILE_WORKSPACE_PUBLISHED) {
+            loader?.invoke() ?: MemberAttr(0, member, PROFILE_WORKSPACE_PUBLISHED, "")
+        }
+
     var profileRole: String
         get() = getOrInitProfileRoleAttr().strValue ?: PROFILE_ROLE_DEFAULT_VALUE
         set(value) {
@@ -291,4 +302,65 @@ interface MemberHasProfileCard : MemberAware {
                     PROFILE_CONTACT_ICON_ALLOWED,
                 )
         }
+
+    val currentProfileWorkspaceContent: MemberProfileWorkspaceContent
+        get() =
+            normalizeMemberProfileWorkspaceContent(
+                MemberProfileWorkspaceContent(
+                    profileImageUrl = member.profileImgUrl,
+                    profileRole = profileRole,
+                    profileBio = profileBio,
+                    aboutRole = aboutRole,
+                    aboutBio = aboutBio,
+                    aboutSections = parseLegacyAboutDetailsToBlocks(aboutDetails),
+                    blogTitle = blogTitle,
+                    homeIntroTitle = homeIntroTitle,
+                    homeIntroDescription = homeIntroDescription,
+                    serviceLinks = serviceLinks,
+                    contactLinks = contactLinks,
+                ),
+            )
+
+    fun hasPersistedProfileWorkspaceDraft(): Boolean = getOrInitProfileWorkspaceDraftAttr().strValue?.isNotBlank() == true
+
+    fun hasPersistedProfileWorkspacePublished(): Boolean = getOrInitProfileWorkspacePublishedAttr().strValue?.isNotBlank() == true
+
+    fun profileWorkspaceDraftModifiedAtOrNull(): Instant? =
+        getOrInitProfileWorkspaceDraftAttr()
+            .takeIf { it.strValue?.isNotBlank() == true }
+            ?.modifiedAt
+
+    fun profileWorkspacePublishedModifiedAtOrNull(): Instant? =
+        getOrInitProfileWorkspacePublishedAttr()
+            .takeIf { it.strValue?.isNotBlank() == true }
+            ?.modifiedAt
+
+    fun getProfileWorkspaceDraftContent(): MemberProfileWorkspaceContent =
+        decodeMemberProfileWorkspaceContent(getOrInitProfileWorkspaceDraftAttr().strValue) ?: currentProfileWorkspaceContent
+
+    fun getProfileWorkspacePublishedContent(): MemberProfileWorkspaceContent =
+        decodeMemberProfileWorkspaceContent(getOrInitProfileWorkspacePublishedAttr().strValue) ?: currentProfileWorkspaceContent
+
+    fun setProfileWorkspaceDraftContent(content: MemberProfileWorkspaceContent) {
+        getOrInitProfileWorkspaceDraftAttr().strValue = encodeMemberProfileWorkspaceContent(content)
+    }
+
+    fun setProfileWorkspacePublishedContent(content: MemberProfileWorkspaceContent) {
+        getOrInitProfileWorkspacePublishedAttr().strValue = encodeMemberProfileWorkspaceContent(content)
+    }
+
+    fun applyProfileWorkspaceContent(content: MemberProfileWorkspaceContent) {
+        val normalized = normalizeMemberProfileWorkspaceContent(content)
+        member.profileImgUrl = normalized.profileImageUrl
+        profileRole = normalized.profileRole
+        profileBio = normalized.profileBio
+        aboutRole = normalized.aboutRole
+        aboutBio = normalized.aboutBio
+        aboutDetails = convertAboutSectionsToLegacyDetails(normalized.aboutSections)
+        blogTitle = normalized.blogTitle
+        homeIntroTitle = normalized.homeIntroTitle
+        homeIntroDescription = normalized.homeIntroDescription
+        serviceLinks = normalized.serviceLinks
+        contactLinks = normalized.contactLinks
+    }
 }

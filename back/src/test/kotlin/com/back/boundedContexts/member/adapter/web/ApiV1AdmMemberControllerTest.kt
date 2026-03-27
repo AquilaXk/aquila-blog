@@ -16,6 +16,8 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.patch
+import org.springframework.test.web.servlet.post
+import org.springframework.test.web.servlet.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import org.springframework.transaction.annotation.Transactional
 
@@ -258,6 +260,131 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                     status { isForbidden() }
                     jsonPath("$.resultCode") { value("403-1") }
                     jsonPath("$.msg") { value("권한이 없습니다.") }
+                }
+        }
+    }
+
+    @Nested
+    inner class ProfileWorkspace {
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자는 프로필 워크스페이스 초안을 저장할 수 있다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+            val previousPublishedRole = member.profileRole
+
+            mvc
+                .put("/member/api/v1/adm/members/${member.id}/profileWorkspace/draft") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "profileImageUrl": "",
+                            "profileRole": "Platform Engineer",
+                            "profileBio": "초안 프로필 소개",
+                            "aboutRole": "Architecture Writer",
+                            "aboutBio": "About 초안 소개",
+                            "aboutSections": [
+                                {
+                                    "id": "career",
+                                    "title": "경력",
+                                    "items": ["2026.03 Aquila Blog 운영", "2025.11 관측성 체계 정리"],
+                                    "dividerBefore": false
+                                }
+                            ],
+                            "blogTitle": "Aquila Workspace",
+                            "homeIntroTitle": "프로필 워크스페이스 실험실",
+                            "homeIntroDescription": "브랜드와 소개 문구를 분리 관리합니다.",
+                            "serviceLinks": [
+                                {"icon": "service", "label": "github", "href": "https://github.com/AquilaXk/aquila-blog"}
+                            ],
+                            "contactLinks": [
+                                {"icon": "mail", "label": "email", "href": "mailto:admin@example.com"}
+                            ]
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.draft.profileRole") { value("Platform Engineer") }
+                    jsonPath("$.draft.aboutSections.length()") { value(1) }
+                    jsonPath("$.draft.aboutSections[0].title") { value("경력") }
+                    jsonPath("$.published.profileRole") { value(previousPublishedRole) }
+                    jsonPath("$.dirtyFromPublished") { value(true) }
+                }
+
+            val updatedMember = memberFacade.findById(member.id).orElseThrow()
+            assertThat(updatedMember.profileRole).isEqualTo("Platform Engineer")
+            assertThat(updatedMember.profileBio).isEqualTo("초안 프로필 소개")
+            assertThat(updatedMember.aboutRole).isEqualTo("Architecture Writer")
+            assertThat(updatedMember.aboutBio).isEqualTo("About 초안 소개")
+            assertThat(updatedMember.aboutDetails).contains("## 경력")
+            assertThat(updatedMember.aboutDetails).contains("- 2026.03 Aquila Blog 운영")
+            assertThat(updatedMember.blogTitle).isEqualTo("Aquila Workspace")
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `draft 저장 후 공개 관리자 프로필은 발행 전까지 기존 공개본을 유지하고 publish 후 반영된다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+            val previousPublishedRole = member.profileRole
+            val previousPublishedBlogTitle = member.blogTitle
+
+            mvc
+                .put("/member/api/v1/adm/members/${member.id}/profileWorkspace/draft") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "profileImageUrl": "",
+                            "profileRole": "Draft Role",
+                            "profileBio": "Draft Bio",
+                            "aboutRole": "Draft About Role",
+                            "aboutBio": "Draft About Bio",
+                            "aboutSections": [
+                                {
+                                    "id": "awards",
+                                    "title": "수상이력",
+                                    "items": ["2026.03 운영 포트폴리오 고도화"],
+                                    "dividerBefore": false
+                                }
+                            ],
+                            "blogTitle": "Draft Blog Title",
+                            "homeIntroTitle": "Draft Intro Title",
+                            "homeIntroDescription": "Draft Intro Description",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                }
+
+            mvc
+                .get("/member/api/v1/members/adminProfile")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.profileRole") { value(previousPublishedRole) }
+                    jsonPath("$.blogTitle") { value(previousPublishedBlogTitle) }
+                }
+
+            mvc
+                .post("/member/api/v1/adm/members/${member.id}/profileWorkspace/publish")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.published.profileRole") { value("Draft Role") }
+                    jsonPath("$.dirtyFromPublished") { value(false) }
+                }
+
+            mvc
+                .get("/member/api/v1/members/adminProfile")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.profileRole") { value("Draft Role") }
+                    jsonPath("$.profileBio") { value("Draft Bio") }
+                    jsonPath("$.aboutRole") { value("Draft About Role") }
+                    jsonPath("$.aboutSections.length()") { value(1) }
+                    jsonPath("$.aboutSections[0].title") { value("수상이력") }
+                    jsonPath("$.blogTitle") { value("Draft Blog Title") }
+                    jsonPath("$.homeIntroTitle") { value("Draft Intro Title") }
                 }
         }
     }

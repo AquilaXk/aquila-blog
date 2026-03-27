@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.global.rsData.RsData
 import com.back.standard.dto.member.type1.MemberSearchSortType1
 import com.back.standard.dto.page.PagedResult
@@ -76,6 +77,13 @@ class MemberUseCaseAdapter(
         serviceLinks = serviceLinks,
         contactLinks = contactLinks,
     )
+
+    override fun saveProfileWorkspaceDraft(
+        member: Member,
+        content: MemberProfileWorkspaceContent,
+    ) = memberApplicationService.saveProfileWorkspaceDraft(member, content)
+
+    override fun publishProfileWorkspace(member: Member) = memberApplicationService.publishProfileWorkspace(member)
 
     override fun modifyOrJoin(
         username: String,

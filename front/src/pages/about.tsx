@@ -6,6 +6,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
+import { parseLegacyAboutDetails } from "src/libs/profileWorkspace"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
@@ -40,100 +41,6 @@ type AboutPageProps = {
   initialAdminProfile: AdminProfile | null
 }
 
-type AboutDetailSection = {
-  title: string
-  items: {
-    text: string
-    bullet: boolean
-  }[]
-  hasDivider: boolean
-}
-
-const parseAboutDetails = (raw: string): AboutDetailSection[] => {
-  const lines = raw.split(/\r?\n/).map((line) => line.trim())
-  const sections: AboutDetailSection[] = []
-  let current: AboutDetailSection | null = null
-  let nextSectionHasDivider = false
-
-  const pushCurrent = () => {
-    if (!current) return
-    const normalizedTitle = current.title.trim()
-    const normalizedItems = current.items.map((item) => ({
-      text: item.text.trim(),
-      bullet: item.bullet,
-    })).filter((item) => Boolean(item.text))
-    if (!normalizedTitle || normalizedItems.length === 0) {
-      current = null
-      return
-    }
-    sections.push({
-      title: normalizedTitle,
-      items: normalizedItems,
-      hasDivider: current.hasDivider,
-    })
-    current = null
-  }
-
-  for (const line of lines) {
-    if (!line) continue
-    if (line === "---") {
-      pushCurrent()
-      nextSectionHasDivider = true
-      continue
-    }
-
-    const markdownHeadingMatch = line.match(/^#{1,3}\s+(.+)$/)
-    if (markdownHeadingMatch) {
-      pushCurrent()
-      current = {
-        title: markdownHeadingMatch[1].trim(),
-        items: [],
-        hasDivider: nextSectionHasDivider,
-      }
-      nextSectionHasDivider = false
-      continue
-    }
-
-    if (!current) {
-      current = {
-        title: line,
-        items: [],
-        hasDivider: nextSectionHasDivider,
-      }
-      nextSectionHasDivider = false
-      continue
-    }
-
-    const plainHeadingLike =
-      !line.startsWith("- ") &&
-      current.items.length > 0 &&
-      line.length <= 24 &&
-      !/\d{4}[./-]\d{1,2}/.test(line) &&
-      !/[,:;)]$/.test(line)
-    if (plainHeadingLike) {
-      pushCurrent()
-      current = {
-        title: line,
-        items: [],
-        hasDivider: nextSectionHasDivider,
-      }
-      nextSectionHasDivider = false
-      continue
-    }
-
-    const isBullet = line.startsWith("- ")
-    const itemText = isBullet ? line.slice(2).trim() : line
-    if (!itemText) continue
-    current.items.push({
-      text: itemText,
-      bullet: isBullet,
-    })
-  }
-
-  pushCurrent()
-  return sections
-}
-
 const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
 
@@ -142,7 +49,18 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
   const displayName = adminProfile?.nickname || adminProfile?.name || CONFIG.profile.name
   const displayRole = adminProfile?.aboutRole || CONFIG.profile.role
   const displayBio = adminProfile?.aboutBio || CONFIG.profile.bio
-  const aboutDetailSections = parseAboutDetails(adminProfile?.aboutDetails || "")
+  const aboutDetailSections =
+    adminProfile?.aboutSections && adminProfile.aboutSections.length > 0
+      ? adminProfile.aboutSections.map((section) => ({
+          title: section.title,
+          items: section.items.map((item) => ({ text: item, bullet: true })),
+          hasDivider: section.dividerBefore,
+        }))
+      : parseLegacyAboutDetails(adminProfile?.aboutDetails || "").map((section) => ({
+          title: section.title,
+          items: section.items.map((item) => ({ text: item, bullet: true })),
+          hasDivider: section.dividerBefore,
+        }))
   const blogTitle = adminProfile?.blogTitle || CONFIG.blog.title
   const contactLinks = resolveContactLinks(adminProfile)
   const serviceLinks = resolveServiceLinks(adminProfile)

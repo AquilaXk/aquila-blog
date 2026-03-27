@@ -2,12 +2,15 @@ package com.back.boundedContexts.member.adapter.web
 
 import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileAboutSectionBlock
 import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileLinkItem
+import com.back.boundedContexts.member.domain.shared.memberMixin.MemberProfileWorkspaceContent
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_ICON_ALLOWED
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT_LINK_ICON_DEFAULT_VALUE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_ICON_ALLOWED
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE
 import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfileLinkHref
+import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -107,6 +111,41 @@ class ApiV1AdmMemberController(
         val href: String,
     )
 
+    data class ProfileWorkspaceSectionRequest(
+        @field:Size(max = 80)
+        val id: String = "",
+        @field:Size(max = 120)
+        val title: String = "",
+        @field:Size(max = 20)
+        val items: List<String> = emptyList(),
+        val dividerBefore: Boolean = false,
+    )
+
+    data class UpdateProfileWorkspaceDraftRequest(
+        @field:Size(max = 2000)
+        val profileImageUrl: String = "",
+        @field:Size(max = 100)
+        val profileRole: String = "",
+        @field:Size(max = 1000)
+        val profileBio: String = "",
+        @field:Size(max = 100)
+        val aboutRole: String = "",
+        @field:Size(max = 2000)
+        val aboutBio: String = "",
+        @field:Size(max = 20)
+        val aboutSections: List<@Valid ProfileWorkspaceSectionRequest> = emptyList(),
+        @field:Size(max = 120)
+        val blogTitle: String = "",
+        @field:Size(max = 120)
+        val homeIntroTitle: String = "",
+        @field:Size(max = 500)
+        val homeIntroDescription: String = "",
+        @field:Size(max = 30)
+        val serviceLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+        @field:Size(max = 30)
+        val contactLinks: List<@Valid ProfileCardLinkItemRequest> = emptyList(),
+    )
+
     /**
      * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
      * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
@@ -145,6 +184,14 @@ class ApiV1AdmMemberController(
         id: Long,
     ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(id)
 
+    @GetMapping("/{id}/profileWorkspace")
+    @Transactional(readOnly = true)
+    fun getProfileWorkspace(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): MemberProfileWorkspaceResponseDto = currentMemberProfileQueryUseCase.getWorkspaceById(id)
+
     /**
      * ProfileImg 항목을 수정한다.
      */
@@ -159,8 +206,7 @@ class ApiV1AdmMemberController(
     ): MemberWithUsernameDto {
         val member = memberUseCase.findById(id).orElseThrow()
         memberUseCase.modify(member, member.nickname, reqBody.profileImgUrl.trim())
-
-        return MemberWithUsernameDto(member)
+        return currentMemberProfileQueryUseCase.getById(id)
     }
 
     /**
@@ -206,8 +252,7 @@ class ApiV1AdmMemberController(
                 .replace("%2F", "/")
         val imageUrl = "${AppConfig.siteBackUrl}/post/api/v1/images/$encodedKey"
         memberUseCase.modify(member, member.nickname, imageUrl)
-
-        return MemberWithUsernameDto(member)
+        return currentMemberProfileQueryUseCase.getById(id)
     }
 
     /**
@@ -236,7 +281,33 @@ class ApiV1AdmMemberController(
             serviceLinks = reqBody.serviceLinks.normalize(LinkSection.SERVICE),
             contactLinks = reqBody.contactLinks.normalize(LinkSection.CONTACT),
         )
-        return MemberWithUsernameDto(member)
+        return currentMemberProfileQueryUseCase.getById(id)
+    }
+
+    @PutMapping("/{id}/profileWorkspace/draft")
+    @Transactional
+    fun saveProfileWorkspaceDraft(
+        @PathVariable
+        @Positive
+        id: Long,
+        @RequestBody @Valid reqBody: UpdateProfileWorkspaceDraftRequest,
+    ): MemberProfileWorkspaceResponseDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.saveProfileWorkspaceDraft(member, reqBody.toDomain())
+        return currentMemberProfileQueryUseCase.getWorkspaceById(id)
+    }
+
+    @PostMapping("/{id}/profileWorkspace/publish")
+    @Transactional
+    @CacheEvict(cacheNames = [ApiV1MemberController.ADMIN_PROFILE_CACHE_NAME], allEntries = true)
+    fun publishProfileWorkspace(
+        @PathVariable
+        @Positive
+        id: Long,
+    ): MemberProfileWorkspaceResponseDto {
+        val member = memberUseCase.findById(id).orElseThrow()
+        memberUseCase.publishProfileWorkspace(member)
+        return currentMemberProfileQueryUseCase.getWorkspaceById(id)
     }
 
     private fun List<ProfileCardLinkItemRequest>.normalize(section: LinkSection): List<MemberProfileLinkItem> =
@@ -260,4 +331,27 @@ class ApiV1AdmMemberController(
                         ),
             )
         }
+
+    private fun UpdateProfileWorkspaceDraftRequest.toDomain(): MemberProfileWorkspaceContent =
+        MemberProfileWorkspaceContent(
+            profileImageUrl = profileImageUrl.trim(),
+            profileRole = profileRole.trim(),
+            profileBio = profileBio.trim(),
+            aboutRole = aboutRole.trim(),
+            aboutBio = aboutBio.trim(),
+            aboutSections =
+                aboutSections.map {
+                    MemberProfileAboutSectionBlock(
+                        id = it.id.trim(),
+                        title = it.title.trim(),
+                        items = it.items.map(String::trim),
+                        dividerBefore = it.dividerBefore,
+                    )
+                },
+            blogTitle = blogTitle.trim(),
+            homeIntroTitle = homeIntroTitle.trim(),
+            homeIntroDescription = homeIntroDescription.trim(),
+            serviceLinks = serviceLinks.normalize(LinkSection.SERVICE),
+            contactLinks = contactLinks.normalize(LinkSection.CONTACT),
+        )
 }

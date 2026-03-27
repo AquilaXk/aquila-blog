@@ -14,6 +14,8 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_IMG_URL
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_ROLE
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINKS
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_DRAFT
+import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_WORKSPACE_PUBLISHED
 import org.springframework.stereotype.Component
 
 /**
@@ -37,6 +39,8 @@ class MemberProfileHydrator(
             HOME_INTRO_DESCRIPTION,
             PROFILE_SERVICE_LINKS,
             PROFILE_CONTACT_LINKS,
+            PROFILE_WORKSPACE_DRAFT,
+            PROFILE_WORKSPACE_PUBLISHED,
         )
 
     fun hydrate(member: Member): Member = hydrateAll(listOf(member)).first()
@@ -87,6 +91,13 @@ class MemberProfileHydrator(
             }
             member.getOrInitContactLinksAttr {
                 attrsByKey["${member.id}:$PROFILE_CONTACT_LINKS"] ?: MemberAttr(0, member, PROFILE_CONTACT_LINKS, "")
+            }
+            member.getOrInitProfileWorkspaceDraftAttr {
+                attrsByKey["${member.id}:$PROFILE_WORKSPACE_DRAFT"] ?: MemberAttr(0, member, PROFILE_WORKSPACE_DRAFT, "")
+            }
+            member.getOrInitProfileWorkspacePublishedAttr {
+                attrsByKey["${member.id}:$PROFILE_WORKSPACE_PUBLISHED"]
+                    ?: MemberAttr(0, member, PROFILE_WORKSPACE_PUBLISHED, "")
             }
         }
 

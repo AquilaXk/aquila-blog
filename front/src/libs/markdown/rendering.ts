@@ -12,6 +12,13 @@ export type MarkdownSegment =
   | { type: "toggle"; title: string; content: string }
   | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string }
 
+export type MarkdownRenderModel = {
+  normalizedContent: string
+  resolvedContentHtml: string
+  renderKey: string
+  segments: MarkdownSegment[]
+}
+
 export const markdownGuide = `### 작성 가이드
 - 코드블록: \`\`\`ts
 const x = 1
@@ -633,3 +640,27 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
 }
 
 export const normalizeMarkdownForRender = (rawMarkdown: string) => normalizeEscapedMarkdownFences(rawMarkdown.trim())
+
+export const resolveMarkdownRenderModel = ({
+  content,
+  contentHtml,
+}: {
+  content?: string
+  contentHtml?: string
+}): MarkdownRenderModel => {
+  const normalizedContent = normalizeMarkdownForRender(content || "")
+  const normalizedContentHtml = contentHtml?.trim() || ""
+  const sanitizedContentHtml = normalizeContentHtmlForMermaid(normalizedContentHtml)
+
+  // 원문 markdown이 있으면 interactive block 책임은 항상 클라이언트 markdown 파이프라인에 둔다.
+  const resolvedContentHtml = normalizedContent ? "" : sanitizedContentHtml
+  const segments = resolvedContentHtml ? [] : parseMarkdownSegments(normalizedContent)
+  const renderKeySeed = resolvedContentHtml ? `html:${resolvedContentHtml}` : `md:${normalizedContent}`
+
+  return {
+    normalizedContent,
+    resolvedContentHtml,
+    renderKey: `${renderKeySeed.length}:${hashString(renderKeySeed)}`,
+    segments,
+  }
+}

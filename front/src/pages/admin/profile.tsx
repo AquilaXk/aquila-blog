@@ -1,12 +1,10 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps, NextPage } from "next"
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import {
   ChangeEvent,
   KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -45,6 +43,7 @@ import {
   PROFILE_IMAGE_EDIT_MIN_ZOOM,
   resolveProfileImageEditDrawRatios,
 } from "src/libs/profileImageUpload"
+import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -56,27 +55,11 @@ type NoticeTone = "idle" | "loading" | "success" | "error"
 type MemberMe = AuthMember
 type LinkSectionType = "service" | "contact"
 type OpenIconPicker = `${LinkSectionType}:${number}` | null
-type ProfileImageEditorDragState = {
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  startFocusX: number
-  startFocusY: number
-}
-type ProfileImageEditorPinchState = {
-  startDistance: number
-  startCenterXRatio: number
-  startCenterYRatio: number
-  startFocusX: number
-  startFocusY: number
-  startZoom: number
-}
 type ProfileImageDraftTransformState = {
   focusX: number
   focusY: number
   zoom: number
 }
-type ProfileImagePointerPosition = { clientX: number; clientY: number }
 
 const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE: ProfileImageSourceSize = { width: 1, height: 1 }
@@ -241,7 +224,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [profileImageDraftSourceSize, setProfileImageDraftSourceSize] = useState<ProfileImageSourceSize>(
     PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE
   )
-  const [isProfileImageDraftDragging, setIsProfileImageDraftDragging] = useState(false)
   const [profileImageDraftNotice, setProfileImageDraftNotice] = useState<{ tone: NoticeTone; text: string }>({
     tone: "idle",
     text: "",
@@ -252,16 +234,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
   const profileImageDraftFrameRef = useRef<HTMLDivElement>(null)
-  const profileImageDraftDragRef = useRef<ProfileImageEditorDragState | null>(null)
-  const profileImageDraftPinchRef = useRef<ProfileImageEditorPinchState | null>(null)
-  const profileImageDraftActivePointersRef = useRef<Map<number, ProfileImagePointerPosition>>(new Map())
-  const profileImageDraftSourceSizeRef = useRef<ProfileImageSourceSize>(PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE)
-  const profileImageDraftTransformRef = useRef<ProfileImageDraftTransformState>({
-    focusX: PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X,
-    focusY: PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y,
-    zoom: PROFILE_IMAGE_EDIT_MIN_ZOOM,
-  })
-  const profileImageDraftTransformRafRef = useRef<number | null>(null)
   const profileImageDraftFileSeqRef = useRef(0)
   const lastSyncedRevisionRef = useRef<string>(buildMemberRevisionKey(initialMember))
 
@@ -435,7 +407,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const frame = profileImageDraftFrameRef.current
     if (!frame) return
 
-    const { drawWidth, drawHeight } = resolveProfileImageEditDrawRatios(profileImageDraftSourceSizeRef.current, transform.zoom)
+    const { drawWidth, drawHeight } = resolveProfileImageEditDrawRatios(profileImageDraftSourceSize, transform.zoom)
     const centerXRatio = transform.focusX / 100
     const centerYRatio = transform.focusY / 100
     const leftRatio = centerXRatio - drawWidth / 2
@@ -445,34 +417,23 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     frame.style.setProperty("--profile-draft-height", `${drawHeight * 100}%`)
     frame.style.setProperty("--profile-draft-left", `${leftRatio * 100}%`)
     frame.style.setProperty("--profile-draft-top", `${topRatio * 100}%`)
-  }, [])
+  }, [profileImageDraftSourceSize])
 
-  const scheduleProfileImageDraftTransform = useCallback((next: ProfileImageDraftTransformState) => {
-    profileImageDraftTransformRef.current = next
-    if (profileImageDraftTransformRafRef.current !== null) return
-
-    profileImageDraftTransformRafRef.current = window.requestAnimationFrame(() => {
-      profileImageDraftTransformRafRef.current = null
-      const current = profileImageDraftTransformRef.current
-      const zoom = clampProfileImageEditZoom(current.zoom)
-      const clampedFocus = clampProfileImageEditFocusBySource({
-        focusX: current.focusX,
-        focusY: current.focusY,
-        zoom,
-        sourceSize: profileImageDraftSourceSizeRef.current,
-      })
-      const normalized: ProfileImageDraftTransformState = {
-        focusX: clampedFocus.focusX,
-        focusY: clampedFocus.focusY,
-        zoom,
-      }
-      profileImageDraftTransformRef.current = normalized
-      applyProfileImageDraftPreviewStyle(normalized)
-      setProfileImageDraftFocusX((prev) => (Math.abs(prev - normalized.focusX) > 0.0001 ? normalized.focusX : prev))
-      setProfileImageDraftFocusY((prev) => (Math.abs(prev - normalized.focusY) > 0.0001 ? normalized.focusY : prev))
-      setProfileImageDraftZoom((prev) => (Math.abs(prev - normalized.zoom) > 0.0001 ? normalized.zoom : prev))
+  const normalizeProfileImageDraftTransform = useCallback((current: ProfileImageDraftTransformState) => {
+    const zoom = clampProfileImageEditZoom(current.zoom)
+    const clampedFocus = clampProfileImageEditFocusBySource({
+      focusX: current.focusX,
+      focusY: current.focusY,
+      zoom,
+      sourceSize: profileImageDraftSourceSize,
     })
-  }, [applyProfileImageDraftPreviewStyle])
+
+    return {
+      focusX: clampedFocus.focusX,
+      focusY: clampedFocus.focusY,
+      zoom,
+    }
+  }, [profileImageDraftSourceSize])
 
   const computeAnchoredZoomTransform = useCallback(
     (
@@ -481,13 +442,12 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       anchorXRatio: number,
       anchorYRatio: number
     ): ProfileImageDraftTransformState => {
-      const sourceSize = profileImageDraftSourceSizeRef.current
       const { drawWidth: prevDrawWidth, drawHeight: prevDrawHeight } = resolveProfileImageEditDrawRatios(
-        sourceSize,
+        profileImageDraftSourceSize,
         baseTransform.zoom
       )
       const { drawWidth: nextDrawWidth, drawHeight: nextDrawHeight } = resolveProfileImageEditDrawRatios(
-        sourceSize,
+        profileImageDraftSourceSize,
         nextZoom
       )
 
@@ -508,35 +468,72 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         zoom: nextZoom,
       }
     },
+    [profileImageDraftSourceSize]
+  )
+
+  const computeDraggedProfileImageTransform = useCallback(
+    (
+      baseTransform: ProfileImageDraftTransformState,
+      deltaXRatio: number,
+      deltaYRatio: number
+    ): ProfileImageDraftTransformState => {
+      const zoomScale = Math.max(baseTransform.zoom, PROFILE_IMAGE_EDIT_MIN_ZOOM)
+      return {
+        focusX: baseTransform.focusX + deltaXRatio * (100 / zoomScale),
+        focusY: baseTransform.focusY + deltaYRatio * (100 / zoomScale),
+        zoom: baseTransform.zoom,
+      }
+    },
     []
   )
 
+  const commitProfileImageDraftTransform = useCallback(
+    (normalized: ProfileImageDraftTransformState) => {
+      applyProfileImageDraftPreviewStyle(normalized)
+      setProfileImageDraftFocusX((prev) => (Math.abs(prev - normalized.focusX) > 0.0001 ? normalized.focusX : prev))
+      setProfileImageDraftFocusY((prev) => (Math.abs(prev - normalized.focusY) > 0.0001 ? normalized.focusY : prev))
+      setProfileImageDraftZoom((prev) => (Math.abs(prev - normalized.zoom) > 0.0001 ? normalized.zoom : prev))
+    },
+    [applyProfileImageDraftPreviewStyle]
+  )
+
+  const {
+    commitTransform: commitProfileImageDraftViewportTransform,
+    finalizePointer: finalizeProfileImageDraftPointer,
+    handlePointerDown: handleProfileImageDraftPointerDown,
+    handlePointerMove: handleProfileImageDraftPointerMove,
+    isDragging: isProfileImageDraftDragging,
+    resetInteractions: resetProfileImageDraftInteractions,
+    scheduleTransform: scheduleProfileImageDraftTransform,
+    transformRef: profileImageDraftTransformRef,
+  } = useViewportImageEditor<ProfileImageDraftTransformState>({
+    frameRef: profileImageDraftFrameRef,
+    initialTransform: {
+      focusX: profileImageDraftFocusX,
+      focusY: profileImageDraftFocusY,
+      zoom: profileImageDraftZoom,
+    },
+    enabled: Boolean(profileImageDraftFile),
+    clampZoom: clampProfileImageEditZoom,
+    normalizeTransform: normalizeProfileImageDraftTransform,
+    computeAnchoredZoomTransform,
+    computeDraggedTransform: computeDraggedProfileImageTransform,
+    onCommit: commitProfileImageDraftTransform,
+  })
+
   const clearProfileImageDraft = useCallback(() => {
     profileImageDraftFileSeqRef.current += 1
-    profileImageDraftDragRef.current = null
-    profileImageDraftPinchRef.current = null
-    profileImageDraftActivePointersRef.current.clear()
-    setIsProfileImageDraftDragging(false)
+    resetProfileImageDraftInteractions()
     setProfileImageDraftFile(null)
     setProfileImageDraftSourceSize(PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE)
-    profileImageDraftSourceSizeRef.current = PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE
     setProfileImageDraftNotice({ tone: "idle", text: "" })
-
-    if (profileImageDraftTransformRafRef.current !== null) {
-      window.cancelAnimationFrame(profileImageDraftTransformRafRef.current)
-      profileImageDraftTransformRafRef.current = null
-    }
 
     const defaultTransform: ProfileImageDraftTransformState = {
       focusX: PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X,
       focusY: PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y,
       zoom: PROFILE_IMAGE_EDIT_MIN_ZOOM,
     }
-    profileImageDraftTransformRef.current = defaultTransform
-    setProfileImageDraftFocusX(defaultTransform.focusX)
-    setProfileImageDraftFocusY(defaultTransform.focusY)
-    setProfileImageDraftZoom(defaultTransform.zoom)
-    applyProfileImageDraftPreviewStyle(defaultTransform)
+    commitProfileImageDraftViewportTransform(defaultTransform)
 
     setProfileImageDraftPreviewUrl((prev) => {
       if (prev) {
@@ -544,7 +541,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
       }
       return ""
     })
-  }, [applyProfileImageDraftPreviewStyle])
+  }, [commitProfileImageDraftViewportTransform, resetProfileImageDraftInteractions])
 
   const openProfileImageEditor = useCallback(() => {
     setIsProfileImageEditorOpen(true)
@@ -554,11 +551,8 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const closeProfileImageEditor = useCallback(() => {
     if (loadingKey === "upload") return
     setIsProfileImageEditorOpen(false)
-    setIsProfileImageDraftDragging(false)
-    profileImageDraftPinchRef.current = null
-    profileImageDraftActivePointersRef.current.clear()
-    profileImageDraftDragRef.current = null
-  }, [loadingKey])
+    resetProfileImageDraftInteractions()
+  }, [loadingKey, resetProfileImageDraftInteractions])
 
   const handleDraftFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -570,15 +564,13 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     setProfileImageFileName(file.name)
     setProfileImageDraftFile(file)
     setProfileImageDraftSourceSize(PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE)
-    profileImageDraftSourceSizeRef.current = PROFILE_IMAGE_DRAFT_DEFAULT_SOURCE_SIZE
     setProfileImageDraftNotice({ tone: "idle", text: "" })
     const defaultTransform: ProfileImageDraftTransformState = {
       focusX: PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_X,
       focusY: PROFILE_IMAGE_EDIT_DEFAULT_FOCUS_Y,
       zoom: PROFILE_IMAGE_EDIT_MIN_ZOOM,
     }
-    profileImageDraftTransformRef.current = defaultTransform
-    scheduleProfileImageDraftTransform(defaultTransform)
+    commitProfileImageDraftViewportTransform(defaultTransform)
     setProfileImageDraftPreviewUrl((prev) => {
       if (prev) {
         URL.revokeObjectURL(prev)
@@ -588,7 +580,6 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
     void readImageSourceSizeFromFile(file)
       .then((sourceSize) => {
         if (profileImageDraftFileSeqRef.current !== nextFileSeq) return
-        profileImageDraftSourceSizeRef.current = sourceSize
         setProfileImageDraftSourceSize(sourceSize)
         scheduleProfileImageDraftTransform(profileImageDraftTransformRef.current)
       })
@@ -596,217 +587,11 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         if (profileImageDraftFileSeqRef.current !== nextFileSeq) return
         setProfileImageDraftNotice({ tone: "error", text: "이미지 해상도 정보를 읽지 못했습니다." })
       })
-  }, [scheduleProfileImageDraftTransform])
-
-  const handleProfileImageDraftPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!profileImageDraftFile) return
-      const frame = profileImageDraftFrameRef.current
-      if (!frame) return
-      if (event.button !== 0) return
-
-      event.preventDefault()
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId)
-      } catch {
-        // 일부 브라우저에서 포인터 캡처가 실패할 수 있으므로 드래그 로직은 계속 진행한다.
-      }
-      profileImageDraftActivePointersRef.current.set(event.pointerId, {
-        clientX: event.clientX,
-        clientY: event.clientY,
-      })
-
-      if (profileImageDraftActivePointersRef.current.size === 1) {
-        const current = profileImageDraftTransformRef.current
-        setIsProfileImageDraftDragging(true)
-        profileImageDraftDragRef.current = {
-          pointerId: event.pointerId,
-          startClientX: event.clientX,
-          startClientY: event.clientY,
-          startFocusX: current.focusX,
-          startFocusY: current.focusY,
-        }
-        return
-      }
-
-      if (profileImageDraftActivePointersRef.current.size >= 2) {
-        const [firstPointer, secondPointer] = Array.from(profileImageDraftActivePointersRef.current.values())
-        const distance = Math.hypot(
-          secondPointer.clientX - firstPointer.clientX,
-          secondPointer.clientY - firstPointer.clientY
-        )
-        if (distance > 0) {
-          const frameRect = frame.getBoundingClientRect()
-          const centerXRatio = frameRect.width > 0
-            ? ((firstPointer.clientX + secondPointer.clientX) / 2 - frameRect.left) / frameRect.width
-            : 0.5
-          const centerYRatio = frameRect.height > 0
-            ? ((firstPointer.clientY + secondPointer.clientY) / 2 - frameRect.top) / frameRect.height
-            : 0.5
-          const current = profileImageDraftTransformRef.current
-          profileImageDraftPinchRef.current = {
-            startDistance: distance,
-            startCenterXRatio: Math.min(1, Math.max(0, centerXRatio)),
-            startCenterYRatio: Math.min(1, Math.max(0, centerYRatio)),
-            startFocusX: current.focusX,
-            startFocusY: current.focusY,
-            startZoom: current.zoom,
-          }
-          profileImageDraftDragRef.current = null
-          setIsProfileImageDraftDragging(false)
-        }
-      }
-    },
-    [profileImageDraftFile]
-  )
-
-  const handleProfileImageDraftPointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      if (profileImageDraftActivePointersRef.current.has(event.pointerId)) {
-        profileImageDraftActivePointersRef.current.set(event.pointerId, {
-          clientX: event.clientX,
-          clientY: event.clientY,
-        })
-      }
-
-      const rect = event.currentTarget.getBoundingClientRect()
-      if (rect.width <= 0 || rect.height <= 0) return
-
-      const pinchState = profileImageDraftPinchRef.current
-      if (pinchState && profileImageDraftActivePointersRef.current.size >= 2) {
-        const [firstPointer, secondPointer] = Array.from(profileImageDraftActivePointersRef.current.values())
-        const distance = Math.hypot(
-          secondPointer.clientX - firstPointer.clientX,
-          secondPointer.clientY - firstPointer.clientY
-        )
-        if (distance > 0) {
-          const zoomFactor = distance / pinchState.startDistance
-          const nextZoom = clampProfileImageEditZoom(pinchState.startZoom * zoomFactor)
-          const baseTransform: ProfileImageDraftTransformState = {
-            focusX: pinchState.startFocusX,
-            focusY: pinchState.startFocusY,
-            zoom: pinchState.startZoom,
-          }
-          let nextTransform = computeAnchoredZoomTransform(
-            baseTransform,
-            nextZoom,
-            pinchState.startCenterXRatio,
-            pinchState.startCenterYRatio
-          )
-          const currentCenterXRatio = ((firstPointer.clientX + secondPointer.clientX) / 2 - rect.left) / rect.width
-          const currentCenterYRatio = ((firstPointer.clientY + secondPointer.clientY) / 2 - rect.top) / rect.height
-          nextTransform = {
-            ...nextTransform,
-            focusX: nextTransform.focusX + (currentCenterXRatio - pinchState.startCenterXRatio) * 100,
-            focusY: nextTransform.focusY + (currentCenterYRatio - pinchState.startCenterYRatio) * 100,
-          }
-          scheduleProfileImageDraftTransform(nextTransform)
-        }
-        return
-      }
-
-      const dragState = profileImageDraftDragRef.current
-      if (!dragState || dragState.pointerId !== event.pointerId) return
-      const deltaX = event.clientX - dragState.startClientX
-      const deltaY = event.clientY - dragState.startClientY
-      const zoomScale = Math.max(profileImageDraftTransformRef.current.zoom, PROFILE_IMAGE_EDIT_MIN_ZOOM)
-      const nextFocusX = dragState.startFocusX + (deltaX / rect.width) * (100 / zoomScale)
-      const nextFocusY = dragState.startFocusY + (deltaY / rect.height) * (100 / zoomScale)
-      scheduleProfileImageDraftTransform({
-        focusX: nextFocusX,
-        focusY: nextFocusY,
-        zoom: profileImageDraftTransformRef.current.zoom,
-      })
-    },
-    [computeAnchoredZoomTransform, scheduleProfileImageDraftTransform]
-  )
-
-  const finalizeProfileImageDraftPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    profileImageDraftActivePointersRef.current.delete(event.pointerId)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    const dragState = profileImageDraftDragRef.current
-    if (dragState && dragState.pointerId === event.pointerId) {
-      profileImageDraftDragRef.current = null
-    }
-
-    if (profileImageDraftActivePointersRef.current.size >= 2) {
-      const [firstPointer, secondPointer] = Array.from(profileImageDraftActivePointersRef.current.values())
-      const rect = event.currentTarget.getBoundingClientRect()
-      const distance = Math.hypot(
-        secondPointer.clientX - firstPointer.clientX,
-        secondPointer.clientY - firstPointer.clientY
-      )
-      if (distance > 0 && rect.width > 0 && rect.height > 0) {
-        const current = profileImageDraftTransformRef.current
-        profileImageDraftPinchRef.current = {
-          startDistance: distance,
-          startCenterXRatio: ((firstPointer.clientX + secondPointer.clientX) / 2 - rect.left) / rect.width,
-          startCenterYRatio: ((firstPointer.clientY + secondPointer.clientY) / 2 - rect.top) / rect.height,
-          startFocusX: current.focusX,
-          startFocusY: current.focusY,
-          startZoom: current.zoom,
-        }
-      }
-      setIsProfileImageDraftDragging(false)
-      return
-    }
-
-    profileImageDraftPinchRef.current = null
-    if (profileImageDraftActivePointersRef.current.size === 1) {
-      const [remainingPointerId, remainingPointerPosition] = Array.from(profileImageDraftActivePointersRef.current.entries())[0]
-      const current = profileImageDraftTransformRef.current
-      profileImageDraftDragRef.current = {
-        pointerId: remainingPointerId,
-        startClientX: remainingPointerPosition.clientX,
-        startClientY: remainingPointerPosition.clientY,
-        startFocusX: current.focusX,
-        startFocusY: current.focusY,
-      }
-      setIsProfileImageDraftDragging(true)
-      return
-    }
-
-    setIsProfileImageDraftDragging(false)
-  }, [])
+  }, [commitProfileImageDraftViewportTransform, profileImageDraftTransformRef, scheduleProfileImageDraftTransform])
 
   useEffect(() => {
-    const frame = profileImageDraftFrameRef.current
-    if (!frame || !profileImageDraftFile) return
-
-    const handleWheel = (event: globalThis.WheelEvent) => {
-      event.preventDefault()
-      const rect = frame.getBoundingClientRect()
-      if (rect.width <= 0 || rect.height <= 0) return
-      const delta = event.deltaY < 0 ? 0.08 : -0.08
-      const current = profileImageDraftTransformRef.current
-      const nextZoom = clampProfileImageEditZoom(current.zoom + delta)
-      if (nextZoom === current.zoom) return
-      const anchorXRatio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-      const anchorYRatio = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
-      const nextTransform = computeAnchoredZoomTransform(current, nextZoom, anchorXRatio, anchorYRatio)
-      scheduleProfileImageDraftTransform(nextTransform)
-    }
-
-    frame.addEventListener("wheel", handleWheel, { passive: false })
-    return () => frame.removeEventListener("wheel", handleWheel)
-  }, [computeAnchoredZoomTransform, profileImageDraftFile, scheduleProfileImageDraftTransform])
-
-  useEffect(() => {
-    profileImageDraftSourceSizeRef.current = profileImageDraftSourceSize
     scheduleProfileImageDraftTransform(profileImageDraftTransformRef.current)
-  }, [profileImageDraftSourceSize, scheduleProfileImageDraftTransform])
-
-  useEffect(() => {
-    return () => {
-      if (profileImageDraftTransformRafRef.current !== null) {
-        window.cancelAnimationFrame(profileImageDraftTransformRafRef.current)
-      }
-    }
-  }, [])
+  }, [profileImageDraftSourceSize, profileImageDraftTransformRef, scheduleProfileImageDraftTransform])
 
   const requestProfileImageUpload = useCallback(async (memberId: number, file: File): Promise<Response> => {
     const formData = new FormData()
@@ -1466,12 +1251,12 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   onPointerUp={finalizeProfileImageDraftPointer}
                   onPointerCancel={finalizeProfileImageDraftPointer}
                 >
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={profileImageDraftPreviewUrl}
                     alt="프로필 편집 미리보기"
-                    fill
-                    unoptimized
-                    sizes="(max-width: 768px) 100vw, 360px"
+                    loading="eager"
+                    decoding="async"
                     style={{
                       objectFit: "cover",
                       width: "var(--profile-draft-width)",

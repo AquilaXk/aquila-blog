@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
   ChangeEvent,
@@ -26,7 +27,6 @@ import { isNavigationCancelledError, replaceRoute, toLoginPath } from "src/libs/
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
-import MarkdownRenderer from "src/routes/Detail/components/MarkdownRenderer"
 import {
   applyThumbnailTransformToUrl,
   clampThumbnailFocusX,
@@ -51,7 +51,13 @@ import {
   POST_IMAGE_UPLOAD_RULE_LABEL,
   PROFILE_IMAGE_UPLOAD_RULE_LABEL,
 } from "src/libs/profileImageUpload"
+import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
+
+const LazyMarkdownRenderer = dynamic(() => import("src/routes/Detail/components/MarkdownRenderer"), {
+  ssr: false,
+  loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>미리보기 렌더 준비 중...</div>,
+})
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
 
@@ -204,28 +210,6 @@ type ThumbnailTransformState = {
   focusX: number
   focusY: number
   zoom: number
-}
-
-type ThumbnailPointerPosition = {
-  clientX: number
-  clientY: number
-}
-
-type ThumbnailDragState = {
-  pointerId: number
-  startClientX: number
-  startClientY: number
-  startFocusX: number
-  startFocusY: number
-}
-
-type ThumbnailPinchState = {
-  startDistance: number
-  startCenterXRatio: number
-  startCenterYRatio: number
-  startFocusX: number
-  startFocusY: number
-  startZoom: number
 }
 
 type PreviewViewportMode = "desktop" | "tablet" | "mobile"
@@ -1305,7 +1289,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [isPreviewThumbnailError, setIsPreviewThumbnailError] = useState(false)
   const [previewThumbnailSourceUrl, setPreviewThumbnailSourceUrl] = useState("")
   const [previewThumbSourceSize, setPreviewThumbSourceSize] = useState<ThumbnailSourceSize>(DEFAULT_THUMBNAIL_SOURCE_SIZE)
-  const [isPreviewThumbDragging, setIsPreviewThumbDragging] = useState(false)
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportMode>("desktop")
   const [localDraftSavedAt, setLocalDraftSavedAt] = useState("")
   const [mobileManageStep, setMobileManageStep] = useState<ManageMobileStudioStep>("query")
@@ -1376,16 +1359,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     new Map<string, { rows: AdminPostListItem[]; total: number; storedAt: number }>()
   )
   const previewThumbFrameRef = useRef<HTMLDivElement>(null)
-  const previewThumbDragRef = useRef<ThumbnailDragState | null>(null)
-  const previewThumbPinchRef = useRef<ThumbnailPinchState | null>(null)
-  const previewThumbActivePointersRef = useRef<Map<number, ThumbnailPointerPosition>>(new Map())
-  const previewThumbSourceSizeRef = useRef<ThumbnailSourceSize>(DEFAULT_THUMBNAIL_SOURCE_SIZE)
-  const previewThumbTransformRef = useRef<ThumbnailTransformState>({
-    focusX: DEFAULT_THUMBNAIL_FOCUS_X,
-    focusY: DEFAULT_THUMBNAIL_FOCUS_Y,
-    zoom: DEFAULT_THUMBNAIL_ZOOM,
-  })
-  const previewThumbTransformRafRef = useRef<number | null>(null)
   const previewThumbSourceSeqRef = useRef(0)
   const applyProfileState = useCallback((member: MemberMe) => {
     setProfileRoleInput(member.profileRole || "")
@@ -1688,7 +1661,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     const frame = previewThumbFrameRef.current
     if (!frame) return
 
-    const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(previewThumbSourceSizeRef.current, transform.zoom)
+    const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(previewThumbSourceSize, transform.zoom)
     const { leftRatio, topRatio } = resolveThumbnailFramePositionFromFocus({
       focusX: transform.focusX,
       focusY: transform.focusY,
@@ -1700,38 +1673,23 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     frame.style.setProperty("--preview-thumb-height", `${drawHeight * 100}%`)
     frame.style.setProperty("--preview-thumb-left", `${leftRatio * 100}%`)
     frame.style.setProperty("--preview-thumb-top", `${topRatio * 100}%`)
-  }, [])
+  }, [previewThumbSourceSize])
 
-  const commitPreviewThumbTransform = useCallback((next: ThumbnailTransformState) => {
+  const normalizePreviewThumbTransform = useCallback((next: ThumbnailTransformState) => {
     const zoom = clampThumbnailZoom(next.zoom)
     const clampedFocus = clampThumbnailFocusBySource({
       focusX: next.focusX,
       focusY: next.focusY,
       zoom,
-      sourceSize: previewThumbSourceSizeRef.current,
+      sourceSize: previewThumbSourceSize,
     })
-    const normalized: ThumbnailTransformState = {
+
+    return {
       focusX: clampedFocus.focusX,
       focusY: clampedFocus.focusY,
       zoom,
     }
-
-    previewThumbTransformRef.current = normalized
-    applyPreviewThumbStyle(normalized)
-    setPostThumbnailFocusX((prev) => (Math.abs(prev - normalized.focusX) > 0.0001 ? normalized.focusX : prev))
-    setPostThumbnailFocusY((prev) => (Math.abs(prev - normalized.focusY) > 0.0001 ? normalized.focusY : prev))
-    setPostThumbnailZoom((prev) => (Math.abs(prev - normalized.zoom) > 0.0001 ? normalized.zoom : prev))
-  }, [applyPreviewThumbStyle])
-
-  const schedulePreviewThumbTransform = useCallback((next: ThumbnailTransformState) => {
-    previewThumbTransformRef.current = next
-    if (previewThumbTransformRafRef.current !== null) return
-
-    previewThumbTransformRafRef.current = window.requestAnimationFrame(() => {
-      previewThumbTransformRafRef.current = null
-      commitPreviewThumbTransform(previewThumbTransformRef.current)
-    })
-  }, [commitPreviewThumbTransform])
+  }, [previewThumbSourceSize])
 
   const computeAnchoredThumbnailTransform = useCallback(
     (
@@ -1740,13 +1698,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       anchorXRatio: number,
       anchorYRatio: number
     ): ThumbnailTransformState => {
-      const sourceSize = previewThumbSourceSizeRef.current
       const { drawWidth: prevDrawWidth, drawHeight: prevDrawHeight } = resolveThumbnailDrawRatios(
-        sourceSize,
+        previewThumbSourceSize,
         baseTransform.zoom
       )
       const { drawWidth: nextDrawWidth, drawHeight: nextDrawHeight } = resolveThumbnailDrawRatios(
-        sourceSize,
+        previewThumbSourceSize,
         nextZoom
       )
       const { leftRatio: prevLeft, topRatio: prevTop } = resolveThumbnailFramePositionFromFocus({
@@ -1774,226 +1731,82 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         zoom: nextZoom,
       }
     },
-    []
+    [previewThumbSourceSize]
   )
 
-  const handlePreviewThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (!safePreviewThumbnail || isPreviewThumbnailError) return
-    if (event.button !== 0) return
-
-    event.preventDefault()
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // 일부 브라우저는 포인터 캡처 실패가 발생할 수 있다.
-    }
-    previewThumbActivePointersRef.current.set(event.pointerId, {
-      clientX: event.clientX,
-      clientY: event.clientY,
-    })
-
-    if (previewThumbActivePointersRef.current.size === 1) {
-      const current = previewThumbTransformRef.current
-      previewThumbDragRef.current = {
-        pointerId: event.pointerId,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        startFocusX: current.focusX,
-        startFocusY: current.focusY,
-      }
-      setIsPreviewThumbDragging(true)
-      return
-    }
-
-    if (previewThumbActivePointersRef.current.size >= 2) {
-      const [firstPointer, secondPointer] = Array.from(previewThumbActivePointersRef.current.values())
-      const distance = Math.hypot(
-        secondPointer.clientX - firstPointer.clientX,
-        secondPointer.clientY - firstPointer.clientY
+  const computeDraggedThumbnailTransform = useCallback(
+    (
+      baseTransform: ThumbnailTransformState,
+      deltaXRatio: number,
+      deltaYRatio: number
+    ): ThumbnailTransformState => {
+      const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(
+        previewThumbSourceSize,
+        baseTransform.zoom
       )
-      if (distance > 0) {
-        const frameRect = event.currentTarget.getBoundingClientRect()
-        const centerXRatio = frameRect.width > 0
-          ? ((firstPointer.clientX + secondPointer.clientX) / 2 - frameRect.left) / frameRect.width
-          : 0.5
-        const centerYRatio = frameRect.height > 0
-          ? ((firstPointer.clientY + secondPointer.clientY) / 2 - frameRect.top) / frameRect.height
-          : 0.5
-        const current = previewThumbTransformRef.current
-        previewThumbPinchRef.current = {
-          startDistance: distance,
-          startCenterXRatio: clampRatio(centerXRatio),
-          startCenterYRatio: clampRatio(centerYRatio),
-          startFocusX: current.focusX,
-          startFocusY: current.focusY,
-          startZoom: current.zoom,
-        }
-        previewThumbDragRef.current = null
-        setIsPreviewThumbDragging(false)
-      }
-    }
-  }, [isPreviewThumbnailError, safePreviewThumbnail])
-
-  const handlePreviewThumbPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    if (previewThumbActivePointersRef.current.has(event.pointerId)) {
-      previewThumbActivePointersRef.current.set(event.pointerId, {
-        clientX: event.clientX,
-        clientY: event.clientY,
+      const { leftRatio: startLeft, topRatio: startTop } = resolveThumbnailFramePositionFromFocus({
+        focusX: baseTransform.focusX,
+        focusY: baseTransform.focusY,
+        drawWidth,
+        drawHeight,
       })
-    }
+      const nextFocus = resolveThumbnailFocusFromFramePosition({
+        leftRatio: startLeft + deltaXRatio,
+        topRatio: startTop + deltaYRatio,
+        drawWidth,
+        drawHeight,
+      })
 
-    const rect = event.currentTarget.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) return
-
-    const pinchState = previewThumbPinchRef.current
-    if (pinchState && previewThumbActivePointersRef.current.size >= 2) {
-      const [firstPointer, secondPointer] = Array.from(previewThumbActivePointersRef.current.values())
-      const distance = Math.hypot(
-        secondPointer.clientX - firstPointer.clientX,
-        secondPointer.clientY - firstPointer.clientY
-      )
-      if (distance > 0) {
-        const zoomFactor = distance / pinchState.startDistance
-        const nextZoom = clampThumbnailZoom(pinchState.startZoom * zoomFactor)
-        const baseTransform: ThumbnailTransformState = {
-          focusX: pinchState.startFocusX,
-          focusY: pinchState.startFocusY,
-          zoom: pinchState.startZoom,
-        }
-        let nextTransform = computeAnchoredThumbnailTransform(
-          baseTransform,
-          nextZoom,
-          pinchState.startCenterXRatio,
-          pinchState.startCenterYRatio
-        )
-        const currentCenterXRatio = ((firstPointer.clientX + secondPointer.clientX) / 2 - rect.left) / rect.width
-        const currentCenterYRatio = ((firstPointer.clientY + secondPointer.clientY) / 2 - rect.top) / rect.height
-        nextTransform = {
-          ...nextTransform,
-          focusX: nextTransform.focusX + (currentCenterXRatio - pinchState.startCenterXRatio) * 100,
-          focusY: nextTransform.focusY + (currentCenterYRatio - pinchState.startCenterYRatio) * 100,
-        }
-        schedulePreviewThumbTransform(nextTransform)
+      return {
+        focusX: nextFocus.focusX,
+        focusY: nextFocus.focusY,
+        zoom: baseTransform.zoom,
       }
-      return
-    }
+    },
+    [previewThumbSourceSize]
+  )
 
-    const dragState = previewThumbDragRef.current
-    if (!dragState || dragState.pointerId !== event.pointerId) return
+  const applyCommittedPreviewThumbTransform = useCallback(
+    (normalized: ThumbnailTransformState) => {
+      applyPreviewThumbStyle(normalized)
+      setPostThumbnailFocusX((prev) => (Math.abs(prev - normalized.focusX) > 0.0001 ? normalized.focusX : prev))
+      setPostThumbnailFocusY((prev) => (Math.abs(prev - normalized.focusY) > 0.0001 ? normalized.focusY : prev))
+      setPostThumbnailZoom((prev) => (Math.abs(prev - normalized.zoom) > 0.0001 ? normalized.zoom : prev))
+    },
+    [applyPreviewThumbStyle]
+  )
 
-    const { drawWidth, drawHeight } = resolveThumbnailDrawRatios(
-      previewThumbSourceSizeRef.current,
-      previewThumbTransformRef.current.zoom
-    )
-    const { leftRatio: startLeft, topRatio: startTop } = resolveThumbnailFramePositionFromFocus({
-      focusX: dragState.startFocusX,
-      focusY: dragState.startFocusY,
-      drawWidth,
-      drawHeight,
-    })
-    const deltaXRatio = (event.clientX - dragState.startClientX) / rect.width
-    const deltaYRatio = (event.clientY - dragState.startClientY) / rect.height
-    const nextFocus = resolveThumbnailFocusFromFramePosition({
-      leftRatio: startLeft + deltaXRatio,
-      topRatio: startTop + deltaYRatio,
-      drawWidth,
-      drawHeight,
-    })
-    schedulePreviewThumbTransform({
-      focusX: nextFocus.focusX,
-      focusY: nextFocus.focusY,
-      zoom: previewThumbTransformRef.current.zoom,
-    })
-  }, [computeAnchoredThumbnailTransform, schedulePreviewThumbTransform])
-
-  const finalizePreviewThumbPointer = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    previewThumbActivePointersRef.current.delete(event.pointerId)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    const dragState = previewThumbDragRef.current
-    if (dragState && dragState.pointerId === event.pointerId) {
-      previewThumbDragRef.current = null
-    }
-
-    if (previewThumbActivePointersRef.current.size >= 2) {
-      const [firstPointer, secondPointer] = Array.from(previewThumbActivePointersRef.current.values())
-      const rect = event.currentTarget.getBoundingClientRect()
-      const distance = Math.hypot(
-        secondPointer.clientX - firstPointer.clientX,
-        secondPointer.clientY - firstPointer.clientY
-      )
-      if (distance > 0 && rect.width > 0 && rect.height > 0) {
-        const current = previewThumbTransformRef.current
-        previewThumbPinchRef.current = {
-          startDistance: distance,
-          startCenterXRatio: ((firstPointer.clientX + secondPointer.clientX) / 2 - rect.left) / rect.width,
-          startCenterYRatio: ((firstPointer.clientY + secondPointer.clientY) / 2 - rect.top) / rect.height,
-          startFocusX: current.focusX,
-          startFocusY: current.focusY,
-          startZoom: current.zoom,
-        }
-      }
-      setIsPreviewThumbDragging(false)
-      return
-    }
-
-    previewThumbPinchRef.current = null
-    if (previewThumbActivePointersRef.current.size === 1) {
-      const [remainingPointerId, remainingPointerPosition] = Array.from(previewThumbActivePointersRef.current.entries())[0]
-      const current = previewThumbTransformRef.current
-      previewThumbDragRef.current = {
-        pointerId: remainingPointerId,
-        startClientX: remainingPointerPosition.clientX,
-        startClientY: remainingPointerPosition.clientY,
-        startFocusX: current.focusX,
-        startFocusY: current.focusY,
-      }
-      setIsPreviewThumbDragging(true)
-      return
-    }
-
-    setIsPreviewThumbDragging(false)
-  }, [])
+  const {
+    commitTransform: commitPreviewThumbTransform,
+    finalizePointer: finalizePreviewThumbPointer,
+    handlePointerDown: handlePreviewThumbPointerDown,
+    handlePointerMove: handlePreviewThumbPointerMove,
+    isDragging: isPreviewThumbDragging,
+    resetInteractions: resetPreviewThumbInteractions,
+    scheduleTransform: schedulePreviewThumbTransform,
+    transformRef: previewThumbTransformRef,
+  } = useViewportImageEditor<ThumbnailTransformState>({
+    frameRef: previewThumbFrameRef,
+    initialTransform: {
+      focusX: postThumbnailFocusX,
+      focusY: postThumbnailFocusY,
+      zoom: postThumbnailZoom,
+    },
+    enabled: Boolean(safePreviewThumbnail && !isPreviewThumbnailError),
+    clampZoom: clampThumbnailZoom,
+    normalizeTransform: normalizePreviewThumbTransform,
+    computeAnchoredZoomTransform: computeAnchoredThumbnailTransform,
+    computeDraggedTransform: computeDraggedThumbnailTransform,
+    onCommit: applyCommittedPreviewThumbTransform,
+  })
 
   useEffect(() => {
     setIsPreviewThumbnailError(false)
   }, [safePreviewThumbnail])
 
   useEffect(() => {
-    const frame = previewThumbFrameRef.current
-    if (!frame) return
-
-    const handleWheel = (event: globalThis.WheelEvent) => {
-      if (!safePreviewThumbnail || isPreviewThumbnailError) return
-
-      event.preventDefault()
-      const rect = frame.getBoundingClientRect()
-      if (rect.width <= 0 || rect.height <= 0) return
-      const delta = event.deltaY < 0 ? 0.08 : -0.08
-      const current = previewThumbTransformRef.current
-      const nextZoom = clampThumbnailZoom(current.zoom + delta)
-      if (nextZoom === current.zoom) return
-      const anchorXRatio = clampRatio((event.clientX - rect.left) / rect.width)
-      const anchorYRatio = clampRatio((event.clientY - rect.top) / rect.height)
-      const nextTransform = computeAnchoredThumbnailTransform(current, nextZoom, anchorXRatio, anchorYRatio)
-      schedulePreviewThumbTransform(nextTransform)
-    }
-
-    frame.addEventListener("wheel", handleWheel, { passive: false })
-    return () => frame.removeEventListener("wheel", handleWheel)
-  }, [computeAnchoredThumbnailTransform, isPreviewThumbnailError, safePreviewThumbnail, schedulePreviewThumbTransform])
-
-  useEffect(() => {
-    previewThumbSourceSizeRef.current = previewThumbSourceSize
-  }, [previewThumbSourceSize])
-
-  useEffect(() => {
     if (!safePreviewThumbnail || isPreviewThumbnailError) {
       previewThumbSourceSeqRef.current += 1
-      previewThumbSourceSizeRef.current = DEFAULT_THUMBNAIL_SOURCE_SIZE
       setPreviewThumbSourceSize(DEFAULT_THUMBNAIL_SOURCE_SIZE)
       return
     }
@@ -2003,17 +1816,15 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     void readThumbnailSourceSizeFromUrl(safePreviewThumbnail)
       .then((sourceSize) => {
         if (previewThumbSourceSeqRef.current !== nextSeq) return
-        previewThumbSourceSizeRef.current = sourceSize
         setPreviewThumbSourceSize(sourceSize)
         commitPreviewThumbTransform(previewThumbTransformRef.current)
       })
       .catch(() => {
         if (previewThumbSourceSeqRef.current !== nextSeq) return
-        previewThumbSourceSizeRef.current = DEFAULT_THUMBNAIL_SOURCE_SIZE
         setPreviewThumbSourceSize(DEFAULT_THUMBNAIL_SOURCE_SIZE)
         commitPreviewThumbTransform(previewThumbTransformRef.current)
       })
-  }, [commitPreviewThumbTransform, isPreviewThumbnailError, safePreviewThumbnail])
+  }, [commitPreviewThumbTransform, isPreviewThumbnailError, previewThumbTransformRef, safePreviewThumbnail])
 
   useEffect(() => {
     if (!safePreviewThumbnail || isPreviewThumbnailError) return
@@ -2037,31 +1848,22 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (!previewThumbFrameRef.current) return
 
     applyPreviewThumbStyle(previewThumbTransformRef.current)
-  }, [applyPreviewThumbStyle, isPreviewThumbnailError, isPublishModalOpen, safePreviewThumbnail])
+  }, [applyPreviewThumbStyle, isPreviewThumbnailError, isPublishModalOpen, previewThumbTransformRef, safePreviewThumbnail])
 
   useEffect(() => {
     if (safePreviewThumbnail && !isPreviewThumbnailError) return
-    previewThumbDragRef.current = null
-    previewThumbPinchRef.current = null
-    previewThumbActivePointersRef.current.clear()
-    setIsPreviewThumbDragging(false)
-  }, [isPreviewThumbnailError, safePreviewThumbnail])
+    resetPreviewThumbInteractions()
+  }, [isPreviewThumbnailError, resetPreviewThumbInteractions, safePreviewThumbnail])
 
   useEffect(() => {
     if (isPublishModalOpen) return
-    previewThumbDragRef.current = null
-    previewThumbPinchRef.current = null
-    previewThumbActivePointersRef.current.clear()
-    setIsPreviewThumbDragging(false)
-  }, [isPublishModalOpen])
+    resetPreviewThumbInteractions()
+  }, [isPublishModalOpen, resetPreviewThumbInteractions])
 
   useEffect(() => {
-    return () => {
-      if (previewThumbTransformRafRef.current !== null) {
-        window.cancelAnimationFrame(previewThumbTransformRafRef.current)
-      }
-    }
-  }, [refreshPublicPostReadViews])
+    if (!safePreviewThumbnail || isPreviewThumbnailError) return
+    schedulePreviewThumbTransform(previewThumbTransformRef.current)
+  }, [isPreviewThumbnailError, previewThumbSourceSize, previewThumbTransformRef, safePreviewThumbnail, schedulePreviewThumbTransform])
 
   const refreshEditorMetaCatalog = useCallback(async () => {
     setMetaCatalogLoading(true)
@@ -5231,7 +5033,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                               : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
                           </PreviewHintNotice>
                         ) : null}
-                        <MarkdownRenderer
+                        <LazyMarkdownRenderer
                           content={previewContent}
                           disableMermaid={isPreviewHeavyDocument}
                         />
@@ -5264,7 +5066,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                         : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
                     </PreviewHintNotice>
                   ) : null}
-                  <MarkdownRenderer
+                  <LazyMarkdownRenderer
                     content={previewContent}
                     disableMermaid={isPreviewHeavyDocument}
                   />

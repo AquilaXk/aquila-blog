@@ -3,7 +3,7 @@ import rehypePrettyCode from "rehype-pretty-code"
 import remarkGfm from "remark-gfm"
 import remarkParse from "remark-parse"
 import remarkRehype from "remark-rehype"
-import { normalizeEscapedMarkdownFences } from "src/libs/markdown/mermaid"
+import { normalizeMarkdownForRender } from "src/libs/markdown/rendering"
 import { unified } from "unified"
 
 const prettyCodeOptions = {
@@ -19,7 +19,8 @@ const prettyCodeOptions = {
 }
 
 export const renderMarkdownToHtml = async (markdown: string): Promise<string> => {
-  const normalizedMarkdown = normalizeEscapedMarkdownFences(markdown)
+  // 서버는 정적 HTML/pretty-code만 담당하고, interactive block 조합 책임은 클라이언트에 둔다.
+  const normalizedMarkdown = normalizeMarkdownForRender(markdown)
   if (!normalizedMarkdown.trim()) return ""
 
   const processor = unified()

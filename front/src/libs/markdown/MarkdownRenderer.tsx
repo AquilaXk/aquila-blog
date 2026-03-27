@@ -3,12 +3,8 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import {
   extractCodeMetaFromPreChildren,
-  hashString,
   isMermaidSource,
-  normalizeContentHtmlForMermaid,
-  normalizeMarkdownForRender,
-  parseMarkdownSegments,
-  shouldPreferMarkdownPipeline,
+  resolveMarkdownRenderModel,
 } from "src/libs/markdown/rendering"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
@@ -29,34 +25,11 @@ type Props = {
 const MarkdownRenderer: FC<Props> = ({ content, contentHtml, disableMermaid = false }) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const imageRenderOrderRef = useRef(0)
-  const normalizedContent = useMemo(() => normalizeMarkdownForRender(content || ""), [content])
-  const normalizedContentHtml = useMemo(() => contentHtml?.trim() || "", [contentHtml])
-  const sanitizedContentHtml = useMemo(
-    () => normalizeContentHtmlForMermaid(normalizedContentHtml),
-    [normalizedContentHtml]
+  const renderModel = useMemo(
+    () => resolveMarkdownRenderModel({ content, contentHtml }),
+    [content, contentHtml]
   )
-  const preferMarkdownPipeline = useMemo(
-    () => shouldPreferMarkdownPipeline(normalizedContent),
-    [normalizedContent]
-  )
-  const resolvedContentHtml = useMemo(() => {
-    // 상세/미리보기 일관성을 위해 markdown 원문이 있으면 항상 markdown 파이프라인을 우선한다.
-    // contentHtml 경로에서 간헐적으로 mermaid fence가 plain code로 남는 케이스를 차단한다.
-    if (normalizedContent.trim()) return ""
-    return preferMarkdownPipeline ? "" : sanitizedContentHtml
-  }, [normalizedContent, preferMarkdownPipeline, sanitizedContentHtml])
-  const segments = useMemo(
-    () => (resolvedContentHtml ? [] : parseMarkdownSegments(normalizedContent)),
-    [normalizedContent, resolvedContentHtml]
-  )
-  const renderKeySeed = useMemo(
-    () => (resolvedContentHtml ? `html:${resolvedContentHtml}` : `md:${normalizedContent}`),
-    [normalizedContent, resolvedContentHtml]
-  )
-  const renderKey = useMemo(
-    () => `${renderKeySeed.length}:${hashString(renderKeySeed)}`,
-    [renderKeySeed]
-  )
+  const { normalizedContent, renderKey, resolvedContentHtml, segments } = renderModel
 
   useMermaidEffect(rootRef, renderKey, !disableMermaid)
   useResponsiveTableEffect(rootRef, renderKey)

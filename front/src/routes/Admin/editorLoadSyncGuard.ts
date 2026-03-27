@@ -1,6 +1,7 @@
 export type BlockEditorLoadGuardState = {
   expectedBody: string
   ignoreUntilMs: number
+  ignoredInitialEmpty: boolean
 }
 
 const DEFAULT_GUARD_HOLD_MS = 1_200
@@ -14,12 +15,13 @@ export const createBlockEditorLoadGuardState = (
 ): BlockEditorLoadGuardState => {
   const normalizedBody = normalizeEditorMarkdown(resolvedBody)
   if (!normalizedBody) {
-    return { expectedBody: "", ignoreUntilMs: 0 }
+    return { expectedBody: "", ignoreUntilMs: 0, ignoredInitialEmpty: false }
   }
 
   return {
     expectedBody: normalizedBody,
     ignoreUntilMs: nowMs + Math.max(0, holdMs),
+    ignoredInitialEmpty: false,
   }
 }
 
@@ -41,6 +43,7 @@ export const shouldIgnoreBlockEditorEmptyUpdate = ({
     normalizedNext.length === 0 &&
     normalizedCurrent.length > 0 &&
     guardState.expectedBody.length > 0 &&
+    !guardState.ignoredInitialEmpty &&
     nowMs <= guardState.ignoreUntilMs
   )
 }
@@ -58,3 +61,11 @@ export const consumeGuardOnExpectedUpdate = (
   }
   return guardState
 }
+
+export const markGuardEmptyUpdateIgnored = (
+  guardState: BlockEditorLoadGuardState
+): BlockEditorLoadGuardState => ({
+  ...guardState,
+  ignoreUntilMs: 0,
+  ignoredInitialEmpty: true,
+})

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import {
   consumeGuardOnExpectedUpdate,
   createBlockEditorLoadGuardState,
+  markGuardEmptyUpdateIgnored,
   shouldIgnoreBlockEditorEmptyUpdate,
 } from "src/routes/Admin/editorLoadSyncGuard"
 
@@ -55,6 +56,31 @@ test.describe("editor load sync guard", () => {
         nextMarkdown: "",
         currentMarkdown: "본문",
         guardState: guard,
+      })
+    ).toBe(false)
+  })
+
+  test("초기 빈 업데이트는 한 번만 무시하고 곧바로 guard를 닫는다", () => {
+    const nowMs = 3_000
+    const guard = createBlockEditorLoadGuardState("기존 본문", nowMs)
+
+    expect(
+      shouldIgnoreBlockEditorEmptyUpdate({
+        nextMarkdown: "",
+        currentMarkdown: "기존 본문",
+        guardState: guard,
+        nowMs: nowMs + 100,
+      })
+    ).toBe(true)
+
+    const closedGuard = markGuardEmptyUpdateIgnored(guard)
+
+    expect(
+      shouldIgnoreBlockEditorEmptyUpdate({
+        nextMarkdown: "",
+        currentMarkdown: "기존 본문",
+        guardState: closedGuard,
+        nowMs: nowMs + 150,
       })
     ).toBe(false)
   })

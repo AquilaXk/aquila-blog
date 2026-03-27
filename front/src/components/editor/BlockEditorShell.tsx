@@ -41,12 +41,16 @@ import {
 
 type Props = {
   value: string
-  onChange: (markdown: string) => void
+  onChange: (markdown: string, meta?: BlockEditorChangeMeta) => void
   onUploadImage: (file: File) => Promise<ImageBlockAttrs>
   disabled?: boolean
   className?: string
   preview?: ReactNode
   enableMermaidBlocks?: boolean
+}
+
+export type BlockEditorChangeMeta = {
+  editorFocused: boolean
 }
 
 type SlashAction = {
@@ -489,7 +493,7 @@ const BlockEditorShell = ({
       const serialized = serializeEditorDocToMarkdown(nextDoc)
       lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
       setRawMarkdownDraft(serialized)
-      onChange(serialized)
+      onChange(serialized, { editorFocused: true })
     },
     [onChange]
   )
@@ -733,11 +737,6 @@ const BlockEditorShell = ({
     onUpdate: ({ editor: nextEditor }) => {
       const markdown = serializeEditorDocToMarkdown(nextEditor.getJSON() as BlockEditorDoc)
       const normalized = normalizeMarkdown(markdown)
-      const normalizedExternal = normalizeMarkdown(value)
-
-      if (!nextEditor.isFocused && normalized.length === 0 && normalizedExternal.length > 0) {
-        return
-      }
 
       if (normalized === lastCommittedMarkdownRef.current) {
         setRawMarkdownDraft(markdown)
@@ -746,7 +745,7 @@ const BlockEditorShell = ({
 
       lastCommittedMarkdownRef.current = normalized
       setRawMarkdownDraft(markdown)
-      onChange(markdown)
+      onChange(markdown, { editorFocused: nextEditor.isFocused })
     },
   })
 
@@ -1090,7 +1089,7 @@ const BlockEditorShell = ({
     editor.commands.setContent(nextDoc, { emitUpdate: false })
     lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
     setRawMarkdownDraft(serialized)
-    onChange(serialized)
+    onChange(serialized, { editorFocused: true })
   }, [editor, enableMermaidBlocks, onChange, rawMarkdownDraft])
 
   const openLinkPrompt = useCallback(() => {

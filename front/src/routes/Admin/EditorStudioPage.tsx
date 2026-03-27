@@ -25,9 +25,14 @@ import {
 import {
   consumeGuardOnExpectedUpdate,
   createBlockEditorLoadGuardState,
+  markGuardEmptyUpdateIgnored,
   shouldIgnoreBlockEditorEmptyUpdate,
   type BlockEditorLoadGuardState,
 } from "./editorLoadSyncGuard"
+import {
+  deriveEditorPersistenceState,
+  isPublishActionDisabled,
+} from "./editorStudioState"
 import {
   isNavigationCancelledError,
   pushRoute,
@@ -69,6 +74,7 @@ import {
   serializeStandaloneMarkdownImageLine,
 } from "src/libs/markdown/rendering"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
+import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
 
 const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED !== "false"
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
@@ -1596,6 +1602,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const blockEditorLoadGuardStateRef = useRef<BlockEditorLoadGuardState>({
     expectedBody: "",
     ignoreUntilMs: 0,
+    ignoredInitialEmpty: false,
   })
   const [previewContent, setPreviewContent] = useState(postContent)
   const [isPreviewSyncPending, setIsPreviewSyncPending] = useState(false)
@@ -1640,18 +1647,30 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     postContentLiveRef.current = postContent
   }, [postContent])
 
-  const handleBlockEditorChange = useCallback((nextMarkdown: string) => {
-    const nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
-    blockEditorLoadGuardStateRef.current = nextGuardState
+  const handleBlockEditorChange = useCallback((nextMarkdown: string, meta?: BlockEditorChangeMeta) => {
+    let nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
+
+    if (meta?.editorFocused) {
+      nextGuardState = {
+        ...nextGuardState,
+        ignoreUntilMs: 0,
+        ignoredInitialEmpty: true,
+      }
+      blockEditorLoadGuardStateRef.current = nextGuardState
+      setPostContent(nextMarkdown)
+      return
+    }
 
     if (shouldIgnoreBlockEditorEmptyUpdate({
       nextMarkdown,
       currentMarkdown: postContentLiveRef.current,
       guardState: nextGuardState,
     })) {
+      blockEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
       return
     }
 
+    blockEditorLoadGuardStateRef.current = nextGuardState
     setPostContent(nextMarkdown)
   }, [])
 
@@ -1705,7 +1724,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const lastWriteFingerprintRef = useRef<string>("")
   const lastWriteIdempotencyKeyRef = useRef<string>("")
   const lastLocalDraftFingerprintRef = useRef("")
-  const lastPersistedEditorFingerprintRef = useRef("")
+  const serverBaselineEditorFingerprintRef = useRef("")
   const listCacheRef = useRef(
     new Map<string, { rows: AdminPostListItem[]; total: number; storedAt: number }>()
   )
@@ -2437,7 +2456,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setPostId("")
     setPostVersion(null)
     setPreviewThumbnailSourceUrl("")
-    lastPersistedEditorFingerprintRef.current = ""
+    serverBaselineEditorFingerprintRef.current = ""
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     if (!keepContent) {
@@ -2502,7 +2521,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       const snapshot = syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
       setPostTitle(nextTitle)
       setPostVisibility(nextVisibility)
-      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: nextTitle,
         content: snapshot.body,
         summary: snapshot.summary,
@@ -2671,7 +2690,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         setPostVersion(typeof response.data.version === "number" ? response.data.version : null)
         setEditorMode("edit")
         setIsTempDraftMode(false)
-        lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+        serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
           title: postTitle,
           content: postContent,
           summary: postSummary,
@@ -2767,7 +2786,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
-      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: postTitle,
         content: postContent,
         summary: postSummary,
@@ -2809,7 +2828,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       const snapshot = syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
       setPostTitle(nextTitle)
       setPostVisibility(nextVisibility)
-      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: nextTitle,
         content: snapshot.body,
         summary: snapshot.summary,
@@ -2899,7 +2918,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setPostVisibility("PUBLIC_LISTED")
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(false)
-      lastPersistedEditorFingerprintRef.current = buildEditorStateFingerprint({
+      serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: postTitle,
         content: postContent,
         summary: postSummary,
@@ -4085,30 +4104,23 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ? `#${postId} 원고를 다듬고 있습니다.`
     : "기술 원고를 차분하게 다듬는 공간입니다."
   const hasEditorDraftContent = Boolean(postTitle.trim() || postContent.trim())
-  const isPersistedEditBaseline =
-    editorMode === "edit" &&
-    hasSelectedManagedPost &&
-    editorStateFingerprint === lastPersistedEditorFingerprintRef.current
-  const isAutoSavedCreateDraft =
-    editorMode === "create" &&
-    editorStateFingerprint === lastLocalDraftFingerprintRef.current &&
-    Boolean(localDraftSavedAt)
-  const composeStatusText =
-    loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
-      ? "저장 중"
-      : hasEditorDraftContent
-        ? isPersistedEditBaseline
-          ? "저장됨"
-          : isAutoSavedCreateDraft
-            ? "자동 저장됨"
-            : "저장되지 않은 변경"
-        : ""
-  const composeStatusTone =
-    loadingKey === "writePost" || loadingKey === "modifyPost" || loadingKey === "publishTempPost"
-      ? "loading"
-      : composeStatusText === "저장됨" || composeStatusText === "자동 저장됨" || publishNotice.tone === "success"
-        ? "success"
-        : "idle"
+  const hasEditorMinimumFields = Boolean(postTitle.trim() && postContent.trim())
+  const publishPlaceholderIssue = hasEditorMinimumFields
+    ? detectPublishPlaceholderIssue(postContent)
+    : null
+  const editorPersistenceState = deriveEditorPersistenceState({
+    editorMode,
+    hasSelectedManagedPost,
+    hasEditorDraftContent,
+    editorStateFingerprint,
+    serverBaselineFingerprint: serverBaselineEditorFingerprintRef.current,
+    localDraftFingerprint: lastLocalDraftFingerprintRef.current,
+    localDraftSavedAt,
+    loadingKey,
+    publishNoticeTone: publishNotice.tone,
+  })
+  const composeStatusText = editorPersistenceState.text
+  const composeStatusTone = editorPersistenceState.tone
   const composeHeroSummary = [
     currentVisibilityText,
     postSummary.trim() ? `요약 ${postSummary.trim().length}자` : "요약 자동",
@@ -4151,12 +4163,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         : loadingKey === "publishTempPost"
           ? "공개 중..."
           : "공개하기"
-  const publishActionButtonDisabled =
-    publishActionType === "create"
-      ? editorMode !== "create" || disabled("writePost")
-      : publishActionType === "modify"
-        ? editorMode !== "edit" || disabled("modifyPost")
-        : editorMode !== "edit" || disabled("publishTempPost")
+  const publishActionButtonDisabled = isPublishActionDisabled({
+    publishActionType,
+    editorMode,
+    loadingKey,
+    hasEditorMinimumFields,
+    hasPlaceholderIssue: Boolean(publishPlaceholderIssue),
+  })
   const mobilePrimaryActionLabel =
     editorMode === "create"
       ? "발행 설정 열기"
@@ -4237,6 +4250,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     { value: "split", label: "작성+미리보기", icon: "split" },
     { value: "preview", label: "미리보기", icon: "eye" },
   ]
+  const isCompactSplitPreview = editorStudioViewMode === "split" && isWideEditorViewport
   const editorStudioViewModeOptions = composeViewModeOptions.filter(
     (option) => isWideEditorViewport || option.value !== "split"
   )
@@ -4606,10 +4620,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         </EditorStudioWritingColumn>
 
         <EditorStudioPreviewColumn $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
-          <EditorStudioPreviewHeader>
+          <EditorStudioPreviewHeader $compact={isCompactSplitPreview}>
             <div>
               <strong>실시간 미리보기</strong>
-              <span>공개 글과 같은 흐름으로 확인합니다.</span>
+              <span>{isCompactSplitPreview ? "집필 중 흐름만 가볍게 확인합니다." : "공개 글과 같은 흐름으로 확인합니다."}</span>
             </div>
             <PreviewViewportTabs role="tablist" aria-label="미리보기 기기 폭">
               {Object.entries(LIVE_PREVIEW_VIEWPORTS).map(([viewport, config]) => (
@@ -4627,11 +4641,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             </PreviewViewportTabs>
           </EditorStudioPreviewHeader>
 
-          <EditorStudioPreviewSurface style={{ "--preview-live-width": livePreviewViewportConfig.maxWidth } as CSSProperties}>
+          <EditorStudioPreviewSurface
+            style={{ "--preview-live-width": livePreviewViewportConfig.maxWidth } as CSSProperties}
+            data-preview-density={isCompactSplitPreview ? "compact" : "full"}
+          >
             <EditorStudioPreviewArticle>
               {(previewThumbnailSrc || postTitle.trim() || resolvedPreviewSummary || postTags.length > 0) && (
-                <EditorStudioPreviewArticleHeader>
-                  {previewThumbnailSrc ? (
+                <EditorStudioPreviewArticleHeader $compact={isCompactSplitPreview}>
+                  {!isCompactSplitPreview && previewThumbnailSrc ? (
                     <div className="cover">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -4649,26 +4666,28 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   ) : null}
                   <h1>{postTitle.trim() || "제목을 입력하세요"}</h1>
                   {resolvedPreviewSummary ? <p className="summary">{resolvedPreviewSummary}</p> : null}
-                  {postTags.length > 0 ? (
+                  {!isCompactSplitPreview && postTags.length > 0 ? (
                     <div className="tags">
                       {postTags.map((tag) => (
                         <span key={tag}>{tag}</span>
                       ))}
                     </div>
                   ) : null}
-                  <div className="meta">
-                    <span>{displayName}</span>
-                    <span className="dot">·</span>
-                    <span>{previewDateText}</span>
-                    <span className="dot">·</span>
-                    <span>{currentVisibilityText}</span>
-                  </div>
+                  {!isCompactSplitPreview ? (
+                    <div className="meta">
+                      <span>{displayName}</span>
+                      <span className="dot">·</span>
+                      <span>{previewDateText}</span>
+                      <span className="dot">·</span>
+                      <span>{currentVisibilityText}</span>
+                    </div>
+                  ) : null}
                 </EditorStudioPreviewArticleHeader>
               )}
 
-              <EditorStudioPreviewArticleBody ref={previewScrollRef}>
-                <PreviewContentFrame>
-                  {isPreviewHeavyDocument ? (
+              <EditorStudioPreviewArticleBody ref={previewScrollRef} $compact={isCompactSplitPreview}>
+                <PreviewContentFrame $compact={isCompactSplitPreview}>
+                  {isPreviewHeavyDocument && !isCompactSplitPreview ? (
                     <PreviewHintNotice>
                       긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
                     </PreviewHintNotice>
@@ -10413,21 +10432,22 @@ const EditorStudioPreviewColumn = styled.aside<{ $viewMode: ComposeViewMode; $sp
   }
 `
 
-const EditorStudioPreviewHeader = styled.div`
+const EditorStudioPreviewHeader = styled.div<{ $compact?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
+  min-width: 0;
 
   strong {
     display: block;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.95rem;
+    font-size: ${({ $compact }) => ($compact ? "0.92rem" : "0.95rem")};
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
+    font-size: ${({ $compact }) => ($compact ? "0.76rem" : "0.78rem")};
   }
 
   @media (max-width: 720px) {
@@ -10441,18 +10461,21 @@ const EditorStudioPreviewSurface = styled.section`
   border-radius: 0;
   background: transparent;
   overflow: hidden;
+  min-width: 0;
 `
 
 const EditorStudioPreviewArticle = styled.article`
   display: grid;
   gap: 0;
+  min-width: 0;
 `
 
-const EditorStudioPreviewArticleHeader = styled.header`
+const EditorStudioPreviewArticleHeader = styled.header<{ $compact?: boolean }>`
   display: grid;
-  gap: 0.9rem;
-  padding: 0 0 1rem;
+  gap: ${({ $compact }) => ($compact ? "0.7rem" : "0.9rem")};
+  padding: 0 0 ${({ $compact }) => ($compact ? "0.85rem" : "1rem")};
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  min-width: 0;
 
   .cover {
     border-radius: 16px;
@@ -10469,16 +10492,28 @@ const EditorStudioPreviewArticleHeader = styled.header`
   h1 {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.45rem);
+    font-size: ${({ $compact }) =>
+      $compact ? "clamp(1.24rem, 1rem + 0.8vw, 1.72rem)" : "clamp(1.75rem, 1.2rem + 1.8vw, 2.45rem)"};
     line-height: 1.14;
     letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
   }
 
   .summary {
     margin: 0;
     color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.98rem;
-    line-height: 1.75;
+    font-size: ${({ $compact }) => ($compact ? "0.88rem" : "0.98rem")};
+    line-height: ${({ $compact }) => ($compact ? "1.55" : "1.75")};
+    overflow-wrap: anywhere;
+    ${({ $compact }) =>
+      $compact
+        ? `
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    `
+        : ""}
   }
 
   .tags {
@@ -10513,15 +10548,16 @@ const EditorStudioPreviewArticleHeader = styled.header`
   }
 `
 
-const EditorStudioPreviewArticleBody = styled.div`
-  max-height: calc(100vh - 15rem);
+const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
+  max-height: ${({ $compact }) => ($compact ? "calc(100vh - 14rem)" : "calc(100vh - 15rem)")};
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 1.1rem 0 1.4rem;
+  padding: ${({ $compact }) => ($compact ? "0.95rem 0 1.1rem" : "1.1rem 0 1.4rem")};
   min-width: 0;
 
   > div {
-    width: min(100%, var(--preview-live-width));
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
   }
 
@@ -10683,11 +10719,79 @@ const ContentInput = styled.textarea`
   }
 `
 
-const PreviewContentFrame = styled.div`
-  width: min(100%, var(--compose-pane-readable-width));
+const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
+  width: ${({ $compact }) =>
+    $compact ? "100%" : "min(100%, var(--compose-pane-readable-width), var(--preview-live-width))"};
+  max-width: 100%;
   min-width: 0;
   margin-inline: auto;
   overflow-x: hidden;
+
+  > .aq-markdown {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  ${({ $compact, theme }) =>
+    $compact
+      ? `
+    > .aq-markdown {
+      font-size: 0.96rem;
+      line-height: 1.72;
+    }
+
+    > .aq-markdown h1,
+    > .aq-markdown h2,
+    > .aq-markdown h3,
+    > .aq-markdown h4,
+    > .aq-markdown p,
+    > .aq-markdown ul,
+    > .aq-markdown ol,
+    > .aq-markdown blockquote,
+    > .aq-markdown pre,
+    > .aq-markdown table,
+    > .aq-markdown .aq-mermaid-stage {
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    > .aq-markdown h1 {
+      font-size: 1.7rem;
+      line-height: 1.15;
+      margin-top: 0;
+    }
+
+    > .aq-markdown h2 {
+      font-size: 1.34rem;
+      line-height: 1.22;
+      margin-top: 1.8rem;
+    }
+
+    > .aq-markdown h3 {
+      font-size: 1.12rem;
+      line-height: 1.28;
+      margin-top: 1.5rem;
+    }
+
+    > .aq-markdown p,
+    > .aq-markdown li,
+    > .aq-markdown blockquote {
+      font-size: 0.96rem;
+      line-height: 1.72;
+      color: ${theme.colors.gray11};
+    }
+
+    > .aq-markdown img,
+    > .aq-markdown video,
+    > .aq-markdown iframe,
+    > .aq-markdown pre,
+    > .aq-markdown table {
+      max-width: 100%;
+    }
+  `
+      : ""}
 `
 
 const PreviewCard = styled.div`

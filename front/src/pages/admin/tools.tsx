@@ -242,16 +242,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     monitoringEmbedUrl.includes("/public-dashboards/")
   const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || defaultUptimeStatusPath
   const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
-  const monitoringEmbedIsCrossOrigin =
-    typeof window !== "undefined" &&
-    (() => {
-      try {
-        return new URL(monitoringEmbedUrl, window.location.href).origin !== window.location.origin
-      } catch {
-        return false
-      }
-    })()
-
   const systemHealthQuery = useQuery({
     queryKey: SYSTEM_HEALTH_QUERY_KEY,
     queryFn: async (): Promise<SystemHealthPayload> =>
@@ -918,6 +908,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 Prometheus 열기
               </NavLink>
             )}
+            {monitoringEmbedUrl && (
+              <NavLink href={monitoringEmbedUrl} target="_blank" rel="noreferrer noopener">
+                {monitoringEmbedLooksLikeGrafana ? "Grafana 열기" : "모니터링 열기"}
+              </NavLink>
+            )}
             {monitoringEmbedUrl ? (
               <PrimaryButton type="button" onClick={() => setDashboardOpen((prev) => !prev)}>
                 {dashboardOpen ? "대시보드 접기" : "대시보드 열기"}
@@ -927,11 +922,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 기본값은 `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH`(예: `/status/aquila`)이며, 필요하면
                 `NEXT_PUBLIC_UPTIME_KUMA_URL`(링크) 또는 `NEXT_PUBLIC_MONITORING_EMBED_URL`(임베드)로 재정의할 수 있습니다.
               </InlineNotice>
-            )}
-            {monitoringEmbedUrl && (
-              <NavLink href={monitoringEmbedUrl} target="_blank" rel="noreferrer noopener">
-                임베드 주소 열기
-              </NavLink>
             )}
           </MonitoringActions>
           <MonitoringResultCard>
@@ -947,17 +937,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   </MetaBox>
                 ))}
               </MetaGrid>
-            )}
-            {dashboardOpen && monitoringEmbedIsCrossOrigin && (
-              <InlineNotice data-tone="warning">
-                임베드 주소가 관리자 페이지와 다른 도메인이라 브라우저 보안 정책상 콘솔 경고가 표시될 수 있습니다.
-              </InlineNotice>
-            )}
-            {dashboardOpen && monitoringEmbedLooksLikeGrafana && (
-              <InlineNotice data-tone="warning">
-                Grafana 임베드는 로그인 페이지가 아니라 공개 읽기 대시보드 URL이어야 합니다. `/login` 리다이렉트나
-                `X-Frame-Options`가 남아 있으면 iframe이 비어 보입니다.
-              </InlineNotice>
             )}
             {dashboardOpen && monitoringEmbedUrl && (
               <MonitoringFrame

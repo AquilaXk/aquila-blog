@@ -39,6 +39,10 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             val member = memberFacade.findByEmail("admin@test.com")!!
             val newRole = "Backend Developer"
             val newBio = "블로그 운영자 소개 문구"
+            val newAboutRole = "Platform Engineer"
+            val newAboutBio = "About 페이지에서 노출할 소개 문구"
+            val newAboutDetails = "## 경력\n- 2024.03 플랫폼 운영/개발"
+            val newAboutDetailsPayload = "## 경력\\n- 2024.03 플랫폼 운영/개발"
             val newBlogTitle = "aquilaXk's Archive"
             val newIntroTitle = "aquilaXk's Backend Log"
             val newIntroDescription = "실전 백엔드 운영과 개발 메모를 남기는 공간입니다."
@@ -55,6 +59,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                         {
                             "role": "$newRole",
                             "bio": "$newBio",
+                            "aboutRole": "$newAboutRole",
+                            "aboutBio": "$newAboutBio",
+                            "aboutDetails": "$newAboutDetailsPayload",
                             "blogTitle": "$newBlogTitle",
                             "homeIntroTitle": "$newIntroTitle",
                             "homeIntroDescription": "$newIntroDescription",
@@ -73,6 +80,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
                     jsonPath("$.id") { value(member.id) }
                     jsonPath("$.profileRole") { value(newRole) }
                     jsonPath("$.profileBio") { value(newBio) }
+                    jsonPath("$.aboutRole") { value(newAboutRole) }
+                    jsonPath("$.aboutBio") { value(newAboutBio) }
+                    jsonPath("$.aboutDetails") { value(newAboutDetails) }
                     jsonPath("$.blogTitle") { value(newBlogTitle) }
                     jsonPath("$.homeIntroTitle") { value(newIntroTitle) }
                     jsonPath("$.homeIntroDescription") { value(newIntroDescription) }
@@ -85,6 +95,9 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             val updatedMember = memberFacade.findById(member.id).orElseThrow()
             assertThat(updatedMember.profileRole).isEqualTo(newRole)
             assertThat(updatedMember.profileBio).isEqualTo(newBio)
+            assertThat(updatedMember.aboutRole).isEqualTo(newAboutRole)
+            assertThat(updatedMember.aboutBio).isEqualTo(newAboutBio)
+            assertThat(updatedMember.aboutDetails).isEqualTo(newAboutDetails)
             assertThat(updatedMember.blogTitle).isEqualTo(newBlogTitle)
             assertThat(updatedMember.homeIntroTitle).isEqualTo(newIntroTitle)
             assertThat(updatedMember.homeIntroDescription).isEqualTo(newIntroDescription)
@@ -94,6 +107,47 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             assertThat(updatedMember.contactLinks).hasSize(1)
             assertThat(updatedMember.contactLinks[0].label).isEqualTo(newContactLabel)
             assertThat(updatedMember.contactLinks[0].href).isEqualTo(newContactHref)
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `관리자 상세 조회는 저장된 about 정보를 다시 비우지 않는다`() {
+            val member = memberFacade.findByEmail("admin@test.com")!!
+            val aboutRole = "Tech Lead"
+            val aboutBio = "운영과 구조 설명을 담는 소개"
+            val aboutDetails = "## 수상이력\n- 2025.03 플랫폼 안정화"
+            val aboutDetailsPayload = "## 수상이력\\n- 2025.03 플랫폼 안정화"
+
+            mvc
+                .patch("/member/api/v1/adm/members/${member.id}/profileCard") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                            "role": "Backend Developer",
+                            "bio": "bio",
+                            "aboutRole": "$aboutRole",
+                            "aboutBio": "$aboutBio",
+                            "aboutDetails": "$aboutDetailsPayload",
+                            "blogTitle": "blog",
+                            "homeIntroTitle": "title",
+                            "homeIntroDescription": "description",
+                            "serviceLinks": [],
+                            "contactLinks": []
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                }
+
+            mvc
+                .get("/member/api/v1/adm/members/${member.id}")
+                .andExpect {
+                    status { isOk() }
+                    jsonPath("$.aboutRole") { value(aboutRole) }
+                    jsonPath("$.aboutBio") { value(aboutBio) }
+                    jsonPath("$.aboutDetails") { value(aboutDetails) }
+                }
         }
 
         @Test

@@ -236,6 +236,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     process.env.NEXT_PUBLIC_MONITORING_EMBED_URL?.trim() ||
     process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() ||
     defaultUptimeStatusPath
+  const monitoringEmbedLooksLikeGrafana =
+    monitoringEmbedUrl.includes("grafana") ||
+    monitoringEmbedUrl.includes("/d/") ||
+    monitoringEmbedUrl.includes("/public-dashboards/")
   const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || defaultUptimeStatusPath
   const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
   const monitoringEmbedIsCrossOrigin =
@@ -924,6 +928,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 `NEXT_PUBLIC_UPTIME_KUMA_URL`(링크) 또는 `NEXT_PUBLIC_MONITORING_EMBED_URL`(임베드)로 재정의할 수 있습니다.
               </InlineNotice>
             )}
+            {monitoringEmbedUrl && (
+              <NavLink href={monitoringEmbedUrl} target="_blank" rel="noreferrer noopener">
+                임베드 주소 열기
+              </NavLink>
+            )}
           </MonitoringActions>
           <MonitoringResultCard>
             <InlineNotice data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
@@ -942,6 +951,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             {dashboardOpen && monitoringEmbedIsCrossOrigin && (
               <InlineNotice data-tone="warning">
                 임베드 주소가 관리자 페이지와 다른 도메인이라 브라우저 보안 정책상 콘솔 경고가 표시될 수 있습니다.
+              </InlineNotice>
+            )}
+            {dashboardOpen && monitoringEmbedLooksLikeGrafana && (
+              <InlineNotice data-tone="warning">
+                Grafana 임베드는 로그인 페이지가 아니라 공개 읽기 대시보드 URL이어야 합니다. `/login` 리다이렉트나
+                `X-Frame-Options`가 남아 있으면 iframe이 비어 보입니다.
               </InlineNotice>
             )}
             {dashboardOpen && monitoringEmbedUrl && (

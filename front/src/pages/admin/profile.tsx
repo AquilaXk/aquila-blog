@@ -719,6 +719,7 @@ const AdminProfilePage: NextPage<AdminPageProps> = ({ initialMember }) => {
         }),
       })
       syncProfileState(updated)
+      await refreshAdminProfile(sessionMember.id, updated)
       setProfileNotice({ tone: "success", text: "프로필 카드, 헤더 브랜드명, 메인 소개 카드 내용이 저장되었습니다." })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

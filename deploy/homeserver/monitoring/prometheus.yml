@@ -15,10 +15,8 @@ scrape_configs:
     scrape_interval: 15s
     static_configs:
       - targets:
-          - back_blue:8080
-          - back_green:8080
-          - back_read:8080
-          - back_admin:8080
-          - back_worker:8080
+          - back-blue:8080
+          - back-read:8080
+          - back-admin:8080
         labels:
           service: aquila-back

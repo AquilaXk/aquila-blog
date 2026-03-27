@@ -375,7 +375,7 @@ allocate_runtime_split_memory_limits() {
   local budget_mb="$1"
   local blue_min=384
   local read_min=512
-  local admin_min=256
+  local admin_min=512
   local worker_min=512
   local blue
   local read
@@ -385,7 +385,7 @@ allocate_runtime_split_memory_limits() {
 
   blue="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${blue_min}")"
   read="$(scaled_limit_mb 640 "${budget_mb}" 2816 "${read_min}")"
-  admin="$(scaled_limit_mb 384 "${budget_mb}" 2816 "${admin_min}")"
+  admin="$(scaled_limit_mb 512 "${budget_mb}" 2816 "${admin_min}")"
   worker="$(scaled_limit_mb 768 "${budget_mb}" 2816 "${worker_min}")"
 
   total=$(( (blue * 2) + read + admin + worker ))
@@ -423,7 +423,7 @@ allocate_runtime_split_memory_limits() {
   AUTO_TUNED_BACK_WORKER_MEM_LIMIT_MB="${worker}"
   AUTO_TUNED_BACK_MEM_RESERVATION_MB="$(reservation_half_mb "${blue}" 192)"
   AUTO_TUNED_BACK_READ_MEM_RESERVATION_MB="$(reservation_half_mb "${read}" 256)"
-  AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB="$(reservation_half_mb "${admin}" 128)"
+  AUTO_TUNED_BACK_ADMIN_MEM_RESERVATION_MB="$(reservation_half_mb "${admin}" 256)"
   AUTO_TUNED_BACK_WORKER_MEM_RESERVATION_MB="$(reservation_ratio_mb "${worker}" 3 4 384)"
 
   return 0
@@ -477,7 +477,7 @@ apply_auto_memory_tuner() {
   local mode_min_budget_mb=1280
   if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
     mode="runtime-split"
-    mode_min_budget_mb=2048
+    mode_min_budget_mb=2304
   fi
 
   if (( AUTO_MEMORY_TUNER_MAX_BUDGET_MB < mode_min_budget_mb )); then

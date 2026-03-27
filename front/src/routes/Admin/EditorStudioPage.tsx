@@ -1613,7 +1613,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
+  const [isWideEditorViewport, setIsWideEditorViewport] = useState(false)
   const [composeViewMode, setComposeViewMode] = useState<ComposeViewMode>("editor")
+  const [editorStudioViewMode, setEditorStudioViewMode] = useState<ComposeViewMode>("editor")
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement>(null)
@@ -1781,6 +1783,25 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const media = window.matchMedia("(min-width: 1024px)")
+    const sync = () => {
+      setIsWideEditorViewport(media.matches)
+    }
+
+    sync()
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync)
+      return () => media.removeEventListener("change", sync)
+    }
+
+    media.addListener(sync)
+    return () => media.removeListener(sync)
+  }, [])
+
+  useEffect(() => {
     setComposeViewMode((prev) => {
       if (isCompactMobileLayout) {
         return prev === "preview" ? "preview" : "editor"
@@ -1788,6 +1809,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return prev === "editor" ? "split" : prev
     })
   }, [isCompactMobileLayout])
+
+  useEffect(() => {
+    if (isWideEditorViewport) return
+    setEditorStudioViewMode((prev) => (prev === "split" ? "editor" : prev))
+  }, [isWideEditorViewport])
 
   const syncPreviewScrollFromEditor = useCallback(() => {
     const preview = previewScrollRef.current
@@ -4211,6 +4237,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     { value: "split", label: "작성+미리보기", icon: "split" },
     { value: "preview", label: "미리보기", icon: "eye" },
   ]
+  const editorStudioViewModeOptions = composeViewModeOptions.filter(
+    (option) => isWideEditorViewport || option.value !== "split"
+  )
   const shouldShowGlobalNotice =
     globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
   const shouldShowPublishNotice = publishNotice.tone !== "idle"
@@ -4359,6 +4388,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const livePreviewViewportConfig = LIVE_PREVIEW_VIEWPORTS[previewViewport]
   const editorPrimaryActionType: PublishActionType =
     editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify"
+  const editorPrimaryActionLabel =
+    editorPrimaryActionType === "modify"
+      ? "수정 반영"
+      : editorPrimaryActionType === "temp"
+        ? "임시글 발행"
+        : "발행"
   const shouldShowEditorLoadingState =
     isDedicatedEditorRoute &&
     router.pathname === EDITOR_NEW_ROUTE_PATH &&
@@ -4400,19 +4435,41 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           ← 나가기
         </Button>
         <EditorStudioTopBarActions>
+          <EditorStudioViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
+            {editorStudioViewModeOptions.map((option) => (
+              <ComposeViewSwitchButton
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={editorStudioViewMode === option.value}
+                data-active={editorStudioViewMode === option.value}
+                onClick={() => setEditorStudioViewMode(option.value)}
+              >
+                {option.icon === "split" ? (
+                  <SplitViewGlyph aria-hidden="true">
+                    <span />
+                    <span />
+                  </SplitViewGlyph>
+                ) : (
+                  <AppIcon name={option.icon} aria-hidden="true" />
+                )}
+                <span>{option.label}</span>
+              </ComposeViewSwitchButton>
+            ))}
+          </EditorStudioViewSwitch>
           {composeStatusText ? <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState> : null}
           <PrimaryButton
             type="button"
             disabled={publishActionButtonDisabled}
             onClick={() => openPublishModal(editorPrimaryActionType)}
           >
-            발행
+            {editorPrimaryActionLabel}
           </PrimaryButton>
         </EditorStudioTopBarActions>
       </EditorStudioTopBar>
 
-      <EditorStudioFrame>
-        <EditorStudioWritingColumn>
+      <EditorStudioFrame $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
+        <EditorStudioWritingColumn $viewMode={editorStudioViewMode}>
           <EditorStudioMetaSection>
             <TitleInput
               id="post-title"
@@ -4548,7 +4605,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
         </EditorStudioWritingColumn>
 
-        <EditorStudioPreviewColumn>
+        <EditorStudioPreviewColumn $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
           <EditorStudioPreviewHeader>
             <div>
               <strong>실시간 미리보기</strong>
@@ -10216,12 +10273,24 @@ const EditorStudioTopBar = styled.div`
   justify-content: space-between;
   gap: 1rem;
   min-height: 48px;
+
+  @media (max-width: 1120px) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 `
 
 const EditorStudioTopBarActions = styled.div`
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+
+  @media (max-width: 1120px) {
+    width: 100%;
+    justify-content: space-between;
+  }
 `
 
 const EditorStudioSaveState = styled.span`
@@ -10242,25 +10311,42 @@ const EditorStudioSaveState = styled.span`
   }
 `
 
-const EditorStudioFrame = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1.4rem;
-  align-items: start;
+const EditorStudioViewSwitch = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.26rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
 
-  @media (min-width: 1024px) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  @media (max-width: 1120px) {
+    order: 2;
   }
 `
 
-const EditorStudioWritingColumn = styled.section`
-  min-width: 0;
+const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: ${({ $viewMode }) => ($viewMode === "split" ? "2rem" : "1.4rem")};
+  align-items: start;
+
+  @media (min-width: 1024px) {
+    grid-template-columns: ${({ $viewMode, $splitAvailable }) =>
+      $splitAvailable && $viewMode === "split"
+        ? "minmax(0, 1fr) minmax(22rem, 0.82fr)"
+        : "minmax(0, 1fr)"};
+  }
+`
+
+const EditorStudioWritingColumn = styled.section<{ $viewMode: ComposeViewMode }>`
+  ${({ $viewMode }) => ($viewMode === "preview" ? "display: none;" : "display: grid;")}
+  min-width: 0;
   gap: 1rem;
 `
 
 const EditorStudioMetaSection = styled.section`
-  width: min(100%, 50rem);
+  width: min(100%, var(--article-readable-width, 48rem));
   display: grid;
   gap: 0.9rem;
 `
@@ -10276,7 +10362,7 @@ const EditorTagRow = styled.div`
 `
 
 const EditorStudioCanvas = styled.section`
-  width: min(100%, 50rem);
+  width: min(100%, var(--article-readable-width, 48rem));
   min-height: clamp(28rem, 70vh, 56rem);
   display: grid;
   gap: 0.72rem;
@@ -10313,19 +10399,17 @@ const RawMarkdownTextarea = styled.textarea`
   }
 `
 
-const EditorStudioPreviewColumn = styled.aside`
-  position: sticky;
+const EditorStudioPreviewColumn = styled.aside<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
+  ${({ $viewMode }) => ($viewMode === "editor" ? "display: none;" : "display: grid;")}
+  position: ${({ $viewMode, $splitAvailable }) =>
+    $splitAvailable && $viewMode === "split" ? "sticky" : "static"};
   top: calc(var(--app-header-height, 64px) + 1rem);
   min-width: 0;
-  display: grid;
   gap: 0.8rem;
 
   @media (max-width: 1023px) {
-    display: none;
-  }
-
-  @media (min-width: 1024px) {
-    position: sticky;
+    display: ${({ $viewMode }) => ($viewMode === "preview" ? "grid" : "none")};
+    position: static;
   }
 `
 
@@ -10480,7 +10564,7 @@ const EditorStudioPreviewArticleBody = styled.div`
 `
 
 const EditorStudioResultPanel = styled.section`
-  width: min(100%, 50rem);
+  width: min(100%, var(--article-readable-width, 48rem));
   border-top: 1px solid ${({ theme }) => theme.colors.gray5};
   padding-top: 0.9rem;
 
@@ -10571,7 +10655,7 @@ const PaneChip = styled.span`
 `
 
 const ContentInput = styled.textarea`
-  width: min(100%, var(--compose-pane-readable-width));
+  width: min(100%, calc(var(--compose-pane-readable-width) + 2rem));
   height: var(--pane-body-height);
   min-height: var(--pane-body-height);
   max-height: var(--pane-body-height);

@@ -46,7 +46,6 @@ const DeferredCommentBox: React.FC<Props> = ({ data, initialComments = null }) =
             <h3>댓글</h3>
             <span className="countBadge">댓글 {data.commentsCount ?? 0}</span>
           </div>
-          <p>스크롤하면 댓글 인터랙션을 불러옵니다.</p>
         </PlaceholderCard>
       )}
     </div>
@@ -88,12 +87,5 @@ const PlaceholderCard = styled.section`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.8rem;
     font-weight: 700;
-  }
-
-  p {
-    margin: 0.85rem 0 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.7;
-    font-size: 0.92rem;
   }
 `

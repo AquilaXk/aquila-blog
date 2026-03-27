@@ -118,6 +118,28 @@ const CODE_LANGUAGE_OPTIONS = [
   "markdown",
   "mermaid",
 ] as const
+
+const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
+  if (!node) return false
+
+  if (node.type === "text") {
+    return Boolean((node as { text?: string }).text?.trim().length)
+  }
+
+  if (
+    node.type === "resizableImage" ||
+    node.type === "calloutBlock" ||
+    node.type === "toggleBlock" ||
+    node.type === "mermaidBlock" ||
+    node.type === "rawMarkdownBlock" ||
+    node.type === "table" ||
+    node.type === "horizontalRule"
+  ) {
+    return true
+  }
+
+  return Array.isArray(node.content) && node.content.some((child) => blockHasVisibleContent(child as BlockEditorDoc))
+}
 const DEFAULT_TABLE_CONFIG = { rows: 3, cols: 2, withHeaderRow: true } as const
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
@@ -367,6 +389,16 @@ const BlockEditorShell = ({
     [getTopLevelBlockElements]
   )
 
+  const isTopLevelBlockHandleEligible = useCallback((blockIndex: number) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
+    const blocks = ((currentEditor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
+    const block = blocks[blockIndex]
+    if (!block) return false
+    if (blocks.length > 1) return true
+    return blockHasVisibleContent(block)
+  }, [])
+
   const findTopLevelBlockIndexFromTarget = useCallback(
     (target: EventTarget | null) => {
       const root = getContentRoot()
@@ -444,7 +476,7 @@ const BlockEditorShell = ({
         linkOnPaste: true,
       }),
       Placeholder.configure({
-        placeholder: "당신의 이야기를 블록 단위로 정리해보세요...",
+        placeholder: "내용을 입력하세요",
       }),
       Table.configure({
         resizable: true,
@@ -1204,8 +1236,9 @@ const BlockEditorShell = ({
     if (!editor) return
     const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex ?? selectedBlockIndex
     const blockElement = getTopLevelBlockElementByIndex(blockIndex)
+    const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
     const shouldShow = Boolean(
-      blockElement && (isCoarsePointer || hoveredBlockIndex !== null || editor.isFocused)
+      blockElement && canShowHandle && (isCoarsePointer || hoveredBlockIndex !== null || editor.isFocused)
     )
 
     if (!shouldShow || !blockElement) {
@@ -1222,7 +1255,15 @@ const BlockEditorShell = ({
       bottom: Math.round(rect.bottom + 12),
       width: Math.round(rect.width),
     })
-  }, [editor, getTopLevelBlockElementByIndex, hoveredBlockIndex, isCoarsePointer, selectedBlockIndex, selectionTick])
+  }, [
+    editor,
+    getTopLevelBlockElementByIndex,
+    hoveredBlockIndex,
+    isCoarsePointer,
+    isTopLevelBlockHandleEligible,
+    selectedBlockIndex,
+    selectionTick,
+  ])
 
   const getInsertionIndexFromClientY = useCallback(
     (clientY: number) => {
@@ -1359,10 +1400,7 @@ const BlockEditorShell = ({
   return (
     <Shell className={className}>
       <Toolbar>
-        <ToolbarHint>
-          <strong>블록 작성기</strong>
-          <span>자주 쓰는 블록만 바로 넣습니다.</span>
-        </ToolbarHint>
+        <ToolbarSectionTitle>블록 작성기</ToolbarSectionTitle>
         <ToolbarActions>
           {toolbarActions.map((action) => (
             <ToolbarButton
@@ -1725,39 +1763,30 @@ export default BlockEditorShell
 const Shell = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem;
 `
 
 const Toolbar = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1rem 1.1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1.1rem;
-  background: rgba(18, 21, 26, 0.94);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.65rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
 `
 
-const ToolbarHint = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-
-  strong {
-    font-size: 0.95rem;
-    color: var(--color-gray12);
-  }
-
-  span {
-    font-size: 0.84rem;
-    color: var(--color-gray10);
-  }
+const ToolbarSectionTitle = styled.strong`
+  margin-right: 0.15rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--color-gray10);
 `
 
 const ToolbarActions = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  gap: 0.45rem;
 `
 
 const ToolbarMoreDisclosure = styled.details`
@@ -1770,13 +1799,13 @@ const ToolbarMoreDisclosure = styled.details`
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    min-height: 2.1rem;
-    padding: 0 0.9rem;
+    min-height: 1.95rem;
+    padding: 0 0.78rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(13, 15, 18, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(18, 21, 26, 0.58);
     color: var(--color-gray11);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 700;
     cursor: pointer;
   }
@@ -1793,30 +1822,30 @@ const ToolbarMoreDisclosure = styled.details`
 `
 
 const ToolbarButton = styled.button`
-  min-height: 2.1rem;
+  min-height: 1.95rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(13, 15, 18, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(18, 21, 26, 0.58);
   color: var(--color-gray11);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  padding: 0 0.9rem;
+  padding: 0 0.82rem;
 
   &[data-active="true"] {
-    border-color: rgba(59, 130, 246, 0.52);
-    background: rgba(37, 99, 235, 0.16);
-    color: #93c5fd;
+    border-color: rgba(59, 130, 246, 0.32);
+    background: rgba(37, 99, 235, 0.12);
+    color: #bfdbfe;
   }
 
   &[data-variant="subtle-danger"] {
-    border-color: rgba(248, 113, 113, 0.2);
-    color: #fca5a5;
+    border-color: rgba(248, 113, 113, 0.14);
+    color: #fda4af;
   }
 
   &[data-variant="danger"] {
-    border-color: rgba(248, 113, 113, 0.36);
-    background: rgba(127, 29, 29, 0.22);
-    color: #fecaca;
+    border-color: rgba(248, 113, 113, 0.22);
+    background: rgba(127, 29, 29, 0.12);
+    color: #fecdd3;
   }
 
   &:disabled {
@@ -1839,14 +1868,14 @@ const InlineControlLabel = styled.label`
 `
 
 const InlineControlInput = styled.input`
-  min-height: 2.2rem;
+  min-height: 2rem;
   min-width: min(16rem, 100%);
-  border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(13, 15, 18, 0.94);
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(18, 21, 26, 0.58);
   color: var(--color-gray12);
   font-size: 0.84rem;
-  padding: 0 0.85rem;
+  padding: 0 0.8rem;
 `
 
 const HiddenFileInput = styled.input`
@@ -1856,10 +1885,10 @@ const HiddenFileInput = styled.input`
 const SlashMenu = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1rem;
-  border: 1px solid rgba(59, 130, 246, 0.22);
-  border-radius: 1rem;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.95rem;
   background: rgba(18, 21, 26, 0.97);
 `
 
@@ -1885,42 +1914,42 @@ const SlashMenuHeader = styled.div`
 
 const SlashMenuGrid = styled.div`
   display: grid;
-  gap: 0.6rem;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
 `
 
 const SlashActionButton = styled.button`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.3rem;
-  min-height: 4rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(13, 15, 18, 0.94);
+  gap: 0.18rem;
+  min-height: 3.3rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(18, 21, 26, 0.7);
   color: var(--color-gray12);
-  padding: 0.9rem 1rem;
+  padding: 0.75rem 0.85rem;
   text-align: left;
 
   strong {
-    font-size: 0.9rem;
+    font-size: 0.84rem;
   }
 
   span {
-    font-size: 0.8rem;
+    font-size: 0.74rem;
     color: var(--color-gray10);
   }
 `
 
 const EditorViewport = styled.div`
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem;
   background: rgba(13, 15, 18, 0.96);
   overflow: hidden;
 
   .aq-block-editor__content {
     min-height: 32rem;
-    padding: 2rem;
+    padding: 1.65rem 1.5rem 2rem;
     color: var(--color-gray12);
     font-size: 1rem;
     line-height: 1.75;
@@ -2004,12 +2033,12 @@ const EditorViewport = styled.div`
 const BubbleToolbar = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  padding: 0.45rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.9rem;
   background: rgba(13, 15, 18, 0.98);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
 
   &[data-layout="table"] {
     max-width: min(92vw, 40rem);
@@ -2032,19 +2061,19 @@ const BlockHandleRail = styled.div`
   z-index: 55;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.3rem;
 `
 
 const BlockHandleButton = styled.button`
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(13, 15, 18, 0.96);
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 21, 26, 0.82);
   color: var(--color-gray11);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: 800;
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.16);
 `
 
 const MobileBlockActionBar = styled.div`
@@ -2054,10 +2083,10 @@ const MobileBlockActionBar = styled.div`
   flex-wrap: wrap;
   gap: 0.45rem;
   padding: 0.5rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(13, 15, 18, 0.98);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
   transform: translateX(-50%);
 `
 
@@ -2067,12 +2096,12 @@ const FloatingBlockMenu = styled.div`
   width: min(30rem, calc(100vw - 2rem));
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.85rem;
-  border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(13, 15, 18, 0.98);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.2);
 `
 
 const FloatingBlockMenuHeader = styled.strong`
@@ -2082,7 +2111,7 @@ const FloatingBlockMenuHeader = styled.strong`
 
 const FloatingBlockMenuGrid = styled.div`
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
 `
 
@@ -2090,46 +2119,46 @@ const FloatingBlockMenuButton = styled.button`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.2rem;
-  min-height: 3.35rem;
-  border-radius: 0.95rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(18, 21, 26, 0.94);
+  gap: 0.15rem;
+  min-height: 3rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 21, 26, 0.72);
   color: var(--color-gray12);
-  padding: 0.75rem 0.85rem;
+  padding: 0.68rem 0.8rem;
   text-align: left;
 
   strong {
-    font-size: 0.86rem;
+    font-size: 0.82rem;
   }
 
   span {
     color: var(--color-gray10);
-    font-size: 0.77rem;
+    font-size: 0.72rem;
   }
 `
 
 const FloatingBlockActionList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
 `
 
 const FloatingBlockActionButton = styled.button`
-  min-height: 2.5rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(18, 21, 26, 0.94);
+  min-height: 2.25rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(18, 21, 26, 0.72);
   color: var(--color-gray12);
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
   text-align: left;
-  padding: 0 0.95rem;
+  padding: 0 0.8rem;
 
   &[data-variant="danger"] {
-    border-color: rgba(248, 113, 113, 0.28);
+    border-color: rgba(248, 113, 113, 0.16);
     color: #fecaca;
-    background: rgba(127, 29, 29, 0.2);
+    background: rgba(127, 29, 29, 0.1);
   }
 `
 
@@ -2143,9 +2172,9 @@ const BlockInsertionIndicator = styled.div`
 `
 
 const AuxDisclosure = styled.details`
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: rgba(18, 21, 26, 0.92);
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
 
   > summary {
     display: flex;
@@ -2154,7 +2183,7 @@ const AuxDisclosure = styled.details`
     gap: 0.75rem;
     cursor: pointer;
     list-style: none;
-    padding: 0.95rem 1rem;
+    padding: 0.8rem 0;
 
     &::-webkit-details-marker {
       display: none;
@@ -2162,17 +2191,17 @@ const AuxDisclosure = styled.details`
   }
 
   strong {
-    font-size: 0.9rem;
-    color: var(--color-gray12);
+    font-size: 0.84rem;
+    color: var(--color-gray11);
   }
 
   span {
-    font-size: 0.82rem;
+    font-size: 0.76rem;
     color: var(--color-gray10);
   }
 
   .body {
-    padding: 0 1rem 1rem;
+    padding: 0 0 0.75rem;
   }
 `
 

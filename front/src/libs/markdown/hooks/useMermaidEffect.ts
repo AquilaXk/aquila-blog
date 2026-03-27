@@ -45,7 +45,7 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
     themeVariables: isDark
       ? {
           darkMode: true,
-          background: "#0d1117",
+          background: "transparent",
           primaryColor: "#161b22",
           primaryTextColor: "#f0f6fc",
           primaryBorderColor: "#30363d",
@@ -59,10 +59,10 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
           textColor: "#f0f6fc",
           nodeBkg: "#161b22",
           nodeBorder: "#30363d",
-          mainBkg: "#161b22",
-          clusterBkg: "#0d1117",
+          mainBkg: "transparent",
+          clusterBkg: "transparent",
           clusterBorder: "#30363d",
-          edgeLabelBackground: "#161b22",
+          edgeLabelBackground: "transparent",
           defaultLinkColor: "#8b949e",
           actorBkg: "#161b22",
           actorBorder: "#30363d",
@@ -71,7 +71,7 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
         }
       : {
           darkMode: false,
-          background: "#ffffff",
+          background: "transparent",
           primaryColor: "#f6f8fa",
           primaryTextColor: "#24292f",
           primaryBorderColor: "#d0d7de",
@@ -85,10 +85,10 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
           textColor: "#24292f",
           nodeBkg: "#f6f8fa",
           nodeBorder: "#d0d7de",
-          mainBkg: "#f6f8fa",
-          clusterBkg: "#f6f8fa",
+          mainBkg: "transparent",
+          clusterBkg: "transparent",
           clusterBorder: "#d0d7de",
-          edgeLabelBackground: "#ffffff",
+          edgeLabelBackground: "transparent",
           defaultLinkColor: "#57606a",
           actorBkg: "#f6f8fa",
           actorBorder: "#d0d7de",
@@ -178,7 +178,7 @@ const useMermaidEffect = (
       if (!(node instanceof Element)) return false
       return Boolean(
         node.closest(
-          "pre.aq-mermaid, pre[data-aq-mermaid='true'], pre[data-language='mermaid'], pre > code, figure[data-rehype-pretty-code-figure]"
+          "pre.aq-mermaid, pre[data-aq-mermaid='true'], pre[data-language='mermaid'], pre > code.language-mermaid, pre > code[data-language='mermaid']"
         )
       )
     }
@@ -364,8 +364,6 @@ const useMermaidEffect = (
             "pre.aq-mermaid > code.language-mermaid",
             "pre > code[data-language='mermaid']",
             "pre[data-language='mermaid'] > code",
-            // language 힌트가 유실된 일반 pre/code 경로도 머메이드 소스 판별 대상으로 포함한다.
-            "pre > code",
           ].join(", ")
         )
       )
@@ -376,10 +374,6 @@ const useMermaidEffect = (
             "pre.aq-mermaid",
             "pre[data-aq-mermaid='true']",
             "pre[data-language='mermaid']",
-            // rehype-pretty-code 경로에서 language 힌트가 유실된 경우를 대비한 fallback 대상
-            "figure[data-rehype-pretty-code-figure] pre",
-            // SSR/HTML 경로에서 class/data-language 힌트 없이 내려오는 pre도 탐지한다.
-            "pre",
           ].join(", ")
         )
       )
@@ -519,12 +513,12 @@ const useMermaidEffect = (
             Number.isFinite(viewBoxHeight) && viewBoxHeight > 0
               ? viewBoxHeight
               : Math.max(1, fallbackHeight)
-          const needsExpandAction = intrinsicWidth > containerWidth + MERMAID_EXPAND_THRESHOLD_PX
+          const exceedsArticleWidth = intrinsicWidth > containerWidth + MERMAID_EXPAND_THRESHOLD_PX
           let maxDisplayWidth = containerWidth
           let wideBleedLeft = 0
           let wideBleedRight = 0
 
-          if (isDesktopViewport && needsExpandAction) {
+          if (isDesktopViewport && exceedsArticleWidth) {
             const detailLayout = block.closest<HTMLElement>(".detailLayout")
             const leftRail = detailLayout?.querySelector<HTMLElement>(".leftRail")
             const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
@@ -586,6 +580,11 @@ const useMermaidEffect = (
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
           const stageWidth = usesDesktopWideLane ? maxDisplayWidth : containerWidth
+          const isMobileHeightClamped =
+            isMobileViewport && intrinsicHeight > maxReadableHeight + MERMAID_EXPAND_THRESHOLD_PX
+          const needsExpandAction =
+            intrinsicWidth > maxDisplayWidth + MERMAID_EXPAND_THRESHOLD_PX ||
+            isMobileHeightClamped
           stage.style.width = `${stageWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
           stage.style.display = "flex"
@@ -610,6 +609,8 @@ const useMermaidEffect = (
           svgElement.style.margin = "0 auto"
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
+
+          block.querySelectorAll(".aq-mermaid-expand-btn").forEach((button) => button.remove())
 
           if (needsExpandAction) {
             const expandButton = document.createElement("button")

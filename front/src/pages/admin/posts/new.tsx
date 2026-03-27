@@ -3703,7 +3703,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const currentPostLabel =
     hasSelectedManagedPost
       ? `${postTitle.trim() || "제목 없음"} · #${postId}`
-      : postTitle.trim() || "새 글 초안"
+      : postTitle.trim()
   const selectedPostLabel =
     hasSelectedManagedPost ? `선택된 글 ID #${postId}` : "선택된 글이 없습니다."
   const hasListFiltersApplied =
@@ -3717,9 +3717,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
-  const localDraftStatusText = localDraftSavedAt
-    ? `브라우저 임시저장: ${localDraftSavedAt.slice(5, 16).replace("T", " ")}`
-    : "브라우저 임시저장 없음"
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"
@@ -4014,22 +4011,20 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       <HeroCard data-compact-manage={isCompactManageSurface}>
         <HeroIntro data-compact-manage={isCompactManageSurface}>
           <h1>글 작업실</h1>
-          <p>
-            {studioSurface === "manage"
-              ? isCompactManageSurface
-                ? "고른 글만 이어서 수정합니다."
-                : "조회·선택·편집만 남겼습니다."
-              : "제목, 태그, 본문부터 바로 씁니다."}
-          </p>
+          {studioSurface === "manage" ? (
+            <p>{isCompactManageSurface ? "고른 글만 이어서 수정합니다." : "조회·선택·편집만 남겼습니다."}</p>
+          ) : null}
           <StudioStatusStrip aria-label="글 작업실 상태 요약">
             <StudioStatusItem>
               <span>현재 화면</span>
               <strong>{studioSurface === "compose" ? "글 작성" : "목록 관리"}</strong>
             </StudioStatusItem>
-            <StudioStatusItem>
-              <span>편집 대상</span>
-              <strong>{currentPostLabel}</strong>
-            </StudioStatusItem>
+            {currentPostLabel ? (
+              <StudioStatusItem>
+                <span>편집 대상</span>
+                <strong>{currentPostLabel}</strong>
+              </StudioStatusItem>
+            ) : null}
             <StudioStatusItem data-optional="true">
               <span>노출 상태</span>
               <strong>{currentVisibilityText}</strong>
@@ -4936,7 +4931,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionTop>
               <div>
                 <h2>글 작성</h2>
-                <SectionDescription>제목과 본문부터 씁니다.</SectionDescription>
               </div>
           </SectionTop>
         <EditorSection data-mobile-visible={!isCompactMobileLayout || studioSurface === "compose"}>
@@ -5043,7 +5037,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </WriterMetaStrip>
               </div>
             </WriterHeader>
-            <EditorContextChip>{`${editorModeLabel} · ${currentPostLabel}`}</EditorContextChip>
             <ComposePublishStatusStrip aria-label="현재 글 설정 요약">
               <SummaryPill>노출 {currentVisibilityText}</SummaryPill>
               <SummaryPill>
@@ -5126,7 +5119,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <PaneHeader>
                   <div>
                     <PaneTitle>블록 작성</PaneTitle>
-                    <PaneDescription>자주 쓰는 블록만 바로 넣습니다.</PaneDescription>
                   </div>
                   <PaneChip>{lineCount} lines</PaneChip>
                 </PaneHeader>
@@ -5290,7 +5282,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </ToolbarIconButton>
                   </ToolbarCluster>
                 </ToolbarQuickBar>
-                <ToolbarHint>핵심 서식만 바로 넣습니다.</ToolbarHint>
               </EditorToolbar>
               <ComposeViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
                 {composeViewModeOptions.map((option) => (
@@ -5320,13 +5311,12 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                   <PaneHeader>
                     <div>
                       <PaneTitle>작성</PaneTitle>
-                        <PaneDescription>현재 줄을 기준으로 미리보기도 같은 구간을 따라갑니다.</PaneDescription>
                     </div>
                     <PaneChip>{lineCount} lines</PaneChip>
                   </PaneHeader>
                   <ContentInput
                     ref={postContentRef}
-                    placeholder="당신의 이야기를 적어보세요..."
+                    placeholder="내용을 입력하세요"
                     value={postContent}
                     onChange={(e) => setPostContent(e.target.value)}
                     onScroll={schedulePreviewScrollSync}
@@ -5342,11 +5332,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     <PaneHeader>
                       <div>
                         <PaneTitle>미리보기</PaneTitle>
-                        <PaneDescription>
-                          {isPreviewSyncPending
-                            ? "입력 반영 중입니다."
-                            : "작성 중인 줄과 같은 본문 구간을 바로 확인합니다."}
-                        </PaneDescription>
                       </div>
                       <PaneChip>
                         {isPreviewSyncPending ? "preview updating" : `${imageCount} images`}
@@ -5377,10 +5362,8 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           )}
           <WriterFooterBar>
             <WriterFooterSummary>
-                <span>{currentPostLabel}</span>
                 <span>{tagSummaryText}</span>
                 <span>{contentLength}자 · {lineCount}줄</span>
-                <span>{localDraftStatusText}</span>
               </WriterFooterSummary>
             <WriterFooterControls>
               {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
@@ -7580,23 +7563,6 @@ const MetaToggleButton = styled.button`
   }
 `
 
-const EditorContextChip = styled.span`
-  display: inline-flex;
-  align-items: center;
-  border-radius: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  font-weight: 600;
-  margin-bottom: 0.65rem;
-
-  @media (max-width: 720px) {
-    display: none;
-  }
-`
-
 const ComposeReadableIntro = styled.div`
   width: min(100%, var(--article-readable-width, 48rem));
   max-width: 100%;
@@ -8075,12 +8041,6 @@ const ToolbarIconButton = styled.button`
     min-width: 2.38rem;
     min-height: 2.38rem;
   }
-`
-
-const ToolbarHint = styled.span`
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.76rem;
-  line-height: 1.45;
 `
 
 const CalloutDropdown = styled.div`
@@ -9175,13 +9135,6 @@ const PaneTitle = styled.h3`
   margin: 0;
   font-size: 1.04rem;
   color: ${({ theme }) => theme.colors.gray12};
-`
-
-const PaneDescription = styled.p`
-  margin: 0.18rem 0 0;
-  font-size: 0.78rem;
-  color: ${({ theme }) => theme.colors.gray11};
-  line-height: 1.45;
 `
 
 const PaneChip = styled.span`

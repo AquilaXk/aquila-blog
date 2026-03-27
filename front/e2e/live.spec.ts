@@ -12,7 +12,7 @@ const liveLoginTimeoutMs = Number.parseInt(process.env.E2E_LIVE_LOGIN_TIMEOUT_MS
 const liveRetryBaseDelayMs = Number.parseInt(process.env.E2E_LIVE_RETRY_BASE_DELAY_MS || "2000", 10)
 const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT_TIMEOUT_MS || "20000", 10)
 const adminLandingHeadingPattern = /관리자 (?:작업 공간|작업 진입점|운영 허브|허브)/
-const adminProfileHeadingPattern = /(?:운영 프로필|관리자 프로필 관리|프로필 관리)/
+const adminProfileHeadingPattern = /(?:프로필 워크스페이스|운영 프로필|관리자 프로필 관리|프로필 관리)/
 const adminToolsHeadingPattern = /운영 (?:센터|도구|진단)/
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
@@ -339,6 +339,10 @@ const loginThroughUi = async (
 
     if (outcome.kind === "error") {
       lastFailure = `error=${outcome.message}`
+      if (attempt < liveLoginAttempts) {
+        await sleep(liveRetryBaseDelayMs * attempt)
+        continue
+      }
       throw new Error(`UI login did not establish session. ${lastFailure}`)
     }
 
@@ -411,7 +415,7 @@ test.describe("live production e2e", () => {
 
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()
-    await expect(page.getByRole("button", { name: /^작업 큐 진단/ })).toBeVisible()
+    await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()
 
     await page.goto("/admin/posts/new")
     const workspaceHeading = page.getByRole("heading", { name: "글 작업 공간" })
@@ -428,7 +432,7 @@ test.describe("live production e2e", () => {
     await expect(blockEditor).toBeVisible()
     await blockEditor.click()
     await page.keyboard.type("라이브 E2E 편집 확인")
-    await expect(page.getByText("라이브 E2E 편집 확인")).toBeVisible()
+    await expect(blockEditor).toContainText("라이브 E2E 편집 확인")
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)

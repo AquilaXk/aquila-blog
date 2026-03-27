@@ -23,9 +23,12 @@ type Props = {
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 30_000
 const SSE_RECOVERY_PROBE_MS = 120_000
+const HIDDEN_GRACE_CLOSE_MS = 45_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
 const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
 const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
+
+type EventSourceLifecycleState = "idle" | "connecting" | "open"
 
 const isLoopbackHost = (hostname: string) =>
   hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]"
@@ -126,6 +129,12 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const lastFocusedRef = useRef<HTMLElement | null>(null)
   const hadOpenedRef = useRef(false)
   const eventSourceRef = useRef<EventSource | null>(null)
+  const eventSourceCleanupRef = useRef<(() => void) | null>(null)
+  const attachEventSourceRef = useRef<(() => void) | null>(null)
+  const clearReconnectTimerRef = useRef<() => void>(() => {})
+  const hiddenCloseTimerRef = useRef<number | null>(null)
+  const intentionalCloseRef = useRef(false)
+  const streamLifecycleRef = useRef<EventSourceLifecycleState>("idle")
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptRef = useRef(0)
   const initialLastEventId = useMemo(() => loadStoredLastEventId(), [])
@@ -144,6 +153,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState !== "hidden"
   )
+  const isDocumentVisibleRef = useRef(isDocumentVisible)
 
   const pushNotification = useCallback((incoming: TMemberNotification) => {
     setItems((prev) => {
@@ -157,6 +167,26 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     lastEventIdRef.current = sanitized
     persistLastEventId(sanitized)
   }, [])
+
+  const clearHiddenCloseTimer = useCallback(() => {
+    if (hiddenCloseTimerRef.current !== null) {
+      window.clearTimeout(hiddenCloseTimerRef.current)
+      hiddenCloseTimerRef.current = null
+    }
+  }, [])
+
+  const closeEventSource = useCallback(
+    (intentional: boolean) => {
+      intentionalCloseRef.current = intentional
+      clearHiddenCloseTimer()
+      eventSourceCleanupRef.current?.()
+      eventSourceCleanupRef.current = null
+      eventSourceRef.current?.close()
+      eventSourceRef.current = null
+      streamLifecycleRef.current = "idle"
+    },
+    [clearHiddenCloseTimer]
+  )
 
   const loadSnapshot = useCallback(async () => {
     if (!enabled) return
@@ -214,6 +244,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }, [])
 
   useEffect(() => {
+    isDocumentVisibleRef.current = isDocumentVisible
+  }, [isDocumentVisible])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
 
     const media = window.matchMedia("(max-width: 720px)")
@@ -244,6 +278,9 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
   useEffect(() => {
     if (!enabled) {
+      clearReconnectTimerRef.current()
+      attachEventSourceRef.current = null
+      closeEventSource(true)
       setItems([])
       setUnreadCount(0)
       setOpen(false)
@@ -273,7 +310,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setIsSnapshotFallback(false)
       setNotificationAccessState("pending")
     }
-  }, [enabled, preferPolling, setLastNotificationEventId])
+  }, [closeEventSource, enabled, preferPolling, setLastNotificationEventId])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -316,7 +353,12 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   }, [enabled, isReady, items, unreadCount])
 
   useEffect(() => {
-    if (!enabled || !isRealtimeActive || streamMode !== "sse" || !isDocumentVisible || notificationAccessState !== "ready") return
+    if (!enabled || !isRealtimeActive || streamMode !== "sse" || notificationAccessState !== "ready") {
+      clearReconnectTimerRef.current()
+      attachEventSourceRef.current = null
+      closeEventSource(true)
+      return
+    }
 
     let disposed = false
 
@@ -327,33 +369,37 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       }
     }
 
+    clearReconnectTimerRef.current = clearReconnectTimer
+
     const scheduleReconnect = () => {
-      if (disposed || reconnectTimerRef.current !== null) return
+      if (disposed || reconnectTimerRef.current !== null || intentionalCloseRef.current) return
 
       setIsReady(false)
       const nextAttempt = reconnectAttemptRef.current + 1
       reconnectAttemptRef.current = nextAttempt
 
       if (nextAttempt > STREAM_MAX_RECONNECT_ATTEMPTS) {
-        eventSourceRef.current?.close()
-        eventSourceRef.current = null
+        closeEventSource(false)
         setStreamMode("poll")
         return
       }
 
       const retryDelay = Math.min(1500 * nextAttempt, 10000)
-
       reconnectTimerRef.current = window.setTimeout(() => {
         reconnectTimerRef.current = null
-        attachEventSource()
+        attachEventSourceRef.current?.()
       }, retryDelay)
     }
 
     const attachEventSource = () => {
       if (disposed) return
+      if (!isDocumentVisibleRef.current) return
+      if (streamLifecycleRef.current === "connecting" || streamLifecycleRef.current === "open") return
+      if (eventSourceRef.current) return
 
       clearReconnectTimer()
-      eventSourceRef.current?.close()
+      intentionalCloseRef.current = false
+      streamLifecycleRef.current = "connecting"
       const streamUrl = new URL(buildNotificationStreamUrl(), window.location.origin)
       if (lastEventIdRef.current) {
         // We recreate EventSource manually (for backoff/fallback control), so we pass the last id explicitly.
@@ -363,7 +409,12 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       const eventSource = new EventSource(streamUrl.toString(), { withCredentials: true })
       eventSourceRef.current = eventSource
 
+      const markStreamOpen = () => {
+        streamLifecycleRef.current = "open"
+      }
+
       const handleNotification = (event: MessageEvent<string>) => {
+        markStreamOpen()
         try {
           const payload = JSON.parse(event.data) as TMemberNotificationStreamPayload
           setLastNotificationEventId(
@@ -379,6 +430,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       }
 
       const handleConnected = (_event: MessageEvent<string>) => {
+        markStreamOpen()
         const recovered = reconnectAttemptRef.current > 0
         reconnectAttemptRef.current = 0
         setIsReady(true)
@@ -390,32 +442,49 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       }
 
       const handleHeartbeat = (_event: MessageEvent<string>) => {
+        markStreamOpen()
         setIsReady(true)
       }
 
+      const detachListeners = () => {
+        eventSource.removeEventListener("connected", handleConnected)
+        eventSource.removeEventListener("notification", handleNotification)
+        eventSource.removeEventListener("heartbeat", handleHeartbeat)
+        eventSource.onerror = null
+      }
+
+      eventSourceCleanupRef.current = detachListeners
       eventSource.addEventListener("connected", handleConnected)
       eventSource.addEventListener("notification", handleNotification)
       eventSource.addEventListener("heartbeat", handleHeartbeat)
       eventSource.onerror = () => {
-        eventSource.removeEventListener("connected", handleConnected)
-        eventSource.removeEventListener("notification", handleNotification)
-        eventSource.removeEventListener("heartbeat", handleHeartbeat)
+        const isIntentionalClose = intentionalCloseRef.current || disposed
+        detachListeners()
         eventSource.close()
+        if (eventSourceRef.current === eventSource) {
+          eventSourceRef.current = null
+        }
+        streamLifecycleRef.current = "idle"
+        if (isIntentionalClose) return
         scheduleReconnect()
       }
     }
 
-    attachEventSource()
+    attachEventSourceRef.current = attachEventSource
+    if (isDocumentVisibleRef.current) {
+      attachEventSource()
+    }
 
     return () => {
       disposed = true
+      attachEventSourceRef.current = null
       clearReconnectTimer()
-      eventSourceRef.current?.close()
-      eventSourceRef.current = null
+      clearReconnectTimerRef.current = () => {}
+      closeEventSource(true)
     }
   }, [
+    closeEventSource,
     enabled,
-    isDocumentVisible,
     isRealtimeActive,
     loadSnapshot,
     notificationAccessState,
@@ -423,6 +492,52 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     setLastNotificationEventId,
     streamMode,
   ])
+
+  useEffect(() => {
+    if (!enabled || !isRealtimeActive || streamMode !== "sse" || notificationAccessState !== "ready") {
+      clearHiddenCloseTimer()
+      return
+    }
+
+    if (!isDocumentVisible) {
+      if (hiddenCloseTimerRef.current !== null) return
+      hiddenCloseTimerRef.current = window.setTimeout(() => {
+        hiddenCloseTimerRef.current = null
+        clearReconnectTimerRef.current()
+        closeEventSource(true)
+      }, HIDDEN_GRACE_CLOSE_MS)
+      return
+    }
+
+    clearHiddenCloseTimer()
+    reconnectAttemptRef.current = 0
+    attachEventSourceRef.current?.()
+  }, [
+    clearHiddenCloseTimer,
+    closeEventSource,
+    enabled,
+    isDocumentVisible,
+    isRealtimeActive,
+    notificationAccessState,
+    streamMode,
+  ])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handlePageExit = () => {
+      clearHiddenCloseTimer()
+      clearReconnectTimerRef.current()
+      closeEventSource(true)
+    }
+
+    window.addEventListener("pagehide", handlePageExit)
+    window.addEventListener("beforeunload", handlePageExit)
+    return () => {
+      window.removeEventListener("pagehide", handlePageExit)
+      window.removeEventListener("beforeunload", handlePageExit)
+    }
+  }, [clearHiddenCloseTimer, closeEventSource])
 
   useEffect(() => {
     if (!enabled || !isRealtimeActive || streamMode !== "poll" || !isDocumentVisible || notificationAccessState !== "ready") return

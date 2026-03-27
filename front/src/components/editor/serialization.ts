@@ -659,7 +659,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
   }
 }
 
-const escapePipeText = (text: string) => text.replace(/\|/g, "\\|")
+const escapePipeText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
 
 const serializeTextNode = (node: JSONContent) => {
   if (node.type !== "text") return ""

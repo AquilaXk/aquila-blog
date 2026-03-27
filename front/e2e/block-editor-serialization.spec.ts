@@ -120,4 +120,18 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("| 이름 | aquila |")
     expect(serialized).toContain("| 역할 | Backend Developer |")
   })
+
+  test("GFM 테이블 직렬화는 셀의 백슬래시와 파이프를 함께 escape 한다", () => {
+    const doc = parseMarkdownToEditorDoc(["| 항목 | 값 |", "| --- | --- |", "| 경로 | sample |"].join("\n"))
+
+    const tableRow = doc.content?.[0]?.content?.[1]
+    const cellNode = tableRow?.content?.[1]?.content?.[0]?.content?.[0]
+    if (cellNode && cellNode.type === "text") {
+      cellNode.text = "C:\\temp\\|draft"
+    }
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(serialized).toContain("| 경로 | C:\\\\temp\\\\\\|draft |")
+  })
 })

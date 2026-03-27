@@ -170,6 +170,8 @@ const extractPlainTextFromHtml = (html: string) => {
   return doc.body.textContent?.replace(/\r\n?/g, "\n").trim() || ""
 }
 
+const escapeMarkdownTableCellText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
+
 const convertHtmlNodeToMarkdown = (node: ChildNode): string => {
   if (node.nodeType === Node.TEXT_NODE) {
     return node.textContent || ""
@@ -195,7 +197,7 @@ const convertHtmlNodeToMarkdown = (node: ChildNode): string => {
     const rows = Array.from(element.querySelectorAll("tr"))
       .map((row) =>
         Array.from(row.querySelectorAll("th,td")).map((cell) =>
-          (cell.textContent || "").replace(/\s+/g, " ").trim().replace(/\|/g, "\\|")
+          escapeMarkdownTableCellText((cell.textContent || "").replace(/\s+/g, " ").trim())
         )
       )
       .filter((row) => row.length > 0)

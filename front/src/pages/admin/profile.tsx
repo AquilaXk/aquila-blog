@@ -14,7 +14,6 @@ import {
   getProfileCardIconOptions,
   isAllowedProfileLinkHref,
   normalizeProfileLinkHref,
-  ProfileCardIconOption,
   ProfileCardLinkItem,
   ProfileCardLinkSection,
 } from "src/constants/profileCardLinks"

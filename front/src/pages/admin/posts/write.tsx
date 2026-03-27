@@ -7,7 +7,6 @@ import {
   ChangeEvent,
   ClipboardEvent,
   CSSProperties,
-  PointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -1406,7 +1405,7 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [customCategoryCatalog, setCustomCategoryCatalog] = useState<string[]>([])
   const [knownTags, setKnownTags] = useState<string[]>([])
   const [tagUsageMap, setTagUsageMap] = useState<MetaUsageMap>({})
-  const [metaCatalogLoading, setMetaCatalogLoading] = useState(false)
+  const [, setMetaCatalogLoading] = useState(false)
   const [postVisibility, setPostVisibility] = useState<PostVisibility>("PUBLIC_LISTED")
   const [publishNotice, setPublishNotice] = useState<NoticeState>({
     tone: "idle",
@@ -3675,21 +3674,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const handleClickCreatePost = () => {
-    if (editorMode !== "create") {
-      switchToCreateMode({ keepContent: true })
-      setPublishStatus(
-        {
-          tone: "success",
-          text: "새 글 모드로 전환했습니다. 이어서 '글 작성'을 한 번 더 누르면 발행 설정이 열립니다.",
-        },
-        "page"
-      )
-      return
-    }
-    openPublishModal("create")
-  }
-
   const closePublishModal = () => {
     if (
       loadingKey === "writePost" ||
@@ -3743,7 +3727,6 @@ const AdminPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const contentLength = postContent.trim().length
   const lineCount = postContent ? postContent.split("\n").length : 0
   const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
-  const codeBlockCount = (postContent.match(/```[\s\S]*?```/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const composePageTitle = editorMode === "edit" ? "원고 편집" : "새 글"
   const composeSurfaceSubtitle = hasSelectedManagedPost
@@ -6116,76 +6099,6 @@ const StudioStatusItem = styled.div`
   }
 `
 
-const StudioSurfaceCard = styled.section`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.55rem;
-  padding: 0.58rem 0.68rem;
-  margin-bottom: 0.82rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray5};
-  border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: none;
-
-  @media (max-width: 420px) {
-    padding: 0.72rem 0.74rem;
-    border-radius: 12px;
-  }
-
-  &[data-compact-manage="true"] {
-    margin-bottom: 0.8rem;
-  }
-
-  @media (max-width: 720px) {
-    display: grid;
-    justify-content: stretch;
-    padding: 0.64rem 0.72rem;
-  }
-`
-
-const SurfaceTabList = styled.div`
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.36rem;
-  width: fit-content;
-  padding: 0.28rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.gray1};
-
-  @media (max-width: 560px) {
-    width: 100%;
-  }
-`
-
-const SurfaceTabButton = styled.button`
-  min-height: 36px;
-  border: 0;
-  border-radius: 999px;
-  padding: 0 0.95rem;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
-
-  &[data-active="true"] {
-    background: ${({ theme }) => theme.colors.blue9};
-    color: ${({ theme }) => theme.colors.gray1};
-    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
-  }
-`
-
 const WorkspaceGrid = styled.div`
   display: block;
 `
@@ -7193,17 +7106,6 @@ const WriterAccent = styled.div`
   background: ${({ theme }) => theme.colors.gray8};
 `
 
-const WriterMetaStrip = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.44fr);
-  gap: 1rem;
-  align-items: start;
-
-  @media (max-width: 1024px) {
-    grid-template-columns: 1fr;
-  }
-`
-
 const InlineTagComposer = styled.div`
   display: grid;
   gap: 0.55rem;
@@ -7773,28 +7675,6 @@ const PreviewThumbFrame = styled.div`
   }
 `
 
-const PreviewSummaryInput = styled.textarea`
-  width: 100%;
-  min-height: 5.8rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
-  padding: 0.56rem 0.62rem;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.84rem;
-  line-height: 1.55;
-  resize: vertical;
-
-  &:focus {
-    outline: 2px solid ${({ theme }) => theme.colors.blue7};
-    outline-offset: 1px;
-  }
-
-  &::placeholder {
-    color: ${({ theme }) => theme.colors.gray10};
-  }
-`
-
 const SummaryCounter = styled.span`
   justify-self: end;
   color: ${({ theme }) => theme.colors.gray10};
@@ -7896,31 +7776,6 @@ const SummaryPill = styled.span`
   font-weight: 600;
 `
 
-const MetaToggleButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  padding: 0 0.72rem;
-  font-size: 0.84rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease,
-    color 0.18s ease;
-
-  &[data-active="true"] {
-    border-color: ${({ theme }) => theme.colors.blue8};
-    background: ${({ theme }) => theme.colors.blue3};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-`
-
 const ComposeReadableIntro = styled.div`
   width: min(100%, var(--article-readable-width, 48rem));
   max-width: 100%;
@@ -8017,21 +7872,6 @@ const ComposeSidebarSummaryText = styled.p`
   white-space: pre-line;
 `
 
-const ComposePublishStatusStrip = styled(PublishSettingsSummary)`
-  margin: -0.1rem 0 0.75rem;
-
-  ${SummaryPill} {
-    min-height: 28px;
-    font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    background: ${({ theme }) => theme.colors.gray2};
-  }
-
-  @media (max-width: 720px) {
-    display: none;
-  }
-`
-
 const FieldHelp = styled.span`
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
@@ -8108,51 +7948,6 @@ const MetadataStatus = styled.div`
     color: ${({ theme }) => theme.colors.red11};
     border: 1px solid ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
-  }
-`
-
-const MetadataBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  border-radius: 999px;
-  padding: 0 0.58rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue11};
-  font-size: 0.72rem;
-  font-weight: 700;
-  white-space: nowrap;
-`
-
-const CompactMetaPanel = styled.section`
-  display: grid;
-  gap: 0.85rem;
-  margin: 0 0 1rem;
-  padding: 0.7rem 0;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-`
-
-const CompactMetaPanelTop = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-
-  h3 {
-    margin: 0;
-    font-size: 0.96rem;
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  p {
-    margin: 0.24rem 0 0;
-    font-size: 0.76rem;
-    line-height: 1.45;
-    color: ${({ theme }) => theme.colors.gray11};
   }
 `
 

@@ -1,7 +1,9 @@
 package com.back.boundedContexts.member.adapter.web
 
+import com.back.boundedContexts.member.application.port.input.CurrentMemberProfileQueryUseCase
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
@@ -36,7 +38,6 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.handler
 import java.time.Instant
-import java.util.Optional
 
 @ActiveProfiles("test")
 @WebMvcTest(
@@ -56,6 +57,9 @@ class ApiV1AdmMemberControllerWebMvcTest {
 
     @MockitoBean
     private lateinit var memberUseCase: MemberUseCase
+
+    @MockitoBean
+    private lateinit var currentMemberProfileQueryUseCase: CurrentMemberProfileQueryUseCase
 
     @MockitoBean
     private lateinit var postImageStoragePort: PostImageStoragePort
@@ -223,7 +227,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
         @WithMockUser(roles = ["ADMIN"])
         fun `회원 단건 조회는 경로의 id 에 해당하는 회원 정보를 반환한다`() {
             val member = sampleMember(id = 2, username = "user1", nickname = "user1")
-            given(memberUseCase.findById(member.id)).willReturn(Optional.of(member))
+            given(currentMemberProfileQueryUseCase.getById(member.id)).willReturn(MemberWithUsernameDto(member))
 
             mvc
                 .get("/member/api/v1/adm/members/${member.id}")
@@ -245,7 +249,7 @@ class ApiV1AdmMemberControllerWebMvcTest {
         @Test
         @WithMockUser(roles = ["ADMIN"])
         fun `회원 단건 조회에서 존재하지 않는 id 를 요청하면 404를 반환한다`() {
-            given(memberUseCase.findById(999999)).willReturn(Optional.empty())
+            given(currentMemberProfileQueryUseCase.getById(999999)).willThrow(NoSuchElementException())
 
             mvc
                 .get("/member/api/v1/adm/members/999999")

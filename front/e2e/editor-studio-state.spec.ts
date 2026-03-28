@@ -1,8 +1,13 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { expect, test } from "@playwright/test"
+import { getServerSideProps as getEditPageServerSideProps } from "src/pages/editor/[id]"
+import { getServerSideProps as getNewPageServerSideProps } from "src/pages/editor/new"
 import {
   deriveEditorPersistenceState,
   isPublishActionDisabled,
 } from "src/routes/Admin/editorStudioState"
+import { getEditorStudioPageProps } from "src/routes/Admin/EditorStudioPage"
 
 test.describe("editor studio state", () => {
   test("기존 글은 서버 baseline과 같으면 저장됨으로 본다", () => {
@@ -106,5 +111,18 @@ test.describe("editor studio state", () => {
         hasPlaceholderIssue: true,
       })
     ).toBe(true)
+  })
+
+  test("새 글/수정 전용 라우트는 동일한 EditorStudioPage와 SSR props를 공유한다", () => {
+    expect(getNewPageServerSideProps).toBe(getEditorStudioPageProps)
+    expect(getEditPageServerSideProps).toBe(getEditorStudioPageProps)
+
+    const editorNewSource = readFileSync(path.resolve(__dirname, "../src/pages/editor/new.tsx"), "utf8")
+    const editorEditSource = readFileSync(path.resolve(__dirname, "../src/pages/editor/[id].tsx"), "utf8")
+
+    expect(editorNewSource).toContain("import { EditorStudioPage, getEditorStudioPageProps }")
+    expect(editorEditSource).toContain("import { EditorStudioPage, getEditorStudioPageProps }")
+    expect(editorNewSource).toContain("const EditorNewPage: NextPage<AdminPageProps> = (props) => <EditorStudioPage {...props} />")
+    expect(editorEditSource).toContain("const EditorPostPage: NextPage<AdminPageProps> = (props) => <EditorStudioPage {...props} />")
   })
 })

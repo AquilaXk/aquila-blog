@@ -4799,8 +4799,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             data-preview-density={isCompactSplitPreview ? "compact" : "full"}
           >
             <EditorStudioPreviewArticle>
-              <PreviewContentFrame>
-                <EditorStudioPreviewHeaderFrame>
+              <PreviewContentFrame $compact={isCompactSplitPreview}>
+                <EditorStudioPreviewHeaderFrame $compact={isCompactSplitPreview}>
                   <PostHeader
                     data={previewPostHeaderData}
                     interactiveTags={false}
@@ -10652,9 +10652,62 @@ const EditorStudioPreviewArticle = styled.article`
   min-width: 0;
 `
 
-const EditorStudioPreviewHeaderFrame = styled.div`
+const EditorStudioPreviewHeaderFrame = styled.div<{ $compact?: boolean }>`
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0 0 1rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  overflow: hidden;
+
+  ${({ $compact }) =>
+    $compact
+      ? `
+    .taxonomyRow {
+      margin-bottom: 0.72rem;
+    }
+
+    .taxonomyRow > span,
+    .staticTag {
+      min-height: 28px;
+      padding: 0.32rem 0.66rem;
+      font-size: 0.74rem;
+    }
+
+    .title {
+      font-size: clamp(1.42rem, 1rem + 1.05vw, 1.96rem);
+      line-height: 1.16;
+      max-width: 14ch;
+    }
+
+    .metaRow {
+      margin-top: 1rem;
+      align-items: flex-start;
+      gap: 0.78rem;
+    }
+
+    .author {
+      gap: 0.72rem;
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+    }
+
+    .authorText strong {
+      font-size: 0.94rem;
+    }
+
+    .metaText {
+      font-size: 0.82rem;
+    }
+
+    .thumbnail {
+      margin-top: 1.35rem;
+    }
+  `
+      : ""}
 `
 
 const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`

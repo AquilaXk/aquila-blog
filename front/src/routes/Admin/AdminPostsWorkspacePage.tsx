@@ -137,6 +137,12 @@ const visibilityLabel = (published: boolean, listed: boolean) => {
   return "전체 공개"
 }
 
+const isWorkspaceTempDraft = (row: Pick<AdminPostListItem, "title" | "published" | "listed">) =>
+  row.title.trim() === "임시글" && !row.published && !row.listed
+
+const getWorkspaceRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed">) =>
+  isWorkspaceTempDraft(row) ? "임시 저장" : row.title
+
 const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) => {
   if (visibility === "PRIVATE") return "비공개"
   if (visibility === "PUBLIC_UNLISTED") return "상세 공개"
@@ -370,7 +376,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           <li key={row.id}>
             <button type="button" onClick={() => void handleContinueRecent(row)}>
               <div>
-                <strong>{row.title}</strong>
+                <strong>{getWorkspaceRowTitle(row)}</strong>
                 <span>{formatDateTime(row.modifiedAt)}</span>
               </div>
               <RecentMeta>
@@ -626,7 +632,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                     <td>
                       <TitleCell>
                         <div className="titleRow">
-                          <strong>{row.title}</strong>
+                          <strong>{getWorkspaceRowTitle(row)}</strong>
                           <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                             {visibilityLabel(row.published, row.listed)}
                           </VisibilityBadge>
@@ -672,7 +678,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                       {visibilityLabel(row.published, row.listed)}
                     </VisibilityBadge>
                   </header>
-                  <strong>{row.title}</strong>
+                  <strong>{getWorkspaceRowTitle(row)}</strong>
                   <p>{row.authorName || "작성자 미상"}</p>
                   <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
                   <div className="actions">

@@ -311,6 +311,8 @@ const IMAGE_UPLOAD_CONFLICT_MAX_RETRIES = 3
 const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
+const TEMP_DRAFT_TITLE_PLACEHOLDER = "임시글"
+const TEMP_DRAFT_BODY_PLACEHOLDER = "임시글 입니다."
 const DEFAULT_THUMBNAIL_SOURCE_SIZE: ThumbnailSourceSize = {
   width: THUMBNAIL_FRAME_ASPECT_RATIO,
   height: 1,
@@ -339,6 +341,32 @@ const PREVIEW_CARD_VIEWPORTS: Record<
     cardWidth: 286,
   },
 }
+
+const isTempDraftTitlePlaceholder = (value: string) => value.trim() === TEMP_DRAFT_TITLE_PLACEHOLDER
+
+const isTempDraftBodyPlaceholder = (value: string) => {
+  const normalized = value.replace(/\r\n?/g, "\n").trim()
+  return normalized === TEMP_DRAFT_BODY_PLACEHOLDER || normalized === EDITOR_BODY_PLACEHOLDER
+}
+
+const isServerTempDraftPost = (post: Pick<PostForEditor, "title" | "published" | "listed">) =>
+  !post.published && !post.listed && isTempDraftTitlePlaceholder(post.title ?? "")
+
+const isBlankServerTempDraft = (
+  post: Pick<PostForEditor, "title" | "published" | "listed">,
+  snapshot: Pick<ResolvedEditorMetaSnapshot, "body">
+) => isServerTempDraftPost(post) && isTempDraftBodyPlaceholder(snapshot.body)
+
+const buildEmptyEditorMetaSnapshot = (): ResolvedEditorMetaSnapshot => ({
+  body: "",
+  tags: [],
+  category: "",
+  summary: "",
+  thumbnailUrl: "",
+  thumbnailFocusX: DEFAULT_THUMBNAIL_FOCUS_X,
+  thumbnailFocusY: DEFAULT_THUMBNAIL_FOCUS_Y,
+  thumbnailZoom: DEFAULT_THUMBNAIL_ZOOM,
+})
 const PREVIEW_CARD_VIEWPORT_ORDER: PreviewViewportMode[] = ["desktop", "tablet", "mobile"]
 const PUBLISH_VISIBILITY_OPTIONS: Array<{
   value: PostVisibility
@@ -2005,7 +2033,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const publishModalHintByAction = useCallback((actionType: PublishActionType): string => {
     if (actionType === "create") return "작성 전 확인이 필요한 항목만 이곳에 표시됩니다."
     if (actionType === "modify") return "수정 전 확인이 필요한 항목만 이곳에 표시됩니다."
-    return "임시글 발행 전 확인이 필요한 항목만 이곳에 표시됩니다."
+    return "새 글 작성 전 확인이 필요한 항목만 이곳에 표시됩니다."
   }, [])
 
   const setPublishStatus = useCallback(
@@ -2487,7 +2515,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setPostId(String(post.id))
     setPostVersion(typeof post.version === "number" ? post.version : null)
     setEditorMode("edit")
-    setIsTempDraftMode(post.title.trim() === "임시글" && !post.published && !post.listed)
+    setIsTempDraftMode(isServerTempDraftPost(post))
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
     if (isCompactMobileLayout) {
@@ -2516,9 +2544,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         }
       }
 
-      const nextTitle = resolvedPost.title ?? ""
+      const rawSnapshot = resolveEditorMetaSnapshot(resolvedPost.content ?? "", resolvedPost.contentHtml)
+      const shouldMaskTempTitle = isServerTempDraftPost(resolvedPost)
+      const shouldMaskTempPlaceholder = isBlankServerTempDraft(resolvedPost, rawSnapshot)
+      const nextTitle = shouldMaskTempTitle ? "" : resolvedPost.title ?? ""
       const nextVisibility = toVisibility(!!resolvedPost.published, !!resolvedPost.listed)
-      const snapshot = syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
+      const snapshot = shouldMaskTempPlaceholder
+        ? (syncEditorMeta("") ?? buildEmptyEditorMetaSnapshot())
+        : syncEditorMeta(resolvedPost.content ?? "", resolvedPost.contentHtml)
       setPostTitle(nextTitle)
       setPostVisibility(nextVisibility)
       serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
@@ -2550,7 +2583,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       )
       const tempRow = (data.content || []).find(
         (row) =>
-          row.title.trim() === "임시글" &&
+          isTempDraftTitlePlaceholder(row.title) &&
           !row.published &&
           !row.listed &&
           !row.deletedAt
@@ -2785,7 +2818,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
       setKnownTags((prev) => dedupeStrings([...prev, ...postTags]).sort((a, b) => a.localeCompare(b)))
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
-      setIsTempDraftMode(postTitle.trim() === "임시글" && postVisibility === "PRIVATE")
+      setIsTempDraftMode(isTempDraftTitlePlaceholder(postTitle) && postVisibility === "PRIVATE")
       serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: postTitle,
         content: postContent,
@@ -2815,7 +2848,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const handleLoadOrCreateTempPost = useCallback(async (options?: { redirectToEditor?: boolean; source?: string }) => {
     try {
       setLoadingKey("postTemp")
-      setPublishStatus({ tone: "loading", text: "임시글을 불러오는 중입니다..." }, "page")
+      setPublishStatus({ tone: "loading", text: "새 글을 준비하고 있습니다..." }, "page")
       if (!tempPostRequestRef.current) {
         tempPostRequestRef.current = requestTempPostWithConflictRetry(loadExistingTempPostForRecovery).finally(() => {
           tempPostRequestRef.current = null
@@ -2823,9 +2856,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       }
       const response = await tempPostRequestRef.current
       const tempPost = response.data
-      const nextTitle = tempPost.title ?? ""
+      const rawSnapshot = resolveEditorMetaSnapshot(tempPost.content ?? "", tempPost.contentHtml)
+      const shouldMaskTempTitle = isServerTempDraftPost(tempPost)
+      const shouldMaskTempPlaceholder = isBlankServerTempDraft(tempPost, rawSnapshot)
+      const nextTitle = shouldMaskTempTitle ? "" : tempPost.title ?? ""
       const nextVisibility = toVisibility(!!tempPost.published, !!tempPost.listed)
-      const snapshot = syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
+      const snapshot = shouldMaskTempPlaceholder
+        ? (syncEditorMeta("") ?? buildEmptyEditorMetaSnapshot())
+        : syncEditorMeta(tempPost.content ?? "", tempPost.contentHtml)
       setPostTitle(nextTitle)
       setPostVisibility(nextVisibility)
       serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
@@ -2845,7 +2883,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setPublishStatus(
         {
           tone: "success",
-          text: "임시글 편집 모드입니다. 내용 저장은 '선택 글 수정', 공개하려면 '임시글 발행'을 사용하세요.",
+          text: shouldMaskTempPlaceholder ? "새 글을 시작할 수 있습니다." : "저장된 임시 저장본을 불러왔습니다.",
         },
         "page"
       )
@@ -2861,7 +2899,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `임시글 불러오기 실패: ${message}` }, "page")
+      setPublishStatus({ tone: "error", text: `새 글 불러오기 실패: ${message}` }, "page")
       setResult(pretty({ error: message }))
     } finally {
       setLoadingKey("")
@@ -2870,7 +2908,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   const handlePublishTempDraft = async (): Promise<boolean> => {
     if (editorMode !== "edit" || !postId.trim()) {
-      const msg = "발행할 임시글을 먼저 불러와주세요."
+      const msg = "작성할 새 글을 먼저 불러와주세요."
       setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
@@ -2899,7 +2937,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
     try {
       setLoadingKey("publishTempPost")
-      setPublishStatus({ tone: "loading", text: "임시글을 발행하는 중입니다..." })
+      setPublishStatus({ tone: "loading", text: "새 글을 작성하는 중입니다..." })
 
       const response = await apiFetch<RsData<PostWriteResult>>(`/post/api/v1/posts/${postId}`, {
         method: "PUT",
@@ -2910,12 +2948,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
           }),
-          published: true,
-          listed: true,
+          ...toFlags(postVisibility),
           version: postVersion ?? undefined,
         }),
       })
-      setPostVisibility("PUBLIC_LISTED")
+      setPostVisibility(postVisibility)
       setPostVersion(typeof response?.data?.version === "number" ? response.data.version : postVersion)
       setIsTempDraftMode(false)
       serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
@@ -2928,15 +2965,15 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         thumbnailZoom: postThumbnailZoom,
         tags: postTags,
         category: postCategory,
-        visibility: "PUBLIC_LISTED",
+        visibility: postVisibility,
       })
       await refreshPublicPostReadViews(postId)
-      setPublishStatus({ tone: "success", text: "임시글 발행이 완료되었습니다." }, "page")
+      setPublishStatus({ tone: "success", text: "새 글 작성이 완료되었습니다." }, "page")
       setResult(pretty(response as unknown as JsonValue))
       return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      setPublishStatus({ tone: "error", text: `임시글 발행 실패: ${message}` })
+      setPublishStatus({ tone: "error", text: `새 글 작성 실패: ${message}` })
       setResult(pretty({ error: message }))
       return false
     } finally {
@@ -4127,7 +4164,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     postTags.length > 0 ? `태그 ${postTags.length}개` : "태그 미설정",
   ]
   const composeCallToActionLabel =
-    editorMode === "create" ? "발행 준비" : isTempDraftMode ? "임시글 발행 준비" : "수정 사항 확인"
+    editorMode === "create" ? "발행 준비" : isTempDraftMode ? "새 글 작성" : "수정 사항 확인"
   const composeSummaryPreview = postSummary.trim() || makePreviewSummary(postContent)
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
@@ -4144,13 +4181,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       ? "발행 설정"
       : publishActionType === "modify"
         ? "수정 설정"
-        : "공개 설정"
+        : "새 글 작성"
   const publishActionDescription =
     publishActionType === "create"
       ? "공개 범위와 카드 결과를 확인한 뒤 발행합니다."
       : publishActionType === "modify"
         ? "공개 범위와 카드 결과를 확인한 뒤 변경 내용을 반영합니다."
-        : "공개 글로 전환하기 전에 마지막으로 확인합니다."
+        : "공개 범위와 카드 결과를 확인한 뒤 새 글로 작성합니다."
   const publishActionButtonText =
     publishActionType === "create"
       ? loadingKey === "writePost"
@@ -4161,8 +4198,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           ? "반영 중..."
           : "변경 반영"
         : loadingKey === "publishTempPost"
-          ? "공개 중..."
-          : "공개하기"
+          ? "작성 중..."
+          : "새 글 작성"
   const publishActionButtonDisabled = isPublishActionDisabled({
     publishActionType,
     editorMode,
@@ -4170,18 +4207,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     hasEditorMinimumFields,
     hasPlaceholderIssue: Boolean(publishPlaceholderIssue),
   })
+  const publishActionTriggerDisabled =
+    loadingKey === "writePost" ||
+    loadingKey === "modifyPost" ||
+    loadingKey === "publishTempPost" ||
+    loadingKey === "postTemp"
   const mobilePrimaryActionLabel =
     editorMode === "create"
       ? "발행 설정 열기"
       : isTempDraftMode
-        ? "임시글 발행 설정"
+        ? "새 글 작성"
         : "수정 설정 열기"
-  const mobilePrimaryActionDisabled =
-    editorMode === "create"
-      ? disabled("writePost")
-      : isTempDraftMode
-        ? disabled("publishTempPost")
-        : disabled("modifyPost")
+  const mobilePrimaryActionDisabled = publishActionTriggerDisabled
   const activeMobileStudioStep = studioSurface === "manage" ? mobileManageStep : mobileComposeStep
   const mobileStudioSurfaceSteps =
     studioSurface === "manage"
@@ -4229,13 +4266,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewViewportConfig = PREVIEW_CARD_VIEWPORTS[previewViewport]
   const previewVisibilityLabel =
-    publishActionType === "temp"
-      ? "전체 공개"
-      : postVisibility === "PRIVATE"
-        ? "비공개"
-        : postVisibility === "PUBLIC_UNLISTED"
-          ? "링크 공개"
-          : "전체 공개"
+    postVisibility === "PRIVATE"
+      ? "비공개"
+      : postVisibility === "PUBLIC_UNLISTED"
+        ? "링크 공개"
+        : "전체 공개"
   const previewThumbnailSrc = safePreviewThumbnail && !isPreviewThumbnailError ? safePreviewThumbnail : ""
   const shouldShowPublishModalNotice = publishModalNotice.tone !== "idle"
   const previewAuthorAvatarSrc = (
@@ -4406,7 +4441,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     editorPrimaryActionType === "modify"
       ? "수정 반영"
       : editorPrimaryActionType === "temp"
-        ? "임시글 발행"
+        ? "새 글 작성"
         : "발행"
   const shouldShowEditorLoadingState =
     isDedicatedEditorRoute &&
@@ -4474,7 +4509,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           {composeStatusText ? <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState> : null}
           <PrimaryButton
             type="button"
-            disabled={publishActionButtonDisabled}
+            disabled={publishActionTriggerDisabled}
             onClick={() => openPublishModal(editorPrimaryActionType)}
           >
             {editorPrimaryActionLabel}
@@ -4726,33 +4761,25 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
               ) : null}
               <PublishOverviewGrid>
-                {publishActionType !== "temp" ? (
-                  <VisibilityCard>
-                    <SectionKicker>노출 범위</SectionKicker>
-                    <strong>누가 이 글을 볼 수 있나요?</strong>
-                    <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
-                      {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
-                        <VisibilityOptionButton
-                          key={option.value}
-                          type="button"
-                          data-active={postVisibility === option.value}
-                          aria-pressed={postVisibility === option.value}
-                          onClick={() => setPostVisibility(option.value)}
-                        >
-                          <strong>{option.label}</strong>
-                          <span>{option.description}</span>
-                        </VisibilityOptionButton>
-                      ))}
-                    </VisibilityOptionGrid>
-                    <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
-                  </VisibilityCard>
-                ) : (
-                  <VisibilityCard>
-                    <SectionKicker>노출 범위</SectionKicker>
-                    <strong>임시글은 공개 글로 전환됩니다.</strong>
-                    <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개’로 반영됩니다.</PublishModeHint>
-                  </VisibilityCard>
-                )}
+                <VisibilityCard>
+                  <SectionKicker>노출 범위</SectionKicker>
+                  <strong>누가 이 글을 볼 수 있나요?</strong>
+                  <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
+                    {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
+                      <VisibilityOptionButton
+                        key={option.value}
+                        type="button"
+                        data-active={postVisibility === option.value}
+                        aria-pressed={postVisibility === option.value}
+                        onClick={() => setPostVisibility(option.value)}
+                      >
+                        <strong>{option.label}</strong>
+                        <span>{option.description}</span>
+                      </VisibilityOptionButton>
+                    ))}
+                  </VisibilityOptionGrid>
+                  <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
+                </VisibilityCard>
                 <PreviewResultPanel>
                   <PreviewResultHeader>
                     <div>
@@ -5169,11 +5196,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                       {listScope === "active" ? "목록 새로고침" : "삭제 글 조회"}
                     </PrimaryButton>
                     {listScope === "active" && (
-                      <Button
-                        disabled={disabled("postTemp")}
-                        onClick={() => void handleLoadOrCreateTempPost()}
-                      >
-                        임시글 열기
+                      <Button disabled={disabled("postTemp")} onClick={() => void handleLoadOrCreateTempPost()}>
+                        임시 저장 열기
                       </Button>
                     )}
                   </QueryActions>
@@ -5191,7 +5215,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                         data-active={listQuickPreset === "temp"}
                         onClick={() => applyListQuickPreset("temp")}
                       >
-                        임시글
+                        임시 저장
                       </PresetButton>
                       {hasListFiltersApplied && (
                         <PresetButton
@@ -5576,7 +5600,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                       <div className="headline">
                         <strong>{postTitle.trim() || "제목 없음"}</strong>
                         {isTempDraftMode ? (
-                          <LoadedBadge>임시글</LoadedBadge>
+                          <LoadedBadge>임시 저장</LoadedBadge>
                         ) : (
                           <VisibilityBadge data-tone={postVisibility}>{currentVisibilityText}</VisibilityBadge>
                         )}
@@ -6245,24 +6269,20 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                       <span>발행 전 노출 범위를 정합니다.</span>
                     </div>
                   </ComposeAssistantGroupHeader>
-                  {publishActionType !== "temp" ? (
-                    <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
-                      {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
-                        <VisibilityOptionButton
-                          key={option.value}
-                          type="button"
-                          data-active={postVisibility === option.value}
-                          aria-pressed={postVisibility === option.value}
-                          onClick={() => setPostVisibility(option.value)}
-                        >
-                          <strong>{option.label}</strong>
-                          <span>{option.description}</span>
-                        </VisibilityOptionButton>
-                      ))}
-                    </VisibilityOptionGrid>
-                  ) : (
-                    <PublishModeHint>임시글은 공개 글로 전환될 때 전체 공개로 반영됩니다.</PublishModeHint>
-                  )}
+                  <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
+                    {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
+                      <VisibilityOptionButton
+                        key={option.value}
+                        type="button"
+                        data-active={postVisibility === option.value}
+                        aria-pressed={postVisibility === option.value}
+                        onClick={() => setPostVisibility(option.value)}
+                      >
+                        <strong>{option.label}</strong>
+                        <span>{option.description}</span>
+                      </VisibilityOptionButton>
+                    ))}
+                  </VisibilityOptionGrid>
                 </ComposeAssistantGroup>
 
                 <ComposeAssistantGroup>
@@ -6516,33 +6536,25 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <PublishNotice data-tone={publishModalNotice.tone}>{publishModalNotice.text}</PublishNotice>
                 ) : null}
                 <PublishOverviewGrid>
-                  {publishActionType !== "temp" ? (
-                    <VisibilityCard>
-                      <SectionKicker>노출 범위</SectionKicker>
-                      <strong>누가 이 글을 볼 수 있나요?</strong>
-                      <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
-                        {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
-                          <VisibilityOptionButton
-                            key={option.value}
-                            type="button"
-                            data-active={postVisibility === option.value}
-                            aria-pressed={postVisibility === option.value}
-                            onClick={() => setPostVisibility(option.value)}
-                          >
-                            <strong>{option.label}</strong>
-                            <span>{option.description}</span>
-                          </VisibilityOptionButton>
-                        ))}
-                      </VisibilityOptionGrid>
-                      <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
-                    </VisibilityCard>
-                  ) : (
-                    <VisibilityCard>
-                      <SectionKicker>노출 범위</SectionKicker>
-                      <strong>임시글은 공개 글로 전환됩니다.</strong>
-                      <PublishModeHint>임시글 발행은 자동으로 ‘전체 공개’로 반영됩니다.</PublishModeHint>
-                    </VisibilityCard>
-                  )}
+                  <VisibilityCard>
+                    <SectionKicker>노출 범위</SectionKicker>
+                    <strong>누가 이 글을 볼 수 있나요?</strong>
+                    <VisibilityOptionGrid role="group" aria-label="노출 범위 선택">
+                      {PUBLISH_VISIBILITY_OPTIONS.map((option) => (
+                        <VisibilityOptionButton
+                          key={option.value}
+                          type="button"
+                          data-active={postVisibility === option.value}
+                          aria-pressed={postVisibility === option.value}
+                          onClick={() => setPostVisibility(option.value)}
+                        >
+                          <strong>{option.label}</strong>
+                          <span>{option.description}</span>
+                        </VisibilityOptionButton>
+                      ))}
+                    </VisibilityOptionGrid>
+                    <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
+                  </VisibilityCard>
                   <PreviewResultPanel>
                     <PreviewResultHeader>
                       <div>

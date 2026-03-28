@@ -183,6 +183,37 @@ const openAdminNewPostEntry = async (page: Page) => {
   throw new Error("관리자 글 작업 공간에서 '새 글 작성' CTA를 찾지 못했습니다.")
 }
 
+const appendTextToBlockEditor = async (page: Page, text: string) => {
+  const blockEditor = page.locator(".aq-block-editor__content[contenteditable='true']").first()
+  await expect(blockEditor).toBeVisible()
+  await expect(blockEditor).toHaveAttribute("contenteditable", "true")
+
+  await blockEditor.click({ position: { x: 24, y: 24 } })
+  await blockEditor.evaluate((node) => {
+    if (!(node instanceof HTMLElement)) return
+    node.focus()
+    const selection = window.getSelection()
+    if (!selection) return
+    const range = document.createRange()
+    range.selectNodeContents(node)
+    range.collapse(false)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  })
+
+  await page.keyboard.insertText(text)
+  await expect
+    .poll(async () => {
+      return blockEditor.evaluate((node) => {
+        if (!(node instanceof HTMLElement)) return ""
+        return (node.textContent || "").trim()
+      })
+    })
+    .toContain(text)
+
+  return blockEditor
+}
+
 type LoginPayloadCandidate = {
   label: "email+policy" | "email" | "username"
   data: Record<string, string | boolean>
@@ -449,11 +480,7 @@ test.describe("live production e2e", () => {
     } else {
       await expect(legacyTitleInput).toBeVisible()
     }
-    const blockEditor = page.locator(".aq-block-editor__content").first()
-    await expect(blockEditor).toBeVisible()
-    await blockEditor.click()
-    await page.keyboard.type("라이브 E2E 편집 확인")
-    await expect(blockEditor).toContainText("라이브 E2E 편집 확인")
+    await appendTextToBlockEditor(page, "라이브 E2E 편집 확인")
 
     await page.getByRole("button", { name: "Logout", exact: true }).click()
     await expect(page).toHaveURL(/\/login/)

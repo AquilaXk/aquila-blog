@@ -1139,6 +1139,7 @@ export interface components {
             version?: number;
             published?: boolean;
             listed?: boolean;
+            tempDraft?: boolean;
             /** Format: int32 */
             likesCount?: number;
             /** Format: int32 */
@@ -1212,6 +1213,7 @@ export interface components {
             version?: number;
             published?: boolean;
             listed?: boolean;
+            tempDraft?: boolean;
             /** Format: int32 */
             likesCount?: number;
             /** Format: int32 */

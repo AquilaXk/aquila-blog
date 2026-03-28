@@ -30,6 +30,8 @@ type Props = {
   adminActionPending?: boolean
   onEditPost?: () => void
   onDeletePost?: () => void
+  interactiveTags?: boolean
+  showEngagement?: boolean
 }
 
 const PostHeader: React.FC<Props> = ({
@@ -48,9 +50,12 @@ const PostHeader: React.FC<Props> = ({
   adminActionPending = false,
   onEditPost,
   onDeletePost,
+  interactiveTags = true,
+  showEngagement = true,
 }) => {
   const authorName = data.author?.[0]?.name || CONFIG.profile.name
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
+  const tags = (data.tags || []).map((tag) => tag.trim()).filter(Boolean)
   const publishedAt = formatDateTime(data.createdTime, CONFIG.lang)
   const modifiedAt =
     data.modifiedTime && data.modifiedTime !== data.createdTime
@@ -69,11 +74,19 @@ const PostHeader: React.FC<Props> = ({
 
   return (
     <StyledWrapper>
-      <div className="taxonomyRow">
-        {data.tags?.map((tag) => (
-          <Tag key={tag}>{tag}</Tag>
-        ))}
-      </div>
+      {tags.length > 0 ? (
+        <div className="taxonomyRow">
+          {tags.map((tag) =>
+            interactiveTags ? (
+              <Tag key={tag}>{tag}</Tag>
+            ) : (
+              <span key={tag} className="staticTag">
+                {tag}
+              </span>
+            )
+          )}
+        </div>
+      ) : null}
 
       <h1 className="title">{data.title}</h1>
 
@@ -105,6 +118,7 @@ const PostHeader: React.FC<Props> = ({
           </div>
         )}
 
+        {showEngagement || showModifyAction || showDeleteAction ? (
         <div className="actions">
           {(showModifyAction || showDeleteAction) && (
             <div className="adminActions">
@@ -122,39 +136,41 @@ const PostHeader: React.FC<Props> = ({
               )}
             </div>
           )}
-          <div className="engagementRow" aria-label="post engagement">
-            <button
-              type="button"
-              className="likeButton"
-              aria-pressed={actorHasLiked}
-              data-active={actorHasLiked}
-              data-hide-desktop={hideLikeActionOnDesktop}
-              disabled={likePending}
-              onClick={onToggleLike}
-            >
-              <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
-              <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
-            </button>
-
-            {onSharePost && (
+          {showEngagement ? (
+            <div className="engagementRow" aria-label="post engagement">
               <button
                 type="button"
-                className="shareButton"
-                data-hide-desktop={hideShareActionOnDesktop}
-                aria-label="게시글 공유"
-                onClick={onSharePost}
+                className="likeButton"
+                aria-pressed={actorHasLiked}
+                data-active={actorHasLiked}
+                data-hide-desktop={hideLikeActionOnDesktop}
+                disabled={likePending}
+                onClick={onToggleLike}
               >
-                <AppIcon name="share" />
-                <span>공유</span>
+                <AppIcon name={actorHasLiked ? "heart-filled" : "heart"} />
+                <span>좋아요 {likesCount ?? data.likesCount ?? 0}</span>
               </button>
-            )}
 
-            <div className="stats" aria-label="post stats">
-              <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
-              <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
+              {onSharePost && (
+                <button
+                  type="button"
+                  className="shareButton"
+                  data-hide-desktop={hideShareActionOnDesktop}
+                  aria-label="게시글 공유"
+                  onClick={onSharePost}
+                >
+                  <AppIcon name="share" />
+                  <span>공유</span>
+                </button>
+              )}
+
+              <div className="stats" aria-label="post stats">
+                <span className="statChip">댓글 {data.commentsCount ?? 0}</span>
+                <span className="statChip">조회 {hitCount ?? data.hitCount ?? 0}</span>
+              </div>
             </div>
-          </div>
-          {shareFeedback && (
+          ) : null}
+          {showEngagement && shareFeedback && (
             <span
               className="shareFeedbackPill"
               data-hide-desktop={hideShareActionOnDesktop}
@@ -165,6 +181,7 @@ const PostHeader: React.FC<Props> = ({
             </span>
           )}
         </div>
+        ) : null}
       </div>
 
       {thumbnailSrc && (
@@ -212,6 +229,20 @@ const StyledWrapper = styled.header`
       line-height: 1;
       font-weight: 600;
     }
+  }
+
+  .staticTag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0.38rem 0.78rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    font-size: 0.86rem;
+    line-height: 1;
+    font-weight: 600;
+    color: ${({ theme }) => theme.colors.gray11};
+    background-color: ${({ theme }) => theme.colors.gray3};
   }
 
   .title {

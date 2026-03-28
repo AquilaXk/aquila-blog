@@ -3,6 +3,7 @@ import {
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
 } from "src/libs/markdown/tableMetadata"
+import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 
 const MarkdownRendererRoot = styled.div`
   margin-top: 1.65rem;
@@ -12,71 +13,13 @@ const MarkdownRendererRoot = styled.div`
   overflow-x: visible;
   overflow-wrap: anywhere;
   word-break: break-word;
-  color: ${({ theme }) => theme.colors.gray12};
-  line-height: 1.7;
-  font-size: 1.125rem;
+  ${({ theme }) => markdownContentTypography("&", theme)}
 
   h1,
   h2,
   h3,
   h4 {
-    line-height: 1.34;
-    letter-spacing: -0.017em;
-    margin-top: 1.65rem;
-    margin-bottom: 0.68rem;
-    font-weight: 760;
     scroll-margin-top: 6.8rem;
-  }
-
-  h1 {
-    font-size: clamp(1.88rem, 3vw, 2.3rem);
-  }
-
-  h2 {
-    font-size: clamp(1.5rem, 2.35vw, 1.84rem);
-  }
-
-  h3 {
-    font-size: clamp(1.2rem, 1.9vw, 1.42rem);
-  }
-
-  h4 {
-    font-size: 1.04rem;
-  }
-
-  p {
-    margin: 0.72rem 0;
-    font-size: 1.125rem;
-    line-height: 1.7;
-    overflow-wrap: anywhere;
-  }
-
-  a {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#7ab6ff" : "#0969da")};
-    text-decoration: underline;
-    text-underline-offset: 0.16em;
-    text-decoration-thickness: 0.08em;
-    word-break: break-word;
-  }
-
-  a:hover {
-    color: ${({ theme }) => (theme.scheme === "dark" ? "#a8ceff" : "#0a58ca")};
-  }
-
-  blockquote {
-    margin: 0.95rem 0;
-    padding: 0.12rem 0 0.12rem 1rem;
-    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
-    color: ${({ theme }) => theme.colors.gray11};
-    background: transparent;
-  }
-
-  blockquote > :first-of-type {
-    margin-top: 0;
-  }
-
-  blockquote > :last-child {
-    margin-bottom: 0;
   }
 
   figure {
@@ -147,21 +90,6 @@ const MarkdownRendererRoot = styled.div`
     text-align: center;
   }
 
-  ul,
-  ol {
-    margin: 0.68rem 0;
-    padding-left: 1.28rem;
-  }
-
-  li + li {
-    margin-top: 0.22rem;
-  }
-
-  li {
-    line-height: 1.78;
-    overflow-wrap: anywhere;
-  }
-
   ul.contains-task-list,
   ol.contains-task-list {
     list-style: none;
@@ -180,19 +108,6 @@ const MarkdownRendererRoot = styled.div`
     width: 0.95rem;
     height: 0.95rem;
     accent-color: ${({ theme }) => (theme.scheme === "dark" ? "#4493f8" : "#0969da")};
-  }
-
-  hr {
-    border: 0;
-    border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-    margin: 1rem 0;
-  }
-
-  .aq-inline-code {
-    border-radius: 6px;
-    padding: 0.16rem 0.38rem;
-    background: ${({ theme }) => theme.colors.gray4};
-    font-size: 0.9em;
   }
 
   .aq-inline-color {
@@ -926,6 +841,57 @@ const MarkdownRendererRoot = styled.div`
   .aq-table tbody tr:last-child td,
   .aq-table tbody tr:last-child th {
     border-bottom: 0;
+  }
+
+  @media (max-width: 480px) {
+    .aq-table-shell,
+    .aq-table-scroll {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .aq-table-scroll {
+      overflow-x: hidden;
+    }
+
+    table.aq-table-responsive,
+    .aq-table.aq-table-responsive {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      table-layout: fixed;
+    }
+
+    table.aq-table-responsive colgroup,
+    .aq-table.aq-table-responsive colgroup,
+    table.aq-table-responsive col,
+    .aq-table.aq-table-responsive col {
+      display: none;
+    }
+
+    table.aq-table-responsive > tbody,
+    .aq-table.aq-table-responsive > tbody,
+    table.aq-table-responsive > tbody > tr,
+    .aq-table.aq-table-responsive > tbody > tr {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    table.aq-table-responsive > tbody > tr > :is(td, th),
+    .aq-table.aq-table-responsive > tbody > tr > :is(td, th) {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    table.aq-table-responsive > tbody > tr > :is(td, th) > *,
+    .aq-table.aq-table-responsive > tbody > tr > :is(td, th) > * {
+      min-width: 0;
+      max-width: 100%;
+    }
   }
 
   .aq-callout.aq-admonition {

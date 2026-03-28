@@ -49,6 +49,7 @@ import {
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
+import PostHeader from "src/routes/Detail/PostDetail/PostHeader"
 import {
   applyThumbnailTransformToUrl,
   clampThumbnailFocusX,
@@ -82,6 +83,7 @@ import {
 import { serializeMarkdownTableLayoutComment } from "src/libs/markdown/tableMetadata"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
+import type { TPost } from "src/types"
 
 const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED !== "false"
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
@@ -4320,6 +4322,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const codeBlockTemplate = "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```"
   const mermaidTemplate = "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```"
   const tableTemplate = "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |"
+  const [previewNowIso] = useState(() => new Date().toISOString())
   if (!sessionMember) {
     return null
   }
@@ -4342,7 +4345,40 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     member.profileImageUrl ||
     ""
   ).trim()
-  const previewDateText = formatDate(new Date().toISOString(), "ko")
+  const previewDateText = formatDate(previewNowIso, "ko")
+  const resolvedPreviewStatus: TPost["status"] =
+    postVisibility === "PRIVATE"
+      ? ["Private"]
+      : postVisibility === "PUBLIC_UNLISTED"
+        ? ["PublicOnDetail"]
+        : ["Public"]
+  const previewPostHeaderData: TPost = {
+    id: postId.trim() || "draft-preview",
+    date: { start_date: previewNowIso },
+    type: ["Post"],
+    slug: postId.trim() || "draft-preview",
+    tags: postTags,
+    summary: resolvedPreviewSummary || undefined,
+    author: [
+      {
+        id: String(member.id),
+        name: displayName,
+        profile_photo: previewAuthorAvatarSrc || undefined,
+      },
+    ],
+    title: postTitle.trim() || "제목을 입력하세요",
+    status: resolvedPreviewStatus,
+    createdTime: previewNowIso,
+    modifiedTime: previewNowIso,
+    fullWidth: false,
+    thumbnail: effectiveThumbnailUrl || undefined,
+    likesCount: 0,
+    commentsCount: 0,
+    hitCount: 0,
+    actorHasLiked: false,
+    actorCanModify: false,
+    actorCanDelete: false,
+  }
   const composeViewModeOptions: { value: ComposeViewMode; label: string; icon: "edit" | "split" | "eye" }[] = [
     { value: "editor", label: "작성", icon: "edit" },
     { value: "split", label: "작성+미리보기", icon: "split" },
@@ -4583,15 +4619,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       <EditorStudioFrame $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
         <EditorStudioWritingColumn $viewMode={editorStudioViewMode}>
           <EditorStudioMetaSection>
-            <TitleInput
-              ref={handleTitleFieldRef}
-              id="post-title"
-              placeholder="제목을 입력하세요"
-              rows={1}
-              value={postTitle}
-              onChange={handleTitleChange}
-              onKeyDown={handleTitleKeyDown}
-            />
             <EditorTagRow aria-label="태그 입력">
               {postTags.map((tag) => (
                 <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
@@ -4627,6 +4654,31 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 }}
               />
             </EditorTagRow>
+            <TitleInput
+              ref={handleTitleFieldRef}
+              id="post-title"
+              placeholder="제목을 입력하세요"
+              rows={1}
+              value={postTitle}
+              onChange={handleTitleChange}
+              onKeyDown={handleTitleKeyDown}
+            />
+            <EditorHeaderMetaRow>
+              <EditorHeaderAuthor>
+                <EditorHeaderAvatar>
+                  {previewAuthorAvatarSrc ? (
+                    <ProfileImage src={previewAuthorAvatarSrc} alt={`${displayName} 프로필 이미지`} fillContainer />
+                  ) : (
+                    <span className="initial">{displayNameInitial}</span>
+                  )}
+                </EditorHeaderAvatar>
+                <EditorHeaderAuthorText>
+                  <strong>{displayName}</strong>
+                  <span>{previewDateText}</span>
+                </EditorHeaderAuthorText>
+              </EditorHeaderAuthor>
+              <EditorHeaderMetaPill>{currentVisibilityText}</EditorHeaderMetaPill>
+            </EditorHeaderMetaRow>
           </EditorStudioMetaSection>
 
           <EditorStudioCanvas>
@@ -4747,44 +4799,15 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             data-preview-density={isCompactSplitPreview ? "compact" : "full"}
           >
             <EditorStudioPreviewArticle>
-              {(previewThumbnailSrc || postTitle.trim() || resolvedPreviewSummary || postTags.length > 0) && (
-                <EditorStudioPreviewArticleHeader $compact={isCompactSplitPreview}>
-                  {!isCompactSplitPreview && previewThumbnailSrc ? (
-                    <div className="cover">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={previewThumbnailSrc}
-                        alt="미리보기 대표 이미지"
-                        style={{
-                          objectFit: "cover",
-                          objectPosition: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
-                          transform: `scale(${postThumbnailZoom})`,
-                          transformOrigin: `${postThumbnailFocusX}% ${postThumbnailFocusY}%`,
-                        }}
-                        onError={() => setIsPreviewThumbnailError(true)}
-                      />
-                    </div>
-                  ) : null}
-                  <h1>{postTitle.trim() || "제목을 입력하세요"}</h1>
-                  {resolvedPreviewSummary ? <p className="summary">{resolvedPreviewSummary}</p> : null}
-                  {!isCompactSplitPreview && postTags.length > 0 ? (
-                    <div className="tags">
-                      {postTags.map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {!isCompactSplitPreview ? (
-                    <div className="meta">
-                      <span>{displayName}</span>
-                      <span className="dot">·</span>
-                      <span>{previewDateText}</span>
-                      <span className="dot">·</span>
-                      <span>{currentVisibilityText}</span>
-                    </div>
-                  ) : null}
-                </EditorStudioPreviewArticleHeader>
-              )}
+              <PreviewContentFrame>
+                <EditorStudioPreviewHeaderFrame>
+                  <PostHeader
+                    data={previewPostHeaderData}
+                    interactiveTags={false}
+                    showEngagement={false}
+                  />
+                </EditorStudioPreviewHeaderFrame>
+              </PreviewContentFrame>
 
               <EditorStudioPreviewArticleBody ref={previewScrollRef} $compact={isCompactSplitPreview}>
                 <PreviewContentFrame $compact={isCompactSplitPreview}>
@@ -7771,10 +7794,10 @@ const TitleInput = styled.textarea`
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: clamp(1.7rem, 3vw, 2.45rem);
-  font-weight: 720;
-  line-height: 1.22;
-  letter-spacing: -0.025em;
+  font-size: clamp(1.94rem, 3.8vw, 3rem);
+  font-weight: 780;
+  line-height: 1.18;
+  letter-spacing: -0.035em;
   resize: none;
   overflow: hidden;
   white-space: pre-wrap;
@@ -7790,7 +7813,8 @@ const TitleInput = styled.textarea`
   }
 
   @media (max-width: 720px) {
-    font-size: clamp(1.45rem, 6vw, 2rem);
+    font-size: clamp(1.75rem, 7.8vw, 2.3rem);
+    line-height: 1.2;
   }
 `
 
@@ -8125,13 +8149,15 @@ const InlineMetaInput = styled(Input)`
   flex: 1 1 12rem;
   min-width: 11rem;
   border: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-bottom: 1px dashed ${({ theme }) => theme.colors.gray6};
   outline: none;
-  min-height: 2rem;
+  min-height: 32px;
   padding: 0 0.12rem;
   border-radius: 0;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.86rem;
+  font-weight: 500;
 
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray10};
@@ -8967,7 +8993,7 @@ const SelectedTagChip = styled.span`
   gap: 0;
   min-width: 0;
   max-width: 100%;
-  min-height: 2.1rem;
+  min-height: 32px;
   border-radius: 999px;
   border: 1px solid var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
   background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
@@ -8990,11 +9016,11 @@ const SelectedTagChip = styled.span`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 0.5rem 0.88rem;
+    padding: 0.38rem 0.78rem;
     color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
-    font-size: 0.8rem;
-    font-weight: 700;
-    line-height: 1.2;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1;
   }
 
   > button {
@@ -9006,8 +9032,8 @@ const SelectedTagChip = styled.span`
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    min-width: 2.05rem;
-    padding: 0 0.58rem;
+    min-width: 1.92rem;
+    padding: 0 0.52rem;
     border: 0;
     border-left: 1px solid var(--tag-chip-divider, rgba(147, 197, 253, 0.24));
     background: var(--tag-chip-button-bg, rgba(15, 23, 42, 0.16));
@@ -10462,9 +10488,78 @@ const EditorTagRow = styled.div`
   flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
-  min-height: 40px;
-  padding-bottom: 0.45rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  min-height: 32px;
+`
+
+const EditorHeaderMetaRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  min-width: 0;
+`
+
+const EditorHeaderAuthor = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+`
+
+const EditorHeaderAvatar = styled.div`
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: ${({ theme }) => theme.colors.gray3};
+
+  .initial {
+    display: inline-flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.84rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+`
+
+const EditorHeaderAuthorText = styled.div`
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+`
+
+const EditorHeaderMetaPill = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 0.82rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1;
 `
 
 const EditorStudioCanvas = styled.section`
@@ -10557,82 +10652,9 @@ const EditorStudioPreviewArticle = styled.article`
   min-width: 0;
 `
 
-const EditorStudioPreviewArticleHeader = styled.header<{ $compact?: boolean }>`
-  display: grid;
-  gap: ${({ $compact }) => ($compact ? "0.7rem" : "0.9rem")};
-  padding: 0 0 ${({ $compact }) => ($compact ? "0.85rem" : "1rem")};
+const EditorStudioPreviewHeaderFrame = styled.div`
+  padding: 0 0 1rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  min-width: 0;
-
-  .cover {
-    border-radius: 16px;
-    overflow: hidden;
-    aspect-ratio: 16 / 9;
-    background: ${({ theme }) => theme.colors.gray3};
-  }
-
-  .cover img {
-    width: 100%;
-    height: 100%;
-  }
-
-  h1 {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: ${({ $compact }) =>
-      $compact ? "clamp(1.24rem, 1rem + 0.8vw, 1.72rem)" : "clamp(1.75rem, 1.2rem + 1.8vw, 2.45rem)"};
-    line-height: 1.14;
-    letter-spacing: -0.03em;
-    overflow-wrap: anywhere;
-  }
-
-  .summary {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: ${({ $compact }) => ($compact ? "0.88rem" : "0.98rem")};
-    line-height: ${({ $compact }) => ($compact ? "1.55" : "1.75")};
-    overflow-wrap: anywhere;
-    ${({ $compact }) =>
-      $compact
-        ? `
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    `
-        : ""}
-  }
-
-  .tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-
-  .tags span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 28px;
-    padding: 0 0.72rem;
-    border-radius: 999px;
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.74rem;
-    font-weight: 600;
-  }
-
-  .meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem;
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.78rem;
-  }
-
-  .dot {
-    opacity: 0.55;
-  }
 `
 
 const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`

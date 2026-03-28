@@ -42,6 +42,7 @@ import {
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
 } from "src/libs/markdown/tableMetadata"
+import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 
 type Props = {
   value: string
@@ -2092,12 +2093,11 @@ const EditorViewport = styled.div`
     min-width: 0;
     min-height: 32rem;
     padding: 1.1rem 0 1.8rem;
-    color: var(--color-gray12);
-    font-size: 1rem;
-    line-height: 1.75;
     outline: none;
     overflow-x: hidden;
   }
+
+  ${({ theme }) => markdownContentTypography(".aq-block-editor__content", theme)}
 
   .aq-block-editor__content > * {
     width: min(100%, var(--compose-pane-readable-width, var(--article-readable-width, 48rem)));
@@ -2106,22 +2106,12 @@ const EditorViewport = styled.div`
     margin-right: auto;
   }
 
-  .aq-block-editor__content > * + * {
-    margin-top: 1.05rem;
-  }
-
   .aq-block-editor__content p.is-editor-empty:first-of-type::before {
     content: attr(data-placeholder);
     color: var(--color-gray10);
     float: left;
     height: 0;
     pointer-events: none;
-  }
-
-  .aq-block-editor__content h1,
-  .aq-block-editor__content h2,
-  .aq-block-editor__content h3 {
-    line-height: 1.25;
   }
 
   .aq-block-editor__content pre {

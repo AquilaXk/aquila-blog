@@ -167,6 +167,22 @@ const waitForApiReachability = async (page: Page, apiBaseUrl: string) => {
   )
 }
 
+const openAdminNewPostEntry = async (page: Page) => {
+  const buttonCta = page.getByRole("button", { name: /^새 글 작성/ }).first()
+  if (await buttonCta.isVisible().catch(() => false)) {
+    await buttonCta.click()
+    return
+  }
+
+  const linkCta = page.getByRole("link", { name: /^새 글 작성/ }).first()
+  if (await linkCta.isVisible().catch(() => false)) {
+    await linkCta.click()
+    return
+  }
+
+  throw new Error("관리자 글 작업 공간에서 '새 글 작성' CTA를 찾지 못했습니다.")
+}
+
 type LoginPayloadCandidate = {
   label: "email+policy" | "email" | "username"
   data: Record<string, string | boolean>
@@ -422,7 +438,7 @@ test.describe("live production e2e", () => {
     const titleInput = page.locator("#post-title").first()
     const legacyTitleInput = page.getByPlaceholder("제목을 입력하세요").first()
     if (await workspaceHeading.isVisible().catch(() => false)) {
-      await page.getByRole("link", { name: "새 글 작성" }).first().click()
+      await openAdminNewPostEntry(page)
       await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write)(\/|$|\?)/)
     } else {
       await expect(page).toHaveURL(/\/(editor\/(new|[0-9]+)|admin\/posts\/write|admin\/posts\/new)(\/|$|\?)/)

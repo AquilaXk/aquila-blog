@@ -79,6 +79,7 @@ import {
   parseStandaloneMarkdownImageLine,
   serializeStandaloneMarkdownImageLine,
 } from "src/libs/markdown/rendering"
+import { serializeMarkdownTableLayoutComment } from "src/libs/markdown/tableMetadata"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
 
@@ -1399,6 +1400,19 @@ const tableToMarkdown = (el: HTMLTableElement): string => {
   const rows = Array.from(el.querySelectorAll("tr"))
   if (!rows.length) return ""
 
+  const columnWidths = Array.from(el.querySelectorAll("colgroup > col")).map((col) => {
+    const colElement = col as HTMLTableColElement
+    const width =
+      Number.parseInt(colElement.getAttribute("width") || "", 10) ||
+      Number.parseInt(colElement.style.width.replace(/px$/, ""), 10)
+    return Number.isFinite(width) && width > 0 ? width : null
+  })
+  const rowHeights = rows.map((row) => {
+    const explicitHeight =
+      Number.parseInt((row as HTMLElement).dataset.rowHeight || "", 10) ||
+      Number.parseInt(row.style.height.replace(/px$/, ""), 10)
+    return Number.isFinite(explicitHeight) && explicitHeight > 0 ? explicitHeight : null
+  })
   const matrix = rows.map((row) =>
     Array.from(row.querySelectorAll("th,td")).map((cell) =>
       escapePipes(Array.from(cell.childNodes).map(inlineToMarkdown).join("").replace(/\n+/g, " ").trim())
@@ -1415,12 +1429,18 @@ const tableToMarkdown = (el: HTMLTableElement): string => {
   const head = normalized[0]
   const separator = Array.from({ length: maxCols }, () => "---")
   const body = normalized.slice(1)
+  const metadataComment = serializeMarkdownTableLayoutComment({
+    columnWidths,
+    rowHeights,
+  })
 
-  return [
+  const markdownTable = [
     `| ${head.join(" | ")} |`,
     `| ${separator.join(" | ")} |`,
     ...body.map((row) => `| ${row.join(" | ")} |`),
   ].join("\n")
+
+  return metadataComment ? `${metadataComment}\n${markdownTable}` : markdownTable
 }
 
 const preToMarkdown = (el: HTMLElement): string => {
@@ -10635,30 +10655,16 @@ const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
     overflow-x: hidden;
   }
 
-  > div > .aq-markdown table {
-    display: block;
+  > div > .aq-markdown .aq-table-shell,
+  > div > .aq-markdown .aq-table-scroll {
     width: 100%;
     max-width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    table-layout: auto;
-    box-sizing: border-box;
-    overscroll-behavior-x: contain;
-  }
-
-  > div > .aq-markdown table thead,
-  > div > .aq-markdown table tbody {
-    display: table;
-    width: 100%;
-    table-layout: fixed;
-  }
-
-  > div > .aq-markdown th,
-  > div > .aq-markdown td {
     min-width: 0;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    box-sizing: border-box;
+  }
+
+  > div > .aq-markdown .aq-table-scroll {
+    overscroll-behavior-x: contain;
   }
 
   @media (max-width: 1200px) {

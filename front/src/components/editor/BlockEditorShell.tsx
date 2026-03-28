@@ -6,7 +6,6 @@ import Placeholder from "@tiptap/extension-placeholder"
 import { Table } from "@tiptap/extension-table"
 import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
-import TableRow from "@tiptap/extension-table-row"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
 import {
@@ -19,6 +18,7 @@ import {
 import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
 import {
   CalloutBlock,
+  EditorTableRow,
   EditorCodeBlock,
   getPreferredCodeLanguage,
   MermaidBlock,
@@ -38,6 +38,10 @@ import {
   type BlockEditorDoc,
   type ImageBlockAttrs,
 } from "./serialization"
+import {
+  TABLE_MIN_COLUMN_WIDTH_PX,
+  TABLE_MIN_ROW_HEIGHT_PX,
+} from "src/libs/markdown/tableMetadata"
 
 type Props = {
   value: string
@@ -114,7 +118,6 @@ const MERMAID_RAW_PLACEHOLDER = "```mermaid\nflowchart TD\n  A[시작] --> B[처
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse), (max-width: 1024px)"
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
-const TABLE_MIN_ROW_HEIGHT_PX = 44
 
 const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (!node) return false
@@ -462,6 +465,13 @@ const BlockEditorShell = ({
     const state = tableRowResizeRef.current
     if (state?.row) {
       state.row.removeAttribute("data-row-resize-active")
+      if (!state.row.getAttribute("data-row-height")) {
+        state.row.style.removeProperty("height")
+      }
+      state.cells.forEach((cell) => {
+        cell.style.removeProperty("height")
+        cell.style.removeProperty("min-height")
+      })
     }
     tableRowResizeRef.current = null
     setViewportRowResizeHot(false)
@@ -491,6 +501,35 @@ const BlockEditorShell = ({
     },
     [setViewportRowResizeHot]
   )
+
+  const commitTableRowHeight = useCallback((rowElement: HTMLTableRowElement, nextHeight: number) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+
+    let domPosition = 0
+    try {
+      domPosition = currentEditor.view.posAtDOM(rowElement, 0)
+    } catch {
+      return
+    }
+    const resolvedPosition = currentEditor.state.doc.resolve(domPosition)
+
+    for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+      if (resolvedPosition.node(depth).type.name !== "tableRow") continue
+
+      const rowPosition = resolvedPosition.before(depth)
+      const rowNode = currentEditor.state.doc.nodeAt(rowPosition)
+      if (!rowNode) return
+
+      const normalizedHeight = Math.max(TABLE_MIN_ROW_HEIGHT_PX, nextHeight)
+      const transaction = currentEditor.state.tr.setNodeMarkup(rowPosition, undefined, {
+        ...rowNode.attrs,
+        rowHeightPx: normalizedHeight,
+      })
+      currentEditor.view.dispatch(transaction)
+      return
+    }
+  }, [])
 
   const syncSerializedDoc = useCallback(
     (nextDoc: BlockEditorDoc) => {
@@ -558,8 +597,9 @@ const BlockEditorShell = ({
       }),
       Table.configure({
         resizable: true,
+        cellMinWidth: TABLE_MIN_COLUMN_WIDTH_PX,
       }),
-      TableRow,
+      EditorTableRow,
       TableHeader,
       TableCell,
       EditorCodeBlock,
@@ -791,6 +831,14 @@ const BlockEditorShell = ({
     }
 
     const handlePointerUp = () => {
+      const state = tableRowResizeRef.current
+      if (state) {
+        const committedHeight = Math.max(
+          TABLE_MIN_ROW_HEIGHT_PX,
+          Math.round(state.row.getBoundingClientRect().height)
+        )
+        commitTableRowHeight(state.row, committedHeight)
+      }
       stopTableRowResize()
     }
 
@@ -804,7 +852,7 @@ const BlockEditorShell = ({
       window.removeEventListener("pointercancel", handlePointerUp)
       stopTableRowResize()
     }
-  }, [stopTableRowResize])
+  }, [commitTableRowHeight, stopTableRowResize])
 
   useEffect(() => {
     const currentEditor = editorRef.current
@@ -2102,6 +2150,7 @@ const EditorViewport = styled.div`
     border-collapse: separate;
     border-spacing: 0;
     table-layout: auto;
+    background: transparent;
   }
 
   .aq-block-editor__content .tableWrapper {
@@ -2111,27 +2160,35 @@ const EditorViewport = styled.div`
     overflow-x: auto;
     overflow-y: hidden;
     margin: 1rem auto;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 16px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "linear-gradient(180deg, rgba(18, 22, 29, 0.96), rgba(15, 18, 24, 0.96))"
+        : "linear-gradient(180deg, #ffffff, #fbfcfe)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "0 18px 38px rgba(2, 6, 23, 0.28)"
+        : "0 18px 38px rgba(15, 23, 42, 0.08)"};
     -webkit-overflow-scrolling: touch;
   }
 
   .aq-block-editor__content thead th {
-    background: rgba(255, 255, 255, 0.05);
+    background: ${({ theme }) => theme.colors.gray3};
     font-weight: 700;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.16);
+    border-bottom: 2px solid
+      ${({ theme }) => (theme.scheme === "dark" ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)")};
   }
 
   .aq-block-editor__content th,
   .aq-block-editor__content td {
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 0.72rem 0.9rem;
+    border-right: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
+    padding: 0.78rem 0.92rem;
     text-align: left;
     vertical-align: top;
     position: relative;
-    min-width: 0;
+    min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
     white-space: normal;
     overflow-wrap: anywhere;
@@ -2148,7 +2205,7 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content tr[data-row-resize-active="true"] > :is(td, th) {
-    box-shadow: inset 0 -2px 0 rgba(148, 163, 184, 0.42);
+    box-shadow: inset 0 -2px 0 rgba(96, 165, 250, 0.5);
   }
 
   .aq-block-editor__content .selectedCell::after {
@@ -2158,10 +2215,11 @@ const EditorViewport = styled.div`
   .aq-block-editor__content .column-resize-handle {
     position: absolute;
     top: 0;
-    right: -2px;
-    width: 4px;
+    right: -3px;
+    width: 6px;
     height: 100%;
-    background: rgba(148, 163, 184, 0.42);
+    background: rgba(96, 165, 250, 0.62);
+    border-radius: 999px;
     pointer-events: none;
   }
 

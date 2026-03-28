@@ -1,4 +1,8 @@
 import styled from "@emotion/styled"
+import {
+  TABLE_MIN_COLUMN_WIDTH_PX,
+  TABLE_MIN_ROW_HEIGHT_PX,
+} from "src/libs/markdown/tableMetadata"
 
 const MarkdownRendererRoot = styled.div`
   margin-top: 1.65rem;
@@ -674,25 +678,32 @@ const MarkdownRendererRoot = styled.div`
       line-height: 1.56;
     }
 
-    table {
-      display: block;
+    .aq-table-scroll {
       width: 100%;
-      max-width: 100%;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      table-layout: auto;
-      border-radius: 12px;
+    }
+
+    table,
+    .aq-table {
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
     }
 
     table thead,
-    table tbody {
+    table tbody,
+    .aq-table thead,
+    .aq-table tbody {
       display: table;
       width: 100%;
       table-layout: fixed;
     }
 
     table th,
-    table td {
+    table td,
+    .aq-table th,
+    .aq-table td {
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
@@ -748,24 +759,39 @@ const MarkdownRendererRoot = styled.div`
   }
 
   @media (max-width: 480px) {
-    table.aq-table-responsive {
+    .aq-table-shell {
+      margin: 0.9rem 0;
+    }
+
+    .aq-table-scroll {
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      overflow: visible;
+    }
+
+    table.aq-table-responsive,
+    .aq-table.aq-table-responsive {
       display: block;
       border: 0;
-      margin: 0.9rem 0;
+      margin: 0;
       background: transparent;
     }
 
-    table.aq-table-responsive > thead {
+    table.aq-table-responsive > thead,
+    .aq-table.aq-table-responsive > thead {
       display: none !important;
     }
 
-    table.aq-table-responsive > tbody {
+    table.aq-table-responsive > tbody,
+    .aq-table.aq-table-responsive > tbody {
       display: grid;
       gap: 0.62rem;
       width: 100%;
     }
 
-    table.aq-table-responsive > tbody > tr {
+    table.aq-table-responsive > tbody > tr,
+    .aq-table.aq-table-responsive > tbody > tr {
       display: block;
       border: 1px solid ${({ theme }) => theme.colors.gray6};
       border-radius: 10px;
@@ -773,7 +799,8 @@ const MarkdownRendererRoot = styled.div`
       background: ${({ theme }) => theme.colors.gray2};
     }
 
-    table.aq-table-responsive > tbody > tr > :is(td, th) {
+    table.aq-table-responsive > tbody > tr > :is(td, th),
+    .aq-table.aq-table-responsive > tbody > tr > :is(td, th) {
       display: grid;
       grid-template-columns: minmax(5.2rem, 35%) minmax(0, 1fr);
       gap: 0.56rem;
@@ -787,11 +814,13 @@ const MarkdownRendererRoot = styled.div`
       overflow-wrap: anywhere;
     }
 
-    table.aq-table-responsive > tbody > tr > :is(td, th):last-child {
+    table.aq-table-responsive > tbody > tr > :is(td, th):last-child,
+    .aq-table.aq-table-responsive > tbody > tr > :is(td, th):last-child {
       border-bottom: 0;
     }
 
-    table.aq-table-responsive > tbody > tr > :is(td, th)::before {
+    table.aq-table-responsive > tbody > tr > :is(td, th)::before,
+    .aq-table.aq-table-responsive > tbody > tr > :is(td, th)::before {
       content: attr(data-label);
       color: ${({ theme }) => theme.colors.gray10};
       font-size: 0.74rem;
@@ -824,17 +853,47 @@ const MarkdownRendererRoot = styled.div`
     content: "▾";
   }
 
-  table {
+  .aq-table-shell {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    border-radius: 12px;
-    overflow: hidden;
+    max-width: 100%;
+    min-width: 0;
     margin: 1rem 0;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
   }
 
-  thead th {
+  .aq-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-radius: 16px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "linear-gradient(180deg, rgba(18, 22, 29, 0.96), rgba(15, 18, 24, 0.96))"
+        : "linear-gradient(180deg, #ffffff, #fbfcfe)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "0 18px 38px rgba(2, 6, 23, 0.28)"
+        : "0 18px 38px rgba(15, 23, 42, 0.08)"};
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table,
+  .aq-table {
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: auto;
+    margin: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  thead th,
+  .aq-table thead th {
     background: ${({ theme }) => theme.colors.gray3};
     font-weight: 700;
     border-bottom: 2px solid
@@ -842,19 +901,30 @@ const MarkdownRendererRoot = styled.div`
   }
 
   th,
-  td {
-    padding: 0.72rem 0.9rem;
+  td,
+  .aq-table th,
+  .aq-table td {
+    padding: 0.78rem 0.92rem;
     border-right: 1px solid ${({ theme }) => theme.colors.gray6};
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
     vertical-align: top;
+    min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
+    min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   tr td:last-child,
-  tr th:last-child {
+  tr th:last-child,
+  .aq-table tr td:last-child,
+  .aq-table tr th:last-child {
     border-right: 0;
   }
 
-  tbody tr:last-child td {
+  tbody tr:last-child td,
+  .aq-table tbody tr:last-child td,
+  .aq-table tbody tr:last-child th {
     border-bottom: 0;
   }
 

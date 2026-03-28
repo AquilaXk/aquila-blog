@@ -6,6 +6,13 @@ import {
   parseStandaloneMarkdownImageLine,
   serializeStandaloneMarkdownImageLine,
 } from "src/libs/markdown/rendering"
+import {
+  parseMarkdownTableLayoutComment,
+  serializeMarkdownTableLayoutComment,
+  TABLE_MIN_COLUMN_WIDTH_PX,
+  TABLE_MIN_ROW_HEIGHT_PX,
+  type MarkdownTableLayout,
+} from "src/libs/markdown/tableMetadata"
 
 export type BlockEditorDoc = JSONContent
 
@@ -358,6 +365,7 @@ const collectParagraphLines = (lines: string[], startIndex: number) => {
   while (index < lines.length) {
     const line = lines[index]
     const nextLine = lines[index + 1]
+    const tableLayout = parseMarkdownTableLayoutComment(line)
 
     if (isBlankLine(line)) break
     if (collected.length > 0 && isSupportedBlockStart(line, nextLine)) break
@@ -392,23 +400,50 @@ const createListNode = (
   })),
 })
 
-const createTableNode = (rows: string[][]): JSONContent => {
+const createTableNode = (
+  rows: string[][],
+  layout?: MarkdownTableLayout | null
+): JSONContent => {
   const [headerRow, ...bodyRows] = normalizeTableRows(rows)
+  const columnWidths = layout?.columnWidths || []
+  const rowHeights = layout?.rowHeights || []
+
+  const buildCellAttrs = (columnIndex: number) => {
+    const width = columnWidths[columnIndex]
+    if (!width) return undefined
+
+    return {
+      colwidth: [Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)],
+    }
+  }
+
+  const buildRowAttrs = (rowIndex: number) => {
+    const rowHeightPx = rowHeights[rowIndex]
+    if (!rowHeightPx) return undefined
+
+    return {
+      rowHeightPx: Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeightPx),
+    }
+  }
 
   return {
     type: "table",
     content: [
       {
         type: "tableRow",
-        content: headerRow.map((cell) => ({
+        ...(buildRowAttrs(0) ? { attrs: buildRowAttrs(0) } : {}),
+        content: headerRow.map((cell, columnIndex) => ({
           type: "tableHeader",
+          ...(buildCellAttrs(columnIndex) ? { attrs: buildCellAttrs(columnIndex) } : {}),
           content: [buildParagraphNode(cell)],
         })),
       },
-      ...bodyRows.map((row) => ({
+      ...bodyRows.map((row, rowIndex) => ({
         type: "tableRow",
-        content: row.map((cell) => ({
+        ...(buildRowAttrs(rowIndex + 1) ? { attrs: buildRowAttrs(rowIndex + 1) } : {}),
+        content: row.map((cell, columnIndex) => ({
           type: "tableCell",
+          ...(buildCellAttrs(columnIndex) ? { attrs: buildCellAttrs(columnIndex) } : {}),
           content: [buildParagraphNode(cell)],
         })),
       })),
@@ -458,6 +493,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
   while (index < lines.length) {
     const line = lines[index]
     const nextLine = lines[index + 1]
+    const tableLayout = parseMarkdownTableLayoutComment(line)
 
     if (isBlankLine(line)) {
       index += 1
@@ -631,21 +667,32 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       continue
     }
 
-    if (isLikelyTableRow(line) && nextLine && isTableSeparatorLine(nextLine)) {
-      const rows: string[][] = [splitTableCells(line)]
-      let pointer = index + 2
+    const tableStartLine =
+      tableLayout && isLikelyTableRow(nextLine || "") && isTableSeparatorLine(lines[index + 2] || "")
+        ? nextLine || ""
+        : line
+    const tableSeparatorLine =
+      tableLayout && isLikelyTableRow(nextLine || "") && isTableSeparatorLine(lines[index + 2] || "")
+        ? lines[index + 2]
+        : nextLine
+    const tableStartIndex =
+      tableLayout && tableStartLine === nextLine ? index + 1 : index
+
+    if (isLikelyTableRow(tableStartLine) && tableSeparatorLine && isTableSeparatorLine(tableSeparatorLine)) {
+      const rows: string[][] = [splitTableCells(tableStartLine)]
+      let pointer = tableStartIndex + 2
 
       while (pointer < lines.length && isLikelyTableRow(lines[pointer])) {
         rows.push(splitTableCells(lines[pointer]))
         pointer += 1
       }
 
-      const tableMarkdown = lines.slice(index, pointer).join("\n")
+      const tableMarkdown = lines.slice(tableStartIndex, pointer).join("\n")
 
-      if (hasTableAlignmentMarker(nextLine)) {
+      if (hasTableAlignmentMarker(tableSeparatorLine)) {
         content.push(toRawBlockNode(tableMarkdown, "unsupported-table-alignment"))
       } else {
-        content.push(createTableNode(rows))
+        content.push(createTableNode(rows, tableLayout))
       }
       index = pointer
       continue
@@ -762,6 +809,27 @@ const serializeTable = (node: JSONContent) => {
   const rows = node.content || []
   if (rows.length === 0) return ""
 
+  const layout: MarkdownTableLayout = {
+    columnWidths: rows[0]?.content?.map((cell) => {
+      const width =
+        Array.isArray(cell.attrs?.colwidth) && typeof cell.attrs.colwidth[0] === "number"
+          ? cell.attrs.colwidth[0]
+          : null
+
+      return width ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width) : null
+    }),
+    rowHeights: rows.map((row) => {
+      const height =
+        typeof row.attrs?.rowHeightPx === "number"
+          ? row.attrs.rowHeightPx
+          : Number.parseInt(String(row.attrs?.rowHeightPx || ""), 10)
+
+      return Number.isFinite(height) && height > 0
+        ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, height)
+        : null
+    }),
+  }
+  const metadataComment = serializeMarkdownTableLayoutComment(layout)
   const serializedRows = normalizeTableRows(
     rows.map((row) =>
       (row.content || [])
@@ -773,11 +841,13 @@ const serializeTable = (node: JSONContent) => {
   const separator = header.map(() => "---")
   const body = serializedRows.slice(1)
 
-  return [
+  const markdownTable = [
     `| ${header.join(" | ")} |`,
     `| ${separator.join(" | ")} |`,
     ...body.map((row) => `| ${row.join(" | ")} |`),
   ].join("\n")
+
+  return metadataComment ? `${metadataComment}\n${markdownTable}` : markdownTable
 }
 
 const serializeCalloutBlock = (attrs: Partial<CalloutBlockAttrs>) => {

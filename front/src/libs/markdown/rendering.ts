@@ -1,4 +1,5 @@
 import { ReactElement, ReactNode, isValidElement } from "react"
+import { extractMarkdownTableLayouts, type MarkdownTableLayout } from "src/libs/markdown/tableMetadata"
 import {
   extractNormalizedMermaidSource,
   normalizeEscapedMarkdownFences,
@@ -25,6 +26,7 @@ export type MarkdownRenderModel = {
   resolvedContentHtml: string
   renderKey: string
   segments: MarkdownSegment[]
+  tableLayouts: MarkdownTableLayout[]
 }
 
 export const markdownGuide = `### 작성 가이드
@@ -746,18 +748,22 @@ export const resolveMarkdownRenderModel = ({
   contentHtml?: string
 }): MarkdownRenderModel => {
   const normalizedContent = normalizeMarkdownForRender(content || "")
+  const { cleanedMarkdown, layouts: tableLayouts } = extractMarkdownTableLayouts(normalizedContent)
   const normalizedContentHtml = contentHtml?.trim() || ""
   const sanitizedContentHtml = normalizeContentHtmlForMermaid(normalizedContentHtml)
 
   // 원문 markdown이 있으면 interactive block 책임은 항상 클라이언트 markdown 파이프라인에 둔다.
   const resolvedContentHtml = normalizedContent ? "" : sanitizedContentHtml
-  const segments = resolvedContentHtml ? [] : parseMarkdownSegments(normalizedContent)
-  const renderKeySeed = resolvedContentHtml ? `html:${resolvedContentHtml}` : `md:${normalizedContent}`
+  const segments = resolvedContentHtml ? [] : parseMarkdownSegments(cleanedMarkdown)
+  const renderKeySeed = resolvedContentHtml
+    ? `html:${resolvedContentHtml}`
+    : `md:${cleanedMarkdown}::table:${JSON.stringify(tableLayouts)}`
 
   return {
-    normalizedContent,
+    normalizedContent: cleanedMarkdown,
     resolvedContentHtml,
     renderKey: `${renderKeySeed.length}:${hashString(renderKeySeed)}`,
     segments,
+    tableLayouts,
   }
 }

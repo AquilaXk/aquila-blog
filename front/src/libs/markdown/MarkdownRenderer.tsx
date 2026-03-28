@@ -1,4 +1,15 @@
-import { CSSProperties, FC, memo, useEffect, useMemo, useRef, useState } from "react"
+import {
+  createContext,
+  CSSProperties,
+  FC,
+  memo,
+  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import {
@@ -7,6 +18,11 @@ import {
   resolveMarkdownRenderModel,
 } from "src/libs/markdown/rendering"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
+import {
+  TABLE_MIN_COLUMN_WIDTH_PX,
+  TABLE_MIN_ROW_HEIGHT_PX,
+  type MarkdownTableLayout,
+} from "src/libs/markdown/tableMetadata"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
 import useResponsiveTableEffect from "src/libs/markdown/hooks/useResponsiveTableEffect"
 import useInlineColorEffect from "src/libs/markdown/hooks/useInlineColorEffect"
@@ -122,6 +138,96 @@ const MarkdownImageFigure = memo(
 
 MarkdownImageFigure.displayName = "MarkdownImageFigure"
 
+type MarkdownTableRenderContextValue = {
+  rowHeights: Array<number | null>
+  allocateRowIndex: () => number
+}
+
+const MarkdownTableRenderContext = createContext<MarkdownTableRenderContextValue | null>(null)
+
+const MarkdownTableRenderer = ({
+  children,
+  className,
+  layout,
+}: {
+  children?: ReactNode
+  className?: string
+  layout?: MarkdownTableLayout | null
+}) => {
+  const rowCursorRef = useRef(0)
+  const columnWidths = layout?.columnWidths || []
+  rowCursorRef.current = 0
+  const contextValue = useMemo<MarkdownTableRenderContextValue>(
+    () => ({
+      rowHeights: layout?.rowHeights || [],
+      allocateRowIndex: () => {
+        const currentIndex = rowCursorRef.current
+        rowCursorRef.current += 1
+        return currentIndex
+      },
+    }),
+    [layout?.rowHeights]
+  )
+
+  return (
+    <MarkdownTableRenderContext.Provider value={contextValue}>
+      <div className="aq-table-shell">
+        <div className="aq-table-scroll">
+          <table className={["aq-table", className].filter(Boolean).join(" ")}>
+            {columnWidths.some((width) => typeof width === "number" && width > 0) ? (
+              <colgroup>
+                {columnWidths.map((width, index) => {
+                  if (!width) return <col key={`table-col-${index}`} />
+                  return (
+                    <col
+                      key={`table-col-${index}`}
+                      style={{ width: `${Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)}px` }}
+                    />
+                  )
+                })}
+              </colgroup>
+            ) : null}
+            {children}
+          </table>
+        </div>
+      </div>
+    </MarkdownTableRenderContext.Provider>
+  )
+}
+
+const MarkdownTableRowRenderer = ({
+  children,
+  className,
+}: {
+  children?: ReactNode
+  className?: string
+}) => {
+  const context = useContext(MarkdownTableRenderContext)
+  const rowIndexRef = useRef<number | null>(null)
+
+  if (context && rowIndexRef.current === null) {
+    rowIndexRef.current = context.allocateRowIndex()
+  }
+
+  const rowHeight =
+    rowIndexRef.current !== null ? context?.rowHeights[rowIndexRef.current] || null : null
+  const rowStyle = rowHeight
+    ? ({
+        height: `${Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeight)}px`,
+      } satisfies CSSProperties)
+    : undefined
+
+  return (
+    <tr
+      className={className}
+      data-row-height={rowHeight ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeight) : undefined}
+      style={rowStyle}
+    >
+      {children}
+    </tr>
+  )
+}
+
 const MarkdownRendererComponent: FC<Props> = ({
   content,
   contentHtml,
@@ -136,6 +242,7 @@ const MarkdownRendererComponent: FC<Props> = ({
     [content, contentHtml]
   )
   const { normalizedContent, renderKey, resolvedContentHtml, segments } = renderModel
+  const { tableLayouts } = renderModel
 
   useMermaidEffect(rootRef, renderKey, !disableMermaid)
   useResponsiveTableEffect(rootRef, renderKey)
@@ -146,6 +253,8 @@ const MarkdownRendererComponent: FC<Props> = ({
     imageRenderOrderRef.current = 0
   }, [renderKey])
 
+  let tableRenderIndex = 0
+
   const renderMarkdown = (markdown: string, key: string, inCallout = false) => (
     // 코드블록이 없는 세그먼트에는 무거운 syntax-highlight 플러그인을 생략한다.
     <ReactMarkdown
@@ -155,6 +264,18 @@ const MarkdownRendererComponent: FC<Props> = ({
         p({ children }) {
           if (!inCallout) return <p>{children}</p>
           return <p className="aq-markdown-text">{children}</p>
+        },
+        table({ children, ...props }) {
+          const layout = tableLayouts[tableRenderIndex] || null
+          tableRenderIndex += 1
+          return (
+            <MarkdownTableRenderer layout={layout} {...props}>
+              {children}
+            </MarkdownTableRenderer>
+          )
+        },
+        tr({ children, ...props }) {
+          return <MarkdownTableRowRenderer {...props}>{children}</MarkdownTableRowRenderer>
         },
         img({ src, alt }) {
           const imageSrc = typeof src === "string" ? src : ""

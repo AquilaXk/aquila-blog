@@ -5,6 +5,7 @@ import {
   serializeEditorDocToMarkdown,
 } from "src/components/editor/serialization"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
+import { resolveMarkdownRenderModel } from "src/libs/markdown/rendering"
 
 test.describe("block editor serialization", () => {
   test("mermaid 블록은 parse/serialize round-trip을 유지한다", () => {
@@ -153,5 +154,44 @@ test.describe("block editor serialization", () => {
 
     expect(doc.content?.[0]?.type).toBe("rawMarkdownBlock")
     expect(serializeEditorDocToMarkdown(doc)).toBe(markdown)
+  })
+
+  test("테이블 열 폭/행 높이 메타는 parse/serialize round-trip 을 유지한다", () => {
+    const markdown = [
+      '<!-- aq-table {"columnWidths":[220,320],"rowHeights":[52,68,44]} -->',
+      "| 항목 | 값 |",
+      "| --- | --- |",
+      "| 이름 | aquila |",
+      "| 역할 | Backend Developer |",
+    ].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const table = doc.content?.[0]
+
+    expect(table?.type).toBe("table")
+    expect(table?.content?.[0]?.attrs?.rowHeightPx).toBe(52)
+    expect(table?.content?.[1]?.attrs?.rowHeightPx).toBe(68)
+    expect(table?.content?.[0]?.content?.[0]?.attrs?.colwidth).toEqual([220])
+    expect(table?.content?.[0]?.content?.[1]?.attrs?.colwidth).toEqual([320])
+    expect(serializeEditorDocToMarkdown(doc)).toBe(markdown)
+  })
+
+  test("렌더 모델은 테이블 메타 comment 를 분리하고 본문 markdown 에서는 제거한다", () => {
+    const markdown = [
+      '<!-- aq-table {"columnWidths":[220,320],"rowHeights":[52,68,44]} -->',
+      "| 항목 | 값 |",
+      "| --- | --- |",
+      "| 이름 | aquila |",
+    ].join("\n")
+
+    const model = resolveMarkdownRenderModel({ content: markdown })
+
+    expect(model.normalizedContent).not.toContain("<!-- aq-table")
+    expect(model.tableLayouts).toEqual([
+      {
+        columnWidths: [220, 320],
+        rowHeights: [52, 68, 44],
+      },
+    ])
   })
 })

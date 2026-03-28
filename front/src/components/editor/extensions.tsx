@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import { Node, mergeAttributes } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
+import TableRow from "@tiptap/extension-table-row"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import AppIcon from "src/components/icons/AppIcon"
 import {
@@ -15,6 +16,7 @@ import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
 import type { CalloutKind } from "src/libs/markdown/rendering"
 import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/libs/markdown/rendering"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
+import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
 
 const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
   "unsupported-mermaid": "Mermaid 원문 블록",
@@ -749,6 +751,36 @@ const ResizableImageView = ({ node, updateAttributes, selected }: NodeViewProps)
     </ImageBlockWrapper>
   )
 }
+
+export const EditorTableRow = TableRow.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      rowHeightPx: {
+        default: null,
+        parseHTML: (element) => {
+          const attrValue = element.getAttribute("data-row-height")
+          const styleValue = element instanceof HTMLElement ? element.style.height : ""
+          const parsedValue =
+            Number.parseInt(attrValue || "", 10) || Number.parseInt(styleValue.replace(/px$/, ""), 10)
+
+          return Number.isFinite(parsedValue) && parsedValue > 0
+            ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, parsedValue)
+            : null
+        },
+        renderHTML: (attributes) => {
+          const rowHeightPx = Number.parseInt(String(attributes.rowHeightPx || ""), 10)
+          if (!Number.isFinite(rowHeightPx) || rowHeightPx <= 0) return {}
+
+          return {
+            "data-row-height": Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeightPx),
+            style: `height: ${Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeightPx)}px;`,
+          }
+        },
+      },
+    }
+  },
+})
 
 export const MermaidBlock = Node.create({
   name: "mermaidBlock",

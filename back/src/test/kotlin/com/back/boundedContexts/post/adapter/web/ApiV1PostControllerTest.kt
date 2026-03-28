@@ -6,6 +6,7 @@ import com.back.boundedContexts.post.application.service.PostHitDedupService
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.SeededSpringBootTestSupport
+import com.jayway.jsonpath.JsonPath
 import jakarta.persistence.EntityManager
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
@@ -766,11 +767,12 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `인증된 작성자가 기존 글 수정 요청 시 글이 정상 변경된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val version = post.version ?: 0L
 
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "제목 new", "content": "내용 new"}"""
+                    content = """{"title": "제목 new", "content": "내용 new", "version": $version}"""
                 }.andExpect {
                     match(handler().handlerType(ApiV1PostController::class.java))
                     match(handler().methodName("modify"))
@@ -785,11 +787,12 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `성공 - 관리자가 다른 사람 글 수정`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val version = post.version ?: 0L
 
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "관리자 수정 제목", "content": "관리자 수정 내용"}"""
+                    content = """{"title": "관리자 수정 제목", "content": "관리자 수정 내용", "version": $version}"""
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.resultCode") { value("200-1") }
@@ -805,6 +808,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             val post = postFacade.write(writer, "원래 제목", "원래 내용", true, true)
             val admin = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val driftedEmail = "admin-drift-${System.currentTimeMillis()}@test.com"
+            val version = post.version ?: 0L
 
             jdbcTemplate.update("update member set email = ? where id = ?", driftedEmail, admin.id)
             entityManager.clear()
@@ -812,7 +816,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "관리자 수정 제목", "content": "관리자 수정 내용"}"""
+                    content = """{"title": "관리자 수정 제목", "content": "관리자 수정 내용", "version": $version}"""
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.resultCode") { value("200-1") }
@@ -826,11 +830,12 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `실패 - 권한 없음`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+            val version = post.version ?: 0L
 
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "제목 new", "content": "내용 new"}"""
+                    content = """{"title": "제목 new", "content": "내용 new", "version": $version}"""
                 }.andExpect {
                     status { isForbidden() }
                     jsonPath("$.resultCode") { value("403-1") }
@@ -843,11 +848,12 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `published false로 수정하면 listed가 자동으로 false가 된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "공개 글", "내용", true, true)
+            val version = post.version ?: 0L
 
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "공개 글", "content": "내용", "published": false}"""
+                    content = """{"title": "공개 글", "content": "내용", "published": false, "version": $version}"""
                 }.andExpect {
                     status { isOk() }
                     jsonPath("$.data.published") { value(false) }
@@ -861,10 +867,25 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
             mvc
                 .put("/post/api/v1/posts/${Int.MAX_VALUE}") {
                     contentType = MediaType.APPLICATION_JSON
-                    content = """{"title": "제목 new", "content": "내용 new"}"""
+                    content = """{"title": "제목 new", "content": "내용 new", "version": 0}"""
                 }.andExpect {
                     status { isNotFound() }
                     jsonPath("$.resultCode") { value("404-1") }
+                }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `실패 - version 없이 수정 요청하면 400`() {
+            val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
+            val post = postFacade.write(actor, "원래 제목", "원래 내용", true, true)
+
+            mvc
+                .put("/post/api/v1/posts/${post.id}") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content = """{"title": "제목 new", "content": "내용 new"}"""
+                }.andExpect {
+                    status { isBadRequest() }
                 }
         }
 
@@ -890,6 +911,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         fun `글 수정 시 contentHtml 은 sanitize 후 저장된다`() {
             val actor = actorApplicationService.findByEmail("admin@test.com").getOrThrow()
             val post = postFacade.write(actor, "원본", "원본 본문", true, true)
+            val version = post.version ?: 0L
 
             mvc
                 .put("/post/api/v1/posts/${post.id}") {
@@ -899,6 +921,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                         {
                           "title": "수정 제목",
                           "content": "수정 본문",
+                          "version": $version,
                           "contentHtml": "<a href=\"javascript:alert(1)\">link</a><img src=\"https://example.com/a.png\" onerror=\"alert(1)\" />"
                         }
                         """.trimIndent()
@@ -1262,6 +1285,7 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                 jsonPath("$.resultCode") { value("201-1") }
                 jsonPath("$.data.published") { value(false) }
                 jsonPath("$.data.listed") { value(false) }
+                jsonPath("$.data.tempDraft") { value(true) }
             }
         }
 
@@ -1274,6 +1298,44 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                 status { isOk() }
                 jsonPath("$.resultCode") { value("200-1") }
                 jsonPath("$.msg") { value("기존 임시저장 글을 불러옵니다.") }
+                jsonPath("$.data.tempDraft") { value(true) }
+            }
+        }
+
+        @Test
+        @WithUserDetails("admin@test.com")
+        fun `성공 - 임시글 작성 완료 후에는 새 임시글을 다시 만든다`() {
+            val firstTemp =
+                mvc
+                    .post("/post/api/v1/posts/temp")
+                    .andReturn()
+                    .response
+                    .contentAsString
+            val firstTempId = JsonPath.read<Int>(firstTemp, "$.data.id")
+            val firstTempVersion = JsonPath.read<Int>(firstTemp, "$.data.version")
+
+            mvc
+                .put("/post/api/v1/posts/$firstTempId") {
+                    contentType = MediaType.APPLICATION_JSON
+                    content =
+                        """
+                        {
+                          "title": "비공개 초안",
+                          "content": "완성된 새 글",
+                          "published": false,
+                          "listed": false,
+                          "version": $firstTempVersion
+                        }
+                        """.trimIndent()
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.data.listed") { value(false) }
+                }
+
+            mvc.post("/post/api/v1/posts/temp").andExpect {
+                status { isCreated() }
+                jsonPath("$.data.id") { value(org.hamcrest.Matchers.not(firstTempId)) }
+                jsonPath("$.data.tempDraft") { value(true) }
             }
         }
 

@@ -134,4 +134,24 @@ test.describe("block editor serialization", () => {
 
     expect(serialized).toContain("| 경로 | C:\\\\temp\\\\\\|draft |")
   })
+
+  test("GFM 테이블의 escaped pipe/backslash 는 parse 후 재직렬화해도 보존된다", () => {
+    const markdown = ["| 항목 | 값 |", "| --- | --- |", "| 경로 | C:\\\\temp\\\\\\|draft |"].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const reparsed = parseMarkdownToEditorDoc(serialized)
+
+    expect(serialized).toContain("| 경로 | C:\\\\temp\\\\\\|draft |")
+    expect(serializeEditorDocToMarkdown(reparsed)).toBe(serialized)
+  })
+
+  test("정렬 지정 GFM 테이블은 raw markdown block 으로 보존한다", () => {
+    const markdown = ["| 항목 | 값 |", "| :--- | ---: |", "| 이름 | aquila |"].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+
+    expect(doc.content?.[0]?.type).toBe("rawMarkdownBlock")
+    expect(serializeEditorDocToMarkdown(doc)).toBe(markdown)
+  })
 })

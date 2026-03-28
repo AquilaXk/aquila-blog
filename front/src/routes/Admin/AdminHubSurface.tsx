@@ -63,7 +63,6 @@ const AdminHubSurface = ({
       </HeaderPanel>
 
       <HeroPanel>
-        <HeroLabel>지금 할 일</HeroLabel>
         <HeroBody>
           <HeroCopy>
             <h2>{primaryAction.title}</h2>
@@ -202,25 +201,10 @@ const StatusItem = styled.div`
 
 const HeroPanel = styled.section`
   display: grid;
-  gap: 0.72rem;
   padding: 1.18rem 1.2rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(32, 39, 52, 0.76) 100%);
-`
-
-const HeroLabel = styled.span`
-  display: inline-flex;
-  width: fit-content;
-  min-height: 30px;
-  align-items: center;
-  padding: 0 0.72rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.76rem;
-  font-weight: 800;
 `
 
 const HeroBody = styled.div`

@@ -46,7 +46,7 @@ interface PostUseCase {
         content: String,
         published: Boolean? = null,
         listed: Boolean? = null,
-        expectedVersion: Long? = null,
+        expectedVersion: Long,
         contentHtml: String? = null,
     )
 
@@ -181,4 +181,6 @@ interface PostUseCase {
     fun findTemp(author: Member): Post?
 
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean>
+
+    fun isTempDraft(post: Post): Boolean
 }

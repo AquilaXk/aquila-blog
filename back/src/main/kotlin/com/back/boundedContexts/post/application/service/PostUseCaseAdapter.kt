@@ -51,7 +51,7 @@ class PostUseCaseAdapter(
         content: String,
         published: Boolean?,
         listed: Boolean?,
-        expectedVersion: Long?,
+        expectedVersion: Long,
         contentHtml: String?,
     ) = postApplicationService.modify(actor, post, title, content, published, listed, expectedVersion, contentHtml)
 
@@ -186,4 +186,6 @@ class PostUseCaseAdapter(
     override fun findTemp(author: Member): Post? = postApplicationService.findTemp(author)
 
     override fun getOrCreateTemp(author: Member): Pair<Post, Boolean> = postApplicationService.getOrCreateTemp(author)
+
+    override fun isTempDraft(post: Post): Boolean = postApplicationService.isTempDraft(post)
 }

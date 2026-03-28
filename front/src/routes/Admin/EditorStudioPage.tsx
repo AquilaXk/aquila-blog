@@ -34,6 +34,12 @@ import {
   isPublishActionDisabled,
 } from "./editorStudioState"
 import {
+  isServerTempDraftPost,
+  isTempDraftTitlePlaceholder,
+  TEMP_DRAFT_BODY_PLACEHOLDER,
+  TEMP_DRAFT_TITLE_PLACEHOLDER,
+} from "./editorTempDraft"
+import {
   isNavigationCancelledError,
   pushRoute,
   replaceRoute,
@@ -130,6 +136,7 @@ type PostForEditor = {
   version?: number
   published: boolean
   listed: boolean
+  tempDraft?: boolean
 }
 
 type PostVisibility = "PRIVATE" | "PUBLIC_UNLISTED" | "PUBLIC_LISTED"
@@ -183,6 +190,7 @@ type AdminPostListItem = {
   authorName: string
   published: boolean
   listed: boolean
+  tempDraft?: boolean
   createdAt: string
   modifiedAt: string
   deletedAt?: string
@@ -310,9 +318,13 @@ const PROFILE_IMAGE_UPLOAD_RETRY_DELAY_MS = 700
 const IMAGE_UPLOAD_CONFLICT_MAX_RETRIES = 3
 const THUMBNAIL_FRAME_ASPECT_RATIO = 1.94
 const EDITOR_BODY_PLACEHOLDER = "내용을 입력하세요."
+
+const syncTitleTextareaHeight = (element: HTMLTextAreaElement | null) => {
+  if (!element) return
+  element.style.height = "0px"
+  element.style.height = `${Math.max(element.scrollHeight, 44)}px`
+}
 const EDITOR_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
-const TEMP_DRAFT_TITLE_PLACEHOLDER = "임시글"
-const TEMP_DRAFT_BODY_PLACEHOLDER = "임시글 입니다."
 const DEFAULT_THUMBNAIL_SOURCE_SIZE: ThumbnailSourceSize = {
   width: THUMBNAIL_FRAME_ASPECT_RATIO,
   height: 1,
@@ -342,15 +354,10 @@ const PREVIEW_CARD_VIEWPORTS: Record<
   },
 }
 
-const isTempDraftTitlePlaceholder = (value: string) => value.trim() === TEMP_DRAFT_TITLE_PLACEHOLDER
-
 const isTempDraftBodyPlaceholder = (value: string) => {
   const normalized = value.replace(/\r\n?/g, "\n").trim()
   return normalized === TEMP_DRAFT_BODY_PLACEHOLDER || normalized === EDITOR_BODY_PLACEHOLDER
 }
-
-const isServerTempDraftPost = (post: Pick<PostForEditor, "title" | "published" | "listed">) =>
-  !post.published && !post.listed && isTempDraftTitlePlaceholder(post.title ?? "")
 
 const isBlankServerTempDraft = (
   post: Pick<PostForEditor, "title" | "published" | "listed">,
@@ -496,7 +503,9 @@ const getTagToneStyle = (value: string): CSSProperties => {
   } as CSSProperties
 }
 
-const isComposingKeyboardEvent = (event: React.KeyboardEvent<HTMLInputElement>) => {
+const isComposingKeyboardEvent = (
+  event: React.KeyboardEvent<HTMLElement>
+) => {
   const nativeEvent = event.nativeEvent as KeyboardEvent & { isComposing?: boolean; keyCode?: number }
   return nativeEvent.isComposing === true || nativeEvent.keyCode === 229
 }
@@ -1656,6 +1665,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const previewScrollRef = useRef<HTMLDivElement>(null)
   const previewScrollSyncRafRef = useRef<number | null>(null)
   const editorScrollRatioRef = useRef(0)
+  const titleFieldRef = useRef<HTMLTextAreaElement | null>(null)
 
   const postContentMermaidBlockCount = useMemo(
     () => countMarkdownMermaidBlocks(postContent),
@@ -1984,6 +1994,27 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     schedulePreviewScrollSync()
   }, [composeViewMode, previewContent, schedulePreviewScrollSync])
 
+  const handleTitleFieldRef = useCallback((node: HTMLTextAreaElement | null) => {
+    titleFieldRef.current = node
+    syncTitleTextareaHeight(node)
+  }, [])
+
+  const handleTitleChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    setPostTitle(event.target.value.replace(/\r\n?/g, "\n"))
+    syncTitleTextareaHeight(event.target)
+  }, [])
+
+  const handleTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isComposingKeyboardEvent(event)) return
+    if (event.key === "Enter") {
+      event.preventDefault()
+    }
+  }, [])
+
+  useEffect(() => {
+    syncTitleTextareaHeight(titleFieldRef.current)
+  }, [postTitle, editorStudioViewMode])
+
   const handlePreviewImageWidthCommit = useCallback(
     (payload: { src: string; alt: string; index: number; widthPx: number }) => {
       const currentContent = postContentLiveRef.current
@@ -2024,8 +2055,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setListKw("")
       setListSort("CREATED_AT")
     } else if (preset === "temp") {
-      setListKw("임시글")
-      setListSort("CREATED_AT")
+      setListKw("")
+      setListSort("MODIFIED_AT")
     }
     setListQuickPreset(preset)
   }, [])
@@ -2579,13 +2610,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const loadExistingTempPostForRecovery = useCallback(async (): Promise<PostForEditor | null> => {
     try {
       const data = await apiFetch<PageDto<AdminPostListItem>>(
-        "/post/api/v1/adm/posts?page=1&pageSize=100&kw=%EC%9E%84%EC%8B%9C%EA%B8%80&sort=MODIFIED_AT"
+        "/post/api/v1/adm/posts?page=1&pageSize=30&kw=&sort=MODIFIED_AT"
       )
       const tempRow = (data.content || []).find(
         (row) =>
-          isTempDraftTitlePlaceholder(row.title) &&
-          !row.published &&
-          !row.listed &&
+          isServerTempDraftPost(row) &&
           !row.deletedAt
       )
       if (!tempRow?.id) return null
@@ -2798,6 +2827,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return false
     }
 
+    if (postVersion == null) {
+      const msg = "최신 글 버전을 불러오지 못했습니다. 글을 다시 열어주세요."
+      setPublishStatus({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return false
+    }
+
     try {
       setLoadingKey("modifyPost")
       setPublishStatus({ tone: "loading", text: "글 수정 중입니다..." })
@@ -2812,7 +2848,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             thumbnail: effectiveThumbnailUrl,
           }),
           ...toFlags(postVisibility),
-          version: postVersion ?? undefined,
+          version: postVersion,
         }),
       })
 
@@ -2935,6 +2971,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return false
     }
 
+    if (postVersion == null) {
+      const msg = "새 글 버전을 불러오지 못했습니다. 글을 다시 열어주세요."
+      setPublishStatus({ tone: "error", text: msg })
+      setResult(pretty({ error: msg }))
+      return false
+    }
+
     try {
       setLoadingKey("publishTempPost")
       setPublishStatus({ tone: "loading", text: "새 글을 작성하는 중입니다..." })
@@ -2949,7 +2992,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             thumbnail: effectiveThumbnailUrl,
           }),
           ...toFlags(postVisibility),
-          version: postVersion ?? undefined,
+          version: postVersion,
         }),
       })
       setPostVisibility(postVisibility)
@@ -3007,7 +3050,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return copy.filter((row) => row.modifiedAt?.startsWith(todayDateKey))
     }
     if (listQuickPreset === "temp") {
-      return copy.filter((row) => row.title.includes("임시글") || (!row.published && !row.listed))
+      return copy.filter((row) => isServerTempDraftPost(row))
     }
     return copy
   }, [adminPostRows, listScope, modifiedSortOrder, listQuickPreset, todayDateKey])
@@ -4521,10 +4564,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         <EditorStudioWritingColumn $viewMode={editorStudioViewMode}>
           <EditorStudioMetaSection>
             <TitleInput
+              ref={handleTitleFieldRef}
               id="post-title"
               placeholder="제목을 입력하세요"
+              rows={1}
               value={postTitle}
-              onChange={(e) => setPostTitle(e.target.value)}
+              onChange={handleTitleChange}
+              onKeyDown={handleTitleKeyDown}
             />
             <EditorTagRow aria-label="태그 입력">
               {postTags.map((tag) => (
@@ -5860,10 +5906,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 <WriterHeader>
                   <div className="titleField">
                     <TitleInput
+                      ref={handleTitleFieldRef}
                       id="post-title"
                       placeholder="제목을 입력하세요"
+                      rows={1}
                       value={postTitle}
-                      onChange={(e) => setPostTitle(e.target.value)}
+                      onChange={handleTitleChange}
+                      onKeyDown={handleTitleKeyDown}
                     />
                     <WriterAccent />
                   </div>
@@ -7692,18 +7741,24 @@ const FieldSelect = styled.select`
   }
 `
 
-const TitleInput = styled(Input)`
+const TitleInput = styled.textarea`
   width: 100%;
   min-width: 0;
   border: 0;
   border-radius: 0;
   padding: 0;
+  min-height: 44px;
   background: transparent;
   box-shadow: none;
+  font-family: inherit;
   font-size: clamp(1.7rem, 3vw, 2.45rem);
   font-weight: 720;
   line-height: 1.22;
   letter-spacing: -0.025em;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 
   &::placeholder {
     color: ${({ theme }) => theme.colors.gray9};

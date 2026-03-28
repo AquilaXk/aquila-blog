@@ -9,6 +9,7 @@ import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { isServerTempDraftPost } from "./editorTempDraft"
 
 type PostListScope = "active" | "deleted"
 
@@ -18,6 +19,7 @@ type AdminPostListItem = {
   authorName: string
   published: boolean
   listed: boolean
+  tempDraft?: boolean
   createdAt: string
   modifiedAt: string
   deletedAt?: string
@@ -137,10 +139,10 @@ const visibilityLabel = (published: boolean, listed: boolean) => {
   return "전체 공개"
 }
 
-const isWorkspaceTempDraft = (row: Pick<AdminPostListItem, "title" | "published" | "listed">) =>
-  row.title.trim() === "임시글" && !row.published && !row.listed
+const isWorkspaceTempDraft = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
+  isServerTempDraftPost(row)
 
-const getWorkspaceRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed">) =>
+const getWorkspaceRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
   isWorkspaceTempDraft(row) ? "임시 저장" : row.title
 
 const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) => {

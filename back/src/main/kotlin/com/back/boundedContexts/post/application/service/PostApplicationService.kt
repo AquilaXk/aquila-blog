@@ -82,6 +82,8 @@ class PostApplicationService(
     private val tagsLocalCacheTtlSeconds: Long,
 ) {
     private val logger = LoggerFactory.getLogger(PostApplicationService::class.java)
+    private val activeTempDraftPostIdAttrName = "activeTempDraftPostId"
+    private val activeTempDraftLockAttrName = "activeTempDraftLock"
 
     private data class TagCountsCache(
         val expiresAtMillis: Long,
@@ -235,12 +237,13 @@ class PostApplicationService(
         content: String,
         published: Boolean? = null,
         listed: Boolean? = null,
-        expectedVersion: Long? = null,
+        expectedVersion: Long,
         contentHtml: String? = null,
     ) {
         hydratePostAttrs(post)
         val currentVersion = post.version ?: 0L
-        if (expectedVersion != null && expectedVersion != currentVersion) {
+        val wasTempDraft = isTempDraft(post)
+        if (expectedVersion != currentVersion) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
 
@@ -258,6 +261,9 @@ class PostApplicationService(
             post.modify(title, content, published, listed, sanitizedContentHtml)
             postRepository.flush()
             syncMetaTagIndexAttr(post)
+            if (wasTempDraft) {
+                updateTempDraftMarker(post.author, null)
+            }
         } catch (exception: ObjectOptimisticLockingFailureException) {
             throw AppException("409-1", "다른 세션에서 이미 수정되었습니다. 최신 글을 다시 불러온 뒤 수정해주세요.")
         }
@@ -395,11 +401,15 @@ class PostApplicationService(
     ) {
         val deletedPostContent = post.content
         val wasPublic = isPubliclyListed(post)
+        val wasTempDraft = isTempDraft(post)
         val beforeTags = extractNormalizedTags(deletedPostContent)
 
         val softDeleted = postRepository.softDeleteById(post.id)
         if (!softDeleted) {
             throw AppException("404-1", "${post.id}번 글을 찾을 수 없습니다.")
+        }
+        if (wasTempDraft) {
+            updateTempDraftMarker(post.author, null)
         }
         clearReadCaches(
             postId = post.id,
@@ -1072,8 +1082,10 @@ class PostApplicationService(
         }
     }
 
-    fun findTemp(author: Member): Post? =
-        postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(toPersistenceMember(author), "임시글")
+    fun findTemp(author: Member): Post? {
+        val persistenceAuthor = toPersistenceMember(author)
+        return resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
+    }
 
     /**
      * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
@@ -1081,12 +1093,29 @@ class PostApplicationService(
      */
     @Transactional
     fun getOrCreateTemp(author: Member): Pair<Post, Boolean> {
-        val existingTemp = findTemp(author)
-        if (existingTemp != null) return existingTemp to false
+        val persistenceAuthor = toPersistenceMember(author)
+        if (!tryAcquireTempDraftLock(persistenceAuthor)) {
+            throw AppException("409-2", "다른 탭에서 임시글을 준비 중입니다. 잠시 후 다시 시도해주세요.")
+        }
 
-        val newPost = Post(0, toPersistenceMember(author), "임시글", "임시글 입니다.")
-        return postRepository.save(newPost) to true
+        return try {
+            val existingTemp = resolveTrackedTempPost(persistenceAuthor) ?: findLegacyTemp(persistenceAuthor)
+            if (existingTemp != null) {
+                updateTempDraftMarker(persistenceAuthor, existingTemp.id)
+                postRepository.flush()
+                existingTemp to false
+            } else {
+                val newPost = postRepository.save(Post(0, persistenceAuthor, "임시글", "임시글 입니다."))
+                updateTempDraftMarker(persistenceAuthor, newPost.id)
+                postRepository.flush()
+                newPost to true
+            }
+        } finally {
+            releaseTempDraftLock(persistenceAuthor)
+        }
     }
+
+    fun isTempDraft(post: Post): Boolean = resolveTrackedTempPostId(post.author) == post.id
 
     private fun findAndHydratePagedPosts(
         page: Int,
@@ -1250,6 +1279,45 @@ class PostApplicationService(
 
     private fun saveMemberAttr(attr: MemberAttr?) {
         attr?.let(memberAttrRepository::save)
+    }
+
+    private fun findLegacyTemp(author: Member): Post? =
+        postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
+
+    private fun resolveTrackedTempPost(author: Member): Post? {
+        val trackedPostId = resolveTrackedTempPostId(author) ?: return null
+        val trackedPost = postRepository.findById(trackedPostId).getOrNull() ?: return null
+        return trackedPost.takeIf { it.author.id == author.id }
+    }
+
+    private fun resolveTrackedTempPostId(author: Member): Long? =
+        memberAttrRepository
+            .findBySubjectAndName(author, activeTempDraftPostIdAttrName)
+            ?.strValue
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.toLongOrNull()
+
+    private fun updateTempDraftMarker(
+        author: Member,
+        postId: Long?,
+    ) {
+        val attr =
+            memberAttrRepository.findBySubjectAndName(author, activeTempDraftPostIdAttrName)
+                ?: MemberAttr(0, author, activeTempDraftPostIdAttrName, "")
+        attr.strValue = postId?.toString().orEmpty()
+        saveMemberAttr(attr)
+    }
+
+    private fun tryAcquireTempDraftLock(author: Member): Boolean {
+        val lockValue = memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, 1)
+        if (lockValue == 1) return true
+        memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, -1)
+        return false
+    }
+
+    private fun releaseTempDraftLock(author: Member) {
+        memberAttrRepository.incrementIntValue(author, activeTempDraftLockAttrName, -1)
     }
 
     // SecurityContext actor는 MemberProxy일 수 있어 영속 경계에서는 실제 엔티티를 사용한다.

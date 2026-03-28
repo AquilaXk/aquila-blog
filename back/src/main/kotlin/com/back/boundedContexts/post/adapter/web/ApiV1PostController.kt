@@ -22,6 +22,7 @@ import jakarta.persistence.OptimisticLockException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
@@ -319,6 +320,7 @@ class ApiV1PostController(
         val actor = rq.actorOrNull
         val hasAdminRole = rq.hasRole("ADMIN")
         return PostWithContentDto(post).apply {
+            tempDraft = postUseCase.isTempDraft(post)
             actorHasLiked = postUseCase.isLiked(post, actor)
             actorCanModify = hasAdminRole || post.getCheckActorCanModifyRs(actor).isSuccess
             actorCanDelete = hasAdminRole || post.getCheckActorCanDeleteRs(actor).isSuccess
@@ -624,7 +626,8 @@ class ApiV1PostController(
         val contentHtml: String? = null,
         val published: Boolean? = null,
         val listed: Boolean? = null,
-        val version: Long? = null,
+        @field:Min(0)
+        val version: Long,
     )
 
     data class PostWriteResultDto(

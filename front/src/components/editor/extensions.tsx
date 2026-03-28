@@ -85,7 +85,24 @@ const CODE_LANGUAGE_OPTIONS: CodeLanguageOption[] = [
   { value: "mermaid", label: "Mermaid" },
 ]
 
-const normalizeCodeLanguage = (value?: string | null) => value?.trim().toLowerCase() || "text"
+const CODE_LANGUAGE_ALIASES: Record<string, string> = {
+  txt: "text",
+  plaintext: "text",
+  "plain-text": "text",
+  "plain text": "text",
+  md: "markdown",
+  yml: "yaml",
+  sh: "shell",
+  kt: "kotlin",
+  py: "python",
+  ts: "typescript",
+  js: "javascript",
+}
+
+export const normalizeCodeLanguage = (value?: string | null) => {
+  const normalized = value?.trim().toLowerCase() || "text"
+  return CODE_LANGUAGE_ALIASES[normalized] || normalized
+}
 
 export const getPreferredCodeLanguage = () => {
   if (typeof window !== "undefined") {
@@ -369,6 +386,9 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
   const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const pickerId = useId()
+  const [isKindMenuOpen, setIsKindMenuOpen] = useState(false)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
   useAutosizeTextarea(bodyRef, draftBody)
@@ -379,6 +399,28 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     setDraftBody(String(node.attrs?.body || ""))
   }, [node.attrs?.kind, node.attrs?.title, node.attrs?.body])
 
+  useEffect(() => {
+    if (!isKindMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && pickerRef.current?.contains(target)) return
+      setIsKindMenuOpen(false)
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setIsKindMenuOpen(false)
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown)
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown)
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isKindMenuOpen])
+
   const commit = (next: Partial<{ kind: CalloutKind; title: string; body: string }>) => {
     const nextAttrs = {
       kind: next.kind ?? draftKind,
@@ -388,26 +430,53 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     scheduleCommit(nextAttrs)
   }
 
+  const activeKindOption =
+    CALLOUT_KIND_OPTIONS.find((option) => option.value === draftKind) ?? CALLOUT_KIND_OPTIONS[0]
+
   return (
     <CalloutEditorWrapper data-selected={selected} data-kind={draftKind}>
       <CalloutEditorCard data-kind={draftKind}>
         <CalloutEditorHeader data-kind={draftKind}>
-          <CalloutEmojiPicker role="list" aria-label="콜아웃 종류">
-            {CALLOUT_KIND_OPTIONS.map((option) => (
-              <CalloutEmojiButton
-                key={option.value}
-                type="button"
-                data-active={draftKind === option.value}
-                aria-label={option.label}
-                title={option.label}
-                onClick={() => {
-                  setDraftKind(option.value)
-                  commit({ kind: option.value })
-                }}
+          <CalloutEmojiPicker ref={pickerRef}>
+            <CalloutEmojiTrigger
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={isKindMenuOpen}
+              aria-controls={`${pickerId}-callout-kind-menu`}
+              title={activeKindOption.label}
+              onClick={() => setIsKindMenuOpen((prev) => !prev)}
+            >
+              <span aria-hidden="true">{activeKindOption.emoji}</span>
+              <AppIcon name="chevron-down" aria-hidden="true" />
+            </CalloutEmojiTrigger>
+            {isKindMenuOpen ? (
+              <CalloutEmojiPopover
+                id={`${pickerId}-callout-kind-menu`}
+                role="dialog"
+                aria-label="콜아웃 종류 선택"
               >
-                <span aria-hidden="true">{option.emoji}</span>
-              </CalloutEmojiButton>
-            ))}
+                <CalloutEmojiOptionList role="listbox" aria-label="콜아웃 종류">
+                  {CALLOUT_KIND_OPTIONS.map((option) => (
+                    <CalloutEmojiOptionButton
+                      key={option.value}
+                      type="button"
+                      data-active={draftKind === option.value}
+                      onClick={() => {
+                        setDraftKind(option.value)
+                        commit({ kind: option.value })
+                        setIsKindMenuOpen(false)
+                      }}
+                    >
+                      <span className="emoji" aria-hidden="true">
+                        {option.emoji}
+                      </span>
+                      <span className="label">{option.label}</span>
+                      {draftKind === option.value ? <AppIcon name="check-circle" aria-hidden="true" /> : null}
+                    </CalloutEmojiOptionButton>
+                  ))}
+                </CalloutEmojiOptionList>
+              </CalloutEmojiPopover>
+            ) : null}
           </CalloutEmojiPicker>
           <CalloutTitleInput
             value={draftTitle}
@@ -436,17 +505,6 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
           />
         </CalloutEditorBody>
       </CalloutEditorCard>
-      <CalloutEditorLabel>
-        {CALLOUT_KIND_OPTIONS.map((option) => (
-          <CalloutToneHint
-            key={option.value}
-            data-active={draftKind === option.value}
-            aria-hidden={draftKind !== option.value}
-          >
-            {option.emoji} {option.label}
-          </CalloutToneHint>
-        ))}
-      </CalloutEditorLabel>
     </CalloutEditorWrapper>
   )
 }
@@ -533,19 +591,26 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
   return (
     <RawBlockWrapper data-selected={selected}>
       <RawBlockHeader>
+        <RawBlockToolbarLeft aria-hidden="true">
+          <RawBlockDot data-tone="red" />
+          <RawBlockDot data-tone="yellow" />
+          <RawBlockDot data-tone="green" />
+        </RawBlockToolbarLeft>
         <strong>{RAW_BLOCK_REASON_LABELS[reason] || "원문 블록"}</strong>
       </RawBlockHeader>
-      <BlockTextarea
-        ref={textareaRef}
-        value={draft}
-        onBlur={flushCommit}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setDraft(nextValue)
-          scheduleCommit({ markdown: nextValue })
-        }}
-        spellCheck={false}
-      />
+      <RawBlockBody>
+        <RawBlockTextarea
+          ref={textareaRef}
+          value={draft}
+          onBlur={flushCommit}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            setDraft(nextValue)
+            scheduleCommit({ markdown: nextValue })
+          }}
+          spellCheck={false}
+        />
+      </RawBlockBody>
     </RawBlockWrapper>
   )
 }
@@ -943,11 +1008,13 @@ const MermaidPreviewCard = styled.div`
 const CodeBlockEditorWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   margin: 1rem 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   background: #2b2d3a;
+  position: relative;
+  z-index: 0;
 
   &[data-selected="true"] {
     border-color: rgba(148, 163, 184, 0.28);
@@ -1022,7 +1089,7 @@ const CodeLanguagePopover = styled.div`
   position: absolute;
   top: calc(100% + 0.55rem);
   right: 0;
-  z-index: 20;
+  z-index: 40;
   width: min(20rem, calc(100vw - 2rem));
   display: flex;
   flex-direction: column;
@@ -1087,6 +1154,9 @@ const CodeLanguageOptionButton = styled.button`
 `
 
 const CodeBlockEditorSurface = styled.div`
+  overflow: hidden;
+  border-radius: 0 0 14px 14px;
+
   .aq-code-editor-content {
     overflow: auto;
     padding: 1.05rem 1.18rem 1.6rem;
@@ -1185,7 +1255,7 @@ const CalloutEditorCard = styled.div`
 const CalloutEditorHeader = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.7rem;
   min-height: 3.3rem;
   padding: 0.7rem 1rem;
   background: var(--ad-header-bg);
@@ -1193,29 +1263,92 @@ const CalloutEditorHeader = styled.div`
 `
 
 const CalloutEmojiPicker = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  position: relative;
+  display: inline-flex;
   flex-shrink: 0;
 `
 
-const CalloutEmojiButton = styled.button`
+const CalloutEmojiTrigger = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border: 0;
+  gap: 0.32rem;
+  min-width: 2.3rem;
+  height: 2.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 1.02rem;
-  transition: background-color 140ms ease, transform 140ms ease, color 140ms ease;
+  padding: 0 0.68rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ad-accent);
+  font-size: 1rem;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 
-  &[data-active="true"] {
+  svg {
+    width: 0.92rem;
+    height: 0.92rem;
+    color: rgba(255, 255, 255, 0.68);
+  }
+
+  &:hover {
     background: rgba(255, 255, 255, 0.12);
-    color: var(--ad-accent);
-    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+`
+
+const CalloutEmojiPopover = styled.div`
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  left: 0;
+  z-index: 40;
+  min-width: 10.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(30, 31, 36, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
+`
+
+const CalloutEmojiOptionList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+`
+
+const CalloutEmojiOptionButton = styled.button`
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 2.5rem;
+  padding: 0 0.72rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--color-gray12);
+  text-align: left;
+
+  .emoji {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .label {
+    font-size: 0.9rem;
+    font-weight: 650;
+  }
+
+  svg {
+    width: 0.98rem;
+    height: 0.98rem;
+    color: #e5e7eb;
+  }
+
+  &[data-active="true"],
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 `
 
@@ -1239,30 +1372,6 @@ const CalloutEditorBody = styled.div`
   padding: 1rem 1.15rem 1.05rem;
 `
 
-const CalloutEditorLabel = styled.div`
-  min-height: 1rem;
-
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-
-  strong {
-    font-size: 0.82rem;
-    color: var(--color-gray12);
-    line-height: 1.1;
-  }
-`
-
-const CalloutToneHint = styled.span`
-  display: none;
-  color: var(--color-gray10);
-  font-size: 0.78rem;
-
-  &[data-active="true"] {
-    display: inline-flex;
-  }
-`
-
 const CalloutBodyTextarea = styled(CompactBlockTextarea)`
   min-height: 5rem;
   border: 0;
@@ -1280,24 +1389,18 @@ const CalloutBodyTextarea = styled(CompactBlockTextarea)`
 `
 
 const ToggleEditorWrapper = styled(NodeViewWrapper)`
-  margin: 0.75rem 0;
+  margin: 1rem 0;
 `
 
 const ToggleEditorCard = styled.details`
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.95rem;
-  background: rgba(18, 21, 26, 0.72);
-  overflow: hidden;
-
   &[data-selected="true"] {
-    border-color: rgba(148, 163, 184, 0.26);
-    box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.08);
+    filter: brightness(1.03);
   }
 
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0.78rem 0.95rem;
+    padding: 0;
 
     &::-webkit-details-marker {
       display: none;
@@ -1308,12 +1411,13 @@ const ToggleEditorCard = styled.details`
 const ToggleSummaryInner = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
 `
 
 const ToggleChevron = styled.span`
   color: var(--color-gray10);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+  line-height: 1;
   flex-shrink: 0;
 `
 
@@ -1323,9 +1427,9 @@ const ToggleTitleInput = styled.input`
   border: 0;
   background: transparent;
   color: var(--color-gray12);
-  font-size: 0.94rem;
+  font-size: 1rem;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.5;
   padding: 0;
 
   &::placeholder {
@@ -1334,8 +1438,7 @@ const ToggleTitleInput = styled.input`
 `
 
 const ToggleEditorBody = styled.div`
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 0 1rem 0.95rem;
+  margin-top: 0.5rem;
 `
 
 const ToggleBodyTextarea = styled(CompactBlockTextarea)`
@@ -1347,7 +1450,7 @@ const ToggleBodyTextarea = styled(CompactBlockTextarea)`
   font-family: inherit;
   font-size: 0.95rem;
   line-height: 1.65;
-  padding: 0.95rem 0 0;
+  padding: 0;
 
   &::placeholder {
     color: var(--color-gray10);
@@ -1357,12 +1460,13 @@ const ToggleBodyTextarea = styled(CompactBlockTextarea)`
 const RawBlockWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  margin: 0.85rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0.95rem;
-  background: rgba(18, 21, 26, 0.68);
-  padding: 0.78rem 0.85rem;
+  gap: 0;
+  margin: 1.2rem 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: 0 18px 38px rgba(2, 6, 23, 0.34);
 
   &[data-selected="true"] {
     border-color: rgba(59, 130, 246, 0.3);
@@ -1373,12 +1477,59 @@ const RawBlockWrapper = styled(NodeViewWrapper)`
 const RawBlockHeader = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.84rem 0.96rem 0.76rem;
+  background: linear-gradient(180deg, #3a3f59, #363b54);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 
   strong {
-    font-size: 0.82rem;
-    color: var(--color-gray12);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ff9d62;
   }
+`
+
+const RawBlockToolbarLeft = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+`
+
+const RawBlockDot = styled.span`
+  width: 0.92rem;
+  height: 0.92rem;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+
+  &[data-tone="red"] {
+    background: #ff5f56;
+  }
+
+  &[data-tone="yellow"] {
+    background: #ffbd2e;
+  }
+
+  &[data-tone="green"] {
+    background: #27c93f;
+  }
+`
+
+const RawBlockBody = styled.div`
+  position: relative;
+  background: #2b2d3a;
+`
+
+const RawBlockTextarea = styled(BlockTextarea)`
+  min-height: 8rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-gray12);
+  box-shadow: none;
+  padding: 1.05rem 1.18rem 1.3rem;
 `
 
 const ImageBlockWrapper = styled(NodeViewWrapper)`

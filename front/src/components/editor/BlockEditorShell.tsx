@@ -209,7 +209,11 @@ const convertHtmlNodeToMarkdown = (node: ChildNode): string => {
       .filter((row) => row.length > 0)
 
     if (rows.length >= 2) {
-      const [header, ...body] = rows
+      const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0)
+      const normalizedRows = rows.map((row) =>
+        row.length >= columnCount ? row : [...row, ...Array.from({ length: columnCount - row.length }, () => "")]
+      )
+      const [header, ...body] = normalizedRows
       const separator = header.map(() => "---")
       return [
         `| ${header.join(" | ")} |`,
@@ -1620,20 +1624,6 @@ const BlockEditorShell = ({
                 </ToolbarButton>
                 <ToolbarButton type="button" data-active={editor.isActive("tableHeader")} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
                   헤더
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  disabled={!editor.can().chain().focus().mergeCells().run()}
-                  onClick={() => editor.chain().focus().mergeCells().run()}
-                >
-                  셀 병합
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  disabled={!editor.can().chain().focus().splitCell().run()}
-                  onClick={() => editor.chain().focus().splitCell().run()}
-                >
-                  셀 분할
                 </ToolbarButton>
                 <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteRow().run()}>
                   행 삭제

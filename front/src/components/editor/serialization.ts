@@ -160,7 +160,53 @@ const isLikelyTableRow = (line: string) => {
 
 const splitTableCells = (line: string) => {
   const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "")
-  return trimmed.split("|").map((cell) => cell.trim())
+  const cells: string[] = []
+  let current = ""
+  let escaped = false
+
+  for (const character of trimmed) {
+    if (escaped) {
+      current += character
+      escaped = false
+      continue
+    }
+
+    if (character === "\\") {
+      escaped = true
+      continue
+    }
+
+    if (character === "|") {
+      cells.push(current.trim())
+      current = ""
+      continue
+    }
+
+    current += character
+  }
+
+  if (escaped) {
+    current += "\\"
+  }
+
+  cells.push(current.trim())
+  return cells
+}
+
+const hasTableAlignmentMarker = (line: string) =>
+  splitTableCells(line).some((cell) => {
+    const compact = cell.replace(/\s+/g, "")
+    return /^:?-{3,}:?$/.test(compact) && (compact.startsWith(":") || compact.endsWith(":"))
+  })
+
+const normalizeTableRows = (rows: string[][]) => {
+  const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0)
+  if (columnCount === 0) return rows
+
+  return rows.map((row) => {
+    if (row.length >= columnCount) return row
+    return [...row, ...Array.from({ length: columnCount - row.length }, () => "")]
+  })
 }
 
 const buildTextNode = (text: string, marks?: EditorTextMark[]): EditorTextNode => ({
@@ -347,7 +393,7 @@ const createListNode = (
 })
 
 const createTableNode = (rows: string[][]): JSONContent => {
-  const [headerRow, ...bodyRows] = rows
+  const [headerRow, ...bodyRows] = normalizeTableRows(rows)
 
   return {
     type: "table",
@@ -594,7 +640,13 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         pointer += 1
       }
 
-      content.push(createTableNode(rows))
+      const tableMarkdown = lines.slice(index, pointer).join("\n")
+
+      if (hasTableAlignmentMarker(nextLine)) {
+        content.push(toRawBlockNode(tableMarkdown, "unsupported-table-alignment"))
+      } else {
+        content.push(createTableNode(rows))
+      }
       index = pointer
       continue
     }
@@ -710,10 +762,12 @@ const serializeTable = (node: JSONContent) => {
   const rows = node.content || []
   if (rows.length === 0) return ""
 
-  const serializedRows = rows.map((row) =>
-    (row.content || [])
-      .map((cell) => serializeParagraphLikeNode(cell.content?.[0] || cell))
-      .map(escapePipeText)
+  const serializedRows = normalizeTableRows(
+    rows.map((row) =>
+      (row.content || [])
+        .map((cell) => serializeParagraphLikeNode(cell.content?.[0] || cell))
+        .map(escapePipeText)
+    )
   )
   const header = serializedRows[0]
   const separator = header.map(() => "---")

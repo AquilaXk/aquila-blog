@@ -66,7 +66,13 @@ class ApiV1AdmPostController(
         val validPage = page.coerceAtLeast(1)
         val validPageSize = pageSize.coerceIn(1, 30)
         val postPage = postUseCase.findPagedByKwForAdmin(kw, sort, validPage, validPageSize)
-        return PageDto(postPage.map(::PostDto))
+        return PageDto(
+            postPage.map { post ->
+                PostDto(post).apply {
+                    tempDraft = postUseCase.isTempDraft(post)
+                }
+            },
+        )
     }
 
     @GetMapping("/deleted")
@@ -90,7 +96,13 @@ class ApiV1AdmPostController(
         @PathVariable @Positive id: Long,
     ): RsData<PostDto> {
         val restoredPost = postUseCase.restoreDeletedByIdForAdmin(id)
-        return RsData("200-1", "${id}번 삭제 글을 복구했습니다.", PostDto(restoredPost))
+        return RsData(
+            "200-1",
+            "${id}번 삭제 글을 복구했습니다.",
+            PostDto(restoredPost).apply {
+                tempDraft = postUseCase.isTempDraft(restoredPost)
+            },
+        )
     }
 
     @DeleteMapping("/{id}/hard")
@@ -112,7 +124,12 @@ class ApiV1AdmPostController(
     @Operation(summary = "관리자용 글 상세 (숨김글 포함)")
     fun getItem(
         @PathVariable id: Long,
-    ): PostWithContentDto = PostWithContentDto(postUseCase.findById(id).getOrThrow())
+    ): PostWithContentDto {
+        val post = postUseCase.findById(id).getOrThrow()
+        return PostWithContentDto(post).apply {
+            tempDraft = postUseCase.isTempDraft(post)
+        }
+    }
 
     data class RecommendTagsRequest(
         @field:Size(max = 300)

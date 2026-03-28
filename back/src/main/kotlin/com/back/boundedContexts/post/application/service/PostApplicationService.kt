@@ -1281,8 +1281,7 @@ class PostApplicationService(
         attr?.let(memberAttrRepository::save)
     }
 
-    private fun findLegacyTemp(author: Member): Post? =
-        postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
+    private fun findLegacyTemp(author: Member): Post? = postRepository.findFirstByAuthorAndTitleAndPublishedFalseOrderByIdAsc(author, "임시글")
 
     private fun resolveTrackedTempPost(author: Member): Post? {
         val trackedPostId = resolveTrackedTempPostId(author) ?: return null

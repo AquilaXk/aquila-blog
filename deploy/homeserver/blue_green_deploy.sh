@@ -194,6 +194,32 @@ compose_up_force_recreate_with_retry() {
   return 1
 }
 
+compose_up_no_deps_with_retry() {
+  local max_attempts=4
+  local attempt=1
+  local output=""
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    if output="$(compose up -d --no-deps "$@" 2>&1)"; then
+      echo "${output}"
+      return 0
+    fi
+
+    if grep -Eqi "network sandbox .* not found|context deadline exceeded|is not running|No such container" <<< "${output}"; then
+      echo "compose up --no-deps retry (${attempt}/${max_attempts}) for services [$*]: ${output}" >&2
+      sleep 2
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "${output}" >&2
+    return 1
+  done
+
+  echo "compose up --no-deps failed after ${max_attempts} retries for services [$*]" >&2
+  echo "${output}" >&2
+  return 1
+}
+
 backend_container_id_any_state() {
   local backend="$1"
   docker ps -aq \
@@ -841,19 +867,62 @@ reload_caddy() {
   compose exec -T caddy caddy reload --config "${CADDY_CONTAINER_FILE}"
 }
 
+normalize_backend_name() {
+  local value="$1"
+  value="${value//-/_}"
+  echo "${value}"
+}
+
+host_env_value() {
+  local key="$1"
+  trim_quotes "$(env_value "${key}")"
+}
+
+mounted_env_value() {
+  local key="$1"
+  compose exec -T caddy sh -lc "printenv ${key}" 2>/dev/null | tr -d '\r' | head -n 1
+}
+
+resolve_caddy_upstream_token() {
+  local token="$1"
+  local scope="${2:-host}"
+
+  if [[ "${token}" =~ ^([a-zA-Z0-9_-]+):8080$ ]]; then
+    normalize_backend_name "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  if [[ "${token}" =~ ^\{\$([A-Z0-9_]+):([a-zA-Z0-9_-]+)\}:8080$ ]]; then
+    local key="${BASH_REMATCH[1]}"
+    local default_value
+    local resolved_value
+    default_value="$(normalize_backend_name "${BASH_REMATCH[2]}")"
+    if [[ "${scope}" == "mounted" ]]; then
+      resolved_value="$(normalize_backend_name "$(mounted_env_value "${key}")")"
+    else
+      resolved_value="$(normalize_backend_name "$(host_env_value "${key}")")"
+    fi
+    if [[ -n "${resolved_value}" ]]; then
+      echo "${resolved_value}"
+      return 0
+    fi
+    echo "${default_value}"
+    return 0
+  fi
+
+  return 1
+}
+
 current_caddy_upstream_host() {
-  awk '
-    $1 == "reverse_proxy" && $2 ~ /^back[-_](blue|green):8080$/ {
-      split($2, a, ":")
-      gsub("-", "_", a[1])
-      print a[1]
-      exit
-    }
-  ' "${CADDY_FILE}"
+  local token
+  token="$(awk '$1 == "reverse_proxy" {print $2; exit}' "${CADDY_FILE}")"
+  resolve_caddy_upstream_token "${token}" "host" || true
 }
 
 current_caddy_mounted_upstream_host() {
-  compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^back[-_](blue|green):8080$/ {split(\$2, a, \":\"); gsub(\"-\", \"_\", a[1]); print a[1]; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1
+  local token
+  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
+  resolve_caddy_upstream_token "${token}" "mounted" || true
 }
 
 caddy_mounted_has_legacy_back_active() {
@@ -913,7 +982,11 @@ set_caddy_upstream_backend() {
 
   # Keep content rewrite in-place; avoids stale config when external tools swap files.
   local rewritten
-  rewritten="$(sed -E "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" "${CADDY_FILE}")"
+  rewritten="$(sed -E \
+    -e "s/\\{\\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\\}:8080/${active_host}:8080/g" \
+    -e "s/\\{\\$READ_API_UPSTREAM:back[-_](blue|green|read|admin)\\}:8080/${active_host}:8080/g" \
+    -e "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" \
+    "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "caddy upstream switched to active=${active_host}:8080"
@@ -1317,11 +1390,12 @@ echo "next backend: ${next_backend}"
 action_backend_host="$(backend_host "${next_backend}")"
 
 echo "starting infra + ${next_backend} (${action_backend_host})"
-services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma prometheus grafana autoheal back_worker)
+services_to_boot=(db_1 redis_1 minio_1 caddy cloudflared uptime_kuma autoheal back_worker)
 if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin)
 fi
 compose_up_with_retry "${services_to_boot[@]}"
+compose_up_no_deps_with_retry prometheus grafana
 ensure_caddy_mount_sync
 check_cloudflared_runtime
 check_grafana_embed_public_route

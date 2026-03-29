@@ -418,6 +418,24 @@ jobs:
           BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
           echo "backup created (pre-env-mutation): ${BACKUP_DIR}"
 
+          DEPLOY_COMPLETED="false"
+          ROLLBACK_IN_PROGRESS="false"
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
+
+          rollback_from_backup_if_needed() {
+            local reason="${1:-unexpected_exit}"
+            if [ "${DEPLOY_COMPLETED}" = "true" ] || [ "${ROLLBACK_IN_PROGRESS}" = "true" ]; then
+              return 0
+            fi
+            if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
+              ROLLBACK_IN_PROGRESS="true"
+              echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
+              RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
+            fi
+          }
+
+          trap 'status=$?; if [ "${status}" -ne 0 ]; then rollback_from_backup_if_needed "unexpected_exit_status_${status}"; fi' EXIT
+
           if [ -n "${HOME_SERVER_ENV:-}" ]; then
             printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod
           elif [ ! -f deploy/homeserver/.env.prod ]; then
@@ -584,6 +602,7 @@ jobs:
           if [ -z "${RUNTIME_SPLIT_STAGE_VALUE}" ]; then
             RUNTIME_SPLIT_STAGE_VALUE="A"
           fi
+          ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
           echo "runtime split from HOME_SERVER_ENV: enabled=${RUNTIME_SPLIT_ENABLED_VALUE} stage=${RUNTIME_SPLIT_STAGE_VALUE}"
 
           emit_post_deploy_diagnostics() {
@@ -601,6 +620,7 @@ jobs:
 
           rollback_and_exit() {
             local reason="$1"
+            ROLLBACK_IN_PROGRESS="true"
             echo "deploy verification failed: ${reason}" >&2
             emit_post_deploy_diagnostics
             if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
@@ -782,6 +802,9 @@ jobs:
           if ! run_canary_ratio_check "detail(${DETAIL_POST_ID})" "${DETAIL_URL}"; then
             rollback_and_exit "post_public_read_canary_detail_failed"
           fi
+
+          DEPLOY_COMPLETED="true"
+          trap - EXIT
           REMOTE
 
   frontLiveE2E:

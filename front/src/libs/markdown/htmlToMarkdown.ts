@@ -7,18 +7,24 @@ const DEFAULT_TOGGLE_TITLE_PLACEHOLDER = "토글 제목"
 const DEFAULT_TOGGLE_BODY_PLACEHOLDER = "내용을 입력하세요."
 const TABLE_MIN_COLUMN_WIDTH_PX = 120
 const TABLE_MIN_ROW_HEIGHT_PX = 44
+const DEFAULT_CALLOUT_TITLE = "참고"
+const EMBEDDED_HTML_BLOCK_PATTERN =
+  /<aside\b[^>]*>[\s\S]*?<\/aside>|<details\b[^>]*>[\s\S]*?<\/details>|<table\b[^>]*>[\s\S]*?<\/table>|<blockquote\b[^>]*>[\s\S]*?<\/blockquote>|<pre\b[^>]*>[\s\S]*?<\/pre>|<figure\b[^>]*>[\s\S]*?<\/figure>|<img\b[^>]*\/?>|<hr\b[^>]*\/?>/gi
 
-const escapeTableCell = (value: string) => value.replace(/[\\|]/g, "\\$&")
-const escapeImageAlt = (value: string) => value.replace(/]/g, "\\]")
-const escapeLinkText = (value: string) => value.replace(/\[/g, "\\[").replace(/]/g, "\\]")
-const escapeLinkHref = (value: string) => value.replace(/\)/g, "\\)")
-const escapeLinkTitle = (value: string) => value.replace(/"/g, '\\"')
+const escapeMarkdownByPattern = (value: string, pattern: RegExp) => value.replace(pattern, "\\$&")
+const escapeTableCell = (value: string) => escapeMarkdownByPattern(value, /[\\|]/g)
+const escapeImageAlt = (value: string) => escapeMarkdownByPattern(value, /[\\\]]/g)
+const escapeLinkText = (value: string) => escapeMarkdownByPattern(value, /[\\[\]]/g)
+const escapeLinkHref = (value: string) => escapeMarkdownByPattern(value, /[\\)]/g)
+const escapeLinkTitle = (value: string) => escapeMarkdownByPattern(value, /[\\"]/g)
 
 const normalizeParagraphSpacing = (value: string) =>
   value
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
+
+const normalizeClipboardLineEndings = (value: string) => value.replace(/\r\n?/g, "\n")
 
 const normalizeTableMetricValue = (value: unknown, minimum: number): number | null => {
   if (typeof value !== "number" || !Number.isFinite(value)) return null
@@ -112,6 +118,76 @@ export const extractPlainTextFromHtml = (html: string) => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, "text/html")
   return doc.body.textContent?.replace(/\r\n?/g, "\n").trim() || ""
+}
+
+const normalizeCalloutLines = (value: string) =>
+  value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+const stripLeadingEmojiOnlyLine = (lines: string[]) => {
+  const [firstLine, ...rest] = lines
+  if (!firstLine) return lines
+  const compact = firstLine.replace(/[\s\uFE0F]/g, "")
+  if (/^[\p{Extended_Pictographic}]+$/u.test(compact)) {
+    return rest
+  }
+  return lines
+}
+
+const isLikelyShortCalloutTitle = (line: string) => {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+  if (trimmed.length > 32) return false
+  if (/[.!?]$/.test(trimmed)) return false
+  if (trimmed.endsWith("다") || trimmed.endsWith("요")) return false
+  return true
+}
+
+const serializeCalloutMarkdown = (kind: string, title: string, bodyLines: string[]) => {
+  const normalizedTitle = title.trim() || DEFAULT_CALLOUT_TITLE
+  const normalizedBodyLines = bodyLines.map((line) => line.trim()).filter(Boolean)
+  return [
+    `> [!${kind}] ${normalizedTitle}`,
+    ...normalizedBodyLines.map((line) => `> ${line}`),
+  ].join("\n")
+}
+
+export const looksLikeStructuredMarkdownDocument = (value: string) => {
+  const normalized = normalizeClipboardLineEndings(value).trim()
+  if (!normalized) return false
+
+  const structuredPatterns = [
+    /^#{1,6}\s+\S/m,
+    /^\s*[-*+]\s+\S/m,
+    /^\s*\d+\.\s+\S/m,
+    /^\s*>\s*(?:\[![A-Za-z]+\]|\S)/m,
+    /^```[\w-]*/m,
+    /^:::toggle(?:\s+.*)?$/im,
+    /^\s*\|.+\|\s*$/m,
+    /^<!--\s*aq-table/m,
+    /!\[[^\]]*]\([^)]+\)/,
+    /<(?:aside|details|table|blockquote|pre|figure|img|hr)\b/i,
+  ]
+
+  return structuredPatterns.some((pattern) => pattern.test(normalized))
+}
+
+export const normalizeStructuredMarkdownClipboard = (
+  value: string,
+  options: ConvertHtmlToMarkdownOptions = {}
+) => {
+  const normalized = normalizeClipboardLineEndings(value).trim()
+  if (!normalized) return ""
+
+  const convertedHtmlBlocks = normalized.replace(EMBEDDED_HTML_BLOCK_PATTERN, (fragment) => {
+    const converted = convertHtmlToMarkdown(fragment, options).trim()
+    if (!converted) return fragment
+    return `\n\n${converted}\n\n`
+  })
+
+  return normalizeParagraphSpacing(convertedHtmlBlocks)
 }
 
 export const convertHtmlToMarkdown = (
@@ -298,6 +374,33 @@ export const convertHtmlToMarkdown = (
         .trim() || toggleBodyPlaceholder
       return `:::toggle ${title}\n${body}\n:::`
     }
+    if (tag === "aside") {
+      let calloutLines = normalizeCalloutLines(
+        Array.from(element.childNodes)
+          .map((node) => {
+            const childElement = findClosestElement(node)
+            if (childElement && isBlockTag(childElement.tagName.toLowerCase()) && childElement !== element) {
+              return blockToMarkdown(childElement)
+            }
+            return inlineToMarkdown(node)
+          })
+          .join("\n")
+      )
+      calloutLines = stripLeadingEmojiOnlyLine(calloutLines)
+
+      let title = DEFAULT_CALLOUT_TITLE
+      let bodyLines = calloutLines
+      if (calloutLines.length > 1 && isLikelyShortCalloutTitle(calloutLines[0])) {
+        title = calloutLines[0]
+        bodyLines = calloutLines.slice(1)
+      }
+
+      if (bodyLines.length === 0 && calloutLines.length === 1) {
+        bodyLines = [calloutLines[0]]
+      }
+
+      return serializeCalloutMarkdown("INFO", title, bodyLines)
+    }
     if (tag === "figure") {
       const image = element.querySelector("img")
       if (image) return serializeImage(image)
@@ -334,12 +437,9 @@ export const convertHtmlToMarkdown = (
           return inlineToMarkdown(node)
         })
         .join("\n")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-      const [title = "참고", ...body] = bodyLines
-      const calloutBody = body.join("\n")
-      return [`> [!${kind}] ${title}`, ...calloutBody.split("\n").filter(Boolean).map((line) => `> ${line}`)].join("\n")
+      const calloutLines = normalizeCalloutLines(bodyLines)
+      const [title = DEFAULT_CALLOUT_TITLE, ...body] = calloutLines
+      return serializeCalloutMarkdown(kind, title, body)
     }
 
     if (["div", "section", "article", "main", "aside", "header", "footer", "nav", "figcaption"].includes(tag)) {

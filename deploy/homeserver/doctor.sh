@@ -7,6 +7,7 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_HOST_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
+NETWORK_NAME="blog_home_default"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -103,6 +104,78 @@ print_grafana_embed_status() {
   fi
   if [[ -n "${csp}" && "${csp}" == *"frame-ancestors"* ]]; then
     echo "WARN: grafana embed response includes frame-ancestors CSP; verify admin origin is allowed"
+  fi
+}
+
+print_robots_status() {
+  local api_domain
+  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  if [[ -z "${api_domain}" ]]; then
+    echo "robots.txt: skip (missing API_DOMAIN)"
+    return 0
+  fi
+
+  local origin_headers="${TMP_DIR}/robots-origin.headers"
+  local origin_body="${TMP_DIR}/robots-origin.body"
+  local public_headers="${TMP_DIR}/robots-public.headers"
+  local public_body="${TMP_DIR}/robots-public.body"
+
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 10 \
+    -sS \
+    -D "${origin_headers}" \
+    -o "${origin_body}" \
+    -H "Host: ${api_domain}" \
+    "http://caddy/robots.txt" >/dev/null 2>&1 || true
+
+  curl -sS \
+    --connect-timeout 5 \
+    --max-time 15 \
+    -D "${public_headers}" \
+    -o "${public_body}" \
+    "https://${api_domain}/robots.txt" >/dev/null 2>&1 || true
+
+  local origin_code public_code
+  origin_code="$(awk 'NR==1 {print $2}' "${origin_headers}" 2>/dev/null | tr -d '\r')"
+  public_code="$(awk 'NR==1 {print $2}' "${public_headers}" 2>/dev/null | tr -d '\r')"
+  [[ -n "${origin_code}" ]] || origin_code="none"
+  [[ -n "${public_code}" ]] || public_code="none"
+
+  local origin_disallow_all public_has_content_signals public_has_managed_block
+  origin_disallow_all="false"
+  public_has_content_signals="false"
+  public_has_managed_block="false"
+  if grep -q '^User-agent: \*$' "${origin_body}" 2>/dev/null && grep -q '^Disallow: /$' "${origin_body}" 2>/dev/null; then
+    origin_disallow_all="true"
+  fi
+  if grep -q '^# As a condition of accessing this website' "${public_body}" 2>/dev/null; then
+    public_has_content_signals="true"
+  fi
+  if grep -q '^# BEGIN Cloudflare Managed Content' "${public_body}" 2>/dev/null; then
+    public_has_managed_block="true"
+  fi
+
+  echo "origin robots status: ${origin_code}"
+  echo "origin robots disallow-all block: ${origin_disallow_all}"
+  echo "public robots status: ${public_code}"
+  echo "public robots content-signals preface: ${public_has_content_signals}"
+  echo "public robots managed block: ${public_has_managed_block}"
+  echo "-- origin robots preview --"
+  sed -n '1,12p' "${origin_body}" 2>/dev/null || true
+  echo "-- public robots preview --"
+  sed -n '1,12p' "${public_body}" 2>/dev/null || true
+
+  if [[ "${origin_code}" == "200" && "${origin_disallow_all}" == "true" && ( "${public_has_content_signals}" == "true" || "${public_has_managed_block}" == "true" ) ]]; then
+    echo "INFO: public robots differs by design; Cloudflare managed robots/content-signals is prepending edge-managed content before origin robots."
+  fi
+
+  if [[ "${origin_code}" != "200" ]]; then
+    echo "WARN: origin robots.txt is not returning 200 from Caddy. investigate local route/auth before blaming Cloudflare."
+  fi
+
+  if [[ "${public_code}" == "200" && "${origin_code}" != "200" && "${public_has_content_signals}" == "true" ]]; then
+    echo "WARN: public robots is being served via Cloudflare managed/content-signals path while origin robots is unhealthy or absent."
   fi
 }
 
@@ -294,6 +367,9 @@ fi
 if [[ "${legacy_back_active}" == "true" ]]; then
   echo "WARN: mounted Caddyfile still has legacy back_active token"
 fi
+
+print_section "Robots.txt (Origin vs Public)"
+print_robots_status
 
 print_section "Back Container States"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green)-1|NAMES' || true

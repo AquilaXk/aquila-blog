@@ -167,6 +167,36 @@ list_running_backends() {
   compose ps --status running --services 2>/dev/null | grep -E '^back_(blue|green)$' || true
 }
 
+resolve_active_backend() {
+  local active
+  active="$(cat "${STATE_FILE}" 2>/dev/null || true)"
+  if [[ "${active}" == "back_blue" || "${active}" == "back_green" ]]; then
+    if compose ps --status running --services 2>/dev/null | grep -qx "${active}"; then
+      printf '%s' "${active}"
+      return 0
+    fi
+  fi
+
+  active="$(list_running_backends | head -n 1)"
+  if [[ "${active}" == "back_blue" || "${active}" == "back_green" ]]; then
+    printf '%s' "${active}"
+    return 0
+  fi
+
+  return 1
+}
+
+container_image_for_service() {
+  local service="$1"
+  local container_id
+  container_id="$(compose ps -q "${service}" 2>/dev/null | head -n 1 || true)"
+  if [[ -z "${container_id}" ]]; then
+    return 1
+  fi
+
+  docker inspect -f '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r'
+}
+
 enforce_single_backend_rule() {
   local running
   running="$(list_running_backends)"
@@ -208,6 +238,34 @@ enforce_single_backend_rule() {
   fi
 
   log "FAIL backend running count=${count} (expected 1)"
+  return 1
+}
+
+check_active_backend_image() {
+  local expected_image active_backend running_image
+  expected_image="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  if [[ -z "${expected_image}" ]]; then
+    log "FAIL missing BACK_IMAGE in ${ENV_FILE}"
+    return 1
+  fi
+
+  if ! active_backend="$(resolve_active_backend)"; then
+    log "FAIL active backend unresolved for image drift check"
+    return 1
+  fi
+
+  running_image="$(container_image_for_service "${active_backend}" || true)"
+  if [[ -z "${running_image}" ]]; then
+    log "FAIL active backend image inspect failed backend=${active_backend}"
+    return 1
+  fi
+
+  if [[ "${running_image}" == "${expected_image}" ]]; then
+    log "OK backend image active=${active_backend} image=${running_image}"
+    return 0
+  fi
+
+  log "FAIL backend image drift active=${active_backend} expected=${expected_image} actual=${running_image}"
   return 1
 }
 
@@ -452,12 +510,13 @@ main() {
 
   local ok=0
   if enforce_single_backend_rule; then ok=$((ok + 1)); fi
+  if check_active_backend_image; then ok=$((ok + 1)); fi
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi
   if check_api_readiness; then ok=$((ok + 1)); fi
   if check_grafana_prometheus_datasource; then ok=$((ok + 1)); fi
   if check_grafana_embed_route; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 5 ]]; then
+  if [[ "${ok}" -ne 6 ]]; then
     compose logs --no-color --tail=80 caddy grafana >&2 || true
     exit 1
   fi

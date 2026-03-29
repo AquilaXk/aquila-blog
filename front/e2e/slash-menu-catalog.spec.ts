@@ -1,0 +1,59 @@
+import path from "path"
+import { test, expect } from "@playwright/test"
+import { readFileSync } from "fs"
+
+test.describe("block editor slash menu contract", () => {
+  test("slash menu는 shared block catalog와 검색형 목록 UI를 사용한다", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"),
+      "utf8"
+    )
+
+    expect(source).toContain("type BlockInsertCatalogItem = {")
+    expect(source).toContain("type SlashKeyboardEventLike = {")
+    expect(source).toContain("const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>(")
+    expect(source).toContain("const toolbarBlockActions = useMemo(")
+    expect(source).toContain("const quickInsertActions = useMemo(")
+    expect(source).not.toContain("const insertMenuActions = useMemo<InsertMenuAction[]>(")
+    expect(source).not.toContain("const slashActions = useMemo<SlashAction[]>(() => {")
+
+    expect(source).toContain("const getSlashMenuMatchScore = (")
+    expect(source).toContain("const getSlashMenuContextBonus = (")
+    expect(source).toContain("const slashMenuContext = useMemo<SlashMenuContext>(() => {")
+    expect(source).toContain("const rankedSlashItems = useMemo(() => {")
+    expect(source).toContain("const seenItemIds = new Set<string>()")
+    expect(source).toContain("const resolveSlashMenuState = useCallback(() => {")
+    expect(source).toContain("const applyResolvedSlashMenuState = useCallback(")
+    expect(source).toContain('const syncSlashMenu = () => {')
+    expect(source).toContain('const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"')
+    expect(source).toContain('const match = /(^|[\\s\\u00A0])\\/([^\\n]*)$/.exec(textBeforeCursor)')
+    expect(source).toContain("const executeSlashCatalogAction = useCallback(")
+    expect(source).toContain("setRecentSlashItemIds((prev) => {")
+    expect(source).toContain("if (isSlashImeComposing || editor.view.composing)")
+    expect(source).toContain("if (event.isComposing) return")
+    expect(source).toContain("onCompositionStart={() => {")
+    expect(source).toContain("onCompositionEnd={() => {")
+    expect(source).toContain("<SlashQuerySummary>")
+    expect(source).toContain("<SlashMenuStatusRow>")
+    expect(source).toContain("<SlashMenuHintPill>tab 이동</SlashMenuHintPill>")
+    expect(source).toContain('const slashSections = useMemo(() => {')
+    expect(source).toContain('{ title: "최근 사용", items: recentItems }')
+    expect(source).toContain('{ title: "추천", items: recommendedItems }')
+    expect(source).toContain('{ title: "기본 블록", items: basicItems }')
+    expect(source).toContain('{ title: "구조 블록", items: structureItems }')
+    expect(source).toContain('{ title: "미디어", items: mediaItems }')
+    expect(source).toContain("position: fixed;")
+    expect(source).toContain('if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey))')
+    expect(source).toContain('if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey))')
+    expect(source).toContain('if (event.key === "Home")')
+    expect(source).toContain('if (event.key === "End")')
+    expect(source).toContain('if (event.key === "Enter")')
+    expect(source).toContain('window.addEventListener("scroll", syncSlashMenuPlacement, true)')
+    expect(source).toContain('data-testid="slash-menu"')
+    expect(source).toContain('data-slash-action-id={action.id}')
+    expect(source).toContain("<SlashActionIcon aria-hidden=\"true\">{getSlashActionGlyph(action)}</SlashActionIcon>")
+    expect(source).toContain("<SlashActionSectionTag>{section.title}</SlashActionSectionTag>")
+    expect(source).toContain("<SlashMenuFooter>")
+    expect(source).toContain("<span>esc</span>")
+  })
+})

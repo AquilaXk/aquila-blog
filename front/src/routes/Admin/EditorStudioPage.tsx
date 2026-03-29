@@ -36,7 +36,6 @@ import {
   isServerTempDraftPost,
   isTempDraftTitlePlaceholder,
   TEMP_DRAFT_BODY_PLACEHOLDER,
-  TEMP_DRAFT_TITLE_PLACEHOLDER,
 } from "./editorTempDraft"
 import {
   isNavigationCancelledError,
@@ -1429,14 +1428,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const titleFieldRef = useRef<HTMLTextAreaElement | null>(null)
   const [previewSurfaceWidth, setPreviewSurfaceWidth] = useState(0)
 
-  const postContentMermaidBlockCount = useMemo(
-    () => countMarkdownMermaidBlocks(postContent),
-    [postContent]
-  )
-  const postContentImageCount = useMemo(
-    () => countMarkdownImages(postContent),
-    [postContent]
-  )
   const previewContentLength = previewContent.length
   const previewMermaidBlockCount = useMemo(
     () => countMarkdownMermaidBlocks(previewContent),
@@ -1691,19 +1682,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   useEffect(() => {
     syncTitleTextareaHeight(titleFieldRef.current)
   }, [postTitle, editorStudioViewMode])
-
-  const handlePreviewImageWidthCommit = useCallback(
-    (payload: { src: string; alt: string; index: number; widthPx: number }) => {
-      const currentContent = postContentLiveRef.current
-      const nextContent = updateStandaloneImageWidthInMarkdown(currentContent, payload.index, payload.widthPx)
-      if (nextContent === currentContent) return
-
-      postContentLiveRef.current = nextContent
-      setPostContent(nextContent)
-      setPreviewContent(nextContent)
-    },
-    []
-  )
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setListPage(sanitizeNumberInput(e.target.value))
@@ -9161,16 +9139,6 @@ const PublishModalBody = styled.div`
   @media (max-width: 720px) {
     gap: 0.7rem;
   }
-`
-
-const PublishModeHint = styled.div`
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  border-radius: 12px;
-  padding: 0.62rem 0.74rem;
-  font-size: 0.8rem;
-  line-height: 1.5;
 `
 
 const PublishModalFooter = styled.div`

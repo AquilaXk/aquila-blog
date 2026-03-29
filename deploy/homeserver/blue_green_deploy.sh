@@ -921,7 +921,7 @@ current_caddy_upstream_host() {
 
 current_caddy_mounted_upstream_host() {
   local token
-  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^(back[-_](blue|green|read|admin):8080|\\{\\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\\}:8080)\$/ {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
+  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^(back[-_](blue|green|read|admin):8080|\\{\\\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\\}:8080)\$/ {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
   resolve_caddy_upstream_token "${token}" "mounted" || true
 }
 

@@ -915,13 +915,13 @@ resolve_caddy_upstream_token() {
 
 current_caddy_upstream_host() {
   local token
-  token="$(awk '$1 == "reverse_proxy" {print $2; exit}' "${CADDY_FILE}")"
+  token="$(awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' "${CADDY_FILE}")"
   resolve_caddy_upstream_token "${token}" "host" || true
 }
 
 current_caddy_mounted_upstream_host() {
   local token
-  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
+  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^(back[-_](blue|green|read|admin):8080|\\{\\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\\}:8080)\$/ {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
   resolve_caddy_upstream_token "${token}" "mounted" || true
 }
 
@@ -980,6 +980,11 @@ set_caddy_upstream_backend() {
   local active_host
   active_host="$(backend_http_host "${backend}")"
 
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+    upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+  fi
+
   # Keep content rewrite in-place; avoids stale config when external tools swap files.
   local rewritten
   rewritten="$(sed -E \
@@ -990,6 +995,18 @@ set_caddy_upstream_backend() {
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "caddy upstream switched to active=${active_host}:8080"
+}
+
+persist_single_runtime_caddy_upstreams() {
+  local backend="$1"
+  local active_host
+  active_host="$(backend_http_host "${backend}")"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    return 0
+  fi
+  upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+  upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+  echo "single-runtime caddy env upstream fixed: active=${active_host}"
 }
 
 is_healthy_http_code() {
@@ -1386,6 +1403,8 @@ fi
 
 echo "active backend: ${active_backend}"
 echo "next backend: ${next_backend}"
+
+persist_single_runtime_caddy_upstreams "${active_backend}"
 
 action_backend_host="$(backend_host "${next_backend}")"
 

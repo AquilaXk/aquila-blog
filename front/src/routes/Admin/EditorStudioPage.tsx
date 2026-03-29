@@ -522,7 +522,6 @@ const normalizeMetaItems = (raw: string): string[] => {
 const normalizeMetaScalar = (raw: string) => raw.trim().replace(/^['"]|['"]$/g, "")
 
 const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
-const markdownImageGlobalPattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const mermaidFenceRegex = /```mermaid\b[\s\S]*?```/gi
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
@@ -541,59 +540,6 @@ const extractFirstMarkdownImage = (content: string): string => {
 
 const countMarkdownMermaidBlocks = (content: string): number =>
   (content.match(mermaidFenceRegex) || []).length
-
-const countMarkdownImages = (content: string): number =>
-  (content.match(markdownImageGlobalPattern) || []).length
-
-const updateStandaloneImageWidthInMarkdown = (
-  content: string,
-  targetImageIndex: number,
-  widthPx: number
-) => {
-  const lines = content.split("\n")
-  let activeFenceMarker: "`" | "~" | null = null
-  let imageIndex = 0
-
-  const parseFenceMarker = (line: string): "`" | "~" | null => {
-    const match = line.trim().match(/^([`~]{3,})(.*)$/)
-    if (!match) return null
-    const marker = match[1][0] as "`" | "~"
-    if (!match[1].split("").every((char) => char === marker)) return null
-    return marker
-  }
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]
-    const fenceMarker = parseFenceMarker(line)
-
-    if (activeFenceMarker) {
-      if (fenceMarker === activeFenceMarker) {
-        activeFenceMarker = null
-      }
-      continue
-    }
-
-    if (fenceMarker) {
-      activeFenceMarker = fenceMarker
-      continue
-    }
-
-    const parsed = parseStandaloneMarkdownImageLine(line)
-    if (!parsed) continue
-
-    if (imageIndex === targetImageIndex) {
-      lines[index] = serializeStandaloneMarkdownImageLine({
-        ...parsed,
-        widthPx,
-      })
-      return lines.join("\n")
-    }
-
-    imageIndex += 1
-  }
-
-  return content
-}
 
 const normalizeSafeImageUrl = (raw: string): string => {
   const value = raw.trim()

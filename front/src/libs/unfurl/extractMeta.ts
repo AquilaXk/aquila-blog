@@ -33,13 +33,20 @@ const IMAGE_PATTERNS = [
   /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']*)["'][^>]*>/i,
 ] as const
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": "\"",
+  "&#39;": "'",
+}
+
+const hostMatches = (hostname: string, suffix: string) =>
+  hostname === suffix || hostname.endsWith(`.${suffix}`)
+
 const htmlDecode = (value: string) =>
   value
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
+    .replace(/&(amp|lt|gt|quot|#39);/g, (entity) => HTML_ENTITY_MAP[entity] || entity)
     .trim()
 
 const firstMatch = (html: string, patterns: readonly RegExp[]) => {
@@ -66,13 +73,13 @@ export const inferLinkProvider = (url: string) => {
 
     if (host === "youtube.com" || host === "youtu.be") return "YouTube"
     if (host === "vimeo.com") return "Vimeo"
-    if (host.endsWith("loom.com")) return "Loom"
-    if (host.endsWith("figma.com")) return "Figma"
-    if (host.endsWith("codepen.io")) return "CodePen"
-    if (host.endsWith("codesandbox.io")) return "CodeSandbox"
-    if (host.endsWith("github.com")) return "GitHub"
-    if (host.endsWith("notion.so") || host.endsWith("notion.site")) return "Notion"
-    if (host.endsWith("medium.com")) return "Medium"
+    if (hostMatches(host, "loom.com")) return "Loom"
+    if (hostMatches(host, "figma.com")) return "Figma"
+    if (hostMatches(host, "codepen.io")) return "CodePen"
+    if (hostMatches(host, "codesandbox.io")) return "CodeSandbox"
+    if (hostMatches(host, "github.com")) return "GitHub"
+    if (hostMatches(host, "notion.so") || hostMatches(host, "notion.site")) return "Notion"
+    if (hostMatches(host, "medium.com")) return "Medium"
 
     return humanizeHost(parsedUrl.hostname)
   } catch {
@@ -109,23 +116,23 @@ export const resolveEmbedPreviewUrl = (url: string) => {
       return videoId ? `https://player.vimeo.com/video/${videoId}` : ""
     }
 
-    if (host.endsWith("loom.com")) {
+    if (hostMatches(host, "loom.com")) {
       const loomId = parsedUrl.pathname.split("/").filter(Boolean).pop() || ""
       return loomId ? `https://www.loom.com/embed/${loomId}` : ""
     }
 
-    if (host.endsWith("figma.com")) {
+    if (hostMatches(host, "figma.com")) {
       return `https://www.figma.com/embed?embed_host=aquila-blog&url=${encodeURIComponent(parsedUrl.toString())}`
     }
 
-    if (host.endsWith("codepen.io")) {
+    if (hostMatches(host, "codepen.io")) {
       const parts = parsedUrl.pathname.split("/").filter(Boolean)
       if (parts.length >= 3 && parts[1] === "pen") {
         return `https://codepen.io/${parts[0]}/embed/${parts[2]}?default-tab=result`
       }
     }
 
-    if (host.endsWith("codesandbox.io")) {
+    if (hostMatches(host, "codesandbox.io")) {
       if (parsedUrl.pathname.startsWith("/s/")) {
         return `https://codesandbox.io/embed${parsedUrl.pathname}?view=preview`
       }

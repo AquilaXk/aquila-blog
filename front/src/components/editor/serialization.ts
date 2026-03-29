@@ -645,7 +645,6 @@ export const createTableNode = (
   layout?: MarkdownTableLayout | null
 ): JSONContent => {
   const normalizedRows = normalizeTableRows(rows)
-  const [headerRow, ...bodyRows] = normalizedRows
   const columnWidths = layout?.columnWidths || []
   const rowHeights = layout?.rowHeights || []
   const columnAlignments = layout?.columnAlignments || []

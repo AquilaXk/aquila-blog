@@ -177,6 +177,18 @@ env_value() {
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
 }
 
+upsert_env_key() {
+  local key="$1"
+  local value="$2"
+  if grep -qE "^${key}=" "${ENV_FILE}"; then
+    grep -vE "^${key}=" "${ENV_FILE}" > "${ENV_FILE}.tmp"
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}.tmp"
+    mv "${ENV_FILE}.tmp" "${ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
+}
+
 trim_quotes() {
   local value="$1"
   value="${value%\"}"
@@ -298,13 +310,13 @@ resolve_caddy_upstream_token() {
 
 current_caddy_upstream_host() {
   local token
-  token="$(awk '$1 == "reverse_proxy" {print $2; exit}' "${CADDY_FILE}")"
+  token="$(awk '$1 == "reverse_proxy" && $2 ~ /^(back[-_](blue|green|read|admin):8080|\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080)$/ {print $2; exit}' "${CADDY_FILE}")"
   resolve_caddy_upstream_token "${token}" "host" || true
 }
 
 current_caddy_mounted_upstream_host() {
   local token
-  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
+  token="$(compose exec -T caddy sh -lc "awk '\$1 == \"reverse_proxy\" && \$2 ~ /^(back[-_](blue|green|read|admin):8080|\\{\\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\\}:8080)\$/ {print \$2; exit}' ${CADDY_CONTAINER_FILE}" 2>/dev/null | tr -d '\r' | head -n 1)"
   resolve_caddy_upstream_token "${token}" "mounted" || true
 }
 
@@ -430,6 +442,10 @@ set_caddy_upstream_backend() {
   local backend="$1"
   local active_host
   active_host="$(backend_http_host "${backend}")"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" != "true" ]]; then
+    upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+    upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+  fi
   local rewritten
   rewritten="$(sed -E \
     -e "s/\\{\\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\\}:8080/${active_host}:8080/g" \
@@ -439,6 +455,18 @@ set_caddy_upstream_backend() {
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"
   reload_caddy
   echo "rollback caddy upstream -> active=${active_host}:8080"
+}
+
+persist_single_runtime_caddy_upstreams() {
+  local backend="$1"
+  local active_host
+  active_host="$(backend_http_host "${backend}")"
+  if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
+    return 0
+  fi
+  upsert_env_key "ADMIN_API_UPSTREAM" "${active_host}"
+  upsert_env_key "READ_API_UPSTREAM" "${active_host}"
+  echo "rollback single-runtime caddy env upstream fixed: active=${active_host}"
 }
 
 ensure_steady_state_guard() {
@@ -497,6 +525,8 @@ if [[ -f "${STATE_FILE}" ]]; then
   fi
 fi
 inactive_backend="$(other_backend "${target_backend}")"
+
+persist_single_runtime_caddy_upstreams "${target_backend}"
 
 warn_unsupported_docker_engine
 services_to_boot=(db_1 redis_1 caddy cloudflared uptime_kuma autoheal)

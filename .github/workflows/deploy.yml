@@ -422,6 +422,44 @@ jobs:
           ROLLBACK_IN_PROGRESS="false"
           ROLLBACK_RUNTIME_SPLIT_ENABLED="false"
 
+          restore_backup_files_minimally() {
+            local backup_dir="$1"
+            if [ -z "${backup_dir:-}" ] || [ ! -d "${backup_dir}" ]; then
+              return 1
+            fi
+
+            for file in .env.prod docker-compose.prod.yml .active_backend; do
+              if [ -f "${backup_dir}/${file}" ]; then
+                cp "${backup_dir}/${file}" "deploy/homeserver/${file}"
+              fi
+            done
+
+            if [ -d "${backup_dir}/caddy" ]; then
+              rm -rf deploy/homeserver/caddy
+              cp -R "${backup_dir}/caddy" deploy/homeserver/caddy
+            elif [ -f "${backup_dir}/Caddyfile" ]; then
+              mkdir -p deploy/homeserver/caddy
+              cp "${backup_dir}/Caddyfile" deploy/homeserver/caddy/Caddyfile
+            fi
+          }
+
+          run_backup_rollback() {
+            local reason="${1:-unexpected_exit}"
+            if [ -z "${BACKUP_DIR:-}" ] || [ ! -d "${BACKUP_DIR}" ]; then
+              return 0
+            fi
+
+            echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
+
+            if ! restore_backup_files_minimally "${BACKUP_DIR}"; then
+              echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
+            fi
+
+            if ! RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
+              echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
+            fi
+          }
+
           rollback_from_backup_if_needed() {
             local reason="${1:-unexpected_exit}"
             if [ "${DEPLOY_COMPLETED}" = "true" ] || [ "${ROLLBACK_IN_PROGRESS}" = "true" ]; then
@@ -429,8 +467,7 @@ jobs:
             fi
             if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
               ROLLBACK_IN_PROGRESS="true"
-              echo "rollback from backup: ${BACKUP_DIR} (reason=${reason})" >&2
-              RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
+              run_backup_rollback "${reason}"
             fi
           }
 
@@ -606,16 +643,31 @@ jobs:
           echo "runtime split from HOME_SERVER_ENV: enabled=${RUNTIME_SPLIT_ENABLED_VALUE} stage=${RUNTIME_SPLIT_STAGE_VALUE}"
 
           emit_post_deploy_diagnostics() {
+            backend_container_id_any_state() {
+              local backend="$1"
+              docker ps -aq \
+                --filter "label=com.docker.compose.project=blog_home" \
+                --filter "label=com.docker.compose.service=${backend}" | head -n 1
+            }
+
             echo "[post-deploy-diagnostic] compose ps"
             docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps || true
+            echo "[post-deploy-diagnostic] compose ps -a back_blue/back_green"
+            docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -a back_blue back_green || true
             echo "[post-deploy-diagnostic] caddy logs"
             docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 caddy || true
             echo "[post-deploy-diagnostic] cloudflared logs"
             docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 cloudflared || true
-            echo "[post-deploy-diagnostic] active backend logs (${ACTIVE_BACKEND:-unknown})"
-            if [ -n "${ACTIVE_BACKEND:-}" ]; then
-              docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=120 "${ACTIVE_BACKEND}" || true
-            fi
+            for backend in back_blue back_green; do
+              echo "[post-deploy-diagnostic] backend=${backend}"
+              cid="$(backend_container_id_any_state "${backend}")"
+              if [ -n "${cid}" ]; then
+                docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" || true
+              else
+                echo "${backend} container=none"
+              fi
+              docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml logs --no-color --tail=160 "${backend}" || true
+            done
           }
 
           rollback_and_exit() {
@@ -624,8 +676,8 @@ jobs:
             echo "deploy verification failed: ${reason}" >&2
             emit_post_deploy_diagnostics
             if [ -n "${BACKUP_DIR:-}" ] && [ -d "${BACKUP_DIR}" ]; then
-              echo "rollback from backup: ${BACKUP_DIR}" >&2
-              RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}" || true
+              ROLLBACK_RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED_VALUE}"
+              run_backup_rollback "${reason}"
             fi
             exit 1
           }

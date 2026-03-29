@@ -19,6 +19,9 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.net.URI
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -127,14 +130,12 @@ class PostImageStorageAdapter(
         val key = buildObjectKey(request.originalFilename)
 
         try {
-            client.putObject(
-                PutObjectRequest
-                    .builder()
-                    .bucket(properties.bucket)
-                    .key(key)
-                    .contentType(contentType)
-                    .build(),
-                RequestBody.fromBytes(request.bytes),
+            putObject(
+                client = client,
+                objectKey = key,
+                contentType = contentType,
+                bytes = request.bytes,
+                originalFilename = request.originalFilename,
             )
         } catch (e: Exception) {
             logger.error("Post image upload failed", e)
@@ -144,11 +145,44 @@ class PostImageStorageAdapter(
         return key
     }
 
+    override fun uploadPostFile(request: PostImageStoragePort.UploadFileRequest): String {
+        val client = requireClient()
+        if (request.bytes.isEmpty()) throw AppException("400-1", "첨부 파일이 비어 있습니다.")
+        if (request.bytes.size > properties.maxFileSizeBytes) {
+            throw AppException("400-1", "첨부 파일은 ${properties.maxFileSizeBytes / (1024 * 1024)}MB 이하여야 합니다.")
+        }
+
+        val key = buildObjectKey(request.originalFilename)
+        val contentType = normalizeDeclaredContentType(request.contentType) ?: "application/octet-stream"
+
+        try {
+            putObject(
+                client = client,
+                objectKey = key,
+                contentType = contentType,
+                bytes = request.bytes,
+                originalFilename = request.originalFilename,
+            )
+        } catch (e: Exception) {
+            logger.error("Post file upload failed", e)
+            throw AppException("500-1", "첨부 파일 업로드에 실패했습니다.")
+        }
+
+        return key
+    }
+
     /**
      * 스토리지 I/O를 수행하며 키/경로/콘텐츠 타입 규칙을 함께 검증합니다.
      * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
      */
-    override fun getPostImage(objectKey: String): PostImageStoragePort.StoredImage? {
+    override fun getPostImage(objectKey: String): PostImageStoragePort.StoredObject? = getStoredObject(objectKey, "이미지를 불러오지 못했습니다.")
+
+    override fun getPostFile(objectKey: String): PostImageStoragePort.StoredObject? = getStoredObject(objectKey, "첨부 파일을 불러오지 못했습니다.")
+
+    private fun getStoredObject(
+        objectKey: String,
+        errorMessage: String,
+    ): PostImageStoragePort.StoredObject? {
         val client = requireClient()
         validateObjectKey(objectKey)
 
@@ -161,17 +195,18 @@ class PostImageStorageAdapter(
                         .key(objectKey)
                         .build(),
                 )
-            PostImageStoragePort.StoredImage(
+            PostImageStoragePort.StoredObject(
                 inputStream = response,
                 contentType = response.response().contentType() ?: "application/octet-stream",
                 contentLength = response.response().contentLength(),
+                originalFilename = decodeStoredOriginalFilename(response.response().metadata()["original-filename"]),
             )
         } catch (_: NoSuchKeyException) {
             null
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return null
             logger.error("Post image download failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", "이미지를 불러오지 못했습니다.")
+            throw AppException("500-1", errorMessage)
         }
     }
 
@@ -180,6 +215,17 @@ class PostImageStorageAdapter(
      * 스토리지 어댑터 계층에서 MinIO/파일 시스템 연동 실패를 고려해 방어적으로 동작합니다.
      */
     override fun deletePostImage(objectKey: String) {
+        deleteObject(objectKey, "이미지 삭제에 실패했습니다.")
+    }
+
+    override fun deletePostFile(objectKey: String) {
+        deleteObject(objectKey, "첨부 파일 삭제에 실패했습니다.")
+    }
+
+    private fun deleteObject(
+        objectKey: String,
+        errorMessage: String,
+    ) {
         val client = requireClient()
         validateObjectKey(objectKey)
 
@@ -194,8 +240,41 @@ class PostImageStorageAdapter(
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) return
             logger.error("Post image delete failed (objectKey={})", objectKey, e)
-            throw AppException("500-1", "이미지 삭제에 실패했습니다.")
+            throw AppException("500-1", errorMessage)
         }
+    }
+
+    private fun putObject(
+        client: S3Client,
+        objectKey: String,
+        contentType: String,
+        bytes: ByteArray,
+        originalFilename: String?,
+    ) {
+        val metadata =
+            originalFilename
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let {
+                    mapOf(
+                        "original-filename" to
+                            URLEncoder
+                                .encode(it, StandardCharsets.UTF_8)
+                                .replace("+", "%20"),
+                    )
+                }
+                ?: emptyMap()
+
+        client.putObject(
+            PutObjectRequest
+                .builder()
+                .bucket(properties.bucket)
+                .key(objectKey)
+                .contentType(contentType)
+                .metadata(metadata)
+                .build(),
+            RequestBody.fromBytes(bytes),
+        )
     }
 
     /**
@@ -346,6 +425,12 @@ class PostImageStorageAdapter(
         if (objectKey.isBlank() || objectKey.contains("..") || objectKey.startsWith("/")) {
             throw AppException("400-1", "유효하지 않은 이미지 경로입니다.")
         }
+    }
+
+    private fun decodeStoredOriginalFilename(value: String?): String? {
+        val encoded = value?.trim().orEmpty()
+        if (encoded.isBlank()) return null
+        return runCatching { URLDecoder.decode(encoded, StandardCharsets.UTF_8) }.getOrNull()
     }
 
     companion object {

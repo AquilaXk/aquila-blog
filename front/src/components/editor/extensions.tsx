@@ -1,9 +1,12 @@
 import styled from "@emotion/styled"
 import { Mark, Node, mergeAttributes } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
+import ListKeymap from "@tiptap/extension-list-keymap"
 import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
+import TaskItem from "@tiptap/extension-task-item"
+import TaskList from "@tiptap/extension-task-list"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import AppIcon from "src/components/icons/AppIcon"
 import {
@@ -18,12 +21,11 @@ import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
 import type { CalloutKind } from "src/libs/markdown/rendering"
 import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/libs/markdown/rendering"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
+import FormulaRender from "src/libs/markdown/FormulaRender"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
 import type {
   BookmarkBlockAttrs,
-  ChecklistBlockAttrs,
-  ChecklistBlockItem,
   EmbedBlockAttrs,
   FileBlockAttrs,
   FormulaBlockAttrs,
@@ -199,15 +201,6 @@ const useDebouncedAttributeCommit = (
     flush,
     cancel,
   }
-}
-
-const normalizeChecklistItems = (items: ChecklistBlockItem[]): ChecklistBlockItem[] => {
-  const normalized = items.map((item) => ({
-    checked: item.checked === true,
-    text: String(item.text || ""),
-  }))
-
-  return normalized.length > 0 ? normalized : [{ checked: false, text: "" }]
 }
 
 export const InlineColorMark = Mark.create({
@@ -702,74 +695,6 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   )
 }
 
-const ChecklistBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
-  const [items, setItems] = useState<ChecklistBlockItem[]>(
-    normalizeChecklistItems((node.attrs?.items as ChecklistBlockItem[]) || [])
-  )
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
-
-  useEffect(() => {
-    setItems(normalizeChecklistItems((node.attrs?.items as ChecklistBlockItem[]) || []))
-  }, [node.attrs?.items])
-
-  const commit = (nextItems: ChecklistBlockItem[]) => {
-    const normalizedItems = normalizeChecklistItems(nextItems)
-    setItems(normalizedItems)
-    scheduleCommit({ items: normalizedItems })
-  }
-
-  return (
-    <ChecklistEditorWrapper data-selected={selected}>
-      <ChecklistEditorHeader>
-        <strong>체크리스트</strong>
-        <ChecklistActionButton
-          type="button"
-          onClick={() => commit([...items, { checked: false, text: "" }])}
-        >
-          항목 추가
-        </ChecklistActionButton>
-      </ChecklistEditorHeader>
-      <ChecklistEditorList>
-        {items.map((item, index) => (
-          <ChecklistEditorRow key={`checklist-item-${index}`}>
-            <input
-              type="checkbox"
-              checked={item.checked}
-              onChange={(event) => {
-                const nextItems = items.map((entry, entryIndex) =>
-                  entryIndex === index ? { ...entry, checked: event.target.checked } : entry
-                )
-                commit(nextItems)
-              }}
-            />
-            <ChecklistItemInput
-              value={item.text}
-              placeholder="체크 항목"
-              onBlur={flushCommit}
-              onChange={(event) => {
-                const nextItems = items.map((entry, entryIndex) =>
-                  entryIndex === index ? { ...entry, text: event.target.value } : entry
-                )
-                commit(nextItems)
-              }}
-            />
-            <ChecklistIconButton
-              type="button"
-              aria-label="항목 삭제"
-              onClick={() => {
-                const nextItems = items.filter((_, entryIndex) => entryIndex !== index)
-                commit(nextItems)
-              }}
-            >
-              ×
-            </ChecklistIconButton>
-          </ChecklistEditorRow>
-        ))}
-      </ChecklistEditorList>
-    </ChecklistEditorWrapper>
-  )
-}
-
 type LinkCardEditorProps = NodeViewProps & {
   kindLabel: string
   urlPlaceholder: string
@@ -793,6 +718,7 @@ const LinkCardEditorView = ({
   const [draftBody, setDraftBody] = useState(
     String(node.attrs?.description || node.attrs?.caption || "")
   )
+  const [isUnfurling, setIsUnfurling] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
@@ -813,15 +739,49 @@ const LinkCardEditorView = ({
     })
   }
 
+  const hydrateFromUrl = async (force = false) => {
+    const trimmedUrl = draftUrl.trim()
+    if (!trimmedUrl || isUnfurling) return
+    if (!force && draftTitle.trim() && draftBody.trim()) return
+
+    setIsUnfurling(true)
+    try {
+      const response = await fetch(`/api/editor/unfurl?url=${encodeURIComponent(trimmedUrl)}`)
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) return
+
+      const nextTitle = force || !draftTitle.trim() ? String(payload.data.title || "").trim() : draftTitle
+      const nextBody =
+        force || !draftBody.trim() ? String(payload.data.description || "").trim() : draftBody
+
+      if (nextTitle) setDraftTitle(nextTitle)
+      if (nextBody) setDraftBody(nextBody)
+      commit({
+        url: trimmedUrl,
+        title: nextTitle || draftTitle,
+        name: nextTitle || draftTitle,
+        [bodyKey]: nextBody || draftBody,
+      })
+    } finally {
+      setIsUnfurling(false)
+    }
+  }
+
   return (
     <LinkCardEditorWrapper data-selected={selected}>
       <LinkCardEditorHeader>
         <strong>{kindLabel}</strong>
+        <ChecklistActionButton type="button" onClick={() => void hydrateFromUrl(true)} disabled={isUnfurling}>
+          {isUnfurling ? "불러오는 중..." : "메타 불러오기"}
+        </ChecklistActionButton>
       </LinkCardEditorHeader>
       <LinkCardFieldInput
         value={draftUrl}
         placeholder={urlPlaceholder}
-        onBlur={flushCommit}
+        onBlur={() => {
+          flushCommit()
+          void hydrateFromUrl(false)
+        }}
         onChange={(event) => {
           const nextUrl = event.target.value
           setDraftUrl(nextUrl)
@@ -971,6 +931,11 @@ const FormulaBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         }}
       />
       <FormulaPreview aria-hidden="true">{draftFormula || "수식 미리보기"}</FormulaPreview>
+      {draftFormula ? (
+        <FormulaRenderedPreview aria-hidden="true">
+          <FormulaRender formula={draftFormula} displayMode />
+        </FormulaRenderedPreview>
+      ) : null}
     </FormulaEditorWrapper>
   )
 }
@@ -1239,6 +1204,32 @@ export const EditorTableHeader = TableHeader.extend({
   },
 })
 
+export const EditorTaskList = TaskList.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      "data-task-list": {
+        default: "true",
+      },
+    }
+  },
+}).configure({
+  HTMLAttributes: {
+    "data-task-list": "true",
+  },
+})
+
+export const EditorTaskItem = TaskItem.extend({
+  draggable: true,
+}).configure({
+  nested: true,
+  HTMLAttributes: {
+    "data-task-item": "true",
+  },
+})
+
+export const EditorListKeymap = ListKeymap
+
 export const MermaidBlock = Node.create({
   name: "mermaidBlock",
   group: "block",
@@ -1335,35 +1326,6 @@ export const ToggleBlock = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(ToggleBlockView)
-  },
-})
-
-export const ChecklistBlock = Node.create({
-  name: "checklistBlock",
-  group: "block",
-  atom: true,
-  selectable: true,
-  draggable: true,
-  isolating: true,
-
-  addAttributes() {
-    return {
-      items: {
-        default: [{ checked: false, text: "" }],
-      },
-    }
-  },
-
-  parseHTML() {
-    return [{ tag: "div[data-checklist-block]" }]
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes(HTMLAttributes, { "data-checklist-block": "true" })]
-  },
-
-  addNodeView() {
-    return ReactNodeViewRenderer(ChecklistBlockView)
   },
 })
 
@@ -2147,35 +2109,6 @@ const ToggleBodyTextarea = styled(CompactBlockTextarea)`
   }
 `
 
-const ChecklistEditorWrapper = styled(NodeViewWrapper)`
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin: 0.9rem 0;
-  padding: 1rem 1.05rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: rgba(17, 19, 24, 0.94);
-
-  &[data-selected="true"] {
-    border-color: rgba(96, 165, 250, 0.32);
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
-  }
-`
-
-const ChecklistEditorHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-
-  strong {
-    color: var(--color-gray12);
-    font-size: 0.92rem;
-    font-weight: 700;
-  }
-`
-
 const ChecklistActionButton = styled.button`
   min-height: 2rem;
   padding: 0 0.75rem;
@@ -2185,46 +2118,6 @@ const ChecklistActionButton = styled.button`
   color: #dbeafe;
   font-size: 0.76rem;
   font-weight: 700;
-`
-
-const ChecklistEditorList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`
-
-const ChecklistEditorRow = styled.div`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.65rem;
-
-  input[type="checkbox"] {
-    width: 1rem;
-    height: 1rem;
-  }
-`
-
-const ChecklistItemInput = styled.input`
-  min-height: 2.5rem;
-  width: 100%;
-  border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--color-gray12);
-  font-size: 0.95rem;
-  padding: 0 0.85rem;
-`
-
-const ChecklistIconButton = styled.button`
-  min-width: 2rem;
-  min-height: 2rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: transparent;
-  color: var(--color-gray10);
-  font-size: 1rem;
-  line-height: 1;
 `
 
 const LinkCardEditorWrapper = styled(NodeViewWrapper)`
@@ -2319,10 +2212,27 @@ const FormulaPreview = styled.div`
   border-radius: 0.88rem;
   background: rgba(255, 255, 255, 0.03);
   color: #e5e7eb;
-  font-family: "Times New Roman", Georgia, serif;
-  font-size: 1.1rem;
-  line-height: 1.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.84rem;
+  line-height: 1.65;
   white-space: pre-wrap;
+`
+
+const FormulaRenderedPreview = styled.div`
+  padding: 1rem 1.05rem;
+  border-radius: 0.88rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 12, 16, 0.78);
+  overflow-x: auto;
+
+  .katex-display {
+    margin: 0;
+  }
+
+  .aq-formula-fallback {
+    color: #e5e7eb;
+  }
 `
 
 const RawBlockWrapper = styled(NodeViewWrapper)`

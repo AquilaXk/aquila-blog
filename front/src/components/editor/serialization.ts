@@ -603,12 +603,19 @@ export const createToggleNode = (attrs: ToggleBlockAttrs): JSONContent => ({
   attrs,
 })
 
-export const createChecklistNode = (items: ChecklistBlockItem[]): JSONContent => ({
-  type: "checklistBlock",
-  attrs: {
-    items,
-  },
+export const createTaskListNode = (items: ChecklistBlockItem[]): JSONContent => ({
+  type: "taskList",
+  content: items.map((item) => ({
+    type: "taskItem",
+    attrs: {
+      checked: item.checked === true,
+    },
+    content: [createParagraphNode(String(item.text || "").trim())],
+  })),
 })
+
+// legacy helper 이름은 유지하되, 현재 문서 모델은 taskList/taskItem을 사용한다.
+export const createChecklistNode = (items: ChecklistBlockItem[]): JSONContent => createTaskListNode(items)
 
 export const createBookmarkNode = (attrs: BookmarkBlockAttrs): JSONContent => ({
   type: "bookmarkBlock",
@@ -1051,6 +1058,15 @@ const serializeList = (node: JSONContent) => {
     .join("\n")
 }
 
+const serializeTaskList = (node: JSONContent) =>
+  (node.content || [])
+    .map((item) => {
+      const paragraph = item.content?.find((child) => child.type === "paragraph")
+      const text = serializeParagraphLikeNode(paragraph || { type: "paragraph", content: [] })
+      return `- [${item.attrs?.checked ? "x" : " "}] ${text}`.trimEnd()
+    })
+    .join("\n")
+
 const serializeChecklistBlock = (attrs: Partial<ChecklistBlockAttrs>) =>
   (attrs.items || [])
     .map((item) => `- [${item.checked ? "x" : " "}] ${String(item.text || "").trim()}`)
@@ -1267,6 +1283,8 @@ export const serializeNode = (node: JSONContent): string => {
     case "bulletList":
     case "orderedList":
       return serializeList(node)
+    case "taskList":
+      return serializeTaskList(node)
     case "checklistBlock":
       return serializeChecklistBlock(node.attrs as ChecklistBlockAttrs)
     case "blockquote": {

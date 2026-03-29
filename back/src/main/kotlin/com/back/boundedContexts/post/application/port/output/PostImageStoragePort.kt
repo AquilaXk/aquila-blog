@@ -14,15 +14,28 @@ interface PostImageStoragePort {
         val originalFilename: String?,
     )
 
-    data class StoredImage(
+    data class UploadFileRequest(
+        val bytes: ByteArray,
+        val contentType: String?,
+        val originalFilename: String?,
+    )
+
+    data class StoredObject(
         val inputStream: InputStream,
         val contentType: String,
         val contentLength: Long?,
+        val originalFilename: String? = null,
     )
 
     fun uploadPostImage(request: UploadImageRequest): String
 
-    fun getPostImage(objectKey: String): StoredImage?
+    fun uploadPostFile(request: UploadFileRequest): String
+
+    fun getPostImage(objectKey: String): StoredObject?
+
+    fun getPostFile(objectKey: String): StoredObject?
 
     fun deletePostImage(objectKey: String)
+
+    fun deletePostFile(objectKey: String)
 }

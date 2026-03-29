@@ -149,6 +149,14 @@ type UploadPostImageResult = {
   }
 }
 
+type UploadPostFileResponse = {
+  data: {
+    key: string
+    url: string
+    name: string
+  }
+}
+
 type RsData<T> = {
   resultCode: string
   msg: string
@@ -3414,6 +3422,56 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     [setPublishStatus, uploadPostImageFile]
   )
 
+  const uploadPostAttachmentFile = useCallback(async (file: File): Promise<UploadPostFileResponse> => {
+    const formData = new FormData()
+    formData.append("file", file, file.name)
+
+    const response = await uploadWithConflictRetry(async () =>
+      fetch(`${getApiBaseUrl()}/post/api/v1/posts/files`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      })
+    )
+
+    return (await response.json()) as UploadPostFileResponse
+  }, [])
+
+  const handleBlockEditorFileUpload = useCallback(
+    async (file: File) => {
+      setPublishStatus({
+        tone: "loading",
+        text: `첨부 파일 "${file.name}" 업로드 중입니다. 완료되면 파일 블록으로 삽입됩니다.`,
+      })
+
+      try {
+        const uploaded = await uploadPostAttachmentFile(file)
+        const uploadedUrl = String(uploaded.data?.url || "").trim()
+        const uploadedName = String(uploaded.data?.name || file.name).trim() || file.name
+        if (!uploadedUrl) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
+
+        setPublishStatus({
+          tone: "success",
+          text: `첨부 파일 업로드가 완료되었습니다. ${uploadedName}`,
+        })
+
+        return {
+          url: uploadedUrl,
+          name: uploadedName,
+          description: "",
+        }
+      } catch (error) {
+        const message = normalizeProfileImageUploadError(error)
+        setPublishStatus({
+          tone: "error",
+          text: `첨부 파일 업로드 실패: ${message}`,
+        })
+        throw error
+      }
+    },
+    [setPublishStatus, uploadPostAttachmentFile]
+  )
+
   const handleUploadThumbnailImage = async (file: File) => {
     try {
       setLoadingKey("uploadThumbnail")
@@ -4067,6 +4125,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               value={postContent}
               onChange={handleBlockEditorChange}
               onUploadImage={handleBlockEditorImageUpload}
+              onUploadFile={handleBlockEditorFileUpload}
               enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
               disabled={loadingKey.length > 0}
             />
@@ -5347,6 +5406,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   value={postContent}
                   onChange={handleBlockEditorChange}
                   onUploadImage={handleBlockEditorImageUpload}
+                  onUploadFile={handleBlockEditorFileUpload}
                   enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
                   disabled={loadingKey.length > 0}
                 />

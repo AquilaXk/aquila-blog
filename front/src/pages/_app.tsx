@@ -7,6 +7,7 @@ import { RootLayout } from "src/layouts"
 import createEmotionCache from "src/libs/emotion/createEmotionCache"
 import { createQueryClient } from "src/libs/react-query"
 import { useState } from "react"
+import "katex/dist/katex.min.css"
 
 const clientSideEmotionCache = createEmotionCache()
 

@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic"
+import { useRouter } from "next/router"
 import type { GetServerSideProps, NextPage } from "next"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
@@ -39,7 +40,15 @@ const QA_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 
 const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
+  const router = useRouter()
   const [markdown, setMarkdown] = useState("")
+
+  useEffect(() => {
+    if (!router.isReady) return
+    const seed = typeof router.query.seed === "string" ? router.query.seed : ""
+    if (!seed) return
+    setMarkdown(seed.replace(/\\n/g, "\n"))
+  }, [router.isReady, router.query.seed])
 
   return (
     <main
@@ -67,6 +76,11 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
           title: "qa-image",
           widthPx: 640,
           align: "center",
+        })}
+        onUploadFile={async (file) => ({
+          url: `https://example.com/files/${encodeURIComponent(file.name)}`,
+          name: file.name,
+          description: "",
         })}
         enableMermaidBlocks={true}
       />

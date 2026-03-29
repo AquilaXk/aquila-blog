@@ -30,6 +30,7 @@ enum class UploadedFileStatus {
  */
 enum class UploadedFilePurpose {
     POST_IMAGE,
+    POST_FILE,
     PROFILE_IMAGE,
 }
 
@@ -110,8 +111,11 @@ class UploadedFile(
         deletedAt = null
     }
 
-    fun attachToPost(postId: Long) {
-        purpose = UploadedFilePurpose.POST_IMAGE
+    fun attachToPost(
+        postId: Long,
+        purpose: UploadedFilePurpose = UploadedFilePurpose.POST_IMAGE,
+    ) {
+        this.purpose = purpose
         status = UploadedFileStatus.ACTIVE
         ownerType = UploadedFileOwnerType.POST
         ownerId = postId

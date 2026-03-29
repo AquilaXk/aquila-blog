@@ -53,3 +53,30 @@ export const moveTopLevelBlockToInsertionIndex = (
   content.splice(nextIndex, 0, moved)
   return createDocument(content)
 }
+
+export const moveTaskItemToInsertionIndex = (
+  doc: BlockEditorDoc,
+  taskListBlockIndex: number,
+  sourceItemIndex: number,
+  insertionIndex: number
+): BlockEditorDoc => {
+  const content = [...normalizeDocContent(cloneNode(doc.content))]
+  const taskList = content[taskListBlockIndex]
+  const taskItems = Array.isArray(taskList?.content) ? [...taskList.content] : null
+  if (!taskList || taskList.type !== "taskList" || !taskItems) return createDocument(content)
+  if (sourceItemIndex < 0 || sourceItemIndex >= taskItems.length) return createDocument(content)
+
+  const [moved] = taskItems.splice(sourceItemIndex, 1)
+  if (!moved) return createDocument(content)
+
+  const normalizedInsertionIndex = Math.max(0, Math.min(insertionIndex, taskItems.length + 1))
+  const nextIndex = normalizedInsertionIndex > sourceItemIndex ? normalizedInsertionIndex - 1 : normalizedInsertionIndex
+  taskItems.splice(nextIndex, 0, moved)
+
+  content[taskListBlockIndex] = {
+    ...taskList,
+    content: taskItems,
+  }
+
+  return createDocument(content)
+}

@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -59,6 +59,30 @@ type LocalDraftSummary = {
 }
 
 type ListSort = "CREATED_AT" | "CREATED_AT_ASC"
+type WorkspaceConfirmState =
+  | {
+      kind: "delete" | "hardDelete"
+      rowId: number
+      rowTitle: string
+      headline: string
+      description: string
+      confirmLabel: string
+      tone: "danger"
+    }
+  | null
+
+type WorkspaceToastState =
+  | {
+      tone: "success" | "error"
+      text: string
+      actionLabel?: string
+      action?: {
+        kind: "restore"
+        rowId: number
+        rowTitle: string
+      }
+    }
+  | null
 
 type ListState = {
   rows: AdminPostListItem[]
@@ -151,6 +175,9 @@ const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) =
   return "전체 공개"
 }
 
+const buildRowTitle = (row: Pick<AdminPostListItem, "title" | "published" | "listed" | "tempDraft">) =>
+  getWorkspaceRowTitle(row) || "제목 없는 글"
+
 const buildListEndpoint = (scope: PostListScope, options: { page: string; pageSize: string; kw: string; sort: ListSort }) => {
   const query = new URLSearchParams({
     page: options.page,
@@ -190,7 +217,9 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   const [listState, setListState] = useState<ListState>({ rows: [], total: 0, loadedAt: "" })
   const [isListLoading, setIsListLoading] = useState(true)
   const [listError, setListError] = useState("")
-  const [actionNotice, setActionNotice] = useState("")
+  const [confirmState, setConfirmState] = useState<WorkspaceConfirmState>(null)
+  const [toast, setToast] = useState<WorkspaceToastState>(null)
+  const [mutationPending, setMutationPending] = useState<{ rowId: number; kind: "delete" | "restore" | "hardDelete" } | null>(null)
 
   const continueSectionRef = useRef<HTMLDivElement | null>(null)
   const listSectionRef = useRef<HTMLElement | null>(null)
@@ -285,6 +314,24 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
     return () => window.clearTimeout(timer)
   }, [router.isReady, router.query.surface])
 
+  useEffect(() => {
+    if (!toast) return
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current === toast ? null : current))
+    }, toast.action ? 7000 : 4200)
+    return () => window.clearTimeout(timer)
+  }, [toast])
+
+  useEffect(() => {
+    if (!confirmState) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setConfirmState(null)
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [confirmState])
+
   const openWriteRoute = useCallback(
     async (query?: Record<string, string>) => {
       await pushRoute(router, toEditorRoute(query))
@@ -292,58 +339,117 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
     [router]
   )
 
-  const handleDeletePost = useCallback(
-    async (row: AdminPostListItem) => {
-      const confirmed = window.confirm(`정말 \"${row.title}\" 글을 삭제할까요?`)
-      if (!confirmed) return
+  const showToast = useCallback((next: WorkspaceToastState) => {
+    setToast(next)
+  }, [])
 
+  const performDeletePost = useCallback(
+    async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
       try {
-        setActionNotice(`#${row.id} 글을 삭제하는 중입니다...`)
+        setMutationPending({ rowId: row.id, kind: "delete" })
+        setToast(null)
         await apiFetch(`/post/api/v1/posts/${row.id}`, { method: "DELETE" })
         await invalidatePublicPostReadCaches(queryClient, row.id)
-        setActionNotice(`#${row.id} 글을 삭제했습니다.`)
         await Promise.all([loadList(), loadRecentPosts()])
+        showToast({
+          tone: "success",
+          text: `#${row.id} ${buildRowTitle(row)} 글을 삭제했습니다.`,
+          actionLabel: "되돌리기",
+          action: {
+            kind: "restore",
+            rowId: row.id,
+            rowTitle: buildRowTitle(row),
+          },
+        })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        setActionNotice(`삭제 실패: ${message}`)
+        showToast({ tone: "error", text: `삭제 실패: ${message}` })
+      } finally {
+        setMutationPending(null)
       }
     },
-    [loadList, loadRecentPosts, queryClient]
+    [loadList, loadRecentPosts, queryClient, showToast]
+  )
+
+  const performRestorePost = useCallback(
+    async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
+      try {
+        setMutationPending({ rowId: row.id, kind: "restore" })
+        setToast(null)
+        await apiFetch<PostWriteResult>(`/post/api/v1/adm/posts/${row.id}/restore`, { method: "POST" })
+        await invalidatePublicPostReadCaches(queryClient, row.id)
+        await Promise.all([loadList(), loadRecentPosts()])
+        showToast({
+          tone: "success",
+          text: `#${row.id} ${buildRowTitle(row)} 글을 복구했습니다.`,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        showToast({ tone: "error", text: `복구 실패: ${message}` })
+      } finally {
+        setMutationPending(null)
+      }
+    },
+    [loadList, loadRecentPosts, queryClient, showToast]
+  )
+
+  const performHardDeletePost = useCallback(
+    async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
+      try {
+        setMutationPending({ rowId: row.id, kind: "hardDelete" })
+        setToast(null)
+        await apiFetch(`/post/api/v1/adm/posts/${row.id}/hard`, { method: "DELETE" })
+        await invalidatePublicPostReadCaches(queryClient, row.id)
+        await Promise.all([loadList(), loadRecentPosts()])
+        showToast({
+          tone: "success",
+          text: `#${row.id} ${buildRowTitle(row)} 글을 영구삭제했습니다.`,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        showToast({ tone: "error", text: `영구삭제 실패: ${message}` })
+      } finally {
+        setMutationPending(null)
+      }
+    },
+    [loadList, loadRecentPosts, queryClient, showToast]
+  )
+
+  const handleDeletePost = useCallback(
+    async (row: AdminPostListItem) => {
+      setConfirmState({
+        kind: "delete",
+        rowId: row.id,
+        rowTitle: buildRowTitle(row),
+        headline: "글을 삭제할까요?",
+        description: "삭제한 글은 삭제 글 탭에서 바로 복구할 수 있습니다.",
+        confirmLabel: "삭제하기",
+        tone: "danger",
+      })
+    },
+    []
   )
 
   const handleRestorePost = useCallback(
     async (row: AdminPostListItem) => {
-      try {
-        setActionNotice(`#${row.id} 글을 복구하는 중입니다...`)
-        await apiFetch<PostWriteResult>(`/post/api/v1/adm/posts/${row.id}/restore`, { method: "POST" })
-        await invalidatePublicPostReadCaches(queryClient, row.id)
-        setActionNotice(`#${row.id} 글을 복구했습니다.`)
-        await Promise.all([loadList(), loadRecentPosts()])
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        setActionNotice(`복구 실패: ${message}`)
-      }
+      await performRestorePost(row)
     },
-    [loadList, loadRecentPosts, queryClient]
+    [performRestorePost]
   )
 
   const handleHardDeletePost = useCallback(
     async (row: AdminPostListItem) => {
-      const confirmed = window.confirm(`#${row.id} 글을 영구삭제할까요?\n영구삭제 후에는 복구할 수 없습니다.`)
-      if (!confirmed) return
-
-      try {
-        setActionNotice(`#${row.id} 글을 영구삭제하는 중입니다...`)
-        await apiFetch(`/post/api/v1/adm/posts/${row.id}/hard`, { method: "DELETE" })
-        await invalidatePublicPostReadCaches(queryClient, row.id)
-        setActionNotice(`#${row.id} 글을 영구삭제했습니다.`)
-        await Promise.all([loadList(), loadRecentPosts()])
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        setActionNotice(`영구삭제 실패: ${message}`)
-      }
+      setConfirmState({
+        kind: "hardDelete",
+        rowId: row.id,
+        rowTitle: buildRowTitle(row),
+        headline: "글을 영구삭제할까요?",
+        description: "영구삭제 후에는 복구할 수 없습니다.",
+        confirmLabel: "영구삭제",
+        tone: "danger",
+      })
     },
-    [loadList, loadRecentPosts, queryClient]
+    []
   )
 
   const handleContinueRecent = useCallback(
@@ -396,6 +502,61 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
 
   const hasAnyResumeTarget = Boolean(localDraft) || recentPosts.length > 0
   const shouldRenderResumeGrid = isRecentLoading || Boolean(recentError) || hasAnyResumeTarget
+  const hasListFilters = Boolean(
+    listKw.trim() ||
+      listScope !== "active" ||
+      sanitizeNumberInput(listPage, DEFAULT_PAGE) !== DEFAULT_PAGE ||
+      sanitizeNumberInput(listPageSize, DEFAULT_PAGE_SIZE) !== DEFAULT_PAGE_SIZE ||
+      listSort !== DEFAULT_SORT
+  )
+  const listSummaryParts = useMemo(() => {
+    const parts = [listScope === "active" ? "활성 글" : "삭제 글"]
+    if (listKw.trim()) parts.push(`검색 "${listKw.trim()}"`)
+    if (listScope === "active") parts.push(listSort === "CREATED_AT" ? "최신순" : "오래된순")
+    parts.push(`${sanitizeNumberInput(listPageSize, DEFAULT_PAGE_SIZE)}개씩`)
+    if (sanitizeNumberInput(listPage, DEFAULT_PAGE) !== DEFAULT_PAGE) {
+      parts.push(`${sanitizeNumberInput(listPage, DEFAULT_PAGE)}페이지`)
+    }
+    return parts
+  }, [listKw, listPage, listPageSize, listScope, listSort])
+
+  const handleResetListFilters = useCallback(() => {
+    setListScope("active")
+    setListKw("")
+    setListPage(DEFAULT_PAGE)
+    setListPageSize(DEFAULT_PAGE_SIZE)
+    setListSort(DEFAULT_SORT)
+  }, [])
+
+  const handleToastAction = useCallback(async () => {
+    if (!toast?.action) return
+    if (toast.action.kind === "restore") {
+      await performRestorePost({
+        id: toast.action.rowId,
+        title: toast.action.rowTitle,
+        published: false,
+        listed: false,
+        tempDraft: false,
+      })
+    }
+  }, [performRestorePost, toast])
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!confirmState) return
+    const row = {
+      id: confirmState.rowId,
+      title: confirmState.rowTitle,
+      published: false,
+      listed: false,
+      tempDraft: false,
+    }
+    setConfirmState(null)
+    if (confirmState.kind === "delete") {
+      await performDeletePost(row)
+      return
+    }
+    await performHardDeletePost(row)
+  }, [confirmState, performDeletePost, performHardDeletePost])
 
   if (!sessionMember) return null
 
@@ -530,7 +691,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             <strong>고급 검색</strong>
             <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
           </summary>
-          {isAdvancedOpen && (
+        {isAdvancedOpen && (
             <div className="body">
               <AdvancedGrid>
                 <FieldBox>
@@ -572,7 +733,24 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           )}
         </AdvancedDisclosure>
 
-        {actionNotice ? <InlineNotice>{actionNotice}</InlineNotice> : null}
+        <FilterSummaryBar>
+          <div className="summaryCopy">
+            <strong>현재 조건</strong>
+            <SummaryPillRow>
+              {listSummaryParts.map((part) => (
+                <SummaryPill key={part}>{part}</SummaryPill>
+              ))}
+              <SummaryPill data-tone="neutral">
+                총 {listState.total}건{listState.loadedAt ? ` · ${formatDateTime(listState.loadedAt)} 기준` : ""}
+              </SummaryPill>
+            </SummaryPillRow>
+          </div>
+          {hasListFilters ? (
+            <GhostButton type="button" onClick={handleResetListFilters}>
+              조건 초기화
+            </GhostButton>
+          ) : null}
+        </FilterSummaryBar>
 
         {isListLoading ? (
           <ListSkeleton aria-hidden="true">
@@ -650,16 +828,28 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                               수정
                             </RowPrimaryButton>
-                            <DangerTextButton type="button" onClick={() => void handleDeletePost(row)}>
+                            <DangerTextButton
+                              type="button"
+                              disabled={Boolean(mutationPending)}
+                              onClick={() => void handleDeletePost(row)}
+                            >
                               삭제
                             </DangerTextButton>
                           </>
                         ) : (
                           <>
-                            <RowPrimaryButton type="button" onClick={() => void handleRestorePost(row)}>
+                            <RowPrimaryButton
+                              type="button"
+                              disabled={Boolean(mutationPending)}
+                              onClick={() => void handleRestorePost(row)}
+                            >
                               복구
                             </RowPrimaryButton>
-                            <DangerTextButton type="button" onClick={() => void handleHardDeletePost(row)}>
+                            <DangerTextButton
+                              type="button"
+                              disabled={Boolean(mutationPending)}
+                              onClick={() => void handleHardDeletePost(row)}
+                            >
                               영구삭제
                             </DangerTextButton>
                           </>
@@ -689,16 +879,28 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                           수정
                         </RowPrimaryButton>
-                        <DangerTextButton type="button" onClick={() => void handleDeletePost(row)}>
+                        <DangerTextButton
+                          type="button"
+                          disabled={Boolean(mutationPending)}
+                          onClick={() => void handleDeletePost(row)}
+                        >
                           삭제
                         </DangerTextButton>
                       </>
                     ) : (
                       <>
-                        <RowPrimaryButton type="button" onClick={() => void handleRestorePost(row)}>
+                        <RowPrimaryButton
+                          type="button"
+                          disabled={Boolean(mutationPending)}
+                          onClick={() => void handleRestorePost(row)}
+                        >
                           복구
                         </RowPrimaryButton>
-                        <DangerTextButton type="button" onClick={() => void handleHardDeletePost(row)}>
+                        <DangerTextButton
+                          type="button"
+                          disabled={Boolean(mutationPending)}
+                          onClick={() => void handleHardDeletePost(row)}
+                        >
                           영구삭제
                         </DangerTextButton>
                       </>
@@ -736,6 +938,51 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           </Link>
         </SupportList>
       </SupportSection>
+
+      {toast ? (
+        <ToastViewport data-tone={toast.tone} role="status" aria-live="polite">
+          <div className="copy">
+            <strong>{toast.tone === "error" ? "작업 실패" : "작업 완료"}</strong>
+            <span>{toast.text}</span>
+          </div>
+          <div className="actions">
+            {toast.action ? (
+              <ToastActionButton type="button" onClick={() => void handleToastAction()}>
+                {toast.actionLabel}
+              </ToastActionButton>
+            ) : null}
+            <ToastDismissButton type="button" onClick={() => setToast(null)}>
+              닫기
+            </ToastDismissButton>
+          </div>
+        </ToastViewport>
+      ) : null}
+
+      {confirmState ? (
+        <ConfirmBackdrop role="presentation" onClick={() => setConfirmState(null)}>
+          <ConfirmDialog
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workspace-confirm-title"
+            aria-describedby="workspace-confirm-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <strong id="workspace-confirm-title">{confirmState.headline}</strong>
+            <p id="workspace-confirm-description">
+              <span className="rowTitle">#{confirmState.rowId} {confirmState.rowTitle}</span>
+              <span>{confirmState.description}</span>
+            </p>
+            <ActionRow>
+              <GhostButton type="button" onClick={() => setConfirmState(null)}>
+                취소
+              </GhostButton>
+              <ConfirmButton type="button" data-tone={confirmState.tone} onClick={() => void handleConfirmAction()}>
+                {confirmState.confirmLabel}
+              </ConfirmButton>
+            </ActionRow>
+          </ConfirmDialog>
+        </ConfirmBackdrop>
+      ) : null}
     </Main>
   )
 }
@@ -1287,13 +1534,49 @@ const FieldBox = styled.div`
   }
 `
 
-const InlineNotice = styled.div`
-  padding: 0.75rem 0.9rem;
-  border-radius: 12px;
+const FilterSummaryBar = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
   background: ${({ theme }) => theme.colors.gray2};
+
+  .summaryCopy {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .summaryCopy > strong {
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
+  }
+
+  @media (max-width: 767px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`
+
+const SummaryPillRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+`
+
+const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 0.72rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme, "data-tone": tone }) => (tone === "neutral" ? theme.colors.gray1 : theme.colors.gray3)};
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 700;
 `
 
 const ListSkeleton = styled.div`
@@ -1414,6 +1697,11 @@ const RowPrimaryButton = styled.button`
   font-size: 0.86rem;
   font-weight: 800;
   cursor: pointer;
+
+  &:disabled {
+    opacity: 0.48;
+    cursor: wait;
+  }
 `
 
 const DangerTextButton = styled.button`
@@ -1424,6 +1712,11 @@ const DangerTextButton = styled.button`
   font-size: 0.86rem;
   font-weight: 700;
   cursor: pointer;
+
+  &:disabled {
+    opacity: 0.48;
+    cursor: wait;
+  }
 `
 
 const MobileCardList = styled.div`
@@ -1474,4 +1767,122 @@ const MobileCardList = styled.div`
     gap: 0.55rem;
     flex-wrap: wrap;
   }
+`
+
+const ToastViewport = styled.div<{ "data-tone": "success" | "error" }>`
+  position: fixed;
+  right: 1.2rem;
+  bottom: 1.2rem;
+  z-index: 40;
+  display: grid;
+  gap: 0.55rem;
+  min-width: min(24rem, calc(100vw - 2rem));
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid
+    ${({ theme, "data-tone": tone }) =>
+      tone === "error" ? theme.colors.statusDangerBorder : theme.colors.statusSuccessBorder};
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
+
+  .copy {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .copy strong {
+    font-size: 0.92rem;
+  }
+
+  .copy span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 767px) {
+    left: 0.85rem;
+    right: 0.85rem;
+    bottom: 0.85rem;
+    min-width: 0;
+    max-width: none;
+  }
+`
+
+const ToastActionButton = styled.button`
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.blue9};
+  padding: 0;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+`
+
+const ToastDismissButton = styled.button`
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+`
+
+const ConfirmBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.56);
+`
+
+const ConfirmDialog = styled.div`
+  width: min(28rem, 100%);
+  display: grid;
+  gap: 0.95rem;
+  padding: 1.1rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  box-shadow: 0 24px 54px rgba(15, 23, 42, 0.24);
+
+  > strong {
+    font-size: 1.02rem;
+    letter-spacing: -0.02em;
+  }
+
+  > p {
+    margin: 0;
+    display: grid;
+    gap: 0.3rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    line-height: 1.55;
+  }
+
+  .rowTitle {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-weight: 800;
+  }
+`
+
+const ConfirmButton = styled.button<{ "data-tone": "danger" }>`
+  border: 0;
+  background: ${({ theme }) => theme.colors.statusDangerSurface};
+  color: ${({ theme }) => theme.colors.statusDangerText};
+  min-height: 40px;
+  padding: 0 0.85rem;
+  border-radius: 10px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  cursor: pointer;
 `

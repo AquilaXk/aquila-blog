@@ -162,35 +162,30 @@ class UploadedFileRetentionService(
         previousContent: String?,
         currentContent: String,
     ) {
-        val previousKeys = UploadedFileUrlCodec.extractObjectKeysFromContent(previousContent.orEmpty())
-        val currentKeys = UploadedFileUrlCodec.extractObjectKeysFromContent(currentContent)
-
-        currentKeys.forEach { objectKey ->
-            val uploadedFile = findOrCreate(objectKey)
-            uploadedFile.attachToPost(postId)
-            uploadedFileRepository.save(uploadedFile)
-        }
-
-        (previousKeys - currentKeys).forEach { objectKey ->
-            scheduleDeletionIfKnown(
-                objectKey = objectKey,
-                purpose = UploadedFilePurpose.POST_IMAGE,
-                reason = UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT,
-                purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
-            )
-        }
+        syncPostAttachmentKeys(
+            postId = postId,
+            currentKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(currentContent),
+            previousKeys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(previousContent.orEmpty()),
+            purpose = UploadedFilePurpose.POST_IMAGE,
+        )
+        syncPostAttachmentKeys(
+            postId = postId,
+            currentKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(currentContent),
+            previousKeys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(previousContent.orEmpty()),
+            purpose = UploadedFilePurpose.POST_FILE,
+        )
     }
 
     @Transactional
     fun scheduleDeletedPostAttachments(content: String) {
-        UploadedFileUrlCodec.extractObjectKeysFromContent(content).forEach { objectKey ->
-            scheduleDeletionIfKnown(
-                objectKey = objectKey,
-                purpose = UploadedFilePurpose.POST_IMAGE,
-                reason = UploadedFileRetentionReason.DELETED_POST_ATTACHMENT,
-                purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
-            )
-        }
+        scheduleDeletionForContent(
+            purpose = UploadedFilePurpose.POST_IMAGE,
+            keys = UploadedFileUrlCodec.extractImageObjectKeysFromContent(content),
+        )
+        scheduleDeletionForContent(
+            purpose = UploadedFilePurpose.POST_FILE,
+            keys = UploadedFileUrlCodec.extractFileObjectKeysFromContent(content),
+        )
     }
 
     /**
@@ -204,6 +199,42 @@ class UploadedFileRetentionService(
             if (uploadedFile.status == UploadedFileStatus.DELETED) return@forEach
             uploadedFile.restoreActive()
             uploadedFileRepository.save(uploadedFile)
+        }
+    }
+
+    private fun syncPostAttachmentKeys(
+        postId: Long,
+        currentKeys: Set<String>,
+        previousKeys: Set<String>,
+        purpose: UploadedFilePurpose,
+    ) {
+        currentKeys.forEach { objectKey ->
+            val uploadedFile = findOrCreate(objectKey)
+            uploadedFile.attachToPost(postId, purpose)
+            uploadedFileRepository.save(uploadedFile)
+        }
+
+        (previousKeys - currentKeys).forEach { objectKey ->
+            scheduleDeletionIfKnown(
+                objectKey = objectKey,
+                purpose = purpose,
+                reason = UploadedFileRetentionReason.DETACHED_POST_ATTACHMENT,
+                purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
+            )
+        }
+    }
+
+    private fun scheduleDeletionForContent(
+        keys: Set<String>,
+        purpose: UploadedFilePurpose,
+    ) {
+        keys.forEach { objectKey ->
+            scheduleDeletionIfKnown(
+                objectKey = objectKey,
+                purpose = purpose,
+                reason = UploadedFileRetentionReason.DELETED_POST_ATTACHMENT,
+                purgeAfter = Instant.now().plusSeconds(retentionProperties.deletedPostAttachmentSeconds),
+            )
         }
     }
 
@@ -390,7 +421,9 @@ class UploadedFileRetentionService(
         }
 
         val imageUrl = UploadedFileUrlCodec.buildImageUrl(objectKey)
+        val fileUrl = UploadedFileUrlCodec.buildFileUrl(objectKey)
         return postRepository.existsByContentContaining(objectKey) ||
+            postRepository.existsByContentContaining(fileUrl) ||
             memberAttrRepository.existsByNameAndStrValueContaining(PROFILE_IMG_URL, objectKey) ||
             memberAttrRepository.existsByNameAndStrValue(PROFILE_IMG_URL, imageUrl)
     }

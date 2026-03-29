@@ -20,6 +20,7 @@ import {
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
 } from "src/components/editor/serialization"
+import { renderFormulaToHtml } from "src/libs/markdown/formula"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { resolveMarkdownRenderModel } from "src/libs/markdown/rendering"
 import ts from "typescript"
@@ -243,6 +244,22 @@ test.describe("block editor serialization", () => {
     expect(doc.content?.some((node) => node.type === "bulletList")).toBe(true)
     expect(doc.content?.some((node) => node.type === "mermaidBlock")).toBe(true)
     expect(doc.content?.some((node) => node.type === "calloutBlock")).toBe(true)
+  })
+
+  test("체크리스트 markdown 는 taskList/taskItem 문서 모델로 승격된다", () => {
+    const doc = parseMarkdownToEditorDoc(["- [ ] 첫 번째", "- [x] 두 번째"].join("\n"))
+
+    expect(doc.content?.[0]?.type).toBe("taskList")
+    expect(doc.content?.[0]?.content?.[0]?.type).toBe("taskItem")
+    expect(doc.content?.[0]?.content?.[1]?.attrs?.checked).toBe(true)
+    expect(serializeEditorDocToMarkdown(doc)).toContain("- [x] 두 번째")
+  })
+
+  test("수식 블록은 KaTeX HTML로 렌더된다", async () => {
+    const html = await renderFormulaToHtml("\\int_0^1 x^2 \\, dx", { displayMode: true })
+
+    expect(html).toContain("katex")
+    expect(html).toContain("katex-display")
   })
 
   test("malformed mermaid fence 는 raw block 으로 보존된다", () => {

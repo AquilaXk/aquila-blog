@@ -14,11 +14,13 @@ import {
   useRef,
   useState,
 } from "react"
-import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
+import type { ChangeEvent, DragEvent as ReactDragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
 import {
   BookmarkBlock,
   CalloutBlock,
-  ChecklistBlock,
+  EditorListKeymap,
+  EditorTaskItem,
+  EditorTaskList,
   EditorCodeBlock,
   EditorTableCell,
   EditorTableHeader,
@@ -37,13 +39,13 @@ import {
   deleteTopLevelBlockAt,
   duplicateTopLevelBlockAt,
   insertTopLevelBlockAt,
+  moveTaskItemToInsertionIndex,
   moveTopLevelBlockToInsertionIndex,
 } from "./blockDocumentOps"
 import {
   createBlockquoteNode,
   createBookmarkNode,
   createCalloutNode,
-  createChecklistNode,
   createCodeBlockNode,
   createEmbedNode,
   createFileBlockNode,
@@ -53,12 +55,14 @@ import {
   createMermaidNode,
   createOrderedListNode,
   createParagraphNode,
+  createTaskListNode,
   createTableNode,
   createToggleNode,
   createBulletListNode,
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
   type BlockEditorDoc,
+  type FileBlockAttrs,
   type ImageBlockAttrs,
 } from "./serialization"
 import {
@@ -78,6 +82,7 @@ type Props = {
   value: string
   onChange: (markdown: string, meta?: BlockEditorChangeMeta) => void
   onUploadImage: (file: File) => Promise<ImageBlockAttrs>
+  onUploadFile?: (file: File) => Promise<FileBlockAttrs>
   disabled?: boolean
   className?: string
   preview?: ReactNode
@@ -143,6 +148,31 @@ type DraggedBlockState =
       pointerId: number
     }
   | null
+
+type DraggedTaskItemState =
+  | {
+      taskListBlockIndex: number
+      sourceItemIndex: number
+    }
+  | null
+
+type TaskItemDropIndicatorState =
+  | {
+      visible: boolean
+      taskListBlockIndex: number
+      insertionIndex: number
+      top: number
+      left: number
+      width: number
+    }
+  | {
+      visible: false
+      taskListBlockIndex: number
+      insertionIndex: number
+      top: number
+      left: number
+      width: number
+    }
 
 type DropIndicatorState =
   | {
@@ -381,6 +411,14 @@ const SLASH_MENU_EDGE_PADDING_PX = 16
 const SLASH_MENU_VERTICAL_GAP_PX = 12
 const SLASH_MENU_ESTIMATED_WIDTH_PX = 608
 const SLASH_MENU_ESTIMATED_HEIGHT_PX = 560
+const TABLE_CELL_COLOR_PRESETS = [
+  { label: "하늘", value: "#dbeafe" },
+  { label: "민트", value: "#dcfce7" },
+  { label: "노랑", value: "#fef3c7" },
+  { label: "장미", value: "#ffe4e6" },
+  { label: "보라", value: "#ede9fe" },
+  { label: "회색", value: "#e2e8f0" },
+] as const
 
 const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (!node) return false
@@ -392,7 +430,7 @@ const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (
     node.type === "resizableImage" ||
     node.type === "calloutBlock" ||
-    node.type === "checklistBlock" ||
+    node.type === "taskList" ||
     node.type === "bookmarkBlock" ||
     node.type === "embedBlock" ||
     node.type === "fileBlock" ||
@@ -410,6 +448,11 @@ const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
 }
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
+
+const normalizeTableColorInputValue = (value: unknown) => {
+  const normalized = String(value || "").trim()
+  return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized : "#dbeafe"
+}
 
 const isPrimaryModifierPressed = (event: ReactKeyboardEvent | globalThis.KeyboardEvent) =>
   event.metaKey || event.ctrlKey
@@ -463,16 +506,19 @@ const BlockEditorShell = ({
   value,
   onChange,
   onUploadImage,
+  onUploadFile,
   disabled = false,
   className,
   preview,
   enableMermaidBlocks = false,
 }: Props) => {
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageFileInputRef = useRef<HTMLInputElement>(null)
+  const attachmentFileInputRef = useRef<HTMLInputElement>(null)
   const inlineColorMenuRef = useRef<HTMLDetailsElement>(null)
   const slashMenuRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
+  const pendingAttachmentInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
@@ -507,6 +553,15 @@ const BlockEditorShell = ({
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>({
     visible: false,
+    insertionIndex: 0,
+    top: 0,
+    left: 0,
+    width: 0,
+  })
+  const [draggedTaskItemState, setDraggedTaskItemState] = useState<DraggedTaskItemState>(null)
+  const [taskItemDropIndicatorState, setTaskItemDropIndicatorState] = useState<TaskItemDropIndicatorState>({
+    visible: false,
+    taskListBlockIndex: 0,
     insertionIndex: 0,
     top: 0,
     left: 0,
@@ -636,6 +691,81 @@ const BlockEditorShell = ({
       return getTopLevelBlockElements().indexOf(element as HTMLElement)
     },
     [getContentRoot, getTopLevelBlockElements]
+  )
+
+  const findTaskItemDragContextFromTarget = useCallback(
+    (target: EventTarget | null) => {
+      const root = getContentRoot()
+      if (!root || !(target instanceof Element)) return null
+
+      const taskItemElement = target.closest("li[data-type='taskItem'], li[data-task-item='true']")
+      if (!(taskItemElement instanceof HTMLElement)) return null
+      const taskListElement = taskItemElement.closest("ul[data-type='taskList'], ul[data-task-list='true']")
+      if (!(taskListElement instanceof HTMLElement)) return null
+
+      let blockElement: Element | null = taskListElement
+      while (blockElement && blockElement.parentElement !== root) {
+        blockElement = blockElement.parentElement
+      }
+
+      if (!(blockElement instanceof HTMLElement) || blockElement.parentElement !== root) return null
+      const taskListBlockIndex = getTopLevelBlockElements().indexOf(blockElement)
+      if (taskListBlockIndex < 0) return null
+
+      const taskItems = Array.from(
+        taskListElement.querySelectorAll(":scope > li[data-type='taskItem'], :scope > li[data-task-item='true']")
+      ) as HTMLElement[]
+      const sourceItemIndex = taskItems.indexOf(taskItemElement)
+      if (sourceItemIndex < 0) return null
+
+      return {
+        taskListBlockIndex,
+        sourceItemIndex,
+        taskItemElement,
+        taskListElement,
+        taskItems,
+      }
+    },
+    [getContentRoot, getTopLevelBlockElements]
+  )
+
+  const resolveTaskItemDropIndicatorByClientY = useCallback(
+    (taskListElement: HTMLElement, clientY: number) => {
+      const taskItems = Array.from(
+        taskListElement.querySelectorAll(":scope > li[data-type='taskItem'], :scope > li[data-task-item='true']")
+      ) as HTMLElement[]
+      if (!taskItems.length) {
+        const rect = taskListElement.getBoundingClientRect()
+        return {
+          insertionIndex: 0,
+          top: Math.round(rect.top),
+          left: Math.round(rect.left),
+          width: Math.round(rect.width),
+        }
+      }
+
+      let insertionIndex = taskItems.length
+      let top = taskItems[taskItems.length - 1].getBoundingClientRect().bottom
+
+      for (let index = 0; index < taskItems.length; index += 1) {
+        const rect = taskItems[index].getBoundingClientRect()
+        const midpoint = rect.top + rect.height / 2
+        if (clientY < midpoint) {
+          insertionIndex = index
+          top = rect.top
+          break
+        }
+      }
+
+      const rootRect = taskListElement.getBoundingClientRect()
+      return {
+        insertionIndex,
+        top: Math.round(top),
+        left: Math.round(rootRect.left + 12),
+        width: Math.max(48, Math.round(rootRect.width - 24)),
+      }
+    },
+    []
   )
 
   const getTableCellFromTarget = useCallback((target: EventTarget | null) => {
@@ -805,7 +935,9 @@ const BlockEditorShell = ({
       RawMarkdownBlock,
       ResizableImage,
       CalloutBlock,
-      ChecklistBlock,
+      EditorTaskList,
+      EditorTaskItem,
+      EditorListKeymap,
       BookmarkBlock,
       EmbedBlock,
       FileBlock,
@@ -1163,7 +1295,7 @@ const BlockEditorShell = ({
   }, [insertBlocksAtCursor])
 
   const insertChecklistBlock = useCallback(() => {
-    insertBlocksAtCursor([createChecklistNode([{ checked: false, text: "할 일" }])], true)
+    insertBlocksAtCursor([createTaskListNode([{ checked: false, text: "할 일" }])], true)
   }, [insertBlocksAtCursor])
 
   const insertBookmarkBlock = useCallback(() => {
@@ -1323,6 +1455,23 @@ const BlockEditorShell = ({
       .run()
   }
 
+  const handleAttachmentInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file || !editor || !onUploadFile) return
+
+    const fileAttrs = await onUploadFile(file)
+    const pendingInsertIndex = pendingAttachmentInsertIndexRef.current
+    pendingAttachmentInsertIndexRef.current = null
+
+    if (typeof pendingInsertIndex === "number") {
+      insertBlocksAtIndex(pendingInsertIndex, [createFileBlockNode(fileAttrs), { type: "paragraph" }])
+      return
+    }
+
+    insertBlocksAtCursor([createFileBlockNode(fileAttrs)], true)
+  }
+
   const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>(() => {
     const createTableTemplate = () =>
       createTableNode([
@@ -1344,7 +1493,7 @@ const BlockEditorShell = ({
       })
 
     const createChecklistTemplate = () =>
-      createChecklistNode([{ checked: false, text: "할 일" }])
+      createTaskListNode([{ checked: false, text: "할 일" }])
 
     const createBookmarkTemplate = () =>
       createBookmarkNode({
@@ -1565,14 +1714,20 @@ const BlockEditorShell = ({
       {
         id: "file",
         label: "파일",
-        helper: "다운로드 링크 블록",
+        helper: onUploadFile ? "업로드 후 첨부 블록으로 삽입" : "다운로드 링크 블록",
         section: "media",
         keywords: ["file", "download", "첨부", "파일"],
         slashHint: "PDF",
         toolbarMore: true,
-        insertAtCursor: insertFileBlock,
-        insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createFileTemplate()])),
+        insertAtCursor: () => (onUploadFile ? attachmentFileInputRef.current?.click() : insertFileBlock()),
+        insertAtBlock: (blockIndex) => {
+          if (onUploadFile) {
+            pendingAttachmentInsertIndexRef.current = blockIndex + 1
+            attachmentFileInputRef.current?.click()
+            return
+          }
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createFileTemplate()]))
+        },
       },
       {
         id: "formula",
@@ -1611,11 +1766,11 @@ const BlockEditorShell = ({
         quickInsert: true,
         toolbarMore: true,
         insertAtCursor: () => {
-          fileInputRef.current?.click()
+          imageFileInputRef.current?.click()
         },
         insertAtBlock: (blockIndex) => {
           pendingImageInsertIndexRef.current = blockIndex + 1
-          fileInputRef.current?.click()
+          attachmentFileInputRef.current?.click()
         },
       },
       ...(enableMermaidBlocks
@@ -1656,6 +1811,7 @@ const BlockEditorShell = ({
     insertMermaidBlock,
     insertTableBlock,
     insertToggleBlock,
+    onUploadFile,
     withTrailingParagraph,
   ])
 
@@ -1912,7 +2068,7 @@ const BlockEditorShell = ({
     { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
-    { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => fileInputRef.current?.click(), active: false },
+    { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => imageFileInputRef.current?.click(), active: false },
     { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
   ]
 
@@ -1928,7 +2084,7 @@ const BlockEditorShell = ({
       item.id === "ordered-list"
         ? editor?.isActive("orderedList") ?? false
         : item.id === "checklist"
-          ? editor?.isActive("checklistBlock") ?? false
+          ? editor?.isActive("taskList") ?? false
         : item.id === "table"
           ? editor?.isActive("table") ?? false
           : item.id === "callout"
@@ -2283,6 +2439,83 @@ const BlockEditorShell = ({
     [getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, startTableRowResize]
   )
 
+  const handleViewportDragStart = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      const taskItemContext = findTaskItemDragContextFromTarget(event.target)
+      if (!taskItemContext) return
+
+      setDraggedTaskItemState({
+        taskListBlockIndex: taskItemContext.taskListBlockIndex,
+        sourceItemIndex: taskItemContext.sourceItemIndex,
+      })
+      setTaskItemDropIndicatorState({
+        visible: true,
+        taskListBlockIndex: taskItemContext.taskListBlockIndex,
+        ...resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY),
+      })
+      event.dataTransfer.effectAllowed = "move"
+      event.dataTransfer.setData("text/plain", `task-item:${taskItemContext.taskListBlockIndex}:${taskItemContext.sourceItemIndex}`)
+    },
+    [findTaskItemDragContextFromTarget, resolveTaskItemDropIndicatorByClientY]
+  )
+
+  const handleViewportDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!draggedTaskItemState) return
+      const taskItemContext = findTaskItemDragContextFromTarget(event.target)
+      if (!taskItemContext || taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex) return
+
+      event.preventDefault()
+      setTaskItemDropIndicatorState({
+        visible: true,
+        taskListBlockIndex: taskItemContext.taskListBlockIndex,
+        ...resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY),
+      })
+    },
+    [draggedTaskItemState, findTaskItemDragContextFromTarget, resolveTaskItemDropIndicatorByClientY]
+  )
+
+  const clearTaskItemDragState = useCallback(() => {
+    setDraggedTaskItemState(null)
+    setTaskItemDropIndicatorState((prev) => ({ ...prev, visible: false }))
+  }, [])
+
+  const handleViewportDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (!draggedTaskItemState) return
+      const taskItemContext = findTaskItemDragContextFromTarget(event.target)
+      if (!taskItemContext || taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex) {
+        clearTaskItemDragState()
+        return
+      }
+
+      event.preventDefault()
+      const indicator = resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY)
+      mutateTopLevelBlocks(
+        (doc) =>
+          moveTaskItemToInsertionIndex(
+            doc,
+            draggedTaskItemState.taskListBlockIndex,
+            draggedTaskItemState.sourceItemIndex,
+            indicator.insertionIndex
+          ),
+        draggedTaskItemState.taskListBlockIndex
+      )
+      clearTaskItemDragState()
+    },
+    [
+      clearTaskItemDragState,
+      draggedTaskItemState,
+      findTaskItemDragContextFromTarget,
+      mutateTopLevelBlocks,
+      resolveTaskItemDropIndicatorByClientY,
+    ]
+  )
+
+  const handleViewportDragEnd = useCallback(() => {
+    clearTaskItemDragState()
+  }, [clearTaskItemDragState])
+
   useEffect(() => {
     if (typeof window === "undefined" || !blockMenuState) return
     const close = (event: PointerEvent | KeyboardEvent) => {
@@ -2453,11 +2686,19 @@ const BlockEditorShell = ({
       </QuickInsertBar>
 
       <HiddenFileInput
-        ref={fileInputRef}
+        ref={imageFileInputRef}
         type="file"
         accept="image/*"
         onChange={(event) => {
           void handleImageInputChange(event)
+        }}
+      />
+
+      <HiddenFileInput
+        ref={attachmentFileInputRef}
+        type="file"
+        onChange={(event) => {
+          void handleAttachmentInputChange(event)
         }}
       />
 
@@ -2577,6 +2818,10 @@ const BlockEditorShell = ({
         onPointerMove={handleViewportPointerMove}
         onPointerLeave={handleViewportPointerLeave}
         onPointerDown={handleViewportPointerDown}
+        onDragStart={handleViewportDragStart}
+        onDragOver={handleViewportDragOver}
+        onDrop={handleViewportDrop}
+        onDragEnd={handleViewportDragEnd}
       >
         {editor && bubbleState.visible ? (
           <FloatingBubbleToolbar
@@ -2667,22 +2912,32 @@ const BlockEditorShell = ({
                 </ToolbarButton>
                 <ToolbarButton
                   type="button"
-                  data-active={activeTableCellAttrs.backgroundColor === "rgba(96, 165, 250, 0.16)"}
-                  onClick={() =>
-                    updateActiveTableCellAttrs({ backgroundColor: "rgba(96, 165, 250, 0.16)" })
-                  }
+                  data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
                 >
-                  파랑
+                  기본
                 </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.backgroundColor === "rgba(74, 222, 128, 0.16)"}
-                  onClick={() =>
-                    updateActiveTableCellAttrs({ backgroundColor: "rgba(74, 222, 128, 0.16)" })
+                <TablePresetSwatches aria-label="표 셀 배경 preset">
+                  {TABLE_CELL_COLOR_PRESETS.map((preset) => (
+                    <TablePresetSwatch
+                      key={preset.value}
+                      type="button"
+                      title={preset.label}
+                      aria-label={`${preset.label} 배경`}
+                      data-active={activeTableCellAttrs.backgroundColor === preset.value}
+                      style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
+                      onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+                    />
+                  ))}
+                </TablePresetSwatches>
+                <TableColorInput
+                  type="color"
+                  aria-label="표 셀 배경색 선택"
+                  value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
+                  onChange={(event) =>
+                    updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
                   }
-                >
-                  초록
-                </ToolbarButton>
+                />
                 <ToolbarButton
                   type="button"
                   onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
@@ -2713,6 +2968,7 @@ const BlockEditorShell = ({
               type="button"
               aria-label="블록 이동"
               data-variant="drag"
+              data-testid="block-drag-handle"
               onPointerDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -2747,6 +3003,16 @@ const BlockEditorShell = ({
               left: `${dropIndicatorState.left}px`,
               top: `${dropIndicatorState.top}px`,
               width: `${dropIndicatorState.width}px`,
+            }}
+          />
+        ) : null}
+        {taskItemDropIndicatorState.visible ? (
+          <BlockDropIndicator
+            data-kind="task-item"
+            style={{
+              left: `${taskItemDropIndicatorState.left}px`,
+              top: `${taskItemDropIndicatorState.top}px`,
+              width: `${taskItemDropIndicatorState.width}px`,
             }}
           />
         ) : null}
@@ -3173,6 +3439,36 @@ const ToolbarButton = styled.button`
 
 const HiddenFileInput = styled.input`
   display: none;
+`
+
+const TablePresetSwatches = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+`
+
+const TablePresetSwatch = styled.button`
+  --table-swatch-color: #dbeafe;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: var(--table-swatch-color);
+  padding: 0;
+
+  &[data-active="true"] {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.28);
+    border-color: rgba(59, 130, 246, 0.42);
+  }
+`
+
+const TableColorInput = styled.input`
+  width: 2.2rem;
+  height: 2rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.22rem;
 `
 
 const slashMenuFadeInFromBottom = keyframes`
@@ -3605,6 +3901,38 @@ const EditorViewport = styled.div`
   .aq-block-editor__content code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
+  }
+
+  .aq-block-editor__content ul[data-type="taskList"],
+  .aq-block-editor__content ul[data-task-list="true"] {
+    width: min(100%, var(--compose-pane-readable-width, var(--article-readable-width, 48rem)));
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"],
+  .aq-block-editor__content li[data-task-item="true"] {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.72rem;
+    margin: 0.45rem 0;
+    cursor: grab;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"]:active,
+  .aq-block-editor__content li[data-task-item="true"]:active {
+    cursor: grabbing;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"] > label,
+  .aq-block-editor__content li[data-task-item="true"] > label {
+    margin-top: 0.28rem;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"] > div,
+  .aq-block-editor__content li[data-task-item="true"] > div {
+    flex: 1;
+    min-width: 0;
   }
 
   .aq-block-editor__content table {

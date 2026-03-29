@@ -201,8 +201,27 @@ const MarkdownRendererRoot = styled.div`
     text-align: center;
   }
 
-  .aq-formula-card code {
-    display: block;
+  .aq-formula-render {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.18rem;
+  }
+
+  .aq-formula-render .katex-display {
+    margin: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2rem 0 0.3rem;
+  }
+
+  .aq-formula-render .katex {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: clamp(1.02rem, 2vw, 1.28rem);
+  }
+
+  .aq-formula-fallback {
+    display: inline-block;
     color: ${({ theme }) => theme.colors.gray12};
     font-family: "Times New Roman", Georgia, serif;
     font-size: clamp(1.05rem, 2vw, 1.35rem);

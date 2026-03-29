@@ -5,7 +5,6 @@ import Link from "next/link"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import styled from "@emotion/styled"
-import MarkdownRenderer from "../components/MarkdownRenderer"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { ApiError, apiFetch } from "src/apis/backend/client"
@@ -17,7 +16,8 @@ import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPost, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
 import AppIcon from "src/components/icons/AppIcon"
-import { extractLeadingSummaryBlock, normalizeCardSummary } from "src/libs/postSummary"
+import ContentHtmlRenderer from "src/libs/markdown/ContentHtmlRenderer"
+import { extractLeadingSummaryBlockFromHtml, normalizeCardSummary } from "src/libs/postSummary"
 
 type Props = {
   initialComments?: TPostComment[] | null
@@ -39,6 +39,8 @@ const renderRelatedSummary = (summary: string | undefined) => {
   const summaryText = normalizeCardSummary(summary, { fallback: "", maxLength: 148 })
   return summaryText ? <p>{summaryText}</p> : null
 }
+
+const RELATED_SKELETON_COUNT = 3
 
 const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
@@ -169,13 +171,19 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   )
   const showStickyToc = visibleTocItems.length >= 2
   const extractedSummaryState = useMemo(
-    () => extractLeadingSummaryBlock(data?.content || "", 180),
-    [data?.content]
+    () => extractLeadingSummaryBlockFromHtml(data?.contentHtml || "", 180),
+    [data?.contentHtml]
   )
-  const renderedContent = useMemo(() => {
-    if (!data?.content) return ""
-    return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content
-  }, [data?.content, extractedSummaryState.contentWithoutSummary, extractedSummaryState.summary])
+  const renderedContentHtml = useMemo(() => {
+    if (!data?.contentHtml) return ""
+    return extractedSummaryState.summary
+      ? extractedSummaryState.contentHtmlWithoutSummary
+      : data.contentHtml
+  }, [
+    data?.contentHtml,
+    extractedSummaryState.contentHtmlWithoutSummary,
+    extractedSummaryState.summary,
+  ])
   const relatedTag = useMemo(
     () =>
       data?.tags
@@ -263,6 +271,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     () => (relatedByAuthorQuery.data || []).slice(0, RELATED_POSTS_LIMIT),
     [relatedByAuthorQuery.data]
   )
+  const showRelatedTagSkeleton = Boolean(data?.type[0] === "Post" && relatedTag && relatedByTagQuery.isPending)
+  const showRelatedAuthorSkeleton = Boolean(data?.type[0] === "Post" && authorId && relatedByAuthorQuery.isPending)
 
   useEffect(() => {
     if (!data) return
@@ -857,9 +867,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             </CompactTocSection>
           )}
           <BodySection data-rum-section="body">
-            <MarkdownRenderer content={renderedContent} />
+            <ContentHtmlRenderer contentHtml={renderedContentHtml} />
           </BodySection>
-          {data.type[0] === "Post" && relatedByTagPosts.length > 0 && (
+          {data.type[0] === "Post" && (showRelatedTagSkeleton || relatedByTagPosts.length > 0) && (
             <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
               <header>
                 <h2>같은 태그 글</h2>
@@ -868,19 +878,28 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 </Link>
               </header>
               <ul>
-                {relatedByTagPosts.map((post) => (
-                  <li key={post.id}>
-                    <Link href={toCanonicalPostPath(post.id)}>
-                      <strong>{post.title}</strong>
-                      {renderRelatedSummary(post.summary)}
-                      <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
-                    </Link>
-                  </li>
-                ))}
+                {showRelatedTagSkeleton
+                  ? Array.from({ length: RELATED_SKELETON_COUNT }, (_, index) => (
+                      <RelatedSkeletonItem key={`tag-skeleton-${index}`} aria-hidden="true">
+                        <span className="titleLine" />
+                        <span className="summaryLine wide" />
+                        <span className="summaryLine medium" />
+                        <span className="metaLine" />
+                      </RelatedSkeletonItem>
+                    ))
+                  : relatedByTagPosts.map((post) => (
+                      <li key={post.id}>
+                        <Link href={toCanonicalPostPath(post.id)}>
+                          <strong>{post.title}</strong>
+                          {renderRelatedSummary(post.summary)}
+                          <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
+                        </Link>
+                      </li>
+                    ))}
               </ul>
             </RelatedSection>
           )}
-          {data.type[0] === "Post" && relatedByAuthorPosts.length > 0 && (
+          {data.type[0] === "Post" && (showRelatedAuthorSkeleton || relatedByAuthorPosts.length > 0) && (
             <RelatedSection aria-label="같은 작성자 글" data-rum-section="related-author">
               <header>
                 <h2>같은 작성자 글</h2>
@@ -889,15 +908,24 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 </Link>
               </header>
               <ul>
-                {relatedByAuthorPosts.map((post) => (
-                  <li key={post.id}>
-                    <Link href={toCanonicalPostPath(post.id)}>
-                      <strong>{post.title}</strong>
-                      {renderRelatedSummary(post.summary)}
-                      <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
-                    </Link>
-                  </li>
-                ))}
+                {showRelatedAuthorSkeleton
+                  ? Array.from({ length: RELATED_SKELETON_COUNT }, (_, index) => (
+                      <RelatedSkeletonItem key={`author-skeleton-${index}`} aria-hidden="true">
+                        <span className="titleLine" />
+                        <span className="summaryLine wide" />
+                        <span className="summaryLine medium" />
+                        <span className="metaLine" />
+                      </RelatedSkeletonItem>
+                    ))
+                  : relatedByAuthorPosts.map((post) => (
+                      <li key={post.id}>
+                        <Link href={toCanonicalPostPath(post.id)}>
+                          <strong>{post.title}</strong>
+                          {renderRelatedSummary(post.summary)}
+                          <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
+                        </Link>
+                      </li>
+                    ))}
               </ul>
             </RelatedSection>
           )}
@@ -1538,5 +1566,58 @@ const RelatedSection = styled.section`
   @media (max-width: 768px) {
     margin-top: 0.38rem;
     padding-top: 0.74rem;
+  }
+`
+
+const RelatedSkeletonItem = styled.li`
+  display: grid;
+  gap: 0.34rem;
+  min-width: 0;
+  padding: 0.68rem 0.74rem;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+
+  .titleLine,
+  .summaryLine,
+  .metaLine {
+    display: block;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray3};
+    animation: related-skeleton-pulse 1.18s ease-in-out infinite;
+  }
+
+  .titleLine {
+    width: min(70%, 17rem);
+    height: 0.98rem;
+  }
+
+  .summaryLine {
+    height: 0.82rem;
+  }
+
+  .summaryLine.wide {
+    width: min(92%, 22rem);
+  }
+
+  .summaryLine.medium {
+    width: min(68%, 14rem);
+  }
+
+  .metaLine {
+    width: 5.4rem;
+    height: 0.74rem;
+  }
+
+  @keyframes related-skeleton-pulse {
+    0% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.7;
+    }
   }
 `

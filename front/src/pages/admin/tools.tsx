@@ -234,6 +234,19 @@ const formatAge = (seconds: number | null | undefined) => {
   return `${Math.floor(seconds / 86400)}일`
 }
 
+const getFreshnessMeta = (value: string | null | undefined): { label: string; tone: "fresh" | "aging" | "stale" } => {
+  if (!value) return { label: "미확인", tone: "stale" }
+
+  const timestamp = new Date(value).getTime()
+  if (Number.isNaN(timestamp)) return { label: "미확인", tone: "stale" }
+
+  const diffMs = Date.now() - timestamp
+  if (diffMs < 90_000) return { label: "방금 확인", tone: "fresh" }
+  if (diffMs < 15 * 60_000) return { label: `${Math.max(1, Math.floor(diffMs / 60_000))}분 전`, tone: "fresh" }
+  if (diffMs < 60 * 60_000) return { label: `${Math.max(15, Math.floor(diffMs / 60_000))}분 전`, tone: "aging" }
+  return { label: `${Math.max(1, Math.floor(diffMs / 3_600_000))}시간 전`, tone: "stale" }
+}
+
 const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
 
@@ -340,10 +353,13 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [mailDiagnosticsError, setMailDiagnosticsError] = useState("")
   const [taskQueueDiagnostics, setTaskQueueDiagnostics] = useState<TaskQueueDiagnostics | null>(null)
   const [taskQueueDiagnosticsError, setTaskQueueDiagnosticsError] = useState("")
+  const [taskQueueCheckedAt, setTaskQueueCheckedAt] = useState<string | null>(null)
   const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(null)
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
+  const [cleanupCheckedAt, setCleanupCheckedAt] = useState<string | null>(null)
   const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>([])
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
+  const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(null)
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [dashboardFrameState, setDashboardFrameState] = useState<DashboardFrameState>("idle")
   const [dashboardFrameKey, setDashboardFrameKey] = useState(0)
@@ -498,6 +514,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       onSuccess: (diagnostics) => {
         setTaskQueueDiagnosticsError("")
         setTaskQueueDiagnostics(diagnostics)
+        setTaskQueueCheckedAt(new Date().toISOString())
       },
       onError: (message) => {
         setTaskQueueDiagnosticsError(message)
@@ -510,6 +527,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       onSuccess: (diagnostics) => {
         setCleanupDiagnosticsError("")
         setCleanupDiagnostics(diagnostics)
+        setCleanupCheckedAt(new Date().toISOString())
       },
       onError: (message) => {
         setCleanupDiagnosticsError(message)
@@ -522,6 +540,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       onSuccess: (events) => {
         setAuthSecurityEventsError("")
         setAuthSecurityEvents(events)
+        setAuthSecurityCheckedAt(new Date().toISOString())
       },
       onError: (message) => {
         setAuthSecurityEventsError(message)
@@ -541,9 +560,18 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       ])
 
       if (mailResult.status === "fulfilled") setMailDiagnostics(mailResult.value)
-      if (taskResult.status === "fulfilled") setTaskQueueDiagnostics(taskResult.value)
-      if (cleanupResult.status === "fulfilled") setCleanupDiagnostics(cleanupResult.value)
-      if (authEventsResult.status === "fulfilled") setAuthSecurityEvents(authEventsResult.value)
+      if (taskResult.status === "fulfilled") {
+        setTaskQueueDiagnostics(taskResult.value)
+        setTaskQueueCheckedAt(new Date().toISOString())
+      }
+      if (cleanupResult.status === "fulfilled") {
+        setCleanupDiagnostics(cleanupResult.value)
+        setCleanupCheckedAt(new Date().toISOString())
+      }
+      if (authEventsResult.status === "fulfilled") {
+        setAuthSecurityEvents(authEventsResult.value)
+        setAuthSecurityCheckedAt(new Date().toISOString())
+      }
       const firstPublicPostId = publicPostsResult.status === "fulfilled" ? publicPostsResult.value.content?.[0]?.id : undefined
       const firstAdminPostId = adminPostsResult.status === "fulfilled" ? adminPostsResult.value.content?.[0]?.id : undefined
       const seedPostId = firstPublicPostId ?? firstAdminPostId
@@ -622,6 +650,13 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [executions, selectedExecutionId])
 
   const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
+  const systemHealthFreshness = getFreshnessMeta(
+    systemHealthQuery.dataUpdatedAt ? new Date(systemHealthQuery.dataUpdatedAt).toISOString() : null
+  )
+  const mailFreshness = getFreshnessMeta(mailDiagnostics?.checkedAt ?? null)
+  const taskQueueFreshness = getFreshnessMeta(taskQueueCheckedAt)
+  const cleanupFreshness = getFreshnessMeta(cleanupCheckedAt)
+  const authFreshness = getFreshnessMeta(authSecurityCheckedAt)
   const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
   const systemHealthFetchedAt = systemHealthQuery.dataUpdatedAt ? formatInstant(new Date(systemHealthQuery.dataUpdatedAt).toISOString()) : "-"
   const mailStatusLabel =
@@ -903,9 +938,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               <SectionTitleBlock>
                 <h2>모니터링</h2>
               </SectionTitleBlock>
-              <StatusBadge data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
-                {systemHealthStatus === "UP" ? "정상" : "확인 필요"}
-              </StatusBadge>
+              <HeadingMetaRow>
+                <FreshnessBadge data-tone={systemHealthFreshness.tone}>{systemHealthFreshness.label}</FreshnessBadge>
+                <StatusBadge data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
+                  {systemHealthStatus === "UP" ? "정상" : "확인 필요"}
+                </StatusBadge>
+              </HeadingMetaRow>
             </SectionHeading>
 
             <MonitoringGrid>
@@ -1018,7 +1056,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <DiagnosticHeader>
                   <div>
                     <strong>메일 진단</strong>
-                    <span>{mailStatusMessage}</span>
+                    <HeaderSubline>
+                      <span>{mailStatusMessage}</span>
+                      <FreshnessBadge data-tone={mailFreshness.tone}>{mailFreshness.label}</FreshnessBadge>
+                    </HeaderSubline>
                   </div>
                   <ActionRow>
                     <QuietButton type="button" disabled={isBusy} onClick={() => void fetchSignupMailDiagnostics(false)}>
@@ -1079,7 +1120,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <DiagnosticHeader>
                   <div>
                     <strong>작업 큐 진단</strong>
-                    <span>{queueHealthMessage}</span>
+                    <HeaderSubline>
+                      <span>{queueHealthMessage}</span>
+                      <FreshnessBadge data-tone={taskQueueFreshness.tone}>{taskQueueFreshness.label}</FreshnessBadge>
+                    </HeaderSubline>
                   </div>
                   <ActionRow>
                     <QuietButton type="button" disabled={isBusy} onClick={() => void fetchTaskQueueDiagnostics()}>
@@ -1186,7 +1230,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <DiagnosticHeader>
                   <div>
                     <strong>파일 정리 진단</strong>
-                    <span>{cleanupHealthMessage}</span>
+                    <HeaderSubline>
+                      <span>{cleanupHealthMessage}</span>
+                      <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge>
+                    </HeaderSubline>
                   </div>
                   <ActionRow>
                     <QuietButton type="button" disabled={isBusy} onClick={() => void fetchCleanupDiagnostics()}>
@@ -1236,7 +1283,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 <DiagnosticHeader>
                   <div>
                     <strong>인증 보안 기록</strong>
-                    <span>{authSecurityHealthMessage}</span>
+                    <HeaderSubline>
+                      <span>{authSecurityHealthMessage}</span>
+                      <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge>
+                    </HeaderSubline>
                   </div>
                   <ActionRow>
                     <QuietButton type="button" disabled={isBusy} onClick={() => void fetchAuthSecurityEvents()}>
@@ -1941,6 +1991,13 @@ const SectionHeading = styled.div`
   }
 `
 
+const HeadingMetaRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+`
+
 const StatusBadge = styled.span`
   display: inline-flex;
   align-items: center;
@@ -1964,6 +2021,38 @@ const StatusBadge = styled.span`
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
     background: ${({ theme }) => theme.colors.statusDangerSurface};
     color: ${({ theme }) => theme.colors.statusDangerText};
+  }
+`
+
+const FreshnessBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.74rem;
+  font-weight: 800;
+
+  &[data-tone="fresh"] {
+    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+    background: ${({ theme }) => theme.colors.statusSuccessSurface};
+    color: ${({ theme }) => theme.colors.statusSuccessText};
+  }
+
+  &[data-tone="aging"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+    background: ${({ theme }) => theme.colors.orange2};
+    color: ${({ theme }) => theme.colors.orange10};
+  }
+
+  &[data-tone="stale"] {
+    border-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray10};
   }
 `
 
@@ -2255,6 +2344,21 @@ const DiagnosticHeader = styled.div`
 
   @media (max-width: 760px) {
     flex-direction: column;
+  }
+`
+
+const HeaderSubline = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+
+  span {
+    margin-top: 0.22rem;
+  }
+
+  ${FreshnessBadge} {
+    margin-top: 0.22rem;
   }
 `
 

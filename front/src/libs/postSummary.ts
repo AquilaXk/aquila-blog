@@ -9,6 +9,9 @@ const INLINE_CODE_REGEX = /`([^`]+)`/g
 const MARKDOWN_LINK_REGEX = /\[(.*?)\]\((.*?)\)/g
 const MARKDOWN_PUNCTUATION_REGEX = /[#>*_~|-]/g
 const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:요약|summary)\b/i
+const SUMMARY_HTML_BLOCKQUOTE_REGEX = /^\s*<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>\s*/i
+const HTML_TAG_REGEX = /<[^>]+>/g
+const HTML_NBSP_REGEX = /&nbsp;|&#160;/gi
 
 export const CARD_SUMMARY_PREVIEW_LIMIT = 150
 export const DEFAULT_CARD_SUMMARY_FALLBACK = "핵심 내용을 정리 중입니다."
@@ -107,6 +110,43 @@ export const extractLeadingSummaryBlock = (
   return {
     summary,
     contentWithoutSummary,
+  }
+}
+
+export const extractLeadingSummaryBlockFromHtml = (
+  contentHtml: string,
+  maxLength = CARD_SUMMARY_PREVIEW_LIMIT
+) => {
+  const match = contentHtml.match(SUMMARY_HTML_BLOCKQUOTE_REGEX)
+  if (!match) {
+    return {
+      summary: "",
+      contentHtmlWithoutSummary: contentHtml,
+    }
+  }
+
+  const rawBlock = match[0]
+  const rawInnerHtml = match[1] || ""
+  const normalizedInnerText = decodeSummaryEntities(
+    rawInnerHtml
+      .replace(HTML_NBSP_REGEX, " ")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(HTML_TAG_REGEX, " ")
+      .replace(WHITESPACE_REGEX, " ")
+      .trim()
+  )
+
+  if (!normalizedInnerText || !/^(?:["'“”]\s*)?(?:요약|summary)\b/i.test(normalizedInnerText)) {
+    return {
+      summary: "",
+      contentHtmlWithoutSummary: contentHtml,
+    }
+  }
+
+  const summary = normalizeCardSummary(normalizedInnerText, { fallback: "", maxLength })
+  return {
+    summary,
+    contentHtmlWithoutSummary: contentHtml.slice(rawBlock.length).trimStart(),
   }
 }
 

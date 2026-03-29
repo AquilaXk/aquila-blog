@@ -75,6 +75,13 @@ const LoginPage = () => {
   }, [next])
   const loginIdActive = useMemo(() => loginIdFocused || email.length > 0, [email, loginIdFocused])
   const passwordActive = useMemo(() => passwordFocused || password.length > 0, [password, passwordFocused])
+  const feedbackMessage = error ? (
+    <ErrorText>{error}</ErrorText>
+  ) : signupDone ? (
+    <SuccessText>
+      회원가입이 완료되었습니다. <strong>{loginIdPrefill || "인증한 이메일"}</strong>로 로그인하면 됩니다.
+    </SuccessText>
+  ) : null
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -242,13 +249,9 @@ const LoginPage = () => {
           </IpSecurityControl>
         </LoginStateRow>
 
-        {error ? (
-          <ErrorText>{error}</ErrorText>
-        ) : signupDone ? (
-          <SuccessText>
-            회원가입이 완료되었습니다. <strong>{loginIdPrefill || "인증한 이메일"}</strong>로 로그인하면 됩니다.
-          </SuccessText>
-        ) : null}
+        <FeedbackSlot aria-live="polite" data-filled={feedbackMessage ? "true" : "false"}>
+          {feedbackMessage}
+        </FeedbackSlot>
 
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}
@@ -395,6 +398,20 @@ const LoginStateRow = styled.div`
     flex-direction: column;
     align-items: flex-start;
     gap: 0.42rem;
+  }
+`
+
+const FeedbackSlot = styled.div`
+  min-height: 4.6rem;
+  display: flex;
+  align-items: stretch;
+
+  &[data-filled="false"] {
+    min-height: 4.1rem;
+  }
+
+  > * {
+    width: 100%;
   }
 `
 

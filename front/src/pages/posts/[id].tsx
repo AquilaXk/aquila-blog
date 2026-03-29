@@ -4,7 +4,7 @@ import { NextPageWithLayout } from "../../types"
 import styled from "@emotion/styled"
 import CustomError from "src/routes/Error"
 import MetaConfig from "src/components/MetaConfig"
-import Detail from "src/routes/Detail"
+import PostDetail from "src/routes/Detail/PostDetail"
 import usePostQuery from "src/hooks/usePostQuery"
 import { TPostComment } from "src/types"
 import { buildCanonicalPostDetailPage } from "src/libs/server/postDetailPage"
@@ -76,13 +76,28 @@ const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({ initialComment
   return (
     <>
       <MetaConfig {...meta} />
-      <Detail initialComments={initialComments} />
+      <DetailShell data-type={post.type}>
+        <PostDetail initialComments={initialComments} />
+      </DetailShell>
     </>
   )
 }
 
 CanonicalPostPage.getLayout = (page) => <>{page}</>
 export default CanonicalPostPage
+
+const DetailShell = styled.div`
+  padding: 2rem 0;
+
+  &[data-type="Paper"] {
+    padding: 40px 0;
+  }
+
+  code[class*="language-mermaid"],
+  pre[class*="language-mermaid"] {
+    background-color: ${({ theme }) => theme.colors.gray5};
+  }
+`
 
 const LoadingShell = styled.section`
   display: grid;

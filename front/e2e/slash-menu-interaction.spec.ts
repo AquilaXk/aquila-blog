@@ -105,4 +105,30 @@ test.describe("block editor slash menu interaction", () => {
     await page.locator("[data-slash-action-id='heading-2']").hover()
     await expect(page.locator("[data-slash-action-id='heading-2']")).toHaveAttribute("data-active", "true")
   })
+
+  test("파일 블록은 업로드 결과 기반 첨부 카드로 삽입된다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    const attachmentInput = page.locator("input[type='file']").nth(1)
+    await attachmentInput.setInputFiles({
+      name: "spec.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7 qa-spec"),
+    })
+
+    await expect(page.getByTestId("qa-markdown-output")).toContainText(":::file https://example.com/files/spec.pdf")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText("spec.pdf")
+  })
+
+  test("task item 은 drag reorder 로 순서를 바꿀 수 있다", async ({ page }) => {
+    const seed = encodeURIComponent("- [ ] 첫째\\n- [ ] 둘째\\n- [ ] 셋째")
+    await page.goto(`/_qa/block-editor-slash?seed=${seed}`)
+
+    const taskItems = page.locator("li[data-task-item='true']")
+    await expect(taskItems).toHaveCount(3)
+
+    await taskItems.nth(2).dragTo(taskItems.nth(0))
+
+    await expect(page.getByTestId("qa-markdown-output")).toContainText("- [ ] 셋째\n- [ ] 첫째\n- [ ] 둘째")
+  })
 })

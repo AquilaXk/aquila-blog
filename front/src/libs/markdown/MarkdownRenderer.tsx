@@ -31,6 +31,7 @@ import useInlineColorEffect from "src/libs/markdown/hooks/useInlineColorEffect"
 import usePrismEffect from "src/libs/markdown/hooks/usePrismEffect"
 import PrettyCodeBlock from "src/libs/markdown/components/PrettyCodeBlock"
 import MarkdownRendererRoot from "src/libs/markdown/components/MarkdownRendererRoot"
+import FormulaRender from "src/libs/markdown/FormulaRender"
 
 export { markdownGuide } from "src/libs/markdown/rendering"
 
@@ -563,7 +564,7 @@ const MarkdownRendererComponent: FC<Props> = ({
         if (segment.type === "formula") {
           return (
             <div key={`formula-${index}`} className="aq-formula-card">
-              <code>{segment.formula}</code>
+              <FormulaRender className="aq-formula-render" formula={segment.formula} displayMode />
             </div>
           )
         }

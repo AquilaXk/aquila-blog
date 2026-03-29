@@ -120,6 +120,32 @@ compose_up_with_retry() {
   return 1
 }
 
+compose_up_force_recreate_with_retry() {
+  local max_attempts=4
+  local attempt=1
+  local output=""
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    if output="$(compose up -d --force-recreate "$@" 2>&1)"; then
+      echo "${output}"
+      return 0
+    fi
+
+    if grep -Eqi "network sandbox .* not found|context deadline exceeded|is not running|No such container" <<< "${output}"; then
+      echo "compose up --force-recreate retry (${attempt}/${max_attempts}) for services [$*]: ${output}" >&2
+      sleep 2
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "${output}" >&2
+    return 1
+  done
+
+  echo "compose up --force-recreate failed after ${max_attempts} retries for services [$*]" >&2
+  echo "${output}" >&2
+  return 1
+}
+
 env_value() {
   local key="$1"
   awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
@@ -409,11 +435,11 @@ ensure_db_runtime_guards || true
 reload_caddy
 ensure_caddy_mount_sync
 
-compose_up_with_retry "${target_backend}"
+compose_up_force_recreate_with_retry "${target_backend}"
 if ! wait_backend_ready "${target_backend}"; then
   fallback_backend="$(other_backend "${target_backend}")"
   echo "rollback primary target unhealthy: ${target_backend}; trying fallback=${fallback_backend}" >&2
-  compose_up_with_retry "${fallback_backend}"
+  compose_up_force_recreate_with_retry "${fallback_backend}"
   if wait_backend_ready "${fallback_backend}"; then
     target_backend="${fallback_backend}"
     inactive_backend="$(other_backend "${target_backend}")"

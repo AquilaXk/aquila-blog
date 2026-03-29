@@ -8,6 +8,7 @@ ENV_FILE="${SCRIPT_DIR}/.env.prod"
 CADDY_FILE="${SCRIPT_DIR}/caddy/Caddyfile"
 CADDY_CONTAINER_FILE="/etc/caddy/Caddyfile"
 STATE_FILE="${SCRIPT_DIR}/.active_backend"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-blog_home}"
 NETWORK_NAME="blog_home_default"
 DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 HEALTHCHECK_PATH="${HEALTHCHECK_PATH:-/actuator/health/readiness}"
@@ -27,6 +28,8 @@ AUTO_MEMORY_TUNER_ENABLED="${AUTO_MEMORY_TUNER_ENABLED:-true}"
 AUTO_MEMORY_TUNER_MAX_BUDGET_MB="${AUTO_MEMORY_TUNER_MAX_BUDGET_MB:-2816}"
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB:-2048}"
 AUTO_MEMORY_TUNER_MIN_BUDGET_MB="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB:-1280}"
+LAST_COMPOSE_UP_SERVICES=""
+LAST_COMPOSE_UP_OUTPUT=""
 
 normalize_bool() {
   local raw="$1"
@@ -133,11 +136,16 @@ compose_up_with_retry() {
   local max_attempts=4
   local attempt=1
   local output=""
+  LAST_COMPOSE_UP_SERVICES="$*"
+  LAST_COMPOSE_UP_OUTPUT=""
   while [[ "${attempt}" -le "${max_attempts}" ]]; do
     if output="$(compose up -d "$@" 2>&1)"; then
+      LAST_COMPOSE_UP_OUTPUT="${output}"
       echo "${output}"
       return 0
     fi
+
+    LAST_COMPOSE_UP_OUTPUT="${output}"
 
     if grep -Eqi "network sandbox .* not found|context deadline exceeded|is not running|No such container" <<< "${output}"; then
       echo "compose up retry (${attempt}/${max_attempts}) for services [$*]: ${output}" >&2
@@ -153,6 +161,66 @@ compose_up_with_retry() {
   echo "compose up failed after ${max_attempts} retries for services [$*]" >&2
   echo "${output}" >&2
   return 1
+}
+
+compose_up_force_recreate_with_retry() {
+  local max_attempts=4
+  local attempt=1
+  local output=""
+  LAST_COMPOSE_UP_SERVICES="$*"
+  LAST_COMPOSE_UP_OUTPUT=""
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    if output="$(compose up -d --force-recreate "$@" 2>&1)"; then
+      LAST_COMPOSE_UP_OUTPUT="${output}"
+      echo "${output}"
+      return 0
+    fi
+
+    LAST_COMPOSE_UP_OUTPUT="${output}"
+
+    if grep -Eqi "network sandbox .* not found|context deadline exceeded|is not running|No such container" <<< "${output}"; then
+      echo "compose up --force-recreate retry (${attempt}/${max_attempts}) for services [$*]: ${output}" >&2
+      sleep 2
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    echo "${output}" >&2
+    return 1
+  done
+
+  echo "compose up --force-recreate failed after ${max_attempts} retries for services [$*]" >&2
+  echo "${output}" >&2
+  return 1
+}
+
+backend_container_id_any_state() {
+  local backend="$1"
+  docker ps -aq \
+    --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+    --filter "label=com.docker.compose.service=${backend}" | head -n 1
+}
+
+emit_backend_diagnostics() {
+  local backend="$1"
+  local cid
+  cid="$(backend_container_id_any_state "${backend}")"
+
+  echo "----- ${backend} diagnostics -----"
+  compose ps -a "${backend}" || true
+  if [[ -n "${cid}" ]]; then
+    docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" || true
+  else
+    echo "${backend} container=none"
+  fi
+
+  if [[ -n "${LAST_COMPOSE_UP_SERVICES}" && ",${LAST_COMPOSE_UP_SERVICES// /,}," == *",${backend},"* ]]; then
+    echo "[compose-up-output:${backend}]"
+    printf '%s\n' "${LAST_COMPOSE_UP_OUTPUT}"
+  fi
+
+  compose logs --no-color --tail=200 "${backend}" || true
+  echo "----- end ${backend} diagnostics -----"
 }
 
 cloudflared_registration_log_exists() {
@@ -1054,8 +1122,7 @@ check_backend_health() {
   done
 
   echo "healthcheck failed: ${backend}" >&2
-  compose logs --no-color --tail=200 "${backend}" >&2 || true
-  compose ps "${backend}" >&2 || true
+  emit_backend_diagnostics "${backend}" >&2 || true
   return 1
 }
 
@@ -1260,7 +1327,10 @@ check_cloudflared_runtime
 check_grafana_embed_public_route
 ensure_db_runtime_guards || true
 compose pull "${next_backend}"
-compose_up_with_retry "${next_backend}"
+if ! compose_up_force_recreate_with_retry "${next_backend}"; then
+  emit_backend_diagnostics "${next_backend}" >&2 || true
+  exit 1
+fi
 
 # Verify cutover target DNS and currently running active backend DNS (if running).
 check_required_backend_dns_from_caddy "${next_backend}" "${active_backend}"

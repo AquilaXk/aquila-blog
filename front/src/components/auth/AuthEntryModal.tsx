@@ -6,6 +6,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { toAuthErrorMessage } from "src/apis/backend/errorMessages"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
+import { useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
 import { loadAuthLoginPolicyPrefs, saveAuthLoginPolicyPrefs } from "src/libs/authLoginPolicy"
 import { normalizeNextPath } from "src/libs/router"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
@@ -96,6 +97,7 @@ const AuthEntryModal: React.FC<Props> = ({
   const [signupError, setSignupError] = useState("")
   const [signupLoading, setSignupLoading] = useState(false)
   const [sentEmail, setSentEmail] = useState("")
+  const { remainingSeconds: signupCooldownSeconds, startCooldown } = useSignupMailCooldown(signupEmail)
 
   const normalizedNextPath = useMemo(() => {
     return normalizeNextPath(nextPath)
@@ -211,6 +213,7 @@ const AuthEntryModal: React.FC<Props> = ({
       })
 
       setSentEmail(response.data.email)
+      startCooldown(response.data.email)
       setView("signup-sent")
     } catch (signupStartError) {
       setSignupError(toAuthErrorMessage("signupStart", signupStartError, "회원가입 메일 전송에 실패했습니다."))
@@ -232,7 +235,7 @@ const AuthEntryModal: React.FC<Props> = ({
           }
         : {
             heading: "메일을 보냈어요",
-            body: "받은편지함에서 회원가입 메일을 확인한 뒤 계속 진행해주세요.",
+            body: "받은편지함에서 메일을 열고 계속 진행해주세요.",
           }
 
   const modalNode = (
@@ -277,6 +280,7 @@ const AuthEntryModal: React.FC<Props> = ({
               signupEmail={signupEmail}
               signupError={signupError}
               signupLoading={signupLoading}
+              signupCooldownSeconds={signupCooldownSeconds}
               socialItems={socialItems}
               onSubmit={handleSignupEmailStart}
               onSignupEmailChange={setSignupEmail}
@@ -288,6 +292,7 @@ const AuthEntryModal: React.FC<Props> = ({
             <SignupSentPanel
               sentEmail={sentEmail}
               signupEmail={signupEmail}
+              signupCooldownSeconds={signupCooldownSeconds}
               onBackToLogin={() => setView("login")}
               onRetryWithAnotherEmail={() => setView("signup")}
             />

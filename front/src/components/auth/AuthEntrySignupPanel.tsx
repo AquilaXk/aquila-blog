@@ -1,11 +1,13 @@
 import { FormEvent, useMemo, useState } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons, { SocialAuthItem } from "src/components/auth/SocialAuthButtons"
+import { formatSignupCooldown } from "src/hooks/useSignupMailCooldown"
 
 type Props = {
   signupEmail: string
   signupError: string
   signupLoading: boolean
+  signupCooldownSeconds: number
   socialItems: SocialAuthItem[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onSignupEmailChange: (value: string) => void
@@ -16,6 +18,7 @@ const AuthEntrySignupPanel = ({
   signupEmail,
   signupError,
   signupLoading,
+  signupCooldownSeconds,
   socialItems,
   onSubmit,
   onSignupEmailChange,
@@ -59,8 +62,12 @@ const AuthEntrySignupPanel = ({
 
         {signupError && <p className="inlineError">{signupError}</p>}
 
-        <button type="submit" className="primaryAction" disabled={signupLoading}>
-          {signupLoading ? "메일 보내는 중..." : "인증 메일 보내기"}
+        <button type="submit" className="primaryAction" disabled={signupLoading || signupCooldownSeconds > 0}>
+          {signupLoading
+            ? "메일 보내는 중..."
+            : signupCooldownSeconds > 0
+              ? `다시 보내기 ${formatSignupCooldown(signupCooldownSeconds)}`
+              : "인증 메일 보내기"}
         </button>
       </form>
 

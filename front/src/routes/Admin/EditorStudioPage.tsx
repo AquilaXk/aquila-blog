@@ -76,7 +76,6 @@ import { saveProfileCardWithConflictRetry } from "src/libs/profileCardSave"
 import useViewportImageEditor from "src/libs/imageEditor/useViewportImageEditor"
 import {
   parseStandaloneMarkdownImageLine,
-  serializeStandaloneMarkdownImageLine,
 } from "src/libs/markdown/rendering"
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"

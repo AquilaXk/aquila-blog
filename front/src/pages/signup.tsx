@@ -9,6 +9,7 @@ import AuthShell from "src/components/auth/AuthShell"
 import AppIcon from "src/components/icons/AppIcon"
 import SocialAuthButtons from "src/components/auth/SocialAuthButtons"
 import { buildSocialAuthItems } from "src/components/auth/socialAuth"
+import { formatSignupCooldown, useSignupMailCooldown } from "src/hooks/useSignupMailCooldown"
 import { normalizeNextPath, toLoginPath, toSignupPath } from "src/libs/router"
 import { GuestPageProps, getGuestPageProps } from "src/libs/server/guestPage"
 import { isValidAuthEmail, normalizeAuthEmail } from "src/libs/validation/auth"
@@ -38,6 +39,7 @@ const SignupPage = () => {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [emailFocused, setEmailFocused] = useState(false)
+  const { remainingSeconds, isCoolingDown, startCooldown } = useSignupMailCooldown(email)
 
   const socialItems = useMemo(() => {
     return buildSocialAuthItems(next)
@@ -76,6 +78,7 @@ const SignupPage = () => {
         }),
       })
       setSentEmail(response.data.email)
+      startCooldown(response.data.email)
     } catch (signupError) {
       setError(toAuthErrorMessage("signupStart", signupError, "회원가입 메일 전송에 실패했습니다."))
     } finally {
@@ -126,8 +129,8 @@ const SignupPage = () => {
           {feedbackMessage}
         </FeedbackSlot>
 
-        <PrimaryButton type="submit" disabled={loading}>
-          {loading ? "메일 보내는 중..." : "인증 메일 보내기"}
+        <PrimaryButton type="submit" disabled={loading || isCoolingDown}>
+          {loading ? "메일 보내는 중..." : isCoolingDown ? `다시 보내기 ${formatSignupCooldown(remainingSeconds)}` : "인증 메일 보내기"}
         </PrimaryButton>
 
         <SocialSection>

@@ -718,6 +718,25 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         : mailDiagnostics?.status === "MISCONFIGURED"
           ? "설정 누락"
           : "미확인"
+  const signupMailTaskQueue = mailDiagnostics?.taskQueue ?? null
+  const signupMailQueueStatusLabel =
+    signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
+      ? "오류"
+      : signupMailTaskQueue?.failedCount && signupMailTaskQueue.failedCount > 0
+        ? "확인 필요"
+        : signupMailTaskQueue?.backlogCount && signupMailTaskQueue.backlogCount > 0
+          ? "대기 중"
+          : signupMailTaskQueue
+            ? "정상"
+            : "미확인"
+  const signupMailQueueStatusMessage =
+    signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
+      ? `stale ${signupMailTaskQueue.staleProcessingCount}건`
+      : signupMailTaskQueue?.failedCount && signupMailTaskQueue.failedCount > 0
+        ? `실패 ${signupMailTaskQueue.failedCount}건`
+        : signupMailTaskQueue?.backlogCount && signupMailTaskQueue.backlogCount > 0
+          ? `대기 ${signupMailTaskQueue.backlogCount}건`
+          : "이상 없음"
   const queueStatusLabel =
     taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
       ? "오류"
@@ -860,6 +879,8 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     systemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
     mailDiagnostics?.status === "MISCONFIGURED" ? "메일 설정 누락을 정리해야 합니다." : null,
     mailDiagnostics?.status === "CONNECTION_FAILED" ? "SMTP 연결 실패 원인을 확인해야 합니다." : null,
+    (signupMailTaskQueue?.failedCount ?? 0) > 0 ? "회원가입 메일 큐에 실패 작업이 있습니다." : null,
+    (signupMailTaskQueue?.backlogCount ?? 0) > 0 ? "회원가입 메일 큐에 대기 작업이 남아 있습니다." : null,
     (taskQueueDiagnostics?.staleProcessingCount ?? 0) > 0 ? "작업 큐에 stale processing이 남아 있습니다." : null,
     (taskQueueDiagnostics?.failedCount ?? 0) > 0 ? "최근 실패한 작업이 있어 재처리 여부를 검토해야 합니다." : null,
     cleanupDiagnostics?.blockedBySafetyThreshold ? "파일 정리 purge가 safety threshold 때문에 보류되어 있습니다." : null,
@@ -1201,6 +1222,54 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 {!!mailDiagnostics?.missing.length && <InlineNotice data-tone="warning">누락된 설정: {mailDiagnostics.missing.join(", ")}</InlineNotice>}
                 {!!mailDiagnostics?.connectionError && <InlineNotice data-tone="danger">{mailDiagnostics.connectionError}</InlineNotice>}
                 {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
+
+                {signupMailTaskQueue ? (
+                  <>
+                    <SubSectionHeading>
+                      <strong>회원가입 메일 큐</strong>
+                      <small>{signupMailQueueStatusLabel}</small>
+                    </SubSectionHeading>
+                    <MetricGrid>
+                      <MetricCard>
+                        <small>ready</small>
+                        <strong>{signupMailTaskQueue.readyPendingCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>processing</small>
+                        <strong>{signupMailTaskQueue.processingCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>backlog</small>
+                        <strong>{signupMailTaskQueue.backlogCount ?? 0}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>failed</small>
+                        <strong>{signupMailTaskQueue.failedCount}</strong>
+                      </MetricCard>
+                    </MetricGrid>
+                    <SubtleMetaGrid>
+                      <SubtleMetaItem>
+                        <span>상태</span>
+                        <strong>{signupMailQueueStatusMessage}</strong>
+                      </SubtleMetaItem>
+                      <SubtleMetaItem>
+                        <span>가장 오래 대기</span>
+                        <strong>{formatAge(signupMailTaskQueue.oldestReadyPendingAgeSeconds)}</strong>
+                      </SubtleMetaItem>
+                      <SubtleMetaItem>
+                        <span>마지막 실패</span>
+                        <strong>{signupMailTaskQueue.latestFailureAt ? formatInstant(signupMailTaskQueue.latestFailureAt) : "-"}</strong>
+                      </SubtleMetaItem>
+                      <SubtleMetaItem>
+                        <span>재시도 정책</span>
+                        <strong>{signupMailTaskQueue.retryPolicy.maxRetries}회</strong>
+                      </SubtleMetaItem>
+                    </SubtleMetaGrid>
+                    {!!signupMailTaskQueue.latestFailureMessage && (
+                      <InlineNotice data-tone="danger">{signupMailTaskQueue.latestFailureMessage}</InlineNotice>
+                    )}
+                  </>
+                ) : null}
 
                 <SubtleMetaGrid>
                   <SubtleMetaItem>
@@ -2297,6 +2366,26 @@ const FreshnessOverviewButton = styled.button`
 const MonitoringGrid = styled.div`
   display: grid;
   gap: 0.7rem;
+`
+
+const SubSectionHeading = styled.div`
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+
+  strong {
+    font-size: 1rem;
+    font-weight: 800;
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
 `
 
 const MonitoringCard = styled.article`

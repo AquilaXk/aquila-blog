@@ -72,7 +72,7 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
-        fun `이미 사용 중인 이메일이어도 동일한 성공 응답을 반환한다`() {
+        fun `이미 사용 중인 이메일이면 충돌 응답을 반환한다`() {
             memberApplicationService.join(
                 username = "dup-email-user",
                 password = "Abcd1234!",
@@ -91,10 +91,14 @@ class ApiV1SignupVerificationControllerTest : SeededSpringBootTestSupport() {
                         }
                         """.trimIndent()
                 }.andExpect {
-                    status { isAccepted() }
-                    jsonPath("$.resultCode") { value("202-1") }
-                    jsonPath("$.data.email") { value("dup@example.com") }
+                    status { isConflict() }
+                    jsonPath("$.resultCode") { value("409-2") }
+                    jsonPath("$.msg") { value("이미 가입된 이메일입니다.") }
                 }
+
+            val mailTasks =
+                taskRepository.findAll().filter { it.taskType == "member.signupVerification.sendMail" }
+            assertThat(mailTasks).isEmpty()
         }
     }
 

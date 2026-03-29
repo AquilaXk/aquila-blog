@@ -4,11 +4,8 @@
 단순한 게시글 CRUD보다 `실서비스 운영`, `장애 복구`, `배포 자동화`, `회귀 방지`에 더 큰 비중을 두고 설계했습니다.
 
 - Live: [https://www.aquilaxk.site](https://www.aquilaxk.site)
-- Troubleshooting Portfolio: [docs/troubleshooting/00-INDEX.md](docs/troubleshooting/00-INDEX.md)
-- System Architecture: [docs/design/System-Architecture.md](docs/design/System-Architecture.md)
-- DevOps Guide: [docs/design/DevOps.md](docs/design/DevOps.md)
 
-![Aquila Blog System Architecture](docs/assets/portfolio/aquila-system-architecture.png)
+![Aquila Blog System Architecture](README.assets/portfolio/aquila-system-architecture.png)
 
 ## 프로젝트 개요
 
@@ -70,19 +67,19 @@ Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오
 
 ### Feed
 
-![Feed Overview - Live](docs/assets/portfolio/feed-overview-live.png)
+![Feed Overview - Live](README.assets/portfolio/feed-overview-live.png)
 
 메인 피드에서 태그 필터, 검색, 카드형 목록을 바로 탐색할 수 있습니다.
 
 ### Post Detail
 
-![Post Detail - Live](docs/assets/portfolio/post-detail-live.png)
+![Post Detail - Live](README.assets/portfolio/post-detail-live.png)
 
 상세 화면은 태그, 작성 메타, 본문, 좌측 반응 액션, 우측 목차를 한 화면에서 확인하도록 구성했습니다.
 
 ### Admin Workspace
 
-![Admin Workspace - Live](docs/assets/portfolio/admin-workspace-live.png)
+![Admin Workspace - Live](README.assets/portfolio/admin-workspace-live.png)
 
 관리자 글 작업실은 작성 흐름, 메타데이터 편집, 미리보기를 같은 화면에서 이어서 처리하도록 정리했습니다.
 
@@ -182,7 +179,7 @@ README에서는 전체 스키마를 모두 그리기보다, 서비스 구조를 
 ├── docs/design/            # 시스템/도메인/DevOps 설계 문서
 ├── docs/troubleshooting/   # 운영 장애/회귀 대응 포트폴리오
 ├── perf/k6/                # 공개 읽기 경로 성능 시나리오
-└── docs/assets/portfolio/  # README/포트폴리오용 다이어그램 및 화면 자산
+└── README.assets/          # README 렌더링에 필요한 tracked 이미지 자산
 ```
 
 ## 로컬 실행

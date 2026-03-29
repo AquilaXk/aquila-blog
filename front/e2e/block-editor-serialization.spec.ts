@@ -1,11 +1,23 @@
+import { readFileSync } from "fs"
+import path from "path"
 import { expect, test } from "@playwright/test"
 import {
+  createBlockquoteNode,
+  createBulletListNode,
+  createCalloutNode,
+  createCodeBlockNode,
+  createHorizontalRuleNode,
+  createMermaidNode,
+  createOrderedListNode,
+  createTableNode,
+  createToggleNode,
   detectUnsupportedMarkdownBlocks,
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
 } from "src/components/editor/serialization"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { resolveMarkdownRenderModel } from "src/libs/markdown/rendering"
+import ts from "typescript"
 
 test.describe("block editor serialization", () => {
   test("mermaid 블록은 parse/serialize round-trip을 유지한다", () => {
@@ -59,6 +71,103 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("> 콜아웃 본문입니다.")
     expect(serialized).toContain(":::toggle 더 보기")
     expect(serialized).toContain("토글 본문입니다.")
+  })
+
+  test("직접 생성한 블록 노드도 markdown serializer 와 같은 canonical 결과를 만든다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        createCalloutNode({ kind: "tip", title: "핵심 포인트", body: "콜아웃 본문입니다." }),
+        createToggleNode({ title: "더 보기", body: "토글 본문입니다." }),
+        createTableNode([
+          ["항목", "값"],
+          ["이름", "aquila"],
+        ]),
+        createBlockquoteNode("본문 인용"),
+        createBulletListNode(["첫 번째"]),
+        createOrderedListNode(["두 번째"], 1),
+        createCodeBlockNode("text", "코드를 입력하세요."),
+        createMermaidNode("flowchart TD\n  A[시작] --> B[처리]"),
+        createHorizontalRuleNode(),
+      ],
+    } as const
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(serialized).toContain("> [!TIP] 핵심 포인트")
+    expect(serialized).toContain(":::toggle 더 보기")
+    expect(serialized).toContain("| 항목 | 값 |")
+    expect(serialized).toContain("> 본문 인용")
+    expect(serialized).toContain("- 첫 번째")
+    expect(serialized).toContain("1. 두 번째")
+    expect(serialized).toContain("```text")
+    expect(serialized).toContain("```mermaid")
+    expect(serialized).toContain("---")
+  })
+
+  test("노션 스타일 HTML 붙여넣기는 블록과 인라인 서식을 렌더 상태로 승격한다", async ({ page }) => {
+    const source = readFileSync(path.resolve(__dirname, "../src/libs/markdown/htmlToMarkdown.ts"), "utf8")
+    const transpiled = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+      },
+    }).outputText
+
+    const html = `
+      <div class="notion-page-content">
+        <h1>문서 제목</h1>
+        <div><strong>굵게</strong> 와 <em>기울임</em> 그리고 <a href="https://example.com/docs">문서 링크</a></div>
+        <ul>
+          <li>첫 번째 항목</li>
+          <li><input type="checkbox" checked />체크 항목</li>
+        </ul>
+        <blockquote><p>인용 본문</p></blockquote>
+        <pre><code class="language-ts">const answer = 42;</code></pre>
+        <table>
+          <tbody>
+            <tr><th>항목</th><th>값</th></tr>
+            <tr><td>이름</td><td>aquila</td></tr>
+          </tbody>
+        </table>
+        <details open>
+          <summary>더 보기</summary>
+          <p>토글 본문입니다.</p>
+        </details>
+        <div><img src="https://example.com/image.png" alt="샘플 이미지" title="샘플" /></div>
+      </div>
+    `
+
+    const markdown = await page.evaluate(
+      ({ compiledSource, htmlSource }) => {
+        const module = { exports: {} as { convertHtmlToMarkdown?: (html: string) => string } }
+        const exports = module.exports
+        const runner = new Function("module", "exports", compiledSource)
+        runner(module, exports)
+        return module.exports.convertHtmlToMarkdown?.(htmlSource) || ""
+      },
+      { compiledSource: transpiled, htmlSource: html }
+    )
+
+    expect(markdown).toContain("# 문서 제목")
+    expect(markdown).toContain("**굵게** 와 *기울임*")
+    expect(markdown).toContain("[문서 링크](https://example.com/docs)")
+    expect(markdown).toContain("- 첫 번째 항목")
+    expect(markdown).toContain("- [x] 체크 항목")
+    expect(markdown).toContain("> 인용 본문")
+    expect(markdown).toContain("```ts")
+    expect(markdown).toContain("| 항목 | 값 |")
+    expect(markdown).toContain(":::toggle 더 보기")
+    expect(markdown).toContain("![샘플 이미지](https://example.com/image.png \"샘플\")")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    expect(doc.content?.some((node) => node.type === "heading")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "bulletList")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "blockquote")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "codeBlock")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "table")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "toggleBlock")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "resizableImage")).toBe(true)
   })
 
   test("malformed mermaid fence 는 raw block 으로 보존된다", () => {

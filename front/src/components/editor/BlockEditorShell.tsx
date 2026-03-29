@@ -34,6 +34,17 @@ import {
   moveTopLevelBlockToInsertionIndex,
 } from "./blockDocumentOps"
 import {
+  createBlockquoteNode,
+  createCalloutNode,
+  createCodeBlockNode,
+  createHeadingNode,
+  createHorizontalRuleNode,
+  createMermaidNode,
+  createOrderedListNode,
+  createParagraphNode,
+  createTableNode,
+  createToggleNode,
+  createBulletListNode,
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
   type BlockEditorDoc,
@@ -44,6 +55,10 @@ import {
   TABLE_MIN_ROW_HEIGHT_PX,
 } from "src/libs/markdown/tableMetadata"
 import { markdownContentTypography } from "src/libs/markdown/contentTypography"
+import {
+  convertHtmlToMarkdown,
+  extractPlainTextFromHtml,
+} from "src/libs/markdown/htmlToMarkdown"
 import { INLINE_TEXT_COLOR_OPTIONS, normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 
 type Props = {
@@ -116,8 +131,6 @@ type InsertMenuAction = {
   disabled?: boolean
 }
 
-const RAW_BLOCK_PLACEHOLDER = "```text\n원문 블록\n```"
-const MERMAID_RAW_PLACEHOLDER = "```mermaid\nflowchart TD\n  A[시작] --> B[처리]\n```"
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse), (max-width: 1024px)"
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
@@ -143,7 +156,6 @@ const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
 
   return Array.isArray(node.content) && node.content.some((child) => blockHasVisibleContent(child as BlockEditorDoc))
 }
-const DEFAULT_TABLE_CONFIG = { rows: 3, cols: 2, withHeaderRow: true } as const
 
 const normalizeMarkdown = (value: string) => value.replace(/\r\n?/g, "\n").trim()
 
@@ -174,125 +186,6 @@ const isTableSelectionActive = (editor?: TiptapEditor | null) =>
         editor.isActive("tableCell") ||
         editor.isActive("tableHeader"))
   )
-
-const extractPlainTextFromHtml = (html: string) => {
-  if (typeof window === "undefined") return ""
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, "text/html")
-  return doc.body.textContent?.replace(/\r\n?/g, "\n").trim() || ""
-}
-
-const escapeMarkdownTableCellText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
-
-const convertHtmlNodeToMarkdown = (node: ChildNode): string => {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return node.textContent || ""
-  }
-
-  if (node.nodeType !== Node.ELEMENT_NODE) return ""
-
-  const element = node as HTMLElement
-  const tagName = element.tagName.toLowerCase()
-
-  if (tagName === "br") return "\n"
-
-  if (tagName === "pre") {
-    const codeElement = element.querySelector("code")
-    const source = (codeElement?.textContent || element.textContent || "").replace(/\r\n?/g, "\n").trimEnd()
-    const className = codeElement?.className || ""
-    const languageMatch = className.match(/language-([\w-]+)/i)
-    const language = languageMatch?.[1] || ""
-    return `\`\`\`${language}\n${source}\n\`\`\``
-  }
-
-  if (tagName === "table") {
-    const rows = Array.from(element.querySelectorAll("tr"))
-      .map((row) =>
-        Array.from(row.querySelectorAll("th,td")).map((cell) =>
-          escapeMarkdownTableCellText((cell.textContent || "").replace(/\s+/g, " ").trim())
-        )
-      )
-      .filter((row) => row.length > 0)
-
-    if (rows.length >= 2) {
-      const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0)
-      const normalizedRows = rows.map((row) =>
-        row.length >= columnCount ? row : [...row, ...Array.from({ length: columnCount - row.length }, () => "")]
-      )
-      const [header, ...body] = normalizedRows
-      const separator = header.map(() => "---")
-      return [
-        `| ${header.join(" | ")} |`,
-        `| ${separator.join(" | ")} |`,
-        ...body.map((row) => `| ${row.join(" | ")} |`),
-      ].join("\n")
-    }
-  }
-
-  if (tagName === "ul" || tagName === "ol") {
-    const items = Array.from(element.children)
-      .filter((child) => child.tagName.toLowerCase() === "li")
-      .map((child, index) => {
-        const text = Array.from(child.childNodes)
-          .map((childNode) => convertHtmlNodeToMarkdown(childNode))
-          .join("")
-          .replace(/\n{2,}/g, "\n")
-          .trim()
-        return tagName === "ol" ? `${index + 1}. ${text}` : `- ${text}`
-      })
-    return items.join("\n")
-  }
-
-  if (/^h[1-6]$/.test(tagName)) {
-    const level = Number.parseInt(tagName.replace("h", ""), 10)
-    const text = Array.from(element.childNodes)
-      .map((child) => convertHtmlNodeToMarkdown(child))
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim()
-    return `${"#".repeat(level)} ${text}`.trim()
-  }
-
-  if (tagName === "blockquote") {
-    const text = Array.from(element.childNodes)
-      .map((child) => convertHtmlNodeToMarkdown(child))
-      .join("")
-      .replace(/\n{2,}/g, "\n")
-      .trim()
-    return text
-      .split("\n")
-      .map((line) => `> ${line}`)
-      .join("\n")
-  }
-
-  if (tagName === "code") {
-    const text = (element.textContent || "").replace(/\r\n?/g, "\n")
-    return `\`${text}\``
-  }
-
-  const inlineText = Array.from(element.childNodes)
-    .map((child) => convertHtmlNodeToMarkdown(child))
-    .join("")
-    .replace(/[ \t]+\n/g, "\n")
-
-  if (tagName === "p" || tagName === "div" || tagName === "section" || tagName === "article") {
-    return inlineText.trim()
-  }
-
-  return inlineText
-}
-
-const convertHtmlToMarkdown = (html: string) => {
-  if (typeof window === "undefined") return ""
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, "text/html")
-  return Array.from(doc.body.childNodes)
-    .map((node) => convertHtmlNodeToMarkdown(node))
-    .filter((section) => section.trim().length > 0)
-    .join("\n\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-}
 
 const downgradeDisabledFeatureNodes = (node: BlockEditorDoc, enableMermaidBlocks: boolean): BlockEditorDoc => {
   if (!enableMermaidBlocks && node.type === "mermaidBlock") {
@@ -330,8 +223,6 @@ const BlockEditorShell = ({
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
-  const [rawMarkdownDraft, setRawMarkdownDraft] = useState(value)
-  const [isRawMarkdownOpen, setIsRawMarkdownOpen] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
@@ -540,7 +431,6 @@ const BlockEditorShell = ({
     (nextDoc: BlockEditorDoc) => {
       const serialized = serializeEditorDocToMarkdown(nextDoc)
       lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
-      setRawMarkdownDraft(serialized)
       onChange(serialized, { editorFocused: true })
     },
     [onChange]
@@ -599,7 +489,7 @@ const BlockEditorShell = ({
       }),
       InlineColorMark,
       Placeholder.configure({
-        placeholder: "당신의 이야기를 적어보세요...",
+        placeholder: "이야기를 적고, / 또는 아래 빠른 블록으로 표·콜아웃·토글을 추가하세요...",
       }),
       Table.configure({
         resizable: true,
@@ -789,12 +679,10 @@ const BlockEditorShell = ({
       const normalized = normalizeMarkdown(markdown)
 
       if (normalized === lastCommittedMarkdownRef.current) {
-        setRawMarkdownDraft(markdown)
         return
       }
 
       lastCommittedMarkdownRef.current = normalized
-      setRawMarkdownDraft(markdown)
       onChange(markdown, { editorFocused: nextEditor.isFocused })
     },
   })
@@ -909,14 +797,12 @@ const BlockEditorShell = ({
     if (!editor) return
     const normalizedIncoming = normalizeMarkdown(value)
     if (normalizedIncoming === lastCommittedMarkdownRef.current) {
-      setRawMarkdownDraft(value)
       return
     }
 
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
     editor.commands.setContent(nextDoc, { emitUpdate: false })
     lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
-    setRawMarkdownDraft(value)
   }, [editor, enableMermaidBlocks, value])
 
   const focusEditor = useCallback(() => {
@@ -924,95 +810,74 @@ const BlockEditorShell = ({
     setIsSlashMenuOpen(false)
   }, [editor])
 
-  const insertParagraphAfterBlock = useCallback((block: BlockEditorDoc) => {
-    if (!editor) return
-    editor
-      .chain()
-      .focus()
-      .insertContent([block, { type: "paragraph" }])
-      .run()
-    setIsSlashMenuOpen(false)
-  }, [editor])
+  const withTrailingParagraph = useCallback(
+    (blocks: BlockEditorDoc[]): NonNullable<BlockEditorDoc["content"]> => [...blocks, createParagraphNode()],
+    []
+  )
 
-  const insertRawMarkdownBlock = useCallback(
-    (markdown = RAW_BLOCK_PLACEHOLDER, reason = "manual-raw") => {
-      insertParagraphAfterBlock({
-        type: "rawMarkdownBlock",
-        attrs: {
-          markdown,
-          reason,
+  const insertBlocksAtCursor = useCallback(
+    (blocks: BlockEditorDoc[], replaceCurrentEmptyParagraph = false) => {
+      if (!editor) return
+      insertDocContent(
+        {
+          type: "doc",
+          content: withTrailingParagraph(blocks),
         },
-      })
-      setIsRawMarkdownOpen(false)
+        replaceCurrentEmptyParagraph
+      )
+      setIsSlashMenuOpen(false)
     },
-    [insertParagraphAfterBlock]
+    [editor, insertDocContent, withTrailingParagraph]
   )
 
   const insertMermaidBlock = useCallback(() => {
-    if (enableMermaidBlocks) {
-      insertParagraphAfterBlock({
-        type: "mermaidBlock",
-        attrs: {
-          source: "flowchart TD\n  A[시작] --> B[처리]",
-        },
-      })
-      return
-    }
-
-    insertRawMarkdownBlock(MERMAID_RAW_PLACEHOLDER, "unsupported-mermaid")
-  }, [enableMermaidBlocks, insertParagraphAfterBlock, insertRawMarkdownBlock])
+    if (!enableMermaidBlocks) return
+    insertBlocksAtCursor([createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")], true)
+  }, [enableMermaidBlocks, insertBlocksAtCursor])
 
   const insertCalloutBlock = useCallback(() => {
-    insertParagraphAfterBlock({
-      type: "calloutBlock",
-      attrs: {
-        kind: "tip",
-        title: "핵심 포인트",
-        body: "콜아웃 본문을 입력하세요.",
-      },
-    })
-  }, [insertParagraphAfterBlock])
+    insertBlocksAtCursor(
+      [
+        createCalloutNode({
+          kind: "tip",
+          title: "핵심 포인트",
+          body: "콜아웃 본문을 입력하세요.",
+        }),
+      ],
+      true
+    )
+  }, [insertBlocksAtCursor])
 
   const insertToggleBlock = useCallback(() => {
-    insertParagraphAfterBlock({
-      type: "toggleBlock",
-      attrs: {
-        title: "더 보기",
-        body: "토글 내부 본문을 입력하세요.",
-      },
-    })
-  }, [insertParagraphAfterBlock])
+    insertBlocksAtCursor(
+      [
+        createToggleNode({
+          title: "더 보기",
+          body: "토글 내부 본문을 입력하세요.",
+        }),
+      ],
+      true
+    )
+  }, [insertBlocksAtCursor])
 
   const insertTableBlock = useCallback(() => {
-    if (!editor) return
-    if (isTableSelectionActive(editor)) return
-    editor.chain().focus().insertTable(DEFAULT_TABLE_CONFIG).run()
-  }, [editor])
+    if (editor && isTableSelectionActive(editor)) return
+    insertBlocksAtCursor(
+      [
+        createTableNode([
+          ["제목", "값"],
+          ["항목", "내용"],
+        ]),
+      ],
+      true
+    )
+  }, [editor, insertBlocksAtCursor])
 
   const canInsertTable = !isTableSelectionActive(editor)
 
   const insertCodeBlock = useCallback(() => {
-    if (!editor) return
-    if (editor.isActive("codeBlock")) {
-      editor.chain().focus().toggleCodeBlock().run()
-      return
-    }
-    editor
-      .chain()
-      .focus()
-      .setCodeBlock({ language: getPreferredCodeLanguage() })
-      .run()
-  }, [editor])
-
-  const buildStructuredInsertContent = useCallback(
-    (markdown: string) => {
-      const parsedDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(markdown), enableMermaidBlocks)
-      return (parsedDoc.content?.length ? parsedDoc.content : [{ type: "paragraph" }]) as NonNullable<
-        BlockEditorDoc["content"]
-      >
-    },
-    [enableMermaidBlocks]
-  )
+    insertBlocksAtCursor([createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")], true)
+  }, [insertBlocksAtCursor])
 
   const insertBlocksAtIndex = useCallback(
     (insertionIndex: number, blocks: NonNullable<BlockEditorDoc["content"]>, focusIndex = insertionIndex) => {
@@ -1027,38 +892,46 @@ const BlockEditorShell = ({
         id: "heading-2",
         label: "제목 2",
         helper: "큰 섹션 제목",
-        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("## 제목")),
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(2, "제목")])),
       },
       {
         id: "heading-3",
         label: "제목 3",
         helper: "작은 섹션 제목",
-        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("### 제목")),
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(3, "제목")])),
       },
       {
         id: "bullet-list",
         label: "불릿 리스트",
         helper: "순서 없는 항목",
-        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("- 항목")),
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBulletListNode(["항목"])])),
       },
       {
         id: "ordered-list",
         label: "번호 리스트",
         helper: "순서 있는 항목",
-        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("1. 항목")),
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createOrderedListNode(["항목"])])),
       },
       {
         id: "quote",
         label: "인용문",
         helper: "본문 인용",
-        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("> 인용문")),
+        insertAt: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBlockquoteNode("인용문")])),
       },
       {
         id: "code-block",
         label: "코드 블록",
         helper: "언어 지정 가능",
         insertAt: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("```text\n코드를 입력하세요.\n```")),
+          insertBlocksAtIndex(
+            blockIndex + 1,
+            withTrailingParagraph([createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")])
+          ),
       },
       {
         id: "table",
@@ -1067,7 +940,12 @@ const BlockEditorShell = ({
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
-            buildStructuredInsertContent(["| 제목 | 값 |", "| --- | --- |", "| 항목 | 내용 |"].join("\n"))
+            withTrailingParagraph([
+              createTableNode([
+                ["제목", "값"],
+                ["항목", "내용"],
+              ]),
+            ])
           ),
         disabled: !canInsertTable,
       },
@@ -1078,7 +956,13 @@ const BlockEditorShell = ({
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
-            buildStructuredInsertContent(["> [!TIP] 핵심 포인트", "> 콜아웃 본문을 입력하세요."].join("\n"))
+            withTrailingParagraph([
+              createCalloutNode({
+                kind: "tip",
+                title: "핵심 포인트",
+                body: "콜아웃 본문을 입력하세요.",
+              }),
+            ])
           ),
       },
       {
@@ -1088,23 +972,28 @@ const BlockEditorShell = ({
         insertAt: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
-            buildStructuredInsertContent([":::toggle 더 보기", "토글 내부 본문을 입력하세요.", ":::"].join("\n"))
+            withTrailingParagraph([
+              createToggleNode({
+                title: "더 보기",
+                body: "토글 내부 본문을 입력하세요.",
+              }),
+            ])
           ),
       },
-      {
-        id: "mermaid",
-        label: "다이어그램",
-        helper: enableMermaidBlocks ? "Mermaid" : "원문 블록으로 유지",
-        insertAt: (blockIndex) =>
-          insertBlocksAtIndex(
-            blockIndex + 1,
-            buildStructuredInsertContent(
-              enableMermaidBlocks
-                ? ["```mermaid", "flowchart TD", "  A[시작] --> B[처리]", "```"].join("\n")
-                : MERMAID_RAW_PLACEHOLDER
-            )
-          ),
-      },
+      ...(enableMermaidBlocks
+        ? [
+            {
+              id: "mermaid",
+              label: "다이어그램",
+              helper: "Mermaid",
+              insertAt: (blockIndex: number) =>
+                insertBlocksAtIndex(
+                  blockIndex + 1,
+                  withTrailingParagraph([createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")])
+                ),
+            },
+          ]
+        : []),
       {
         id: "image",
         label: "이미지",
@@ -1118,37 +1007,12 @@ const BlockEditorShell = ({
         id: "divider",
         label: "구분선",
         helper: "섹션 구분",
-        insertAt: (blockIndex) => insertBlocksAtIndex(blockIndex + 1, buildStructuredInsertContent("---")),
-      },
-      {
-        id: "raw",
-        label: "원문 블록",
-        helper: "특수 markdown을 그대로 유지",
         insertAt: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, [
-            {
-              type: "rawMarkdownBlock",
-              attrs: {
-                markdown: RAW_BLOCK_PLACEHOLDER,
-                reason: "manual-raw",
-              },
-            },
-            { type: "paragraph" },
-          ]),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHorizontalRuleNode()])),
       },
     ],
-    [buildStructuredInsertContent, canInsertTable, enableMermaidBlocks, insertBlocksAtIndex]
+    [canInsertTable, enableMermaidBlocks, insertBlocksAtIndex, withTrailingParagraph]
   )
-
-  const applyRawMarkdownDraft = useCallback(() => {
-    if (!editor) return
-    const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(rawMarkdownDraft), enableMermaidBlocks)
-    const serialized = serializeEditorDocToMarkdown(nextDoc)
-    editor.commands.setContent(nextDoc, { emitUpdate: false })
-    lastCommittedMarkdownRef.current = normalizeMarkdown(serialized)
-    setRawMarkdownDraft(serialized)
-    onChange(serialized, { editorFocused: true })
-  }, [editor, enableMermaidBlocks, onChange, rawMarkdownDraft])
 
   const openLinkPrompt = useCallback(() => {
     if (!editor || typeof window === "undefined") return
@@ -1287,8 +1151,9 @@ const BlockEditorShell = ({
       {
         id: "mermaid",
         label: "다이어그램",
-        helper: enableMermaidBlocks ? "Mermaid" : "원문 블록으로 유지",
+        helper: "Mermaid",
         run: insertMermaidBlock,
+        disabled: !enableMermaidBlocks,
       },
       {
         id: "image",
@@ -1302,14 +1167,8 @@ const BlockEditorShell = ({
         helper: "섹션 구분",
         run: () => editor.chain().focus().setHorizontalRule().run(),
       },
-      {
-        id: "raw",
-        label: "원문 블록",
-        helper: "특수 markdown을 그대로 유지",
-        run: () => insertRawMarkdownBlock(),
-      },
     ]
-  }, [canInsertTable, editor, enableMermaidBlocks, insertCalloutBlock, insertCodeBlock, insertMermaidBlock, insertRawMarkdownBlock, insertTableBlock, insertToggleBlock])
+  }, [canInsertTable, editor, enableMermaidBlocks, insertCalloutBlock, insertCodeBlock, insertMermaidBlock, insertTableBlock, insertToggleBlock])
 
   const toolbarActions: ToolbarAction[] = [
     { id: "heading-1", label: "H1", ariaLabel: "제목 1", run: () => editor?.chain().focus().toggleHeading({ level: 1 }).run(), active: editor?.isActive("heading", { level: 1 }) ?? false },
@@ -1330,9 +1189,8 @@ const BlockEditorShell = ({
     { id: "table", label: "표", ariaLabel: "표", run: insertTableBlock, active: editor?.isActive("table") ?? false, disabled: !canInsertTable },
     { id: "callout", label: "콜아웃", ariaLabel: "콜아웃", run: insertCalloutBlock, active: editor?.isActive("calloutBlock") ?? false },
     { id: "toggle", label: "토글", ariaLabel: "토글", run: insertToggleBlock, active: editor?.isActive("toggleBlock") ?? false },
-    { id: "mermaid", label: "다이어그램", ariaLabel: "다이어그램", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false },
+    { id: "mermaid", label: "다이어그램", ariaLabel: "다이어그램", run: insertMermaidBlock, active: enableMermaidBlocks ? editor?.isActive("mermaidBlock") ?? false : false, disabled: !enableMermaidBlocks },
     { id: "divider", label: "구분선", ariaLabel: "구분선", run: () => editor?.chain().focus().setHorizontalRule().run(), active: false },
-    { id: "raw", label: "원문 블록", ariaLabel: "원문 블록", run: () => insertRawMarkdownBlock(), active: editor?.isActive("rawMarkdownBlock") ?? false },
   ]
 
   const handleSlashMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1373,21 +1231,6 @@ const BlockEditorShell = ({
       window.removeEventListener("keydown", closeMenu)
     }
   }, [isInlineColorMenuOpen])
-
-  const toggleRawMarkdownDisclosure = () => {
-    if (!editor) {
-      setIsRawMarkdownOpen((prev) => !prev)
-      return
-    }
-
-    setIsRawMarkdownOpen((prev) => {
-      const next = !prev
-      if (next) {
-        setRawMarkdownDraft(serializeEditorDocToMarkdown(editor.getJSON() as BlockEditorDoc))
-      }
-      return next
-    })
-  }
 
   const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
 
@@ -1677,6 +1520,32 @@ const BlockEditorShell = ({
         </ToolbarActions>
       </Toolbar>
 
+      <QuickInsertBar aria-label="빠른 블록 삽입">
+        <QuickInsertHint>슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.</QuickInsertHint>
+        <QuickInsertActions>
+          <QuickInsertButton type="button" onClick={insertCalloutBlock} disabled={disabled}>
+            콜아웃
+          </QuickInsertButton>
+          <QuickInsertButton type="button" onClick={insertTableBlock} disabled={disabled || !canInsertTable}>
+            표
+          </QuickInsertButton>
+          <QuickInsertButton type="button" onClick={insertToggleBlock} disabled={disabled}>
+            토글
+          </QuickInsertButton>
+          <QuickInsertButton type="button" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
+            이미지
+          </QuickInsertButton>
+          <QuickInsertButton type="button" onClick={insertCodeBlock} disabled={disabled}>
+            코드
+          </QuickInsertButton>
+          {enableMermaidBlocks ? (
+            <QuickInsertButton type="button" onClick={insertMermaidBlock} disabled={disabled}>
+              다이어그램
+            </QuickInsertButton>
+          ) : null}
+        </QuickInsertActions>
+      </QuickInsertBar>
+
       <HiddenFileInput
         ref={fileInputRef}
         type="file"
@@ -1886,35 +1755,6 @@ const BlockEditorShell = ({
         ) : null}
         <EditorContent editor={editor} />
       </EditorViewport>
-
-        <AuxDisclosure open={isRawMarkdownOpen}>
-          <summary
-          onClick={(event) => {
-            event.preventDefault()
-            toggleRawMarkdownDisclosure()
-          }}
-        >
-          <strong>Markdown 편집</strong>
-          <span>{isRawMarkdownOpen ? "닫기" : "열기"}</span>
-        </summary>
-        {isRawMarkdownOpen ? (
-          <div className="body">
-            <RawMarkdownTextarea
-              value={rawMarkdownDraft}
-              onChange={(event) => setRawMarkdownDraft(event.target.value)}
-              spellCheck={false}
-            />
-            <RawMarkdownActions>
-              <RawMarkdownButton type="button" onClick={applyRawMarkdownDraft}>
-                변경 반영
-              </RawMarkdownButton>
-              <RawMarkdownButton type="button" data-variant="ghost" onClick={() => setRawMarkdownDraft(value)}>
-                되돌리기
-              </RawMarkdownButton>
-            </RawMarkdownActions>
-          </div>
-        ) : null}
-      </AuxDisclosure>
 
       {preview ? (
         <AuxDisclosure open={isPreviewOpen}>
@@ -2642,45 +2482,49 @@ const AuxDisclosure = styled.details`
   }
 `
 
-const RawMarkdownTextarea = styled.textarea`
-  min-height: 14rem;
-  width: 100%;
-  resize: vertical;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 0.95rem;
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(11, 14, 20, 0.9)" : "rgba(255, 255, 255, 0.98)"};
-  color: var(--color-gray12);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-  font-size: 0.88rem;
-  line-height: 1.65;
-  padding: 1rem;
+const QuickInsertBar = styled.div`
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.1rem 0 0.2rem;
 `
 
-const RawMarkdownActions = styled.div`
+const QuickInsertHint = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.84rem;
+  line-height: 1.55;
+`
+
+const QuickInsertActions = styled.div`
   display: flex;
-  justify-content: flex-end;
-  gap: 0.6rem;
-  margin-top: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 `
 
-const RawMarkdownButton = styled.button`
-  min-height: 2.25rem;
+const QuickInsertButton = styled.button`
+  min-height: 2.4rem;
   border-radius: 999px;
   border: 1px solid ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.24)" : "rgba(37, 99, 235, 0.22)"};
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "rgba(71, 85, 105, 0.14)"};
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(37, 99, 235, 0.18)" : "rgba(37, 99, 235, 0.08)"};
-  color: ${({ theme }) => (theme.scheme === "dark" ? "#93c5fd" : theme.colors.blue8)};
+    theme.scheme === "dark" ? "rgba(17, 24, 39, 0.78)" : "rgba(255, 255, 255, 0.94)"};
+  color: var(--color-gray12);
   font-size: 0.82rem;
   font-weight: 700;
-  padding: 0 1rem;
+  padding: 0 0.95rem;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease;
 
-  &[data-variant="ghost"] {
-    border-color: ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(13, 15, 18, 0.94)" : "rgba(255, 255, 255, 0.98)"};
-    color: var(--color-gray11);
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 `

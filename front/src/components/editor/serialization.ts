@@ -336,7 +336,7 @@ const buildInlineContent = (text: string): JSONContent[] => {
   return nodes.length > 0 ? nodes : [{ type: "text", text }]
 }
 
-const buildParagraphNode = (text: string): JSONContent => ({
+export const createParagraphNode = (text = ""): JSONContent => ({
   type: "paragraph",
   content: buildInlineContent(text),
 })
@@ -407,7 +407,7 @@ const collectParagraphLines = (lines: string[], startIndex: number) => {
   }
 }
 
-const toRawBlockNode = (markdown: string, reason: string): JSONContent => ({
+export const createRawBlockNode = (markdown: string, reason: string): JSONContent => ({
   type: "rawMarkdownBlock",
   attrs: {
     markdown,
@@ -415,7 +415,7 @@ const toRawBlockNode = (markdown: string, reason: string): JSONContent => ({
   },
 })
 
-const createListNode = (
+export const createListNode = (
   type: "bulletList" | "orderedList",
   items: string[],
   start?: number
@@ -424,11 +424,38 @@ const createListNode = (
   ...(type === "orderedList" && start && start > 1 ? { attrs: { start } } : {}),
   content: items.map((item) => ({
     type: "listItem",
-    content: [buildParagraphNode(item.trim())],
+    content: [createParagraphNode(item.trim())],
   })),
 })
 
-const createTableNode = (
+export const createHeadingNode = (level: number, text: string): JSONContent => ({
+  type: "heading",
+  attrs: { level },
+  content: buildInlineContent(text),
+})
+
+export const createBlockquoteNode = (text: string): JSONContent => ({
+  type: "blockquote",
+  content: [createParagraphNode(text)],
+})
+
+export const createCodeBlockNode = (language: string | null, code: string): JSONContent => ({
+  type: "codeBlock",
+  attrs: {
+    language: language?.trim() || null,
+  },
+  content: code ? [{ type: "text", text: code }] : [],
+})
+
+export const createHorizontalRuleNode = (): JSONContent => ({
+  type: "horizontalRule",
+})
+
+export const createBulletListNode = (items: string[]) => createListNode("bulletList", items)
+
+export const createOrderedListNode = (items: string[], start = 1) => createListNode("orderedList", items, start)
+
+export const createTableNode = (
   rows: string[][],
   layout?: MarkdownTableLayout | null
 ): JSONContent => {
@@ -463,7 +490,7 @@ const createTableNode = (
         content: headerRow.map((cell, columnIndex) => ({
           type: "tableHeader",
           ...(buildCellAttrs(columnIndex) ? { attrs: buildCellAttrs(columnIndex) } : {}),
-          content: [buildParagraphNode(cell)],
+          content: [createParagraphNode(cell)],
         })),
       },
       ...bodyRows.map((row, rowIndex) => ({
@@ -472,26 +499,26 @@ const createTableNode = (
         content: row.map((cell, columnIndex) => ({
           type: "tableCell",
           ...(buildCellAttrs(columnIndex) ? { attrs: buildCellAttrs(columnIndex) } : {}),
-          content: [buildParagraphNode(cell)],
+          content: [createParagraphNode(cell)],
         })),
       })),
     ],
   }
 }
 
-const createMermaidNode = (source: string): JSONContent => ({
+export const createMermaidNode = (source: string): JSONContent => ({
   type: "mermaidBlock",
   attrs: {
     source,
   },
 })
 
-const createCalloutNode = (attrs: CalloutBlockAttrs): JSONContent => ({
+export const createCalloutNode = (attrs: CalloutBlockAttrs): JSONContent => ({
   type: "calloutBlock",
   attrs,
 })
 
-const createToggleNode = (attrs: ToggleBlockAttrs): JSONContent => ({
+export const createToggleNode = (attrs: ToggleBlockAttrs): JSONContent => ({
   type: "toggleBlock",
   attrs,
 })
@@ -549,22 +576,16 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
       if (language.toLowerCase() === "mermaid") {
         if (!closed) {
-          content.push(toRawBlockNode(markdownBlock, "unsupported-mermaid"))
+          content.push(createRawBlockNode(markdownBlock, "unsupported-mermaid"))
         } else {
           const source = collected.slice(1, -1).join("\n").trim()
           content.push(createMermaidNode(source))
         }
       } else if (!closed) {
-        content.push(toRawBlockNode(markdownBlock, "manual-raw"))
+        content.push(createRawBlockNode(markdownBlock, "manual-raw"))
       } else {
         const codeContent = collected.slice(1, -1).join("\n")
-        content.push({
-          type: "codeBlock",
-          attrs: {
-            language: language || null,
-          },
-          content: codeContent ? [{ type: "text", text: codeContent }] : [],
-        })
+        content.push(createCodeBlockNode(language || null, codeContent))
       }
 
       index = pointer
@@ -591,7 +612,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       }
 
       if (!closed) {
-        content.push(toRawBlockNode(collected.join("\n"), "unsupported-toggle"))
+        content.push(createRawBlockNode(collected.join("\n"), "unsupported-toggle"))
       } else {
         content.push(
           createToggleNode({
@@ -657,13 +678,13 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         pointer += 1
       }
 
-      content.push(toRawBlockNode(collected.join("\n"), "unsupported-callout"))
+      content.push(createRawBlockNode(collected.join("\n"), "unsupported-callout"))
       index = pointer
       continue
     }
 
     if (isDividerLine(line)) {
-      content.push({ type: "horizontalRule" })
+      content.push(createHorizontalRuleNode())
       index += 1
       continue
     }
@@ -686,11 +707,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const heading = isHeadingLine(line)
     if (heading) {
-      content.push({
-        type: "heading",
-        attrs: { level: heading.level },
-        content: buildInlineContent(heading.text),
-      })
+      content.push(createHeadingNode(heading.level, heading.text))
       index += 1
       continue
     }
@@ -718,7 +735,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       const tableMarkdown = lines.slice(tableStartIndex, pointer).join("\n")
 
       if (hasTableAlignmentMarker(tableSeparatorLine)) {
-        content.push(toRawBlockNode(tableMarkdown, "unsupported-table-alignment"))
+        content.push(createRawBlockNode(tableMarkdown, "unsupported-table-alignment"))
       } else {
         content.push(createTableNode(rows, tableLayout))
       }
@@ -736,7 +753,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         items.push(itemText)
         pointer += 1
       }
-      content.push(createListNode("bulletList", items))
+      content.push(createBulletListNode(items))
       index = pointer
       continue
     }
@@ -752,7 +769,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         items.push(item.text)
         pointer += 1
       }
-      content.push(createListNode("orderedList", items, start))
+      content.push(createOrderedListNode(items, start))
       index = pointer
       continue
     }
@@ -767,16 +784,13 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         items.push(blockquoteText)
         pointer += 1
       }
-      content.push({
-        type: "blockquote",
-        content: [buildParagraphNode(items.join(" ").replace(/\s+/g, " ").trim())],
-      })
+      content.push(createBlockquoteNode(items.join(" ").replace(/\s+/g, " ").trim()))
       index = pointer
       continue
     }
 
     const paragraph = collectParagraphLines(lines, index)
-    content.push(buildParagraphNode(paragraph.text))
+    content.push(createParagraphNode(paragraph.text))
     index = paragraph.nextIndex
   }
 

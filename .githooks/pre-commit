@@ -12,10 +12,12 @@ fi
 bash tools/guards/check-forbidden-tracked-files.sh --staged
 
 needs_contract_check="false"
+needs_openapi_snapshot_check="false"
 while IFS= read -r file; do
   case "${file}" in
     back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*)
       needs_contract_check="true"
+      needs_openapi_snapshot_check="true"
       break
       ;;
     front/contracts/openapi/openapi.json|front/packages/shared-contracts/src/generated/backend-openapi.d.ts)
@@ -31,6 +33,34 @@ done <<< "${staged_files}"
 
 if [[ "${needs_contract_check}" != "true" ]]; then
   exit 0
+fi
+
+if [[ "${needs_openapi_snapshot_check}" == "true" ]]; then
+  if [[ ! -x "back/gradlew" ]]; then
+    echo "[pre-commit] back/gradlew 실행 파일을 찾지 못해 OpenAPI 산출물 동기화 검사를 실행할 수 없습니다." >&2
+    exit 1
+  fi
+
+  echo "[pre-commit] OpenAPI 산출물 내보내기 실행: OpenApiContractExportTest"
+  back/gradlew -p back test --tests "com.back.global.springDoc.OpenApiContractExportTest" --no-daemon
+
+  backend_openapi="back/build/openapi/openapi.json"
+  frontend_openapi="front/contracts/openapi/openapi.json"
+  snapshot_diff_report="front/test-results/contracts-openapi/openapi-snapshot.diff"
+
+  if [[ ! -f "${backend_openapi}" ]]; then
+    echo "[pre-commit] 백엔드 OpenAPI 산출물을 찾지 못했습니다: ${backend_openapi}" >&2
+    exit 1
+  fi
+
+  if ! cmp -s "${backend_openapi}" "${frontend_openapi}"; then
+    mkdir -p "$(dirname "${snapshot_diff_report}")"
+    diff -u "${frontend_openapi}" "${backend_openapi}" > "${snapshot_diff_report}" || true
+    echo "[pre-commit] OpenAPI snapshot 드리프트를 감지했습니다." >&2
+    echo "[pre-commit] diff report: ${snapshot_diff_report}" >&2
+    echo "[pre-commit] fix: cp back/build/openapi/openapi.json front/contracts/openapi/openapi.json && yarn --cwd front contracts:generate" >&2
+    exit 1
+  fi
 fi
 
 if ! command -v yarn >/dev/null 2>&1; then

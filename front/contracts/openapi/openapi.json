@@ -664,6 +664,40 @@
         }
       }
     },
+    "/post/api/v1/posts/files" : {
+      "post" : {
+        "tags" : [ "api-v-1-post-image-controller" ],
+        "operationId" : "uploadPostFile",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RsDataUploadPostFileResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/adm/posts/{id}/restore" : {
       "post" : {
         "tags" : [ "ApiV1AdmPostController" ],
@@ -1520,6 +1554,25 @@
       "get" : {
         "tags" : [ "api-v-1-post-image-controller" ],
         "operationId" : "getPostImage",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/post/api/v1/files/**" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-image-controller" ],
+        "operationId" : "getPostFile",
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -2868,6 +2921,34 @@
             "type" : "string"
           },
           "markdown" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RsDataUploadPostFileResBody" : {
+        "type" : "object",
+        "properties" : {
+          "resultCode" : {
+            "type" : "string"
+          },
+          "msg" : {
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/UploadPostFileResBody"
+          }
+        }
+      },
+      "UploadPostFileResBody" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          },
+          "name" : {
             "type" : "string"
           }
         }

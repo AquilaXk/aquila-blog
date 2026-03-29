@@ -1,9 +1,21 @@
 export const TABLE_MIN_COLUMN_WIDTH_PX = 120
 export const TABLE_MIN_ROW_HEIGHT_PX = 44
 
+export type MarkdownTableCellAlignment = "left" | "center" | "right"
+
+export type MarkdownTableCellLayout = {
+  align?: MarkdownTableCellAlignment | null
+  backgroundColor?: string | null
+  colspan?: number | null
+  rowspan?: number | null
+  hidden?: boolean
+}
+
 export type MarkdownTableLayout = {
   columnWidths?: Array<number | null>
   rowHeights?: Array<number | null>
+  columnAlignments?: Array<MarkdownTableCellAlignment | null>
+  cells?: Array<Array<MarkdownTableCellLayout | null>>
 }
 
 const TABLE_LAYOUT_COMMENT_PATTERN = /^<!--\s*aq-table\s+(\{.*\})\s*-->$/
@@ -35,6 +47,101 @@ const normalizeTableMetricList = (
   return normalized.slice(0, lastMeaningfulIndex + 1)
 }
 
+const normalizeTableCellAlignment = (
+  value: unknown
+): MarkdownTableCellAlignment | null => {
+  if (value !== "left" && value !== "center" && value !== "right") return null
+  return value
+}
+
+const normalizeTableAlignmentList = (
+  values: unknown
+): Array<MarkdownTableCellAlignment | null> | undefined => {
+  if (!Array.isArray(values)) return undefined
+
+  const normalized = values.map((value) => normalizeTableCellAlignment(value))
+  let lastMeaningfulIndex = -1
+
+  normalized.forEach((value, index) => {
+    if (value !== null) {
+      lastMeaningfulIndex = index
+    }
+  })
+
+  if (lastMeaningfulIndex < 0) return undefined
+  return normalized.slice(0, lastMeaningfulIndex + 1)
+}
+
+const normalizeBackgroundColor = (value: unknown): string | null => {
+  if (typeof value !== "string") return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  return normalized
+}
+
+const normalizePositiveInteger = (value: unknown): number | null => {
+  const numericValue =
+    typeof value === "number" ? value : Number.parseInt(String(value || ""), 10)
+  if (!Number.isFinite(numericValue) || numericValue < 1) return null
+  return Math.max(1, Math.round(numericValue))
+}
+
+const normalizeTableCellLayout = (
+  value: unknown
+): MarkdownTableCellLayout | null => {
+  if (!value || typeof value !== "object") return null
+
+  const candidate = value as MarkdownTableCellLayout
+  const align = normalizeTableCellAlignment(candidate.align)
+  const backgroundColor = normalizeBackgroundColor(candidate.backgroundColor)
+  const colspan = normalizePositiveInteger(candidate.colspan)
+  const rowspan = normalizePositiveInteger(candidate.rowspan)
+  const hidden = candidate.hidden === true ? true : undefined
+
+  if (!align && !backgroundColor && !colspan && !rowspan && !hidden) {
+    return null
+  }
+
+  return {
+    ...(align ? { align } : {}),
+    ...(backgroundColor ? { backgroundColor } : {}),
+    ...(colspan && colspan > 1 ? { colspan } : {}),
+    ...(rowspan && rowspan > 1 ? { rowspan } : {}),
+    ...(hidden ? { hidden: true } : {}),
+  }
+}
+
+const normalizeTableCellMatrix = (
+  value: unknown
+): Array<Array<MarkdownTableCellLayout | null>> | undefined => {
+  if (!Array.isArray(value)) return undefined
+
+  const normalizedRows = value.map((row) => {
+    if (!Array.isArray(row)) return []
+
+    const normalized = row.map((cell) => normalizeTableCellLayout(cell))
+    let lastMeaningfulIndex = -1
+
+    normalized.forEach((cell, index) => {
+      if (cell) {
+        lastMeaningfulIndex = index
+      }
+    })
+
+    return lastMeaningfulIndex < 0 ? [] : normalized.slice(0, lastMeaningfulIndex + 1)
+  })
+
+  let lastMeaningfulRowIndex = -1
+  normalizedRows.forEach((row, index) => {
+    if (row.length > 0) {
+      lastMeaningfulRowIndex = index
+    }
+  })
+
+  if (lastMeaningfulRowIndex < 0) return undefined
+  return normalizedRows.slice(0, lastMeaningfulRowIndex + 1)
+}
+
 export const normalizeMarkdownTableLayout = (
   layout?: MarkdownTableLayout | null
 ): MarkdownTableLayout | null => {
@@ -42,12 +149,16 @@ export const normalizeMarkdownTableLayout = (
 
   const columnWidths = normalizeTableMetricList(layout.columnWidths, TABLE_MIN_COLUMN_WIDTH_PX)
   const rowHeights = normalizeTableMetricList(layout.rowHeights, TABLE_MIN_ROW_HEIGHT_PX)
+  const columnAlignments = normalizeTableAlignmentList(layout.columnAlignments)
+  const cells = normalizeTableCellMatrix(layout.cells)
 
-  if (!columnWidths && !rowHeights) return null
+  if (!columnWidths && !rowHeights && !columnAlignments && !cells) return null
 
   return {
     ...(columnWidths ? { columnWidths } : {}),
     ...(rowHeights ? { rowHeights } : {}),
+    ...(columnAlignments ? { columnAlignments } : {}),
+    ...(cells ? { cells } : {}),
   }
 }
 

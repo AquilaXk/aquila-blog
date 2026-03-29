@@ -110,6 +110,106 @@ const MarkdownRendererRoot = styled.div`
     accent-color: ${({ theme }) => (theme.scheme === "dark" ? "#4493f8" : "#0969da")};
   }
 
+  .aq-bookmark-card,
+  .aq-file-card,
+  .aq-embed-card,
+  .aq-formula-card {
+    width: min(100%, var(--article-readable-width, 48rem));
+    margin: 1.25rem auto;
+    border-radius: 16px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(17, 19, 24, 0.94)" : "rgba(255, 255, 255, 0.98)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 18px 38px rgba(2, 6, 23, 0.24)" : "0 18px 36px rgba(15, 23, 42, 0.06)"};
+    overflow: hidden;
+  }
+
+  .aq-bookmark-card a,
+  .aq-file-card a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.38rem;
+    padding: 1rem 1.08rem;
+    text-decoration: none;
+  }
+
+  .aq-bookmark-card strong,
+  .aq-file-card strong,
+  .aq-embed-card strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .aq-bookmark-card span,
+  .aq-file-card span,
+  .aq-embed-caption,
+  .aq-embed-fallback p {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.86rem;
+    line-height: 1.55;
+  }
+
+  .aq-bookmark-card p,
+  .aq-file-card p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+
+  .aq-embed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 1rem 1.08rem 0.72rem;
+  }
+
+  .aq-embed-header a {
+    color: ${({ theme }) => theme.colors.blue8};
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .aq-embed-frame {
+    padding: 0 1.08rem 0.92rem;
+  }
+
+  .aq-embed-frame iframe {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    border-radius: 12px;
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
+  .aq-embed-fallback {
+    padding: 0 1.08rem 0.92rem;
+  }
+
+  .aq-embed-caption {
+    margin: 0;
+    padding: 0 1.08rem 1rem;
+  }
+
+  .aq-formula-card {
+    padding: 1rem 1.08rem;
+    text-align: center;
+  }
+
+  .aq-formula-card code {
+    display: block;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-family: "Times New Roman", Georgia, serif;
+    font-size: clamp(1.05rem, 2vw, 1.35rem);
+    line-height: 1.8;
+    white-space: pre-wrap;
+  }
+
   .aq-inline-color {
     color: var(--aq-inline-color, inherit);
     font-weight: 700;

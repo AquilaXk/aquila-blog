@@ -2,10 +2,15 @@ import { readFileSync } from "fs"
 import path from "path"
 import { expect, test } from "@playwright/test"
 import {
+  createBookmarkNode,
   createBlockquoteNode,
   createBulletListNode,
   createCalloutNode,
+  createChecklistNode,
   createCodeBlockNode,
+  createEmbedNode,
+  createFileBlockNode,
+  createFormulaNode,
   createHorizontalRuleNode,
   createMermaidNode,
   createOrderedListNode,
@@ -89,6 +94,11 @@ test.describe("block editor serialization", () => {
       type: "doc",
       content: [
         createCalloutNode({ kind: "tip", title: "핵심 포인트", body: "콜아웃 본문입니다." }),
+        createChecklistNode([{ checked: false, text: "할 일" }]),
+        createBookmarkNode({ url: "https://example.com", title: "링크 제목", description: "북마크 설명" }),
+        createEmbedNode({ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: "임베드 제목", caption: "임베드 캡션" }),
+        createFileBlockNode({ url: "https://example.com/files/spec.pdf", name: "spec.pdf", description: "첨부 설명" }),
+        createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" }),
         createToggleNode({ title: "더 보기", body: "토글 본문입니다." }),
         createTableNode([
           ["항목", "값"],
@@ -106,6 +116,11 @@ test.describe("block editor serialization", () => {
     const serialized = serializeEditorDocToMarkdown(doc)
 
     expect(serialized).toContain("> [!TIP] 핵심 포인트")
+    expect(serialized).toContain("- [ ] 할 일")
+    expect(serialized).toContain(":::bookmark https://example.com")
+    expect(serialized).toContain(":::embed https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    expect(serialized).toContain(":::file https://example.com/files/spec.pdf")
+    expect(serialized).toContain("$$")
     expect(serialized).toContain(":::toggle 더 보기")
     expect(serialized).toContain("| 항목 | 값 |")
     expect(serialized).toContain("> 본문 인용")
@@ -248,13 +263,16 @@ test.describe("block editor serialization", () => {
     expect(unsupported[0]?.markdown).toContain(":::toggle 덜 닫힌 토글")
   })
 
-  test("지원하지 않는 callout 타입은 raw block 으로 보존된다", () => {
+  test("지원하지 않는 callout 타입도 info 블록으로 승격하고 원래 label 을 유지한다", () => {
     const markdown = ["> [!CUSTOM] 알 수 없는 콜아웃", "> 본문은 유지되어야 합니다."].join("\n")
 
-    const unsupported = detectUnsupportedMarkdownBlocks(markdown)
-    expect(unsupported).toHaveLength(1)
-    expect(unsupported[0]?.reason).toBe("unsupported-callout")
-    expect(unsupported[0]?.markdown).toContain("> [!CUSTOM] 알 수 없는 콜아웃")
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(doc.content?.[0]?.type).toBe("calloutBlock")
+    expect(doc.content?.[0]?.attrs?.kind).toBe("info")
+    expect(doc.content?.[0]?.attrs?.label).toBe("CUSTOM")
+    expect(serialized).toBe(markdown)
   })
 
   test("code block 언어와 image width/align 메타를 유지한다", () => {
@@ -342,13 +360,17 @@ test.describe("block editor serialization", () => {
     expect(serializeEditorDocToMarkdown(reparsed)).toBe(serialized)
   })
 
-  test("정렬 지정 GFM 테이블은 raw markdown block 으로 보존한다", () => {
+  test("정렬 지정 GFM 테이블은 table block 으로 승격되고 정렬 메타를 유지한다", () => {
     const markdown = ["| 항목 | 값 |", "| :--- | ---: |", "| 이름 | aquila |"].join("\n")
 
     const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
 
-    expect(doc.content?.[0]?.type).toBe("rawMarkdownBlock")
-    expect(serializeEditorDocToMarkdown(doc)).toBe(markdown)
+    expect(doc.content?.[0]?.type).toBe("table")
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]?.attrs?.textAlign).toBe("left")
+    expect(doc.content?.[0]?.content?.[0]?.content?.[1]?.attrs?.textAlign).toBe("right")
+    expect(serialized).toContain("| :--- | ---: |")
+    expect(serialized).toContain("<!-- aq-table")
   })
 
   test("테이블 열 폭/행 높이 메타는 parse/serialize round-trip 을 유지한다", () => {

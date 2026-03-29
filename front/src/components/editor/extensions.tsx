@@ -1,6 +1,8 @@
 import styled from "@emotion/styled"
 import { Mark, Node, mergeAttributes } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
+import TableCell from "@tiptap/extension-table-cell"
+import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import AppIcon from "src/components/icons/AppIcon"
@@ -18,6 +20,14 @@ import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/lib
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
+import type {
+  BookmarkBlockAttrs,
+  ChecklistBlockAttrs,
+  ChecklistBlockItem,
+  EmbedBlockAttrs,
+  FileBlockAttrs,
+  FormulaBlockAttrs,
+} from "./serialization"
 
 const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
   "unsupported-mermaid": "Mermaid 원문 블록",
@@ -189,6 +199,15 @@ const useDebouncedAttributeCommit = (
     flush,
     cancel,
   }
+}
+
+const normalizeChecklistItems = (items: ChecklistBlockItem[]): ChecklistBlockItem[] => {
+  const normalized = items.map((item) => ({
+    checked: item.checked === true,
+    text: String(item.text || ""),
+  }))
+
+  return normalized.length > 0 ? normalized : [{ checked: false, text: "" }]
 }
 
 export const InlineColorMark = Mark.create({
@@ -683,6 +702,279 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   )
 }
 
+const ChecklistBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [items, setItems] = useState<ChecklistBlockItem[]>(
+    normalizeChecklistItems((node.attrs?.items as ChecklistBlockItem[]) || [])
+  )
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+
+  useEffect(() => {
+    setItems(normalizeChecklistItems((node.attrs?.items as ChecklistBlockItem[]) || []))
+  }, [node.attrs?.items])
+
+  const commit = (nextItems: ChecklistBlockItem[]) => {
+    const normalizedItems = normalizeChecklistItems(nextItems)
+    setItems(normalizedItems)
+    scheduleCommit({ items: normalizedItems })
+  }
+
+  return (
+    <ChecklistEditorWrapper data-selected={selected}>
+      <ChecklistEditorHeader>
+        <strong>체크리스트</strong>
+        <ChecklistActionButton
+          type="button"
+          onClick={() => commit([...items, { checked: false, text: "" }])}
+        >
+          항목 추가
+        </ChecklistActionButton>
+      </ChecklistEditorHeader>
+      <ChecklistEditorList>
+        {items.map((item, index) => (
+          <ChecklistEditorRow key={`checklist-item-${index}`}>
+            <input
+              type="checkbox"
+              checked={item.checked}
+              onChange={(event) => {
+                const nextItems = items.map((entry, entryIndex) =>
+                  entryIndex === index ? { ...entry, checked: event.target.checked } : entry
+                )
+                commit(nextItems)
+              }}
+            />
+            <ChecklistItemInput
+              value={item.text}
+              placeholder="체크 항목"
+              onBlur={flushCommit}
+              onChange={(event) => {
+                const nextItems = items.map((entry, entryIndex) =>
+                  entryIndex === index ? { ...entry, text: event.target.value } : entry
+                )
+                commit(nextItems)
+              }}
+            />
+            <ChecklistIconButton
+              type="button"
+              aria-label="항목 삭제"
+              onClick={() => {
+                const nextItems = items.filter((_, entryIndex) => entryIndex !== index)
+                commit(nextItems)
+              }}
+            >
+              ×
+            </ChecklistIconButton>
+          </ChecklistEditorRow>
+        ))}
+      </ChecklistEditorList>
+    </ChecklistEditorWrapper>
+  )
+}
+
+type LinkCardEditorProps = NodeViewProps & {
+  kindLabel: string
+  urlPlaceholder: string
+  titlePlaceholder: string
+  bodyPlaceholder: string
+  bodyKey: "description" | "caption"
+}
+
+const LinkCardEditorView = ({
+  node,
+  updateAttributes,
+  selected,
+  kindLabel,
+  urlPlaceholder,
+  titlePlaceholder,
+  bodyPlaceholder,
+  bodyKey,
+}: LinkCardEditorProps) => {
+  const [draftUrl, setDraftUrl] = useState(String(node.attrs?.url || ""))
+  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || node.attrs?.name || ""))
+  const [draftBody, setDraftBody] = useState(
+    String(node.attrs?.description || node.attrs?.caption || "")
+  )
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+
+  useAutosizeTextarea(bodyRef, draftBody)
+
+  useEffect(() => {
+    setDraftUrl(String(node.attrs?.url || ""))
+    setDraftTitle(String(node.attrs?.title || node.attrs?.name || ""))
+    setDraftBody(String(node.attrs?.description || node.attrs?.caption || ""))
+  }, [node.attrs?.caption, node.attrs?.description, node.attrs?.name, node.attrs?.title, node.attrs?.url])
+
+  const commit = (next: Partial<Record<"url" | "title" | "name" | "description" | "caption", string>>) => {
+    scheduleCommit({
+      url: next.url ?? draftUrl,
+      title: next.title ?? draftTitle,
+      name: next.name ?? draftTitle,
+      [bodyKey]: next[bodyKey] ?? draftBody,
+    })
+  }
+
+  return (
+    <LinkCardEditorWrapper data-selected={selected}>
+      <LinkCardEditorHeader>
+        <strong>{kindLabel}</strong>
+      </LinkCardEditorHeader>
+      <LinkCardFieldInput
+        value={draftUrl}
+        placeholder={urlPlaceholder}
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextUrl = event.target.value
+          setDraftUrl(nextUrl)
+          commit({ url: nextUrl })
+        }}
+      />
+      <LinkCardFieldInput
+        value={draftTitle}
+        placeholder={titlePlaceholder}
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextTitle = event.target.value
+          setDraftTitle(nextTitle)
+          commit({ title: nextTitle, name: nextTitle })
+        }}
+      />
+      <LinkCardTextarea
+        ref={bodyRef}
+        value={draftBody}
+        rows={2}
+        placeholder={bodyPlaceholder}
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextBody = event.target.value
+          setDraftBody(nextBody)
+          commit({ [bodyKey]: nextBody })
+        }}
+      />
+    </LinkCardEditorWrapper>
+  )
+}
+
+const BookmarkBlockView = (props: NodeViewProps) => (
+  <LinkCardEditorView
+    {...props}
+    kindLabel="북마크"
+    urlPlaceholder="https://example.com"
+    titlePlaceholder="링크 제목"
+    bodyPlaceholder="설명"
+    bodyKey="description"
+  />
+)
+
+const EmbedBlockView = (props: NodeViewProps) => (
+  <LinkCardEditorView
+    {...props}
+    kindLabel="임베드"
+    urlPlaceholder="https://www.youtube.com/watch?v=..."
+    titlePlaceholder="임베드 제목"
+    bodyPlaceholder="캡션"
+    bodyKey="caption"
+  />
+)
+
+const FileBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draftUrl, setDraftUrl] = useState(String(node.attrs?.url || ""))
+  const [draftName, setDraftName] = useState(String(node.attrs?.name || ""))
+  const [draftDescription, setDraftDescription] = useState(String(node.attrs?.description || ""))
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+
+  useAutosizeTextarea(bodyRef, draftDescription)
+
+  useEffect(() => {
+    setDraftUrl(String(node.attrs?.url || ""))
+    setDraftName(String(node.attrs?.name || ""))
+    setDraftDescription(String(node.attrs?.description || ""))
+  }, [node.attrs?.description, node.attrs?.name, node.attrs?.url])
+
+  const commit = (next: Partial<FileBlockAttrs>) => {
+    scheduleCommit({
+      url: next.url ?? draftUrl,
+      name: next.name ?? draftName,
+      description: next.description ?? draftDescription,
+    })
+  }
+
+  return (
+    <LinkCardEditorWrapper data-selected={selected}>
+      <LinkCardEditorHeader>
+        <strong>파일</strong>
+      </LinkCardEditorHeader>
+      <LinkCardFieldInput
+        value={draftUrl}
+        placeholder="https://example.com/files/spec.pdf"
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextUrl = event.target.value
+          setDraftUrl(nextUrl)
+          commit({ url: nextUrl })
+        }}
+      />
+      <LinkCardFieldInput
+        value={draftName}
+        placeholder="파일명"
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextName = event.target.value
+          setDraftName(nextName)
+          commit({ name: nextName })
+        }}
+      />
+      <LinkCardTextarea
+        ref={bodyRef}
+        value={draftDescription}
+        rows={2}
+        placeholder="설명"
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextDescription = event.target.value
+          setDraftDescription(nextDescription)
+          commit({ description: nextDescription })
+        }}
+      />
+    </LinkCardEditorWrapper>
+  )
+}
+
+const FormulaBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draftFormula, setDraftFormula] = useState(String(node.attrs?.formula || ""))
+  const formulaRef = useRef<HTMLTextAreaElement>(null)
+  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
+
+  useAutosizeTextarea(formulaRef, draftFormula)
+
+  useEffect(() => {
+    setDraftFormula(String(node.attrs?.formula || ""))
+  }, [node.attrs?.formula])
+
+  return (
+    <FormulaEditorWrapper data-selected={selected}>
+      <FormulaEditorHeader>
+        <strong>수식</strong>
+        <span>LaTeX 스타일 원문을 입력합니다.</span>
+      </FormulaEditorHeader>
+      <FormulaEditorTextarea
+        ref={formulaRef}
+        value={draftFormula}
+        rows={3}
+        spellCheck={false}
+        placeholder={"\\int_0^1 x^2 \\, dx"}
+        onBlur={flushCommit}
+        onChange={(event) => {
+          const nextFormula = event.target.value
+          setDraftFormula(nextFormula)
+          scheduleCommit({ formula: nextFormula })
+        }}
+      />
+      <FormulaPreview aria-hidden="true">{draftFormula || "수식 미리보기"}</FormulaPreview>
+    </FormulaEditorWrapper>
+  )
+}
+
 const RawMarkdownBlockView = ({ node, selected }: NodeViewProps) => {
   const [copied, setCopied] = useState(false)
   const markdown = String(node.attrs?.markdown || "")
@@ -893,6 +1185,60 @@ export const EditorTableRow = TableRow.extend({
   },
 })
 
+const TABLE_CELL_BACKGROUND_PATTERN = /^.+$/
+
+const buildStyledTableCellAttributes = () => ({
+  textAlign: {
+    default: null,
+    parseHTML: (element: HTMLElement) => {
+      const value = element.style.textAlign || element.getAttribute("data-text-align") || ""
+      return value === "left" || value === "center" || value === "right" ? value : null
+    },
+    renderHTML: (attributes: Record<string, unknown>) => {
+      const textAlign = String(attributes.textAlign || "")
+      if (textAlign !== "left" && textAlign !== "center" && textAlign !== "right") return {}
+      return {
+        "data-text-align": textAlign,
+        style: `text-align: ${textAlign};`,
+      }
+    },
+  },
+  backgroundColor: {
+    default: null,
+    parseHTML: (element: HTMLElement) => {
+      const value =
+        element.style.backgroundColor || element.getAttribute("data-background-color") || ""
+      return TABLE_CELL_BACKGROUND_PATTERN.test(value.trim()) ? value.trim() || null : null
+    },
+    renderHTML: (attributes: Record<string, unknown>) => {
+      const backgroundColor = String(attributes.backgroundColor || "").trim()
+      if (!backgroundColor) return {}
+      return {
+        "data-background-color": backgroundColor,
+        style: `background-color: ${backgroundColor};`,
+      }
+    },
+  },
+})
+
+export const EditorTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      ...buildStyledTableCellAttributes(),
+    }
+  },
+})
+
+export const EditorTableHeader = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      ...buildStyledTableCellAttributes(),
+    }
+  },
+})
+
 export const MermaidBlock = Node.create({
   name: "mermaidBlock",
   group: "block",
@@ -934,6 +1280,9 @@ export const CalloutBlock = Node.create({
     return {
       kind: {
         default: "tip",
+      },
+      label: {
+        default: null,
       },
       title: {
         default: "",
@@ -986,6 +1335,116 @@ export const ToggleBlock = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(ToggleBlockView)
+  },
+})
+
+export const ChecklistBlock = Node.create({
+  name: "checklistBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  isolating: true,
+
+  addAttributes() {
+    return {
+      items: {
+        default: [{ checked: false, text: "" }],
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-checklist-block]" }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-checklist-block": "true" })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ChecklistBlockView)
+  },
+})
+
+const createLinkCardBlock = (
+  name: "bookmarkBlock" | "embedBlock" | "fileBlock",
+  dataAttribute: string,
+  view: (props: NodeViewProps) => JSX.Element
+) =>
+  Node.create({
+    name,
+    group: "block",
+    atom: true,
+    selectable: true,
+    draggable: true,
+    isolating: true,
+
+    addAttributes() {
+      return {
+        url: {
+          default: "",
+        },
+        title: {
+          default: "",
+        },
+        name: {
+          default: "",
+        },
+        description: {
+          default: "",
+        },
+        caption: {
+          default: "",
+        },
+      }
+    },
+
+    parseHTML() {
+      return [{ tag: `div[${dataAttribute}]` }]
+    },
+
+    renderHTML({ HTMLAttributes }) {
+      return ["div", mergeAttributes(HTMLAttributes, { [dataAttribute]: "true" })]
+    },
+
+    addNodeView() {
+      return ReactNodeViewRenderer(view)
+    },
+  })
+
+export const BookmarkBlock = createLinkCardBlock("bookmarkBlock", "data-bookmark-block", BookmarkBlockView)
+
+export const EmbedBlock = createLinkCardBlock("embedBlock", "data-embed-block", EmbedBlockView)
+
+export const FileBlock = createLinkCardBlock("fileBlock", "data-file-block", FileBlockView)
+
+export const FormulaBlock = Node.create({
+  name: "formulaBlock",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  isolating: true,
+
+  addAttributes() {
+    return {
+      formula: {
+        default: "",
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "div[data-formula-block]" }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes(HTMLAttributes, { "data-formula-block": "true" })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(FormulaBlockView)
   },
 })
 
@@ -1686,6 +2145,184 @@ const ToggleBodyTextarea = styled(CompactBlockTextarea)`
   &::placeholder {
     color: var(--color-gray10);
   }
+`
+
+const ChecklistEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0.9rem 0;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(17, 19, 24, 0.94);
+
+  &[data-selected="true"] {
+    border-color: rgba(96, 165, 250, 0.32);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+  }
+`
+
+const ChecklistEditorHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+
+  strong {
+    color: var(--color-gray12);
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+`
+
+const ChecklistActionButton = styled.button`
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  background: rgba(59, 130, 246, 0.12);
+  color: #dbeafe;
+  font-size: 0.76rem;
+  font-weight: 700;
+`
+
+const ChecklistEditorList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`
+
+const ChecklistEditorRow = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+
+  input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+  }
+`
+
+const ChecklistItemInput = styled.input`
+  min-height: 2.5rem;
+  width: 100%;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-gray12);
+  font-size: 0.95rem;
+  padding: 0 0.85rem;
+`
+
+const ChecklistIconButton = styled.button`
+  min-width: 2rem;
+  min-height: 2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: var(--color-gray10);
+  font-size: 1rem;
+  line-height: 1;
+`
+
+const LinkCardEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+  margin: 0.9rem 0;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(17, 19, 24, 0.94);
+
+  &[data-selected="true"] {
+    border-color: rgba(96, 165, 250, 0.32);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+  }
+`
+
+const LinkCardEditorHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  strong {
+    color: var(--color-gray12);
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+`
+
+const LinkCardFieldInput = styled.input`
+  min-height: 2.6rem;
+  width: 100%;
+  border-radius: 0.88rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-gray12);
+  font-size: 0.94rem;
+  padding: 0 0.92rem;
+`
+
+const LinkCardTextarea = styled(CompactBlockTextarea)`
+  min-height: 4.6rem;
+  border-radius: 0.88rem;
+  background: rgba(255, 255, 255, 0.03);
+  font-family: inherit;
+  font-size: 0.92rem;
+`
+
+const FormulaEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+  margin: 0.9rem 0;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: rgba(17, 19, 24, 0.94);
+
+  &[data-selected="true"] {
+    border-color: rgba(96, 165, 250, 0.32);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+  }
+`
+
+const FormulaEditorHeader = styled.div`
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+
+  strong {
+    color: var(--color-gray12);
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  span {
+    color: var(--color-gray10);
+    font-size: 0.76rem;
+  }
+`
+
+const FormulaEditorTextarea = styled(CompactBlockTextarea)`
+  min-height: 5rem;
+  border-radius: 0.88rem;
+  background: rgba(255, 255, 255, 0.03);
+`
+
+const FormulaPreview = styled.div`
+  padding: 0.9rem 1rem;
+  border-radius: 0.88rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e5e7eb;
+  font-family: "Times New Roman", Georgia, serif;
+  font-size: 1.1rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
 `
 
 const RawBlockWrapper = styled(NodeViewWrapper)`

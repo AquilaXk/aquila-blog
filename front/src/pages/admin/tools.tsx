@@ -140,6 +140,7 @@ type ActionCardTone = "read" | "write" | "danger" | "infra"
 type InlineNoticeTone = "warning" | "danger" | "success"
 type DiagnosticTab = "mail" | "queue" | "cleanup" | "auth"
 type ExecutionDomain = "overview" | "monitoring" | "diagnostics" | "execution" | "mutation"
+type DashboardFrameState = "idle" | "loading" | "ready" | "error"
 type MonitoringBrandIcon = {
   icon?: SimpleIcon
   fallbackIcon?: "service"
@@ -170,6 +171,22 @@ const SECTION_IDS = {
 } as const
 
 type SectionKey = keyof typeof SECTION_IDS
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  overview: "개요",
+  monitoring: "모니터링",
+  diagnostics: "진단",
+  execution: "실행",
+  mutation: "실데이터 테스트",
+  results: "최근 실행 결과",
+}
+
+const DIAGNOSTIC_TAB_LABELS: Record<DiagnosticTab, string> = {
+  mail: "메일 진단",
+  queue: "작업 큐 진단",
+  cleanup: "파일 정리 진단",
+  auth: "인증 보안 기록",
+}
 
 const ACTION_META: Record<
   string,
@@ -328,8 +345,11 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>([])
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
   const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [dashboardFrameState, setDashboardFrameState] = useState<DashboardFrameState>("idle")
+  const [dashboardFrameKey, setDashboardFrameKey] = useState(0)
   const [, setIsMobileLayout] = useState(false)
   const [activeSection, setActiveSection] = useState<SectionKey>("overview")
+  const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab>("mail")
   const [testEmail, setTestEmail] = useState("")
   const [mailTestNotice, setMailTestNotice] = useState<{ tone: InlineNoticeTone; text: string }>({
@@ -382,7 +402,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
 
     setExecutions((prev) => {
-      const next = [entry, ...prev].slice(0, 6)
+      const next = [entry, ...prev].slice(0, 5)
       return next
     })
     setSelectedExecutionId(entry.id)
@@ -545,6 +565,16 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [dashboardOpen])
 
   useEffect(() => {
+    if (!sectionJumpTarget || typeof window === "undefined") return
+
+    const timeout = window.setTimeout(() => {
+      setSectionJumpTarget((current) => (current === sectionJumpTarget ? null : current))
+    }, 1600)
+
+    return () => window.clearTimeout(timeout)
+  }, [sectionJumpTarget])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const media = window.matchMedia("(max-width: 960px)")
     const sync = () => setIsMobileLayout(media.matches)
@@ -567,7 +597,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
         if (!next) return
         const section = next.target.getAttribute("data-ops-section") as SectionKey | null
-        if (section) setActiveSection(section)
+        if (section) {
+          setActiveSection(section)
+          setSectionJumpTarget((current) => (current === section ? null : current))
+        }
       },
       {
         rootMargin: "-20% 0px -60% 0px",
@@ -715,6 +748,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const focusSection = (section: SectionKey, tab?: DiagnosticTab) => {
     if (tab) setActiveDiagnosticTab(tab)
     setActiveSection(section)
+    setSectionJumpTarget(section)
     const target = document.getElementById(SECTION_IDS[section])
     if (target) {
       requestAnimationFrame(() => {
@@ -723,9 +757,27 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
+  const toggleDashboard = () => {
+    setDashboardOpen((prev) => {
+      const next = !prev
+      setDashboardFrameState(next ? "loading" : "idle")
+      return next
+    })
+  }
+
+  const retryDashboard = () => {
+    setDashboardFrameState("loading")
+    setDashboardFrameKey((prev) => prev + 1)
+  }
+
   if (!sessionMember) return null
 
   const isBusy = Boolean(loadingKey)
+  const sectionNavStatusLabel = sectionJumpTarget
+    ? `${SECTION_LABELS[sectionJumpTarget]}로 이동 중`
+    : activeSection === "diagnostics"
+      ? `${SECTION_LABELS[activeSection]} · ${DIAGNOSTIC_TAB_LABELS[activeDiagnosticTab]}`
+      : SECTION_LABELS[activeSection]
   const monitoringItems = [
     uptimeKumaUrl
       ? {
@@ -821,6 +873,10 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
       <WorkspaceShell>
         <SectionNav aria-label="운영 섹션">
+          <SectionNavStatus data-jumping={sectionJumpTarget ? "true" : "false"}>
+            <small>{sectionJumpTarget ? "이동 중" : "현재 위치"}</small>
+            <strong>{sectionNavStatusLabel}</strong>
+          </SectionNavStatus>
           {([
             { key: "overview", label: "개요" },
             { key: "monitoring", label: "모니터링" },
@@ -872,20 +928,58 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
             {monitoringEmbedUrl ? (
               <DetailsPanel open={dashboardOpen}>
-                <DetailsSummary onClick={(event) => {
-                  event.preventDefault()
-                  setDashboardOpen((prev) => !prev)
-                }}>
+                <DetailsSummary
+                  onClick={(event) => {
+                    event.preventDefault()
+                    toggleDashboard()
+                  }}
+                >
                   <span>대시보드 보기</span>
                   <small>{dashboardOpen ? "숨기기" : "열기"}</small>
                 </DetailsSummary>
                 {dashboardOpen ? (
-                  <MonitoringFrame
-                    src={monitoringEmbedUrl}
-                    loading="lazy"
-                    title="Monitoring Dashboard"
-                    referrerPolicy="no-referrer"
-                  />
+                  <DashboardFrameShell data-state={dashboardFrameState}>
+                    {dashboardFrameState !== "ready" ? (
+                      <DashboardFramePlaceholder data-state={dashboardFrameState}>
+                        <div className="copy">
+                          <strong>
+                            {dashboardFrameState === "error" ? "대시보드를 불러오지 못했습니다." : "대시보드 로딩 중"}
+                          </strong>
+                          <span>
+                            {dashboardFrameState === "error"
+                              ? "외부 대시보드 응답 또는 embed 설정을 확인한 뒤 다시 시도하세요."
+                              : "iframe이 준비되면 이 영역을 실제 대시보드로 교체합니다."}
+                          </span>
+                        </div>
+                        {dashboardFrameState === "loading" ? (
+                          <div className="skeleton" aria-hidden="true">
+                            <span className="line wide" />
+                            <span className="line medium" />
+                            <span className="panel" />
+                          </div>
+                        ) : (
+                          <ActionRow>
+                            <QuietButton type="button" onClick={retryDashboard}>
+                              다시 시도
+                            </QuietButton>
+                            <LaunchLink href={monitoringEmbedUrl} target="_blank" rel="noreferrer noopener">
+                              새 탭에서 열기
+                            </LaunchLink>
+                          </ActionRow>
+                        )}
+                      </DashboardFramePlaceholder>
+                    ) : null}
+                    <MonitoringFrame
+                      key={dashboardFrameKey}
+                      src={monitoringEmbedUrl}
+                      loading="lazy"
+                      title="Monitoring Dashboard"
+                      referrerPolicy="no-referrer"
+                      data-state={dashboardFrameState}
+                      onLoad={() => setDashboardFrameState("ready")}
+                      onError={() => setDashboardFrameState("error")}
+                    />
+                  </DashboardFrameShell>
                 ) : null}
               </DetailsPanel>
             ) : null}
@@ -1755,6 +1849,39 @@ const SectionNav = styled.aside`
   }
 `
 
+const SectionNavStatus = styled.div`
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.88rem 0.96rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 780;
+    letter-spacing: -0.02em;
+  }
+
+  &[data-jumping="true"] {
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+  }
+
+  @media (max-width: 960px) {
+    min-width: 12.5rem;
+    flex: 0 0 auto;
+  }
+`
+
 const SectionNavButton = styled.button`
   display: flex;
   align-items: center;
@@ -1966,13 +2093,102 @@ const DetailsSummary = styled.summary`
   }
 `
 
-const MonitoringFrame = styled.iframe`
+const DashboardFrameShell = styled.div`
+  position: relative;
   width: calc(100% - 1.2rem);
   min-height: 420px;
   margin: 0 0.6rem 0.8rem;
+`
+
+const DashboardFramePlaceholder = styled.div`
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+  padding: 1.1rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 14px;
+  background: ${({ theme }) => theme.colors.gray1};
+
+  .copy {
+    display: grid;
+    gap: 0.26rem;
+  }
+
+  .copy strong {
+    font-size: 0.96rem;
+    letter-spacing: -0.02em;
+  }
+
+  .copy span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+
+  .skeleton {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .line,
+  .panel {
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray3};
+    animation: ops-dashboard-pulse 1.18s ease-in-out infinite;
+  }
+
+  .line {
+    height: 0.9rem;
+  }
+
+  .line.wide {
+    width: min(18rem, 62%);
+  }
+
+  .line.medium {
+    width: min(13rem, 44%);
+  }
+
+  .panel {
+    height: 16rem;
+    border-radius: 18px;
+  }
+
+  &[data-state="error"] {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+  }
+
+  @keyframes ops-dashboard-pulse {
+    0% {
+      opacity: 0.72;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.72;
+    }
+  }
+`
+
+const MonitoringFrame = styled.iframe`
+  position: relative;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  min-height: 420px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 14px;
   background: transparent;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+
+  &[data-state="ready"] {
+    opacity: 1;
+  }
 `
 
 const ReadonlyPill = styled.span`

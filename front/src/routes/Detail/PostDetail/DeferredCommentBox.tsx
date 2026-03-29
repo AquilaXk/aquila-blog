@@ -46,6 +46,18 @@ const DeferredCommentBox: React.FC<Props> = ({ data, initialComments = null }) =
             <h3>댓글</h3>
             <span className="countBadge">댓글 {data.commentsCount ?? 0}</span>
           </div>
+          <div className="composerSkeleton" aria-hidden="true">
+            <span className="avatar" />
+            <div className="body">
+              <span className="line wide" />
+              <span className="line medium" />
+              <span className="button" />
+            </div>
+          </div>
+          <div className="commentSkeleton" aria-hidden="true">
+            <span className="line strong" />
+            <span className="line medium" />
+          </div>
         </PlaceholderCard>
       )}
     </div>
@@ -87,5 +99,67 @@ const PlaceholderCard = styled.section`
     color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.8rem;
     font-weight: 700;
+  }
+
+  .composerSkeleton,
+  .commentSkeleton {
+    display: grid;
+    gap: 0.72rem;
+    margin-top: 0.9rem;
+  }
+
+  .composerSkeleton {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .avatar,
+  .line,
+  .button {
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray3};
+    animation: comment-placeholder-pulse 1.16s ease-in-out infinite;
+  }
+
+  .avatar {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .body {
+    display: grid;
+    gap: 0.56rem;
+  }
+
+  .line {
+    height: 0.92rem;
+  }
+
+  .line.wide {
+    width: min(84%, 38rem);
+  }
+
+  .line.medium {
+    width: min(62%, 24rem);
+  }
+
+  .line.strong {
+    width: min(38%, 16rem);
+  }
+
+  .button {
+    width: 6.25rem;
+    height: 2rem;
+  }
+  @keyframes comment-placeholder-pulse {
+    0% {
+      opacity: 0.72;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.72;
+    }
   }
 `

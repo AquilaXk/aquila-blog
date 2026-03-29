@@ -11,7 +11,11 @@ export type CalloutKind = "tip" | "info" | "warning" | "outline" | "example" | "
 export type MarkdownSegment =
   | { type: "markdown"; content: string }
   | { type: "toggle"; title: string; content: string }
-  | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string }
+  | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string; label?: string }
+  | { type: "bookmark"; url: string; title: string; description?: string }
+  | { type: "embed"; url: string; title: string; caption?: string }
+  | { type: "file"; url: string; name: string; description?: string }
+  | { type: "formula"; formula: string }
   | {
       type: "image"
       alt: string
@@ -33,6 +37,9 @@ export const markdownGuide = `### 작성 가이드
 - 코드블록: \`\`\`ts
 const x = 1
 \`\`\`
+- 체크리스트:
+  - [ ] 할 일
+  - [x] 완료한 일
 - 글자색: \`{{color:#60a5fa|강조 텍스트}}\`
 - 머메이드: \`\`\`mermaid
 graph TD
@@ -42,6 +49,25 @@ graph TD
   :::toggle 토글 제목
   접기/펼치기 본문
   :::
+- 북마크:
+  :::bookmark https://example.com
+  링크 제목
+  설명
+  :::
+- 임베드:
+  :::embed https://www.youtube.com/watch?v=dQw4w9WgXcQ
+  영상 제목
+  캡션
+  :::
+- 파일:
+  :::file https://example.com/files/spec.pdf
+  spec.pdf
+  첨부 설명
+  :::
+- 수식:
+  $$
+  E = mc^2
+  $$
 - 콜아웃:
   > [!TIP]
   > 내용
@@ -103,6 +129,7 @@ type ParsedCalloutHeader = {
   kind: CalloutKind
   title: string
   emoji: string
+  label?: string
 }
 
 const LANGUAGE_LABEL_MAP: Record<string, string> = {
@@ -190,13 +217,14 @@ const parseCalloutHeader = (raw: string): ParsedCalloutHeader | null => {
 
   const blockquoteMatch = line.match(/^\[!([A-Za-z]+)\](?:\s*(.*))?$/)
   const rawKind = blockquoteMatch?.[1]?.toUpperCase() || ""
-  const mappedKind = CALLOUT_KIND_MAP[rawKind]
-  if (mappedKind) {
+  if (blockquoteMatch) {
+    const mappedKind = CALLOUT_KIND_MAP[rawKind] || "info"
     const customTitle = blockquoteMatch?.[2]?.trim() || ""
     return {
       kind: mappedKind,
       title: customTitle,
       emoji: CALLOUT_EMOJI_BY_KIND[mappedKind],
+      ...(CALLOUT_KIND_MAP[rawKind] ? {} : { label: rawKind }),
     }
   }
 
@@ -258,6 +286,7 @@ const buildCalloutSegment = (
     title: resolvedTitle,
     emoji: header.emoji,
     content: promoted.bodyLines.join("\n").trim() || "내용을 입력하세요.",
+    ...(header.label ? { label: header.label } : {}),
   }
 }
 
@@ -567,6 +596,11 @@ const parseFenceMarker = (line: string): "`" | "~" | null => {
   return marker
 }
 
+const CUSTOM_DIRECTIVE_PATTERN =
+  /^:::(bookmark|embed|file)(?:\s+(\S+))?\s*$/i
+
+const FORMULA_BLOCK_START_PATTERN = /^\s*\$\$\s*$/
+
 export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   const lines = content.split("\n")
   const segments: MarkdownSegment[] = []
@@ -610,6 +644,85 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
         title: standaloneImage.title,
         widthPx: standaloneImage.widthPx,
       })
+      i += 1
+      continue
+    }
+
+    const customDirectiveMatch = line.trim().match(CUSTOM_DIRECTIVE_PATTERN)
+    if (customDirectiveMatch) {
+      const directive = customDirectiveMatch[1]?.toLowerCase()
+      const url = (customDirectiveMatch[2] || "").trim()
+      const bodyLines: string[] = []
+      let closed = false
+
+      for (let j = i + 1; j < lines.length; j += 1) {
+        if (lines[j].trim() === ":::") {
+          const [firstLine = "", ...restLines] = bodyLines
+          const secondaryText = restLines.join("\n").trim()
+          flushMarkdown()
+
+          if (directive === "bookmark") {
+            segments.push({
+              type: "bookmark",
+              url,
+              title: firstLine.trim() || "북마크",
+              description: secondaryText,
+            })
+          } else if (directive === "embed") {
+            segments.push({
+              type: "embed",
+              url,
+              title: firstLine.trim() || "임베드",
+              caption: secondaryText,
+            })
+          } else if (directive === "file") {
+            segments.push({
+              type: "file",
+              url,
+              name: firstLine.trim() || "파일",
+              description: secondaryText,
+            })
+          }
+
+          i = j
+          closed = true
+          break
+        }
+        bodyLines.push(lines[j])
+      }
+
+      if (!closed) {
+        markdownBuffer.push(line)
+        markdownBuffer.push(...bodyLines)
+      }
+
+      i += 1
+      continue
+    }
+
+    if (FORMULA_BLOCK_START_PATTERN.test(line.trim())) {
+      const bodyLines: string[] = []
+      let closed = false
+
+      for (let j = i + 1; j < lines.length; j += 1) {
+        if (FORMULA_BLOCK_START_PATTERN.test(lines[j].trim())) {
+          flushMarkdown()
+          segments.push({
+            type: "formula",
+            formula: bodyLines.join("\n").trim(),
+          })
+          i = j
+          closed = true
+          break
+        }
+        bodyLines.push(lines[j])
+      }
+
+      if (!closed) {
+        markdownBuffer.push(line)
+        markdownBuffer.push(...bodyLines)
+      }
+
       i += 1
       continue
     }

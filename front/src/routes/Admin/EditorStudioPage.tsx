@@ -3748,6 +3748,41 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const shouldShowPublishNotice = publishNotice.tone !== "idle"
   const shouldShowTagRecommendationNotice =
     tagRecommendationNotice.tone !== "idle" || tagRecommendationNotice.text !== TAG_RECOMMENDATION_IDLE_TEXT
+  const composeStatusEntries = [
+    shouldShowPublishNotice
+      ? {
+          key: "publish",
+          label: "발행 상태",
+          tone: publishNotice.tone,
+          text: publishNotice.text,
+        }
+      : null,
+    shouldShowTagRecommendationNotice
+      ? {
+          key: "tags",
+          label: "태그 상태",
+          tone: tagRecommendationNotice.tone,
+          text: tagRecommendationNotice.text,
+        }
+      : null,
+    {
+      key: "draft",
+      label: "브라우저 임시저장",
+      tone: localDraftSavedAt ? ("success" as NoticeTone) : ("idle" as NoticeTone),
+      text: localDraftSavedAt
+        ? `${localDraftSavedAt.slice(11, 16)} 저장본이 있습니다.`
+        : "아직 브라우저 임시저장이 없습니다.",
+    },
+  ].filter(
+    (
+      item
+    ): item is {
+      key: string
+      label: string
+      tone: NoticeTone
+      text: string
+    } => Boolean(item)
+  )
   const thumbnailEditorPanel = (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
@@ -5323,7 +5358,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <span>{contentLength}자 · {lineCount}줄</span>
                 </WriterFooterSummary>
                 <WriterFooterControls>
-                  {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
                   <WriterFooterActions>
                     <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
                       임시 저장
@@ -5370,11 +5404,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                       {loadingKey === "recommendTags" ? "태그 제안 중..." : "태그 제안"}
                     </Button>
                   </ComposeAssistantActionBar>
-                  {shouldShowTagRecommendationNotice ? (
-                    <SummaryActionStatus data-tone={tagRecommendationNotice.tone}>
-                      {tagRecommendationNotice.text}
-                    </SummaryActionStatus>
-                  ) : null}
+                  <ComposeStatusBoard aria-label="작성 상태 요약">
+                    {composeStatusEntries.map((item) => (
+                      <ComposeStatusRow key={item.key} data-tone={item.tone}>
+                        <strong>{item.label}</strong>
+                        <span>{item.text}</span>
+                      </ComposeStatusRow>
+                    ))}
+                  </ComposeStatusBoard>
                 </ComposeAssistantGroup>
 
                 <ComposeAssistantGroup>
@@ -7718,34 +7755,57 @@ const SummaryCounter = styled.span`
   line-height: 1;
 `
 
-const SummaryActionStatus = styled.div`
-  padding: 0.48rem 0.6rem;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  line-height: 1.45;
+const ComposeStatusBoard = styled.div`
+  display: grid;
+  gap: 0.56rem;
+`
 
-  &[data-tone="idle"] {
-    color: ${({ theme }) => theme.colors.gray11};
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: transparent;
+const ComposeStatusRow = styled.div`
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.68rem 0.76rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.79rem;
+    line-height: 1.48;
   }
 
   &[data-tone="loading"] {
-    color: ${({ theme }) => theme.colors.blue11};
-    border: 1px solid ${({ theme }) => theme.colors.blue7};
+    border-color: ${({ theme }) => theme.colors.blue7};
     background: ${({ theme }) => theme.colors.blue3};
+
+    span {
+      color: ${({ theme }) => theme.colors.blue11};
+    }
   }
 
   &[data-tone="success"] {
-    color: ${({ theme }) => theme.colors.green11};
-    border: 1px solid ${({ theme }) => theme.colors.green7};
+    border-color: ${({ theme }) => theme.colors.green7};
     background: ${({ theme }) => theme.colors.green3};
+
+    span {
+      color: ${({ theme }) => theme.colors.green11};
+    }
   }
 
   &[data-tone="error"] {
-    color: ${({ theme }) => theme.colors.red11};
-    border: 1px solid ${({ theme }) => theme.colors.red7};
+    border-color: ${({ theme }) => theme.colors.red7};
     background: ${({ theme }) => theme.colors.red3};
+
+    span {
+      color: ${({ theme }) => theme.colors.red11};
+    }
   }
 `
 

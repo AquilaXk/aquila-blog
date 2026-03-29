@@ -11,6 +11,8 @@ import {
   serializeMarkdownTableLayoutComment,
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
+  type MarkdownTableCellAlignment,
+  type MarkdownTableCellLayout,
   type MarkdownTableLayout,
 } from "src/libs/markdown/tableMetadata"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
@@ -33,11 +35,43 @@ export type CalloutBlockAttrs = {
   kind: CalloutKind
   title: string
   body: string
+  label?: string | null
 }
 
 export type ToggleBlockAttrs = {
   title: string
   body: string
+}
+
+export type ChecklistBlockItem = {
+  checked: boolean
+  text: string
+}
+
+export type ChecklistBlockAttrs = {
+  items: ChecklistBlockItem[]
+}
+
+export type BookmarkBlockAttrs = {
+  url: string
+  title: string
+  description?: string
+}
+
+export type EmbedBlockAttrs = {
+  url: string
+  title: string
+  caption?: string
+}
+
+export type FileBlockAttrs = {
+  url: string
+  name: string
+  description?: string
+}
+
+export type FormulaBlockAttrs = {
+  formula: string
 }
 
 export type RawMarkdownBlockPayload = {
@@ -84,6 +118,11 @@ const CALL_OUT_KIND_LABELS: Record<CalloutKind, string> = {
   summary: "SUMMARY",
 }
 
+const CUSTOM_DIRECTIVE_PATTERN =
+  /^:::(bookmark|embed|file)(?:\s+(\S+))?\s*$/i
+
+const FORMULA_BLOCK_START_PATTERN = /^\s*\$\$\s*$/
+
 const isBlankLine = (line: string) => line.trim().length === 0
 
 const isFenceStart = (line: string) => {
@@ -118,6 +157,16 @@ const isBulletListItem = (line: string) => {
   return match ? match[1] : null
 }
 
+const isTaskListItem = (line: string) => {
+  const match = line.match(/^\s*[-*+]\s+\[( |x|X)\]\s+(.*)$/)
+  if (!match) return null
+
+  return {
+    checked: match[1].toLowerCase() === "x",
+    text: match[2],
+  }
+}
+
 const isOrderedListItem = (line: string) => {
   const match = line.match(/^\s*(\d+)\.\s+(.*)$/)
   return match
@@ -145,17 +194,15 @@ const parseCalloutStart = (line: string) => {
   const match = line.match(/^\s*>\s*\[!([A-Za-z]+)\](?:\s*(.*))?$/)
   if (!match) return null
 
-  const kind = CALL_OUT_KIND_MAP[(match[1] || "").toUpperCase()]
-  if (!kind) return null
+  const rawLabel = (match[1] || "").toUpperCase()
+  const kind = CALL_OUT_KIND_MAP[rawLabel] || "info"
 
   return {
     kind,
     title: (match[2] || "").trim(),
+    label: CALL_OUT_KIND_MAP[rawLabel] ? null : rawLabel,
   }
 }
-
-const isUnsupportedCalloutStart = (line: string) =>
-  /^\s*>\s*\[![A-Za-z]+\]/.test(line) && !parseCalloutStart(line)
 
 const isTableSeparatorLine = (line: string) =>
   /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(line)
@@ -205,6 +252,18 @@ const hasTableAlignmentMarker = (line: string) =>
   splitTableCells(line).some((cell) => {
     const compact = cell.replace(/\s+/g, "")
     return /^:?-{3,}:?$/.test(compact) && (compact.startsWith(":") || compact.endsWith(":"))
+  })
+
+const parseTableAlignments = (
+  line: string
+): Array<MarkdownTableCellAlignment | null> =>
+  splitTableCells(line).map((cell) => {
+    const compact = cell.replace(/\s+/g, "")
+    if (!/^:?-{3,}:?$/.test(compact)) return null
+    if (compact.startsWith(":") && compact.endsWith(":")) return "center"
+    if (compact.endsWith(":")) return "right"
+    if (compact.startsWith(":")) return "left"
+    return null
   })
 
 const normalizeTableRows = (rows: string[][]) => {
@@ -458,17 +517,42 @@ export const createTableNode = (
   rows: string[][],
   layout?: MarkdownTableLayout | null
 ): JSONContent => {
-  const [headerRow, ...bodyRows] = normalizeTableRows(rows)
+  const normalizedRows = normalizeTableRows(rows)
+  const [headerRow, ...bodyRows] = normalizedRows
   const columnWidths = layout?.columnWidths || []
   const rowHeights = layout?.rowHeights || []
+  const columnAlignments = layout?.columnAlignments || []
+  const cellLayouts = layout?.cells || []
 
-  const buildCellAttrs = (columnIndex: number) => {
+  const buildCellAttrs = (
+    rowIndex: number,
+    columnIndex: number
+  ) => {
     const width = columnWidths[columnIndex]
-    if (!width) return undefined
+    const cellLayout = cellLayouts[rowIndex]?.[columnIndex] || null
+    const align = cellLayout?.align || columnAlignments[columnIndex] || null
+    const backgroundColor = cellLayout?.backgroundColor || null
+    const colspan = cellLayout?.colspan
+    const rowspan = cellLayout?.rowspan
 
-    return {
-      colwidth: [Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)],
+    const attrs: Record<string, unknown> = {}
+    if (width) {
+      attrs.colwidth = [Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)]
     }
+    if (align) {
+      attrs.textAlign = align
+    }
+    if (backgroundColor) {
+      attrs.backgroundColor = backgroundColor
+    }
+    if (colspan && colspan > 1) {
+      attrs.colspan = colspan
+    }
+    if (rowspan && rowspan > 1) {
+      attrs.rowspan = rowspan
+    }
+
+    return Object.keys(attrs).length > 0 ? attrs : undefined
   }
 
   const buildRowAttrs = (rowIndex: number) => {
@@ -482,26 +566,23 @@ export const createTableNode = (
 
   return {
     type: "table",
-    content: [
-      {
-        type: "tableRow",
-        ...(buildRowAttrs(0) ? { attrs: buildRowAttrs(0) } : {}),
-        content: headerRow.map((cell, columnIndex) => ({
-          type: "tableHeader",
-          ...(buildCellAttrs(columnIndex) ? { attrs: buildCellAttrs(columnIndex) } : {}),
-          content: [createParagraphNode(cell)],
-        })),
-      },
-      ...bodyRows.map((row, rowIndex) => ({
-        type: "tableRow",
-        ...(buildRowAttrs(rowIndex + 1) ? { attrs: buildRowAttrs(rowIndex + 1) } : {}),
-        content: row.map((cell, columnIndex) => ({
-          type: "tableCell",
-          ...(buildCellAttrs(columnIndex) ? { attrs: buildCellAttrs(columnIndex) } : {}),
-          content: [createParagraphNode(cell)],
-        })),
-      })),
-    ],
+    content: normalizedRows.map((row, rowIndex) => ({
+      type: "tableRow",
+      ...(buildRowAttrs(rowIndex) ? { attrs: buildRowAttrs(rowIndex) } : {}),
+      content: row.flatMap((cell, columnIndex) => {
+        const cellLayout = cellLayouts[rowIndex]?.[columnIndex] || null
+        if (cellLayout?.hidden) return []
+
+        const cellType = rowIndex === 0 ? "tableHeader" : "tableCell"
+        return [
+          {
+            type: cellType,
+            ...(buildCellAttrs(rowIndex, columnIndex) ? { attrs: buildCellAttrs(rowIndex, columnIndex) } : {}),
+            content: [createParagraphNode(cell)],
+          },
+        ]
+      }),
+    })),
   }
 }
 
@@ -522,19 +603,48 @@ export const createToggleNode = (attrs: ToggleBlockAttrs): JSONContent => ({
   attrs,
 })
 
+export const createChecklistNode = (items: ChecklistBlockItem[]): JSONContent => ({
+  type: "checklistBlock",
+  attrs: {
+    items,
+  },
+})
+
+export const createBookmarkNode = (attrs: BookmarkBlockAttrs): JSONContent => ({
+  type: "bookmarkBlock",
+  attrs,
+})
+
+export const createEmbedNode = (attrs: EmbedBlockAttrs): JSONContent => ({
+  type: "embedBlock",
+  attrs,
+})
+
+export const createFileBlockNode = (attrs: FileBlockAttrs): JSONContent => ({
+  type: "fileBlock",
+  attrs,
+})
+
+export const createFormulaNode = (attrs: FormulaBlockAttrs): JSONContent => ({
+  type: "formulaBlock",
+  attrs,
+})
+
 const isSupportedBlockStart = (line: string, nextLine?: string) =>
   isBlankLine(line) ||
   Boolean(isFenceStart(line)) ||
   Boolean(isHeadingLine(line)) ||
   isDividerLine(line) ||
   Boolean(parseStandaloneMarkdownImageLine(line)) ||
+  Boolean(isTaskListItem(line)) ||
   Boolean(isBulletListItem(line)) ||
   Boolean(isOrderedListItem(line)) ||
   Boolean(isBlockquoteLine(line)) ||
   (isLikelyTableRow(line) && Boolean(nextLine && isTableSeparatorLine(nextLine))) ||
   Boolean(parseToggleStart(line)) ||
   Boolean(parseCalloutStart(line)) ||
-  isUnsupportedCalloutStart(line)
+  Boolean(line.trim().match(CUSTOM_DIRECTIVE_PATTERN)) ||
+  FORMULA_BLOCK_START_PATTERN.test(line.trim())
 
 export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
   const normalizedMarkdown = markdown.replace(/\r\n?/g, "\n").trim()
@@ -625,6 +735,95 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       continue
     }
 
+    const customDirectiveMatch = line.trim().match(CUSTOM_DIRECTIVE_PATTERN)
+    if (customDirectiveMatch) {
+      const directive = customDirectiveMatch[1]?.toLowerCase()
+      const headerValue = (customDirectiveMatch[2] || "").trim()
+      const bodyLines: string[] = []
+      let pointer = index + 1
+      let closed = false
+
+      while (pointer < lines.length) {
+        const current = lines[pointer]
+        if (current.trim() === ":::") {
+          closed = true
+          pointer += 1
+          break
+        }
+        bodyLines.push(current)
+        pointer += 1
+      }
+
+      if (!closed) {
+        const fallbackMarkdown = lines.slice(index, pointer).join("\n")
+        content.push(createRawBlockNode(fallbackMarkdown, "manual-raw"))
+        index = pointer
+        continue
+      }
+
+      const normalizedBodyLines = bodyLines.map((bodyLine) => bodyLine.trimEnd())
+      const [firstLine = "", ...restLines] = normalizedBodyLines
+      const secondaryText = restLines.join("\n").trim()
+
+      if (directive === "bookmark") {
+        content.push(
+          createBookmarkNode({
+            url: headerValue,
+            title: firstLine.trim() || "북마크",
+            description: secondaryText,
+          })
+        )
+      } else if (directive === "embed") {
+        content.push(
+          createEmbedNode({
+            url: headerValue,
+            title: firstLine.trim() || "임베드",
+            caption: secondaryText,
+          })
+        )
+      } else if (directive === "file") {
+        content.push(
+          createFileBlockNode({
+            url: headerValue,
+            name: firstLine.trim() || "파일",
+            description: secondaryText,
+          })
+        )
+      }
+
+      index = pointer
+      continue
+    }
+
+    if (FORMULA_BLOCK_START_PATTERN.test(line.trim())) {
+      const bodyLines: string[] = []
+      let pointer = index + 1
+      let closed = false
+
+      while (pointer < lines.length) {
+        if (FORMULA_BLOCK_START_PATTERN.test(lines[pointer].trim())) {
+          closed = true
+          pointer += 1
+          break
+        }
+        bodyLines.push(lines[pointer])
+        pointer += 1
+      }
+
+      if (!closed) {
+        content.push(createRawBlockNode(lines.slice(index, pointer).join("\n"), "manual-raw"))
+      } else {
+        content.push(
+          createFormulaNode({
+            formula: bodyLines.join("\n").trim(),
+          })
+        )
+      }
+
+      index = pointer
+      continue
+    }
+
     const calloutStart = parseCalloutStart(line)
     if (calloutStart) {
       const collected = [line]
@@ -653,31 +852,9 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
           kind: calloutStart.kind,
           title: promoted.title,
           body: promoted.bodyLines.join("\n").trim(),
+          ...(calloutStart.label ? { label: calloutStart.label } : {}),
         })
       )
-      index = pointer
-      continue
-    }
-
-    if (isUnsupportedCalloutStart(line)) {
-      const collected = [line]
-      let pointer = index + 1
-
-      while (pointer < lines.length) {
-        const current = lines[pointer]
-        if (isBlankLine(current)) {
-          collected.push(current)
-          pointer += 1
-          continue
-        }
-
-        const blockquoteText = isBlockquoteLine(current)
-        if (blockquoteText === null) break
-        collected.push(current)
-        pointer += 1
-      }
-
-      content.push(createRawBlockNode(collected.join("\n"), "unsupported-callout"))
       index = pointer
       continue
     }
@@ -731,13 +908,32 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         pointer += 1
       }
 
-      const tableMarkdown = lines.slice(tableStartIndex, pointer).join("\n")
+      const layoutWithAlignment: MarkdownTableLayout | null =
+        hasTableAlignmentMarker(tableSeparatorLine)
+          ? {
+              ...(tableLayout || {}),
+              columnAlignments: parseTableAlignments(tableSeparatorLine),
+            }
+          : tableLayout
 
-      if (hasTableAlignmentMarker(tableSeparatorLine)) {
-        content.push(createRawBlockNode(tableMarkdown, "unsupported-table-alignment"))
-      } else {
-        content.push(createTableNode(rows, tableLayout))
+      content.push(createTableNode(rows, layoutWithAlignment))
+      index = pointer
+      continue
+    }
+
+    const taskListItem = isTaskListItem(line)
+    if (taskListItem) {
+      const items: ChecklistBlockItem[] = []
+      let pointer = index
+
+      while (pointer < lines.length) {
+        const item = isTaskListItem(lines[pointer])
+        if (!item) break
+        items.push(item)
+        pointer += 1
       }
+
+      content.push(createChecklistNode(items))
       index = pointer
       continue
     }
@@ -855,18 +1051,137 @@ const serializeList = (node: JSONContent) => {
     .join("\n")
 }
 
+const serializeChecklistBlock = (attrs: Partial<ChecklistBlockAttrs>) =>
+  (attrs.items || [])
+    .map((item) => `- [${item.checked ? "x" : " "}] ${String(item.text || "").trim()}`)
+    .join("\n")
+
+type TableMatrixEntry = {
+  node: JSONContent
+  hidden: boolean
+  rowIndex: number
+  columnIndex: number
+}
+
+const buildTableMatrix = (rows: JSONContent[]) => {
+  const matrix: Array<Array<TableMatrixEntry | null>> = []
+  let columnCount = 0
+
+  rows.forEach((row, rowIndex) => {
+    matrix[rowIndex] ||= []
+    let columnCursor = 0
+
+    for (const cell of row.content || []) {
+      while (matrix[rowIndex][columnCursor]) {
+        columnCursor += 1
+      }
+
+      const colspan = Math.max(1, Number.parseInt(String(cell.attrs?.colspan || 1), 10) || 1)
+      const rowspan = Math.max(1, Number.parseInt(String(cell.attrs?.rowspan || 1), 10) || 1)
+
+      for (let rowOffset = 0; rowOffset < rowspan; rowOffset += 1) {
+        const targetRowIndex = rowIndex + rowOffset
+        matrix[targetRowIndex] ||= []
+        for (let columnOffset = 0; columnOffset < colspan; columnOffset += 1) {
+          const targetColumnIndex = columnCursor + columnOffset
+          matrix[targetRowIndex][targetColumnIndex] = {
+            node: cell,
+            hidden: rowOffset > 0 || columnOffset > 0,
+            rowIndex: targetRowIndex,
+            columnIndex: targetColumnIndex,
+          }
+          columnCount = Math.max(columnCount, targetColumnIndex + 1)
+        }
+      }
+
+      columnCursor += colspan
+    }
+  })
+
+  const normalizedMatrix = matrix.map((row) =>
+    Array.from({ length: columnCount }, (_, columnIndex) => row[columnIndex] || null)
+  )
+
+  return {
+    matrix: normalizedMatrix,
+    columnCount,
+  }
+}
+
+const serializeTableAlignments = (columnAlignments: Array<MarkdownTableCellAlignment | null>) =>
+  columnAlignments.map((alignment) => {
+    switch (alignment) {
+      case "left":
+        return ":---"
+      case "center":
+        return ":---:"
+      case "right":
+        return "---:"
+      default:
+        return "---"
+    }
+  })
+
 const serializeTable = (node: JSONContent) => {
   const rows = node.content || []
   if (rows.length === 0) return ""
 
-  const layout: MarkdownTableLayout = {
-    columnWidths: rows[0]?.content?.map((cell) => {
-      const width =
-        Array.isArray(cell.attrs?.colwidth) && typeof cell.attrs.colwidth[0] === "number"
-          ? cell.attrs.colwidth[0]
-          : null
+  const { matrix, columnCount } = buildTableMatrix(rows)
+  if (columnCount === 0 || matrix.length === 0) return ""
 
-      return width ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width) : null
+  const cellLayouts: Array<Array<MarkdownTableCellLayout | null>> = matrix.map((row) =>
+    row.map((entry) => {
+      if (!entry) return null
+      if (entry.hidden) return { hidden: true }
+
+      const align =
+        entry.node.attrs?.textAlign === "left" ||
+        entry.node.attrs?.textAlign === "center" ||
+        entry.node.attrs?.textAlign === "right"
+          ? (entry.node.attrs.textAlign as MarkdownTableCellAlignment)
+          : null
+      const backgroundColor =
+        typeof entry.node.attrs?.backgroundColor === "string"
+          ? String(entry.node.attrs.backgroundColor)
+          : null
+      const colspan = Math.max(1, Number.parseInt(String(entry.node.attrs?.colspan || 1), 10) || 1)
+      const rowspan = Math.max(1, Number.parseInt(String(entry.node.attrs?.rowspan || 1), 10) || 1)
+
+      if (!align && !backgroundColor && colspan === 1 && rowspan === 1) {
+        return null
+      }
+
+      return {
+        ...(align ? { align } : {}),
+        ...(backgroundColor ? { backgroundColor } : {}),
+        ...(colspan > 1 ? { colspan } : {}),
+        ...(rowspan > 1 ? { rowspan } : {}),
+      }
+    })
+  )
+
+  const columnAlignments = Array.from({ length: columnCount }, (_, columnIndex) => {
+    for (const row of cellLayouts) {
+      const cellLayout = row[columnIndex]
+      if (cellLayout?.align) return cellLayout.align
+    }
+    return null
+  })
+
+  const layout: MarkdownTableLayout = {
+    columnWidths: Array.from({ length: columnCount }, (_, columnIndex) => {
+      for (const row of matrix) {
+        const entry = row[columnIndex]
+        if (!entry || entry.hidden) continue
+        const width =
+          Array.isArray(entry.node.attrs?.colwidth) && typeof entry.node.attrs.colwidth[0] === "number"
+            ? entry.node.attrs.colwidth[0]
+            : null
+        if (width) {
+          return Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)
+        }
+      }
+      return null
     }),
     rowHeights: rows.map((row) => {
       const height =
@@ -878,17 +1193,19 @@ const serializeTable = (node: JSONContent) => {
         ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, height)
         : null
     }),
+    columnAlignments,
+    cells: cellLayouts,
   }
   const metadataComment = serializeMarkdownTableLayoutComment(layout)
   const serializedRows = normalizeTableRows(
-    rows.map((row) =>
-      (row.content || [])
-        .map((cell) => serializeParagraphLikeNode(cell.content?.[0] || cell))
-        .map(escapePipeText)
+    matrix.map((row) =>
+      row.map((entry) =>
+        escapePipeText(entry && !entry.hidden ? serializeParagraphLikeNode(entry.node.content?.[0] || entry.node) : "")
+      )
     )
   )
   const header = serializedRows[0]
-  const separator = header.map(() => "---")
+  const separator = serializeTableAlignments(columnAlignments)
   const body = serializedRows.slice(1)
 
   const markdownTable = [
@@ -901,7 +1218,7 @@ const serializeTable = (node: JSONContent) => {
 }
 
 const serializeCalloutBlock = (attrs: Partial<CalloutBlockAttrs>) => {
-  const kind = attrs.kind ? CALL_OUT_KIND_LABELS[attrs.kind] : "TIP"
+  const kind = attrs.label?.trim() || (attrs.kind ? CALL_OUT_KIND_LABELS[attrs.kind] : "TIP")
   const title = String(attrs.title || "").trim()
   const header = title ? `> [!${kind}] ${title}` : `> [!${kind}]`
   const bodyLines = String(attrs.body || "").replace(/\r\n?/g, "\n").split("\n")
@@ -922,6 +1239,21 @@ const serializeMermaidBlock = (attrs: Partial<MermaidBlockAttrs>) => {
   return ["```mermaid", source, "```"].join("\n")
 }
 
+const serializeDirectiveBlock = (
+  name: "bookmark" | "embed" | "file",
+  url: string,
+  primaryText: string,
+  secondaryText?: string
+) =>
+  [`:::${name} ${url}`.trimEnd(), primaryText, secondaryText || "", ":::"]
+    .filter((line, index) => index === 0 || line.trim().length > 0 || index === 3)
+    .join("\n")
+
+const serializeFormulaBlock = (attrs: Partial<FormulaBlockAttrs>) => {
+  const formula = String(attrs.formula || "").trim()
+  return ["$$", formula, "$$"].join("\n")
+}
+
 export const serializeNode = (node: JSONContent): string => {
   switch (node.type) {
     case "doc":
@@ -935,6 +1267,8 @@ export const serializeNode = (node: JSONContent): string => {
     case "bulletList":
     case "orderedList":
       return serializeList(node)
+    case "checklistBlock":
+      return serializeChecklistBlock(node.attrs as ChecklistBlockAttrs)
     case "blockquote": {
       const content = (node.content || []).map((child) => serializeNode(child)).join("\n")
       return content
@@ -966,6 +1300,29 @@ export const serializeNode = (node: JSONContent): string => {
       return serializeCalloutBlock(node.attrs as CalloutBlockAttrs)
     case "toggleBlock":
       return serializeToggleBlock(node.attrs as ToggleBlockAttrs)
+    case "bookmarkBlock":
+      return serializeDirectiveBlock(
+        "bookmark",
+        String(node.attrs?.url || ""),
+        String(node.attrs?.title || ""),
+        String(node.attrs?.description || "")
+      )
+    case "embedBlock":
+      return serializeDirectiveBlock(
+        "embed",
+        String(node.attrs?.url || ""),
+        String(node.attrs?.title || ""),
+        String(node.attrs?.caption || "")
+      )
+    case "fileBlock":
+      return serializeDirectiveBlock(
+        "file",
+        String(node.attrs?.url || ""),
+        String(node.attrs?.name || ""),
+        String(node.attrs?.description || "")
+      )
+    case "formulaBlock":
+      return serializeFormulaBlock(node.attrs as FormulaBlockAttrs)
     case "rawMarkdownBlock":
       return String(node.attrs?.markdown || "")
     default:

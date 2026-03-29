@@ -3,10 +3,12 @@ import {
   blue,
   red,
   green,
+  orange,
   grayDark,
   blueDark,
   redDark,
   greenDark,
+  orangeDark,
   indigo,
   indigoDark,
 } from "@radix-ui/colors"
@@ -83,6 +85,7 @@ export const colors = {
     ...blue,
     ...red,
     ...green,
+    ...orange,
     ...semanticLight,
   },
   dark: {
@@ -92,6 +95,7 @@ export const colors = {
     ...blueDark,
     ...redDark,
     ...greenDark,
+    ...orangeDark,
     ...semanticDark,
   },
 }

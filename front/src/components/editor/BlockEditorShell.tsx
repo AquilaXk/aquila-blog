@@ -1,11 +1,10 @@
 import type { Editor as TiptapEditor } from "@tiptap/core"
+import { keyframes } from "@emotion/react"
 import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Table } from "@tiptap/extension-table"
-import TableCell from "@tiptap/extension-table-cell"
-import TableHeader from "@tiptap/extension-table-header"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
 import {
@@ -17,9 +16,16 @@ import {
 } from "react"
 import type { ChangeEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
 import {
+  BookmarkBlock,
   CalloutBlock,
-  EditorTableRow,
+  ChecklistBlock,
   EditorCodeBlock,
+  EditorTableCell,
+  EditorTableHeader,
+  EditorTableRow,
+  EmbedBlock,
+  FileBlock,
+  FormulaBlock,
   getPreferredCodeLanguage,
   InlineColorMark,
   MermaidBlock,
@@ -35,8 +41,13 @@ import {
 } from "./blockDocumentOps"
 import {
   createBlockquoteNode,
+  createBookmarkNode,
   createCalloutNode,
+  createChecklistNode,
   createCodeBlockNode,
+  createEmbedNode,
+  createFileBlockNode,
+  createFormulaNode,
   createHeadingNode,
   createHorizontalRuleNode,
   createMermaidNode,
@@ -126,9 +137,41 @@ type TopLevelBlockHandleState = {
   width: number
 }
 
+type DraggedBlockState =
+  | {
+      sourceIndex: number
+      pointerId: number
+    }
+  | null
+
+type DropIndicatorState =
+  | {
+      visible: boolean
+      insertionIndex: number
+      top: number
+      left: number
+      width: number
+    }
+  | {
+      visible: false
+      insertionIndex: number
+      top: number
+      left: number
+      width: number
+    }
+
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
 
 const compactSlashSearchText = (value: string) => normalizeSlashSearchText(value).replace(/\s+/g, "")
+
+const getSlashSearchTerms = (item: BlockInsertCatalogItem) =>
+  Array.from(
+    new Set(
+      [item.label, item.helper ?? "", item.slashHint ?? "", item.section, ...(item.keywords ?? [])]
+        .map((value) => normalizeSlashSearchText(value))
+        .filter(Boolean)
+    )
+  )
 
 const getSlashActionGlyph = (item: BlockInsertCatalogItem) => {
   switch (item.id) {
@@ -146,6 +189,8 @@ const getSlashActionGlyph = (item: BlockInsertCatalogItem) => {
       return "•"
     case "ordered-list":
       return "1."
+    case "checklist":
+      return "☑"
     case "quote":
       return "❞"
     case "code-block":
@@ -156,6 +201,14 @@ const getSlashActionGlyph = (item: BlockInsertCatalogItem) => {
       return "!"
     case "toggle":
       return "▸"
+    case "bookmark":
+      return "↗"
+    case "embed":
+      return "▶"
+    case "file":
+      return "PDF"
+    case "formula":
+      return "∑"
     case "divider":
       return "—"
     case "image":
@@ -187,6 +240,14 @@ const getSlashMenuContextBonus = (item: BlockInsertCatalogItem, context: SlashMe
     if (item.id === "paragraph") score += 8
     if (item.id === "heading-2") score += 6
     if (item.id === "bullet-list") score += 6
+    if (item.id === "code-block") score += 4
+  }
+
+  if (context.currentBlockType === "heading") {
+    if (item.id === "paragraph") score += 18
+    if (item.id === "bullet-list") score += 12
+    if (item.id === "quote") score += 10
+    if (item.id === "image") score += 8
   }
 
   if (context.previousBlockType === "heading") {
@@ -200,6 +261,7 @@ const getSlashMenuContextBonus = (item: BlockInsertCatalogItem, context: SlashMe
     if (item.id === "bullet-list" || item.id === "ordered-list") score += 16
     if (item.id === "paragraph") score += 14
     if (item.id === "heading-2") score += 8
+    if (item.id === "divider") score += 6
   }
 
   if (
@@ -211,6 +273,18 @@ const getSlashMenuContextBonus = (item: BlockInsertCatalogItem, context: SlashMe
     if (item.id === "divider") score += 18
     if (item.id === "callout") score += 8
     if (item.id === "image") score += 8
+  }
+
+  if (context.previousBlockType === "image") {
+    if (item.id === "paragraph") score += 18
+    if (item.id === "heading-2") score += 10
+    if (item.id === "callout") score += 8
+  }
+
+  if (context.previousBlockType === "calloutBlock" || context.previousBlockType === "toggleBlock") {
+    if (item.id === "paragraph") score += 18
+    if (item.id === "heading-2") score += 10
+    if (item.id === "bullet-list") score += 8
   }
 
   return score
@@ -231,32 +305,38 @@ const getSlashMenuMatchScore = (
   }
 
   const compactQuery = compactSlashSearchText(normalizedQuery)
-  const fields = [item.label, item.helper ?? "", item.keywords?.join(" ") ?? "", item.slashHint ?? ""]
-    .map((value) => normalizeSlashSearchText(value))
-    .filter(Boolean)
+  const contextTieBreaker = Math.round(contextBonus * 0.42)
+  const fields = getSlashSearchTerms(item)
 
   let score = Number.NEGATIVE_INFINITY
+  let keywordIntentBonus = 0
 
   for (const field of fields) {
     const compactField = compactSlashSearchText(field)
 
     if (field === normalizedQuery || compactField === compactQuery) {
-      score = Math.max(score, 900)
+      score = Math.max(score, 1200)
+      if (item.keywords?.some((keyword) => compactSlashSearchText(keyword) === compactQuery)) {
+        keywordIntentBonus = Math.max(keywordIntentBonus, 120)
+      }
       continue
     }
 
     if (field.startsWith(normalizedQuery) || compactField.startsWith(compactQuery)) {
-      score = Math.max(score, 760)
+      score = Math.max(score, 980)
+      if (item.keywords?.some((keyword) => compactSlashSearchText(keyword).startsWith(compactQuery))) {
+        keywordIntentBonus = Math.max(keywordIntentBonus, 72)
+      }
       continue
     }
 
-    if (field.split(/\s+/).some((token) => token.startsWith(normalizedQuery))) {
-      score = Math.max(score, 660)
+    if (field.split(/\s+/).some((token) => compactSlashSearchText(token).startsWith(compactQuery))) {
+      score = Math.max(score, 860)
       continue
     }
 
     if (field.includes(normalizedQuery) || compactField.includes(compactQuery)) {
-      score = Math.max(score, 520)
+      score = Math.max(score, 680)
     }
   }
 
@@ -264,7 +344,7 @@ const getSlashMenuMatchScore = (
     return Number.NEGATIVE_INFINITY
   }
 
-  return score + recentBonus + recommendedBonus + contextBonus
+  return score + recentBonus + recommendedBonus + contextTieBreaker + keywordIntentBonus
 }
 
 type BlockMenuState =
@@ -281,6 +361,7 @@ type SlashMenuState =
       top: number
       from: number
       to: number
+      placement: "top" | "bottom"
     }
   | null
 
@@ -296,6 +377,10 @@ const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"
 const SLASH_MENU_MAX_RECENT_ITEMS = 6
+const SLASH_MENU_EDGE_PADDING_PX = 16
+const SLASH_MENU_VERTICAL_GAP_PX = 12
+const SLASH_MENU_ESTIMATED_WIDTH_PX = 608
+const SLASH_MENU_ESTIMATED_HEIGHT_PX = 560
 
 const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (!node) return false
@@ -307,6 +392,11 @@ const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (
     node.type === "resizableImage" ||
     node.type === "calloutBlock" ||
+    node.type === "checklistBlock" ||
+    node.type === "bookmarkBlock" ||
+    node.type === "embedBlock" ||
+    node.type === "fileBlock" ||
+    node.type === "formulaBlock" ||
     node.type === "toggleBlock" ||
     node.type === "mermaidBlock" ||
     node.type === "rawMarkdownBlock" ||
@@ -393,6 +483,7 @@ const BlockEditorShell = ({
   const [slashMenuState, setSlashMenuState] = useState<SlashMenuState>(null)
   const [recentSlashItemIds, setRecentSlashItemIds] = useState<string[]>([])
   const [isSlashImeComposing, setIsSlashImeComposing] = useState(false)
+  const [slashInteractionMode, setSlashInteractionMode] = useState<"keyboard" | "pointer">("keyboard")
   const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
   const [isInlineColorMenuOpen, setIsInlineColorMenuOpen] = useState(false)
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
@@ -412,6 +503,14 @@ const BlockEditorShell = ({
     mode: "text",
     left: 0,
     top: 0,
+  })
+  const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
+  const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>({
+    visible: false,
+    insertionIndex: 0,
+    top: 0,
+    left: 0,
+    width: 0,
   })
   const [selectionTick, setSelectionTick] = useState(0)
   const initialDocRef = useRef(
@@ -474,6 +573,42 @@ const BlockEditorShell = ({
 
   const getTopLevelBlockElementByIndex = useCallback(
     (blockIndex: number) => getTopLevelBlockElements()[blockIndex] ?? null,
+    [getTopLevelBlockElements]
+  )
+
+  const resolveDropIndicatorByClientY = useCallback(
+    (clientY: number) => {
+      const elements = getTopLevelBlockElements()
+      if (!elements.length) {
+        return {
+          insertionIndex: 0,
+          top: 0,
+          left: 0,
+          width: 0,
+        }
+      }
+
+      const rootRect = elements[0]?.parentElement?.getBoundingClientRect()
+      let insertionIndex = elements.length
+      let top = elements[elements.length - 1].getBoundingClientRect().bottom
+
+      for (let index = 0; index < elements.length; index += 1) {
+        const rect = elements[index].getBoundingClientRect()
+        const midpoint = rect.top + rect.height / 2
+        if (clientY < midpoint) {
+          insertionIndex = index
+          top = rect.top
+          break
+        }
+      }
+
+      return {
+        insertionIndex,
+        top: Math.round(top),
+        left: Math.round(rootRect?.left || elements[0].getBoundingClientRect().left),
+        width: Math.round(rootRect?.width || elements[0].getBoundingClientRect().width),
+      }
+    },
     [getTopLevelBlockElements]
   )
 
@@ -664,12 +799,17 @@ const BlockEditorShell = ({
         cellMinWidth: TABLE_MIN_COLUMN_WIDTH_PX,
       }),
       EditorTableRow,
-      TableHeader,
-      TableCell,
+      EditorTableHeader,
+      EditorTableCell,
       EditorCodeBlock,
       RawMarkdownBlock,
       ResizableImage,
       CalloutBlock,
+      ChecklistBlock,
+      BookmarkBlock,
+      EmbedBlock,
+      FileBlock,
+      FormulaBlock,
       ToggleBlock,
       ...(enableMermaidBlocks ? [MermaidBlock] : []),
     ],
@@ -1022,6 +1162,53 @@ const BlockEditorShell = ({
     )
   }, [insertBlocksAtCursor])
 
+  const insertChecklistBlock = useCallback(() => {
+    insertBlocksAtCursor([createChecklistNode([{ checked: false, text: "할 일" }])], true)
+  }, [insertBlocksAtCursor])
+
+  const insertBookmarkBlock = useCallback(() => {
+    insertBlocksAtCursor(
+      [
+        createBookmarkNode({
+          url: "https://example.com",
+          title: "링크 제목",
+          description: "북마크 설명",
+        }),
+      ],
+      true
+    )
+  }, [insertBlocksAtCursor])
+
+  const insertEmbedBlock = useCallback(() => {
+    insertBlocksAtCursor(
+      [
+        createEmbedNode({
+          url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          title: "임베드 제목",
+          caption: "임베드 캡션",
+        }),
+      ],
+      true
+    )
+  }, [insertBlocksAtCursor])
+
+  const insertFileBlock = useCallback(() => {
+    insertBlocksAtCursor(
+      [
+        createFileBlockNode({
+          url: "https://example.com/files/spec.pdf",
+          name: "spec.pdf",
+          description: "첨부 설명",
+        }),
+      ],
+      true
+    )
+  }, [insertBlocksAtCursor])
+
+  const insertFormulaBlock = useCallback(() => {
+    insertBlocksAtCursor([createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" })], true)
+  }, [insertBlocksAtCursor])
+
   const insertTableBlock = useCallback(() => {
     if (editor && isTableSelectionActive(editor)) return
     insertBlocksAtCursor(
@@ -1077,6 +1264,19 @@ const BlockEditorShell = ({
     },
     [editor]
   )
+
+  const updateActiveTableCellAttrs = useCallback(
+    (attrs: Record<string, unknown>) => {
+      if (!editor) return
+      const cellNodeType = editor.isActive("tableHeader") ? "tableHeader" : "tableCell"
+      editor.chain().focus().updateAttributes(cellNodeType, attrs).run()
+    },
+    [editor]
+  )
+
+  const activeTableCellNodeType =
+    editor?.isActive("tableHeader") ?? false ? "tableHeader" : "tableCell"
+  const activeTableCellAttrs = editor?.getAttributes(activeTableCellNodeType) || {}
 
   const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -1141,6 +1341,35 @@ const BlockEditorShell = ({
       createToggleNode({
         title: "더 보기",
         body: "토글 내부 본문을 입력하세요.",
+      })
+
+    const createChecklistTemplate = () =>
+      createChecklistNode([{ checked: false, text: "할 일" }])
+
+    const createBookmarkTemplate = () =>
+      createBookmarkNode({
+        url: "https://example.com",
+        title: "링크 제목",
+        description: "북마크 설명",
+      })
+
+    const createEmbedTemplate = () =>
+      createEmbedNode({
+        url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        title: "임베드 제목",
+        caption: "임베드 캡션",
+      })
+
+    const createFileTemplate = () =>
+      createFileBlockNode({
+        url: "https://example.com/files/spec.pdf",
+        name: "spec.pdf",
+        description: "첨부 설명",
+      })
+
+    const createFormulaTemplate = () =>
+      createFormulaNode({
+        formula: "\\int_0^1 x^2 \\, dx",
       })
 
     return [
@@ -1225,6 +1454,20 @@ const BlockEditorShell = ({
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createOrderedListNode(["항목"])])),
       },
       {
+        id: "checklist",
+        label: "체크리스트",
+        helper: "체크 가능한 작업 목록",
+        section: "basic",
+        keywords: ["checklist", "todo", "task", "체크", "할일"],
+        slashHint: "☑",
+        recommended: true,
+        quickInsert: true,
+        toolbarMore: true,
+        insertAtCursor: insertChecklistBlock,
+        insertAtBlock: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createChecklistTemplate()])),
+      },
+      {
         id: "quote",
         label: "인용문",
         helper: "본문 인용",
@@ -1294,6 +1537,57 @@ const BlockEditorShell = ({
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createToggleTemplate()])),
       },
       {
+        id: "bookmark",
+        label: "북마크",
+        helper: "외부 링크 카드",
+        section: "structure",
+        keywords: ["bookmark", "link", "북마크", "링크"],
+        slashHint: "↗",
+        quickInsert: true,
+        toolbarMore: true,
+        insertAtCursor: insertBookmarkBlock,
+        insertAtBlock: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBookmarkTemplate()])),
+      },
+      {
+        id: "embed",
+        label: "임베드",
+        helper: "영상/외부 콘텐츠",
+        section: "media",
+        keywords: ["embed", "video", "youtube", "임베드"],
+        slashHint: "▶",
+        quickInsert: true,
+        toolbarMore: true,
+        insertAtCursor: insertEmbedBlock,
+        insertAtBlock: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createEmbedTemplate()])),
+      },
+      {
+        id: "file",
+        label: "파일",
+        helper: "다운로드 링크 블록",
+        section: "media",
+        keywords: ["file", "download", "첨부", "파일"],
+        slashHint: "PDF",
+        toolbarMore: true,
+        insertAtCursor: insertFileBlock,
+        insertAtBlock: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createFileTemplate()])),
+      },
+      {
+        id: "formula",
+        label: "수식",
+        helper: "LaTeX 스타일 블록 수식",
+        section: "structure",
+        keywords: ["formula", "math", "latex", "수식"],
+        slashHint: "∑",
+        quickInsert: true,
+        toolbarMore: true,
+        insertAtCursor: insertFormulaBlock,
+        insertAtBlock: (blockIndex) =>
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createFormulaTemplate()])),
+      },
+      {
         id: "divider",
         label: "구분선",
         helper: "섹션 구분",
@@ -1352,8 +1646,13 @@ const BlockEditorShell = ({
     focusEditor,
     insertBlocksAtCursor,
     insertBlocksAtIndex,
+    insertBookmarkBlock,
     insertCalloutBlock,
+    insertChecklistBlock,
     insertCodeBlock,
+    insertEmbedBlock,
+    insertFileBlock,
+    insertFormulaBlock,
     insertMermaidBlock,
     insertTableBlock,
     insertToggleBlock,
@@ -1490,7 +1789,7 @@ const BlockEditorShell = ({
   )
 
   const resolveSlashMenuState = useCallback(() => {
-    if (!editor) return null
+    if (!editor || typeof window === "undefined") return null
 
     const selection = editor.state.selection
 
@@ -1512,25 +1811,32 @@ const BlockEditorShell = ({
 
     const slashOffset = (match.index ?? 0) + match[1].length
     const coords = editor.view.coordsAtPos(selection.from)
-    const viewportPadding = 16
-    const estimatedMenuWidth = Math.min(608, window.innerWidth - viewportPadding * 2)
-    const estimatedMenuHeight = Math.min(window.innerHeight * 0.62, 640)
+    const viewportPadding = SLASH_MENU_EDGE_PADDING_PX
+    const estimatedMenuWidth = Math.min(SLASH_MENU_ESTIMATED_WIDTH_PX, window.innerWidth - viewportPadding * 2)
+    const estimatedMenuHeight = Math.min(
+      SLASH_MENU_ESTIMATED_HEIGHT_PX,
+      Math.max(320, window.innerHeight - viewportPadding * 2)
+    )
+    const spaceBelow = window.innerHeight - coords.bottom - viewportPadding
+    const spaceAbove = coords.top - viewportPadding
+    const placeAbove = spaceBelow < 280 && spaceAbove > spaceBelow + 48
     const nextLeft = Math.min(
       Math.max(coords.left, viewportPadding),
       Math.max(viewportPadding, window.innerWidth - estimatedMenuWidth - viewportPadding)
     )
-    const nextTop = Math.min(
-      coords.bottom + 12,
-      Math.max(viewportPadding, window.innerHeight - estimatedMenuHeight - viewportPadding)
-    )
+    const rawTop = placeAbove
+      ? coords.top - estimatedMenuHeight - SLASH_MENU_VERTICAL_GAP_PX
+      : coords.bottom + SLASH_MENU_VERTICAL_GAP_PX
+    const nextTop = Math.min(rawTop, Math.max(viewportPadding, window.innerHeight - estimatedMenuHeight - viewportPadding))
 
     return {
       query: match[2] ?? "",
       menuState: {
         left: Math.round(nextLeft),
-        top: Math.round(nextTop),
+        top: Math.round(Math.max(viewportPadding, nextTop)),
         from: selection.$from.start() + slashOffset,
         to: selection.from,
+        placement: placeAbove ? "top" : "bottom",
       } satisfies Exclude<SlashMenuState, null>,
     }
   }, [editor])
@@ -1542,6 +1848,7 @@ const BlockEditorShell = ({
         setSlashMenuState(null)
         setSlashQuery("")
         setSelectedSlashIndex(0)
+        setSlashInteractionMode("keyboard")
         return
       }
 
@@ -1620,15 +1927,25 @@ const BlockEditorShell = ({
     active:
       item.id === "ordered-list"
         ? editor?.isActive("orderedList") ?? false
+        : item.id === "checklist"
+          ? editor?.isActive("checklistBlock") ?? false
         : item.id === "table"
           ? editor?.isActive("table") ?? false
           : item.id === "callout"
             ? editor?.isActive("calloutBlock") ?? false
             : item.id === "toggle"
               ? editor?.isActive("toggleBlock") ?? false
-              : item.id === "mermaid"
-                ? editor?.isActive("mermaidBlock") ?? false
-                : false,
+              : item.id === "bookmark"
+                ? editor?.isActive("bookmarkBlock") ?? false
+                : item.id === "embed"
+                  ? editor?.isActive("embedBlock") ?? false
+                  : item.id === "file"
+                    ? editor?.isActive("fileBlock") ?? false
+                    : item.id === "formula"
+                      ? editor?.isActive("formulaBlock") ?? false
+                : item.id === "mermaid"
+                  ? editor?.isActive("mermaidBlock") ?? false
+                  : false,
     disabled: item.disabled,
   }))
 
@@ -1637,30 +1954,41 @@ const BlockEditorShell = ({
 
     if (!flatSlashEntries.length && event.key === "Escape") {
       event.preventDefault()
+      setSlashInteractionMode("keyboard")
       closeSlashMenu(true)
       return
     }
 
     if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
       event.preventDefault()
-      setSelectedSlashIndex((prev) => Math.min(prev + 1, Math.max(flatSlashEntries.length - 1, 0)))
+      setSlashInteractionMode("keyboard")
+      setSelectedSlashIndex((prev) => {
+        if (!flatSlashEntries.length) return 0
+        return (prev + 1) % flatSlashEntries.length
+      })
       return
     }
 
     if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
       event.preventDefault()
-      setSelectedSlashIndex((prev) => Math.max(prev - 1, 0))
+      setSlashInteractionMode("keyboard")
+      setSelectedSlashIndex((prev) => {
+        if (!flatSlashEntries.length) return 0
+        return (prev - 1 + flatSlashEntries.length) % flatSlashEntries.length
+      })
       return
     }
 
     if (event.key === "Home") {
       event.preventDefault()
+      setSlashInteractionMode("keyboard")
       setSelectedSlashIndex(0)
       return
     }
 
     if (event.key === "End") {
       event.preventDefault()
+      setSlashInteractionMode("keyboard")
       setSelectedSlashIndex(Math.max(flatSlashEntries.length - 1, 0))
       return
     }
@@ -1673,11 +2001,25 @@ const BlockEditorShell = ({
       return
     }
 
+    if (event.key === "Backspace" && !slashQuery && slashMenuState && editor) {
+      event.preventDefault()
+      setSlashInteractionMode("keyboard")
+      editor.chain().focus().deleteRange({ from: slashMenuState.from, to: slashMenuState.to }).run()
+      closeSlashMenu()
+      return
+    }
+
     if (event.key === "Escape") {
       event.preventDefault()
+      setSlashInteractionMode("keyboard")
       closeSlashMenu(true)
     }
-  }, [closeSlashMenu, executeSlashCatalogAction, flatSlashEntries, selectedSlashIndex])
+  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, selectedSlashIndex, slashMenuState, slashQuery])
+
+  const handleSlashActionPointerMove = useCallback((flatIndex: number) => {
+    setSlashInteractionMode((prev) => (prev === "pointer" ? prev : "pointer"))
+    setSelectedSlashIndex((prev) => (prev === flatIndex ? prev : flatIndex))
+  }, [])
 
   const handleSlashMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     handleSlashMenuKeyboard(event)
@@ -1708,7 +2050,7 @@ const BlockEditorShell = ({
 
     const closeMenu = (event: PointerEvent | KeyboardEvent) => {
       if (event instanceof KeyboardEvent) {
-        if (!["ArrowDown", "ArrowUp", "Tab", "Home", "End", "Enter", "Escape"].includes(event.key)) return
+        if (!["ArrowDown", "ArrowUp", "Tab", "Home", "End", "Enter", "Escape", "Backspace"].includes(event.key)) return
         handleSlashMenuKeyboard(event)
         return
       }
@@ -1810,6 +2152,49 @@ const BlockEditorShell = ({
     },
     [closeBlockMenus, mutateTopLevelBlocks]
   )
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !draggedBlockState) return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const nextIndicator = resolveDropIndicatorByClientY(event.clientY)
+      setDropIndicatorState({
+        visible: true,
+        ...nextIndicator,
+      })
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== draggedBlockState.pointerId) return
+
+      const nextIndicator = resolveDropIndicatorByClientY(event.clientY)
+      const sourceIndex = draggedBlockState.sourceIndex
+      const normalizedInsertionIndex =
+        nextIndicator.insertionIndex > sourceIndex
+          ? nextIndicator.insertionIndex
+          : nextIndicator.insertionIndex
+
+      mutateTopLevelBlocks(
+        (doc) => moveTopLevelBlockToInsertionIndex(doc, sourceIndex, normalizedInsertionIndex),
+        Math.max(0, Math.min(nextIndicator.insertionIndex, ((editorRef.current?.getJSON() as BlockEditorDoc)?.content?.length || 1) - 1))
+      )
+
+      setDraggedBlockState(null)
+      setDropIndicatorState((prev) => ({ ...prev, visible: false }))
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerUp)
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+    }
+  }, [draggedBlockState, mutateTopLevelBlocks, resolveDropIndicatorByClientY])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -2079,10 +2464,17 @@ const BlockEditorShell = ({
       {isSlashMenuOpen ? (
         <SlashMenu
           data-testid="slash-menu"
+          data-placement={slashMenuState?.placement ?? "bottom"}
+          data-input-mode={slashInteractionMode}
           ref={slashMenuRef}
           role="dialog"
           aria-label="블록 삽입 메뉴"
           onKeyDown={handleSlashMenuKeyDown}
+          onPointerMove={() => {
+            if (slashInteractionMode !== "pointer") {
+              setSlashInteractionMode("pointer")
+            }
+          }}
           style={
             slashMenuState
               ? {
@@ -2099,7 +2491,11 @@ const BlockEditorShell = ({
                 문단 안에서 <code>/검색어</code>를 입력하면 자동으로 필터링됩니다.
               </span>
             </SlashMenuTitleGroup>
-            <SlashMenuCloseButton type="button" onClick={() => closeSlashMenu(true)}>
+            <SlashMenuCloseButton
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => closeSlashMenu(true)}
+            >
               닫기
             </SlashMenuCloseButton>
           </SlashMenuHeader>
@@ -2112,6 +2508,7 @@ const BlockEditorShell = ({
             <SlashMenuHintList>
               <SlashMenuHintPill>tab 이동</SlashMenuHintPill>
               <SlashMenuHintPill>↵ 삽입</SlashMenuHintPill>
+              <SlashMenuHintPill>⌫ 제거</SlashMenuHintPill>
               <SlashMenuHintPill>esc 닫기</SlashMenuHintPill>
             </SlashMenuHintList>
           </SlashMenuStatusRow>
@@ -2130,8 +2527,10 @@ const BlockEditorShell = ({
                           type="button"
                           data-slash-action-id={action.id}
                           data-active={flatIndex === selectedSlashIndex}
+                          data-input-mode={slashInteractionMode}
                           disabled={disabled || action.disabled}
-                          onMouseEnter={() => setSelectedSlashIndex(flatIndex)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onPointerMove={() => handleSlashActionPointerMove(flatIndex)}
                           onClick={() => {
                             if (action.disabled) return
                             void executeSlashCatalogAction(action)
@@ -2233,6 +2632,63 @@ const BlockEditorShell = ({
                 <ToolbarButton type="button" data-active={editor.isActive("tableHeader")} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
                   헤더
                 </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  onClick={() => editor.chain().focus().mergeCells().run()}
+                >
+                  셀 병합
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  onClick={() => editor.chain().focus().splitCell().run()}
+                >
+                  셀 분리
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.textAlign === "left"}
+                  onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
+                >
+                  좌측
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.textAlign === "center"}
+                  onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
+                >
+                  가운데
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.textAlign === "right"}
+                  onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
+                >
+                  우측
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.backgroundColor === "rgba(96, 165, 250, 0.16)"}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ backgroundColor: "rgba(96, 165, 250, 0.16)" })
+                  }
+                >
+                  파랑
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  data-active={activeTableCellAttrs.backgroundColor === "rgba(74, 222, 128, 0.16)"}
+                  onClick={() =>
+                    updateActiveTableCellAttrs({ backgroundColor: "rgba(74, 222, 128, 0.16)" })
+                  }
+                >
+                  초록
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
+                >
+                  배경 해제
+                </ToolbarButton>
                 <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteRow().run()}>
                   행 삭제
                 </ToolbarButton>
@@ -2255,6 +2711,26 @@ const BlockEditorShell = ({
           >
             <BlockHandleButton
               type="button"
+              aria-label="블록 이동"
+              data-variant="drag"
+              onPointerDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                const indicator = resolveDropIndicatorByClientY(event.clientY)
+                setDraggedBlockState({
+                  sourceIndex: blockHandleState.blockIndex,
+                  pointerId: event.pointerId,
+                })
+                setDropIndicatorState({
+                  visible: true,
+                  ...indicator,
+                })
+              }}
+            >
+              ⋮⋮
+            </BlockHandleButton>
+            <BlockHandleButton
+              type="button"
               aria-label="삽입"
               onClick={(event) => {
                 event.stopPropagation()
@@ -2264,6 +2740,15 @@ const BlockEditorShell = ({
               +
             </BlockHandleButton>
           </BlockHandleRail>
+        ) : null}
+        {dropIndicatorState.visible ? (
+          <BlockDropIndicator
+            style={{
+              left: `${dropIndicatorState.left}px`,
+              top: `${dropIndicatorState.top}px`,
+              width: `${dropIndicatorState.width}px`,
+            }}
+          />
         ) : null}
         {isCoarsePointer && blockHandleState.visible ? (
           <MobileBlockActionBar
@@ -2690,6 +3175,30 @@ const HiddenFileInput = styled.input`
   display: none;
 `
 
+const slashMenuFadeInFromBottom = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+`
+
+const slashMenuFadeInFromTop = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+`
+
 const SlashMenu = styled.div`
   position: fixed;
   z-index: 70;
@@ -2704,6 +3213,21 @@ const SlashMenu = styled.div`
     theme.scheme === "dark" ? "rgba(18, 21, 26, 0.98)" : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
     theme.scheme === "dark" ? "0 24px 48px rgba(0, 0, 0, 0.22)" : "0 24px 48px rgba(15, 23, 42, 0.14)"};
+  backdrop-filter: blur(18px);
+  transform-origin: top left;
+  animation: ${slashMenuFadeInFromBottom} 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: left 120ms cubic-bezier(0.2, 0.8, 0.2, 1), top 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 140ms ease, border-color 140ms ease;
+  will-change: left, top, transform, opacity;
+
+  &[data-placement="top"] {
+    transform-origin: bottom left;
+    animation-name: ${slashMenuFadeInFromTop};
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
 `
 
 const SlashMenuHeader = styled.div`
@@ -2711,6 +3235,7 @@ const SlashMenuHeader = styled.div`
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
+  padding-bottom: 0.1rem;
 `
 
 const SlashMenuTitleGroup = styled.div`
@@ -2736,11 +3261,25 @@ const SlashMenuTitleGroup = styled.div`
 `
 
 const SlashMenuCloseButton = styled.button`
-  border: 0;
-  background: transparent;
+  min-height: 1.9rem;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.52)" : "rgba(255, 255, 255, 0.9)"};
   color: var(--color-gray10);
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.76rem;
+  font-weight: 800;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.16)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(24, 29, 38, 0.82)" : "rgba(248, 250, 252, 0.96)"};
+    color: var(--color-gray12);
+  }
 `
 
 const SlashQuerySummary = styled.div`
@@ -2807,11 +3346,29 @@ const SlashMenuBody = styled.div`
   max-height: min(62vh, 32rem);
   overflow-y: auto;
   padding-right: 0.15rem;
+
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.28)" : "rgba(100, 116, 139, 0.24)"};
+  }
 `
 
 const SlashMenuSection = styled.section`
   display: grid;
   gap: 0.42rem;
+
+  & + & {
+    padding-top: 0.28rem;
+    border-top: 1px solid ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(15, 23, 42, 0.05)"};
+  }
 `
 
 const SlashMenuSectionLabel = styled.strong`
@@ -2889,6 +3446,7 @@ const SlashActionHint = styled.span`
 `
 
 const SlashActionButton = styled.button`
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -2898,16 +3456,54 @@ const SlashActionButton = styled.button`
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) =>
     theme.scheme === "dark" ? "rgba(18, 21, 26, 0.48)" : "rgba(255, 255, 255, 0.96)"};
-  padding: 0.8rem 0.9rem;
+  padding: 0.8rem 0.9rem 0.8rem 1.05rem;
   text-align: left;
-  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+
+  &:hover:not(:disabled),
+  &:focus-visible:not(:disabled) {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.16)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(24, 29, 38, 0.74)" : "rgba(248, 250, 252, 0.98)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 12px 24px rgba(0, 0, 0, 0.14)" : "0 10px 22px rgba(15, 23, 42, 0.06)"};
+  }
 
   &[data-active="true"] {
     border-color: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(96, 165, 250, 0.42)" : "rgba(59, 130, 246, 0.28)"};
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(30, 41, 59, 0.7)" : "rgba(239, 246, 255, 0.92)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 14px 28px rgba(15, 23, 42, 0.22)" : "0 12px 24px rgba(59, 130, 246, 0.12)"};
     transform: translateY(-1px);
+  }
+
+  &[data-active="true"][data-input-mode="keyboard"] {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.48)" : "rgba(59, 130, 246, 0.32)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "0 16px 30px rgba(15, 23, 42, 0.24), inset 0 0 0 1px rgba(96, 165, 250, 0.18)"
+        : "0 14px 26px rgba(59, 130, 246, 0.14), inset 0 0 0 1px rgba(59, 130, 246, 0.12)"};
+  }
+
+  &[data-active="true"][data-input-mode="pointer"] {
+    transform: translateY(-0.5px);
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 12px 24px rgba(15, 23, 42, 0.18)" : "0 10px 22px rgba(59, 130, 246, 0.1)"};
+  }
+
+  &[data-active="true"]::before {
+    content: "";
+    position: absolute;
+    left: 0.42rem;
+    top: 0.52rem;
+    bottom: 0.52rem;
+    width: 3px;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.blue8};
   }
 
   &[data-active="true"] ${SlashActionIcon} {
@@ -2920,6 +3516,10 @@ const SlashActionButton = styled.button`
   &:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 `
 
@@ -3141,6 +3741,21 @@ const BlockHandleButton = styled.button`
   font-weight: 800;
   box-shadow: ${({ theme }) =>
     theme.scheme === "dark" ? "0 8px 14px rgba(0, 0, 0, 0.12)" : "0 8px 14px rgba(15, 23, 42, 0.08)"};
+
+  &[data-variant="drag"] {
+    cursor: grab;
+    letter-spacing: -0.1em;
+  }
+`
+
+const BlockDropIndicator = styled.div`
+  position: fixed;
+  z-index: 54;
+  height: 3px;
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.blue8};
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+  pointer-events: none;
 `
 
 const MobileBlockActionBar = styled.div`

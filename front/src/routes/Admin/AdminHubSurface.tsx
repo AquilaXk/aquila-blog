@@ -19,13 +19,19 @@ export type AdminHubSecondaryLink = {
   cta: string
 }
 
+export type AdminHubSummaryItem = {
+  label: string
+  value: string
+  tone?: "neutral" | "good" | "warn"
+}
+
 type Props = {
   displayName: string
   displayNameInitial: string
   profileSrc?: string
   profileRole?: string
   profileBio?: string
-  profileUpdatedText: string
+  summaryItems: AdminHubSummaryItem[]
   primaryAction: AdminHubPrimaryAction
   secondaryLinks: AdminHubSecondaryLink[]
 }
@@ -36,7 +42,7 @@ const AdminHubSurface = ({
   profileSrc = "",
   profileRole,
   profileBio,
-  profileUpdatedText,
+  summaryItems,
   primaryAction,
   secondaryLinks,
 }: Props) => {
@@ -47,18 +53,12 @@ const AdminHubSurface = ({
           <h1>관리자 허브</h1>
         </HeaderCopy>
         <SummaryRail aria-label="관리자 상태 요약">
-          <StatusItem>
-            <span>현재 계정</span>
-            <strong>{displayName}</strong>
-          </StatusItem>
-          <StatusItem>
-            <span>역할</span>
-            <strong>{profileRole || "미설정"}</strong>
-          </StatusItem>
-          <StatusItem>
-            <span>마지막 업데이트</span>
-            <strong>{profileUpdatedText}</strong>
-          </StatusItem>
+          {summaryItems.map((item) => (
+            <StatusItem key={`${item.label}-${item.value}`} data-tone={item.tone || "neutral"}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </StatusItem>
+          ))}
         </SummaryRail>
       </HeaderPanel>
 
@@ -160,7 +160,7 @@ const HeaderCopy = styled.div`
 
 const SummaryRail = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: 0.78rem;
 
   @media (max-width: 900px) {
@@ -180,6 +180,22 @@ const StatusItem = styled.div`
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 0 0 1px rgba(59, 130, 246, 0.08),
     0 16px 34px rgba(17, 24, 39, 0.18);
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 0 0 1px rgba(74, 222, 128, 0.08),
+      0 16px 34px rgba(17, 24, 39, 0.18);
+  }
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 0 0 1px rgba(251, 191, 36, 0.08),
+      0 16px 34px rgba(17, 24, 39, 0.18);
+  }
 
   span {
     color: ${({ theme }) => theme.colors.gray10};

@@ -96,6 +96,42 @@ const WORKSPACE_SECTIONS: {
   },
 ]
 
+const pickWorkspaceSectionContent = (
+  content: ProfileWorkspaceContent,
+  sectionId: WorkspaceSectionId
+) => {
+  switch (sectionId) {
+    case "identity":
+      return {
+        profileImageUrl: content.profileImageUrl,
+        profileRole: content.profileRole,
+        profileBio: content.profileBio,
+      }
+    case "about":
+      return {
+        aboutRole: content.aboutRole,
+        aboutBio: content.aboutBio,
+        aboutSections: content.aboutSections,
+      }
+    case "home":
+      return {
+        blogTitle: content.blogTitle,
+        homeIntroTitle: content.homeIntroTitle,
+        homeIntroDescription: content.homeIntroDescription,
+      }
+    case "links":
+      return {
+        serviceLinks: content.serviceLinks,
+        contactLinks: content.contactLinks,
+      }
+  }
+}
+
+const serializeWorkspaceSection = (
+  content: ProfileWorkspaceContent,
+  sectionId: WorkspaceSectionId
+) => JSON.stringify(pickWorkspaceSectionContent(normalizeProfileWorkspaceContent(content), sectionId))
+
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms)
@@ -415,6 +451,27 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     () => serializeProfileWorkspaceContent(remoteDraft) !== serializeProfileWorkspaceContent(publishedSnapshot),
     [publishedSnapshot, remoteDraft]
   )
+  const sectionStateMap = useMemo(() => {
+    return WORKSPACE_SECTIONS.reduce<Record<WorkspaceSectionId, { dirty: boolean; publishedDiff: boolean }>>(
+      (acc, section) => {
+        acc[section.id] = {
+          dirty:
+            serializeWorkspaceSection(draft, section.id) !==
+            serializeWorkspaceSection(remoteDraft, section.id),
+          publishedDiff:
+            serializeWorkspaceSection(remoteDraft, section.id) !==
+            serializeWorkspaceSection(publishedSnapshot, section.id),
+        }
+        return acc
+      },
+      {
+        identity: { dirty: false, publishedDiff: false },
+        about: { dirty: false, publishedDiff: false },
+        home: { dirty: false, publishedDiff: false },
+        links: { dirty: false, publishedDiff: false },
+      }
+    )
+  }, [draft, publishedSnapshot, remoteDraft])
 
   useEffect(() => {
     if (typeof window === "undefined" || !sessionMember || !hasUnsavedChanges) return
@@ -942,6 +999,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   )
   const canPublish = !hasUnsavedChanges && hasPublishedDiff && loadingKey !== "publish" && loadingKey !== "save"
   const canSave = hasUnsavedChanges && loadingKey !== "save"
+  const activeSectionState = sectionStateMap[activeSection]
 
   const renderActiveSection = () => {
     switch (activeSection) {
@@ -1385,6 +1443,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
             onClick={() => setActiveSection(section.id)}
           >
             {section.label}
+            {sectionStateMap[section.id].dirty ? <SectionStateDot data-tone="dirty" aria-hidden="true" /> : null}
           </SectionSwitchButton>
         ))}
       </MobileSectionRail>
@@ -1398,7 +1457,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
               data-active={activeSection === section.id}
               onClick={() => setActiveSection(section.id)}
             >
-              {section.label}
+              <span>{section.label}</span>
+              {sectionStateMap[section.id].dirty ? <SectionStateDot data-tone="dirty" aria-hidden="true" /> : null}
+              {!sectionStateMap[section.id].dirty && sectionStateMap[section.id].publishedDiff ? (
+                <SectionStateDot data-tone="published" aria-hidden="true" />
+              ) : null}
             </SectionRailButton>
           ))}
         </SectionRail>
@@ -1406,7 +1469,16 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         <EditorColumn>
           <EditorSurface>
             <EditorPaneHeader>
-              <h2>{activeSectionMeta.label}</h2>
+              <div className="titleRow">
+                <h2>{activeSectionMeta.label}</h2>
+                {activeSectionState.dirty ? (
+                  <SectionStateBadge data-tone="dirty">저장 안 됨</SectionStateBadge>
+                ) : activeSectionState.publishedDiff ? (
+                  <SectionStateBadge data-tone="published">공개본과 차이 있음</SectionStateBadge>
+                ) : (
+                  <SectionStateBadge data-tone="synced">동기화됨</SectionStateBadge>
+                )}
+              </div>
               {activeSectionMeta.description ? <p>{activeSectionMeta.description}</p> : null}
             </EditorPaneHeader>
             {renderActiveSection()}
@@ -1841,6 +1913,10 @@ const MobileSectionRail = styled.div`
 `
 
 const SectionSwitchButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
   min-height: 38px;
   border-radius: 12px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
@@ -1890,6 +1966,9 @@ const SectionRail = styled.nav`
 `
 
 const SectionRailButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
   text-align: left;
   padding: 0.82rem 0.9rem 0.82rem 1rem;
   border-radius: 14px;
@@ -1912,6 +1991,22 @@ const SectionRailButton = styled.button`
   }
 `
 
+const SectionStateDot = styled.span`
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: ${({ theme }) => theme.colors.gray7};
+  flex: 0 0 auto;
+
+  &[data-tone="dirty"] {
+    background: ${({ theme }) => theme.colors.orange7};
+  }
+
+  &[data-tone="published"] {
+    background: ${({ theme }) => theme.colors.blue8};
+  }
+`
+
 const EditorColumn = styled.div`
   display: grid;
   gap: 0.8rem;
@@ -1922,6 +2017,13 @@ const EditorPaneHeader = styled.div`
   gap: 0.22rem;
   padding-bottom: 0.95rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+
+  .titleRow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
 
   h2 {
     margin: 0;
@@ -1935,6 +2037,39 @@ const EditorPaneHeader = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.86rem;
     line-height: 1.55;
+  }
+`
+
+const SectionStateBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.8rem;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  color: ${({ theme }) => theme.colors.gray10};
+  background: ${({ theme }) => theme.colors.gray2};
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+
+  &[data-tone="dirty"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+    color: ${({ theme }) => theme.colors.orange10};
+    background: ${({ theme }) => theme.colors.orange2};
+  }
+
+  &[data-tone="published"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    color: ${({ theme }) => theme.colors.blue10};
+    background: ${({ theme }) => theme.colors.blue2};
+  }
+
+  &[data-tone="synced"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+    color: ${({ theme }) => theme.colors.green10};
+    background: ${({ theme }) => theme.colors.green2};
   }
 `
 

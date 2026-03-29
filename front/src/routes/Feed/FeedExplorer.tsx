@@ -371,6 +371,16 @@ const getSearchDebounceMs = (value: string) => {
   return 240
 }
 
+const formatRestoreSavedAtLabel = (savedAt: number) => {
+  if (!Number.isFinite(savedAt) || savedAt <= 0) return ""
+  const date = new Date(savedAt)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 const useDebouncedValue = (value: string, pause = false) => {
   const [debounced, setDebounced] = useState(value)
   const delayMs = getSearchDebounceMs(value)
@@ -392,6 +402,7 @@ const FeedExplorer = () => {
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
   const [isComposing, setIsComposing] = useState(false)
+  const [restoreNotice, setRestoreNotice] = useState<{ savedAt: number; loadedPages: number } | null>(null)
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const restoreStateRef = useRef<FeedExplorerRestoreState | null>(null)
@@ -473,10 +484,17 @@ const FeedExplorer = () => {
     if (restored.tag !== activeTag) return
 
     restoreStateRef.current = restored
+    setRestoreNotice({
+      savedAt: restored.savedAt,
+      loadedPages: restored.loadedPages,
+    })
     restoreTargetPagesRef.current = Math.min(
       resolveRestorePageCap(),
       Math.max(1, restored.loadedPages)
     )
+    if (restored.q.trim().length > 0) {
+      setQ(restored.q)
+    }
 
     const restoredSnapshot = parseFeedExplorerRestoreSnapshot(
       window.sessionStorage.getItem(restoreSnapshotStorageKey)
@@ -624,6 +642,24 @@ const FeedExplorer = () => {
   }, [persistFeedExplorerState, router.events])
 
   useEffect(() => {
+    const restored = restoreStateRef.current
+    if (!restored) {
+      setRestoreNotice(null)
+      return
+    }
+
+    const activeTag = currentTag || ""
+    if (restored.tag !== activeTag) {
+      setRestoreNotice(null)
+      return
+    }
+
+    if (q.trim().length > 0 && q.trim() !== restored.q.trim()) {
+      setRestoreNotice(null)
+    }
+  }, [currentTag, q])
+
+  useEffect(() => {
     const restoreState = restoreStateRef.current
     if (!restoreState || hasRestoredScrollRef.current) return
 
@@ -696,9 +732,22 @@ const FeedExplorer = () => {
     if (hasTagFilter && currentTag) parts.push(`태그 "${currentTag}"`)
     return parts.join(" · ")
   }, [currentTag, hasFilter, hasQueryFilter, hasTagFilter, normalizedQuery])
+  const restoreSummaryLabel = useMemo(() => {
+    if (!restoreNotice) return ""
+    const parts = [`이전 탐색 ${restoreNotice.loadedPages}페이지 복구`]
+    const timeLabel = formatRestoreSavedAtLabel(restoreNotice.savedAt)
+    if (timeLabel) parts.push(timeLabel)
+    return parts.join(" · ")
+  }, [restoreNotice])
+  const contextStatusLabel = useMemo(() => {
+    if (isInitialLoading) return hasFilter ? "검색 결과를 불러오는 중..." : "피드를 불러오는 중..."
+    if (restoreSummaryLabel) return restoreSummaryLabel
+    return ""
+  }, [hasFilter, isInitialLoading, restoreSummaryLabel])
 
   const handleClearFilters = useCallback(() => {
     setQ("")
+    setRestoreNotice(null)
     if (!currentTag) return
     const { category: _deprecatedCategory, ...restQuery } = router.query
     startTransition(() => {
@@ -735,12 +784,24 @@ const FeedExplorer = () => {
             <div className="contextMain">
               <strong className="contextCount">{hasFilter ? `${resultCount}개` : `피드 ${resultCount}개`}</strong>
               {hasFilter && <span className="filterSummary">{filterSummary}</span>}
+              {contextStatusLabel ? (
+                <span className="restoreBadge" data-loading={isInitialLoading ? "true" : "false"}>
+                  {contextStatusLabel}
+                </span>
+              ) : null}
             </div>
-            {hasFilter && (
-              <button type="button" className="resetButton" onClick={handleClearFilters}>
-                초기화
-              </button>
-            )}
+            <div className="contextActions">
+              {restoreNotice ? (
+                <button type="button" className="resetButton" onClick={() => setRestoreNotice(null)}>
+                  복구 안내 닫기
+                </button>
+              ) : null}
+              {hasFilter && (
+                <button type="button" className="resetButton" onClick={handleClearFilters}>
+                  초기화
+                </button>
+              )}
+            </div>
           </FilterContextBar>
           <PostList
             posts={regularPosts}
@@ -859,6 +920,13 @@ const FilterContextBar = styled.div`
     gap: 0.38rem;
   }
 
+  .contextActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    flex: 0 0 auto;
+  }
+
   .contextCount {
     font-size: 0.88rem;
     color: ${({ theme }) => theme.colors.gray11};
@@ -875,6 +943,26 @@ const FilterContextBar = styled.div`
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .restoreBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    min-height: 1.7rem;
+    padding: 0 0.58rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .restoreBadge[data-loading="true"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    color: ${({ theme }) => theme.colors.blue10};
   }
 
   .resetButton {
@@ -908,6 +996,12 @@ const FilterContextBar = styled.div`
     .filterSummary {
       font-size: 0.71rem;
       max-width: 100%;
+    }
+
+    .restoreBadge {
+      max-width: 100%;
+      white-space: normal;
+      line-height: 1.35;
     }
   }
 `

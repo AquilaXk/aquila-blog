@@ -21,6 +21,8 @@ import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import {
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
+  type MarkdownTableCellAlignment,
+  type MarkdownTableCellLayout,
   type MarkdownTableLayout,
 } from "src/libs/markdown/tableMetadata"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
@@ -140,10 +142,18 @@ MarkdownImageFigure.displayName = "MarkdownImageFigure"
 
 type MarkdownTableRenderContextValue = {
   rowHeights: Array<number | null>
+  columnAlignments: Array<MarkdownTableCellAlignment | null>
+  cellLayouts: Array<Array<MarkdownTableCellLayout | null>>
   allocateRowIndex: () => number
 }
 
+type MarkdownTableRowContextValue = {
+  rowIndex: number
+  allocateCellIndex: () => number
+}
+
 const MarkdownTableRenderContext = createContext<MarkdownTableRenderContextValue | null>(null)
+const MarkdownTableRowContext = createContext<MarkdownTableRowContextValue | null>(null)
 
 const MarkdownTableRenderer = ({
   children,
@@ -160,13 +170,15 @@ const MarkdownTableRenderer = ({
   const contextValue = useMemo<MarkdownTableRenderContextValue>(
     () => ({
       rowHeights: layout?.rowHeights || [],
+      columnAlignments: layout?.columnAlignments || [],
+      cellLayouts: layout?.cells || [],
       allocateRowIndex: () => {
         const currentIndex = rowCursorRef.current
         rowCursorRef.current += 1
         return currentIndex
       },
     }),
-    [layout?.rowHeights]
+    [layout?.cells, layout?.columnAlignments, layout?.rowHeights]
   )
 
   return (
@@ -217,15 +229,95 @@ const MarkdownTableRowRenderer = ({
       } satisfies CSSProperties)
     : undefined
 
+  let cellCursor = 0
+  const rowContextValue: MarkdownTableRowContextValue = {
+    rowIndex: rowIndexRef.current ?? 0,
+    allocateCellIndex: () => {
+      const currentIndex = cellCursor
+      cellCursor += 1
+      return currentIndex
+    },
+  }
+
   return (
-    <tr
-      className={className}
-      data-row-height={rowHeight ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeight) : undefined}
-      style={rowStyle}
-    >
-      {children}
-    </tr>
+    <MarkdownTableRowContext.Provider value={rowContextValue}>
+      <tr
+        className={className}
+        data-row-height={rowHeight ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeight) : undefined}
+        style={rowStyle}
+      >
+        {children}
+      </tr>
+    </MarkdownTableRowContext.Provider>
   )
+}
+
+const MarkdownTableCellRenderer = ({
+  as: Component,
+  children,
+  className,
+}: {
+  as: "td" | "th"
+  children?: ReactNode
+  className?: string
+}) => {
+  const tableContext = useContext(MarkdownTableRenderContext)
+  const rowContext = useContext(MarkdownTableRowContext)
+  const cellIndexRef = useRef<number | null>(null)
+
+  if (rowContext && cellIndexRef.current === null) {
+    cellIndexRef.current = rowContext.allocateCellIndex()
+  }
+
+  const rowIndex = rowContext?.rowIndex ?? 0
+  const columnIndex = cellIndexRef.current ?? 0
+  const cellLayout = tableContext?.cellLayouts[rowIndex]?.[columnIndex] || null
+  const columnAlignment = tableContext?.columnAlignments[columnIndex] || null
+
+  if (cellLayout?.hidden) {
+    return null
+  }
+
+  const rowSpan = cellLayout?.rowspan && cellLayout.rowspan > 1 ? cellLayout.rowspan : undefined
+  const colSpan = cellLayout?.colspan && cellLayout.colspan > 1 ? cellLayout.colspan : undefined
+  const textAlign = cellLayout?.align || columnAlignment || undefined
+  const backgroundColor = cellLayout?.backgroundColor || undefined
+  const style = textAlign || backgroundColor
+    ? ({
+        ...(textAlign ? { textAlign } : {}),
+        ...(backgroundColor ? { backgroundColor } : {}),
+      } satisfies CSSProperties)
+    : undefined
+
+  return (
+    <Component className={className} rowSpan={rowSpan} colSpan={colSpan} style={style}>
+      {children}
+    </Component>
+  )
+}
+
+const resolveEmbedPreviewUrl = (url: string) => {
+  try {
+    const parsedUrl = new URL(url)
+    const host = parsedUrl.hostname.replace(/^www\./, "")
+
+    if (host === "youtube.com" || host === "youtu.be") {
+      const videoId =
+        host === "youtu.be"
+          ? parsedUrl.pathname.replace(/^\/+/, "")
+          : parsedUrl.searchParams.get("v") || ""
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : ""
+    }
+
+    if (host === "vimeo.com") {
+      const videoId = parsedUrl.pathname.replace(/^\/+/, "")
+      return videoId ? `https://player.vimeo.com/video/${videoId}` : ""
+    }
+  } catch {
+    return ""
+  }
+
+  return ""
 }
 
 const MarkdownRendererComponent: FC<Props> = ({
@@ -276,6 +368,20 @@ const MarkdownRendererComponent: FC<Props> = ({
         },
         tr({ children, ...props }) {
           return <MarkdownTableRowRenderer {...props}>{children}</MarkdownTableRowRenderer>
+        },
+        th({ children, ...props }) {
+          return (
+            <MarkdownTableCellRenderer as="th" className={props.className}>
+              {children}
+            </MarkdownTableCellRenderer>
+          )
+        },
+        td({ children, ...props }) {
+          return (
+            <MarkdownTableCellRenderer as="td" className={props.className}>
+              {children}
+            </MarkdownTableCellRenderer>
+          )
         },
         img({ src, alt }) {
           const imageSrc = typeof src === "string" ? src : ""
@@ -396,6 +502,68 @@ const MarkdownRendererComponent: FC<Props> = ({
                 </div>
                 {renderMarkdown(segment.content, `callout-body-${index}`, true)}
               </div>
+            </div>
+          )
+        }
+
+        if (segment.type === "bookmark") {
+          return (
+            <div key={`bookmark-${index}`} className="aq-bookmark-card">
+              <a href={segment.url} target="_blank" rel="noreferrer">
+                <strong>{segment.title || segment.url}</strong>
+                <span>{segment.url}</span>
+                {segment.description ? <p>{segment.description}</p> : null}
+              </a>
+            </div>
+          )
+        }
+
+        if (segment.type === "embed") {
+          const previewUrl = resolveEmbedPreviewUrl(segment.url)
+          return (
+            <div key={`embed-${index}`} className="aq-embed-card">
+              <div className="aq-embed-header">
+                <strong>{segment.title || "임베드"}</strong>
+                <a href={segment.url} target="_blank" rel="noreferrer">
+                  원본 열기
+                </a>
+              </div>
+              {previewUrl ? (
+                <div className="aq-embed-frame">
+                  <iframe
+                    src={previewUrl}
+                    title={segment.title || segment.url}
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <div className="aq-embed-fallback">
+                  <p>이 사이트는 인라인 임베드를 지원하지 않아 링크 카드로 대체했습니다.</p>
+                </div>
+              )}
+              {segment.caption ? <p className="aq-embed-caption">{segment.caption}</p> : null}
+            </div>
+          )
+        }
+
+        if (segment.type === "file") {
+          return (
+            <div key={`file-${index}`} className="aq-file-card">
+              <a href={segment.url} target="_blank" rel="noreferrer">
+                <strong>{segment.name || "첨부 파일"}</strong>
+                <span>{segment.url}</span>
+              </a>
+              {segment.description ? <p>{segment.description}</p> : null}
+            </div>
+          )
+        }
+
+        if (segment.type === "formula") {
+          return (
+            <div key={`formula-${index}`} className="aq-formula-card">
+              <code>{segment.formula}</code>
             </div>
           )
         }

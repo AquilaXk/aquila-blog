@@ -72,6 +72,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
 
   const { me, authStatus, authUnavailable } = useAuthSession()
   const [comments, setComments] = useState<TPostComment[]>(initialComments ?? [])
+  const [commentsLoading, setCommentsLoading] = useState(initialComments === null)
   const [commentInput, setCommentInput] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingCommentInput, setEditingCommentInput] = useState("")
@@ -97,20 +98,25 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const loadComments = useCallback(async () => {
     if (!Number.isInteger(postId) || postId <= 0) {
       setComments([])
+      setCommentsLoading(false)
       return
     }
 
     try {
+      setCommentsLoading(true)
       const rows = await apiFetch<TPostComment[]>(`/post/api/v1/posts/${postId}/comments`)
       setComments(rows)
     } catch {
       setComments([])
+    } finally {
+      setCommentsLoading(false)
     }
   }, [postId])
 
   useEffect(() => {
     if (!initialComments) return
     setComments(initialComments)
+    setCommentsLoading(false)
   }, [initialComments])
 
   useEffect(() => {
@@ -189,6 +195,11 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     const ok = await submitComment(commentInput)
     if (ok) setCommentInput("")
   }
+
+  const handleComposerIntent = useCallback(() => {
+    preloadAuthEntryModal()
+    if (!me && !authUnavailable) openAuthPrompt()
+  }, [authUnavailable, me, openAuthPrompt])
 
   const handleReplySubmit = async (event: FormEvent<HTMLFormElement>, parentCommentId: number) => {
     event.preventDefault()
@@ -464,34 +475,59 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
           )}
         </div>
         <div className="composerBody">
-          <textarea
-            value={commentInput}
-            onChange={(event) => setCommentInput(event.target.value)}
-            onFocus={() => {
-              preloadAuthEntryModal()
-              if (!me && !authUnavailable) openAuthPrompt()
-            }}
-            onClick={() => {
-              preloadAuthEntryModal()
-              if (!me && !authUnavailable) openAuthPrompt()
-            }}
-            placeholder={
-              authUnavailable ? "인증 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요." : "의견이나 질문을 남겨주세요."
-            }
-            readOnly={!me}
-            disabled={isLoading || authUnavailable}
-          />
-          <div className="composerFooter">
-            <button type="submit" disabled={isLoading || authUnavailable}>
-              댓글 작성
-            </button>
-          </div>
+          {me ? (
+            <>
+              <textarea
+                value={commentInput}
+                onChange={(event) => setCommentInput(event.target.value)}
+                placeholder="의견이나 질문을 남겨주세요."
+                disabled={isLoading}
+              />
+              <div className="composerFooter">
+                <button type="submit" disabled={isLoading}>
+                  댓글 작성
+                </button>
+              </div>
+            </>
+          ) : authUnavailable ? (
+            <ComposerPromptCard data-tone="error">
+              <strong>인증 상태를 확인할 수 없습니다.</strong>
+              <p>잠시 후 다시 시도해주세요. 문제가 계속되면 새로고침 후 다시 시도하는 편이 안전합니다.</p>
+            </ComposerPromptCard>
+          ) : (
+            <ComposerPromptCard data-tone="neutral">
+              <strong>로그인 후 댓글을 작성할 수 있습니다.</strong>
+              <p>의견이나 질문을 남기려면 먼저 로그인해 주세요.</p>
+              <button type="button" onClick={handleComposerIntent}>
+                로그인하고 댓글 작성
+              </button>
+            </ComposerPromptCard>
+          )}
         </div>
       </form>
 
       {error && <p className="error">{error}</p>}
 
-      {commentTree.length > 0 ? (
+      {commentsLoading ? (
+        <CommentListSkeleton aria-hidden="true">
+          <li>
+            <span className="avatar" />
+            <div className="body">
+              <span className="title" />
+              <span className="line wide" />
+              <span className="line medium" />
+            </div>
+          </li>
+          <li>
+            <span className="avatar" />
+            <div className="body">
+              <span className="title" />
+              <span className="line wide" />
+              <span className="line narrow" />
+            </div>
+          </li>
+        </CommentListSkeleton>
+      ) : commentTree.length > 0 ? (
         <ul className="commentList">
           {commentTree.map((comment) => (
             <li key={comment.id}>{renderComment(comment)}</li>
@@ -892,5 +928,105 @@ const EmptyState = styled.div`
   @media (max-width: 640px) {
     margin-left: 0;
     padding: 0.9rem 0.92rem;
+  }
+`
+
+const ComposerPromptCard = styled.div`
+  display: grid;
+  gap: 0.52rem;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+
+  &[data-tone="error"] {
+    border-color: ${({ theme }) => theme.colors.red6};
+    background: ${({ theme }) => theme.colors.red2};
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.94rem;
+    font-weight: 800;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+
+  button {
+    justify-self: start;
+  }
+`
+
+const CommentListSkeleton = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.95rem;
+
+  li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.78rem;
+    align-items: start;
+  }
+
+  .avatar,
+  .title,
+  .line {
+    display: block;
+    background: ${({ theme }) => theme.colors.gray3};
+    animation: comment-box-skeleton-pulse 1.18s ease-in-out infinite;
+  }
+
+  .avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+  }
+
+  .body {
+    display: grid;
+    gap: 0.52rem;
+  }
+
+  .title {
+    width: min(28%, 8rem);
+    height: 0.88rem;
+    border-radius: 999px;
+  }
+
+  .line {
+    height: 0.84rem;
+    border-radius: 999px;
+  }
+
+  .line.wide {
+    width: min(84%, 30rem);
+  }
+
+  .line.medium {
+    width: min(62%, 22rem);
+  }
+
+  .line.narrow {
+    width: min(48%, 18rem);
+  }
+
+  @keyframes comment-box-skeleton-pulse {
+    0% {
+      opacity: 0.72;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.72;
+    }
   }
 `

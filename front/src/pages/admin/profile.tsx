@@ -2573,48 +2573,6 @@ const PreviewAboutCard = styled.div`
   }
 `
 
-const PreviewHomeCard = styled.div`
-  display: grid;
-  gap: 1rem;
-
-  .topbar {
-    border-radius: 14px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    padding: 0.72rem 0.82rem;
-  }
-
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-weight: 800;
-    font-size: 1rem;
-  }
-
-  .heroCard {
-    border-radius: 18px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray2};
-    padding: 1rem;
-    display: grid;
-    gap: 0.42rem;
-  }
-
-  .heroCard strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1.36rem;
-    line-height: 1.18;
-    letter-spacing: -0.03em;
-  }
-
-  .heroCard p {
-    margin: 0;
-    color: ${({ theme }) => theme.colors.gray11};
-    line-height: 1.62;
-  }
-`
-
 const PreviewLinksCard = styled.div`
   display: grid;
   gap: 0.82rem;

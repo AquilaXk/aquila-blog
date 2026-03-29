@@ -1083,18 +1083,6 @@ const sharedTextareaStyles = ({ minHeight = "6rem" }: { minHeight?: string } = {
   padding: 1rem;
 `
 
-const BlockInput = styled.input`
-  min-height: 2.75rem;
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.95rem;
-  background: rgba(10, 12, 16, 0.92);
-  color: var(--color-gray12);
-  font-size: 0.94rem;
-  font-weight: 600;
-  padding: 0 1rem;
-`
-
 const BlockTextarea = styled.textarea<{ rows?: number }>`
   ${({ rows }) =>
     sharedTextareaStyles({ minHeight: rows ? `${Math.max(Number(rows) * 1.8, 6)}rem` : "6rem" })}
@@ -1105,35 +1093,6 @@ const CompactBlockTextarea = styled(BlockTextarea)`
   padding: 0.9rem 1rem;
   font-size: 0.9rem;
   line-height: 1.55;
-`
-
-const RichBlockWrapper = styled(NodeViewWrapper)`
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  margin: 0.85rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0.95rem;
-  background: rgba(18, 21, 26, 0.72);
-  padding: 0.82rem 0.88rem;
-
-  &[data-selected="true"] {
-    border-color: rgba(59, 130, 246, 0.28);
-    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
-  }
-`
-
-const RichBlockHeader = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-
-  strong {
-    display: block;
-    font-size: 0.86rem;
-    color: var(--color-gray12);
-  }
 `
 
 const MermaidPreviewCard = styled.div`

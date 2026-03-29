@@ -19,6 +19,17 @@ import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { resolveMarkdownRenderModel } from "src/libs/markdown/rendering"
 import ts from "typescript"
 
+const htmlToMarkdownModuleSource = readFileSync(
+  path.resolve(__dirname, "../src/libs/markdown/htmlToMarkdown.ts"),
+  "utf8"
+)
+const transpiledHtmlToMarkdownModule = ts.transpileModule(htmlToMarkdownModuleSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2020,
+  },
+}).outputText
+
 test.describe("block editor serialization", () => {
   test("mermaid 블록은 parse/serialize round-trip을 유지한다", () => {
     const markdown = ["## 플로우", "", "```mermaid", "flowchart TD", "  A[시작] --> B[처리]", "```"].join("\n")
@@ -106,14 +117,6 @@ test.describe("block editor serialization", () => {
   })
 
   test("노션 스타일 HTML 붙여넣기는 블록과 인라인 서식을 렌더 상태로 승격한다", async ({ page }) => {
-    const source = readFileSync(path.resolve(__dirname, "../src/libs/markdown/htmlToMarkdown.ts"), "utf8")
-    const transpiled = ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2020,
-      },
-    }).outputText
-
     const html = `
       <div class="notion-page-content">
         <h1>문서 제목</h1>
@@ -146,7 +149,7 @@ test.describe("block editor serialization", () => {
         runner(module, exports)
         return module.exports.convertHtmlToMarkdown?.(htmlSource) || ""
       },
-      { compiledSource: transpiled, htmlSource: html }
+      { compiledSource: transpiledHtmlToMarkdownModule, htmlSource: html }
     )
 
     expect(markdown).toContain("# 문서 제목")
@@ -168,6 +171,63 @@ test.describe("block editor serialization", () => {
     expect(doc.content?.some((node) => node.type === "table")).toBe(true)
     expect(doc.content?.some((node) => node.type === "toggleBlock")).toBe(true)
     expect(doc.content?.some((node) => node.type === "resizableImage")).toBe(true)
+  })
+
+  test("plain text markdown 문서 붙여넣기는 전체 블록을 자동 렌더 상태로 승격한다", async ({ page }) => {
+    const markdownSource = [
+      "# 시작하며",
+      "",
+      "- 첫 번째 항목",
+      "- 두 번째 항목",
+      "",
+      "```mermaid",
+      "sequenceDiagram",
+      '  participant C as "Client"',
+      '  participant S as "Server"',
+      "  C->>S: connect",
+      "```",
+      "",
+      "<aside>",
+      "💡",
+      "",
+      "SSE의 핵심 가치는 서버에서 클라이언트로 흐르는 단방향 스트림을 HTTP 위에서 단순하게 유지하는 데 있습니다.",
+      "",
+      "운영 관점에서도 인증과 로깅 흐름을 그대로 재사용할 수 있습니다.",
+      "</aside>",
+    ].join("\n")
+
+    const normalizedMarkdown = await page.evaluate(
+      ({ compiledSource, plainText }) => {
+        const module = {
+          exports: {} as {
+            normalizeStructuredMarkdownClipboard?: (value: string) => string
+            looksLikeStructuredMarkdownDocument?: (value: string) => boolean
+          },
+        }
+        const exports = module.exports
+        const runner = new Function("module", "exports", compiledSource)
+        runner(module, exports)
+
+        return {
+          normalized:
+            module.exports.normalizeStructuredMarkdownClipboard?.(plainText) || "",
+          looksStructured:
+            module.exports.looksLikeStructuredMarkdownDocument?.(plainText) || false,
+        }
+      },
+      { compiledSource: transpiledHtmlToMarkdownModule, plainText: markdownSource }
+    )
+
+    expect(normalizedMarkdown.looksStructured).toBe(true)
+    expect(normalizedMarkdown.normalized).toContain("# 시작하며")
+    expect(normalizedMarkdown.normalized).toContain("```mermaid")
+    expect(normalizedMarkdown.normalized).toContain("> [!INFO] 참고")
+
+    const doc = parseMarkdownToEditorDoc(normalizedMarkdown.normalized)
+    expect(doc.content?.some((node) => node.type === "heading")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "bulletList")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "mermaidBlock")).toBe(true)
+    expect(doc.content?.some((node) => node.type === "calloutBlock")).toBe(true)
   })
 
   test("malformed mermaid fence 는 raw block 으로 보존된다", () => {

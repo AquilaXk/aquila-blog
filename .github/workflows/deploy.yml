@@ -397,6 +397,16 @@ jobs:
 
           mkdir -p deploy/homeserver
 
+          chmod +x \
+            deploy/homeserver/create_deploy_backup.sh \
+            deploy/homeserver/blue_green_deploy.sh \
+            deploy/homeserver/rollback_last_deploy.sh \
+            deploy/homeserver/steady_state_guard.sh \
+            deploy/homeserver/install_steady_state_guard_cron.sh
+
+          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
+          echo "backup created (pre-env-mutation): ${BACKUP_DIR}"
+
           if [ -n "${HOME_SERVER_ENV:-}" ]; then
             printf '%s\n' "${HOME_SERVER_ENV}" > deploy/homeserver/.env.prod
           elif [ ! -f deploy/homeserver/.env.prod ]; then
@@ -555,16 +565,6 @@ jobs:
             echo "${HOME_GHCR_TOKEN}" | docker login ghcr.io -u "${HOME_GHCR_USERNAME}" --password-stdin
           fi
 
-          chmod +x \
-            deploy/homeserver/create_deploy_backup.sh \
-            deploy/homeserver/blue_green_deploy.sh \
-            deploy/homeserver/rollback_last_deploy.sh \
-            deploy/homeserver/steady_state_guard.sh \
-            deploy/homeserver/install_steady_state_guard_cron.sh
-
-          BACKUP_DIR="$(./deploy/homeserver/create_deploy_backup.sh)"
-          echo "backup created: ${BACKUP_DIR}"
-
           RUNTIME_SPLIT_ENABLED_VALUE="$(extract_env_value "RUNTIME_SPLIT_ENABLED")"
           RUNTIME_SPLIT_STAGE_VALUE="$(extract_env_value "RUNTIME_SPLIT_STAGE")"
           if [ -z "${RUNTIME_SPLIT_ENABLED_VALUE}" ]; then
@@ -615,6 +615,14 @@ jobs:
 
           if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps --status running --services | grep -qx "${ACTIVE_BACKEND}"; then
             rollback_and_exit "active_backend_not_running"
+          fi
+
+          ACTIVE_BACKEND_CONTAINER_ID="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml ps -q "${ACTIVE_BACKEND}" | head -n 1)"
+          ACTIVE_BACKEND_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${ACTIVE_BACKEND_CONTAINER_ID}" 2>/dev/null | tr -d '\r')"
+          EXPECTED_BACK_IMAGE="$(extract_env_value "BACK_IMAGE")"
+          echo "post-deploy image verify: active_backend=${ACTIVE_BACKEND}, expected_image=${EXPECTED_BACK_IMAGE}, active_image=${ACTIVE_BACKEND_IMAGE:-none}"
+          if [ -z "${ACTIVE_BACKEND_CONTAINER_ID}" ] || [ -z "${ACTIVE_BACKEND_IMAGE}" ] || [ "${ACTIVE_BACKEND_IMAGE}" != "${EXPECTED_BACK_IMAGE}" ]; then
+            rollback_and_exit "active_backend_image_mismatch"
           fi
 
           if [ "${ACTIVE_BACKEND}" = "back_blue" ]; then

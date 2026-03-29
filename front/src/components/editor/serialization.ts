@@ -393,7 +393,6 @@ const collectParagraphLines = (lines: string[], startIndex: number) => {
   while (index < lines.length) {
     const line = lines[index]
     const nextLine = lines[index + 1]
-    const tableLayout = parseMarkdownTableLayoutComment(line)
 
     if (isBlankLine(line)) break
     if (collected.length > 0 && isSupportedBlockStart(line, nextLine)) break

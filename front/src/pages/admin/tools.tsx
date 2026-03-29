@@ -2216,14 +2216,15 @@ const FreshnessBadge = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  padding: 0 0.7rem;
-  border-radius: 999px;
+  min-height: 26px;
+  padding: 0 0.58rem;
+  border-radius: 10px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   font-weight: 800;
+  line-height: 1;
 
   &[data-tone="fresh"] {
     border-color: ${({ theme }) => theme.colors.statusSuccessBorder};

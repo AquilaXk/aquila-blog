@@ -182,6 +182,23 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     [showDetailedToc, tocItems]
   )
   const showStickyToc = visibleTocItems.length >= 2
+  const activeTocIndex = useMemo(
+    () => visibleTocItems.findIndex((item) => item.id === activeTocId),
+    [activeTocId, visibleTocItems]
+  )
+  const activeTocItem = activeTocIndex >= 0 ? visibleTocItems[activeTocIndex] : null
+  const tocProgressLabel =
+    activeTocIndex >= 0 ? `${activeTocIndex + 1}/${visibleTocItems.length}` : `${visibleTocItems.length}`
+  const commentsCount = typeof data?.commentsCount === "number" ? data.commentsCount : 0
+  const commentsProgressLabel = commentsRailActive ? "읽는 중" : `${commentsCount}`
+  const shareProgressLabel =
+    shareFeedback === "failed"
+      ? "재시도"
+      : shareFeedback === "shared"
+        ? "공유됨"
+        : shareFeedback === "copied"
+          ? "복사됨"
+          : "대기"
   const extractedSummaryState = useMemo(() => extractLeadingSummaryBlock(data?.content || "", 180), [data?.content])
   const renderedContent = useMemo(() => {
     if (!data?.content) return ""
@@ -904,11 +921,13 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   type="button"
                   data-active={Boolean(activeTocId)}
                   data-tone="accent"
+                  title={activeTocItem?.text || "목차 열기"}
+                  aria-label={activeTocItem ? `현재 섹션 ${activeTocIndex + 1} / ${visibleTocItems.length}` : "목차 열기"}
                   onClick={() => scrollSectionIntoView(compactTocSectionRef.current)}
                 >
                   <AppIcon name="list" />
                   <span>목차</span>
-                  <strong>{visibleTocItems.length}</strong>
+                  <strong>{tocProgressLabel}</strong>
                 </button>
               ) : null}
               <button
@@ -926,20 +945,31 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 type="button"
                 data-active={commentsRailActive}
                 data-tone="accent"
+                aria-label={commentsRailActive ? `댓글 영역 읽는 중, 댓글 ${commentsCount}개` : `댓글 ${commentsCount}개`}
                 onClick={() => scrollSectionIntoView(commentsSectionRef.current)}
               >
                 <AppIcon name="message" />
                 <span>댓글</span>
-                <strong>{typeof data.commentsCount === "number" ? data.commentsCount : 0}</strong>
+                <strong>{commentsProgressLabel}</strong>
               </button>
               <button
                 type="button"
                 data-active={Boolean(shareFeedback)}
-                data-tone="accent"
+                data-tone={shareFeedback === "failed" ? "danger" : "accent"}
+                aria-label={
+                  shareFeedback === "failed"
+                    ? "공유 실패, 다시 시도"
+                    : shareFeedback === "shared"
+                      ? "공유 완료"
+                      : shareFeedback === "copied"
+                        ? "공유 링크 복사 완료"
+                        : "공유"
+                }
                 onClick={handleSharePost}
               >
                 <AppIcon name="share" />
-                <span>{shareFeedback === "copied" ? "복사됨" : "공유"}</span>
+                <span>{shareFeedback === "copied" ? "복사" : shareFeedback === "shared" ? "공유" : shareFeedback === "failed" ? "실패" : "공유"}</span>
+                <strong>{shareProgressLabel}</strong>
               </button>
             </MobileSummaryBar>
           ) : null}
@@ -1000,6 +1030,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   : relatedByTagPosts.map((post) => (
                       <li key={post.id}>
                         <Link href={toCanonicalPostPath(post.id)}>
+                          <span className="reasonChip">같은 태그</span>
                           <strong>{post.title}</strong>
                           {renderRelatedSummary(post.summary)}
                           <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
@@ -1033,6 +1064,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                   : relatedByAuthorPosts.map((post) => (
                       <li key={post.id}>
                         <Link href={toCanonicalPostPath(post.id)}>
+                          <span className="reasonChip">같은 작성자</span>
                           <strong>{post.title}</strong>
                           {renderRelatedSummary(post.summary)}
                           <span>{formatDate(post.date?.start_date || post.createdTime)}</span>
@@ -1719,6 +1751,22 @@ const RelatedSection = styled.section`
       box-shadow: ${({ theme }) =>
         theme.scheme === "light" ? "0 10px 24px rgba(15, 23, 42, 0.05)" : "none"};
     }
+  }
+
+  .reasonChip {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-height: 24px;
+    padding: 0 0.52rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    font-style: normal;
   }
 
   strong {

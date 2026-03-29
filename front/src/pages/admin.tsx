@@ -1,8 +1,19 @@
+import { useQuery } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { useMemo } from "react"
+import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
+
+type AdminHubSystemHealthPayload = {
+  status?: string
+}
+
+type AdminHubTaskQueuePayload = {
+  failedCount?: number
+  staleProcessingCount?: number
+}
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   return await getAdminPageProps(req)
@@ -13,6 +24,24 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const sessionMember = authStatus === "loading" ? initialMember : me
   const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
+  const systemHealthQuery = useQuery({
+    queryKey: ["admin", "hub", "system-health"],
+    queryFn: (): Promise<AdminHubSystemHealthPayload> => apiFetch<AdminHubSystemHealthPayload>("/system/api/v1/adm/health"),
+    enabled: Boolean(sessionMember?.isAdmin),
+    staleTime: 30_000,
+    gcTime: 120_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
+  const taskQueueQuery = useQuery({
+    queryKey: ["admin", "hub", "task-queue"],
+    queryFn: (): Promise<AdminHubTaskQueuePayload> => apiFetch<AdminHubTaskQueuePayload>("/system/api/v1/adm/tasks"),
+    enabled: Boolean(sessionMember?.isAdmin),
+    staleTime: 30_000,
+    gcTime: 120_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  })
 
   const profileSrc = useMemo(
     () => sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || "",
@@ -81,6 +110,30 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   ]
 
   const nextActionCandidates: Array<AdminHubNextAction | null> = [
+    systemHealthQuery.data?.status && systemHealthQuery.data.status !== "UP"
+      ? {
+          href: "/admin/tools",
+          title: "서비스 상태 확인",
+          detail: `현재 상태가 ${systemHealthQuery.data.status}입니다. 운영 센터에서 시스템 상태와 모니터링을 먼저 점검하세요.`,
+          tone: "warn" as const,
+        }
+      : null,
+    (taskQueueQuery.data?.staleProcessingCount ?? 0) > 0
+      ? {
+          href: "/admin/tools",
+          title: "작업 큐 stale 처리 점검",
+          detail: `stale processing ${taskQueueQuery.data?.staleProcessingCount || 0}건이 남아 있습니다. 재처리 여부를 확인하세요.`,
+          tone: "warn" as const,
+        }
+      : null,
+    (taskQueueQuery.data?.failedCount ?? 0) > 0
+      ? {
+          href: "/admin/tools",
+          title: "최근 실패 작업 확인",
+          detail: `실패한 작업 ${taskQueueQuery.data?.failedCount || 0}건이 있습니다. 최근 실행 결과부터 확인하세요.`,
+          tone: "warn" as const,
+        }
+      : null,
     profileCompletion < 80
       ? {
           href: "/admin/profile",
@@ -111,6 +164,14 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       detail: "허브 점검이 끝났다면 바로 임시글부터 작성 흐름을 이어갈 수 있습니다.",
       tone: "neutral" as const,
     },
+    systemHealthQuery.isSuccess && taskQueueQuery.isSuccess
+      ? {
+          href: "/admin/tools",
+          title: "운영 센터 최근 결과 확인",
+          detail: "오늘 진단/실행 기록과 갱신 상태를 한 번에 확인할 수 있습니다.",
+          tone: "neutral" as const,
+        }
+      : null,
   ]
 
   const nextActions = nextActionCandidates.filter((item): item is AdminHubNextAction => Boolean(item)).slice(0, 3)

@@ -162,6 +162,7 @@ type ExecutionEntry = {
 
 const SYSTEM_HEALTH_QUERY_KEY = ["admin", "tools", "system-health"] as const
 const HEALTH_CACHE_MS = 10_000
+const RESULTS_FILTER_STORAGE_KEY = "admin.tools.resultsFilter.v1"
 const SECTION_IDS = {
   overview: "ops-overview",
   monitoring: "ops-monitoring",
@@ -188,6 +189,9 @@ const DIAGNOSTIC_TAB_LABELS: Record<DiagnosticTab, string> = {
   cleanup: "파일 정리 진단",
   auth: "인증 보안 기록",
 }
+
+const isExecutionResultFilter = (value: string): value is ExecutionResultFilter =>
+  value === "all" || value === "success" || value === "error" || value === "stale"
 
 const ACTION_META: Record<
   string,
@@ -609,6 +613,18 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
     return () => window.clearTimeout(timeout)
   }, [sectionJumpTarget])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const savedFilter = window.sessionStorage.getItem(RESULTS_FILTER_STORAGE_KEY)
+    if (!savedFilter || !isExecutionResultFilter(savedFilter)) return
+    setResultsFilter(savedFilter)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.sessionStorage.setItem(RESULTS_FILTER_STORAGE_KEY, resultsFilter)
+  }, [resultsFilter])
 
   useEffect(() => {
     if (typeof window === "undefined") return

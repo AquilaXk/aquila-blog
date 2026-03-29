@@ -137,6 +137,7 @@ const CARD_METADATA_COMMENT_PATTERN =
   /^\s*<!--\s*aq-(bookmark|embed|file)\s+(\{[\s\S]*\})\s*-->\s*$/
 
 const FORMULA_BLOCK_START_PATTERN = /^\s*\$\$\s*$/
+const SINGLE_LINE_FORMULA_BLOCK_PATTERN = /^\s*\$\$\s*(.+?)\s*\$\$\s*$/
 
 const isBlankLine = (line: string) => line.trim().length === 0
 
@@ -217,6 +218,13 @@ const parseCalloutStart = (line: string) => {
     title: (match[2] || "").trim(),
     label: CALL_OUT_KIND_MAP[rawLabel] ? null : rawLabel,
   }
+}
+
+const parseSingleLineFormulaBlock = (line: string) => {
+  const match = line.match(SINGLE_LINE_FORMULA_BLOCK_PATTERN)
+  if (!match) return null
+  const formula = (match[1] || "").trim()
+  return formula ? { formula } : null
 }
 
 const isTableSeparatorLine = (line: string) =>
@@ -776,6 +784,7 @@ const isSupportedBlockStart = (line: string, nextLine?: string) =>
   Boolean(parseCalloutStart(line)) ||
   Boolean(parseCardMetadataComment(line)) ||
   Boolean(line.trim().match(CUSTOM_DIRECTIVE_PATTERN)) ||
+  Boolean(parseSingleLineFormulaBlock(line)) ||
   FORMULA_BLOCK_START_PATTERN.test(line.trim())
 
 export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
@@ -797,6 +806,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
     const nextLine = lines[index + 1]
     const tableLayout = parseMarkdownTableLayoutComment(line)
     const directiveMetadataComment = parseCardMetadataComment(line)
+    const singleLineFormula = parseSingleLineFormulaBlock(line)
 
     if (isBlankLine(line)) {
       pendingDirectiveMetadata = null
@@ -806,6 +816,17 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     if (directiveMetadataComment) {
       pendingDirectiveMetadata = directiveMetadataComment
+      index += 1
+      continue
+    }
+
+    if (singleLineFormula) {
+      pendingDirectiveMetadata = null
+      content.push(
+        createFormulaNode({
+          formula: singleLineFormula.formula,
+        })
+      )
       index += 1
       continue
     }
@@ -868,7 +889,14 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         pointer += 1
       }
 
-      if (!closed) {
+      if (!closed && bodyLines.every((bodyLine) => bodyLine.trim().length === 0)) {
+        content.push(
+          createToggleNode({
+            title: toggleStart.title,
+            body: "",
+          })
+        )
+      } else if (!closed) {
         content.push(createRawBlockNode(collected.join("\n"), "unsupported-toggle"))
       } else {
         content.push(
@@ -900,6 +928,46 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
         }
         bodyLines.push(current)
         pointer += 1
+      }
+
+      if (!closed && bodyLines.every((bodyLine) => bodyLine.trim().length === 0)) {
+        const directiveMetadata =
+          pendingDirectiveMetadata?.kind === directive
+            ? pendingDirectiveMetadata.attrs
+            : {}
+        pendingDirectiveMetadata = null
+
+        if (directive === "bookmark") {
+          content.push(
+            createBookmarkNode({
+              url: headerValue,
+              title: "북마크",
+              description: "",
+              ...directiveMetadata,
+            })
+          )
+        } else if (directive === "embed") {
+          content.push(
+            createEmbedNode({
+              url: headerValue,
+              title: "임베드",
+              caption: "",
+              ...directiveMetadata,
+            })
+          )
+        } else if (directive === "file") {
+          content.push(
+            createFileBlockNode({
+              url: headerValue,
+              name: "파일",
+              description: "",
+              ...directiveMetadata,
+            })
+          )
+        }
+
+        index = pointer
+        continue
       }
 
       if (!closed) {

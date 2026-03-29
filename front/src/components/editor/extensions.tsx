@@ -1,7 +1,8 @@
 import styled from "@emotion/styled"
-import { Mark, Node, mergeAttributes } from "@tiptap/core"
+import { InputRule, Mark, Node, mergeAttributes } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
 import ListKeymap from "@tiptap/extension-list-keymap"
+import ListItem from "@tiptap/extension-list-item"
 import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
@@ -1384,6 +1385,14 @@ export const EditorTaskItem = TaskItem.extend({
   },
 })
 
+export const EditorListItem = ListItem.extend({
+  draggable: true,
+}).configure({
+  HTMLAttributes: {
+    "data-list-item": "true",
+  },
+})
+
 export const EditorListKeymap = ListKeymap
 
 export const MermaidBlock = Node.create({
@@ -1609,6 +1618,26 @@ export const InlineFormula = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(InlineFormulaView)
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /(^|[\s([{])\$([^$\n]+)\$$/,
+        handler: ({ chain, match, range }) => {
+          const prefix = String(match[1] || "")
+          const formula = String(match[2] || "").trim()
+          if (!formula) return null
+
+          const inlineContent = [
+            ...(prefix ? [{ type: "text" as const, text: prefix }] : []),
+            { type: "inlineFormula" as const, attrs: { formula } },
+          ]
+
+          chain().deleteRange(range).insertContentAt(range.from, inlineContent).run()
+        },
+      }),
+    ]
   },
 })
 

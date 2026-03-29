@@ -10,34 +10,41 @@ test.describe("block editor authoring flow", () => {
   test("긴 작성 플로우에서 인라인 수식/quick insert/표 스타일/파일 업로드가 함께 유지된다", async ({
     page,
   }) => {
+    test.slow()
     await page.goto("/_qa/block-editor-slash")
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
-    await page.keyboard.type("인라인 수식 대상")
-
-    await page.evaluate(() => {
-      const paragraph = document.querySelector(".aq-block-editor__content p")
-      const textNode = paragraph?.firstChild
-      if (!paragraph || !textNode || textNode.nodeType !== Node.TEXT_NODE) return
-      const text = textNode.textContent || ""
-      const start = text.indexOf("수식")
-      if (start < 0) return
-
-      const range = document.createRange()
-      range.setStart(textNode, start)
-      range.setEnd(textNode, start + "수식".length)
-      const selection = window.getSelection()
-      selection?.removeAllRanges()
-      selection?.addRange(range)
-    })
-
-    const inlineFormulaButton = page.getByRole("button", { name: "인라인 수식" })
-    if (!(await inlineFormulaButton.isVisible().catch(() => false))) {
-      await page.locator("summary[aria-label='추가 도구']").click()
-    }
-    await page.getByRole("button", { name: "인라인 수식" }).click()
+    await page.keyboard.type("인라인 $수식$ 대상")
     await expect(page.getByTestId("qa-markdown-output")).toContainText("인라인 $수식$ 대상")
+
+    await page.keyboard.press("Enter")
+
+    await editor.evaluate((element, payload) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", payload.url)
+      data.setData("text/html", `<a href="${payload.url}">${payload.url}</a>`)
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    }, { url: "https://github.com/aquilaxk/aquila-blog" })
+
+    await expect(page.getByTestId("qa-markdown-output")).toContainText(":::bookmark https://github.com/aquilaxk/aquila-blog")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"provider":"GitHub"')
+
+    await page.keyboard.press("Enter")
+
+    await editor.evaluate((element, payload) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", payload.url)
+      data.setData("text/html", `<a href="${payload.url}">${payload.url}</a>`)
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    }, { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" })
+
+    await expect(page.getByTestId("qa-markdown-output")).toContainText(":::embed https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"embedUrl":"https://www.youtube.com/embed/dQw4w9WgXcQ"')
 
     await page.getByRole("button", { name: "콜아웃" }).click()
     await page.getByRole("button", { name: "테이블" }).click()

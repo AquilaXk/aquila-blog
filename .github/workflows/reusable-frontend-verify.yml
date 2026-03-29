@@ -172,6 +172,10 @@ jobs:
         working-directory: front
         run: yarn test:e2e:smoke
 
+      - name: Run editor authoring e2e
+        working-directory: front
+        run: yarn test:e2e:authoring
+
       - name: Run CLS perf e2e
         working-directory: front
         run: yarn test:e2e:perf

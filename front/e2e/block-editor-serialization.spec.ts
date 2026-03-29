@@ -113,7 +113,7 @@ test.describe("block editor serialization", () => {
         createMermaidNode("flowchart TD\n  A[시작] --> B[처리]"),
         createHorizontalRuleNode(),
       ],
-    } as const
+    }
 
     const serialized = serializeEditorDocToMarkdown(doc)
 
@@ -286,9 +286,16 @@ test.describe("block editor serialization", () => {
           ],
         },
       ],
-    } as const
+    }
 
     expect(serializeEditorDocToMarkdown(doc)).toBe("결과는 $e^{i\\pi} + 1 = 0$ 입니다.")
+  })
+
+  test("single-line block formula 는 formulaBlock 으로 승격된다", () => {
+    const doc = parseMarkdownToEditorDoc("$$ a^2 + b^2 = c^2 $$")
+
+    expect(doc.content?.[0]?.type).toBe("formulaBlock")
+    expect(doc.content?.[0]?.attrs?.formula).toBe("a^2 + b^2 = c^2")
   })
 
   test("카드 메타 comment 는 directive parse/serialize round-trip 을 유지한다", () => {
@@ -334,6 +341,21 @@ test.describe("block editor serialization", () => {
     expect(unsupported).toHaveLength(1)
     expect(unsupported[0]?.reason).toBe("unsupported-toggle")
     expect(unsupported[0]?.markdown).toContain(":::toggle 덜 닫힌 토글")
+  })
+
+  test("header-only toggle directive 는 빈 toggle block 으로 승격된다", () => {
+    const doc = parseMarkdownToEditorDoc(":::toggle 접힌 섹션")
+
+    expect(doc.content?.[0]?.type).toBe("toggleBlock")
+    expect(doc.content?.[0]?.attrs?.title).toBe("접힌 섹션")
+    expect(doc.content?.[0]?.attrs?.body).toBe("")
+  })
+
+  test("header-only bookmark directive 는 카드 블록으로 승격된다", () => {
+    const doc = parseMarkdownToEditorDoc(":::bookmark https://github.com/aquilaxk/aquila-blog")
+
+    expect(doc.content?.[0]?.type).toBe("bookmarkBlock")
+    expect(doc.content?.[0]?.attrs?.url).toBe("https://github.com/aquilaxk/aquila-blog")
   })
 
   test("지원하지 않는 callout 타입도 info 블록으로 승격하고 원래 label 을 유지한다", () => {

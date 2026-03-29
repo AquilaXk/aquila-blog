@@ -20,6 +20,7 @@ import {
   BookmarkBlock,
   CalloutBlock,
   EditorListKeymap,
+  EditorListItem,
   EditorTaskItem,
   EditorTaskList,
   EditorCodeBlock,
@@ -41,7 +42,7 @@ import {
   deleteTopLevelBlockAt,
   duplicateTopLevelBlockAt,
   insertTopLevelBlockAt,
-  moveTaskItemToInsertionIndex,
+  moveNestedListItemToInsertionIndex,
   moveTopLevelBlockToInsertionIndex,
 } from "./blockDocumentOps"
 import {
@@ -80,6 +81,7 @@ import {
   normalizeStructuredMarkdownClipboard,
 } from "src/libs/markdown/htmlToMarkdown"
 import { INLINE_TEXT_COLOR_OPTIONS, normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
+import { inferCardKindFromUrl, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
 
 type Props = {
   value: string
@@ -152,19 +154,19 @@ type DraggedBlockState =
     }
   | null
 
-type DraggedTaskItemState =
+type DraggedNestedListItemState =
   | {
-      taskListBlockIndex: number
-      taskListPath: number[]
+      listBlockIndex: number
+      listPath: number[]
       sourceItemIndex: number
     }
   | null
 
-type TaskItemDropIndicatorState =
+type NestedListItemDropIndicatorState =
   | {
       visible: boolean
-      taskListBlockIndex: number
-      taskListPath: number[]
+      listBlockIndex: number
+      listPath: number[]
       insertionIndex: number
       top: number
       left: number
@@ -172,8 +174,8 @@ type TaskItemDropIndicatorState =
     }
   | {
       visible: false
-      taskListBlockIndex: number
-      taskListPath: number[]
+      listBlockIndex: number
+      listPath: number[]
       insertionIndex: number
       top: number
       left: number
@@ -199,6 +201,11 @@ type DropIndicatorState =
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
 
 const compactSlashSearchText = (value: string) => normalizeSlashSearchText(value).replace(/\s+/g, "")
+
+const LIST_ITEM_SELECTOR =
+  "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
+const LIST_CONTAINER_SELECTOR =
+  "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"
 
 const getSlashSearchTerms = (item: BlockInsertCatalogItem) =>
   Array.from(
@@ -568,11 +575,11 @@ const BlockEditorShell = ({
     left: 0,
     width: 0,
   })
-  const [draggedTaskItemState, setDraggedTaskItemState] = useState<DraggedTaskItemState>(null)
-  const [taskItemDropIndicatorState, setTaskItemDropIndicatorState] = useState<TaskItemDropIndicatorState>({
+  const [draggedNestedListItemState, setDraggedNestedListItemState] = useState<DraggedNestedListItemState>(null)
+  const [nestedListItemDropIndicatorState, setNestedListItemDropIndicatorState] = useState<NestedListItemDropIndicatorState>({
     visible: false,
-    taskListBlockIndex: 0,
-    taskListPath: [],
+    listBlockIndex: 0,
+    listPath: [],
     insertionIndex: 0,
     top: 0,
     left: 0,
@@ -704,14 +711,14 @@ const BlockEditorShell = ({
     [getContentRoot, getTopLevelBlockElements]
   )
 
-  const findTaskItemDragContextFromTarget = useCallback(
+  const findNestedListItemDragContextFromTarget = useCallback(
     (target: EventTarget | null) => {
       const root = getContentRoot()
       if (!root || !(target instanceof Element)) return null
 
-      const taskItemElement = target.closest("li[data-type='taskItem'], li[data-task-item='true']")
+      const taskItemElement = target.closest(LIST_ITEM_SELECTOR)
       if (!(taskItemElement instanceof HTMLElement)) return null
-      const taskListElement = taskItemElement.closest("ul[data-type='taskList'], ul[data-task-list='true']")
+      const taskListElement = taskItemElement.closest(LIST_CONTAINER_SELECTOR)
       if (!(taskListElement instanceof HTMLElement)) return null
 
       let blockElement: Element | null = taskListElement
@@ -724,7 +731,7 @@ const BlockEditorShell = ({
       if (taskListBlockIndex < 0) return null
 
       const taskItems = Array.from(
-        taskListElement.querySelectorAll(":scope > li[data-type='taskItem'], :scope > li[data-task-item='true']")
+        taskListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
       ) as HTMLElement[]
       const sourceItemIndex = taskItems.indexOf(taskItemElement)
       if (sourceItemIndex < 0) return null
@@ -733,14 +740,14 @@ const BlockEditorShell = ({
       let currentListElement: HTMLElement | null = taskListElement
       while (currentListElement && currentListElement !== blockElement) {
         const parentTaskItem: HTMLElement | null =
-          currentListElement.parentElement?.closest("li[data-type='taskItem'], li[data-task-item='true']") ?? null
+          currentListElement.parentElement?.closest(LIST_ITEM_SELECTOR) ?? null
         if (!(parentTaskItem instanceof HTMLElement)) break
         const parentTaskList: HTMLElement | null =
-          parentTaskItem.parentElement?.closest("ul[data-type='taskList'], ul[data-task-list='true']") ?? null
+          parentTaskItem.parentElement?.closest(LIST_CONTAINER_SELECTOR) ?? null
         if (!(parentTaskList instanceof HTMLElement)) break
 
         const siblingItems = Array.from(
-          parentTaskList.querySelectorAll(":scope > li[data-type='taskItem'], :scope > li[data-task-item='true']")
+          parentTaskList.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
         ) as HTMLElement[]
         const parentItemIndex = siblingItems.indexOf(parentTaskItem)
         if (parentItemIndex < 0) break
@@ -750,21 +757,21 @@ const BlockEditorShell = ({
       }
 
       return {
-        taskListBlockIndex,
-        taskListPath,
+        listBlockIndex: taskListBlockIndex,
+        listPath: taskListPath,
         sourceItemIndex,
         taskItemElement,
-        taskListElement,
+        listElement: taskListElement,
         taskItems,
       }
     },
     [getContentRoot, getTopLevelBlockElements]
   )
 
-  const resolveTaskItemDropIndicatorByClientY = useCallback(
+  const resolveNestedListItemDropIndicatorByClientY = useCallback(
     (taskListElement: HTMLElement, clientY: number) => {
       const taskItems = Array.from(
-        taskListElement.querySelectorAll(":scope > li[data-type='taskItem'], :scope > li[data-task-item='true']")
+        taskListElement.querySelectorAll(`:scope > ${LIST_ITEM_SELECTOR}`)
       ) as HTMLElement[]
       if (!taskItems.length) {
         const rect = taskListElement.getBoundingClientRect()
@@ -946,6 +953,7 @@ const BlockEditorShell = ({
       StarterKit.configure({
         link: false,
         codeBlock: false,
+        listItem: false,
       }),
       Link.configure({
         openOnClick: false,
@@ -967,6 +975,7 @@ const BlockEditorShell = ({
       RawMarkdownBlock,
       ResizableImage,
       CalloutBlock,
+      EditorListItem,
       EditorTaskList,
       EditorTaskItem,
       EditorListKeymap,
@@ -1012,6 +1021,18 @@ const BlockEditorShell = ({
         if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "k") {
           event.preventDefault()
           openLinkPrompt()
+          return true
+        }
+
+        if (hasPrimaryModifier && event.altKey && !event.shiftKey && normalizedKey === "m") {
+          event.preventDefault()
+          insertInlineFormula()
+          return true
+        }
+
+        if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "m") {
+          event.preventDefault()
+          insertFormulaBlock()
           return true
         }
 
@@ -1063,9 +1084,8 @@ const BlockEditorShell = ({
         const currentEditor = editorRef.current
         if (!currentEditor) return false
 
-        const imageFile = Array.from(event.clipboardData?.files || []).find((file) =>
-          file.type.startsWith("image/")
-        )
+        const clipboardFiles = Array.from(event.clipboardData?.files || [])
+        const imageFile = clipboardFiles.find((file) => file.type.startsWith("image/"))
         if (imageFile) {
           event.preventDefault()
           void (async () => {
@@ -1091,10 +1111,38 @@ const BlockEditorShell = ({
           return true
         }
 
+        const attachmentFile = clipboardFiles.find((file) => !file.type.startsWith("image/"))
+        if (attachmentFile && onUploadFile) {
+          event.preventDefault()
+          void (async () => {
+            const fileAttrs = await onUploadFile(attachmentFile)
+            insertDocContent(
+              {
+                type: "doc",
+                content: [createFileBlockNode(fileAttrs), { type: "paragraph" }],
+              },
+              isSelectionInEmptyParagraph()
+            )
+          })()
+          return true
+        }
+
         const plainText = event.clipboardData?.getData("text/plain") || ""
         const html = event.clipboardData?.getData("text/html") || ""
+        const trimmedPlainText = plainText.trim()
         const normalizedPlainText = normalizeStructuredMarkdownClipboard(plainText)
         const normalizedHtmlMarkdown = html ? convertHtmlToMarkdown(html) : ""
+
+        if (
+          isSelectionInEmptyParagraph() &&
+          trimmedPlainText &&
+          !trimmedPlainText.includes("\n") &&
+          isHttpUrl(trimmedPlainText)
+        ) {
+          event.preventDefault()
+          void insertCardBlockFromUrl(trimmedPlainText)
+          return true
+        }
 
         if (html && normalizedHtmlMarkdown) {
           event.preventDefault()
@@ -1409,6 +1457,95 @@ const BlockEditorShell = ({
       mutateTopLevelBlocks((doc) => insertTopLevelBlockAt(doc, insertionIndex, blocks), focusIndex)
     },
     [mutateTopLevelBlocks]
+  )
+
+  const isHttpUrl = useCallback((value: string) => {
+    try {
+      const parsed = new URL(value.trim())
+      return parsed.protocol === "http:" || parsed.protocol === "https:"
+    } catch {
+      return false
+    }
+  }, [])
+
+  const fetchUnfurlMetadata = useCallback(async (url: string) => {
+    try {
+      const response = await fetch(`/api/editor/unfurl?url=${encodeURIComponent(url)}`)
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) return null
+      return payload.data as {
+        title?: string
+        description?: string
+        siteName?: string
+        provider?: string
+        thumbnailUrl?: string
+        embedUrl?: string
+      }
+    } catch {
+      return null
+    }
+  }, [])
+
+  const createCardNodeFromUrl = useCallback(
+    async (url: string) => {
+      const trimmedUrl = url.trim()
+      const cardKind = inferCardKindFromUrl(trimmedUrl)
+      const metadata = await fetchUnfurlMetadata(trimmedUrl)
+      const fallbackProvider = inferLinkProvider(trimmedUrl)
+      const fallbackTitle = (() => {
+        try {
+          const parsed = new URL(trimmedUrl)
+          const lastSegment = parsed.pathname.split("/").filter(Boolean).pop() || ""
+          return decodeURIComponent(lastSegment || parsed.hostname.replace(/^www\./i, "")) || trimmedUrl
+        } catch {
+          return trimmedUrl
+        }
+      })()
+
+      if (cardKind === "file") {
+        return createFileBlockNode({
+          url: trimmedUrl,
+          name: String(metadata?.title || fallbackTitle || "첨부 파일").trim(),
+          description: String(metadata?.description || "").trim(),
+        })
+      }
+
+      if (cardKind === "embed") {
+        return createEmbedNode({
+          url: trimmedUrl,
+          title: String(metadata?.title || fallbackProvider || "임베드").trim(),
+          caption: String(metadata?.description || "").trim(),
+          siteName: String(metadata?.siteName || "").trim(),
+          provider: String(metadata?.provider || fallbackProvider || "").trim(),
+          thumbnailUrl: String(metadata?.thumbnailUrl || "").trim(),
+          embedUrl: String(metadata?.embedUrl || resolveEmbedPreviewUrl(trimmedUrl) || "").trim(),
+        })
+      }
+
+      return createBookmarkNode({
+        url: trimmedUrl,
+        title: String(metadata?.title || fallbackTitle || trimmedUrl).trim(),
+        description: String(metadata?.description || "").trim(),
+        siteName: String(metadata?.siteName || "").trim(),
+        provider: String(metadata?.provider || fallbackProvider || "").trim(),
+        thumbnailUrl: String(metadata?.thumbnailUrl || "").trim(),
+      })
+    },
+    [fetchUnfurlMetadata]
+  )
+
+  const insertCardBlockFromUrl = useCallback(
+    async (url: string) => {
+      const nextNode = await createCardNodeFromUrl(url)
+      return insertDocContent(
+        {
+          type: "doc",
+          content: [nextNode, { type: "paragraph" }],
+        },
+        isSelectionInEmptyParagraph()
+      )
+    },
+    [createCardNodeFromUrl, insertDocContent, isSelectionInEmptyParagraph]
   )
 
   const openLinkPrompt = useCallback(() => {
@@ -1859,7 +1996,7 @@ const BlockEditorShell = ({
         },
         insertAtBlock: (blockIndex) => {
           pendingImageInsertIndexRef.current = blockIndex + 1
-          attachmentFileInputRef.current?.click()
+          imageFileInputRef.current?.click()
         },
       },
       ...(enableMermaidBlocks
@@ -2543,94 +2680,94 @@ const BlockEditorShell = ({
 
   const handleViewportDragStart = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      const taskItemContext = findTaskItemDragContextFromTarget(event.target)
+      const taskItemContext = findNestedListItemDragContextFromTarget(event.target)
       if (!taskItemContext) return
 
-      setDraggedTaskItemState({
-        taskListBlockIndex: taskItemContext.taskListBlockIndex,
-        taskListPath: taskItemContext.taskListPath,
+      setDraggedNestedListItemState({
+        listBlockIndex: taskItemContext.listBlockIndex,
+        listPath: taskItemContext.listPath,
         sourceItemIndex: taskItemContext.sourceItemIndex,
       })
-      setTaskItemDropIndicatorState({
+      setNestedListItemDropIndicatorState({
         visible: true,
-        taskListBlockIndex: taskItemContext.taskListBlockIndex,
-        taskListPath: taskItemContext.taskListPath,
-        ...resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY),
+        listBlockIndex: taskItemContext.listBlockIndex,
+        listPath: taskItemContext.listPath,
+        ...resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY),
       })
       event.dataTransfer.effectAllowed = "move"
-      event.dataTransfer.setData("text/plain", `task-item:${taskItemContext.taskListBlockIndex}:${taskItemContext.sourceItemIndex}`)
+      event.dataTransfer.setData("text/plain", `list-item:${taskItemContext.listBlockIndex}:${taskItemContext.sourceItemIndex}`)
     },
-    [findTaskItemDragContextFromTarget, resolveTaskItemDropIndicatorByClientY]
+    [findNestedListItemDragContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
   )
 
   const handleViewportDragOver = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (!draggedTaskItemState) return
-      const taskItemContext = findTaskItemDragContextFromTarget(event.target)
+      if (!draggedNestedListItemState) return
+      const taskItemContext = findNestedListItemDragContextFromTarget(event.target)
       if (
         !taskItemContext ||
-        taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex ||
-        taskItemContext.taskListPath.join(",") !== draggedTaskItemState.taskListPath.join(",")
+        taskItemContext.listBlockIndex !== draggedNestedListItemState.listBlockIndex ||
+        taskItemContext.listPath.join(",") !== draggedNestedListItemState.listPath.join(",")
       ) {
         return
       }
 
       event.preventDefault()
-      setTaskItemDropIndicatorState({
+      setNestedListItemDropIndicatorState({
         visible: true,
-        taskListBlockIndex: taskItemContext.taskListBlockIndex,
-        taskListPath: taskItemContext.taskListPath,
-        ...resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY),
+        listBlockIndex: taskItemContext.listBlockIndex,
+        listPath: taskItemContext.listPath,
+        ...resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY),
       })
     },
-    [draggedTaskItemState, findTaskItemDragContextFromTarget, resolveTaskItemDropIndicatorByClientY]
+    [draggedNestedListItemState, findNestedListItemDragContextFromTarget, resolveNestedListItemDropIndicatorByClientY]
   )
 
-  const clearTaskItemDragState = useCallback(() => {
-    setDraggedTaskItemState(null)
-    setTaskItemDropIndicatorState((prev) => ({ ...prev, visible: false }))
+  const clearNestedListItemDragState = useCallback(() => {
+    setDraggedNestedListItemState(null)
+    setNestedListItemDropIndicatorState((prev) => ({ ...prev, visible: false }))
   }, [])
 
   const handleViewportDrop = useCallback(
     (event: ReactDragEvent<HTMLDivElement>) => {
-      if (!draggedTaskItemState) return
-      const taskItemContext = findTaskItemDragContextFromTarget(event.target)
+      if (!draggedNestedListItemState) return
+      const taskItemContext = findNestedListItemDragContextFromTarget(event.target)
       if (
         !taskItemContext ||
-        taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex ||
-        taskItemContext.taskListPath.join(",") !== draggedTaskItemState.taskListPath.join(",")
+        taskItemContext.listBlockIndex !== draggedNestedListItemState.listBlockIndex ||
+        taskItemContext.listPath.join(",") !== draggedNestedListItemState.listPath.join(",")
       ) {
-        clearTaskItemDragState()
+        clearNestedListItemDragState()
         return
       }
 
       event.preventDefault()
-      const indicator = resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY)
+      const indicator = resolveNestedListItemDropIndicatorByClientY(taskItemContext.listElement, event.clientY)
       mutateTopLevelBlocks(
         (doc) =>
-          moveTaskItemToInsertionIndex(
+          moveNestedListItemToInsertionIndex(
             doc,
-            draggedTaskItemState.taskListBlockIndex,
-            draggedTaskItemState.taskListPath,
-            draggedTaskItemState.sourceItemIndex,
+            draggedNestedListItemState.listBlockIndex,
+            draggedNestedListItemState.listPath,
+            draggedNestedListItemState.sourceItemIndex,
             indicator.insertionIndex
           ),
-        draggedTaskItemState.taskListBlockIndex
+        draggedNestedListItemState.listBlockIndex
       )
-      clearTaskItemDragState()
+      clearNestedListItemDragState()
     },
     [
-      clearTaskItemDragState,
-      draggedTaskItemState,
-      findTaskItemDragContextFromTarget,
+      clearNestedListItemDragState,
+      draggedNestedListItemState,
+      findNestedListItemDragContextFromTarget,
       mutateTopLevelBlocks,
-      resolveTaskItemDropIndicatorByClientY,
+      resolveNestedListItemDropIndicatorByClientY,
     ]
   )
 
   const handleViewportDragEnd = useCallback(() => {
-    clearTaskItemDragState()
-  }, [clearTaskItemDragState])
+    clearNestedListItemDragState()
+  }, [clearNestedListItemDragState])
 
   useEffect(() => {
     if (typeof window === "undefined" || !blockMenuState) return
@@ -3140,13 +3277,13 @@ const BlockEditorShell = ({
             }}
           />
         ) : null}
-        {taskItemDropIndicatorState.visible ? (
+        {nestedListItemDropIndicatorState.visible ? (
           <BlockDropIndicator
             data-kind="task-item"
             style={{
-              left: `${taskItemDropIndicatorState.left}px`,
-              top: `${taskItemDropIndicatorState.top}px`,
-              width: `${taskItemDropIndicatorState.width}px`,
+              left: `${nestedListItemDropIndicatorState.left}px`,
+              top: `${nestedListItemDropIndicatorState.top}px`,
+              width: `${nestedListItemDropIndicatorState.width}px`,
             }}
           />
         ) : null}

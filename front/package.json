@@ -18,6 +18,7 @@
     "contracts:check": "node scripts/openapi/check-contract-drift.mjs",
     "test:e2e": "env -u NO_COLOR playwright test",
     "test:e2e:smoke": "env -u NO_COLOR playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts",
+    "test:e2e:authoring": "env -u NO_COLOR playwright test e2e/editor-authoring-flow.spec.ts --workers=1",
     "test:e2e:perf": "BACKEND_INTERNAL_URL=http://127.0.0.1:1 NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:3000 env -u NO_COLOR playwright test e2e/perf.spec.ts",
     "test:e2e:a11y": "env -u NO_COLOR playwright test e2e/accessibility.spec.ts",
     "test:e2e:live": "env -u NO_COLOR PLAYWRIGHT_LIVE_MULTI_BROWSER=true playwright test e2e/live.spec.ts --workers=1",

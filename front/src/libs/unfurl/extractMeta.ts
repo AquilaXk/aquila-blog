@@ -8,6 +8,9 @@ export type UnfurlMetadata = {
   embedUrl?: string
 }
 
+const FILE_EXTENSION_PATTERN =
+  /\.(?:pdf|doc|docx|xls|xlsx|ppt|pptx|zip|tar|gz|tgz|rar|7z|txt|csv|md|rtf|json|xml|yaml|yml|svg|psd|ai|sketch|fig|mp3|wav|ogg|mp4|mov|avi|mkv)$/i
+
 const META_PATTERNS = [
   /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["'][^>]*>/i,
   /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']*)["'][^>]*>/i,
@@ -77,6 +80,17 @@ export const inferLinkProvider = (url: string) => {
   }
 }
 
+export const isLikelyFileUrl = (url: string) => {
+  try {
+    const parsedUrl = new URL(url)
+    const pathname = parsedUrl.pathname.trim()
+    if (!pathname) return false
+    return FILE_EXTENSION_PATTERN.test(pathname)
+  } catch {
+    return false
+  }
+}
+
 export const resolveEmbedPreviewUrl = (url: string) => {
   try {
     const parsedUrl = new URL(url)
@@ -121,6 +135,12 @@ export const resolveEmbedPreviewUrl = (url: string) => {
   }
 
   return ""
+}
+
+export const inferCardKindFromUrl = (url: string): "bookmark" | "embed" | "file" => {
+  if (isLikelyFileUrl(url)) return "file"
+  if (resolveEmbedPreviewUrl(url)) return "embed"
+  return "bookmark"
 }
 
 export const formatReadableFileSize = (sizeBytes?: number | null) => {

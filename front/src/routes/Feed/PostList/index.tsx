@@ -24,7 +24,7 @@ type EmptyPostStateProps = {
 }
 
 const INITIAL_SKELETON_KEYS = Array.from({ length: 6 }, (_, index) => `skeleton-initial-${index}`)
-const NEXT_SKELETON_KEYS = Array.from({ length: 2 }, (_, index) => `skeleton-next-${index}`)
+const NEXT_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-next-${index}`)
 const FILTER_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-filter-${index}`)
 
 const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClearFilters }) => {
@@ -140,10 +140,16 @@ const PostList: React.FC<Props> = ({
             </button>
           )}
           {isFetchingNextPage && (
-            <div className="skeletonGrid" aria-hidden="true">
-              {NEXT_SKELETON_KEYS.map((key) => (
-                <article key={key} className="skeletonCard" />
-              ))}
+            <div className="loadMoreSkeletonShell" aria-hidden="true">
+              <div className="loadMoreSkeletonCopy">
+                <strong>다음 글을 정리하는 중...</strong>
+                <span>현재 카드 레이아웃을 유지한 채 다음 페이지를 이어 붙입니다.</span>
+              </div>
+              <div className="skeletonGrid">
+                {NEXT_SKELETON_KEYS.map((key) => (
+                  <article key={key} className="skeletonCard" />
+                ))}
+              </div>
             </div>
           )}
         </section>
@@ -332,6 +338,31 @@ const StyledWrapper = styled.div`
     justify-items: center;
     gap: 0.8rem;
     padding-top: 0.35rem;
+  }
+
+  .loadMoreSkeletonShell {
+    width: 100%;
+    display: grid;
+    gap: 0.72rem;
+  }
+
+  .loadMoreSkeletonCopy {
+    display: grid;
+    gap: 0.12rem;
+    justify-items: center;
+    text-align: center;
+
+    strong {
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    span {
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.8rem;
+      line-height: 1.5;
+    }
   }
 
   .loadMoreTrigger {

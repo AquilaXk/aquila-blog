@@ -89,6 +89,7 @@ type WorkspaceRecentAction = {
   tone: "success" | "error"
   label: string
   detail: string
+  stateLabel: string
   occurredAt: string
 }
 
@@ -223,6 +224,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   const [listPageSize, setListPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [listSort, setListSort] = useState<ListSort>(DEFAULT_SORT)
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [isStickyToolbarCompact, setIsStickyToolbarCompact] = useState(false)
   const [listState, setListState] = useState<ListState>({ rows: [], total: 0, loadedAt: "" })
   const [isListLoading, setIsListLoading] = useState(true)
   const [listError, setListError] = useState("")
@@ -353,17 +355,21 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
     setToast(next)
   }, [])
 
-  const pushRecentAction = useCallback((tone: WorkspaceRecentAction["tone"], label: string, detail: string) => {
+  const pushRecentAction = useCallback(
+    (tone: WorkspaceRecentAction["tone"], label: string, detail: string, stateLabel: string) => {
     const entry: WorkspaceRecentAction = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       tone,
       label,
       detail,
+      stateLabel,
       occurredAt: new Date().toISOString(),
     }
 
     setRecentActions((current) => [entry, ...current].slice(0, 4))
-  }, [])
+    },
+    []
+  )
 
   const performDeletePost = useCallback(
     async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
@@ -383,11 +389,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             rowTitle: buildRowTitle(row),
           },
         })
-        pushRecentAction("success", "글 삭제", `#${row.id} ${buildRowTitle(row)} 글을 삭제했습니다.`)
+        pushRecentAction("success", "글 삭제", `#${row.id} ${buildRowTitle(row)} 글을 삭제했습니다.`, "되돌리기 가능")
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ tone: "error", text: `삭제 실패: ${message}` })
-        pushRecentAction("error", "삭제 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`)
+        pushRecentAction("error", "삭제 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`, "재시도 필요")
       } finally {
         setMutationPending(null)
       }
@@ -407,11 +413,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           tone: "success",
           text: `#${row.id} ${buildRowTitle(row)} 글을 복구했습니다.`,
         })
-        pushRecentAction("success", "글 복구", `#${row.id} ${buildRowTitle(row)} 글을 복구했습니다.`)
+        pushRecentAction("success", "글 복구", `#${row.id} ${buildRowTitle(row)} 글을 복구했습니다.`, "복구 완료")
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ tone: "error", text: `복구 실패: ${message}` })
-        pushRecentAction("error", "복구 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`)
+        pushRecentAction("error", "복구 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`, "재시도 필요")
       } finally {
         setMutationPending(null)
       }
@@ -431,11 +437,11 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           tone: "success",
           text: `#${row.id} ${buildRowTitle(row)} 글을 영구삭제했습니다.`,
         })
-        pushRecentAction("success", "영구삭제", `#${row.id} ${buildRowTitle(row)} 글을 영구삭제했습니다.`)
+        pushRecentAction("success", "영구삭제", `#${row.id} ${buildRowTitle(row)} 글을 영구삭제했습니다.`, "영구 반영")
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ tone: "error", text: `영구삭제 실패: ${message}` })
-        pushRecentAction("error", "영구삭제 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`)
+        pushRecentAction("error", "영구삭제 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`, "재시도 필요")
       } finally {
         setMutationPending(null)
       }
@@ -686,7 +692,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           </ListMeta>
         </SectionHeading>
 
-        <StickyFilterToolbar>
+        <StickyFilterToolbar data-compact={isStickyToolbarCompact}>
           <FilterRail>
             <ScopeTabs role="tablist" aria-label="글 범위 선택">
               <ScopeTabButton type="button" data-active={listScope === "active"} onClick={() => setListScope("active")}>
@@ -710,57 +716,59 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             </SearchField>
           </FilterRail>
 
-          <AdvancedDisclosure open={isAdvancedOpen}>
-            <summary
-              onClick={(event) => {
-                event.preventDefault()
-                setIsAdvancedOpen((prev) => !prev)
-              }}
-            >
-              <strong>고급 검색</strong>
-              <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
-            </summary>
-          {isAdvancedOpen && (
-              <div className="body">
-                <AdvancedGrid>
-                  <FieldBox>
-                    <label htmlFor="workspace-page">페이지</label>
-                    <input
-                      id="workspace-page"
-                      type="number"
-                      min={1}
-                      value={listPage}
-                      onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
-                    />
-                  </FieldBox>
-                  <FieldBox>
-                    <label htmlFor="workspace-page-size">페이지 크기</label>
-                    <input
-                      id="workspace-page-size"
-                      type="number"
-                      min={1}
-                      max={30}
-                      value={listPageSize}
-                      onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
-                    />
-                  </FieldBox>
-                  {listScope === "active" && (
+          {!isStickyToolbarCompact ? (
+            <AdvancedDisclosure open={isAdvancedOpen}>
+              <summary
+                onClick={(event) => {
+                  event.preventDefault()
+                  setIsAdvancedOpen((prev) => !prev)
+                }}
+              >
+                <strong>고급 검색</strong>
+                <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
+              </summary>
+            {isAdvancedOpen && (
+                <div className="body">
+                  <AdvancedGrid>
                     <FieldBox>
-                      <label htmlFor="workspace-sort">정렬</label>
-                      <select
-                        id="workspace-sort"
-                        value={listSort}
-                        onChange={(event) => setListSort(event.target.value as ListSort)}
-                      >
-                        <option value="CREATED_AT">최신순</option>
-                        <option value="CREATED_AT_ASC">오래된순</option>
-                      </select>
+                      <label htmlFor="workspace-page">페이지</label>
+                      <input
+                        id="workspace-page"
+                        type="number"
+                        min={1}
+                        value={listPage}
+                        onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
+                      />
                     </FieldBox>
-                  )}
-                </AdvancedGrid>
-              </div>
-            )}
-          </AdvancedDisclosure>
+                    <FieldBox>
+                      <label htmlFor="workspace-page-size">페이지 크기</label>
+                      <input
+                        id="workspace-page-size"
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={listPageSize}
+                        onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
+                      />
+                    </FieldBox>
+                    {listScope === "active" && (
+                      <FieldBox>
+                        <label htmlFor="workspace-sort">정렬</label>
+                        <select
+                          id="workspace-sort"
+                          value={listSort}
+                          onChange={(event) => setListSort(event.target.value as ListSort)}
+                        >
+                          <option value="CREATED_AT">최신순</option>
+                          <option value="CREATED_AT_ASC">오래된순</option>
+                        </select>
+                      </FieldBox>
+                    )}
+                  </AdvancedGrid>
+                </div>
+              )}
+            </AdvancedDisclosure>
+          ) : null}
 
           <FilterSummaryBar>
             <div className="summaryCopy">
@@ -774,11 +782,16 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
                 </SummaryPill>
               </SummaryPillRow>
             </div>
-            {hasListFilters ? (
-              <GhostButton type="button" onClick={handleResetListFilters}>
-                조건 초기화
+            <ToolbarUtilityRow>
+              <GhostButton type="button" onClick={() => setIsStickyToolbarCompact((prev) => !prev)}>
+                {isStickyToolbarCompact ? "전체 보기" : "요약만 보기"}
               </GhostButton>
-            ) : null}
+              {hasListFilters ? (
+                <GhostButton type="button" onClick={handleResetListFilters}>
+                  조건 초기화
+                </GhostButton>
+              ) : null}
+            </ToolbarUtilityRow>
           </FilterSummaryBar>
         </StickyFilterToolbar>
 
@@ -792,7 +805,10 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
               {recentActions.map((entry) => (
                 <li key={entry.id} data-tone={entry.tone}>
                   <div className="copy">
-                    <strong>{entry.label}</strong>
+                    <div className="headline">
+                      <strong>{entry.label}</strong>
+                      <span className="stateLabel">{entry.stateLabel}</span>
+                    </div>
                     <p>{entry.detail}</p>
                   </div>
                   <span className="time">{formatDateTime(entry.occurredAt)}</span>
@@ -1533,6 +1549,12 @@ const StickyFilterToolbar = styled.div`
     top: calc(var(--app-header-height, 64px) + 0.35rem);
     padding: 0.8rem 0.82rem;
   }
+
+  &[data-compact="true"] {
+    gap: 0.56rem;
+    padding-top: 0.72rem;
+    padding-bottom: 0.72rem;
+  }
 `
 
 const FilterRail = styled.div`
@@ -1674,6 +1696,18 @@ const FilterSummaryBar = styled.div`
   }
 `
 
+const ToolbarUtilityRow = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+
+  @media (max-width: 767px) {
+    justify-content: flex-start;
+  }
+`
+
 const SummaryPillRow = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -1747,10 +1781,37 @@ const RecentActionList = styled.ul`
     gap: 0.16rem;
   }
 
+  .headline {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.48rem;
+  }
+
   strong {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: 0.86rem;
     font-weight: 800;
+  }
+
+  .stateLabel {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 0.56rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  li[data-tone="error"] .stateLabel {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    background: ${({ theme }) => theme.colors.statusDangerSurface};
+    color: ${({ theme }) => theme.colors.statusDangerText};
   }
 
   p {

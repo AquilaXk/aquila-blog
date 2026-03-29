@@ -59,7 +59,7 @@ export default defineConfig({
           BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:1",
         },
         timeout: 120_000,
-        reuseExistingServer: true,
+        reuseExistingServer: !process.env.CI,
       }
     : undefined,
   projects: useLiveMultiBrowser ? liveMultiBrowserProjects : defaultProjects,

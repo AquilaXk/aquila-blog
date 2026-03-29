@@ -4,6 +4,34 @@ import { extractUnfurlMetadata } from "src/libs/unfurl/extractMeta"
 const DISALLOWED_HOST_PATTERN =
   /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$)/i
 
+const QA_UNFURL_FIXTURES: Record<
+  string,
+  {
+    title: string
+    description: string
+    siteName: string
+    provider: string
+    thumbnailUrl: string
+    embedUrl?: string
+  }
+> = {
+  "https://github.com/aquilaxk/aquila-blog": {
+    title: "aquila-blog",
+    description: "에디터 개선 로그와 블로그 서비스를 담은 저장소",
+    siteName: "GitHub",
+    provider: "GitHub",
+    thumbnailUrl: "https://opengraph.githubassets.com/aquila-blog.png",
+  },
+  "https://www.youtube.com/watch?v=dQw4w9WgXcQ": {
+    title: "Never Gonna Give You Up",
+    description: "테스트용 고정 임베드 메타데이터",
+    siteName: "YouTube",
+    provider: "YouTube",
+    thumbnailUrl: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    embedUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+  },
+}
+
 const createError = (status: number, message: string) => ({
   status,
   body: {
@@ -37,6 +65,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (DISALLOWED_HOST_PATTERN.test(parsedUrl.hostname)) {
     return res.status(400).json({ ok: false, message: "내부 네트워크 대상은 unfurl할 수 없습니다." })
+  }
+
+  if (process.env.ENABLE_QA_ROUTES === "true") {
+    const fixture = QA_UNFURL_FIXTURES[parsedUrl.toString()]
+    if (fixture) {
+      return res.status(200).json({
+        ok: true,
+        data: {
+          url: parsedUrl.toString(),
+          ...fixture,
+        },
+      })
+    }
   }
 
   const controller = new AbortController()

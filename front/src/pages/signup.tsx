@@ -43,6 +43,13 @@ const SignupPage = () => {
     return buildSocialAuthItems(next)
   }, [next])
   const emailActive = useMemo(() => emailFocused || email.length > 0, [email, emailFocused])
+  const feedbackMessage = error ? (
+    <ErrorText>{error}</ErrorText>
+  ) : sentEmail ? (
+    <SuccessText>
+      <strong>{sentEmail}</strong>으로 회원가입 링크를 보냈습니다. 받은편지함에서 메일을 열고 계속 진행해주세요.
+    </SuccessText>
+  ) : null
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -115,12 +122,9 @@ const SignupPage = () => {
           )}
         </NaverField>
 
-        {error && <ErrorText>{error}</ErrorText>}
-        {!error && sentEmail && (
-          <SuccessText>
-            <strong>{sentEmail}</strong>으로 회원가입 링크를 보냈습니다. 받은편지함에서 메일을 열고 계속 진행해주세요.
-          </SuccessText>
-        )}
+        <FeedbackSlot aria-live="polite" data-filled={feedbackMessage ? "true" : "false"}>
+          {feedbackMessage}
+        </FeedbackSlot>
 
         <PrimaryButton type="submit" disabled={loading}>
           {loading ? "메일 보내는 중..." : "인증 메일 보내기"}
@@ -277,6 +281,20 @@ const SuccessText = styled.p`
 
   strong {
     word-break: break-all;
+  }
+`
+
+const FeedbackSlot = styled.div`
+  min-height: 4.8rem;
+  display: flex;
+  align-items: stretch;
+
+  &[data-filled="false"] {
+    min-height: 4.2rem;
+  }
+
+  > * {
+    width: 100%;
   }
 `
 

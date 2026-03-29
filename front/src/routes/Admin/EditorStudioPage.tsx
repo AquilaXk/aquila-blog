@@ -3843,6 +3843,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       text: string
     } => Boolean(item)
   )
+  const mobileComposeStatusPrimary = composeStatusEntries[0] ?? {
+    key: "visibility",
+    label: "공개 범위",
+    tone: "idle" as NoticeTone,
+    text: `${currentVisibilityText} · ${postSummary.trim() ? "요약 입력됨" : "요약 자동 생성"}`,
+  }
+  const mobileComposeStatusSecondary = composeStatusEntries.find((item) => item.key === "draft") ?? null
   const thumbnailEditorPanel = (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
@@ -5280,6 +5287,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         {studioSurface === "compose" && (
         <ComposeSurfaceSection>
         <EditorSection data-mobile-visible={!isCompactMobileLayout || studioSurface === "compose"}>
+          {isCompactMobileLayout ? (
+            <MobileComposeStatusBar data-tone={mobileComposeStatusPrimary.tone}>
+              <div className="headline">
+                <strong>{mobileComposeStatusPrimary.label}</strong>
+                <span>{mobileComposeStatusPrimary.text}</span>
+              </div>
+              <div className="meta">
+                <span className="pill">{currentVisibilityText}</span>
+                {mobileComposeStatusSecondary ? <span className="pill">{mobileComposeStatusSecondary.text}</span> : null}
+              </div>
+            </MobileComposeStatusBar>
+          ) : null}
           <ComposeStudioLayout>
             <ComposeMainColumn>
               <ComposeStudioHeader>
@@ -9799,6 +9818,79 @@ const MobilePrimaryActionBar = styled.div`
       width: 100%;
       justify-content: center;
       min-height: 40px;
+    }
+  }
+`
+
+const MobileComposeStatusBar = styled.div`
+  display: none;
+
+  @media (max-width: 720px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 64px) + 0.3rem);
+    z-index: 22;
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 0.72rem;
+    padding: 0.72rem 0.82rem;
+    border-radius: 14px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: color-mix(in srgb, ${({ theme }) => theme.colors.gray2} 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.16);
+
+    .headline {
+      display: grid;
+      gap: 0.16rem;
+    }
+
+    .headline strong {
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    .headline span {
+      color: ${({ theme }) => theme.colors.gray10};
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.42rem;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 0.58rem;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: ${({ theme }) => theme.colors.gray1};
+      color: ${({ theme }) => theme.colors.gray11};
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    &[data-tone="loading"] {
+      border-color: ${({ theme }) => theme.colors.blue7};
+      background: color-mix(in srgb, ${({ theme }) => theme.colors.blue3} 82%, transparent);
+    }
+
+    &[data-tone="success"] {
+      border-color: ${({ theme }) => theme.colors.green7};
+      background: color-mix(in srgb, ${({ theme }) => theme.colors.green3} 84%, transparent);
+    }
+
+    &[data-tone="error"] {
+      border-color: ${({ theme }) => theme.colors.red7};
+      background: color-mix(in srgb, ${({ theme }) => theme.colors.red3} 84%, transparent);
     }
   }
 `

@@ -89,6 +89,11 @@ const SignupVerifyPage = () => {
   const hasPasswordConfirmInput = passwordConfirm.length > 0
   const passwordMatched = hasPasswordInput && hasPasswordConfirmInput && password === passwordConfirm
   const passwordMismatch = hasPasswordConfirmInput && password !== passwordConfirm
+  const submitFeedbackMessage = submitError ? (
+    <ErrorText>{submitError}</ErrorText>
+  ) : (
+    <InfoText>가입이 끝나면 로그인 화면으로 이동합니다. 이후부터는 이메일과 비밀번호로 로그인하면 됩니다.</InfoText>
+  )
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -260,11 +265,7 @@ const SignupVerifyPage = () => {
             </PasswordPolicyList>
           </PasswordPolicyCard>
 
-          {submitError ? (
-            <ErrorText>{submitError}</ErrorText>
-          ) : (
-            <InfoText>가입이 끝나면 로그인 화면으로 이동합니다. 이후부터는 이메일과 비밀번호로 로그인하면 됩니다.</InfoText>
-          )}
+          <FeedbackSlot aria-live="polite">{submitFeedbackMessage}</FeedbackSlot>
 
           <ActionRow>
             <CancelLink href={toSignupPath(next)}>취소</CancelLink>
@@ -451,6 +452,16 @@ const ActionRow = styled.div`
   @media (max-width: 640px) {
     display: grid;
     grid-template-columns: 1fr;
+  }
+`
+
+const FeedbackSlot = styled.div`
+  min-height: 4.8rem;
+  display: flex;
+  align-items: stretch;
+
+  > * {
+    width: 100%;
   }
 `
 

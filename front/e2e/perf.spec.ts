@@ -463,7 +463,7 @@ const getThemeSurfaceFingerprint = async (page: Page) =>
     const readStyle = (selector: string, property: keyof CSSStyleDeclaration) => {
       const node = document.querySelector(selector)
       if (!node) return null
-      return getComputedStyle(node as HTMLElement)[property]
+      return getComputedStyle(node as HTMLElement)[property] as string | null
     }
 
     const readThemeToggleLabel = () => {

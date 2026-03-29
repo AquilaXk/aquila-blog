@@ -49,7 +49,7 @@ export default defineConfig({
   },
   webServer: useWebServer
     ? {
-        command: "yarn start -p 3000",
+        command: "node scripts/playwright-web-server.mjs",
         url: baseURL,
         cwd: __dirname,
         env: {

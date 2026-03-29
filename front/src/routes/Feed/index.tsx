@@ -18,12 +18,14 @@ type Props = {
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
   const introTitle = adminProfile?.homeIntroTitle || adminProfile?.blogTitle || CONFIG.blog.title
+  const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.description
 
   return (
     <StyledWrapper>
       <div className="mid">
         <IntroCard>
           <h1>{introTitle}</h1>
+          <p>{introDescription}</p>
         </IntroCard>
         <FeedExplorer />
         <div className="mobileProfileCard">
@@ -129,13 +131,28 @@ const IntroCard = styled.section`
     max-width: 13ch;
   }
 
+  p {
+    margin: 0.78rem 0 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: clamp(1rem, 1.55vw, 1.18rem);
+    line-height: 1.55;
+    letter-spacing: -0.022em;
+    max-width: 34rem;
+  }
+
   @media (max-width: 768px) {
-    padding-bottom: 0.76rem;
+    padding-bottom: 1.12rem;
 
     h1 {
       max-width: none;
       font-size: clamp(1.85rem, 10vw, 2.55rem);
       line-height: 1.1;
+    }
+
+    p {
+      margin-top: 0.64rem;
+      font-size: 0.95rem;
+      line-height: 1.5;
     }
   }
 `

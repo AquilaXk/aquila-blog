@@ -448,8 +448,8 @@ set_caddy_upstream_backend() {
   fi
   local rewritten
   rewritten="$(sed -E \
-    -e "s/\\{\\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\\}:8080/${active_host}:8080/g" \
-    -e "s/\\{\\$READ_API_UPSTREAM:back[-_](blue|green|read|admin)\\}:8080/${active_host}:8080/g" \
+    -e 's/\{\$ADMIN_API_UPSTREAM:back[-_](blue|green|read|admin)\}:8080/'"${active_host}"':8080/g' \
+    -e 's/\{\$READ_API_UPSTREAM:back[-_](blue|green|read|admin)\}:8080/'"${active_host}"':8080/g' \
     -e "s/back[-_](blue|green|active):8080( +back[-_](blue|green|active):8080)?/${active_host}:8080/g" \
     "${CADDY_FILE}")"
   printf '%s\n' "${rewritten}" > "${CADDY_FILE}"

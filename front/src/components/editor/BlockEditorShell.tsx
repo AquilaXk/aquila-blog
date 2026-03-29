@@ -92,10 +92,20 @@ type Props = {
   className?: string
   preview?: ReactNode
   enableMermaidBlocks?: boolean
+  onQaActionsReady?: (actions: BlockEditorQaActions | null) => void
 }
 
 export type BlockEditorChangeMeta = {
   editorFocused: boolean
+}
+
+export type BlockEditorQaActions = {
+  selectTableAxis: (axis: "row" | "column") => void
+  setActiveTableCellAlign: (align: "left" | "center" | "right" | null) => void
+  setActiveTableCellBackground: (color: string | null) => void
+  focusDocumentEnd: () => void
+  appendCalloutBlock: () => void
+  appendFormulaBlock: () => void
 }
 
 type BlockInsertSection = "basic" | "structure" | "media"
@@ -528,6 +538,7 @@ const BlockEditorShell = ({
   className,
   preview,
   enableMermaidBlocks = false,
+  onQaActionsReady,
 }: Props) => {
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const attachmentFileInputRef = useRef<HTMLInputElement>(null)
@@ -1261,7 +1272,7 @@ const BlockEditorShell = ({
 
       const selection = activeEditor.state.selection
       const isImageNodeSelected = activeEditor.isActive("resizableImage")
-      const isTableActive = activeEditor.isActive("table")
+      const isTableActive = isTableSelectionActive(activeEditor)
       const canShowTextToolbar =
         !selection.empty &&
         !isImageNodeSelected &&
@@ -1600,7 +1611,7 @@ const BlockEditorShell = ({
 
   const selectCurrentTableAxis = useCallback(
     (axis: "row" | "column") => {
-      if (!editor || !editor.isActive("table")) return
+      if (!editor || !isTableSelectionActive(editor)) return
 
       const rect = selectedRect(editor.state)
       const anchorCellPos =
@@ -1631,6 +1642,55 @@ const BlockEditorShell = ({
     },
     [editor]
   )
+
+  useEffect(() => {
+    if (!onQaActionsReady) return
+
+    onQaActionsReady({
+      selectTableAxis: (axis) => {
+        selectCurrentTableAxis(axis)
+      },
+      setActiveTableCellAlign: (align) => {
+        updateActiveTableCellAttrs({ textAlign: align })
+      },
+      setActiveTableCellBackground: (color) => {
+        updateActiveTableCellAttrs({ backgroundColor: color })
+      },
+      focusDocumentEnd: () => {
+        editor?.chain().focus("end").run()
+      },
+      appendCalloutBlock: () => {
+        const currentEditor = editorRef.current
+        if (!currentEditor) return
+        insertBlocksAtIndex(
+          currentEditor.state.doc.childCount,
+          withTrailingParagraph([
+            createCalloutNode({
+              kind: "tip",
+              title: "핵심 포인트",
+              body: "콜아웃 본문을 입력하세요.",
+            }),
+          ])
+        )
+      },
+      appendFormulaBlock: () => {
+        const currentEditor = editorRef.current
+        if (!currentEditor) return
+        insertBlocksAtIndex(
+          currentEditor.state.doc.childCount,
+          withTrailingParagraph([
+            createFormulaNode({
+              formula: "\\int_0^1 x^2 \\, dx",
+            }),
+          ])
+        )
+      },
+    })
+
+    return () => {
+      onQaActionsReady(null)
+    }
+  }, [editor, insertBlocksAtIndex, onQaActionsReady, selectCurrentTableAxis, updateActiveTableCellAttrs, withTrailingParagraph])
 
   const activeTableCellNodeType =
     editor?.isActive("tableHeader") ?? false ? "tableHeader" : "tableCell"

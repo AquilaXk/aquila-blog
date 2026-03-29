@@ -1,7 +1,8 @@
 import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import type { GetServerSideProps, NextPage } from "next"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import type { BlockEditorQaActions } from "src/components/editor/BlockEditorShell"
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
@@ -50,6 +51,7 @@ const QA_IMAGE_DATA_URL =
 const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
   const router = useRouter()
   const [markdown, setMarkdown] = useState("")
+  const qaActionsRef = useRef<BlockEditorQaActions | null>(null)
 
   useEffect(() => {
     if (!router.isReady) return
@@ -75,6 +77,33 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
         </span>
       </header>
 
+      <section
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.65rem",
+        }}
+      >
+        <button type="button" onClick={() => qaActionsRef.current?.selectTableAxis("column")}>
+          QA 열 선택
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.setActiveTableCellAlign("center")}>
+          QA 가운데
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.setActiveTableCellBackground("#fef3c7")}>
+          QA 노랑 배경
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.focusDocumentEnd()}>
+          QA 끝으로 이동
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.appendCalloutBlock()}>
+          QA 콜아웃
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.appendFormulaBlock()}>
+          QA 수식
+        </button>
+      </section>
+
       <LazyBlockEditorShell
         value={markdown}
         onChange={(next) => setMarkdown(next)}
@@ -93,6 +122,9 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
           sizeBytes: file.size,
         })}
         enableMermaidBlocks={true}
+        onQaActionsReady={(actions) => {
+          qaActionsRef.current = actions
+        }}
       />
 
       <section style={{ display: "grid", gap: "0.45rem" }}>

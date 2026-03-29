@@ -46,9 +46,17 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("qa-markdown-output")).toContainText(":::embed https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     await expect(page.getByTestId("qa-markdown-output")).toContainText('"embedUrl":"https://www.youtube.com/embed/dQw4w9WgXcQ"')
 
-    await page.getByRole("button", { name: "콜아웃" }).click()
     await page.getByRole("button", { name: "테이블" }).click()
-    await page.getByRole("button", { name: "수식" }).click()
+
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await page.getByRole("button", { name: "QA 열 선택" }).click()
+    await page.getByRole("button", { name: "QA 가운데" }).click()
+    await page.getByRole("button", { name: "QA 노랑 배경" }).click()
+    await page.getByRole("button", { name: "QA 끝으로 이동" }).click()
+
+    await page.getByRole("button", { name: "QA 콜아웃" }).click()
+    await page.getByRole("button", { name: "QA 수식" }).click()
 
     const attachmentInput = page.locator("input[type='file']").nth(1)
     await attachmentInput.setInputFiles({
@@ -57,18 +65,12 @@ test.describe("block editor authoring flow", () => {
       buffer: Buffer.from("%PDF-1.7 qa-architecture"),
     })
 
-    const firstTableCell = page.locator("table th, table td").first()
-    await firstTableCell.click()
-    await page.getByRole("button", { name: "열 선택" }).click()
-    await page.getByRole("button", { name: "가운데" }).click()
-    await page.getByRole("button", { name: "노랑 배경" }).click()
-
     const markdownOutput = page.getByTestId("qa-markdown-output")
     await expect(markdownOutput).toContainText("> [!TIP] 핵심 포인트")
     await expect(markdownOutput).toContainText("$$")
     await expect(markdownOutput).toContainText(":::file https://example.com/files/architecture.pdf")
     await expect(markdownOutput).toContainText('"mimeType":"application/pdf"')
-    await expect(markdownOutput).toContainText('"columnAlignments":["center",null]')
+    await expect(markdownOutput).toContainText('"columnAlignments":["center"]')
     await expect(markdownOutput).toContainText('"backgroundColor":"#fef3c7"')
   })
 })

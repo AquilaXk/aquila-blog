@@ -78,8 +78,12 @@ class SecurityConfig(
             cors { }
 
             headers {
-                // Public read APIs expose explicit cache policy/etag headers; disable Spring Security default no-store writer.
+                // Caddy is the single source of response security headers in prod;
+                // disable Spring Security defaults that would otherwise duplicate them.
                 cacheControl { disable() }
+                contentTypeOptions { disable() }
+                frameOptions { disable() }
+                httpStrictTransportSecurity { disable() }
             }
 
             csrf { disable() }

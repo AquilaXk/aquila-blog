@@ -23,6 +23,7 @@ const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
   "unsupported-mermaid": "Mermaid 원문 블록",
   "unsupported-callout": "콜아웃 원문 블록",
   "unsupported-toggle": "토글 원문 블록",
+  "unsupported-table-alignment": "정렬 표 원문 블록",
   "manual-raw": "원문 블록",
 }
 
@@ -248,8 +249,17 @@ export const InlineColorMark = Mark.create({
   },
 })
 
+type MermaidEditorViewMode = "code" | "split" | "preview"
+
+const MERMAID_VIEW_MODE_OPTIONS: Array<{ value: MermaidEditorViewMode; label: string }> = [
+  { value: "code", label: "코드" },
+  { value: "split", label: "코드+미리보기" },
+  { value: "preview", label: "미리보기" },
+]
+
 const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
+  const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
@@ -261,7 +271,11 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     setDraftSource(String(node.attrs?.source || MERMAID_TEMPLATE))
   }, [node.attrs?.source])
 
+  const showCodePane = viewMode !== "preview"
+  const showPreviewPane = viewMode !== "code"
+
   useEffect(() => {
+    if (!showPreviewPane) return
     const target = previewRootRef.current
     if (!target || typeof window === "undefined") return
 
@@ -276,44 +290,76 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     )
     observer.observe(target)
     return () => observer.disconnect()
-  }, [])
+  }, [showPreviewPane])
 
   const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
   useMermaidEffect(previewRootRef, `editor-mermaid:${normalizedSource}`, isPreviewVisible && normalizedSource.length > 0)
 
   return (
-    <RichBlockWrapper data-selected={selected}>
-      <RichBlockHeader>
-        <div>
+    <MermaidEditorWrapper data-selected={selected}>
+      <MermaidEditorHeader>
+        <MermaidEditorTitleGroup>
           <strong>Mermaid</strong>
-        </div>
-      </RichBlockHeader>
-      <BlockTextarea
-        ref={textareaRef}
-        value={draftSource}
-        spellCheck={false}
-        onBlur={flushCommit}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setDraftSource(nextValue)
-          scheduleCommit({ source: nextValue })
-        }}
-      />
-      <MermaidPreviewCard ref={previewRootRef}>
-        {normalizedSource ? (
-          isPreviewVisible ? (
-            <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending">
-              <code>{normalizedSource}</code>
-              <div className="aq-mermaid-stage" />
-            </pre>
-          ) : (
-            <MermaidPreviewPlaceholder>스크롤 구간에 들어오면 다이어그램 미리보기를 렌더합니다.</MermaidPreviewPlaceholder>
-          )
-        ) : (
-          <MermaidPreviewPlaceholder>Mermaid 원문을 입력하면 다이어그램 미리보기가 표시됩니다.</MermaidPreviewPlaceholder>
-        )}
-      </MermaidPreviewCard>
-    </RichBlockWrapper>
+          <span>코드와 결과를 같은 블록에서 바로 검토합니다.</span>
+        </MermaidEditorTitleGroup>
+        <MermaidViewModeRail role="tablist" aria-label="Mermaid 보기 모드">
+          {MERMAID_VIEW_MODE_OPTIONS.map((option) => (
+            <MermaidViewModeButton
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={viewMode === option.value}
+              data-active={viewMode === option.value}
+              onClick={() => setViewMode(option.value)}
+            >
+              {option.label}
+            </MermaidViewModeButton>
+          ))}
+        </MermaidViewModeRail>
+      </MermaidEditorHeader>
+      <MermaidEditorBody>
+        {showCodePane ? (
+          <MermaidCodePane>
+            <MermaidPaneLabel>코드</MermaidPaneLabel>
+            <MermaidCodeTextarea
+              ref={textareaRef}
+              value={draftSource}
+              spellCheck={false}
+              data-view-mode={viewMode}
+              onBlur={flushCommit}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                setDraftSource(nextValue)
+                scheduleCommit({ source: nextValue })
+              }}
+            />
+          </MermaidCodePane>
+        ) : null}
+        {showPreviewPane ? (
+          <MermaidPreviewPane ref={previewRootRef}>
+            <MermaidPaneLabel>미리보기</MermaidPaneLabel>
+            <MermaidPreviewCard>
+              {normalizedSource ? (
+                isPreviewVisible ? (
+                  <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending">
+                    <code>{normalizedSource}</code>
+                    <div className="aq-mermaid-stage" />
+                  </pre>
+                ) : (
+                  <MermaidPreviewPlaceholder>
+                    블록이 화면에 들어오면 다이어그램 미리보기를 렌더합니다.
+                  </MermaidPreviewPlaceholder>
+                )
+              ) : (
+                <MermaidPreviewPlaceholder>
+                  Mermaid 원문을 입력하면 여기서 다이어그램 결과를 바로 확인할 수 있습니다.
+                </MermaidPreviewPlaceholder>
+              )}
+            </MermaidPreviewCard>
+          </MermaidPreviewPane>
+        ) : null}
+      </MermaidEditorBody>
+    </MermaidEditorWrapper>
   )
 }
 
@@ -637,17 +683,27 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   )
 }
 
-const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
-  const [draft, setDraft] = useState(String(node.attrs?.markdown || ""))
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+const RawMarkdownBlockView = ({ node, selected }: NodeViewProps) => {
+  const [copied, setCopied] = useState(false)
+  const markdown = String(node.attrs?.markdown || "")
   const reason = String(node.attrs?.reason || "manual-raw")
-  const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes, 220)
+  const helperText =
+    reason === "manual-raw"
+      ? "이 블록은 원문 보존 전용입니다. 일반 작성은 다른 블록을 사용하세요."
+      : "현재 편집기에서 안전하게 구조화할 수 없어 원문을 보존했습니다."
+  const preview = markdown.trim() || "(빈 원문 블록)"
 
-  useAutosizeTextarea(textareaRef, draft)
+  const copyMarkdown = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return
+    await navigator.clipboard.writeText(markdown)
+    setCopied(true)
+  }
 
   useEffect(() => {
-    setDraft(String(node.attrs?.markdown || ""))
-  }, [node.attrs?.markdown])
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1600)
+    return () => window.clearTimeout(timer)
+  }, [copied])
 
   return (
     <RawBlockWrapper data-selected={selected}>
@@ -660,17 +716,13 @@ const RawMarkdownBlockView = ({ node, updateAttributes, selected }: NodeViewProp
         <strong>{RAW_BLOCK_REASON_LABELS[reason] || "원문 블록"}</strong>
       </RawBlockHeader>
       <RawBlockBody>
-        <RawBlockTextarea
-          ref={textareaRef}
-          value={draft}
-          onBlur={flushCommit}
-          onChange={(event) => {
-            const nextValue = event.target.value
-            setDraft(nextValue)
-            scheduleCommit({ markdown: nextValue })
-          }}
-          spellCheck={false}
-        />
+        <RawBlockSummary>
+          <p>{helperText}</p>
+          <RawBlockActionButton type="button" onClick={() => void copyMarkdown()} disabled={!markdown.trim()}>
+            {copied ? "원문 복사됨" : "원문 복사"}
+          </RawBlockActionButton>
+        </RawBlockSummary>
+        <RawBlockPreview role="note">{preview}</RawBlockPreview>
       </RawBlockBody>
     </RawBlockWrapper>
   )
@@ -1085,15 +1137,144 @@ const RichBlockHeader = styled.div`
 `
 
 const MermaidPreviewCard = styled.div`
-  min-height: 8rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 0.9rem;
-  background: rgba(13, 15, 18, 0.96);
-  padding: 0.7rem;
+  min-height: 12rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  background: rgba(13, 15, 18, 0.94);
+  padding: 0.85rem;
 
   .aq-mermaid {
     margin: 0;
   }
+`
+
+const MermaidEditorWrapper = styled(NodeViewWrapper)`
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  background: #1c1f24;
+
+  &[data-selected="true"] {
+    border-color: rgba(96, 165, 250, 0.4);
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.14);
+  }
+`
+
+const MermaidEditorHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem 0.82rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(38, 42, 49, 0.98), rgba(30, 33, 39, 0.98));
+
+  @media (max-width: 720px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`
+
+const MermaidEditorTitleGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+
+  strong {
+    display: block;
+    color: #f3f4f6;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  span {
+    color: rgba(226, 232, 240, 0.68);
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+`
+
+const MermaidViewModeRail = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.26rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+`
+
+const MermaidViewModeButton = styled.button`
+  min-height: 2rem;
+  border: 0;
+  border-radius: 0.68rem;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 0.72rem;
+
+  &[data-active="true"] {
+    background: rgba(59, 130, 246, 0.16);
+    color: #eff6ff;
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.42);
+  }
+`
+
+const MermaidEditorBody = styled.div`
+  display: flex;
+  flex-direction: column;
+`
+
+const MermaidPaneLabel = styled.span`
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 1.7rem;
+  padding: 0 0.62rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+`
+
+const MermaidCodePane = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem 1rem;
+  background: linear-gradient(180deg, rgba(22, 24, 29, 0.98), rgba(20, 22, 27, 0.98));
+`
+
+const MermaidCodeTextarea = styled(BlockTextarea)`
+  min-height: 13rem;
+  border-radius: 0.95rem;
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(10, 12, 16, 0.98);
+  color: #dbe2ea;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.97rem;
+  line-height: 1.7;
+  white-space: pre;
+
+  &[data-view-mode="code"] {
+    min-height: 22rem;
+  }
+`
+
+const MermaidPreviewPane = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(25, 27, 33, 0.98);
 `
 
 const CodeBlockEditorWrapper = styled(NodeViewWrapper)`
@@ -1610,17 +1791,57 @@ const RawBlockDot = styled.span`
 
 const RawBlockBody = styled.div`
   position: relative;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem 1.15rem;
   background: #2b2d3a;
 `
 
-const RawBlockTextarea = styled(BlockTextarea)`
-  min-height: 8rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+const RawBlockSummary = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+
+  p {
+    margin: 0;
+    color: var(--color-gray10);
+    font-size: 0.82rem;
+    line-height: 1.55;
+  }
+`
+
+const RawBlockActionButton = styled.button`
+  min-height: 2.15rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 157, 98, 0.26);
+  background: rgba(255, 157, 98, 0.12);
+  color: #ffbd93;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 0.9rem;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+`
+
+const RawBlockPreview = styled.pre`
+  margin: 0;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 14, 20, 0.42);
   color: var(--color-gray12);
-  box-shadow: none;
-  padding: 1.05rem 1.18rem 1.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  padding: 0.95rem 1rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 `
 
 const ImageBlockWrapper = styled(NodeViewWrapper)`

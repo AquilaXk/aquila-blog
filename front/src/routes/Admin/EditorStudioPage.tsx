@@ -5,7 +5,6 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
   ChangeEvent,
-  ClipboardEvent,
   CSSProperties,
   useCallback,
   useEffect,
@@ -80,25 +79,17 @@ import {
   parseStandaloneMarkdownImageLine,
   serializeStandaloneMarkdownImageLine,
 } from "src/libs/markdown/rendering"
-import { serializeMarkdownTableLayoutComment } from "src/libs/markdown/tableMetadata"
+import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
 import type { TPost } from "src/types"
 
-const BLOCK_EDITOR_V2_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_ENABLED !== "false"
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
+const ARTICLE_READABLE_WIDTH_PX = 48 * 16
 
 const toEditorPostRoute = (id: string | number) => `/editor/${encodeURIComponent(String(id))}`
-const LIVE_PREVIEW_VIEWPORTS: Record<
-  PreviewViewportMode,
-  { label: string; maxWidth: string }
-> = {
-  desktop: { label: "데스크톱", maxWidth: "100%" },
-  tablet: { label: "태블릿", maxWidth: "820px" },
-  mobile: { label: "모바일", maxWidth: "430px" },
-}
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
@@ -448,16 +439,6 @@ const TAG_TONES = [
   },
 ] as const
 
-const INLINE_TEXT_COLOR_OPTIONS = [
-  { label: "하늘", value: "#60a5fa" },
-  { label: "바이올렛", value: "#a78bfa" },
-  { label: "그린", value: "#34d399" },
-  { label: "오렌지", value: "#fb923c" },
-  { label: "로즈", value: "#f472b6" },
-  { label: "옐로", value: "#facc15" },
-  { label: "슬레이트", value: "#94a3b8" },
-] as const
-
 const SHOW_LEGACY_PROFILE_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_PROFILE_STUDIO === "true"
 const SHOW_LEGACY_CONTENT_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_CONTENT_STUDIO === "true"
 const SHOW_LEGACY_UTILITY_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_UTILITY_STUDIO === "true"
@@ -541,12 +522,6 @@ const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
 const EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH = 8_000
 const EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS = 2
-const EDITOR_PREVIEW_DELAY_LIGHT_MS = 120
-const EDITOR_PREVIEW_DELAY_MEDIUM_MS = 260
-const EDITOR_PREVIEW_DELAY_IMAGE_MS = 420
-const EDITOR_PREVIEW_DELAY_HEAVY_MS = 520
-const EDITOR_PREVIEW_DELAY_HEAVY_IMAGE_MS = 760
-const EDITOR_PREVIEW_DELAY_HEAVY_MERMAID_MS = 900
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
@@ -611,26 +586,6 @@ const updateStandaloneImageWidthInMarkdown = (
   }
 
   return content
-}
-
-const resolveEditorPreviewDelay = (
-  contentLength: number,
-  mermaidBlockCount: number,
-  imageCount: number
-): number => {
-  if (
-    contentLength >= EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH &&
-    mermaidBlockCount >= EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS
-  ) {
-    return EDITOR_PREVIEW_DELAY_HEAVY_MERMAID_MS
-  }
-  if (imageCount >= 3 || (imageCount > 0 && contentLength >= EDITOR_PREVIEW_HEAVY_LENGTH)) {
-    return EDITOR_PREVIEW_DELAY_HEAVY_IMAGE_MS
-  }
-  if (contentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return EDITOR_PREVIEW_DELAY_HEAVY_MS
-  if (imageCount > 0) return EDITOR_PREVIEW_DELAY_IMAGE_MS
-  if (contentLength >= 5_000 || mermaidBlockCount > 0) return EDITOR_PREVIEW_DELAY_MEDIUM_MS
-  return EDITOR_PREVIEW_DELAY_LIGHT_MS
 }
 
 const normalizeSafeImageUrl = (raw: string): string => {
@@ -1002,7 +957,7 @@ const resolveEditorBodyFallback = (content: string, parsedBody: string) => {
 const resolveEditorMetaSnapshot = (content: string, contentHtml?: string): ResolvedEditorMetaSnapshot => {
   const parsed = parseEditorMeta(content)
   const normalizedRawContent = content.replace(/\r\n?/g, "\n").trim()
-  const markdownFromHtml = contentHtml?.trim() ? convertHtmlToMarkdown(contentHtml).trim() : ""
+  const markdownFromHtml = contentHtml?.trim() ? convertHtmlClipboardToMarkdown(contentHtml).trim() : ""
   const resolvedBody = parsed.body.trim() || markdownFromHtml || normalizedRawContent
   const parsedThumbnail = normalizeSafeImageUrl(parsed.thumbnail)
   const fallbackThumbnail = normalizeSafeImageUrl(extractFirstMarkdownImage(resolvedBody))
@@ -1339,186 +1294,6 @@ const uploadWithConflictRetry = async (
   )
 }
 
-const escapePipes = (value: string) => value.replace(/[\\|]/g, "\\$&")
-
-const nodeText = (node: Node): string => {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
-  if (node.nodeType !== Node.ELEMENT_NODE) return ""
-  const el = node as HTMLElement
-  return Array.from(el.childNodes).map(nodeText).join("")
-}
-
-const inlineToMarkdown = (node: Node): string => {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent || ""
-  if (node.nodeType !== Node.ELEMENT_NODE) return ""
-
-  const el = node as HTMLElement
-  const tag = el.tagName.toLowerCase()
-  const inner = Array.from(el.childNodes).map(inlineToMarkdown).join("")
-
-  if (tag === "strong" || tag === "b") return `**${inner}**`
-  if (tag === "em" || tag === "i") return `*${inner}*`
-  if (tag === "s" || tag === "del" || tag === "strike") return `~~${inner}~~`
-  if (tag === "code" && el.parentElement?.tagName.toLowerCase() !== "pre") return `\`${inner}\``
-  if (tag === "a") {
-    const href = el.getAttribute("href") || ""
-    if (!href) return inner
-    return `[${inner || href}](${href})`
-  }
-  if (tag === "br") return "\n"
-
-  return inner
-}
-
-const blockquoteToMarkdown = (el: HTMLElement): string => {
-  const content = Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()
-  if (!content) return ""
-  return content
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n")
-}
-
-const listToMarkdown = (el: HTMLElement, ordered: boolean): string => {
-  const items = Array.from(el.children).filter(
-    (child): child is HTMLLIElement => child.tagName.toLowerCase() === "li"
-  )
-
-  return items
-    .map((li, idx) => {
-      const checkbox = li.querySelector<HTMLInputElement>("input[type='checkbox']")
-      const hasCheckbox = !!checkbox
-      const checked = checkbox?.checked
-      const marker = ordered ? `${idx + 1}.` : hasCheckbox ? (checked ? "- [x]" : "- [ ]") : "-"
-      if (checkbox) checkbox.remove()
-
-      const content = Array.from(li.childNodes).map(inlineToMarkdown).join("").trim() || "내용"
-      return `${marker} ${content}`
-    })
-    .join("\n")
-}
-
-const tableToMarkdown = (el: HTMLTableElement): string => {
-  const rows = Array.from(el.querySelectorAll("tr"))
-  if (!rows.length) return ""
-
-  const columnWidths = Array.from(el.querySelectorAll("colgroup > col")).map((col) => {
-    const colElement = col as HTMLTableColElement
-    const width =
-      Number.parseInt(colElement.getAttribute("width") || "", 10) ||
-      Number.parseInt(colElement.style.width.replace(/px$/, ""), 10)
-    return Number.isFinite(width) && width > 0 ? width : null
-  })
-  const rowHeights = rows.map((row) => {
-    const explicitHeight =
-      Number.parseInt((row as HTMLElement).dataset.rowHeight || "", 10) ||
-      Number.parseInt(row.style.height.replace(/px$/, ""), 10)
-    return Number.isFinite(explicitHeight) && explicitHeight > 0 ? explicitHeight : null
-  })
-  const matrix = rows.map((row) =>
-    Array.from(row.querySelectorAll("th,td")).map((cell) =>
-      escapePipes(Array.from(cell.childNodes).map(inlineToMarkdown).join("").replace(/\n+/g, " ").trim())
-    )
-  )
-
-  const maxCols = Math.max(...matrix.map((row) => row.length))
-  const normalized = matrix.map((row) => {
-    const copy = [...row]
-    while (copy.length < maxCols) copy.push("")
-    return copy
-  })
-
-  const head = normalized[0]
-  const separator = Array.from({ length: maxCols }, () => "---")
-  const body = normalized.slice(1)
-  const metadataComment = serializeMarkdownTableLayoutComment({
-    columnWidths,
-    rowHeights,
-  })
-
-  const markdownTable = [
-    `| ${head.join(" | ")} |`,
-    `| ${separator.join(" | ")} |`,
-    ...body.map((row) => `| ${row.join(" | ")} |`),
-  ].join("\n")
-
-  return metadataComment ? `${metadataComment}\n${markdownTable}` : markdownTable
-}
-
-const preToMarkdown = (el: HTMLElement): string => {
-  const codeEl = el.querySelector("code")
-  const codeText = (codeEl?.textContent || el.textContent || "").trimEnd()
-  const className = codeEl?.className || ""
-  const lang = (className.match(/language-([a-zA-Z0-9_-]+)/)?.[1] || "").trim()
-  return `\`\`\`${lang}\n${codeText}\n\`\`\``
-}
-
-const detailsToMarkdown = (el: HTMLElement): string => {
-  const summary = el.querySelector("summary")
-  const title = summary?.textContent?.trim() || EDITOR_TOGGLE_TITLE_PLACEHOLDER
-
-  const contentNodes = Array.from(el.childNodes).filter((node) => node !== summary)
-  const body = contentNodes
-    .map((node) => (node.nodeType === Node.ELEMENT_NODE ? blockToMarkdown(node as HTMLElement) : inlineToMarkdown(node)))
-    .join("\n")
-    .trim() || EDITOR_BODY_PLACEHOLDER
-
-  return `:::toggle ${title}\n${body}\n:::`
-}
-
-const blockToMarkdown = (el: HTMLElement): string => {
-  const tag = el.tagName.toLowerCase()
-
-  if (tag === "h1") return `# ${Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()}`
-  if (tag === "h2") return `## ${Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()}`
-  if (tag === "h3") return `### ${Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()}`
-  if (tag === "p") return Array.from(el.childNodes).map(inlineToMarkdown).join("").trim()
-  if (tag === "hr") return "---"
-  if (tag === "blockquote") return blockquoteToMarkdown(el)
-  if (tag === "ul") return listToMarkdown(el, false)
-  if (tag === "ol") return listToMarkdown(el, true)
-  if (tag === "pre") return preToMarkdown(el)
-  if (tag === "table") return tableToMarkdown(el as HTMLTableElement)
-  if (tag === "details") return detailsToMarkdown(el)
-
-  const classNames = el.className || ""
-  const hasToggleClass = /(^|\s)[a-z0-9_-]*toggle[a-z0-9_-]*(\s|$)/i.test(classNames)
-  if (hasToggleClass) {
-    const title =
-      el.querySelector("summary, [class*='toggle-summary'], [class*='summary']")?.textContent?.trim() ||
-      EDITOR_TOGGLE_TITLE_PLACEHOLDER
-    const body =
-      el.querySelector("[class*='toggle-content'], [class*='content']")?.textContent?.trim() ||
-      EDITOR_BODY_PLACEHOLDER
-    return `:::toggle ${title}\n${body}\n:::`
-  }
-
-  return Array.from(el.childNodes)
-    .map((node) =>
-      node.nodeType === Node.ELEMENT_NODE
-        ? blockToMarkdown(node as HTMLElement)
-        : inlineToMarkdown(node)
-    )
-    .join("\n")
-    .trim()
-}
-
-const convertHtmlToMarkdown = (html: string): string => {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, "text/html")
-  const lines = Array.from(doc.body.childNodes)
-    .map((node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        return blockToMarkdown(node as HTMLElement)
-      }
-      return inlineToMarkdown(node).trim()
-    })
-    .map((line) => line.trimEnd())
-    .filter(Boolean)
-
-  return lines.join("\n\n").replace(/\n{3,}/g, "\n\n")
-}
-
 const detectPublishPlaceholderIssue = (content: string): string | null => {
   let inFence = false
 
@@ -1563,35 +1338,6 @@ const buildListCacheKey = (params: {
     kw: params.kw.trim(),
     sort: params.sort.trim(),
   })
-
-const normalizePreviewSyncText = (value: string) =>
-  value
-    .replace(/^(?:[#>*-]|\d+\.)+\s*/, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase()
-
-const resolveEditorSyncSnippet = (content: string, selectionStart: number, topVisibleLineIndex?: number) => {
-  const lines = content.split(/\r?\n/)
-  if (lines.length === 0) return ""
-
-  let lineIndex: number
-  if (typeof topVisibleLineIndex === "number" && Number.isFinite(topVisibleLineIndex)) {
-    lineIndex = Math.max(0, Math.min(lines.length - 1, topVisibleLineIndex))
-  } else {
-    const safeSelectionStart = Math.max(0, Math.min(content.length, selectionStart))
-    lineIndex = content.slice(0, safeSelectionStart).split(/\r?\n/).length - 1
-  }
-
-  const candidateIndexes = [lineIndex, lineIndex + 1, lineIndex - 1]
-  for (const candidateIndex of candidateIndexes) {
-    if (candidateIndex < 0 || candidateIndex >= lines.length) continue
-    const normalized = normalizePreviewSyncText(lines[candidateIndex] || "")
-    if (normalized.length >= 3) return normalized
-  }
-
-  return ""
-}
 
 export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const router = useRouter()
@@ -1654,9 +1400,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
   const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
   const [isComposePreviewOpen, setIsComposePreviewOpen] = useState(false)
-  const [isCalloutMenuOpen, setIsCalloutMenuOpen] = useState(false)
-  const [isColorMenuOpen, setIsColorMenuOpen] = useState(false)
-  const postContentRef = useRef<HTMLTextAreaElement>(null)
   const postContentLiveRef = useRef(postContent)
   const blockEditorLoadGuardStateRef = useRef<BlockEditorLoadGuardState>({
     expectedBody: "",
@@ -1664,8 +1407,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ignoredInitialEmpty: false,
   })
   const [previewContent, setPreviewContent] = useState(postContent)
-  const [isPreviewSyncPending, setIsPreviewSyncPending] = useState(false)
-  const postImageFileInputRef = useRef<HTMLInputElement>(null)
   const thumbnailImageFileInputRef = useRef<HTMLInputElement>(null)
   const [thumbnailImageFileName, setThumbnailImageFileName] = useState("")
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
@@ -1680,14 +1421,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
   const [isWideEditorViewport, setIsWideEditorViewport] = useState(false)
-  const [composeViewMode, setComposeViewMode] = useState<ComposeViewMode>("editor")
   const [editorStudioViewMode, setEditorStudioViewMode] = useState<ComposeViewMode>("editor")
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement>(null)
-  const previewScrollSyncRafRef = useRef<number | null>(null)
-  const editorScrollRatioRef = useRef(0)
+  const previewSurfaceRef = useRef<HTMLElement | null>(null)
   const titleFieldRef = useRef<HTMLTextAreaElement | null>(null)
+  const [previewSurfaceWidth, setPreviewSurfaceWidth] = useState(0)
 
   const postContentMermaidBlockCount = useMemo(
     () => countMarkdownMermaidBlocks(postContent),
@@ -1881,88 +1621,30 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [])
 
   useEffect(() => {
-    setComposeViewMode((prev) => {
-      if (isCompactMobileLayout) {
-        return prev === "preview" ? "preview" : "editor"
-      }
-      return prev === "editor" ? "split" : prev
-    })
-  }, [isCompactMobileLayout])
-
-  useEffect(() => {
     if (isWideEditorViewport) return
     setEditorStudioViewMode((prev) => (prev === "split" ? "editor" : prev))
   }, [isWideEditorViewport])
 
-  const syncPreviewScrollFromEditor = useCallback(() => {
-    const preview = previewScrollRef.current
-    if (!preview) return
-
-    const editor = postContentRef.current
-    let nextScrollRatio = editorScrollRatioRef.current
-
-    if (editor) {
-      const editorScrollableHeight = editor.scrollHeight - editor.clientHeight
-      if (editorScrollableHeight <= 0) {
-        nextScrollRatio = 0
-      } else {
-        nextScrollRatio = editor.scrollTop / editorScrollableHeight
-      }
-      editorScrollRatioRef.current = nextScrollRatio
-    }
-
-    const previewScrollableHeight = preview.scrollHeight - preview.clientHeight
-
-    if (previewScrollableHeight <= 0) {
-      preview.scrollTop = 0
-      return
-    }
-
-    if (editor) {
-      const computedStyle = window.getComputedStyle(editor)
-      const lineHeight =
-        Number.parseFloat(computedStyle.lineHeight) ||
-        Number.parseFloat(computedStyle.fontSize) * 1.6 ||
-        24
-      const paddingTop = Number.parseFloat(computedStyle.paddingTop) || 0
-      const topVisibleLineIndex = Math.max(0, Math.floor(Math.max(0, editor.scrollTop - paddingTop) / Math.max(lineHeight, 1)))
-      const syncSnippet = resolveEditorSyncSnippet(postContent, editor.selectionStart, topVisibleLineIndex)
-
-      if (syncSnippet) {
-        const previewBlocks = Array.from(
-          preview.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, p, li, blockquote, summary, pre, td, th")
-        )
-        const matchedBlock = previewBlocks.find((block) => normalizePreviewSyncText(block.textContent || "").includes(syncSnippet))
-
-        if (matchedBlock) {
-          const targetOffset = Math.max(0, matchedBlock.offsetTop - preview.clientHeight * 0.18)
-          preview.scrollTop = Math.min(targetOffset, previewScrollableHeight)
-          return
-        }
-      }
-    }
-
-    preview.scrollTop = nextScrollRatio * previewScrollableHeight
-  }, [postContent])
-
-  const schedulePreviewScrollSync = useCallback(() => {
-    if (typeof window === "undefined") return
-    if (previewScrollSyncRafRef.current !== null) {
-      window.cancelAnimationFrame(previewScrollSyncRafRef.current)
-    }
-    previewScrollSyncRafRef.current = window.requestAnimationFrame(() => {
-      previewScrollSyncRafRef.current = null
-      syncPreviewScrollFromEditor()
-    })
-  }, [syncPreviewScrollFromEditor])
-
   useEffect(() => {
-    return () => {
-      if (typeof window !== "undefined" && previewScrollSyncRafRef.current !== null) {
-        window.cancelAnimationFrame(previewScrollSyncRafRef.current)
-      }
+    if (typeof window === "undefined") return
+    const surface = previewSurfaceRef.current
+    if (!surface) return
+
+    const sync = () => {
+      setPreviewSurfaceWidth(surface.clientWidth)
     }
-  }, [])
+
+    sync()
+
+    if (typeof ResizeObserver !== "function") return
+
+    const observer = new ResizeObserver(() => {
+      sync()
+    })
+    observer.observe(surface)
+
+    return () => observer.disconnect()
+  }, [editorStudioViewMode, isWideEditorViewport])
 
   useEffect(() => {
     setStudioSurface("compose")
@@ -1984,37 +1666,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [router])
 
   useEffect(() => {
-    if (BLOCK_EDITOR_V2_ENABLED) {
-      if (previewContent !== postContent) {
-        setPreviewContent(postContent)
-      }
-      setIsPreviewSyncPending(false)
-      return
-    }
-
-    if (previewContent === postContent) {
-      setIsPreviewSyncPending(false)
-      return
-    }
-
-    setIsPreviewSyncPending(true)
-    const delay = resolveEditorPreviewDelay(
-      postContent.length,
-      postContentMermaidBlockCount,
-      postContentImageCount
-    )
-    const timer = window.setTimeout(() => {
+    if (previewContent !== postContent) {
       setPreviewContent(postContent)
-      setIsPreviewSyncPending(false)
-    }, delay)
-
-    return () => window.clearTimeout(timer)
-  }, [postContent, postContentImageCount, postContentMermaidBlockCount, previewContent])
-
-  useEffect(() => {
-    if (composeViewMode === "editor") return
-    schedulePreviewScrollSync()
-  }, [composeViewMode, previewContent, schedulePreviewScrollSync])
+    }
+  }, [postContent, previewContent])
 
   const handleTitleFieldRef = useCallback((node: HTMLTextAreaElement | null) => {
     titleFieldRef.current = node
@@ -2046,15 +1701,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       postContentLiveRef.current = nextContent
       setPostContent(nextContent)
       setPreviewContent(nextContent)
-      setIsPreviewSyncPending(false)
-
-      if (typeof window !== "undefined") {
-        window.requestAnimationFrame(() => {
-          schedulePreviewScrollSync()
-        })
-      }
     },
-    [schedulePreviewScrollSync]
+    []
   )
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
@@ -3727,237 +3375,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     })
   }, [authStatus, handleLoadOrCreateTempPost, isDedicatedEditorRoute, router, sessionMember?.isAdmin])
 
-  const insertSnippet = (snippet: string) => {
-    const textarea = postContentRef.current
-    if (!textarea) {
-      setPostContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${snippet}`)
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      const cursor = start + snippet.length
-      textarea.setSelectionRange(cursor, cursor)
-    })
-  }
-
-  const insertBlockSnippet = (
-    snippet: string,
-    options?: {
-      selectionMode?: "select" | "after"
-    }
-  ) => {
-    const normalized = snippet.trim()
-    if (!normalized) return
-    const selectionMode = options?.selectionMode ?? "select"
-
-    const apply = (base: string, start: number, end: number) => {
-      const before = base.slice(0, start)
-      const after = base.slice(end)
-      const prefix = before.length === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n"
-      const suffix = after.length === 0 ? "\n" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n"
-      const inserted = `${prefix}${normalized}${suffix}`
-      const insertedStart = before.length + prefix.length
-      const insertedEnd = insertedStart + normalized.length
-      const cursorAfter = before.length + inserted.length
-      return {
-        nextContent: `${before}${inserted}${after}`,
-        selectionStart: selectionMode === "after" ? cursorAfter : insertedStart,
-        selectionEnd: selectionMode === "after" ? cursorAfter : insertedEnd,
-      }
-    }
-
-    const textarea = postContentRef.current
-    if (!textarea) {
-      setPostContent((prev) => apply(prev, prev.length, prev.length).nextContent)
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const { nextContent, selectionStart, selectionEnd } = apply(postContent, start, end)
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      textarea.setSelectionRange(selectionStart, selectionEnd)
-    })
-  }
-
-  const applyHeadingStyle = (level: 1 | 2 | 3 | 0) => {
-    const textarea = postContentRef.current
-    const prefix = level === 0 ? "" : `${"#".repeat(level)} `
-
-    if (!textarea) {
-      const fallback = level === 0 ? "본문 텍스트" : `${prefix}제목`
-      setPostContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${fallback}\n`)
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const blockStart = postContent.lastIndexOf("\n", Math.max(0, start - 1)) + 1
-    const nextNewline = postContent.indexOf("\n", end)
-    const blockEnd = nextNewline === -1 ? postContent.length : nextNewline
-    const selectedBlock = postContent.slice(blockStart, blockEnd)
-
-    const nextBlock = selectedBlock
-      .split("\n")
-      .map((line) => {
-        if (!line.trim()) return line
-        const stripped = line.replace(/^#{1,3}\s+/, "")
-        return prefix ? `${prefix}${stripped}` : stripped
-      })
-      .join("\n")
-
-    const nextContent = `${postContent.slice(0, blockStart)}${nextBlock}${postContent.slice(blockEnd)}`
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      textarea.setSelectionRange(blockStart, blockStart + nextBlock.length)
-    })
-  }
-
-  const insertToggle = () => {
-    const textarea = postContentRef.current
-    const defaultBody = EDITOR_BODY_PLACEHOLDER
-
-    if (!textarea) {
-      setPostContent(
-        (prev) =>
-          `${prev}${prev.endsWith("\n") ? "" : "\n"}:::toggle ${EDITOR_TOGGLE_TITLE_PLACEHOLDER}\n${defaultBody}\n:::\n`
-      )
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selected = postContent.slice(start, end).trim()
-    const body = selected || defaultBody
-    const snippet = `:::toggle ${EDITOR_TOGGLE_TITLE_PLACEHOLDER}\n${body}\n:::\n`
-    const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      const titleStart = start + ":::toggle ".length
-      textarea.setSelectionRange(titleStart, titleStart + EDITOR_TOGGLE_TITLE_PLACEHOLDER.length)
-    })
-  }
-
-  const wrapSelection = (prefix: string, suffix = "", placeholder = "텍스트") => {
-    const textarea = postContentRef.current
-
-    if (!textarea) {
-      setPostContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${prefix}${placeholder}${suffix}`)
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selected = postContent.slice(start, end) || placeholder
-    const inserted = `${prefix}${selected}${suffix}`
-    const nextContent = `${postContent.slice(0, start)}${inserted}${postContent.slice(end)}`
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      if (start === end) {
-        const selectionStart = start + prefix.length
-        textarea.setSelectionRange(selectionStart, selectionStart + placeholder.length)
-        return
-      }
-      textarea.setSelectionRange(start, start + inserted.length)
-    })
-  }
-
-  const applyChecklist = () => {
-    const textarea = postContentRef.current
-    if (!textarea) {
-      insertSnippet("- [ ] 체크 항목\n")
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const blockStart = postContent.lastIndexOf("\n", Math.max(0, start - 1)) + 1
-    const nextNewline = postContent.indexOf("\n", end)
-    const blockEnd = nextNewline === -1 ? postContent.length : nextNewline
-    const selectedBlock = postContent.slice(blockStart, blockEnd)
-
-    const nextBlock = selectedBlock
-      .split("\n")
-      .map((line) => {
-        if (!line.trim()) return "- [ ] "
-        if (line.startsWith("- [ ] ") || line.startsWith("- [x] ")) return line
-        return `- [ ] ${line}`
-      })
-      .join("\n")
-
-    const nextContent = `${postContent.slice(0, blockStart)}${nextBlock}${postContent.slice(blockEnd)}`
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      textarea.setSelectionRange(blockStart, blockStart + nextBlock.length)
-    })
-  }
-
-  const insertDivider = () => {
-    insertBlockSnippet("---")
-  }
-
-  const insertLink = () => {
-    const textarea = postContentRef.current
-    if (!textarea) {
-      insertSnippet("[링크 텍스트](https://example.com)")
-      return
-    }
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selected = postContent.slice(start, end) || "링크 텍스트"
-    const url = "https://example.com"
-    const snippet = `[${selected}](${url})`
-    const nextContent = `${postContent.slice(0, start)}${snippet}${postContent.slice(end)}`
-    setPostContent(nextContent)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      const urlStart = start + selected.length + 3
-      textarea.setSelectionRange(urlStart, urlStart + url.length)
-    })
-  }
-
-  const insertCallout = (
-    kind: "TIP" | "INFO" | "WARNING" | "OUTLINE" | "EXAMPLE" | "SUMMARY",
-    body: string
-  ) => {
-    insertBlockSnippet(`> [!${kind}]\n> ${body}`)
-    setIsCalloutMenuOpen(false)
-  }
-
-  const applyInlineTextColor = (color: string) => {
-    wrapSelection(`{{color:${color}|`, "}}", "색상 텍스트")
-    setIsColorMenuOpen(false)
-  }
-
-  const handlePasteFromHtml = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const html = e.clipboardData.getData("text/html")
-    if (!html) return
-
-    e.preventDefault()
-    const markdown = convertHtmlToMarkdown(html)
-    if (!markdown.trim()) return
-    insertSnippet(markdown)
-  }
-
   const uploadPostImageFile = useCallback(async (file: File): Promise<UploadPostImageResult> => {
     const prepared = await preparePostImageForUpload(file)
     const requestUpload = async () => {
@@ -3979,38 +3396,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       },
     }
   }, [])
-
-  const handlePostImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) return
-
-    void run("uploadPostImage", async () => {
-      setPublishStatus({
-        tone: "loading",
-        text: `이미지 "${file.name}" 최적화/업로드 중입니다. 완료되면 본문에 자동 삽입됩니다.`,
-      })
-
-      try {
-        const uploaded = await uploadPostImageFile(file)
-        const markdown = uploaded.uploaded.data?.markdown
-        if (!markdown) throw new Error("업로드 응답 형식이 올바르지 않습니다.")
-        insertBlockSnippet(markdown, { selectionMode: "after" })
-        setPublishStatus({
-          tone: "success",
-          text: `이미지 업로드가 완료되었습니다. ${uploaded.prepared.summary}`,
-        })
-        return uploaded
-      } catch (error) {
-        const message = normalizeProfileImageUploadError(error)
-        setPublishStatus({
-          tone: "error",
-          text: `이미지 업로드 실패: ${message}`,
-        })
-        throw error
-      }
-    })
-  }
 
   const handleBlockEditorImageUpload = useCallback(
     async (file: File) => {
@@ -4309,19 +3694,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }
   const isCompactManageSurface = isCompactMobileLayout && studioSurface === "manage"
   const showSelectedPanelInManageSurface = !isCompactMobileLayout || activeMobileStudioStep !== "list" || hasSelectedManagedPost
-  const closeToolbarMenus = () => {
-    setIsCalloutMenuOpen(false)
-    setIsColorMenuOpen(false)
-  }
-
-  const runToolbarAction = (action: () => void) => {
-    action()
-    closeToolbarMenus()
-  }
-
-  const codeBlockTemplate = "```ts\nconst message = \"Hello, Aquila\";\nconsole.log(message);\n```"
-  const mermaidTemplate = "```mermaid\ngraph TD\n  A[사용자 요청] --> B{검증}\n  B -->|OK| C[처리]\n  B -->|Fail| D[오류 반환]\n```"
-  const tableTemplate = "| 구분 | 내용 |\n| --- | --- |\n| API | /post/api/v1/posts |\n| 상태 | 운영중 |"
   const [previewNowIso] = useState(() => new Date().toISOString())
   if (!sessionMember) {
     return null
@@ -4385,6 +3757,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     { value: "preview", label: "미리보기", icon: "eye" },
   ]
   const isCompactSplitPreview = editorStudioViewMode === "split" && isWideEditorViewport
+  const splitPreviewScale =
+    isCompactSplitPreview && previewSurfaceWidth > 0
+      ? Math.min(1, previewSurfaceWidth / ARTICLE_READABLE_WIDTH_PX)
+      : 1
+  const isScaledSplitPreview = isCompactSplitPreview && splitPreviewScale < 0.999
   const editorStudioViewModeOptions = composeViewModeOptions.filter(
     (option) => isWideEditorViewport || option.value !== "split"
   )
@@ -4532,8 +3909,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
     </PreviewEditorSection>
   )
-
-  const livePreviewViewportConfig = LIVE_PREVIEW_VIEWPORTS[previewViewport]
   const editorPrimaryActionType: PublishActionType =
     editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify"
   const editorPrimaryActionLabel =
@@ -4564,13 +3939,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     return (
       <EditorStudioRoot>
       <input
-        ref={postImageFileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handlePostImageFileChange}
-        style={{ display: "none" }}
-      />
-      <input
         ref={thumbnailImageFileInputRef}
         type="file"
         accept="image/*"
@@ -4579,9 +3947,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       />
 
       <EditorStudioTopBar>
-        <Button type="button" data-variant="text" onClick={() => void pushRoute(router, ADMIN_POSTS_WORKSPACE_ROUTE)}>
+        <EditorExitAction type="button" onClick={() => void pushRoute(router, ADMIN_POSTS_WORKSPACE_ROUTE)}>
           ← 나가기
-        </Button>
+        </EditorExitAction>
         <EditorStudioTopBarActions>
           <EditorStudioViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
             {editorStudioViewModeOptions.map((option) => (
@@ -4682,92 +4050,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           </EditorStudioMetaSection>
 
           <EditorStudioCanvas>
-            {BLOCK_EDITOR_V2_ENABLED ? (
-              <LazyBlockEditorShell
-                value={postContent}
-                onChange={handleBlockEditorChange}
-                onUploadImage={handleBlockEditorImageUpload}
-                enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-                disabled={loadingKey.length > 0}
-              />
-            ) : (
-              <>
-                <EditorStudioLegacyToolbar role="toolbar" aria-label="기본 편집 도구">
-                  <ToolbarIconButton type="button" title="제목" aria-label="제목" onClick={() => runToolbarAction(() => applyHeadingStyle(1))}>
-                    <span className="textIcon">H1</span>
-                  </ToolbarIconButton>
-                  <ToolbarIconButton type="button" title="소제목" aria-label="소제목" onClick={() => runToolbarAction(() => applyHeadingStyle(2))}>
-                    <span className="textIcon">H2</span>
-                  </ToolbarIconButton>
-                  <ToolbarIconButton type="button" title="굵게" aria-label="굵게" onClick={() => runToolbarAction(() => wrapSelection("**", "**", "굵은 텍스트"))}>
-                    <span className="textIcon strong">B</span>
-                  </ToolbarIconButton>
-                  <ToolbarIconButton type="button" title="기울임" aria-label="기울임" onClick={() => runToolbarAction(() => wrapSelection("*", "*", "기울임 텍스트"))}>
-                    <span className="textIcon italic">I</span>
-                  </ToolbarIconButton>
-                  <ToolbarIconButton type="button" title="목록" aria-label="목록" onClick={() => runToolbarAction(applyChecklist)}>
-                    <AppIcon name="check-circle" />
-                  </ToolbarIconButton>
-                  <ToolbarIconButton type="button" title="코드 블록" aria-label="코드 블록" onClick={() => runToolbarAction(() => insertBlockSnippet(codeBlockTemplate))}>
-                    <span className="textIcon code">{"{ }"}</span>
-                  </ToolbarIconButton>
-                </EditorStudioLegacyToolbar>
-                <ContentInput
-                  ref={postContentRef}
-                  placeholder="당신의 이야기를 적어보세요..."
-                  value={postContent}
-                  onChange={(e) => setPostContent(e.target.value)}
-                  onScroll={schedulePreviewScrollSync}
-                  onClick={schedulePreviewScrollSync}
-                  onKeyUp={schedulePreviewScrollSync}
-                  onSelect={schedulePreviewScrollSync}
-                  onPaste={handlePasteFromHtml}
-                />
-              </>
-            )}
+            <LazyBlockEditorShell
+              value={postContent}
+              onChange={handleBlockEditorChange}
+              onUploadImage={handleBlockEditorImageUpload}
+              enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+              disabled={loadingKey.length > 0}
+            />
           </EditorStudioCanvas>
-
-          {!BLOCK_EDITOR_V2_ENABLED ? (
-            <InlineDisclosure open={isComposeUtilityOpen}>
-              <summary
-                onClick={(event) => {
-                  event.preventDefault()
-                  setIsComposeUtilityOpen((prev) => !prev)
-                }}
-              >
-                <strong>Markdown 편집</strong>
-                <span>{isComposeUtilityOpen ? "닫기" : "열기"}</span>
-              </summary>
-              {isComposeUtilityOpen && (
-                <div className="body">
-                  <RawEditorSection>
-                    <FieldLabel htmlFor="raw-markdown-editor">Markdown</FieldLabel>
-                    <RawMarkdownTextarea
-                      id="raw-markdown-editor"
-                      value={postContent}
-                      onChange={(e) => setPostContent(e.target.value)}
-                      placeholder="당신의 이야기를 적어보세요..."
-                    />
-                    <SubActionRow>
-                      <Button type="button" disabled={loadingKey.length > 0} onClick={() => saveLocalDraft()}>
-                        임시 저장
-                      </Button>
-                      <Button type="button" disabled={loadingKey.length > 0} onClick={restoreLocalDraft}>
-                        임시저장 불러오기
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={loadingKey.length > 0 || !localDraftSavedAt}
-                        onClick={clearLocalDraft}
-                      >
-                        임시저장 삭제
-                      </Button>
-                    </SubActionRow>
-                  </RawEditorSection>
-                </div>
-              )}
-            </InlineDisclosure>
-          ) : null}
 
           {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
         </EditorStudioWritingColumn>
@@ -4776,29 +4066,26 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           <EditorStudioPreviewHeader $compact={isCompactSplitPreview}>
             <div>
               <strong>실시간 미리보기</strong>
-              <span>{isCompactSplitPreview ? "집필 중 흐름만 가볍게 확인합니다." : "공개 글과 같은 흐름으로 확인합니다."}</span>
+              <span>
+                {isCompactSplitPreview
+                  ? "실제 공개 본문 폭을 유지한 채 축소해서 보여줍니다."
+                  : "실제 공개 글과 같은 본문 폭 기준으로 확인합니다."}
+              </span>
             </div>
-            <PreviewViewportTabs role="tablist" aria-label="미리보기 기기 폭">
-              {Object.entries(LIVE_PREVIEW_VIEWPORTS).map(([viewport, config]) => (
-                <PreviewViewportButton
-                  key={viewport}
-                  type="button"
-                  role="tab"
-                  aria-selected={previewViewport === viewport}
-                  data-active={previewViewport === viewport}
-                  onClick={() => setPreviewViewport(viewport as PreviewViewportMode)}
-                >
-                  {config.label}
-                </PreviewViewportButton>
-              ))}
-            </PreviewViewportTabs>
+            <EditorPreviewWidthBadge>실제 본문 폭 기준</EditorPreviewWidthBadge>
           </EditorStudioPreviewHeader>
 
           <EditorStudioPreviewSurface
-            style={{ "--preview-live-width": livePreviewViewportConfig.maxWidth } as CSSProperties}
+            ref={previewSurfaceRef}
+            style={
+              {
+                "--preview-render-width": `${ARTICLE_READABLE_WIDTH_PX}px`,
+                "--preview-scale": splitPreviewScale,
+              } as CSSProperties
+            }
             data-preview-density={isCompactSplitPreview ? "compact" : "full"}
           >
-            <EditorStudioPreviewArticle>
+            <EditorStudioPreviewArticle $scaled={isScaledSplitPreview}>
               <PreviewContentFrame $compact={isCompactSplitPreview}>
                 <EditorStudioPreviewHeaderFrame $compact={isCompactSplitPreview}>
                   <PostHeader
@@ -6025,13 +5312,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               </ComposeReadableIntro>
 
               <input
-                ref={postImageFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handlePostImageFileChange}
-                style={{ display: "none" }}
-              />
-              <input
                 ref={thumbnailImageFileInputRef}
                 type="file"
                 accept="image/*"
@@ -6039,260 +5319,25 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 style={{ display: "none" }}
               />
 
-              {BLOCK_EDITOR_V2_ENABLED ? (
-                <ComposeBodySection>
-                  <ComposeBodyHeader>
-                    <ComposeBodyTitleGroup>
-                      <h3>본문</h3>
-                    </ComposeBodyTitleGroup>
-                    <ComposeBodyMetrics>
-                      <span>{contentLength.toLocaleString()}자</span>
-                      <span>{lineCount}줄</span>
-                      <span>{imageCount}개 이미지</span>
-                    </ComposeBodyMetrics>
-                  </ComposeBodyHeader>
-                  <LazyBlockEditorShell
-                    value={postContent}
-                    onChange={handleBlockEditorChange}
-                    onUploadImage={handleBlockEditorImageUpload}
-                    enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-                    disabled={loadingKey.length > 0}
-                  />
-                </ComposeBodySection>
-              ) : (
-                <>
-                  <ComposeBodySection>
-                    <ComposeBodyHeader>
-                      <ComposeBodyTitleGroup>
-                        <h3>본문</h3>
-                      </ComposeBodyTitleGroup>
-                      <ComposeBodyMetrics>
-                        <span>{contentLength.toLocaleString()}자</span>
-                        <span>{lineCount}줄</span>
-                        <span>{imageCount}개 이미지</span>
-                      </ComposeBodyMetrics>
-                    </ComposeBodyHeader>
-                    <EditorToolbar>
-              <ToolbarQuickBar role="toolbar" aria-label="글쓰기 서식 툴바">
-                  <ToolbarCluster>
-                    <ToolbarIconButton type="button" title="제목1" aria-label="제목1" onClick={() => runToolbarAction(() => applyHeadingStyle(1))}>
-                      <span className="textIcon">H1</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="제목2" aria-label="제목2" onClick={() => runToolbarAction(() => applyHeadingStyle(2))}>
-                      <span className="textIcon">H2</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="제목3" aria-label="제목3" onClick={() => runToolbarAction(() => applyHeadingStyle(3))}>
-                      <span className="textIcon">H3</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="일반 텍스트" aria-label="일반 텍스트" onClick={() => runToolbarAction(() => applyHeadingStyle(0))}>
-                      <span className="textIcon">T</span>
-                    </ToolbarIconButton>
-                  </ToolbarCluster>
-
-                  <ToolbarDivider aria-hidden="true" />
-
-                  <ToolbarCluster>
-                    <ToolbarIconButton type="button" title="굵게" aria-label="굵게" onClick={() => runToolbarAction(() => wrapSelection("**", "**", "굵은 텍스트"))}>
-                      <span className="textIcon strong">B</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="기울임" aria-label="기울임" onClick={() => runToolbarAction(() => wrapSelection("*", "*", "기울임 텍스트"))}>
-                      <span className="textIcon italic">I</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="취소선" aria-label="취소선" onClick={() => runToolbarAction(() => wrapSelection("~~", "~~", "취소선 텍스트"))}>
-                      <span className="textIcon strike">S</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="인라인 코드" aria-label="인라인 코드" onClick={() => runToolbarAction(() => wrapSelection("`", "`", "코드"))}>
-                      <span className="textIcon code">&lt;/&gt;</span>
-                    </ToolbarIconButton>
-                  </ToolbarCluster>
-
-                  <ToolbarDivider aria-hidden="true" />
-
-                  <ToolbarCluster>
-                    <ToolbarIconButton type="button" title="체크리스트" aria-label="체크리스트" onClick={() => runToolbarAction(applyChecklist)}>
-                      <AppIcon name="check-circle" />
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="구분선" aria-label="구분선" onClick={() => runToolbarAction(insertDivider)}>
-                      <span className="textIcon">—</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="토글 블록" aria-label="토글 블록" onClick={() => runToolbarAction(insertToggle)}>
-                      <AppIcon name="chevron-down" />
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="링크" aria-label="링크" onClick={() => runToolbarAction(insertLink)}>
-                      <AppIcon name="link" />
-                    </ToolbarIconButton>
-                    <ColorDropdown>
-                      <ToolbarIconButton
-                        type="button"
-                        title="글자색"
-                        aria-label="글자색"
-                        data-active={isColorMenuOpen}
-                        onClick={() => {
-                          setIsColorMenuOpen((prev) => !prev)
-                          setIsCalloutMenuOpen(false)
-                        }}
-                      >
-                        <span className="textIcon">A</span>
-                      </ToolbarIconButton>
-                      {isColorMenuOpen && (
-                        <ColorMenu>
-                          {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
-                            <button
-                              type="button"
-                              key={option.value}
-                              onClick={() => applyInlineTextColor(option.value)}
-                            >
-                              <ColorSwatch style={{ background: option.value }} aria-hidden="true" />
-                              <span>{option.label}</span>
-                            </button>
-                          ))}
-                        </ColorMenu>
-                      )}
-                    </ColorDropdown>
-                    <CalloutDropdown>
-                      <ToolbarIconButton
-                        type="button"
-                        title="콜아웃"
-                        aria-label="콜아웃"
-                        data-active={isCalloutMenuOpen}
-                        onClick={() => {
-                          setIsCalloutMenuOpen((prev) => !prev)
-                          setIsColorMenuOpen(false)
-                        }}
-                      >
-                        <span className="textIcon">❝</span>
-                      </ToolbarIconButton>
-                      {isCalloutMenuOpen && (
-                        <CalloutMenu>
-                          <button type="button" onClick={() => insertCallout("TIP", "핵심 팁을 작성하세요.")}>
-                            TIP
-                          </button>
-                          <button type="button" onClick={() => insertCallout("INFO", "참고 정보를 작성하세요.")}>
-                            INFO
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => insertCallout("WARNING", "주의해야 할 내용을 작성하세요.")}
-                          >
-                            WARNING
-                          </button>
-                          <button type="button" onClick={() => insertCallout("OUTLINE", "모범 개요를 작성하세요.")}>
-                            OUTLINE
-                          </button>
-                          <button type="button" onClick={() => insertCallout("EXAMPLE", "예시 답안을 작성하세요.")}>
-                            EXAMPLE
-                          </button>
-                          <button type="button" onClick={() => insertCallout("SUMMARY", "핵심 개념을 정리하세요.")}>
-                            SUMMARY
-                          </button>
-                        </CalloutMenu>
-                      )}
-                    </CalloutDropdown>
-                  </ToolbarCluster>
-
-                  <ToolbarDivider aria-hidden="true" />
-
-                  <ToolbarCluster>
-                    <ToolbarIconButton
-                      type="button"
-                      title={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
-                      aria-label={`이미지 업로드 (${POST_IMAGE_UPLOAD_RULE_LABEL})`}
-                      data-variant="primary"
-                      disabled={disabled("uploadPostImage")}
-                      onClick={() => runToolbarAction(() => postImageFileInputRef.current?.click())}
-                    >
-                      <AppIcon name="camera" />
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="코드 블록" aria-label="코드 블록" onClick={() => runToolbarAction(() => insertBlockSnippet(codeBlockTemplate))}>
-                      <span className="textIcon code">{"{ }"}</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="Mermaid" aria-label="Mermaid 다이어그램" onClick={() => runToolbarAction(() => insertBlockSnippet(mermaidTemplate))}>
-                      <span className="textIcon">◇</span>
-                    </ToolbarIconButton>
-                    <ToolbarIconButton type="button" title="테이블" aria-label="테이블" onClick={() => runToolbarAction(() => insertBlockSnippet(tableTemplate))}>
-                      <span className="textIcon">▦</span>
-                    </ToolbarIconButton>
-                  </ToolbarCluster>
-                </ToolbarQuickBar>
-              </EditorToolbar>
-              <ComposeViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
-                {composeViewModeOptions.map((option) => (
-                  <ComposeViewSwitchButton
-                    key={option.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={composeViewMode === option.value}
-                    data-active={composeViewMode === option.value}
-                    onClick={() => setComposeViewMode(option.value)}
-                  >
-                    {option.icon === "split" ? (
-                      <SplitViewGlyph aria-hidden="true">
-                        <span />
-                        <span />
-                      </SplitViewGlyph>
-                    ) : (
-                      <AppIcon name={option.icon} aria-hidden="true" />
-                    )}
-                    <span>{option.label}</span>
-                  </ComposeViewSwitchButton>
-                ))}
-              </ComposeViewSwitch>
-              <EditorGrid data-view-mode={composeViewMode}>
-                {composeViewMode !== "preview" ? (
-                <EditorPane>
-                  <PaneHeader>
-                    <div>
-                      <PaneTitle>본문</PaneTitle>
-                    </div>
-                    <PaneChip>{lineCount}줄</PaneChip>
-                  </PaneHeader>
-                  <ContentInput
-                    ref={postContentRef}
-                    placeholder="본문을 시작하세요"
-                    value={postContent}
-                    onChange={(e) => setPostContent(e.target.value)}
-                    onScroll={schedulePreviewScrollSync}
-                    onClick={schedulePreviewScrollSync}
-                    onKeyUp={schedulePreviewScrollSync}
-                    onSelect={schedulePreviewScrollSync}
-                    onPaste={handlePasteFromHtml}
-                  />
-                </EditorPane>
-                ) : null}
-                {composeViewMode !== "editor" ? (
-                  <PreviewPane>
-                    <PaneHeader>
-                      <div>
-                        <PaneTitle>공개 결과 미리보기</PaneTitle>
-                      </div>
-                      <PaneChip>
-                        {isPreviewSyncPending ? "갱신 중" : `${imageCount}개 이미지`}
-                      </PaneChip>
-                    </PaneHeader>
-                    <PreviewCard ref={previewScrollRef}>
-                      <PreviewContentFrame>
-                        {isPreviewHeavyDocument ? (
-                          <PreviewHintNotice>
-                            긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
-                            {isPreviewSyncPending
-                              ? ` (갱신 대기 · 본문 ${postContent.length.toLocaleString()}자 · Mermaid ${postContentMermaidBlockCount}개)`
-                              : ` (본문 ${previewContentLength.toLocaleString()}자 · Mermaid ${previewMermaidBlockCount}개)`}
-                          </PreviewHintNotice>
-                        ) : null}
-                        <LazyMarkdownRenderer
-                          content={previewContent}
-                          disableMermaid={isPreviewHeavyDocument}
-                          editableImages
-                          onImageWidthCommit={handlePreviewImageWidthCommit}
-                        />
-                      </PreviewContentFrame>
-                    </PreviewCard>
-                  </PreviewPane>
-                ) : null}
-              </EditorGrid>
-                  </ComposeBodySection>
-                </>
-              )}
+              <ComposeBodySection>
+                <ComposeBodyHeader>
+                  <ComposeBodyTitleGroup>
+                    <h3>본문</h3>
+                  </ComposeBodyTitleGroup>
+                  <ComposeBodyMetrics>
+                    <span>{contentLength.toLocaleString()}자</span>
+                    <span>{lineCount}줄</span>
+                    <span>{imageCount}개 이미지</span>
+                  </ComposeBodyMetrics>
+                </ComposeBodyHeader>
+                <LazyBlockEditorShell
+                  value={postContent}
+                  onChange={handleBlockEditorChange}
+                  onUploadImage={handleBlockEditorImageUpload}
+                  enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+                  disabled={loadingKey.length > 0}
+                />
+              </ComposeBodySection>
 
               <WriterFooterBar>
                 <WriterFooterSummary>
@@ -9182,195 +8227,6 @@ const EmptyMetaText = styled.span`
   line-height: 1.5;
 `
 
-const EditorToolbar = styled.div`
-  display: grid;
-  gap: 0.52rem;
-  margin: 0 0 0.72rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 10px;
-  background: ${({ theme }) => theme.colors.gray2};
-`
-
-const ToolbarQuickBar = styled.div`
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.38rem;
-  row-gap: 0.48rem;
-`
-
-const ToolbarCluster = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  flex-wrap: wrap;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-`
-
-const ToolbarDivider = styled.span`
-  width: 1px;
-  align-self: stretch;
-  min-height: 1.9rem;
-  background: ${({ theme }) => theme.colors.gray7};
-  margin: 0 0.2rem;
-`
-
-const ToolbarIconButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.28rem;
-  min-height: 2.28rem;
-  padding: 0 0.48rem;
-  border-radius: 6px;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  cursor: pointer;
-  font-size: 0.92rem;
-  font-weight: 650;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    transform 0.12s ease;
-
-  svg {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .textIcon {
-    font-size: 0.76rem;
-    letter-spacing: -0.01em;
-    font-weight: 700;
-
-    &.strong {
-      font-weight: 800;
-      font-size: 0.92rem;
-    }
-
-    &.italic {
-      font-style: italic;
-      font-size: 0.9rem;
-    }
-
-    &.strike {
-      text-decoration: line-through;
-      font-size: 0.88rem;
-    }
-
-    &.code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-  }
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.colors.gray4};
-    color: ${({ theme }) => theme.colors.gray12};
-    transform: none;
-  }
-
-  &[data-active="true"] {
-    background: ${({ theme }) => theme.colors.blue4};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &[data-variant="primary"] {
-    background: ${({ theme }) => theme.colors.blue4};
-    color: ${({ theme }) => theme.colors.blue11};
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-    transform: none;
-  }
-
-  @media (max-width: 720px) {
-    min-width: 2.38rem;
-    min-height: 2.38rem;
-  }
-`
-
-const CalloutDropdown = styled.div`
-  position: relative;
-`
-
-const ColorDropdown = styled(CalloutDropdown)``
-
-const CalloutMenu = styled.div`
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 0.35rem);
-  left: 0;
-  min-width: 10rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 8px;
-  background: ${({ theme }) => theme.colors.gray2};
-  box-shadow: none;
-  padding: 0.3rem;
-  display: grid;
-  gap: 0.25rem;
-
-  button {
-    border: 1px solid transparent;
-    border-radius: 8px;
-    min-height: 36px;
-    padding: 0.48rem 0.6rem;
-    text-align: left;
-    background: transparent;
-    color: ${({ theme }) => theme.colors.gray12};
-    cursor: pointer;
-    font-size: 0.84rem;
-
-    &:hover {
-      background: ${({ theme }) => theme.colors.gray3};
-      border-color: ${({ theme }) => theme.colors.gray6};
-    }
-  }
-`
-
-const ColorMenu = styled(CalloutMenu)`
-  min-width: 9.2rem;
-
-  button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-  }
-`
-
-const ColorSwatch = styled.span`
-  width: 0.88rem;
-  height: 0.88rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.24);
-`
-
-const ComposeViewSwitch = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
-  margin-bottom: 0.72rem;
-  padding: 0.26rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  @media (max-width: 720px) {
-    width: 100%;
-    justify-content: stretch;
-  }
-`
-
 const ComposeViewSwitchButton = styled.button`
   display: inline-flex;
   align-items: center;
@@ -9411,38 +8267,6 @@ const SplitViewGlyph = styled.span`
   span {
     border-radius: 3px;
     border: 1.5px solid currentColor;
-  }
-`
-
-const EditorGrid = styled.div`
-  --pane-body-height: clamp(28rem, calc(100vh - 20rem), 46rem);
-  --compose-readable-width: var(--article-readable-width, 48rem);
-  --compose-pane-readable-width: var(--compose-readable-width);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.85rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  overflow: visible;
-  align-items: stretch;
-
-  &[data-view-mode="editor"],
-  &[data-view-mode="preview"] {
-    width: min(100%, calc(var(--compose-pane-readable-width) + 2rem));
-    margin-inline: auto;
-  }
-
-  &[data-view-mode="split"] {
-    --compose-pane-readable-width: min(var(--editor-split-readable-width, 42rem), calc((100vw - 7rem) / 2));
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  @media (max-width: 1024px) {
-    --pane-body-height: clamp(18rem, 52vh, 34rem);
-    --compose-pane-readable-width: var(--compose-readable-width);
-    grid-template-columns: 1fr;
-    gap: 0.78rem;
   }
 `
 
@@ -10412,6 +9236,35 @@ const EditorStudioTopBar = styled.div`
   }
 `
 
+const EditorExitAction = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.2rem 0.32rem;
+  margin: -0.2rem -0.32rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.gray3};
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
+  }
+`
+
 const EditorStudioTopBarActions = styled.div`
   display: flex;
   align-items: center;
@@ -10458,16 +9311,23 @@ const EditorStudioViewSwitch = styled.div`
 `
 
 const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
+  --editor-split-gap: clamp(2.4rem, 3vw, 3.5rem);
+  --editor-split-pane-width: min(
+    var(--article-readable-width, 48rem),
+    calc((min(100vw, 1600px) - 4rem - var(--editor-split-gap)) / 2)
+  );
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: ${({ $viewMode }) => ($viewMode === "split" ? "2rem" : "1.4rem")};
   align-items: start;
+  justify-content: center;
 
   @media (min-width: 1024px) {
     grid-template-columns: ${({ $viewMode, $splitAvailable }) =>
       $splitAvailable && $viewMode === "split"
-        ? "minmax(0, 1fr) minmax(22rem, 0.82fr)"
+        ? "minmax(0, var(--editor-split-pane-width)) minmax(0, var(--editor-split-pane-width))"
         : "minmax(0, 1fr)"};
+    gap: ${({ $viewMode }) => ($viewMode === "split" ? "var(--editor-split-gap)" : "1.4rem")};
   }
 `
 
@@ -10569,37 +9429,6 @@ const EditorStudioCanvas = styled.section`
   gap: 0.72rem;
 `
 
-const EditorStudioLegacyToolbar = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  padding-bottom: 0.35rem;
-`
-
-const RawEditorSection = styled.div`
-  display: grid;
-  gap: 0.72rem;
-`
-
-const RawMarkdownTextarea = styled.textarea`
-  width: 100%;
-  min-height: 18rem;
-  border-radius: 14px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
-  padding: 0.95rem 1rem;
-  resize: vertical;
-  line-height: 1.7;
-  font-size: 0.94rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.colors.blue8};
-  }
-`
-
 const EditorStudioPreviewColumn = styled.aside<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
   ${({ $viewMode }) => ($viewMode === "editor" ? "display: none;" : "display: grid;")}
   position: ${({ $viewMode, $splitAvailable }) =>
@@ -10638,18 +9467,50 @@ const EditorStudioPreviewHeader = styled.div<{ $compact?: boolean }>`
   }
 `
 
+const EditorPreviewWidthBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
+`
+
 const EditorStudioPreviewSurface = styled.section`
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
   min-width: 0;
 `
 
-const EditorStudioPreviewArticle = styled.article`
+const EditorStudioPreviewArticle = styled.article<{ $scaled?: boolean }>`
   display: grid;
   gap: 0;
   min-width: 0;
+  width: ${({ $scaled }) => ($scaled ? "var(--preview-render-width, 100%)" : "100%")};
+  max-width: ${({ $scaled }) => ($scaled ? "none" : "100%")};
+  margin-inline: auto;
+  transform-origin: top center;
+
+  ${({ $scaled }) =>
+    $scaled
+      ? `
+    zoom: var(--preview-scale, 1);
+
+    @supports not (zoom: 1) {
+      transform: scale(var(--preview-scale, 1));
+    }
+  `
+      : ""}
 `
 
 const EditorStudioPreviewHeaderFrame = styled.div<{ $compact?: boolean }>`
@@ -10659,55 +9520,6 @@ const EditorStudioPreviewHeaderFrame = styled.div<{ $compact?: boolean }>`
   padding: 0 0 1rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
   overflow: hidden;
-
-  ${({ $compact }) =>
-    $compact
-      ? `
-    .taxonomyRow {
-      margin-bottom: 0.72rem;
-    }
-
-    .taxonomyRow > span,
-    .staticTag {
-      min-height: 28px;
-      padding: 0.32rem 0.66rem;
-      font-size: 0.74rem;
-    }
-
-    .title {
-      font-size: clamp(1.42rem, 1rem + 1.05vw, 1.96rem);
-      line-height: 1.16;
-      max-width: 14ch;
-    }
-
-    .metaRow {
-      margin-top: 1rem;
-      align-items: flex-start;
-      gap: 0.78rem;
-    }
-
-    .author {
-      gap: 0.72rem;
-    }
-
-    .avatar {
-      width: 42px;
-      height: 42px;
-    }
-
-    .authorText strong {
-      font-size: 0.94rem;
-    }
-
-    .metaText {
-      font-size: 0.82rem;
-    }
-
-    .thumbnail {
-      margin-top: 1.35rem;
-    }
-  `
-      : ""}
 `
 
 const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
@@ -10781,95 +9593,8 @@ const EditorStudioResultPanel = styled.section`
   }
 `
 
-const EditorPane = styled.section`
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 10px;
-  background: ${({ theme }) => theme.colors.gray2};
-  overflow: hidden;
-  transition: border-color 0.16s ease;
-
-  &:focus-within {
-    border-color: ${({ theme }) => theme.colors.blue8};
-  }
-`
-
-const PreviewPane = styled(EditorPane)`
-  border-color: ${({ theme }) => theme.colors.gray7};
-  background: ${({ theme }) => theme.colors.gray1};
-
-  @media (max-width: 760px) {
-    border-left: 1px solid ${({ theme }) => theme.colors.gray7};
-    border-top: 1px solid ${({ theme }) => theme.colors.gray7};
-  }
-`
-
-const PaneHeader = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0.9rem 1rem 0.78rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-`
-
-const PaneTitle = styled.h3`
-  margin: 0;
-  font-size: 1.04rem;
-  color: ${({ theme }) => theme.colors.gray12};
-`
-
-const PaneChip = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray3};
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.72rem;
-  font-weight: 700;
-  min-height: 26px;
-  padding: 0 0.62rem;
-`
-
-const ContentInput = styled.textarea`
-  width: min(100%, calc(var(--compose-pane-readable-width) + 2rem));
-  height: var(--pane-body-height);
-  min-height: var(--pane-body-height);
-  max-height: var(--pane-body-height);
-  border: 0;
-  border-radius: 0;
-  margin: 0 auto;
-  padding: 1rem 1rem 1.15rem;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray12};
-  line-height: 1.82;
-  font-size: 1.02rem;
-  font-family: inherit;
-  resize: none;
-  overflow-y: auto;
-  scrollbar-gutter: stable both-edges;
-  box-sizing: border-box;
-  box-shadow: none;
-
-  &:focus {
-    outline: none;
-  }
-
-  &::placeholder {
-    color: ${({ theme }) => theme.colors.gray9};
-  }
-`
-
 const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
-  width: ${({ $compact }) =>
-    $compact ? "100%" : "min(100%, var(--compose-pane-readable-width), var(--preview-live-width))"};
+  width: min(100%, var(--article-readable-width, 48rem));
   max-width: 100%;
   min-width: 0;
   margin-inline: auto;
@@ -10881,65 +9606,6 @@ const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
     min-width: 0;
     overflow-x: hidden;
   }
-
-  ${({ $compact, theme }) =>
-    $compact
-      ? `
-    > .aq-markdown {
-      font-size: 0.96rem;
-      line-height: 1.72;
-    }
-
-    > .aq-markdown h1,
-    > .aq-markdown h2,
-    > .aq-markdown h3,
-    > .aq-markdown h4,
-    > .aq-markdown p,
-    > .aq-markdown ul,
-    > .aq-markdown ol,
-    > .aq-markdown blockquote,
-    > .aq-markdown pre,
-    > .aq-markdown table,
-    > .aq-markdown .aq-mermaid-stage {
-      max-width: 100%;
-      min-width: 0;
-    }
-
-    > .aq-markdown h1 {
-      font-size: 1.7rem;
-      line-height: 1.15;
-      margin-top: 0;
-    }
-
-    > .aq-markdown h2 {
-      font-size: 1.34rem;
-      line-height: 1.22;
-      margin-top: 1.8rem;
-    }
-
-    > .aq-markdown h3 {
-      font-size: 1.12rem;
-      line-height: 1.28;
-      margin-top: 1.5rem;
-    }
-
-    > .aq-markdown p,
-    > .aq-markdown li,
-    > .aq-markdown blockquote {
-      font-size: 0.96rem;
-      line-height: 1.72;
-      color: ${theme.colors.gray11};
-    }
-
-    > .aq-markdown img,
-    > .aq-markdown video,
-    > .aq-markdown iframe,
-    > .aq-markdown pre,
-    > .aq-markdown table {
-      max-width: 100%;
-    }
-  `
-      : ""}
 `
 
 const PreviewCard = styled.div`

@@ -91,6 +91,15 @@ http://{$API_DOMAIN} {
     ?Vary "Origin, Access-Control-Request-Method, Access-Control-Request-Headers"
   }
 
+  @apiRobots path /robots.txt
+  handle @apiRobots {
+    header {
+      Content-Type "text/plain; charset=utf-8"
+      Cache-Control "public, max-age=300"
+    }
+    respond "User-agent: *\nDisallow: /\n" 200
+  }
+
   @notificationSse path /member/api/v1/notifications/stream
   log_skip @notificationSse
   handle @notificationSse {
@@ -98,7 +107,7 @@ http://{$API_DOMAIN} {
       Cache-Control "no-cache, no-transform"
     }
 
-    reverse_proxy back_blue:8080 {
+    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
       header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
@@ -202,7 +211,7 @@ http://{$API_DOMAIN} {
   handle {
     encode gzip zstd
 
-    reverse_proxy back_blue:8080 {
+    reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
       # Public traffic is HTTPS at the Cloudflare edge, but the tunnel origin to
       # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
       # callback URLs, so we pin the upstream scheme/host to the external URL.

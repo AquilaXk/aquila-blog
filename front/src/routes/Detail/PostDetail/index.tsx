@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter } from "next/router"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import PostHeader from "./PostHeader"
 import Footer from "./PostFooter"
 import styled from "@emotion/styled"
@@ -16,8 +17,7 @@ import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { PostDetail as PostDetailType, TPost, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
 import AppIcon from "src/components/icons/AppIcon"
-import ContentHtmlRenderer from "src/libs/markdown/ContentHtmlRenderer"
-import { extractLeadingSummaryBlockFromHtml, normalizeCardSummary } from "src/libs/postSummary"
+import { extractLeadingSummaryBlock, normalizeCardSummary } from "src/libs/postSummary"
 
 type Props = {
   initialComments?: TPostComment[] | null
@@ -39,6 +39,8 @@ const renderRelatedSummary = (summary: string | undefined) => {
   const summaryText = normalizeCardSummary(summary, { fallback: "", maxLength: 148 })
   return summaryText ? <p>{summaryText}</p> : null
 }
+
+const MarkdownRenderer = dynamic(() => import("../components/MarkdownRenderer"))
 
 const RELATED_SKELETON_COUNT = 3
 
@@ -128,6 +130,13 @@ const collectTocFromArticle = (article: HTMLElement): TocItem[] => {
   return toc
 }
 
+const isSameToc = (left: TocItem[], right: TocItem[]) =>
+  left.length === right.length &&
+  left.every((item, index) => {
+    const target = right[index]
+    return target && item.id === target.id && item.text === target.text && item.level === target.level
+  })
+
 const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const { post: data } = usePostQuery()
   const router = useRouter()
@@ -170,20 +179,11 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     [showDetailedToc, tocItems]
   )
   const showStickyToc = visibleTocItems.length >= 2
-  const extractedSummaryState = useMemo(
-    () => extractLeadingSummaryBlockFromHtml(data?.contentHtml || "", 180),
-    [data?.contentHtml]
-  )
-  const renderedContentHtml = useMemo(() => {
-    if (!data?.contentHtml) return ""
-    return extractedSummaryState.summary
-      ? extractedSummaryState.contentHtmlWithoutSummary
-      : data.contentHtml
-  }, [
-    data?.contentHtml,
-    extractedSummaryState.contentHtmlWithoutSummary,
-    extractedSummaryState.summary,
-  ])
+  const extractedSummaryState = useMemo(() => extractLeadingSummaryBlock(data?.content || "", 180), [data?.content])
+  const renderedContent = useMemo(() => {
+    if (!data?.content) return ""
+    return extractedSummaryState.summary ? extractedSummaryState.contentWithoutSummary : data.content
+  }, [data?.content, extractedSummaryState.contentWithoutSummary, extractedSummaryState.summary])
   const relatedTag = useMemo(
     () =>
       data?.tags
@@ -291,11 +291,40 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       return
     }
 
-    const collected = collectTocFromArticle(article)
-    setTocItems(collected)
+    let rafId: number | null = null
+
+    const syncToc = () => {
+      const collected = collectTocFromArticle(article)
+      setTocItems((prev) => (isSameToc(prev, collected) ? prev : collected))
+      setActiveTocId((prev) => (collected.some((item) => item.id === prev) ? prev : collected[0]?.id ?? ""))
+    }
+
+    const scheduleSync = () => {
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        syncToc()
+      })
+    }
+
     setShowDetailedToc(false)
-    setActiveTocId(collected[0]?.id ?? "")
-  }, [data?.content, data?.id])
+    syncToc()
+
+    let observer: MutationObserver | null = null
+    if (typeof MutationObserver !== "undefined") {
+      observer = new MutationObserver(() => {
+        scheduleSync()
+      })
+      observer.observe(article, { childList: true, subtree: true, characterData: true })
+    }
+
+    return () => {
+      observer?.disconnect()
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+    }
+  }, [data?.id, renderedContent])
 
   useEffect(() => {
     if (!tocItems.length || !visibleTocItems.length) return
@@ -867,14 +896,14 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
             </CompactTocSection>
           )}
           <BodySection data-rum-section="body">
-            <ContentHtmlRenderer contentHtml={renderedContentHtml} />
+            <MarkdownRenderer content={renderedContent} />
           </BodySection>
           {data.type[0] === "Post" && (showRelatedTagSkeleton || relatedByTagPosts.length > 0) && (
             <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
               <header>
                 <h2>같은 태그 글</h2>
                 <Link href={relatedTag ? `/?tag=${encodeURIComponent(relatedTag)}` : "/"}>
-                  더 보기
+                  태그 글 보기
                 </Link>
               </header>
               <ul>
@@ -904,7 +933,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               <header>
                 <h2>같은 작성자 글</h2>
                 <Link href="/">
-                  더 보기
+                  작성자 글 보기
                 </Link>
               </header>
               <ul>

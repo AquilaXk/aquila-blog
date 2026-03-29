@@ -6,7 +6,6 @@ import { queryKey } from "src/constants/queryKey"
 import { createQueryClient } from "src/libs/react-query"
 import { hydrateServerAuthSession } from "./authSession"
 import { serverApiFetch } from "./backend"
-import { renderMarkdownToHtml } from "./markdownToHtml"
 import { TPostComment } from "src/types"
 
 type DetailPageProps = {
@@ -48,13 +47,6 @@ export const buildCanonicalPostDetailPage = async (
   if (!postDetail && !shouldClientRecover) return { notFound: true }
 
   if (postDetail) {
-    if (!postDetail.contentHtml?.trim() && postDetail.content.trim()) {
-      postDetail = {
-        ...postDetail,
-        contentHtml: await renderMarkdownToHtml(postDetail.content),
-      }
-    }
-
     await queryClient.prefetchQuery({
       queryKey: queryKey.post(postDetail.id),
       queryFn: () => postDetail,

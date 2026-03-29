@@ -13,25 +13,26 @@ bash tools/guards/check-forbidden-tracked-files.sh --staged
 
 needs_contract_check="false"
 needs_openapi_snapshot_check="false"
+needs_detail_render_guard="false"
 while IFS= read -r file; do
   case "${file}" in
     back/src/main/*|back/src/main/resources/*|back/src/test/kotlin/com/back/global/springDoc/*)
       needs_contract_check="true"
       needs_openapi_snapshot_check="true"
-      break
       ;;
     front/contracts/openapi/openapi.json|front/packages/shared-contracts/src/generated/backend-openapi.d.ts)
       needs_contract_check="true"
-      break
       ;;
     .github/workflows/ci.yml|.github/workflows/reusable-backend-quality.yml|.github/workflows/reusable-frontend-verify.yml)
       needs_contract_check="true"
-      break
+      ;;
+    front/src/pages/posts/\[id\].tsx|front/src/routes/Detail/*|front/src/libs/markdown/*|front/src/libs/postSummary.ts|front/src/libs/server/postDetailPage.ts)
+      needs_detail_render_guard="true"
       ;;
   esac
 done <<< "${staged_files}"
 
-if [[ "${needs_contract_check}" != "true" ]]; then
+if [[ "${needs_contract_check}" != "true" && "${needs_detail_render_guard}" != "true" ]]; then
   exit 0
 fi
 
@@ -64,12 +65,34 @@ if [[ "${needs_openapi_snapshot_check}" == "true" ]]; then
 fi
 
 if ! command -v yarn >/dev/null 2>&1; then
-  echo "[pre-commit] yarn 명령을 찾지 못해 OpenAPI 계약 검사(contracts:check)를 실행할 수 없습니다." >&2
+  echo "[pre-commit] yarn 명령을 찾지 못해 필요한 프런트엔드 검사를 실행할 수 없습니다." >&2
   exit 1
 fi
 
-echo "[pre-commit] OpenAPI 계약 드리프트 검사 실행: yarn contracts:check"
-(
-  cd front
-  yarn contracts:check
-)
+if [[ "${needs_contract_check}" == "true" ]]; then
+  echo "[pre-commit] OpenAPI 계약 드리프트 검사 실행: yarn contracts:check"
+  (
+    cd front
+    yarn contracts:check
+  )
+fi
+
+if [[ "${needs_detail_render_guard}" == "true" ]]; then
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn build"
+  (
+    cd front
+    yarn build
+  )
+
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: node scripts/check-bundle-size.mjs"
+  (
+    cd front
+    node scripts/check-bundle-size.mjs
+  )
+
+  echo "[pre-commit] 상세 렌더 회귀 가드 실행: yarn playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts"
+  (
+    cd front
+    yarn playwright test e2e/smoke.spec.ts e2e/mobile-layout.spec.ts
+  )
+fi

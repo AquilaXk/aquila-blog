@@ -87,7 +87,16 @@ jobs:
           REQUIRED_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
           CHANGED_FILES=""
           CHANGE_SOURCE="head-commit"
+          LATEST_MAIN_SHA=""
           PREV_SUCCESS_SHA=""
+
+          if [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
+            LATEST_MAIN_SHA="$(git ls-remote origin refs/heads/main | awk 'NR==1 {print $1}')"
+            if [ -n "${LATEST_MAIN_SHA}" ] && [ "${DEPLOY_SHA}" != "${LATEST_MAIN_SHA}" ]; then
+              SHOULD_DEPLOY="false"
+              CHANGE_SOURCE="stale-workflow-run:${DEPLOY_SHA} != ${LATEST_MAIN_SHA}"
+            fi
+          fi
 
           if [ "${EVENT_NAME}" != "workflow_dispatch" ] && command -v jq >/dev/null 2>&1 && [ -n "${CURRENT_RUN_ID}" ]; then
             runs_api="https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20"
@@ -104,7 +113,7 @@ jobs:
             fi
           fi
 
-          if [ -n "${PREV_SUCCESS_SHA}" ]; then
+          if [ "${SHOULD_DEPLOY}" = "true" ] && [ -n "${PREV_SUCCESS_SHA}" ]; then
             compare_api="https://api.github.com/repos/${REPOSITORY}/compare/${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
             compare_json="$(curl -fsSL \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -123,12 +132,12 @@ jobs:
             fi
           fi
 
-          if [ -z "${CHANGED_FILES}" ]; then
+          if [ "${SHOULD_DEPLOY}" = "true" ] && [ -z "${CHANGED_FILES}" ]; then
             CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r "${DEPLOY_SHA}" || true)"
             CHANGE_SOURCE="${CHANGE_SOURCE} -> fallback:head-commit"
           fi
 
-          if [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
+          if [ "${SHOULD_DEPLOY}" = "true" ] && [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
             SHOULD_DEPLOY="false"
           fi
 

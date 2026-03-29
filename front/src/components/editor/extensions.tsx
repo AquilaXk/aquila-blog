@@ -1,5 +1,5 @@
 import styled from "@emotion/styled"
-import { Node, mergeAttributes } from "@tiptap/core"
+import { Mark, Node, mergeAttributes } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
 import TableRow from "@tiptap/extension-table-row"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
@@ -15,6 +15,7 @@ import {
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
 import type { CalloutKind } from "src/libs/markdown/rendering"
 import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/libs/markdown/rendering"
+import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
 
@@ -188,6 +189,64 @@ const useDebouncedAttributeCommit = (
     cancel,
   }
 }
+
+export const InlineColorMark = Mark.create({
+  name: "inlineColor",
+  excludes: "code",
+
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: "span[data-inline-color]",
+        getAttrs: (element) => {
+          const color = normalizeInlineColorToken(
+            (element as HTMLElement).getAttribute("data-inline-color") || ""
+          )
+          return color ? { color } : false
+        },
+      },
+      {
+        tag: "span[style]",
+        getAttrs: (element) => {
+          const color = normalizeInlineColorToken((element as HTMLElement).style.color || "")
+          return color ? { color } : false
+        },
+      },
+      {
+        tag: "font[color]",
+        getAttrs: (element) => {
+          const color = normalizeInlineColorToken((element as HTMLElement).getAttribute("color") || "")
+          return color ? { color } : false
+        },
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    const color = normalizeInlineColorToken(String(HTMLAttributes.color || ""))
+    if (!color) return ["span", 0]
+
+    const { color: _ignoredColor, style, ...rest } = HTMLAttributes
+    const nextStyle = [style, `--aq-inline-color:${color}`, `color:${color}`].filter(Boolean).join("; ")
+
+    return [
+      "span",
+      mergeAttributes(rest, {
+        "data-inline-color": color,
+        style: nextStyle,
+      }),
+      0,
+    ]
+  },
+})
 
 const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))

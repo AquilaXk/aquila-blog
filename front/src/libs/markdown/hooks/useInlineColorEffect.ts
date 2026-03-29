@@ -1,23 +1,5 @@
 import { RefObject, useEffect } from "react"
-
-const INLINE_COLOR_TOKEN_REGEX = /\{\{\s*color\s*:\s*([^|{}]+?)\s*\|\s*([^{}]+?)\s*\}\}/gi
-const HEX_COLOR_REGEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
-
-const NAMED_COLORS: Record<string, string> = {
-  sky: "#60a5fa",
-  violet: "#a78bfa",
-  green: "#34d399",
-  orange: "#fb923c",
-  rose: "#f472b6",
-  yellow: "#facc15",
-  slate: "#94a3b8",
-}
-
-const toCssColor = (raw: string) => {
-  const value = raw.trim().toLowerCase()
-  if (HEX_COLOR_REGEX.test(value)) return value
-  return NAMED_COLORS[value] || null
-}
+import { INLINE_COLOR_TOKEN_REGEX, resolveInlineColorValue } from "src/libs/markdown/inlineColor"
 
 const useInlineColorEffect = (rootRef: RefObject<HTMLElement>, contentKey: string) => {
   useEffect(() => {
@@ -52,7 +34,7 @@ const useInlineColorEffect = (rootRef: RefObject<HTMLElement>, contentKey: strin
           const colorToken = match[1]
           const content = match[2].trim()
           const start = match.index ?? 0
-          const cssColor = toCssColor(colorToken)
+          const cssColor = resolveInlineColorValue(colorToken)
 
           if (start > cursor) {
             fragment.appendChild(document.createTextNode(original.slice(cursor, start)))

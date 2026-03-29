@@ -13,6 +13,7 @@ import {
   TABLE_MIN_ROW_HEIGHT_PX,
   type MarkdownTableLayout,
 } from "src/libs/markdown/tableMetadata"
+import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 
 export type BlockEditorDoc = JSONContent
 
@@ -227,6 +228,17 @@ const pushPlainText = (nodes: JSONContent[], text: string) => {
   nodes.push(buildTextNode(text))
 }
 
+const appendMarkToInlineTextNodes = (nodes: JSONContent[], mark: EditorTextMark) =>
+  nodes.map((node) => {
+    if (node.type !== "text") return node
+
+    const marks = Array.isArray(node.marks) ? [...node.marks, mark] : [mark]
+    return {
+      ...node,
+      marks,
+    }
+  })
+
 const buildInlineContent = (text: string): JSONContent[] => {
   if (!text) return []
 
@@ -235,6 +247,10 @@ const buildInlineContent = (text: string): JSONContent[] => {
 
   while (index < text.length) {
     const nextPatterns = [
+      {
+        name: "inlineColor",
+        match: text.slice(index).match(/^\{\{\s*color\s*:\s*([^|{}]+?)\s*\|\s*([^{}]+?)\s*\}\}/),
+      },
       {
         name: "link",
         match: text.slice(index).match(/^\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/),
@@ -281,16 +297,28 @@ const buildInlineContent = (text: string): JSONContent[] => {
 
     const [full, first, second] = nextPattern.match
 
-    if (nextPattern.name === "link") {
-      nodes.push(
-        buildTextNode(first, [
-          {
-            type: "link",
+    if (nextPattern.name === "inlineColor") {
+      const normalizedColor = normalizeInlineColorToken(first)
+      if (!normalizedColor || !second?.trim()) {
+        pushPlainText(nodes, full)
+      } else {
+        nodes.push(
+          ...appendMarkToInlineTextNodes(buildInlineContent(second), {
+            type: "inlineColor",
             attrs: {
-              href: second,
+              color: normalizedColor,
             },
+          })
+        )
+      }
+    } else if (nextPattern.name === "link") {
+      nodes.push(
+        ...appendMarkToInlineTextNodes(buildInlineContent(first), {
+          type: "link",
+          attrs: {
+            href: second,
           },
-        ])
+        })
       )
     } else if (nextPattern.name === "bold") {
       nodes.push(buildTextNode(first, [{ type: "bold" }]))
@@ -765,7 +793,8 @@ const serializeTextNode = (node: JSONContent) => {
   const rawText = node.text || ""
   const marks = node.marks || []
   const linkMark = marks.find((mark) => mark.type === "link" && mark.attrs?.href)
-  const otherMarks = marks.filter((mark) => mark !== linkMark)
+  const inlineColorMark = marks.find((mark) => mark.type === "inlineColor" && mark.attrs?.color)
+  const otherMarks = marks.filter((mark) => mark !== linkMark && mark !== inlineColorMark)
 
   let text = rawText
 
@@ -774,6 +803,14 @@ const serializeTextNode = (node: JSONContent) => {
     if (mark.type === "italic") text = `*${text}*`
     if (mark.type === "strike") text = `~~${text}~~`
     if (mark.type === "code") text = `\`${text}\``
+  }
+
+  const normalizedColor = inlineColorMark?.attrs?.color
+    ? normalizeInlineColorToken(String(inlineColorMark.attrs.color))
+    : null
+
+  if (normalizedColor) {
+    text = `{{color:${normalizedColor}|${text}}}`
   }
 
   if (linkMark?.attrs?.href) {

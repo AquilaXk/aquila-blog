@@ -21,6 +21,7 @@ import {
   EditorTableRow,
   EditorCodeBlock,
   getPreferredCodeLanguage,
+  InlineColorMark,
   MermaidBlock,
   RawMarkdownBlock,
   ResizableImage,
@@ -43,6 +44,7 @@ import {
   TABLE_MIN_ROW_HEIGHT_PX,
 } from "src/libs/markdown/tableMetadata"
 import { markdownContentTypography } from "src/libs/markdown/contentTypography"
+import { INLINE_TEXT_COLOR_OPTIONS, normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 
 type Props = {
   value: string
@@ -322,6 +324,7 @@ const BlockEditorShell = ({
   enableMermaidBlocks = false,
 }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const inlineColorMenuRef = useRef<HTMLDetailsElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
@@ -332,6 +335,7 @@ const BlockEditorShell = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
+  const [isInlineColorMenuOpen, setIsInlineColorMenuOpen] = useState(false)
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
@@ -593,6 +597,7 @@ const BlockEditorShell = ({
         autolink: false,
         linkOnPaste: true,
       }),
+      InlineColorMark,
       Placeholder.configure({
         placeholder: "당신의 이야기를 적어보세요...",
       }),
@@ -1157,6 +1162,24 @@ const BlockEditorShell = ({
     editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run()
   }, [editor])
 
+  const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
+  const isInlineCodeActive = editor?.isActive("code") ?? false
+
+  const applyInlineColor = useCallback(
+    (color?: string | null) => {
+      if (!editor) return
+
+      const chain = editor.chain().focus()
+      if (!color) {
+        chain.unsetMark("inlineColor").run()
+      } else {
+        chain.setMark("inlineColor", { color }).run()
+      }
+      setIsInlineColorMenuOpen(false)
+    },
+    [editor]
+  )
+
   const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ""
@@ -1319,6 +1342,37 @@ const BlockEditorShell = ({
       focusEditor()
     }
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isInlineColorMenuOpen) return
+
+    const closeMenu = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== "Escape") return
+        setIsInlineColorMenuOpen(false)
+        return
+      }
+
+      const target = event.target
+      if (
+        inlineColorMenuRef.current &&
+        target instanceof Node &&
+        inlineColorMenuRef.current.contains(target)
+      ) {
+        return
+      }
+
+      setIsInlineColorMenuOpen(false)
+    }
+
+    window.addEventListener("pointerdown", closeMenu)
+    window.addEventListener("keydown", closeMenu)
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu)
+      window.removeEventListener("keydown", closeMenu)
+    }
+  }, [isInlineColorMenuOpen])
 
   const toggleRawMarkdownDisclosure = () => {
     if (!editor) {
@@ -1527,6 +1581,51 @@ const BlockEditorShell = ({
                 {action.label}
               </ToolbarRibbonButton>
             ))}
+            <ToolbarColorDisclosure ref={inlineColorMenuRef} open={isInlineColorMenuOpen}>
+              <summary
+                aria-label="글자색"
+                title="글자색"
+                data-active={Boolean(activeInlineColor)}
+                onClick={(event) => {
+                  event.preventDefault()
+                  setIsInlineColorMenuOpen((prev) => !prev)
+                  setIsToolbarMoreOpen(false)
+                }}
+              >
+                <ColorTriggerIcon data-active={Boolean(activeInlineColor)}>
+                  <span>A</span>
+                  <i style={activeInlineColor ? { background: activeInlineColor } : undefined} aria-hidden="true" />
+                </ColorTriggerIcon>
+              </summary>
+              {isInlineColorMenuOpen ? (
+                <div className="body">
+                  <ColorOptionButton
+                    type="button"
+                    data-active={!activeInlineColor}
+                    onClick={() => applyInlineColor(null)}
+                  >
+                    <ColorOptionLabel>
+                      <ColorOptionSwatch data-empty="true" aria-hidden="true" />
+                      <span>기본색</span>
+                    </ColorOptionLabel>
+                  </ColorOptionButton>
+                  {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
+                    <ColorOptionButton
+                      key={option.value}
+                      type="button"
+                      data-active={activeInlineColor === option.value}
+                      disabled={disabled || isInlineCodeActive}
+                      onClick={() => applyInlineColor(option.value)}
+                    >
+                      <ColorOptionLabel>
+                        <ColorOptionSwatch style={{ background: option.value }} aria-hidden="true" />
+                        <span>{option.label}</span>
+                      </ColorOptionLabel>
+                    </ColorOptionButton>
+                  ))}
+                </div>
+              ) : null}
+            </ToolbarColorDisclosure>
           </ToolbarGroup>
           <ToolbarSeparator aria-hidden="true" />
           <ToolbarGroup>
@@ -1552,6 +1651,7 @@ const BlockEditorShell = ({
               onClick={(event) => {
                 event.preventDefault()
                 setIsToolbarMoreOpen((prev) => !prev)
+                setIsInlineColorMenuOpen(false)
               }}
             >
               <span aria-hidden="true">⋯</span>
@@ -1924,6 +2024,148 @@ const ToolbarMoreDisclosure = styled.details`
       theme.scheme === "dark"
         ? "0 18px 40px rgba(3, 7, 18, 0.32)"
         : "0 18px 40px rgba(15, 23, 42, 0.12)"};
+  }
+`
+
+const ToolbarColorDisclosure = styled.details`
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+
+  summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.7rem;
+    height: 2.4rem;
+    padding: 0 0.45rem;
+    border-radius: 0.8rem;
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    cursor: pointer;
+    transition: background-color 160ms ease, color 160ms ease;
+  }
+
+  summary[data-active="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.14)" : "rgba(15, 23, 42, 0.08)"};
+    color: ${({ theme }) => theme.colors.gray12};
+    box-shadow: inset 0 -1.5px 0
+      ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(226, 232, 240, 0.32)" : "rgba(15, 23, 42, 0.22)"};
+  }
+
+  summary:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.08)" : "rgba(15, 23, 42, 0.05)"};
+    color: var(--color-gray12);
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .body {
+    position: absolute;
+    top: calc(100% + 0.55rem);
+    right: 0;
+    z-index: 32;
+    display: grid;
+    gap: 0.42rem;
+    min-width: 10.5rem;
+    padding: 0.72rem;
+    border-radius: 1rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(12, 16, 22, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark"
+        ? "0 18px 40px rgba(3, 7, 18, 0.32)"
+        : "0 18px 40px rgba(15, 23, 42, 0.12)"};
+  }
+`
+
+const ColorTriggerIcon = styled.span`
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 1.15rem;
+
+  span {
+    font-size: 0.96rem;
+    font-weight: 760;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  i {
+    display: block;
+    width: 1rem;
+    height: 0.18rem;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray8};
+  }
+
+  &[data-active="true"] i {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+`
+
+const ColorOptionButton = styled.button`
+  min-height: 2rem;
+  border-radius: 0.8rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.42)" : "rgba(255, 255, 255, 0.96)"};
+  color: var(--color-gray12);
+  padding: 0 0.72rem;
+  text-align: left;
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.32)" : "rgba(37, 99, 235, 0.24)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.12)" : "rgba(37, 99, 235, 0.08)"};
+  }
+
+  &:disabled {
+    opacity: 0.44;
+    cursor: not-allowed;
+  }
+`
+
+const ColorOptionLabel = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+`
+
+const ColorOptionSwatch = styled.span`
+  display: inline-flex;
+  width: 0.92rem;
+  height: 0.92rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray3};
+
+  &[data-empty="true"] {
+    position: relative;
+    background: transparent;
+  }
+
+  &[data-empty="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0.38rem -0.05rem auto -0.05rem;
+    height: 1.5px;
+    background: ${({ theme }) => theme.colors.gray10};
+    transform: rotate(-34deg);
+    transform-origin: center;
   }
 `
 

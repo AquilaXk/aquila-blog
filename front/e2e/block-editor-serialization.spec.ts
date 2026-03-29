@@ -105,6 +105,32 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("![diagram](https://example.com/image.png \"sample\") {width=640 align=wide}")
   })
 
+  test("inline color token 은 parse/serialize round-trip 을 유지한다", () => {
+    const markdown = "문장 중간 {{color:#60a5fa|강조 텍스트}} 와 일반 텍스트"
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(serialized).toBe(markdown)
+  })
+
+  test("named inline color 는 canonical hex token 으로 정규화된다", () => {
+    const markdown = "{{color:sky|강조 텍스트}}"
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+
+    expect(serializeEditorDocToMarkdown(doc)).toBe("{{color:#60a5fa|강조 텍스트}}")
+  })
+
+  test("링크와 inline color mark 는 함께 round-trip 된다", () => {
+    const markdown = "[{{color:#34d399|문서 링크}}](https://example.com/docs)"
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(serialized).toBe(markdown)
+  })
+
   test("GFM 테이블은 parse/serialize round-trip 을 유지한다", () => {
     const markdown = [
       "| 항목 | 값 |",

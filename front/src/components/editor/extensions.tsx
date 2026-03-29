@@ -24,11 +24,17 @@ import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 import FormulaRender from "src/libs/markdown/FormulaRender"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
+import {
+  formatReadableFileSize,
+  inferLinkProvider,
+  resolveEmbedPreviewUrl,
+} from "src/libs/unfurl/extractMeta"
 import type {
   BookmarkBlockAttrs,
   EmbedBlockAttrs,
   FileBlockAttrs,
   FormulaBlockAttrs,
+  InlineFormulaAttrs,
 } from "./serialization"
 
 const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
@@ -718,6 +724,10 @@ const LinkCardEditorView = ({
   const [draftBody, setDraftBody] = useState(
     String(node.attrs?.description || node.attrs?.caption || "")
   )
+  const [draftSiteName, setDraftSiteName] = useState(String(node.attrs?.siteName || ""))
+  const [draftProvider, setDraftProvider] = useState(String(node.attrs?.provider || ""))
+  const [draftThumbnailUrl, setDraftThumbnailUrl] = useState(String(node.attrs?.thumbnailUrl || ""))
+  const [draftEmbedUrl, setDraftEmbedUrl] = useState(String(node.attrs?.embedUrl || ""))
   const [isUnfurling, setIsUnfurling] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
@@ -728,14 +738,39 @@ const LinkCardEditorView = ({
     setDraftUrl(String(node.attrs?.url || ""))
     setDraftTitle(String(node.attrs?.title || node.attrs?.name || ""))
     setDraftBody(String(node.attrs?.description || node.attrs?.caption || ""))
-  }, [node.attrs?.caption, node.attrs?.description, node.attrs?.name, node.attrs?.title, node.attrs?.url])
+    setDraftSiteName(String(node.attrs?.siteName || ""))
+    setDraftProvider(String(node.attrs?.provider || ""))
+    setDraftThumbnailUrl(String(node.attrs?.thumbnailUrl || ""))
+    setDraftEmbedUrl(String(node.attrs?.embedUrl || ""))
+  }, [
+    node.attrs?.caption,
+    node.attrs?.description,
+    node.attrs?.embedUrl,
+    node.attrs?.name,
+    node.attrs?.provider,
+    node.attrs?.siteName,
+    node.attrs?.thumbnailUrl,
+    node.attrs?.title,
+    node.attrs?.url,
+  ])
 
-  const commit = (next: Partial<Record<"url" | "title" | "name" | "description" | "caption", string>>) => {
+  const commit = (
+    next: Partial<
+      Record<
+        "url" | "title" | "name" | "description" | "caption" | "siteName" | "provider" | "thumbnailUrl" | "embedUrl",
+        string
+      >
+    >
+  ) => {
     scheduleCommit({
       url: next.url ?? draftUrl,
       title: next.title ?? draftTitle,
       name: next.name ?? draftTitle,
       [bodyKey]: next[bodyKey] ?? draftBody,
+      siteName: next.siteName ?? draftSiteName,
+      provider: next.provider ?? draftProvider,
+      thumbnailUrl: next.thumbnailUrl ?? draftThumbnailUrl,
+      embedUrl: next.embedUrl ?? draftEmbedUrl,
     })
   }
 
@@ -753,19 +788,34 @@ const LinkCardEditorView = ({
       const nextTitle = force || !draftTitle.trim() ? String(payload.data.title || "").trim() : draftTitle
       const nextBody =
         force || !draftBody.trim() ? String(payload.data.description || "").trim() : draftBody
+      const nextSiteName = String(payload.data.siteName || "").trim()
+      const nextProvider = String(payload.data.provider || "").trim()
+      const nextThumbnailUrl = String(payload.data.thumbnailUrl || "").trim()
+      const nextEmbedUrl = String(payload.data.embedUrl || "").trim()
 
       if (nextTitle) setDraftTitle(nextTitle)
       if (nextBody) setDraftBody(nextBody)
+      setDraftSiteName(nextSiteName)
+      setDraftProvider(nextProvider)
+      setDraftThumbnailUrl(nextThumbnailUrl)
+      setDraftEmbedUrl(nextEmbedUrl)
       commit({
         url: trimmedUrl,
         title: nextTitle || draftTitle,
         name: nextTitle || draftTitle,
         [bodyKey]: nextBody || draftBody,
+        siteName: nextSiteName,
+        provider: nextProvider,
+        thumbnailUrl: nextThumbnailUrl,
+        embedUrl: nextEmbedUrl,
       })
     } finally {
       setIsUnfurling(false)
     }
   }
+
+  const previewLabel = draftProvider || draftSiteName || inferLinkProvider(draftUrl)
+  const previewEmbedUrl = bodyKey === "caption" ? draftEmbedUrl || resolveEmbedPreviewUrl(draftUrl) : ""
 
   return (
     <LinkCardEditorWrapper data-selected={selected}>
@@ -810,6 +860,25 @@ const LinkCardEditorView = ({
           commit({ [bodyKey]: nextBody })
         }}
       />
+      {(previewLabel || draftThumbnailUrl || previewEmbedUrl) && draftUrl.trim() ? (
+        <LinkCardPreview data-kind={bodyKey === "caption" ? "embed" : "bookmark"}>
+          {draftThumbnailUrl ? (
+            <LinkCardPreviewThumb aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={draftThumbnailUrl} alt="" loading="lazy" decoding="async" />
+            </LinkCardPreviewThumb>
+          ) : null}
+          <LinkCardPreviewCopy>
+            {previewLabel ? <small>{previewLabel}</small> : null}
+            <strong>{draftTitle || draftUrl}</strong>
+            {draftBody ? <p>{draftBody}</p> : null}
+            <span>{draftUrl}</span>
+          </LinkCardPreviewCopy>
+          {previewEmbedUrl ? (
+            <LinkCardPreviewHint>지원 provider라 공개 페이지에서 인라인 임베드됩니다.</LinkCardPreviewHint>
+          ) : null}
+        </LinkCardPreview>
+      ) : null}
     </LinkCardEditorWrapper>
   )
 }
@@ -840,6 +909,12 @@ const FileBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftUrl, setDraftUrl] = useState(String(node.attrs?.url || ""))
   const [draftName, setDraftName] = useState(String(node.attrs?.name || ""))
   const [draftDescription, setDraftDescription] = useState(String(node.attrs?.description || ""))
+  const [draftMimeType, setDraftMimeType] = useState(String(node.attrs?.mimeType || ""))
+  const [draftSizeBytes, setDraftSizeBytes] = useState<number | null>(
+    typeof node.attrs?.sizeBytes === "number" && Number.isFinite(node.attrs.sizeBytes)
+      ? Math.max(0, Math.round(node.attrs.sizeBytes))
+      : null
+  )
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
@@ -849,15 +924,25 @@ const FileBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
     setDraftUrl(String(node.attrs?.url || ""))
     setDraftName(String(node.attrs?.name || ""))
     setDraftDescription(String(node.attrs?.description || ""))
-  }, [node.attrs?.description, node.attrs?.name, node.attrs?.url])
+    setDraftMimeType(String(node.attrs?.mimeType || ""))
+    setDraftSizeBytes(
+      typeof node.attrs?.sizeBytes === "number" && Number.isFinite(node.attrs.sizeBytes)
+        ? Math.max(0, Math.round(node.attrs.sizeBytes))
+        : null
+    )
+  }, [node.attrs?.description, node.attrs?.mimeType, node.attrs?.name, node.attrs?.sizeBytes, node.attrs?.url])
 
   const commit = (next: Partial<FileBlockAttrs>) => {
     scheduleCommit({
       url: next.url ?? draftUrl,
       name: next.name ?? draftName,
       description: next.description ?? draftDescription,
+      mimeType: next.mimeType ?? draftMimeType,
+      sizeBytes: next.sizeBytes ?? draftSizeBytes,
     })
   }
+
+  const fileMeta = [draftMimeType || "", formatReadableFileSize(draftSizeBytes)].filter(Boolean).join(" · ")
 
   return (
     <LinkCardEditorWrapper data-selected={selected}>
@@ -896,6 +981,16 @@ const FileBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
           commit({ description: nextDescription })
         }}
       />
+      {(draftUrl || fileMeta) ? (
+        <LinkCardPreview data-kind="file">
+          <LinkCardPreviewCopy>
+            {fileMeta ? <small>{fileMeta}</small> : null}
+            <strong>{draftName || "첨부 파일"}</strong>
+            {draftDescription ? <p>{draftDescription}</p> : null}
+            {draftUrl ? <span>{draftUrl}</span> : null}
+          </LinkCardPreviewCopy>
+        </LinkCardPreview>
+      ) : null}
     </LinkCardEditorWrapper>
   )
 }
@@ -937,6 +1032,67 @@ const FormulaBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         </FormulaRenderedPreview>
       ) : null}
     </FormulaEditorWrapper>
+  )
+}
+
+const InlineFormulaView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+  const [draftFormula, setDraftFormula] = useState(String(node.attrs?.formula || ""))
+  const [editing, setEditing] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setDraftFormula(String(node.attrs?.formula || ""))
+  }, [node.attrs?.formula])
+
+  useEffect(() => {
+    if (!editing) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [editing])
+
+  const commit = () => {
+    updateAttributes({ formula: draftFormula.trim() })
+    setEditing(false)
+  }
+
+  return (
+    <InlineFormulaWrapper as="span" data-selected={selected}>
+      <InlineFormulaChip
+        type="button"
+        contentEditable={false}
+        onMouseDown={(event) => {
+          event.preventDefault()
+          setEditing(true)
+        }}
+        aria-label="인라인 수식 편집"
+      >
+        <FormulaRender formula={draftFormula || "x^2"} displayMode={false} />
+      </InlineFormulaChip>
+      {(editing || selected) && (
+        <InlineFormulaPopover contentEditable={false}>
+          <strong>인라인 수식</strong>
+          <InlineFormulaInput
+            ref={inputRef}
+            value={draftFormula}
+            spellCheck={false}
+            placeholder="x^2 + y^2"
+            onChange={(event) => setDraftFormula(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                commit()
+              }
+              if (event.key === "Escape") {
+                event.preventDefault()
+                setDraftFormula(String(node.attrs?.formula || ""))
+                setEditing(false)
+              }
+            }}
+          />
+        </InlineFormulaPopover>
+      )}
+    </InlineFormulaWrapper>
   )
 }
 
@@ -1359,6 +1515,24 @@ const createLinkCardBlock = (
         caption: {
           default: "",
         },
+        siteName: {
+          default: "",
+        },
+        provider: {
+          default: "",
+        },
+        thumbnailUrl: {
+          default: "",
+        },
+        embedUrl: {
+          default: "",
+        },
+        mimeType: {
+          default: "",
+        },
+        sizeBytes: {
+          default: null,
+        },
       }
     },
 
@@ -1407,6 +1581,34 @@ export const FormulaBlock = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(FormulaBlockView)
+  },
+})
+
+export const InlineFormula = Node.create({
+  name: "inlineFormula",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      formula: {
+        default: "",
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: "span[data-inline-formula]" }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["span", mergeAttributes(HTMLAttributes, { "data-inline-formula": "true" })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(InlineFormulaView)
   },
 })
 
@@ -2167,6 +2369,78 @@ const LinkCardTextarea = styled(CompactBlockTextarea)`
   font-size: 0.92rem;
 `
 
+const LinkCardPreview = styled.div`
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: minmax(0, 120px) 1fr;
+  align-items: start;
+  padding: 0.84rem 0.9rem;
+  border-radius: 0.92rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+
+  &[data-kind="file"] {
+    grid-template-columns: 1fr;
+  }
+`
+
+const LinkCardPreviewThumb = styled.div`
+  overflow: hidden;
+  border-radius: 0.82rem;
+  aspect-ratio: 16 / 10;
+  background: rgba(255, 255, 255, 0.05);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`
+
+const LinkCardPreviewCopy = styled.div`
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+
+  small {
+    color: var(--color-gray10);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    color: var(--color-gray12);
+    font-size: 0.94rem;
+    font-weight: 700;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  p {
+    margin: 0;
+    color: var(--color-gray11);
+    font-size: 0.85rem;
+    line-height: 1.58;
+  }
+
+  span {
+    color: var(--color-gray10);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    word-break: break-all;
+  }
+`
+
+const LinkCardPreviewHint = styled.div`
+  grid-column: 1 / -1;
+  color: #93c5fd;
+  font-size: 0.75rem;
+  font-weight: 600;
+`
+
 const FormulaEditorWrapper = styled(NodeViewWrapper)`
   display: flex;
   flex-direction: column;
@@ -2233,6 +2507,62 @@ const FormulaRenderedPreview = styled.div`
   .aq-formula-fallback {
     color: #e5e7eb;
   }
+`
+
+const InlineFormulaWrapper = styled(NodeViewWrapper)`
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+`
+
+const InlineFormulaChip = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 1.9rem;
+  padding: 0.18rem 0.56rem;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-gray12);
+  cursor: pointer;
+
+  .katex {
+    font-size: 0.98rem;
+  }
+`
+
+const InlineFormulaPopover = styled.span`
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.45rem);
+  z-index: 18;
+  display: grid;
+  gap: 0.42rem;
+  min-width: 15rem;
+  padding: 0.74rem;
+  border-radius: 0.82rem;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  background: rgba(10, 12, 16, 0.98);
+  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.28);
+
+  strong {
+    color: var(--color-gray11);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+`
+
+const InlineFormulaInput = styled.input`
+  min-height: 2.3rem;
+  width: 100%;
+  border-radius: 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-gray12);
+  font-size: 0.9rem;
+  padding: 0 0.78rem;
 `
 
 const RawBlockWrapper = styled(NodeViewWrapper)`

@@ -12,6 +12,7 @@ import {
   createFileBlockNode,
   createFormulaNode,
   createHorizontalRuleNode,
+  createInlineFormulaNode,
   createMermaidNode,
   createOrderedListNode,
   createTableNode,
@@ -260,6 +261,61 @@ test.describe("block editor serialization", () => {
 
     expect(html).toContain("katex")
     expect(html).toContain("katex-display")
+  })
+
+  test("인라인 수식 markdown 는 parse/serialize round-trip 을 유지한다", () => {
+    const markdown = "피타고라스 정리는 $a^2 + b^2 = c^2$ 로 표현합니다."
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+
+    expect(doc.content?.[0]?.content?.some((node) => node.type === "inlineFormula")).toBe(true)
+    expect(serialized).toBe(markdown)
+  })
+
+  test("직접 생성한 인라인 수식 노드도 canonical markdown 로 직렬화된다", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "결과는 " },
+            createInlineFormulaNode({ formula: "e^{i\\pi} + 1 = 0" }),
+            { type: "text", text: " 입니다." },
+          ],
+        },
+      ],
+    } as const
+
+    expect(serializeEditorDocToMarkdown(doc)).toBe("결과는 $e^{i\\pi} + 1 = 0$ 입니다.")
+  })
+
+  test("카드 메타 comment 는 directive parse/serialize round-trip 을 유지한다", () => {
+    const markdown = [
+      '<!-- aq-bookmark {"siteName":"GitHub","provider":"GitHub","thumbnailUrl":"https://example.com/thumb.png"} -->',
+      ":::bookmark https://github.com/aquilaxk/aquila-blog",
+      "Aquila Blog",
+      "에디터 개선 로그",
+      ":::",
+      "",
+      '<!-- aq-file {"mimeType":"application/pdf","sizeBytes":128000} -->',
+      ":::file https://example.com/files/spec.pdf",
+      "spec.pdf",
+      "첨부 설명",
+      ":::",
+    ].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const serialized = serializeEditorDocToMarkdown(doc)
+    const bookmark = doc.content?.[0]
+    const file = doc.content?.[1]
+
+    expect(bookmark?.attrs?.siteName).toBe("GitHub")
+    expect(bookmark?.attrs?.thumbnailUrl).toBe("https://example.com/thumb.png")
+    expect(file?.attrs?.mimeType).toBe("application/pdf")
+    expect(file?.attrs?.sizeBytes).toBe(128000)
+    expect(serialized).toBe(markdown)
   })
 
   test("malformed mermaid fence 는 raw block 으로 보존된다", () => {

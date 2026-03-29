@@ -9,7 +9,7 @@ const TABLE_MIN_COLUMN_WIDTH_PX = 120
 const TABLE_MIN_ROW_HEIGHT_PX = 44
 const DEFAULT_CALLOUT_TITLE = "참고"
 const EMBEDDED_HTML_BLOCK_PATTERN =
-  /<aside\b[^>]*>[\s\S]*?<\/aside>|<details\b[^>]*>[\s\S]*?<\/details>|<table\b[^>]*>[\s\S]*?<\/table>|<blockquote\b[^>]*>[\s\S]*?<\/blockquote>|<pre\b[^>]*>[\s\S]*?<\/pre>|<figure\b[^>]*>[\s\S]*?<\/figure>|<img\b[^>]*\/?>|<hr\b[^>]*\/?>/gi
+  /<aside\b[^>]*>[\s\S]*?<\/aside>|<details\b[^>]*>[\s\S]*?<\/details>|<table\b[^>]*>[\s\S]*?<\/table>|<blockquote\b[^>]*>[\s\S]*?<\/blockquote>|<pre\b[^>]*>[\s\S]*?<\/pre>|<figure\b[^>]*>[\s\S]*?<\/figure>|<iframe\b[^>]*>[\s\S]*?<\/iframe>|<img\b[^>]*\/?>|<hr\b[^>]*\/?>/gi
 
 const escapeMarkdownByPattern = (value: string, pattern: RegExp) => value.replace(pattern, "\\$&")
 const escapeTableCell = (value: string) => escapeMarkdownByPattern(value, /[\\|]/g)
@@ -168,7 +168,7 @@ export const looksLikeStructuredMarkdownDocument = (value: string) => {
     /^\s*\|.+\|\s*$/m,
     /^<!--\s*aq-table/m,
     /!\[[^\]]*]\([^)]+\)/,
-    /<(?:aside|details|table|blockquote|pre|figure|img|hr)\b/i,
+    /<(?:aside|details|table|blockquote|pre|figure|iframe|img|hr)\b/i,
   ]
 
   return structuredPatterns.some((pattern) => pattern.test(normalized))
@@ -358,6 +358,12 @@ export const convertHtmlToMarkdown = (
       return `\`\`\`${language}\n${codeText}\n\`\`\``
     }
     if (tag === "table") return tableToMarkdown(element as HTMLTableElement)
+    if (tag === "iframe") {
+      const src = (element.getAttribute("src") || "").trim()
+      const title = element.getAttribute("title")?.trim() || "임베드"
+      if (!src) return ""
+      return `:::embed ${src}\n${title}\n:::`
+    }
     if (tag === "details") {
       const summary = element.querySelector("summary")
       const title = summary?.textContent?.trim() || toggleTitlePlaceholder

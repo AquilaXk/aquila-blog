@@ -2,7 +2,7 @@ import { GetServerSideProps, NextPage } from "next"
 import { useMemo } from "react"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
-import AdminHubSurface from "src/routes/Admin/AdminHubSurface"
+import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   return await getAdminPageProps(req)
@@ -80,6 +80,41 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
   ]
 
+  const nextActionCandidates: Array<AdminHubNextAction | null> = [
+    profileCompletion < 80
+      ? {
+          href: "/admin/profile",
+          title: "프로필 완성도 보강",
+          detail: `현재 ${profileCompletion}% 상태입니다. 소개와 이미지를 먼저 정리하세요.`,
+          tone: "warn" as const,
+        }
+      : null,
+    !(sessionMember?.homeIntroTitle?.trim() && sessionMember?.homeIntroDescription?.trim())
+      ? {
+          href: "/admin/profile",
+          title: "홈 소개 문구 채우기",
+          detail: "첫 방문자가 블로그의 주제를 바로 이해할 수 있도록 인트로를 완성하세요.",
+          tone: "warn" as const,
+        }
+      : null,
+    linkCount === 0
+      ? {
+          href: "/admin/profile",
+          title: "연결 채널 추가",
+          detail: "연락처나 서비스 링크를 하나 이상 등록해 방문자 동선을 열어두세요.",
+          tone: "warn" as const,
+        }
+      : null,
+    {
+      href: "/editor/new",
+      title: "새 글 작성 시작",
+      detail: "허브 점검이 끝났다면 바로 임시글부터 작성 흐름을 이어갈 수 있습니다.",
+      tone: "neutral" as const,
+    },
+  ]
+
+  const nextActions = nextActionCandidates.filter((item): item is AdminHubNextAction => Boolean(item)).slice(0, 3)
+
   if (!sessionMember) return null
 
   return (
@@ -90,6 +125,7 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       profileRole={sessionMember.profileRole}
       profileBio={sessionMember.profileBio}
       summaryItems={summaryItems}
+      nextActions={nextActions}
       primaryAction={primaryAction}
       secondaryLinks={secondaryLinks}
     />

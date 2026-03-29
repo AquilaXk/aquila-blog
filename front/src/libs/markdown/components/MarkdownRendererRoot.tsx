@@ -128,10 +128,47 @@ const MarkdownRendererRoot = styled.div`
   .aq-bookmark-card a,
   .aq-file-card a {
     display: flex;
-    flex-direction: column;
-    gap: 0.38rem;
+    gap: 0.9rem;
     padding: 1rem 1.08rem;
     text-decoration: none;
+  }
+
+  .aq-link-card-thumb,
+  .aq-embed-thumb {
+    overflow: hidden;
+    border-radius: 14px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(15, 23, 42, 0.04)"};
+    aspect-ratio: 16 / 10;
+  }
+
+  .aq-link-card-thumb {
+    width: min(11rem, 36%);
+    flex-shrink: 0;
+  }
+
+  .aq-link-card-thumb img,
+  .aq-embed-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .aq-link-card-copy,
+  .aq-embed-copy {
+    display: grid;
+    gap: 0.34rem;
+    min-width: 0;
+  }
+
+  .aq-link-card-copy small,
+  .aq-embed-copy small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 
   .aq-bookmark-card strong,
@@ -191,6 +228,10 @@ const MarkdownRendererRoot = styled.div`
     padding: 0 1.08rem 0.92rem;
   }
 
+  .aq-embed-thumb {
+    margin: 0 1.08rem 0.92rem;
+  }
+
   .aq-embed-caption {
     margin: 0;
     padding: 0 1.08rem 1rem;
@@ -218,6 +259,15 @@ const MarkdownRendererRoot = styled.div`
   .aq-formula-render .katex {
     color: ${({ theme }) => theme.colors.gray12};
     font-size: clamp(1.02rem, 2vw, 1.28rem);
+  }
+
+  .katex {
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .aq-formula-fallback {

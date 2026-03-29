@@ -25,10 +25,22 @@ type EmptyPostStateProps = {
 
 const INITIAL_SKELETON_KEYS = Array.from({ length: 6 }, (_, index) => `skeleton-initial-${index}`)
 const NEXT_SKELETON_KEYS = Array.from({ length: 2 }, (_, index) => `skeleton-next-${index}`)
+const FILTER_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-filter-${index}`)
 
 const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClearFilters }) => {
   const { me, authStatus } = useAuthSession()
   const isAdmin = authStatus === "authenticated" && Boolean(me?.isAdmin)
+  const secondaryCta = isAdmin
+    ? {
+        href: "/admin",
+        icon: "service" as const,
+        label: "관리자 허브",
+      }
+    : {
+        href: "/about",
+        icon: "service" as const,
+        label: "블로그 소개",
+      }
 
   return (
     <section className="emptyState" aria-live="polite">
@@ -50,9 +62,9 @@ const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClear
           </Link>
         )}
         {!hasFilter && (
-          <Link href="/" className="actionBtn">
-            <AppIcon name="service" />
-            새로고침
+          <Link href={secondaryCta.href} className="actionBtn">
+            <AppIcon name={secondaryCta.icon} />
+            {secondaryCta.label}
           </Link>
         )}
       </div>
@@ -65,15 +77,19 @@ EmptyPostState.displayName = "EmptyPostState"
 
 const FilterLoadingStateInner: React.FC = () => (
   <section className="searchLoadingState" aria-live="polite">
-    <div className="searchLoadingIcon" aria-hidden="true">
-      <AppIcon name="search" />
+    <div className="searchLoadingHeading">
+      <div className="searchLoadingIcon" aria-hidden="true">
+        <AppIcon name="search" />
+      </div>
+      <div className="searchLoadingCopy">
+        <h3>검색 결과를 불러오는 중...</h3>
+        <p>입력한 조건에 맞는 글을 카드 레이아웃 기준으로 정리하고 있습니다.</p>
+      </div>
     </div>
-    <h3>검색 결과를 불러오는 중...</h3>
-    <p>입력한 조건에 맞는 글을 찾고 있습니다.</p>
-    <div className="searchLoadingBars" aria-hidden="true">
-      <span />
-      <span />
-      <span />
+    <div className="searchLoadingGrid skeletonGrid" aria-hidden="true">
+      {FILTER_SKELETON_KEYS.map((key) => (
+        <article key={key} className="skeletonCard" />
+      ))}
     </div>
   </section>
 )
@@ -261,13 +277,16 @@ const StyledWrapper = styled.div`
     grid-column: 1 / -1;
     border-top: 1px solid ${({ theme }) => theme.colors.gray6};
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-    min-height: 9.5rem;
+    min-height: 16rem;
     padding: 1rem 0;
     display: grid;
-    align-content: center;
-    justify-items: center;
-    text-align: center;
-    gap: 0.5rem;
+    gap: 0.9rem;
+
+    .searchLoadingHeading {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+    }
 
     .searchLoadingIcon {
       width: 2.1rem;
@@ -280,6 +299,11 @@ const StyledWrapper = styled.div`
       justify-content: center;
       font-size: 1rem;
       background: ${({ theme }) => theme.colors.gray2};
+    }
+
+    .searchLoadingCopy {
+      display: grid;
+      gap: 0.16rem;
     }
 
     h3 {
@@ -298,36 +322,8 @@ const StyledWrapper = styled.div`
     }
   }
 
-  .searchLoadingBars {
-    margin-top: 0.2rem;
-    width: min(340px, 72vw);
-    display: grid;
-    gap: 0.35rem;
-
-    span {
-      display: block;
-      height: 0.5rem;
-      border-radius: 999px;
-      background:
-        linear-gradient(
-          90deg,
-          ${({ theme }) => theme.colors.gray2} 0%,
-          ${({ theme }) => theme.colors.gray3} 50%,
-          ${({ theme }) => theme.colors.gray2} 100%
-        );
-      background-size: 220% 100%;
-      animation: feed-card-skeleton-pulse 1.1s ease-in-out infinite;
-    }
-
-    span:nth-of-type(2) {
-      width: 88%;
-      justify-self: center;
-    }
-
-    span:nth-of-type(3) {
-      width: 76%;
-      justify-self: center;
-    }
+  .searchLoadingGrid {
+    padding-top: 0.1rem;
   }
 
   .loadMoreArea {

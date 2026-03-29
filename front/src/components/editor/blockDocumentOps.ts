@@ -57,13 +57,68 @@ export const moveTopLevelBlockToInsertionIndex = (
 export const moveTaskItemToInsertionIndex = (
   doc: BlockEditorDoc,
   taskListBlockIndex: number,
+  taskListPath: number[],
   sourceItemIndex: number,
   insertionIndex: number
 ): BlockEditorDoc => {
   const content = [...normalizeDocContent(cloneNode(doc.content))]
   const taskList = content[taskListBlockIndex]
-  const taskItems = Array.isArray(taskList?.content) ? [...taskList.content] : null
-  if (!taskList || taskList.type !== "taskList" || !taskItems) return createDocument(content)
+  if (!taskList || taskList.type !== "taskList") return createDocument(content)
+
+  const readTaskListAtPath = (node: BlockEditorDoc, path: number[]): BlockEditorDoc | null => {
+    let current: BlockEditorDoc | null = node
+
+    for (const itemIndex of path) {
+      const taskItem = current?.content?.[itemIndex]
+      const nestedTaskList = taskItem?.content?.find((child) => child.type === "taskList") as
+        | BlockEditorDoc
+        | undefined
+      if (!nestedTaskList) return null
+      current = nestedTaskList
+    }
+
+    return current
+  }
+
+  const writeTaskListAtPath = (
+    node: BlockEditorDoc,
+    path: number[],
+    updater: (target: BlockEditorDoc) => BlockEditorDoc
+  ): BlockEditorDoc => {
+    if (path.length === 0) {
+      return updater(node)
+    }
+
+    const [itemIndex, ...restPath] = path
+    const items = Array.isArray(node.content) ? [...node.content] : []
+    const taskItem = items[itemIndex]
+    if (!taskItem) return node
+
+    const nestedTaskListIndex = taskItem.content?.findIndex((child) => child.type === "taskList") ?? -1
+    if (nestedTaskListIndex < 0 || !taskItem.content?.[nestedTaskListIndex]) return node
+
+    const nestedTaskList = writeTaskListAtPath(
+      taskItem.content[nestedTaskListIndex] as BlockEditorDoc,
+      restPath,
+      updater
+    )
+
+    const nextTaskItemContent = [...(taskItem.content || [])]
+    nextTaskItemContent[nestedTaskListIndex] = nestedTaskList
+    items[itemIndex] = {
+      ...taskItem,
+      content: nextTaskItemContent,
+    }
+
+    return {
+      ...node,
+      content: items,
+    }
+  }
+
+  const targetTaskList = readTaskListAtPath(taskList as BlockEditorDoc, taskListPath)
+  const taskItems = Array.isArray(targetTaskList?.content) ? [...targetTaskList.content] : null
+  if (!taskItems) return createDocument(content)
   if (sourceItemIndex < 0 || sourceItemIndex >= taskItems.length) return createDocument(content)
 
   const [moved] = taskItems.splice(sourceItemIndex, 1)
@@ -74,8 +129,10 @@ export const moveTaskItemToInsertionIndex = (
   taskItems.splice(nextIndex, 0, moved)
 
   content[taskListBlockIndex] = {
-    ...taskList,
-    content: taskItems,
+    ...writeTaskListAtPath(taskList as BlockEditorDoc, taskListPath, (currentTaskList) => ({
+      ...currentTaskList,
+      content: taskItems,
+    })),
   }
 
   return createDocument(content)

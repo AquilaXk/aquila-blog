@@ -3459,6 +3459,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           url: uploadedUrl,
           name: uploadedName,
           description: "",
+          mimeType: file.type || "",
+          sizeBytes: file.size,
         }
       } catch (error) {
         const message = normalizeProfileImageUploadError(error)

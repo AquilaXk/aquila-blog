@@ -195,6 +195,18 @@ const createBlankAboutSection = (): AboutSectionBlock => ({
   dividerBefore: false,
 })
 
+const reorderListItem = <T,>(items: T[], fromIndex: number, toIndex: number) => {
+  if (fromIndex === toIndex) return items
+  if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) {
+    return items
+  }
+
+  const next = items.slice()
+  const [item] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, item)
+  return next
+}
+
 const validateLinkInputs = (
   section: ProfileCardLinkSection,
   sectionLabel: string,
@@ -308,6 +320,9 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
   const [linkTab, setLinkTab] = useState<LinkTab>("service")
   const [previewMode, setPreviewMode] = useState<PreviewMode>("draft")
   const [isPreviewExpanded, setIsPreviewExpanded] = useState(false)
+  const [draggingLinkIndex, setDraggingLinkIndex] = useState<number | null>(null)
+  const [dragOverLinkIndex, setDragOverLinkIndex] = useState<number | null>(null)
+  const [dragOverLinkPosition, setDragOverLinkPosition] = useState<"before" | "after" | null>(null)
   const [openIconPicker, setOpenIconPicker] = useState<OpenIconPicker>(null)
   const [loadingKey, setLoadingKey] = useState("")
   const [workspaceNotice, setWorkspaceNotice] = useState<{ tone: NoticeTone; text: string }>({
@@ -583,6 +598,16 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
       return {
         ...current,
         [key]: moveListItem(current[key], index, direction),
+      }
+    })
+  }, [])
+
+  const reorderLinkItems = useCallback((section: LinkTab, fromIndex: number, toIndex: number) => {
+    setDraft((current) => {
+      const key = section === "service" ? "serviceLinks" : "contactLinks"
+      return {
+        ...current,
+        [key]: reorderListItem(current[key], fromIndex, toIndex),
       }
     })
   }, [])
@@ -986,6 +1011,11 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
     syncPublishedAdminProfileCache,
   ])
 
+  useEffect(() => {
+    setDraggingLinkIndex(null)
+    setDragOverLinkIndex(null)
+  }, [linkTab])
+
   if (!sessionMember) return null
 
   const displayName = sessionMember.nickname || sessionMember.username || "관리자"
@@ -1301,6 +1331,15 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                   링크 추가
                 </GhostButton>
               </LinkManagerHeader>
+              <LinkManagerHint
+                data-tone={draggingLinkIndex !== null ? "dragging" : sectionStateMap.links.dirty ? "dirty" : "idle"}
+              >
+                {draggingLinkIndex !== null
+                  ? "드롭 위치에 놓으면 순서가 바로 바뀝니다."
+                  : sectionStateMap.links.dirty
+                    ? "링크 순서나 내용이 바뀌었습니다. 저장 또는 공개해야 실제 카드에 반영됩니다."
+                    : "드래그해서 순서를 바꾸고, 필요하면 저장 후 공개하세요."}
+              </LinkManagerHint>
 
               {visibleLinks.length > 0 ? (
                 <LinkCardList>
@@ -1312,7 +1351,52 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                     const optionLabel = options.find((option) => option.id === item.icon)?.label || "아이콘"
 
                     return (
-                      <LinkRowCard key={`${section}-${index}`}>
+                      <LinkRowCard
+                        key={`${section}-${index}`}
+                        draggable={true}
+                        data-dragging={draggingLinkIndex === index ? "true" : "false"}
+                        data-drop-target={dragOverLinkIndex === index && draggingLinkIndex !== index ? "true" : "false"}
+                        data-drop-position={dragOverLinkIndex === index ? dragOverLinkPosition || undefined : undefined}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = "move"
+                          event.dataTransfer.setData("text/plain", `${section}:${index}`)
+                          setDraggingLinkIndex(index)
+                          setDragOverLinkIndex(index)
+                          setDragOverLinkPosition("after")
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault()
+                          event.dataTransfer.dropEffect = "move"
+                          const bounds = (event.currentTarget as HTMLDivElement).getBoundingClientRect()
+                          const nextPosition = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after"
+                          if (dragOverLinkIndex !== index) {
+                            setDragOverLinkIndex(index)
+                          }
+                          setDragOverLinkPosition(nextPosition)
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault()
+                          const payload = event.dataTransfer.getData("text/plain")
+                          const [dragSection, rawIndex] = payload.split(":")
+                          const fromIndex = Number.parseInt(rawIndex ?? "", 10)
+                          if (dragSection === section && Number.isFinite(fromIndex)) {
+                            const rawTargetIndex =
+                              dragOverLinkPosition === "after" && index < visibleLinks.length - 1 ? index + 1 : index
+                            const normalizedTargetIndex =
+                              fromIndex < rawTargetIndex ? rawTargetIndex - 1 : rawTargetIndex
+                            const nextTargetIndex = Math.max(0, Math.min(visibleLinks.length - 1, normalizedTargetIndex))
+                            reorderLinkItems(section, fromIndex, nextTargetIndex)
+                          }
+                          setDraggingLinkIndex(null)
+                          setDragOverLinkIndex(null)
+                          setDragOverLinkPosition(null)
+                        }}
+                        onDragEnd={() => {
+                          setDraggingLinkIndex(null)
+                          setDragOverLinkIndex(null)
+                          setDragOverLinkPosition(null)
+                        }}
+                      >
                         <IconPickerField data-icon-picker-root="true">
                           <FieldLabel as="span">아이콘</FieldLabel>
                           <IconPickerButton
@@ -1376,6 +1460,10 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                         </LinkInputs>
 
                         <InlineActionRow className="linkActions">
+                          <DragHandleButton aria-hidden="true">
+                            <AppIcon name="list" />
+                            드래그 정렬
+                          </DragHandleButton>
                           {previewHref && isAllowedProfileLinkHref(section, item.href) ? (
                             <PreviewAnchor href={previewHref} target="_blank" rel="noreferrer">
                               열기
@@ -1386,6 +1474,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                             </MiniButton>
                           )}
                           <MiniButton
+                            className="reorderButton"
                             type="button"
                             disabled={index === 0}
                             onClick={() => moveLinkItem(section, index, -1)}
@@ -1393,6 +1482,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                             위로
                           </MiniButton>
                           <MiniButton
+                            className="reorderButton"
                             type="button"
                             disabled={index === visibleLinks.length - 1}
                             onClick={() => moveLinkItem(section, index, 1)}
@@ -2304,6 +2394,12 @@ const InlineActionRow = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.42rem;
+
+  .reorderButton {
+    @media (min-width: 901px) {
+      display: none;
+    }
+  }
 `
 
 const EmptyStateCard = styled.div`
@@ -2375,12 +2471,28 @@ const LinkManagerHeader = styled.div`
   }
 `
 
+const LinkManagerHint = styled.p`
+  margin: -0.18rem 0 0;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.79rem;
+  line-height: 1.5;
+
+  &[data-tone="dirty"] {
+    color: ${({ theme }) => theme.colors.orange10};
+  }
+
+  &[data-tone="dragging"] {
+    color: ${({ theme }) => theme.colors.accentLink};
+  }
+`
+
 const LinkCardList = styled.div`
   display: grid;
   gap: 0.72rem;
 `
 
 const LinkRowCard = styled.div`
+  position: relative;
   display: grid;
   grid-template-columns: 216px minmax(0, 1fr) auto;
   gap: 0.72rem;
@@ -2388,6 +2500,37 @@ const LinkRowCard = styled.div`
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+
+  &[data-dragging="true"] {
+    opacity: 0.78;
+    transform: scale(0.995);
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+  }
+
+  &[data-drop-target="true"] {
+    border-color: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+  }
+
+  &[data-drop-target="true"]::before {
+    content: "";
+    position: absolute;
+    left: 0.72rem;
+    right: 0.72rem;
+    height: 3px;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.blue8};
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.2);
+  }
+
+  &[data-drop-target="true"][data-drop-position="before"]::before {
+    top: -2px;
+  }
+
+  &[data-drop-target="true"][data-drop-position="after"]::before {
+    bottom: -2px;
+  }
 
   .linkActions {
     align-self: center;
@@ -2400,6 +2543,25 @@ const LinkRowCard = styled.div`
     .linkActions {
       justify-content: flex-start;
     }
+  }
+`
+
+const DragHandleButton = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-height: 32px;
+  padding: 0 0.72rem;
+  border-radius: 999px;
+  border: 1px dashed ${({ theme }) => theme.colors.gray6};
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: grab;
+  user-select: none;
+
+  @media (max-width: 900px) {
+    display: none;
   }
 `
 

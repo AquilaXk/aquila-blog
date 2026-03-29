@@ -11,7 +11,9 @@ import {
   useState,
 } from "react"
 import ReactMarkdown from "react-markdown"
+import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
 import {
   extractCodeMetaFromPreChildren,
   isMermaidSource,
@@ -32,6 +34,7 @@ import usePrismEffect from "src/libs/markdown/hooks/usePrismEffect"
 import PrettyCodeBlock from "src/libs/markdown/components/PrettyCodeBlock"
 import MarkdownRendererRoot from "src/libs/markdown/components/MarkdownRendererRoot"
 import FormulaRender from "src/libs/markdown/FormulaRender"
+import { formatReadableFileSize, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
 
 export { markdownGuide } from "src/libs/markdown/rendering"
 
@@ -297,30 +300,6 @@ const MarkdownTableCellRenderer = ({
   )
 }
 
-const resolveEmbedPreviewUrl = (url: string) => {
-  try {
-    const parsedUrl = new URL(url)
-    const host = parsedUrl.hostname.replace(/^www\./, "")
-
-    if (host === "youtube.com" || host === "youtu.be") {
-      const videoId =
-        host === "youtu.be"
-          ? parsedUrl.pathname.replace(/^\/+/, "")
-          : parsedUrl.searchParams.get("v") || ""
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : ""
-    }
-
-    if (host === "vimeo.com") {
-      const videoId = parsedUrl.pathname.replace(/^\/+/, "")
-      return videoId ? `https://player.vimeo.com/video/${videoId}` : ""
-    }
-  } catch {
-    return ""
-  }
-
-  return ""
-}
-
 const MarkdownRendererComponent: FC<Props> = ({
   content,
   contentHtml,
@@ -352,7 +331,8 @@ const MarkdownRendererComponent: FC<Props> = ({
     // 코드블록이 없는 세그먼트에는 무거운 syntax-highlight 플러그인을 생략한다.
     <ReactMarkdown
       key={key}
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
       components={{
         p({ children }) {
           if (!inCallout) return <p>{children}</p>
@@ -508,23 +488,37 @@ const MarkdownRendererComponent: FC<Props> = ({
         }
 
         if (segment.type === "bookmark") {
+          const providerLabel = segment.provider || segment.siteName || inferLinkProvider(segment.url)
           return (
             <div key={`bookmark-${index}`} className="aq-bookmark-card">
               <a href={segment.url} target="_blank" rel="noreferrer">
-                <strong>{segment.title || segment.url}</strong>
-                <span>{segment.url}</span>
-                {segment.description ? <p>{segment.description}</p> : null}
+                {segment.thumbnailUrl ? (
+                  <div className="aq-link-card-thumb" aria-hidden="true">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={segment.thumbnailUrl} alt="" loading="lazy" decoding="async" />
+                  </div>
+                ) : null}
+                <div className="aq-link-card-copy">
+                  {providerLabel ? <small>{providerLabel}</small> : null}
+                  <strong>{segment.title || segment.url}</strong>
+                  <span>{segment.url}</span>
+                  {segment.description ? <p>{segment.description}</p> : null}
+                </div>
               </a>
             </div>
           )
         }
 
         if (segment.type === "embed") {
-          const previewUrl = resolveEmbedPreviewUrl(segment.url)
+          const previewUrl = segment.embedUrl || resolveEmbedPreviewUrl(segment.url)
+          const providerLabel = segment.provider || segment.siteName || inferLinkProvider(segment.url)
           return (
             <div key={`embed-${index}`} className="aq-embed-card">
               <div className="aq-embed-header">
-                <strong>{segment.title || "임베드"}</strong>
+                <div className="aq-embed-copy">
+                  {providerLabel ? <small>{providerLabel}</small> : null}
+                  <strong>{segment.title || "임베드"}</strong>
+                </div>
                 <a href={segment.url} target="_blank" rel="noreferrer">
                   원본 열기
                 </a>
@@ -544,17 +538,27 @@ const MarkdownRendererComponent: FC<Props> = ({
                   <p>이 사이트는 인라인 임베드를 지원하지 않아 링크 카드로 대체했습니다.</p>
                 </div>
               )}
+              {segment.thumbnailUrl && !previewUrl ? (
+                <div className="aq-embed-thumb" aria-hidden="true">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={segment.thumbnailUrl} alt="" loading="lazy" decoding="async" />
+                </div>
+              ) : null}
               {segment.caption ? <p className="aq-embed-caption">{segment.caption}</p> : null}
             </div>
           )
         }
 
         if (segment.type === "file") {
+          const meta = [segment.mimeType || "", formatReadableFileSize(segment.sizeBytes)].filter(Boolean).join(" · ")
           return (
             <div key={`file-${index}`} className="aq-file-card">
               <a href={segment.url} target="_blank" rel="noreferrer">
-                <strong>{segment.name || "첨부 파일"}</strong>
-                <span>{segment.url}</span>
+                <div className="aq-link-card-copy">
+                  {meta ? <small>{meta}</small> : null}
+                  <strong>{segment.name || "첨부 파일"}</strong>
+                  <span>{segment.url}</span>
+                </div>
               </a>
               {segment.description ? <p>{segment.description}</p> : null}
             </div>

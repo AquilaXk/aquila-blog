@@ -56,21 +56,34 @@ export type BookmarkBlockAttrs = {
   url: string
   title: string
   description?: string
+  siteName?: string
+  provider?: string
+  thumbnailUrl?: string
 }
 
 export type EmbedBlockAttrs = {
   url: string
   title: string
   caption?: string
+  siteName?: string
+  provider?: string
+  thumbnailUrl?: string
+  embedUrl?: string
 }
 
 export type FileBlockAttrs = {
   url: string
   name: string
   description?: string
+  mimeType?: string
+  sizeBytes?: number | null
 }
 
 export type FormulaBlockAttrs = {
+  formula: string
+}
+
+export type InlineFormulaAttrs = {
   formula: string
 }
 
@@ -120,6 +133,8 @@ const CALL_OUT_KIND_LABELS: Record<CalloutKind, string> = {
 
 const CUSTOM_DIRECTIVE_PATTERN =
   /^:::(bookmark|embed|file)(?:\s+(\S+))?\s*$/i
+const CARD_METADATA_COMMENT_PATTERN =
+  /^\s*<!--\s*aq-(bookmark|embed|file)\s+(\{[\s\S]*\})\s*-->\s*$/
 
 const FORMULA_BLOCK_START_PATTERN = /^\s*\$\$\s*$/
 
@@ -298,6 +313,85 @@ const appendMarkToInlineTextNodes = (nodes: JSONContent[], mark: EditorTextMark)
     }
   })
 
+const sanitizeCardMetadata = (
+  kind: "bookmark" | "embed" | "file",
+  payload: unknown
+): Partial<BookmarkBlockAttrs & EmbedBlockAttrs & FileBlockAttrs> => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {}
+
+  const source = payload as Record<string, unknown>
+  if (kind === "file") {
+    const mimeType = typeof source.mimeType === "string" ? source.mimeType.trim() : ""
+    const sizeBytes = typeof source.sizeBytes === "number" && Number.isFinite(source.sizeBytes)
+      ? Math.max(0, Math.round(source.sizeBytes))
+      : null
+
+    return {
+      ...(mimeType ? { mimeType } : {}),
+      ...(sizeBytes !== null ? { sizeBytes } : {}),
+    }
+  }
+
+  const siteName = typeof source.siteName === "string" ? source.siteName.trim() : ""
+  const provider = typeof source.provider === "string" ? source.provider.trim() : ""
+  const thumbnailUrl = typeof source.thumbnailUrl === "string" ? source.thumbnailUrl.trim() : ""
+  const embedUrl = kind === "embed" && typeof source.embedUrl === "string" ? source.embedUrl.trim() : ""
+
+  return {
+    ...(siteName ? { siteName } : {}),
+    ...(provider ? { provider } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(embedUrl ? { embedUrl } : {}),
+  }
+}
+
+const parseCardMetadataComment = (line: string) => {
+  const match = line.match(CARD_METADATA_COMMENT_PATTERN)
+  if (!match) return null
+
+  try {
+    const kind = match[1].toLowerCase() as "bookmark" | "embed" | "file"
+    const payload = JSON.parse(match[2])
+    return {
+      kind,
+      attrs: sanitizeCardMetadata(kind, payload),
+    }
+  } catch {
+    return null
+  }
+}
+
+const buildInlineFormulaNode = (formula: string): JSONContent => ({
+  type: "inlineFormula",
+  attrs: {
+    formula: formula.trim(),
+  },
+})
+
+const matchInlineFormula = (value: string) => {
+  if (!value.startsWith("$") || value.startsWith("$$")) return null
+  const match = value.match(/^\$((?:\\\$|[^$\n])+?)\$/)
+  if (!match) return null
+
+  const formula = String(match[1] || "").trim()
+  return formula ? { full: match[0], formula } : null
+}
+
+const findNextInlinePatternStart = (value: string) => {
+  const candidates = [
+    value.indexOf("{{"),
+    value.indexOf("["),
+    value.indexOf("**"),
+    value.indexOf("~~"),
+    value.indexOf("`"),
+    value.indexOf("$"),
+    value.indexOf("*"),
+  ].filter((index) => index >= 0)
+
+  if (candidates.length === 0) return -1
+  return Math.min(...candidates)
+}
+
 const buildInlineContent = (text: string): JSONContent[] => {
   if (!text) return []
 
@@ -327,14 +421,37 @@ const buildInlineContent = (text: string): JSONContent[] => {
         match: text.slice(index).match(/^`([^`]+)`/),
       },
       {
+        name: "inlineFormula",
+        match: (() => {
+          const formulaMatch = matchInlineFormula(text.slice(index))
+          if (!formulaMatch) return null
+          return Object.assign([formulaMatch.full, formulaMatch.formula], {
+            index: 0,
+            input: text.slice(index),
+          }) as RegExpMatchArray
+        })(),
+      },
+      {
         name: "italic",
         match: text.slice(index).match(/^\*([^*]+)\*/),
       },
     ].filter((entry) => entry.match)
 
     if (nextPatterns.length === 0) {
-      pushPlainText(nodes, text.slice(index))
-      break
+      const remaining = text.slice(index)
+      const nextPatternStart = findNextInlinePatternStart(remaining)
+      if (nextPatternStart < 0) {
+        pushPlainText(nodes, remaining)
+        break
+      }
+      if (nextPatternStart === 0) {
+        pushPlainText(nodes, remaining[0] || "")
+        index += 1
+        continue
+      }
+      pushPlainText(nodes, remaining.slice(0, nextPatternStart))
+      index += nextPatternStart
+      continue
     }
 
     const nextPattern = nextPatterns.reduce((prev, current) => {
@@ -387,6 +504,8 @@ const buildInlineContent = (text: string): JSONContent[] => {
       nodes.push(buildTextNode(first, [{ type: "strike" }]))
     } else if (nextPattern.name === "code") {
       nodes.push(buildTextNode(first, [{ type: "code" }]))
+    } else if (nextPattern.name === "inlineFormula") {
+      nodes.push(buildInlineFormulaNode(first))
     }
 
     index += full.length
@@ -637,6 +756,11 @@ export const createFormulaNode = (attrs: FormulaBlockAttrs): JSONContent => ({
   attrs,
 })
 
+export const createInlineFormulaNode = (attrs: InlineFormulaAttrs): JSONContent => ({
+  type: "inlineFormula",
+  attrs,
+})
+
 const isSupportedBlockStart = (line: string, nextLine?: string) =>
   isBlankLine(line) ||
   Boolean(isFenceStart(line)) ||
@@ -650,6 +774,7 @@ const isSupportedBlockStart = (line: string, nextLine?: string) =>
   (isLikelyTableRow(line) && Boolean(nextLine && isTableSeparatorLine(nextLine))) ||
   Boolean(parseToggleStart(line)) ||
   Boolean(parseCalloutStart(line)) ||
+  Boolean(parseCardMetadataComment(line)) ||
   Boolean(line.trim().match(CUSTOM_DIRECTIVE_PATTERN)) ||
   FORMULA_BLOCK_START_PATTERN.test(line.trim())
 
@@ -660,19 +785,34 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
   const lines = normalizedMarkdown.split("\n")
   const content: JSONContent[] = []
   let index = 0
+  let pendingDirectiveMetadata:
+    | {
+        kind: "bookmark" | "embed" | "file"
+        attrs: Partial<BookmarkBlockAttrs & EmbedBlockAttrs & FileBlockAttrs>
+      }
+    | null = null
 
   while (index < lines.length) {
     const line = lines[index]
     const nextLine = lines[index + 1]
     const tableLayout = parseMarkdownTableLayoutComment(line)
+    const directiveMetadataComment = parseCardMetadataComment(line)
 
     if (isBlankLine(line)) {
+      pendingDirectiveMetadata = null
+      index += 1
+      continue
+    }
+
+    if (directiveMetadataComment) {
+      pendingDirectiveMetadata = directiveMetadataComment
       index += 1
       continue
     }
 
     const fence = isFenceStart(line)
     if (fence) {
+      pendingDirectiveMetadata = null
       const collected = [line]
       let pointer = index + 1
       let closed = false
@@ -710,6 +850,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const toggleStart = parseToggleStart(line)
     if (toggleStart) {
+      pendingDirectiveMetadata = null
       const collected = [line]
       const bodyLines: string[] = []
       let pointer = index + 1
@@ -771,6 +912,11 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       const normalizedBodyLines = bodyLines.map((bodyLine) => bodyLine.trimEnd())
       const [firstLine = "", ...restLines] = normalizedBodyLines
       const secondaryText = restLines.join("\n").trim()
+      const directiveMetadata =
+        pendingDirectiveMetadata?.kind === directive
+          ? pendingDirectiveMetadata.attrs
+          : {}
+      pendingDirectiveMetadata = null
 
       if (directive === "bookmark") {
         content.push(
@@ -778,6 +924,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
             url: headerValue,
             title: firstLine.trim() || "북마크",
             description: secondaryText,
+            ...directiveMetadata,
           })
         )
       } else if (directive === "embed") {
@@ -786,6 +933,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
             url: headerValue,
             title: firstLine.trim() || "임베드",
             caption: secondaryText,
+            ...directiveMetadata,
           })
         )
       } else if (directive === "file") {
@@ -794,6 +942,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
             url: headerValue,
             name: firstLine.trim() || "파일",
             description: secondaryText,
+            ...directiveMetadata,
           })
         )
       }
@@ -803,6 +952,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
     }
 
     if (FORMULA_BLOCK_START_PATTERN.test(line.trim())) {
+      pendingDirectiveMetadata = null
       const bodyLines: string[] = []
       let pointer = index + 1
       let closed = false
@@ -833,6 +983,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const calloutStart = parseCalloutStart(line)
     if (calloutStart) {
+      pendingDirectiveMetadata = null
       const collected = [line]
       const bodyLines: string[] = []
       let pointer = index + 1
@@ -867,6 +1018,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
     }
 
     if (isDividerLine(line)) {
+      pendingDirectiveMetadata = null
       content.push(createHorizontalRuleNode())
       index += 1
       continue
@@ -874,6 +1026,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const image = parseStandaloneMarkdownImageLine(line)
     if (image) {
+      pendingDirectiveMetadata = null
       content.push({
         type: "resizableImage",
         attrs: {
@@ -890,6 +1043,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const heading = isHeadingLine(line)
     if (heading) {
+      pendingDirectiveMetadata = null
       content.push(createHeadingNode(heading.level, heading.text))
       index += 1
       continue
@@ -907,6 +1061,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
       tableLayout && tableStartLine === nextLine ? index + 1 : index
 
     if (isLikelyTableRow(tableStartLine) && tableSeparatorLine && isTableSeparatorLine(tableSeparatorLine)) {
+      pendingDirectiveMetadata = null
       const rows: string[][] = [splitTableCells(tableStartLine)]
       let pointer = tableStartIndex + 2
 
@@ -930,6 +1085,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const taskListItem = isTaskListItem(line)
     if (taskListItem) {
+      pendingDirectiveMetadata = null
       const items: ChecklistBlockItem[] = []
       let pointer = index
 
@@ -947,6 +1103,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const bulletItem = isBulletListItem(line)
     if (bulletItem !== null) {
+      pendingDirectiveMetadata = null
       const items: string[] = []
       let pointer = index
       while (pointer < lines.length) {
@@ -962,6 +1119,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const orderedItem = isOrderedListItem(line)
     if (orderedItem) {
+      pendingDirectiveMetadata = null
       const items: string[] = []
       const start = orderedItem.order
       let pointer = index
@@ -978,6 +1136,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
 
     const quoteLine = isBlockquoteLine(line)
     if (quoteLine !== null) {
+      pendingDirectiveMetadata = null
       const items: string[] = []
       let pointer = index
       while (pointer < lines.length) {
@@ -992,6 +1151,7 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
     }
 
     const paragraph = collectParagraphLines(lines, index)
+    pendingDirectiveMetadata = null
     content.push(createParagraphNode(paragraph.text))
     index = paragraph.nextIndex
   }
@@ -1034,6 +1194,11 @@ const serializeTextNode = (node: JSONContent) => {
   }
 
   return text
+}
+
+const serializeInlineFormulaNode = (node: JSONContent) => {
+  const formula = String(node.attrs?.formula || "").trim()
+  return formula ? `$${formula}$` : ""
 }
 
 const serializeInlineContent = (content?: JSONContent[]) =>
@@ -1257,13 +1422,34 @@ const serializeMermaidBlock = (attrs: Partial<MermaidBlockAttrs>) => {
 
 const serializeDirectiveBlock = (
   name: "bookmark" | "embed" | "file",
+  attrs: Partial<BookmarkBlockAttrs & EmbedBlockAttrs & FileBlockAttrs>,
   url: string,
   primaryText: string,
   secondaryText?: string
-) =>
-  [`:::${name} ${url}`.trimEnd(), primaryText, secondaryText || "", ":::"]
+) => {
+  const metadata =
+    name === "file"
+      ? {
+          ...(attrs.mimeType ? { mimeType: attrs.mimeType } : {}),
+          ...(typeof attrs.sizeBytes === "number" && Number.isFinite(attrs.sizeBytes)
+            ? { sizeBytes: Math.max(0, Math.round(attrs.sizeBytes)) }
+            : {}),
+        }
+      : {
+          ...(attrs.siteName ? { siteName: attrs.siteName } : {}),
+          ...(attrs.provider ? { provider: attrs.provider } : {}),
+          ...(attrs.thumbnailUrl ? { thumbnailUrl: attrs.thumbnailUrl } : {}),
+          ...(name === "embed" && attrs.embedUrl ? { embedUrl: attrs.embedUrl } : {}),
+        }
+
+  const metadataComment =
+    Object.keys(metadata).length > 0 ? `<!-- aq-${name} ${JSON.stringify(metadata)} -->` : ""
+  const directiveBody = [`:::${name} ${url}`.trimEnd(), primaryText, secondaryText || "", ":::"]
     .filter((line, index) => index === 0 || line.trim().length > 0 || index === 3)
     .join("\n")
+
+  return metadataComment ? `${metadataComment}\n${directiveBody}` : directiveBody
+}
 
 const serializeFormulaBlock = (attrs: Partial<FormulaBlockAttrs>) => {
   const formula = String(attrs.formula || "").trim()
@@ -1278,6 +1464,8 @@ export const serializeNode = (node: JSONContent): string => {
       return serializeParagraphLikeNode(node)
     case "text":
       return serializeTextNode(node)
+    case "inlineFormula":
+      return serializeInlineFormulaNode(node)
     case "heading":
       return `${"#".repeat(Number(node.attrs?.level || 1))} ${serializeParagraphLikeNode(node)}`
     case "bulletList":
@@ -1321,6 +1509,7 @@ export const serializeNode = (node: JSONContent): string => {
     case "bookmarkBlock":
       return serializeDirectiveBlock(
         "bookmark",
+        node.attrs as BookmarkBlockAttrs,
         String(node.attrs?.url || ""),
         String(node.attrs?.title || ""),
         String(node.attrs?.description || "")
@@ -1328,6 +1517,7 @@ export const serializeNode = (node: JSONContent): string => {
     case "embedBlock":
       return serializeDirectiveBlock(
         "embed",
+        node.attrs as EmbedBlockAttrs,
         String(node.attrs?.url || ""),
         String(node.attrs?.title || ""),
         String(node.attrs?.caption || "")
@@ -1335,6 +1525,7 @@ export const serializeNode = (node: JSONContent): string => {
     case "fileBlock":
       return serializeDirectiveBlock(
         "file",
+        node.attrs as FileBlockAttrs,
         String(node.attrs?.url || ""),
         String(node.attrs?.name || ""),
         String(node.attrs?.description || "")

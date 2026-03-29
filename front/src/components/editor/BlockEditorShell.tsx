@@ -5,6 +5,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Table } from "@tiptap/extension-table"
+import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
 import {
@@ -28,6 +29,7 @@ import {
   EmbedBlock,
   FileBlock,
   FormulaBlock,
+  InlineFormula,
   getPreferredCodeLanguage,
   InlineColorMark,
   MermaidBlock,
@@ -52,6 +54,7 @@ import {
   createFormulaNode,
   createHeadingNode,
   createHorizontalRuleNode,
+  createInlineFormulaNode,
   createMermaidNode,
   createOrderedListNode,
   createParagraphNode,
@@ -152,6 +155,7 @@ type DraggedBlockState =
 type DraggedTaskItemState =
   | {
       taskListBlockIndex: number
+      taskListPath: number[]
       sourceItemIndex: number
     }
   | null
@@ -160,6 +164,7 @@ type TaskItemDropIndicatorState =
   | {
       visible: boolean
       taskListBlockIndex: number
+      taskListPath: number[]
       insertionIndex: number
       top: number
       left: number
@@ -168,6 +173,7 @@ type TaskItemDropIndicatorState =
   | {
       visible: false
       taskListBlockIndex: number
+      taskListPath: number[]
       insertionIndex: number
       top: number
       left: number
@@ -413,10 +419,14 @@ const SLASH_MENU_ESTIMATED_WIDTH_PX = 608
 const SLASH_MENU_ESTIMATED_HEIGHT_PX = 560
 const TABLE_CELL_COLOR_PRESETS = [
   { label: "하늘", value: "#dbeafe" },
+  { label: "하늘 진함", value: "#bfdbfe" },
   { label: "민트", value: "#dcfce7" },
+  { label: "청록", value: "#ccfbf1" },
   { label: "노랑", value: "#fef3c7" },
+  { label: "주황", value: "#fed7aa" },
   { label: "장미", value: "#ffe4e6" },
   { label: "보라", value: "#ede9fe" },
+  { label: "라일락", value: "#ddd6fe" },
   { label: "회색", value: "#e2e8f0" },
 ] as const
 
@@ -562,6 +572,7 @@ const BlockEditorShell = ({
   const [taskItemDropIndicatorState, setTaskItemDropIndicatorState] = useState<TaskItemDropIndicatorState>({
     visible: false,
     taskListBlockIndex: 0,
+    taskListPath: [],
     insertionIndex: 0,
     top: 0,
     left: 0,
@@ -718,8 +729,29 @@ const BlockEditorShell = ({
       const sourceItemIndex = taskItems.indexOf(taskItemElement)
       if (sourceItemIndex < 0) return null
 
+      const taskListPath: number[] = []
+      let currentListElement: HTMLElement | null = taskListElement
+      while (currentListElement && currentListElement !== blockElement) {
+        const parentTaskItem: HTMLElement | null =
+          currentListElement.parentElement?.closest("li[data-type='taskItem'], li[data-task-item='true']") ?? null
+        if (!(parentTaskItem instanceof HTMLElement)) break
+        const parentTaskList: HTMLElement | null =
+          parentTaskItem.parentElement?.closest("ul[data-type='taskList'], ul[data-task-list='true']") ?? null
+        if (!(parentTaskList instanceof HTMLElement)) break
+
+        const siblingItems = Array.from(
+          parentTaskList.querySelectorAll(":scope > li[data-type='taskItem'], :scope > li[data-task-item='true']")
+        ) as HTMLElement[]
+        const parentItemIndex = siblingItems.indexOf(parentTaskItem)
+        if (parentItemIndex < 0) break
+
+        taskListPath.unshift(parentItemIndex)
+        currentListElement = parentTaskList
+      }
+
       return {
         taskListBlockIndex,
+        taskListPath,
         sourceItemIndex,
         taskItemElement,
         taskListElement,
@@ -938,6 +970,7 @@ const BlockEditorShell = ({
       EditorTaskList,
       EditorTaskItem,
       EditorListKeymap,
+      InlineFormula,
       BookmarkBlock,
       EmbedBlock,
       FileBlock,
@@ -1341,6 +1374,17 @@ const BlockEditorShell = ({
     insertBlocksAtCursor([createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" })], true)
   }, [insertBlocksAtCursor])
 
+  const insertInlineFormula = useCallback(() => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, " ").trim()
+    editor
+      .chain()
+      .focus()
+      .insertContent(createInlineFormulaNode({ formula: selectedText || "x^2" }))
+      .run()
+  }, [editor])
+
   const insertTableBlock = useCallback(() => {
     if (editor && isTableSelectionActive(editor)) return
     insertBlocksAtCursor(
@@ -1400,8 +1444,53 @@ const BlockEditorShell = ({
   const updateActiveTableCellAttrs = useCallback(
     (attrs: Record<string, unknown>) => {
       if (!editor) return
+      const entries = Object.entries(attrs)
+      const chain = editor.chain().focus()
+
+      if (typeof editor.commands.setCellAttribute === "function" && entries.length > 0) {
+        entries.forEach(([name, value]) => {
+          chain.setCellAttribute(name, value)
+        })
+        chain.run()
+        return
+      }
+
       const cellNodeType = editor.isActive("tableHeader") ? "tableHeader" : "tableCell"
-      editor.chain().focus().updateAttributes(cellNodeType, attrs).run()
+      chain.updateAttributes(cellNodeType, attrs).run()
+    },
+    [editor]
+  )
+
+  const selectCurrentTableAxis = useCallback(
+    (axis: "row" | "column") => {
+      if (!editor || !editor.isActive("table")) return
+
+      const rect = selectedRect(editor.state)
+      const anchorCellPos =
+        rect.tableStart +
+        rect.map.positionAt(
+          rect.top,
+          rect.left,
+          rect.table
+        )
+      const headCellPos =
+        rect.tableStart +
+        rect.map.positionAt(
+          rect.bottom - 1,
+          rect.right - 1,
+          rect.table
+        )
+
+      const selection =
+        axis === "row"
+          ? CellSelection.rowSelection(editor.state.doc.resolve(anchorCellPos), editor.state.doc.resolve(headCellPos))
+          : CellSelection.colSelection(
+              editor.state.doc.resolve(anchorCellPos),
+              editor.state.doc.resolve(headCellPos)
+            )
+
+      editor.view.dispatch(editor.state.tr.setSelection(selection))
+      editor.view.focus()
     },
     [editor]
   )
@@ -2068,42 +2157,55 @@ const BlockEditorShell = ({
     { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
+    { id: "inline-formula", label: <span aria-hidden="true">ƒx</span>, ariaLabel: "인라인 수식", run: insertInlineFormula, active: editor?.isActive("inlineFormula") ?? false },
     { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => imageFileInputRef.current?.click(), active: false },
     { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
   ]
 
-  const toolbarMoreActions: ToolbarAction[] = toolbarBlockActions.map((item) => ({
-    id: item.id,
-    label: item.label,
-    ariaLabel: item.label,
-    run: () => {
-      void item.insertAtCursor()
-      setIsToolbarMoreOpen(false)
+  const toolbarMoreActions: ToolbarAction[] = [
+    {
+      id: "inline-formula",
+      label: "인라인 수식",
+      ariaLabel: "인라인 수식",
+      run: () => {
+        insertInlineFormula()
+        setIsToolbarMoreOpen(false)
+      },
+      active: editor?.isActive("inlineFormula") ?? false,
     },
-    active:
-      item.id === "ordered-list"
-        ? editor?.isActive("orderedList") ?? false
-        : item.id === "checklist"
-          ? editor?.isActive("taskList") ?? false
-        : item.id === "table"
-          ? editor?.isActive("table") ?? false
-          : item.id === "callout"
-            ? editor?.isActive("calloutBlock") ?? false
-            : item.id === "toggle"
-              ? editor?.isActive("toggleBlock") ?? false
-              : item.id === "bookmark"
-                ? editor?.isActive("bookmarkBlock") ?? false
-                : item.id === "embed"
-                  ? editor?.isActive("embedBlock") ?? false
-                  : item.id === "file"
-                    ? editor?.isActive("fileBlock") ?? false
-                    : item.id === "formula"
-                      ? editor?.isActive("formulaBlock") ?? false
-                : item.id === "mermaid"
-                  ? editor?.isActive("mermaidBlock") ?? false
-                  : false,
-    disabled: item.disabled,
-  }))
+    ...toolbarBlockActions.map((item) => ({
+      id: item.id,
+      label: item.label,
+      ariaLabel: item.label,
+      run: () => {
+        void item.insertAtCursor()
+        setIsToolbarMoreOpen(false)
+      },
+      active:
+        item.id === "ordered-list"
+          ? editor?.isActive("orderedList") ?? false
+          : item.id === "checklist"
+            ? editor?.isActive("taskList") ?? false
+            : item.id === "table"
+              ? editor?.isActive("table") ?? false
+              : item.id === "callout"
+                ? editor?.isActive("calloutBlock") ?? false
+                : item.id === "toggle"
+                  ? editor?.isActive("toggleBlock") ?? false
+                  : item.id === "bookmark"
+                    ? editor?.isActive("bookmarkBlock") ?? false
+                    : item.id === "embed"
+                      ? editor?.isActive("embedBlock") ?? false
+                      : item.id === "file"
+                        ? editor?.isActive("fileBlock") ?? false
+                        : item.id === "formula"
+                          ? editor?.isActive("formulaBlock") ?? false
+                          : item.id === "mermaid"
+                            ? editor?.isActive("mermaidBlock") ?? false
+                            : false,
+      disabled: item.disabled,
+    })),
+  ]
 
   const handleSlashMenuKeyboard = useCallback((event: SlashKeyboardEventLike) => {
     if (event.isComposing) return
@@ -2446,11 +2548,13 @@ const BlockEditorShell = ({
 
       setDraggedTaskItemState({
         taskListBlockIndex: taskItemContext.taskListBlockIndex,
+        taskListPath: taskItemContext.taskListPath,
         sourceItemIndex: taskItemContext.sourceItemIndex,
       })
       setTaskItemDropIndicatorState({
         visible: true,
         taskListBlockIndex: taskItemContext.taskListBlockIndex,
+        taskListPath: taskItemContext.taskListPath,
         ...resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY),
       })
       event.dataTransfer.effectAllowed = "move"
@@ -2463,12 +2567,19 @@ const BlockEditorShell = ({
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!draggedTaskItemState) return
       const taskItemContext = findTaskItemDragContextFromTarget(event.target)
-      if (!taskItemContext || taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex) return
+      if (
+        !taskItemContext ||
+        taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex ||
+        taskItemContext.taskListPath.join(",") !== draggedTaskItemState.taskListPath.join(",")
+      ) {
+        return
+      }
 
       event.preventDefault()
       setTaskItemDropIndicatorState({
         visible: true,
         taskListBlockIndex: taskItemContext.taskListBlockIndex,
+        taskListPath: taskItemContext.taskListPath,
         ...resolveTaskItemDropIndicatorByClientY(taskItemContext.taskListElement, event.clientY),
       })
     },
@@ -2484,7 +2595,11 @@ const BlockEditorShell = ({
     (event: ReactDragEvent<HTMLDivElement>) => {
       if (!draggedTaskItemState) return
       const taskItemContext = findTaskItemDragContextFromTarget(event.target)
-      if (!taskItemContext || taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex) {
+      if (
+        !taskItemContext ||
+        taskItemContext.taskListBlockIndex !== draggedTaskItemState.taskListBlockIndex ||
+        taskItemContext.taskListPath.join(",") !== draggedTaskItemState.taskListPath.join(",")
+      ) {
         clearTaskItemDragState()
         return
       }
@@ -2496,6 +2611,7 @@ const BlockEditorShell = ({
           moveTaskItemToInsertionIndex(
             doc,
             draggedTaskItemState.taskListBlockIndex,
+            draggedTaskItemState.taskListPath,
             draggedTaskItemState.sourceItemIndex,
             indicator.insertionIndex
           ),
@@ -2563,6 +2679,9 @@ const BlockEditorShell = ({
                 key={action.id}
                 type="button"
                 data-active={action.active}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
                 onClick={() => action.run()}
                 disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
@@ -2844,6 +2963,9 @@ const BlockEditorShell = ({
                 <ToolbarButton type="button" data-active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
                   인라인 코드
                 </ToolbarButton>
+                <ToolbarButton type="button" data-active={editor.isActive("inlineFormula")} onClick={insertInlineFormula}>
+                  인라인 수식
+                </ToolbarButton>
               </BubbleToolbar>
             ) : bubbleState.mode === "image" ? (
               <BubbleToolbar>
@@ -2876,6 +2998,18 @@ const BlockEditorShell = ({
                 </ToolbarButton>
                 <ToolbarButton type="button" data-active={editor.isActive("tableHeader")} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
                   헤더
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  onClick={() => selectCurrentTableAxis("row")}
+                >
+                  행 선택
+                </ToolbarButton>
+                <ToolbarButton
+                  type="button"
+                  onClick={() => selectCurrentTableAxis("column")}
+                >
+                  열 선택
                 </ToolbarButton>
                 <ToolbarButton
                   type="button"

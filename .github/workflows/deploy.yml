@@ -9,6 +9,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "front-only 등 changed-path gate를 무시하고 강제 배포"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: homeserver-deploy-${{ github.ref }}
@@ -59,6 +65,7 @@ jobs:
           CURRENT_RUN_ID: ${{ github.event.workflow_run.id || '' }}
           REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
+          FORCE_DEPLOY_INPUT: ${{ github.event.inputs.force_deploy || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -77,57 +84,61 @@ jobs:
           RELEASE_NAME="[PROD] ${RELEASE_VERSION} (${SHORT_SHA})"
 
           SHOULD_DEPLOY="true"
-          if [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
-            REQUIRED_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
-            CHANGED_FILES=""
-            CHANGE_SOURCE="head-commit"
-            PREV_SUCCESS_SHA=""
+          REQUIRED_PATHS_PATTERN='^(back/|deploy/homeserver/|\.github/workflows/deploy\.yml|\.github/workflows/ci\.yml|\.github/workflows/reusable-backend-quality\.yml)'
+          CHANGED_FILES=""
+          CHANGE_SOURCE="head-commit"
+          PREV_SUCCESS_SHA=""
 
-            if command -v jq >/dev/null 2>&1 && [ -n "${CURRENT_RUN_ID}" ]; then
-              runs_api="https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20"
-              runs_json="$(curl -fsSL \
-                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                -H "Accept: application/vnd.github+json" \
-                "${runs_api}" || true)"
-              if [ -n "${runs_json}" ]; then
-                PREV_SUCCESS_SHA="$(
-                  echo "${runs_json}" |
-                    jq -r --argjson current "${CURRENT_RUN_ID}" '.workflow_runs[] | select(.id != $current) | .head_sha' |
-                    head -n 1
-                )"
-              fi
+          if [ "${EVENT_NAME}" != "workflow_dispatch" ] && command -v jq >/dev/null 2>&1 && [ -n "${CURRENT_RUN_ID}" ]; then
+            runs_api="https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=20"
+            runs_json="$(curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${runs_api}" || true)"
+            if [ -n "${runs_json}" ]; then
+              PREV_SUCCESS_SHA="$(
+                echo "${runs_json}" |
+                  jq -r --argjson current "${CURRENT_RUN_ID}" '.workflow_runs[] | select(.id != $current) | .head_sha' |
+                  head -n 1
+              )"
             fi
-
-            if [ -n "${PREV_SUCCESS_SHA}" ]; then
-              compare_api="https://api.github.com/repos/${REPOSITORY}/compare/${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
-              compare_json="$(curl -fsSL \
-                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                -H "Accept: application/vnd.github+json" \
-                "${compare_api}" || true)"
-              if [ -n "${compare_json}" ] && echo "${compare_json}" | jq -e '.files' >/dev/null 2>&1; then
-                files_len="$(echo "${compare_json}" | jq '.files | length')"
-                if [ "${files_len}" -ge 300 ]; then
-                  # GitHub compare API files 배열은 최대 300개라서 절단 가능성이 있다.
-                  # 절단 시 false-negative(배포 누락)를 피하기 위해 안전하게 deploy=true로 둔다.
-                  CHANGED_FILES=""
-                else
-                  CHANGED_FILES="$(echo "${compare_json}" | jq -r '.files[].filename')"
-                  CHANGE_SOURCE="compare:${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
-                fi
-              fi
-            fi
-
-            if [ -z "${CHANGED_FILES}" ]; then
-              CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r "${DEPLOY_SHA}" || true)"
-              CHANGE_SOURCE="${CHANGE_SOURCE} -> fallback:head-commit"
-            fi
-
-            if [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
-              SHOULD_DEPLOY="false"
-            fi
-
-            echo "should_deploy_source=${CHANGE_SOURCE}"
           fi
+
+          if [ -n "${PREV_SUCCESS_SHA}" ]; then
+            compare_api="https://api.github.com/repos/${REPOSITORY}/compare/${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
+            compare_json="$(curl -fsSL \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${compare_api}" || true)"
+            if [ -n "${compare_json}" ] && echo "${compare_json}" | jq -e '.files' >/dev/null 2>&1; then
+              files_len="$(echo "${compare_json}" | jq '.files | length')"
+              if [ "${files_len}" -ge 300 ]; then
+                # GitHub compare API files 배열은 최대 300개라서 절단 가능성이 있다.
+                # 절단 시 false-negative(배포 누락)를 피하기 위해 안전하게 deploy=true로 둔다.
+                CHANGED_FILES=""
+              else
+                CHANGED_FILES="$(echo "${compare_json}" | jq -r '.files[].filename')"
+                CHANGE_SOURCE="compare:${PREV_SUCCESS_SHA}...${DEPLOY_SHA}"
+              fi
+            fi
+          fi
+
+          if [ -z "${CHANGED_FILES}" ]; then
+            CHANGED_FILES="$(git diff-tree --no-commit-id --name-only -r "${DEPLOY_SHA}" || true)"
+            CHANGE_SOURCE="${CHANGE_SOURCE} -> fallback:head-commit"
+          fi
+
+          if [ -n "${CHANGED_FILES}" ] && ! echo "${CHANGED_FILES}" | grep -Eq "${REQUIRED_PATHS_PATTERN}"; then
+            SHOULD_DEPLOY="false"
+          fi
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_DEPLOY_INPUT}" = "true" ]; then
+            SHOULD_DEPLOY="true"
+            CHANGE_SOURCE="${CHANGE_SOURCE} + workflow_dispatch(force_deploy=true)"
+          fi
+
+          echo "should_deploy_source=${CHANGE_SOURCE}"
+          echo "workflow_dispatch_force_deploy=${FORCE_DEPLOY_INPUT}"
 
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"

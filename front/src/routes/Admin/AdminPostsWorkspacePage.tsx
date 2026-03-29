@@ -84,6 +84,14 @@ type WorkspaceToastState =
     }
   | null
 
+type WorkspaceRecentAction = {
+  id: string
+  tone: "success" | "error"
+  label: string
+  detail: string
+  occurredAt: string
+}
+
 type ListState = {
   rows: AdminPostListItem[]
   total: number
@@ -95,6 +103,7 @@ const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 const DEFAULT_PAGE = "1"
 const DEFAULT_PAGE_SIZE = "20"
 const DEFAULT_SORT: ListSort = "CREATED_AT"
+const LIST_SKELETON_ROW_COUNT = 5
 
 const toEditorRoute = (query?: Record<string, string>) => {
   if (query?.postId) {
@@ -220,6 +229,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   const [confirmState, setConfirmState] = useState<WorkspaceConfirmState>(null)
   const [toast, setToast] = useState<WorkspaceToastState>(null)
   const [mutationPending, setMutationPending] = useState<{ rowId: number; kind: "delete" | "restore" | "hardDelete" } | null>(null)
+  const [recentActions, setRecentActions] = useState<WorkspaceRecentAction[]>([])
 
   const continueSectionRef = useRef<HTMLDivElement | null>(null)
   const listSectionRef = useRef<HTMLElement | null>(null)
@@ -343,6 +353,18 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
     setToast(next)
   }, [])
 
+  const pushRecentAction = useCallback((tone: WorkspaceRecentAction["tone"], label: string, detail: string) => {
+    const entry: WorkspaceRecentAction = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      tone,
+      label,
+      detail,
+      occurredAt: new Date().toISOString(),
+    }
+
+    setRecentActions((current) => [entry, ...current].slice(0, 4))
+  }, [])
+
   const performDeletePost = useCallback(
     async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
       try {
@@ -361,14 +383,16 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
             rowTitle: buildRowTitle(row),
           },
         })
+        pushRecentAction("success", "글 삭제", `#${row.id} ${buildRowTitle(row)} 글을 삭제했습니다.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ tone: "error", text: `삭제 실패: ${message}` })
+        pushRecentAction("error", "삭제 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`)
       } finally {
         setMutationPending(null)
       }
     },
-    [loadList, loadRecentPosts, queryClient, showToast]
+    [loadList, loadRecentPosts, pushRecentAction, queryClient, showToast]
   )
 
   const performRestorePost = useCallback(
@@ -383,14 +407,16 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           tone: "success",
           text: `#${row.id} ${buildRowTitle(row)} 글을 복구했습니다.`,
         })
+        pushRecentAction("success", "글 복구", `#${row.id} ${buildRowTitle(row)} 글을 복구했습니다.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ tone: "error", text: `복구 실패: ${message}` })
+        pushRecentAction("error", "복구 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`)
       } finally {
         setMutationPending(null)
       }
     },
-    [loadList, loadRecentPosts, queryClient, showToast]
+    [loadList, loadRecentPosts, pushRecentAction, queryClient, showToast]
   )
 
   const performHardDeletePost = useCallback(
@@ -405,14 +431,16 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           tone: "success",
           text: `#${row.id} ${buildRowTitle(row)} 글을 영구삭제했습니다.`,
         })
+        pushRecentAction("success", "영구삭제", `#${row.id} ${buildRowTitle(row)} 글을 영구삭제했습니다.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         showToast({ tone: "error", text: `영구삭제 실패: ${message}` })
+        pushRecentAction("error", "영구삭제 실패", `#${row.id} ${buildRowTitle(row)} · ${message}`)
       } finally {
         setMutationPending(null)
       }
     },
-    [loadList, loadRecentPosts, queryClient, showToast]
+    [loadList, loadRecentPosts, pushRecentAction, queryClient, showToast]
   )
 
   const handleDeletePost = useCallback(
@@ -658,107 +686,173 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
           </ListMeta>
         </SectionHeading>
 
-        <FilterRail>
-          <ScopeTabs role="tablist" aria-label="글 범위 선택">
-            <ScopeTabButton type="button" data-active={listScope === "active"} onClick={() => setListScope("active")}>
-              활성 글
-            </ScopeTabButton>
-            <ScopeTabButton type="button" data-active={listScope === "deleted"} onClick={() => setListScope("deleted")}>
-              삭제 글
-            </ScopeTabButton>
-          </ScopeTabs>
-          <SearchField>
-            <label htmlFor="workspace-post-search">검색어</label>
-            <input
-              id="workspace-post-search"
-              placeholder={listScope === "active" ? "제목이나 본문 검색" : "삭제된 글 검색"}
-              value={listKw}
-              onChange={(event) => {
-                setListPage(DEFAULT_PAGE)
-                setListKw(event.target.value)
+        <StickyFilterToolbar>
+          <FilterRail>
+            <ScopeTabs role="tablist" aria-label="글 범위 선택">
+              <ScopeTabButton type="button" data-active={listScope === "active"} onClick={() => setListScope("active")}>
+                활성 글
+              </ScopeTabButton>
+              <ScopeTabButton type="button" data-active={listScope === "deleted"} onClick={() => setListScope("deleted")}>
+                삭제 글
+              </ScopeTabButton>
+            </ScopeTabs>
+            <SearchField>
+              <label htmlFor="workspace-post-search">검색어</label>
+              <input
+                id="workspace-post-search"
+                placeholder={listScope === "active" ? "제목이나 본문 검색" : "삭제된 글 검색"}
+                value={listKw}
+                onChange={(event) => {
+                  setListPage(DEFAULT_PAGE)
+                  setListKw(event.target.value)
+                }}
+              />
+            </SearchField>
+          </FilterRail>
+
+          <AdvancedDisclosure open={isAdvancedOpen}>
+            <summary
+              onClick={(event) => {
+                event.preventDefault()
+                setIsAdvancedOpen((prev) => !prev)
               }}
-            />
-          </SearchField>
-        </FilterRail>
-
-        <AdvancedDisclosure open={isAdvancedOpen}>
-          <summary
-            onClick={(event) => {
-              event.preventDefault()
-              setIsAdvancedOpen((prev) => !prev)
-            }}
-          >
-            <strong>고급 검색</strong>
-            <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
-          </summary>
-        {isAdvancedOpen && (
-            <div className="body">
-              <AdvancedGrid>
-                <FieldBox>
-                  <label htmlFor="workspace-page">페이지</label>
-                  <input
-                    id="workspace-page"
-                    type="number"
-                    min={1}
-                    value={listPage}
-                    onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
-                  />
-                </FieldBox>
-                <FieldBox>
-                  <label htmlFor="workspace-page-size">페이지 크기</label>
-                  <input
-                    id="workspace-page-size"
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={listPageSize}
-                    onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
-                  />
-                </FieldBox>
-                {listScope === "active" && (
+            >
+              <strong>고급 검색</strong>
+              <span>{isAdvancedOpen ? "닫기" : "열기"}</span>
+            </summary>
+          {isAdvancedOpen && (
+              <div className="body">
+                <AdvancedGrid>
                   <FieldBox>
-                    <label htmlFor="workspace-sort">정렬</label>
-                    <select
-                      id="workspace-sort"
-                      value={listSort}
-                      onChange={(event) => setListSort(event.target.value as ListSort)}
-                    >
-                      <option value="CREATED_AT">최신순</option>
-                      <option value="CREATED_AT_ASC">오래된순</option>
-                    </select>
+                    <label htmlFor="workspace-page">페이지</label>
+                    <input
+                      id="workspace-page"
+                      type="number"
+                      min={1}
+                      value={listPage}
+                      onChange={(event) => setListPage(sanitizeNumberInput(event.target.value, DEFAULT_PAGE))}
+                    />
                   </FieldBox>
-                )}
-              </AdvancedGrid>
-            </div>
-          )}
-        </AdvancedDisclosure>
+                  <FieldBox>
+                    <label htmlFor="workspace-page-size">페이지 크기</label>
+                    <input
+                      id="workspace-page-size"
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={listPageSize}
+                      onChange={(event) => setListPageSize(sanitizeNumberInput(event.target.value, DEFAULT_PAGE_SIZE))}
+                    />
+                  </FieldBox>
+                  {listScope === "active" && (
+                    <FieldBox>
+                      <label htmlFor="workspace-sort">정렬</label>
+                      <select
+                        id="workspace-sort"
+                        value={listSort}
+                        onChange={(event) => setListSort(event.target.value as ListSort)}
+                      >
+                        <option value="CREATED_AT">최신순</option>
+                        <option value="CREATED_AT_ASC">오래된순</option>
+                      </select>
+                    </FieldBox>
+                  )}
+                </AdvancedGrid>
+              </div>
+            )}
+          </AdvancedDisclosure>
 
-        <FilterSummaryBar>
-          <div className="summaryCopy">
-            <strong>현재 조건</strong>
-            <SummaryPillRow>
-              {listSummaryParts.map((part) => (
-                <SummaryPill key={part}>{part}</SummaryPill>
-              ))}
-              <SummaryPill data-tone="neutral">
-                총 {listState.total}건{listState.loadedAt ? ` · ${formatDateTime(listState.loadedAt)} 기준` : ""}
-              </SummaryPill>
-            </SummaryPillRow>
+          <FilterSummaryBar>
+            <div className="summaryCopy">
+              <strong>현재 조건</strong>
+              <SummaryPillRow>
+                {listSummaryParts.map((part) => (
+                  <SummaryPill key={part}>{part}</SummaryPill>
+                ))}
+                <SummaryPill data-tone="neutral">
+                  총 {listState.total}건{listState.loadedAt ? ` · ${formatDateTime(listState.loadedAt)} 기준` : ""}
+                </SummaryPill>
+              </SummaryPillRow>
+            </div>
+            {hasListFilters ? (
+              <GhostButton type="button" onClick={handleResetListFilters}>
+                조건 초기화
+              </GhostButton>
+            ) : null}
+          </FilterSummaryBar>
+        </StickyFilterToolbar>
+
+        <RecentActionPanel aria-live="polite">
+          <div className="panelHead">
+            <strong>최근 작업</strong>
+            <span>삭제/복구 작업의 마지막 결과를 빠르게 다시 확인할 수 있습니다.</span>
           </div>
-          {hasListFilters ? (
-            <GhostButton type="button" onClick={handleResetListFilters}>
-              조건 초기화
-            </GhostButton>
-          ) : null}
-        </FilterSummaryBar>
+          {recentActions.length > 0 ? (
+            <RecentActionList>
+              {recentActions.map((entry) => (
+                <li key={entry.id} data-tone={entry.tone}>
+                  <div className="copy">
+                    <strong>{entry.label}</strong>
+                    <p>{entry.detail}</p>
+                  </div>
+                  <span className="time">{formatDateTime(entry.occurredAt)}</span>
+                </li>
+              ))}
+            </RecentActionList>
+          ) : (
+            <MutedText>아직 기록된 작업이 없습니다. 삭제, 복구, 영구삭제 결과가 여기에 쌓입니다.</MutedText>
+          )}
+        </RecentActionPanel>
 
         {isListLoading ? (
-          <ListSkeleton aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </ListSkeleton>
+          <ListCard aria-hidden="true">
+            <ListSkeleton>
+              <div className="desktopRows">
+                <div className="headerRow">
+                  <span className="idCell">ID</span>
+                  <span>제목</span>
+                  <span className="dateCell">{listScope === "active" ? "수정일" : "삭제일"}</span>
+                  <span className="actionCell">작업</span>
+                </div>
+                {Array.from({ length: LIST_SKELETON_ROW_COUNT }, (_, index) => (
+                  <div className="row" key={`desktop-skeleton-${index}`}>
+                    <div className="cell idCell">
+                      <span className="line short" />
+                    </div>
+                    <div className="cell titleCell">
+                      <span className="line medium" />
+                      <span className="line wide" />
+                      <span className="line short muted" />
+                    </div>
+                    <div className="cell dateCell">
+                      <span className="line medium" />
+                    </div>
+                    <div className="cell actionCell">
+                      <span className="line short" />
+                      <span className="line short" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mobileCards">
+                {Array.from({ length: 3 }, (_, index) => (
+                  <article key={`mobile-skeleton-${index}`}>
+                    <div className="metaRow">
+                      <span className="line short" />
+                      <span className="line short" />
+                    </div>
+                    <span className="line wide" />
+                    <span className="line medium muted" />
+                    <span className="line short muted" />
+                    <div className="actionRow">
+                      <span className="line short" />
+                      <span className="line short" />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </ListSkeleton>
+          </ListCard>
         ) : listError ? (
           <ListEmptyState>
             <strong>목록을 불러오지 못했습니다.</strong>
@@ -1421,6 +1515,26 @@ const ListMeta = styled.div`
   }
 `
 
+const StickyFilterToolbar = styled.div`
+  position: sticky;
+  top: calc(var(--app-header-height, 64px) + 0.55rem);
+  z-index: 12;
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.88rem 0.92rem;
+  border-radius: 18px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: color-mix(in srgb, ${({ theme }) => theme.colors.gray1} 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+
+  @media (max-width: 767px) {
+    top: calc(var(--app-header-height, 64px) + 0.35rem);
+    padding: 0.8rem 0.82rem;
+  }
+`
+
 const FilterRail = styled.div`
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1579,15 +1693,193 @@ const SummaryPill = styled.span<{ "data-tone"?: "neutral" }>`
   font-weight: 700;
 `
 
-const ListSkeleton = styled.div`
+const RecentActionPanel = styled.section`
   display: grid;
-  gap: 0.6rem;
+  gap: 0.72rem;
+  padding: 0.92rem 1rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray5};
+  background: ${({ theme }) => theme.colors.gray2};
 
-  span {
-    display: block;
-    height: 64px;
+  .panelHead {
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .panelHead > strong {
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
+  }
+
+  .panelHead > span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+`
+
+const RecentActionList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.58rem;
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.72rem;
+    padding: 0.8rem 0.88rem;
     border-radius: 14px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.1), rgba(255,255,255,0.06));
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    background: ${({ theme }) => theme.colors.gray1};
+  }
+
+  li[data-tone="error"] {
+    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+    background: ${({ theme }) => theme.colors.statusDangerSurface};
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 800;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .time {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.74rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767px) {
+    li {
+      display: grid;
+    }
+
+    .time {
+      white-space: normal;
+    }
+  }
+`
+
+const ListSkeleton = styled.div`
+  .desktopRows {
+    display: grid;
+  }
+
+  .headerRow,
+  .row {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr) 144px 220px;
+  }
+
+  .headerRow {
+    min-height: 49px;
+    align-items: center;
+    padding: 0 1rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  }
+
+  .headerRow > span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .row {
+    padding: 0 1rem;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+  }
+
+  .row:last-of-type {
+    border-bottom: none;
+  }
+
+  .cell {
+    display: grid;
+    align-content: center;
+    gap: 0.34rem;
+    min-height: 78px;
+    padding: 0.95rem 0;
+  }
+
+  .actionCell {
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: start;
+    gap: 0.65rem;
+  }
+
+  .line {
+    display: block;
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+  }
+
+  .line.short {
+    width: 4.5rem;
+  }
+
+  .line.medium {
+    width: 8.5rem;
+  }
+
+  .line.wide {
+    width: min(100%, 22rem);
+  }
+
+  .line.muted {
+    opacity: 0.65;
+  }
+
+  .mobileCards {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    .desktopRows {
+      display: none;
+    }
+
+    .mobileCards {
+      display: grid;
+      gap: 0.75rem;
+      padding: 0.95rem;
+    }
+
+    .mobileCards article {
+      display: grid;
+      gap: 0.55rem;
+      padding: 0.95rem;
+      border-radius: 14px;
+      border: 1px solid ${({ theme }) => theme.colors.gray5};
+      background: ${({ theme }) => theme.colors.gray1};
+    }
+
+    .mobileCards .metaRow,
+    .mobileCards .actionRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.55rem;
+    }
   }
 `
 

@@ -8,6 +8,7 @@ export type AdminProfile = {
   username: string
   name: string
   nickname: string
+  modifiedAt?: string
   profileImageUrl: string
   profileImageDirectUrl?: string
   profileRole?: string
@@ -27,6 +28,7 @@ type AdminProfileLike = {
   username: string
   name?: string
   nickname?: string
+  modifiedAt?: string
   profileImageUrl?: string
   profileImageDirectUrl?: string
   profileRole?: string
@@ -46,6 +48,7 @@ export const toAdminProfile = (value: AdminProfileLike): AdminProfile => ({
   username: value.username,
   name: value.name || value.nickname || value.username,
   nickname: value.nickname || value.name || value.username,
+  modifiedAt: value.modifiedAt,
   profileImageUrl: value.profileImageUrl || "",
   profileImageDirectUrl: value.profileImageDirectUrl,
   profileRole: value.profileRole,

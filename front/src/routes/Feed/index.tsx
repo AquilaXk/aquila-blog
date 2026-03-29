@@ -1,5 +1,6 @@
 import Footer from "./Footer"
 import styled from "@emotion/styled"
+import { useMemo } from "react"
 import MobileProfileCard from "./MobileProfileCard"
 import ProfileCard from "./ProfileCard"
 import ServiceCard from "./ServiceCard"
@@ -13,11 +14,33 @@ import {
 
 const DEFAULT_HOME_DESCRIPTION = "백엔드 아키텍처, 운영 트러블슈팅, 성능 최적화를 실서비스 경험 기준으로 정리합니다."
 
+const HOME_TOPIC_CANDIDATES = [
+  { label: "백엔드 아키텍처", pattern: /(백엔드|backend).*(아키텍처|architecture)|(아키텍처|architecture).*(백엔드|backend)/i },
+  { label: "운영 트러블슈팅", pattern: /(운영|ops|incident|장애).*(트러블슈팅|troubleshooting)|(트러블슈팅|troubleshooting).*(운영|ops|장애)/i },
+  { label: "성능 최적화", pattern: /(성능|performance).*(최적화|optimization)|(최적화|optimization).*(성능|performance)/i },
+  { label: "관측성", pattern: /(observability|grafana|prometheus|모니터링|관측)/i },
+]
+
 const normalizeHomeIntroDescription = (value?: string) => {
   const normalized = typeof value === "string" ? value.trim() : ""
   if (!normalized) return DEFAULT_HOME_DESCRIPTION
   if (/^welcome to my backend dev log!?$/i.test(normalized)) return DEFAULT_HOME_DESCRIPTION
   return normalized
+}
+
+const resolveHomeTopicChips = (source: string) => {
+  const matches = HOME_TOPIC_CANDIDATES.filter((candidate) => candidate.pattern.test(source)).map(
+    (candidate) => candidate.label
+  )
+  if (matches.length >= 3) return matches.slice(0, 3)
+  return [...new Set([...matches, "실서비스 경험", "문제 해결 중심"])].slice(0, 3)
+}
+
+const formatHomeUpdatedLabel = (value?: string) => {
+  if (!value) return "최근 정리 중"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "최근 정리 중"
+  return `${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")} 업데이트`
 }
 
 type Props = {
@@ -30,6 +53,36 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const introDescription = normalizeHomeIntroDescription(
     adminProfile?.homeIntroDescription || CONFIG.blog.description
   )
+  const introTopicChips = useMemo(
+    () =>
+      resolveHomeTopicChips(
+        `${introTitle} ${introDescription} ${adminProfile?.profileRole || ""}`
+      ),
+    [adminProfile?.profileRole, introDescription, introTitle]
+  )
+  const introSummaryItems = useMemo(() => {
+    const connectedLinks =
+      (adminProfile?.serviceLinks?.length || 0) + (adminProfile?.contactLinks?.length || 0)
+    return [
+      {
+        label: "작성 기준",
+        value: adminProfile?.profileRole?.trim() || "실서비스 경험 기준",
+      },
+      {
+        label: "연결 채널",
+        value: connectedLinks > 0 ? `${connectedLinks}개 채널` : "정리 중",
+      },
+      {
+        label: "최근 업데이트",
+        value: formatHomeUpdatedLabel(adminProfile?.modifiedAt),
+      },
+    ]
+  }, [
+    adminProfile?.contactLinks?.length,
+    adminProfile?.modifiedAt,
+    adminProfile?.profileRole,
+    adminProfile?.serviceLinks?.length,
+  ])
 
   return (
     <StyledWrapper>
@@ -37,6 +90,21 @@ const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
         <IntroCard>
           <h1>{introTitle}</h1>
           <p>{introDescription}</p>
+          <IntroSummaryStrip aria-label="홈 요약">
+            <div className="topicChips">
+              {introTopicChips.map((topic) => (
+                <span key={topic}>{topic}</span>
+              ))}
+            </div>
+            <div className="metaGrid">
+              {introSummaryItems.map((item) => (
+                <article key={item.label}>
+                  <small>{item.label}</small>
+                  <strong>{item.value}</strong>
+                </article>
+              ))}
+            </div>
+          </IntroSummaryStrip>
         </IntroCard>
         <FeedExplorer />
         <div className="mobileProfileCard">
@@ -164,6 +232,70 @@ const IntroCard = styled.section`
       margin-top: 0.54rem;
       font-size: 0.9rem;
       line-height: 1.58;
+    }
+  }
+`
+
+const IntroSummaryStrip = styled.div`
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+
+  .topicChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .topicChips span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 0.7rem;
+    border-radius: 999px;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .metaGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .metaGrid article {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.72rem 0.82rem;
+    border-radius: 14px;
+    border: 1px solid ${({ theme }) => theme.colors.gray5};
+    background: ${({ theme }) => theme.colors.gray2};
+  }
+
+  .metaGrid small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
+  .metaGrid strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.84rem;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
+  }
+
+  @media (max-width: 768px) {
+    margin-top: 0.78rem;
+    gap: 0.58rem;
+
+    .metaGrid {
+      grid-template-columns: 1fr;
     }
   }
 `

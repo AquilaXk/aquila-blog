@@ -141,6 +141,7 @@ type InlineNoticeTone = "warning" | "danger" | "success"
 type DiagnosticTab = "mail" | "queue" | "cleanup" | "auth"
 type ExecutionDomain = "overview" | "monitoring" | "diagnostics" | "execution" | "mutation"
 type DashboardFrameState = "idle" | "loading" | "ready" | "error"
+type ExecutionResultFilter = "all" | "success" | "error" | "stale"
 type MonitoringBrandIcon = {
   icon?: SimpleIcon
   fallbackIcon?: "service"
@@ -247,6 +248,12 @@ const getFreshnessMeta = (value: string | null | undefined): { label: string; to
   return { label: `${Math.max(1, Math.floor(diffMs / 3_600_000))}시간 전`, tone: "stale" }
 }
 
+const combineFreshnessTones = (...tones: Array<"fresh" | "aging" | "stale" | null | undefined>) => {
+  if (tones.some((tone) => tone === "stale")) return "stale" as const
+  if (tones.some((tone) => tone === "aging")) return "aging" as const
+  return "fresh" as const
+}
+
 const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
 
@@ -346,6 +353,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [loadingKey, setLoadingKey] = useState("")
   const [executions, setExecutions] = useState<ExecutionEntry[]>([])
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null)
+  const [resultsFilter, setResultsFilter] = useState<ExecutionResultFilter>("all")
   const [postId, setPostId] = useState("1")
   const [commentId, setCommentId] = useState("1")
   const [commentContent, setCommentContent] = useState("운영 테스트 댓글")
@@ -644,10 +652,29 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     return () => observer.disconnect()
   }, [])
 
+  const filteredExecutions = useMemo(() => {
+    return executions.filter((entry) => {
+      if (resultsFilter === "all") return true
+      if (resultsFilter === "success") return entry.status === "success"
+      if (resultsFilter === "error") return entry.status === "error"
+      return getFreshnessMeta(entry.completedAt).tone === "stale"
+    })
+  }, [executions, resultsFilter])
+
+  const resultFilterCounts = useMemo(
+    () => ({
+      all: executions.length,
+      success: executions.filter((entry) => entry.status === "success").length,
+      error: executions.filter((entry) => entry.status === "error").length,
+      stale: executions.filter((entry) => getFreshnessMeta(entry.completedAt).tone === "stale").length,
+    }),
+    [executions]
+  )
+
   const selectedExecution = useMemo(() => {
-    if (!executions.length) return null
-    return executions.find((entry) => entry.id === selectedExecutionId) ?? executions[0]
-  }, [executions, selectedExecutionId])
+    if (!filteredExecutions.length) return null
+    return filteredExecutions.find((entry) => entry.id === selectedExecutionId) ?? filteredExecutions[0]
+  }, [filteredExecutions, selectedExecutionId])
 
   const systemHealthStatus = systemHealthQuery.data?.status || "UNKNOWN"
   const systemHealthFreshness = getFreshnessMeta(
@@ -767,6 +794,51 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       tab: "auth" as DiagnosticTab,
     },
   ]
+
+  const freshnessOverviewItems = [
+    {
+      label: "메일",
+      detail: mailDiagnostics?.checkedAt ? formatInstant(mailDiagnostics.checkedAt) : "미확인",
+      freshness: mailFreshness,
+      tab: "mail" as DiagnosticTab,
+    },
+    {
+      label: "작업 큐",
+      detail: taskQueueDiagnostics ? "최근 점검 완료" : "미확인",
+      freshness: taskQueueFreshness,
+      tab: "queue" as DiagnosticTab,
+    },
+    {
+      label: "파일 정리",
+      detail: cleanupDiagnostics ? "정리 상태 확인" : "미확인",
+      freshness: cleanupFreshness,
+      tab: "cleanup" as DiagnosticTab,
+    },
+    {
+      label: "인증 보안",
+      detail: authSecurityEvents.length > 0 ? formatInstant(authSecurityEvents[0]?.createdAt) : "미확인",
+      freshness: authFreshness,
+      tab: "auth" as DiagnosticTab,
+    },
+  ]
+
+  const sectionNavFreshnessMap: Partial<Record<SectionKey, "fresh" | "aging" | "stale">> = {
+    overview: combineFreshnessTones(
+      systemHealthFreshness.tone,
+      mailFreshness.tone,
+      taskQueueFreshness.tone,
+      cleanupFreshness.tone,
+      authFreshness.tone
+    ),
+    monitoring: systemHealthFreshness.tone,
+    diagnostics: combineFreshnessTones(
+      mailFreshness.tone,
+      taskQueueFreshness.tone,
+      cleanupFreshness.tone,
+      authFreshness.tone
+    ),
+    results: executions[0] ? getFreshnessMeta(executions[0].completedAt).tone : "stale",
+  }
 
   const attentionItems = [
     systemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
@@ -892,6 +964,25 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </StatusCardGrid>
         </OverviewContent>
 
+        <FreshnessOverview>
+          <SectionTitleBlock>
+            <h2>진단 갱신 상태</h2>
+          </SectionTitleBlock>
+          <FreshnessOverviewGrid>
+            {freshnessOverviewItems.map((item) => (
+              <FreshnessOverviewButton
+                key={item.label}
+                type="button"
+                onClick={() => focusSection("diagnostics", item.tab)}
+              >
+                <small>{item.label}</small>
+                <strong>{item.detail}</strong>
+                <FreshnessBadge data-tone={item.freshness.tone}>{item.freshness.label}</FreshnessBadge>
+              </FreshnessOverviewButton>
+            ))}
+          </FreshnessOverviewGrid>
+        </FreshnessOverview>
+
         <AttentionRow>
           <SectionTitleBlock>
             <h2>주의 필요</h2>
@@ -925,6 +1016,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
               type="button"
               data-active={activeSection === item.key}
               data-tone={item.tone || "default"}
+              data-freshness={sectionNavFreshnessMap[item.key] || undefined}
               onClick={() => focusSection(item.key)}
             >
               {item.label}
@@ -1545,8 +1637,44 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
             <SectionHeading>
               <SectionTitleBlock>
                 <h2>최근 실행 결과</h2>
+                <p>방금 실행한 작업과 최근 진단 결과를 빠르게 좁혀서 확인할 수 있습니다.</p>
               </SectionTitleBlock>
             </SectionHeading>
+
+            <ResultFilterRow aria-label="실행 결과 필터">
+              <ResultFilterButton
+                type="button"
+                data-active={resultsFilter === "all"}
+                onClick={() => setResultsFilter("all")}
+              >
+                전체
+                <span>{resultFilterCounts.all}</span>
+              </ResultFilterButton>
+              <ResultFilterButton
+                type="button"
+                data-active={resultsFilter === "success"}
+                onClick={() => setResultsFilter("success")}
+              >
+                성공
+                <span>{resultFilterCounts.success}</span>
+              </ResultFilterButton>
+              <ResultFilterButton
+                type="button"
+                data-active={resultsFilter === "error"}
+                onClick={() => setResultsFilter("error")}
+              >
+                실패
+                <span>{resultFilterCounts.error}</span>
+              </ResultFilterButton>
+              <ResultFilterButton
+                type="button"
+                data-active={resultsFilter === "stale"}
+                onClick={() => setResultsFilter("stale")}
+              >
+                오래됨
+                <span>{resultFilterCounts.stale}</span>
+              </ResultFilterButton>
+            </ResultFilterRow>
 
             {selectedExecution ? (
               <ResultsLayout>
@@ -1556,9 +1684,14 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       <small>방금 실행한 작업</small>
                       <strong>{selectedExecution.source}</strong>
                     </div>
-                    <ActionToneBadge data-tone={selectedExecution.status === "error" ? "danger" : selectedExecution.tone === "danger" ? "danger" : selectedExecution.tone === "write" ? "write" : "read"}>
-                      {selectedExecution.status === "error" ? "실패" : "성공"}
-                    </ActionToneBadge>
+                    <ResultBadgeRow>
+                      <ActionToneBadge data-tone={selectedExecution.status === "error" ? "danger" : selectedExecution.tone === "danger" ? "danger" : selectedExecution.tone === "write" ? "write" : "read"}>
+                        {selectedExecution.status === "error" ? "실패" : "성공"}
+                      </ActionToneBadge>
+                      <FreshnessBadge data-tone={getFreshnessMeta(selectedExecution.completedAt).tone}>
+                        {getFreshnessMeta(selectedExecution.completedAt).label}
+                      </FreshnessBadge>
+                    </ResultBadgeRow>
                   </ResultTop>
                   <ResultMetaGrid>
                     <SubtleMetaItem>
@@ -1587,7 +1720,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                     </div>
                   </CardSectionHeading>
                   <HistoryList>
-                    {executions.map((entry) => (
+                    {filteredExecutions.map((entry) => (
                       <HistoryButton
                         key={entry.id}
                         type="button"
@@ -1596,7 +1729,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                       >
                         <span>{entry.source}</span>
                         <small>
-                          {entry.status === "error" ? "실패" : "성공"} · {formatInstant(entry.completedAt)}
+                          {entry.status === "error" ? "실패" : "성공"} · {formatInstant(entry.completedAt)} · {getFreshnessMeta(entry.completedAt).label}
                         </small>
                       </HistoryButton>
                     ))}
@@ -1604,7 +1737,9 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 </ResultHistoryCard>
               </ResultsLayout>
             ) : (
-              <EmptyResultState>실행 기록 없음</EmptyResultState>
+              <EmptyResultState>
+                {executions.length === 0 ? "실행 기록 없음" : "현재 필터에 맞는 실행 결과가 없습니다."}
+              </EmptyResultState>
             )}
           </WorkspaceSection>
         </WorkspaceColumn>
@@ -1933,6 +2068,8 @@ const SectionNavStatus = styled.div`
 `
 
 const SectionNavButton = styled.button`
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -1952,6 +2089,41 @@ const SectionNavButton = styled.button`
     color: ${({ theme }) => theme.colors.gray12};
     border-color: ${({ theme }) => theme.colors.accentBorder};
     background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+  }
+
+  &[data-freshness="fresh"] {
+    border-color: ${({ theme }) => theme.colors.statusSuccessBorder};
+  }
+
+  &[data-freshness="aging"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  &[data-freshness="stale"] {
+    border-color: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &[data-freshness]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray7};
+  }
+
+  &[data-freshness="fresh"]::before {
+    background: ${({ theme }) => theme.colors.statusSuccessBorder};
+  }
+
+  &[data-freshness="aging"]::before {
+    background: ${({ theme }) => theme.colors.orange8};
+  }
+
+  &[data-freshness="stale"]::before {
+    background: ${({ theme }) => theme.colors.gray8};
   }
 
   &[data-tone="danger"] {
@@ -2053,6 +2225,55 @@ const FreshnessBadge = styled.span`
     border-color: ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
+  }
+`
+
+const FreshnessOverview = styled.div`
+  display: grid;
+  gap: 0.72rem;
+  margin-top: 1rem;
+`
+
+const FreshnessOverviewGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+
+  @media (max-width: 1080px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const FreshnessOverviewButton = styled.button`
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  text-align: left;
+  cursor: pointer;
+
+  small {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 780;
+    letter-spacing: -0.02em;
+  }
+
+  ${FreshnessBadge} {
+    justify-self: flex-start;
   }
 `
 
@@ -2768,6 +2989,38 @@ const DangerButton = styled.button`
   }
 `
 
+const ResultFilterRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+`
+
+const ResultFilterButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 36px;
+  padding: 0 0.8rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.74rem;
+  }
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) => theme.colors.accentBorder};
+    background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+    color: ${({ theme }) => theme.colors.accentLink};
+  }
+`
+
 const ResultsLayout = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) 320px;
@@ -2807,6 +3060,13 @@ const ResultTop = styled.div`
     font-size: 1.08rem;
     letter-spacing: -0.02em;
   }
+`
+
+const ResultBadgeRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
 `
 
 const ResultMetaGrid = styled.div`

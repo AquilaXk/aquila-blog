@@ -12,9 +12,33 @@ export type MarkdownSegment =
   | { type: "markdown"; content: string }
   | { type: "toggle"; title: string; content: string }
   | { type: "callout"; kind: CalloutKind; title: string; emoji: string; content: string; label?: string }
-  | { type: "bookmark"; url: string; title: string; description?: string }
-  | { type: "embed"; url: string; title: string; caption?: string }
-  | { type: "file"; url: string; name: string; description?: string }
+  | {
+      type: "bookmark"
+      url: string
+      title: string
+      description?: string
+      siteName?: string
+      provider?: string
+      thumbnailUrl?: string
+    }
+  | {
+      type: "embed"
+      url: string
+      title: string
+      caption?: string
+      siteName?: string
+      provider?: string
+      thumbnailUrl?: string
+      embedUrl?: string
+    }
+  | {
+      type: "file"
+      url: string
+      name: string
+      description?: string
+      mimeType?: string
+      sizeBytes?: number | null
+    }
   | { type: "formula"; formula: string }
   | {
       type: "image"
@@ -65,6 +89,8 @@ graph TD
   첨부 설명
   :::
 - 수식:
+  인라인: \`$a^2 + b^2 = c^2$\`
+  블록:
   $$
   E = mc^2
   $$
@@ -598,14 +624,61 @@ const parseFenceMarker = (line: string): "`" | "~" | null => {
 
 const CUSTOM_DIRECTIVE_PATTERN =
   /^:::(bookmark|embed|file)(?:\s+(\S+))?\s*$/i
+const CARD_METADATA_COMMENT_PATTERN =
+  /^\s*<!--\s*aq-(bookmark|embed|file)\s+(\{[\s\S]*\})\s*-->\s*$/
 
 const FORMULA_BLOCK_START_PATTERN = /^\s*\$\$\s*$/
+
+const parseCardMetadataComment = (line: string) => {
+  const match = line.match(CARD_METADATA_COMMENT_PATTERN)
+  if (!match) return null
+
+  try {
+    const kind = match[1].toLowerCase() as "bookmark" | "embed" | "file"
+    const payload = JSON.parse(match[2]) as Record<string, unknown>
+    return {
+      kind,
+      attrs:
+        kind === "file"
+          ? {
+              ...(typeof payload.mimeType === "string" && payload.mimeType.trim()
+                ? { mimeType: payload.mimeType.trim() }
+                : {}),
+              ...(typeof payload.sizeBytes === "number" && Number.isFinite(payload.sizeBytes)
+                ? { sizeBytes: Math.max(0, Math.round(payload.sizeBytes)) }
+                : {}),
+            }
+          : {
+              ...(typeof payload.siteName === "string" && payload.siteName.trim()
+                ? { siteName: payload.siteName.trim() }
+                : {}),
+              ...(typeof payload.provider === "string" && payload.provider.trim()
+                ? { provider: payload.provider.trim() }
+                : {}),
+              ...(typeof payload.thumbnailUrl === "string" && payload.thumbnailUrl.trim()
+                ? { thumbnailUrl: payload.thumbnailUrl.trim() }
+                : {}),
+              ...(kind === "embed" && typeof payload.embedUrl === "string" && payload.embedUrl.trim()
+                ? { embedUrl: payload.embedUrl.trim() }
+                : {}),
+            },
+    }
+  } catch {
+    return null
+  }
+}
 
 export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   const lines = content.split("\n")
   const segments: MarkdownSegment[] = []
   let markdownBuffer: string[] = []
   let activeFenceMarker: "`" | "~" | null = null
+  let pendingDirectiveMetadata:
+    | {
+        kind: "bookmark" | "embed" | "file"
+        attrs: Record<string, unknown>
+      }
+    | null = null
 
   const flushMarkdown = () => {
     const text = markdownBuffer.join("\n").trim()
@@ -617,12 +690,19 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
   while (i < lines.length) {
     const line = lines[i]
     const fenceMarker = parseFenceMarker(line)
+    const directiveMetadataComment = parseCardMetadataComment(line)
 
     if (activeFenceMarker) {
       markdownBuffer.push(line)
       if (fenceMarker === activeFenceMarker) {
         activeFenceMarker = null
       }
+      i += 1
+      continue
+    }
+
+    if (directiveMetadataComment) {
+      pendingDirectiveMetadata = directiveMetadataComment
       i += 1
       continue
     }
@@ -660,6 +740,11 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
           const [firstLine = "", ...restLines] = bodyLines
           const secondaryText = restLines.join("\n").trim()
           flushMarkdown()
+          const directiveMetadata =
+            pendingDirectiveMetadata?.kind === directive
+              ? pendingDirectiveMetadata.attrs
+              : {}
+          pendingDirectiveMetadata = null
 
           if (directive === "bookmark") {
             segments.push({
@@ -667,6 +752,7 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
               url,
               title: firstLine.trim() || "북마크",
               description: secondaryText,
+              ...directiveMetadata,
             })
           } else if (directive === "embed") {
             segments.push({
@@ -674,6 +760,7 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
               url,
               title: firstLine.trim() || "임베드",
               caption: secondaryText,
+              ...directiveMetadata,
             })
           } else if (directive === "file") {
             segments.push({
@@ -681,6 +768,7 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
               url,
               name: firstLine.trim() || "파일",
               description: secondaryText,
+              ...directiveMetadata,
             })
           }
 
@@ -699,6 +787,8 @@ export const parseMarkdownSegments = (content: string): MarkdownSegment[] => {
       i += 1
       continue
     }
+
+    pendingDirectiveMetadata = null
 
     if (FORMULA_BLOCK_START_PATTERN.test(line.trim())) {
       const bodyLines: string[] = []

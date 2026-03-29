@@ -54,6 +54,7 @@ export default defineConfig({
         cwd: __dirname,
         env: {
           ...inheritedEnv,
+          ENABLE_QA_ROUTES: inheritedEnv.ENABLE_QA_ROUTES || "true",
           NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:3000",
           BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:1",
         },

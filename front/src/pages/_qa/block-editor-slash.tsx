@@ -24,8 +24,16 @@ type QaBlockEditorSlashPageProps = {
   enabled: boolean
 }
 
-export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps> = async () => {
-  if (process.env.ENABLE_QA_ROUTES !== "true") {
+export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps> = async (context) => {
+  const host = String(context.req.headers.host || "").toLowerCase()
+  const isLocalQaHost =
+    host.startsWith("localhost:") ||
+    host.startsWith("127.0.0.1:") ||
+    host === "localhost" ||
+    host === "127.0.0.1"
+  const qaRoutesEnabled =
+    process.env.ENABLE_QA_ROUTES === "true" || process.env.NODE_ENV !== "production" || isLocalQaHost
+  if (!qaRoutesEnabled) {
     return { notFound: true }
   }
 
@@ -81,6 +89,8 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
           url: `https://example.com/files/${encodeURIComponent(file.name)}`,
           name: file.name,
           description: "",
+          mimeType: file.type || "",
+          sizeBytes: file.size,
         })}
         enableMermaidBlocks={true}
       />

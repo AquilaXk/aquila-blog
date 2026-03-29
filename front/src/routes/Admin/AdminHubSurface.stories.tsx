@@ -18,6 +18,20 @@ const meta: Meta<typeof AdminHubSurface> = {
       { label: "연결 채널", value: "4개", tone: "neutral" },
       { label: "마지막 업데이트", value: "2026-03-24 14:05" },
     ],
+    nextActions: [
+      {
+        href: "/admin/profile",
+        title: "프로필 완성도 보강",
+        detail: "공개 프로필과 홈 소개를 먼저 정리하세요.",
+        tone: "warn",
+      },
+      {
+        href: "/editor/new",
+        title: "새 글 작성 시작",
+        detail: "허브 점검이 끝났다면 바로 임시글 작성으로 이어집니다.",
+        tone: "neutral",
+      },
+    ],
     primaryAction: {
       href: "/editor/new",
       title: "새 글 쓰기",

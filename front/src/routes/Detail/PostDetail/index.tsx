@@ -148,6 +148,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const likePendingRef = useRef(false)
   const shareFeedbackResetTimerRef = useRef<number | null>(null)
   const articleRef = useRef<HTMLElement | null>(null)
+  const compactTocSectionRef = useRef<HTMLElement | null>(null)
+  const commentsSectionRef = useRef<HTMLElement | null>(null)
   const leftRailRef = useRef<HTMLElement | null>(null)
   const leftRailInnerRef = useRef<HTMLDivElement | null>(null)
   const rightRailRef = useRef<HTMLElement | null>(null)
@@ -156,6 +158,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const [adminActionPending, setAdminActionPending] = useState(false)
   const [tocItems, setTocItems] = useState<TocItem[]>([])
   const [activeTocId, setActiveTocId] = useState<string>("")
+  const [commentsRailActive, setCommentsRailActive] = useState(false)
   const [showDetailedToc, setShowDetailedToc] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<"copied" | "shared" | "failed" | null>(null)
   const [leftHybridRailActive, setLeftHybridRailActive] = useState(false)
@@ -412,6 +415,28 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       ratioMap.clear()
     }
   }, [tocItems, visibleTocItems])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const commentsNode = commentsSectionRef.current
+    if (!commentsNode) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (!entry) return
+        setCommentsRailActive(entry.isIntersecting && entry.intersectionRatio > 0.22)
+      },
+      {
+        root: null,
+        rootMargin: "-24% 0px -48% 0px",
+        threshold: [0, 0.15, 0.22, 0.4, 0.65],
+      }
+    )
+
+    observer.observe(commentsNode)
+    return () => observer.disconnect()
+  }, [data?.id])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -787,6 +812,13 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     window.scrollTo({ top: targetTop, behavior: "smooth" })
   }
 
+  const scrollSectionIntoView = (target: HTMLElement | null) => {
+    if (!target) return
+    const targetTop =
+      target.getBoundingClientRect().top + window.scrollY - (resolveRailTopOffset() + 20)
+    window.scrollTo({ top: targetTop, behavior: "smooth" })
+  }
+
   return (
     <StyledWrapper data-sticky-rail-safe="true">
       <div
@@ -865,8 +897,54 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               />
             </section>
           )}
+          {data.type[0] === "Post" ? (
+            <MobileSummaryBar aria-label="빠른 이동 및 반응">
+              {showStickyToc ? (
+                <button
+                  type="button"
+                  data-active={Boolean(activeTocId)}
+                  data-tone="accent"
+                  onClick={() => scrollSectionIntoView(compactTocSectionRef.current)}
+                >
+                  <AppIcon name="list" />
+                  <span>목차</span>
+                  <strong>{visibleTocItems.length}</strong>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                data-active={engagement.actorHasLiked}
+                data-tone="danger"
+                aria-pressed={engagement.actorHasLiked}
+                onClick={handleToggleLike}
+              >
+                <AppIcon name={engagement.actorHasLiked ? "heart-filled" : "heart"} />
+                <span>좋아요</span>
+                <strong>{engagement.likesCount}</strong>
+              </button>
+              <button
+                type="button"
+                data-active={commentsRailActive}
+                data-tone="accent"
+                onClick={() => scrollSectionIntoView(commentsSectionRef.current)}
+              >
+                <AppIcon name="message" />
+                <span>댓글</span>
+                <strong>{typeof data.commentsCount === "number" ? data.commentsCount : 0}</strong>
+              </button>
+              <button
+                type="button"
+                data-active={Boolean(shareFeedback)}
+                data-tone="accent"
+                onClick={handleSharePost}
+              >
+                <AppIcon name="share" />
+                <span>{shareFeedback === "copied" ? "복사됨" : "공유"}</span>
+              </button>
+            </MobileSummaryBar>
+          ) : null}
           {showStickyToc && (
-            <CompactTocSection aria-label="접이식 목차">
+            <CompactTocSection ref={compactTocSectionRef} aria-label="접이식 목차">
               <details>
                 <summary>
                   <div className="summaryCopy">
@@ -901,7 +979,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           {data.type[0] === "Post" && (showRelatedTagSkeleton || relatedByTagPosts.length > 0) && (
             <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
               <header>
-                <h2>같은 태그 글</h2>
+                <div className="headerCopy">
+                  <h2>같은 태그 글</h2>
+                  <p className="sectionReason">현재 글과 같은 태그 흐름에서 바로 이어 읽기 좋은 글만 추렸습니다.</p>
+                </div>
                 <Link href={relatedTag ? `/?tag=${encodeURIComponent(relatedTag)}` : "/"}>
                   태그 글 보기
                 </Link>
@@ -931,7 +1012,10 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           {data.type[0] === "Post" && (showRelatedAuthorSkeleton || relatedByAuthorPosts.length > 0) && (
             <RelatedSection aria-label="같은 작성자 글" data-rum-section="related-author">
               <header>
-                <h2>같은 작성자 글</h2>
+                <div className="headerCopy">
+                  <h2>같은 작성자 글</h2>
+                  <p className="sectionReason">같은 문제의식과 톤으로 연결되는 작성자 글을 한 번에 이어볼 수 있습니다.</p>
+                </div>
                 <Link href="/">
                   작성자 글 보기
                 </Link>
@@ -963,7 +1047,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               <section data-rum-section="footer">
                 <Footer />
               </section>
-              <section data-rum-section="comments">
+              <section ref={commentsSectionRef} data-rum-section="comments">
                 <DeferredCommentBox data={data} initialComments={initialComments} />
               </section>
             </>
@@ -1495,6 +1579,66 @@ const CompactTocSection = styled.section`
   }
 `
 
+const MobileSummaryBar = styled.div`
+  display: none;
+
+  @media (max-width: 1023px) {
+    position: sticky;
+    top: calc(var(--app-header-height, 64px) + 0.4rem);
+    z-index: 14;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.16rem 0 0.4rem;
+    margin-bottom: 0.18rem;
+
+    button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.36rem;
+      padding: 0 0.55rem;
+      border-radius: 999px;
+      border: 1px solid ${({ theme }) => theme.colors.gray6};
+      background: color-mix(in srgb, ${({ theme }) => theme.colors.gray1} 88%, transparent);
+      color: ${({ theme }) => theme.colors.gray11};
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    button[data-active="true"] {
+      border-color: ${({ theme }) => theme.colors.accentBorder};
+      background: ${({ theme }) => theme.colors.accentSurfaceSubtle};
+      color: ${({ theme }) => theme.colors.accentLink};
+    }
+
+    button[data-active="true"][data-tone="danger"] {
+      border-color: ${({ theme }) => theme.colors.statusDangerBorder};
+      background: ${({ theme }) => theme.colors.statusDangerSurface};
+      color: ${({ theme }) => theme.colors.statusDangerText};
+    }
+
+    button span,
+    button strong {
+      white-space: nowrap;
+    }
+
+    button strong {
+      color: ${({ theme }) => theme.colors.gray12};
+      font-size: 0.74rem;
+    }
+  }
+
+  @media (max-width: 540px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+`
+
 const RelatedSection = styled.section`
   margin-top: 0.52rem;
   padding-top: 0.88rem;
@@ -1506,9 +1650,15 @@ const RelatedSection = styled.section`
 
   > header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.75rem;
+  }
+
+  > header .headerCopy {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
   }
 
   h2 {
@@ -1517,6 +1667,14 @@ const RelatedSection = styled.section`
     font-weight: 760;
     line-height: 1.35;
     color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  > header .sectionReason {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.8rem;
+    line-height: 1.5;
+    display: block;
   }
 
   > header a {
@@ -1595,6 +1753,11 @@ const RelatedSection = styled.section`
   @media (max-width: 768px) {
     margin-top: 0.38rem;
     padding-top: 0.74rem;
+
+    > header {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 `
 

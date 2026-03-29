@@ -25,6 +25,13 @@ export type AdminHubSummaryItem = {
   tone?: "neutral" | "good" | "warn"
 }
 
+export type AdminHubNextAction = {
+  href: string
+  title: string
+  detail: string
+  tone?: "neutral" | "good" | "warn"
+}
+
 type Props = {
   displayName: string
   displayNameInitial: string
@@ -32,6 +39,7 @@ type Props = {
   profileRole?: string
   profileBio?: string
   summaryItems: AdminHubSummaryItem[]
+  nextActions: AdminHubNextAction[]
   primaryAction: AdminHubPrimaryAction
   secondaryLinks: AdminHubSecondaryLink[]
 }
@@ -43,6 +51,7 @@ const AdminHubSurface = ({
   profileRole,
   profileBio,
   summaryItems,
+  nextActions,
   primaryAction,
   secondaryLinks,
 }: Props) => {
@@ -60,6 +69,24 @@ const AdminHubSurface = ({
             </StatusItem>
           ))}
         </SummaryRail>
+        <NextActionStrip aria-label="지금 해야 할 일">
+          <SectionHeader>
+            <h2>지금 해야 할 일</h2>
+          </SectionHeader>
+          <NextActionGrid>
+            {nextActions.map((item) => (
+              <Link key={`${item.href}-${item.title}`} href={item.href} passHref legacyBehavior>
+                <NextActionLink data-tone={item.tone || "neutral"}>
+                  <div className="copy">
+                    <strong>{item.title}</strong>
+                    <p>{item.detail}</p>
+                  </div>
+                  <span className="meta">바로 가기</span>
+                </NextActionLink>
+              </Link>
+            ))}
+          </NextActionGrid>
+        </NextActionStrip>
       </HeaderPanel>
 
       <HeroPanel>
@@ -212,6 +239,82 @@ const StatusItem = styled.div`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+`
+
+const NextActionStrip = styled.section`
+  display: grid;
+  gap: 0.62rem;
+`
+
+const NextActionGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.72rem;
+
+  @media (max-width: 960px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const NextActionLink = styled.a`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.88rem 0.96rem;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.9) 100%);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    background-color 0.16s ease;
+
+  &[data-tone="warn"] {
+    border-color: ${({ theme }) => theme.colors.orange7};
+  }
+
+  &[data-tone="good"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+  }
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    transform: translateY(-1px);
+  }
+
+  .copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.92rem;
+    font-weight: 800;
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  .meta {
+    color: ${({ theme }) => theme.colors.gray11};
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 560px) {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 `
 

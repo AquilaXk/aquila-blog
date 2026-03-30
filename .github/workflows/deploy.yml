@@ -616,17 +616,29 @@ jobs:
           }
 
           run_pgroonga_query() {
-            local sql="$1"
-            local output
-            local output_one_line
+            local out_var="$1"
+            local sql="$2"
+            local stdout_file
+            local stderr_file
+            local stdout_one_line
+            local stderr_one_line
+            local normalized_output
 
-            if ! output="$(compose_with_staged_back_image exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"$sql\"" 2>&1)"; then
-              output_one_line="$(printf '%s' "${output}" | tr '\r\n' ' ' | xargs || true)"
-              echo "[PGROONGA_QUERY_EXEC_FAILED] db=${TARGET_DB_NAME} sql=${sql} output=${output_one_line:-empty}" >&2
+            stdout_file="$(mktemp)"
+            stderr_file="$(mktemp)"
+
+            if ! compose_with_staged_back_image exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"$sql\"" >"${stdout_file}" 2>"${stderr_file}"; then
+              stdout_one_line="$(tr '\r\n' ' ' < "${stdout_file}" | xargs || true)"
+              stderr_one_line="$(tr '\r\n' ' ' < "${stderr_file}" | xargs || true)"
+              echo "[PGROONGA_QUERY_EXEC_FAILED] db=${TARGET_DB_NAME} sql=${sql} stdout=${stdout_one_line:-empty} stderr=${stderr_one_line:-empty}" >&2
+              rm -f "${stdout_file}" "${stderr_file}"
               return 1
             fi
 
-            printf '%s' "${output}" | tr -d '\r' | xargs || true
+            normalized_output="$(tr -d '\r' < "${stdout_file}" | xargs || true)"
+            rm -f "${stdout_file}" "${stderr_file}"
+            printf -v "${out_var}" '%s' "${normalized_output}"
+            return 0
           }
 
           echo "pgroonga precheck target db=${TARGET_DB_NAME}"
@@ -637,7 +649,8 @@ jobs:
             pgroonga_precheck_fail "install_failed" "create_extension_failed"
           fi
 
-          if ! PGROONGA_EXT_OK="$(run_pgroonga_query "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pgroonga');")"; then
+          PGROONGA_EXT_OK=""
+          if ! run_pgroonga_query PGROONGA_EXT_OK "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pgroonga');"; then
             pgroonga_precheck_fail "extension_check_exec_failed" "query_exec_failed"
           fi
           echo "pgroonga extension check result: ${PGROONGA_EXT_OK:-empty}"
@@ -645,7 +658,8 @@ jobs:
             pgroonga_precheck_fail "extension_missing" "pg_extension_not_found value=${PGROONGA_EXT_OK:-empty}"
           fi
 
-          if ! PGROONGA_OP_OK="$(run_pgroonga_query "SELECT (ARRAY['ping'::text, 'pong'::text] &@~ 'ping');")"; then
+          PGROONGA_OP_OK=""
+          if ! run_pgroonga_query PGROONGA_OP_OK "SELECT (ARRAY['ping'::text, 'pong'::text] &@~ 'ping');"; then
             pgroonga_precheck_fail "operator_check_exec_failed" "query_exec_failed"
           fi
           echo "pgroonga operator check result: ${PGROONGA_OP_OK:-empty}"

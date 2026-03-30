@@ -1,3 +1,4 @@
+import { css } from "@emotion/react"
 import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
@@ -530,6 +531,7 @@ const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
 const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
 const EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH = 8_000
 const EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS = 2
+const EDITOR_STUDIO_SPLIT_MIN_VIEWPORT_PX = 1680
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
@@ -1379,7 +1381,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
   const [isWideEditorViewport, setIsWideEditorViewport] = useState(false)
-  const [editorStudioViewMode, setEditorStudioViewMode] = useState<ComposeViewMode>("editor")
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement>(null)
@@ -1552,7 +1553,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const media = window.matchMedia("(min-width: 1024px)")
+    const media = window.matchMedia(`(min-width: ${EDITOR_STUDIO_SPLIT_MIN_VIEWPORT_PX}px)`)
     const sync = () => {
       setIsWideEditorViewport(media.matches)
     }
@@ -1567,11 +1568,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     media.addListener(sync)
     return () => media.removeListener(sync)
   }, [])
-
-  useEffect(() => {
-    if (isWideEditorViewport) return
-    setEditorStudioViewMode((prev) => (prev === "split" ? "editor" : prev))
-  }, [isWideEditorViewport])
 
   useEffect(() => {
     setStudioSurface("compose")
@@ -1617,7 +1613,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   useEffect(() => {
     syncTitleTextareaHeight(titleFieldRef.current)
-  }, [postTitle, editorStudioViewMode])
+  }, [postTitle, isWideEditorViewport])
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setListPage(sanitizeNumberInput(e.target.value))
@@ -3749,15 +3745,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     return null
   }
 
-  const composeViewModeOptions: { value: ComposeViewMode; label: string; icon: "edit" | "split" | "eye" }[] = [
-    { value: "editor", label: "작성", icon: "edit" },
-    { value: "split", label: "작성+미리보기", icon: "split" },
-    { value: "preview", label: "미리보기", icon: "eye" },
-  ]
+  const editorStudioViewMode: ComposeViewMode = isWideEditorViewport ? "split" : "editor"
   const isCompactSplitPreview = editorStudioViewMode === "split" && isWideEditorViewport
-  const editorStudioViewModeOptions = composeViewModeOptions.filter(
-    (option) => isWideEditorViewport || option.value !== "split"
-  )
   const shouldShowGlobalNotice =
     globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
   const shouldShowPublishNotice = publishNotice.tone !== "idle"
@@ -3961,7 +3950,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   if (shouldShowEditorLoadingState) {
     return (
-      <EditorStudioRoot>
+      <EditorStudioRoot $splitAvailable={isWideEditorViewport} $viewMode={editorStudioViewMode}>
         <EditorStudioLoadingState>
           <strong>편집 화면을 준비하고 있습니다.</strong>
           <span>잠시만 기다려 주세요.</span>
@@ -3972,7 +3961,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   if (isDedicatedEditorRoute) {
     return (
-      <EditorStudioRoot>
+      <EditorStudioRoot $splitAvailable={isWideEditorViewport} $viewMode={editorStudioViewMode}>
       <input
         ref={thumbnailImageFileInputRef}
         type="file"
@@ -3986,28 +3975,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           ← 나가기
         </EditorExitAction>
         <EditorStudioTopBarActions>
-          <EditorStudioViewSwitch role="tablist" aria-label="편집 화면 보기 모드">
-            {editorStudioViewModeOptions.map((option) => (
-              <ComposeViewSwitchButton
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={editorStudioViewMode === option.value}
-                data-active={editorStudioViewMode === option.value}
-                onClick={() => setEditorStudioViewMode(option.value)}
-              >
-                {option.icon === "split" ? (
-                  <SplitViewGlyph aria-hidden="true">
-                    <span />
-                    <span />
-                  </SplitViewGlyph>
-                ) : (
-                  <AppIcon name={option.icon} aria-hidden="true" />
-                )}
-                <span>{option.label}</span>
-              </ComposeViewSwitchButton>
-            ))}
-          </EditorStudioViewSwitch>
           {composeStatusText ? <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState> : null}
           <PrimaryButton
             type="button"
@@ -4020,9 +3987,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       </EditorStudioTopBar>
 
       <EditorStudioFrame $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
-        <EditorStudioWritingColumn $viewMode={editorStudioViewMode}>
-          <EditorStudioMetaSection>
-            <EditorTagRow aria-label="태그 입력">
+        <EditorStudioWritingColumn $viewMode={editorStudioViewMode} $compact={isCompactSplitPreview}>
+          <EditorStudioMetaSection $compact={isCompactSplitPreview}>
+            <EditorTagRow aria-label="태그 입력" $compact={isCompactSplitPreview}>
               {postTags.map((tag) => (
                 <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
                   <span className="label">{tag}</span>
@@ -4058,6 +4025,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               />
             </EditorTagRow>
             <TitleInput
+              $compact={isCompactSplitPreview}
               ref={handleTitleFieldRef}
               id="post-title"
               placeholder="제목을 입력하세요"
@@ -4068,19 +4036,19 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             />
             <EditorHeaderMetaRow>
               <EditorHeaderAuthor>
-                <EditorHeaderAvatar>
+                <EditorHeaderAvatar $compact={isCompactSplitPreview}>
                   {previewAuthorAvatarSrc ? (
                     <ProfileImage src={previewAuthorAvatarSrc} alt={`${displayName} 프로필 이미지`} fillContainer />
                   ) : (
                     <span className="initial">{displayNameInitial}</span>
                   )}
                 </EditorHeaderAvatar>
-                <EditorHeaderAuthorText>
+                <EditorHeaderAuthorText $compact={isCompactSplitPreview}>
                   <strong>{displayName}</strong>
                   <span>{previewDateText}</span>
                 </EditorHeaderAuthorText>
               </EditorHeaderAuthor>
-              <EditorHeaderMetaPill>{currentVisibilityText}</EditorHeaderMetaPill>
+              <EditorHeaderMetaPill $compact={isCompactSplitPreview}>{currentVisibilityText}</EditorHeaderMetaPill>
             </EditorHeaderMetaRow>
           </EditorStudioMetaSection>
 
@@ -6876,7 +6844,7 @@ const FieldSelect = styled.select`
   }
 `
 
-const TitleInput = styled.textarea`
+const TitleInput = styled.textarea<{ $compact?: boolean }>`
   width: 100%;
   min-width: 0;
   border: 0;
@@ -6886,9 +6854,9 @@ const TitleInput = styled.textarea`
   background: transparent;
   box-shadow: none;
   font-family: inherit;
-  font-size: clamp(1.94rem, 3.8vw, 3rem);
+  font-size: ${({ $compact }) => ($compact ? "clamp(1.7rem, 3vw, 2.45rem)" : "clamp(1.94rem, 3.8vw, 3rem)")};
   font-weight: 780;
-  line-height: 1.18;
+  line-height: ${({ $compact }) => ($compact ? "1.12" : "1.18")};
   letter-spacing: -0.035em;
   resize: none;
   overflow: hidden;
@@ -6905,8 +6873,8 @@ const TitleInput = styled.textarea`
   }
 
   @media (max-width: 720px) {
-    font-size: clamp(1.75rem, 7.8vw, 2.3rem);
-    line-height: 1.2;
+    font-size: ${({ $compact }) => ($compact ? "clamp(1.64rem, 7vw, 2.05rem)" : "clamp(1.75rem, 7.8vw, 2.3rem)")};
+    line-height: ${({ $compact }) => ($compact ? "1.16" : "1.2")};
   }
 `
 
@@ -7905,8 +7873,9 @@ const SummaryPill = styled.span`
 `
 
 const ComposeReadableIntro = styled.div`
-  width: min(100%, var(--article-readable-width, 48rem));
-  max-width: 100%;
+  width: 100%;
+  max-width: var(--article-readable-width, 48rem);
+  min-width: 0;
   margin-inline: auto;
   display: grid;
   gap: 1rem;
@@ -7958,8 +7927,9 @@ const ComposeBodyHeader = styled.div`
   align-items: flex-end;
   justify-content: space-between;
   gap: 0.75rem;
-  width: min(100%, var(--article-readable-width, 48rem));
-  max-width: 100%;
+  width: 100%;
+  max-width: var(--article-readable-width, 48rem);
+  min-width: 0;
   margin-inline: auto;
   padding-top: 0.2rem;
 
@@ -8295,49 +8265,6 @@ const EmptyMetaText = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.78rem;
   line-height: 1.5;
-`
-
-const ComposeViewSwitchButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.44rem;
-  min-height: 40px;
-  padding: 0 0.78rem;
-  border-radius: 10px;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-  font-weight: 700;
-  transition: background-color 0.16s ease, color 0.16s ease;
-
-  svg {
-    font-size: 1rem;
-  }
-
-  &[data-active="true"] {
-    background: ${({ theme }) => theme.colors.gray3};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  @media (max-width: 720px) {
-    flex: 1 1 0;
-    justify-content: center;
-    padding: 0 0.58rem;
-  }
-`
-
-const SplitViewGlyph = styled.span`
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.16rem;
-  width: 1rem;
-  height: 1rem;
-
-  span {
-    border-radius: 3px;
-    border: 1.5px solid currentColor;
-  }
 `
 
 const ListPanel = styled.div`
@@ -9253,8 +9180,12 @@ const PublishModalFooter = styled.div`
   }
 `
 
-const EditorStudioRoot = styled.main`
-  width: min(100%, 1600px);
+const EditorStudioRoot = styled.main<{ $splitAvailable?: boolean; $viewMode?: ComposeViewMode }>`
+  width: min(
+    100%,
+    ${({ $splitAvailable, $viewMode }) =>
+      $splitAvailable && $viewMode === "split" ? "104rem" : "1600px"}
+  );
   margin: 0 auto;
   padding: 1.4rem 1.6rem 2rem;
   display: grid;
@@ -9356,26 +9287,8 @@ const EditorStudioSaveState = styled.span`
   }
 `
 
-const EditorStudioViewSwitch = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.32rem;
-  padding: 0.26rem;
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-
-  @media (max-width: 1120px) {
-    order: 2;
-  }
-`
-
 const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
   --editor-split-gap: clamp(2.4rem, 3vw, 3.5rem);
-  --editor-split-pane-width: min(
-    var(--article-readable-width, 48rem),
-    calc((min(100vw, 1600px) - 4rem - var(--editor-split-gap)) / 2)
-  );
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: ${({ $viewMode }) => ($viewMode === "split" ? "2rem" : "1.4rem")};
@@ -9385,29 +9298,31 @@ const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailab
   @media (min-width: 1024px) {
     grid-template-columns: ${({ $viewMode, $splitAvailable }) =>
       $splitAvailable && $viewMode === "split"
-        ? "minmax(0, var(--editor-split-pane-width)) minmax(0, var(--editor-split-pane-width))"
+        ? "minmax(0, var(--article-readable-width, 48rem)) minmax(0, var(--article-readable-width, 48rem))"
         : "minmax(0, 1fr)"};
     gap: ${({ $viewMode }) => ($viewMode === "split" ? "var(--editor-split-gap)" : "1.4rem")};
   }
 `
 
-const EditorStudioWritingColumn = styled.section<{ $viewMode: ComposeViewMode }>`
+const EditorStudioWritingColumn = styled.section<{ $viewMode: ComposeViewMode; $compact?: boolean }>`
   ${({ $viewMode }) => ($viewMode === "preview" ? "display: none;" : "display: grid;")}
   min-width: 0;
-  gap: 1rem;
+  gap: ${({ $compact }) => ($compact ? "0.88rem" : "1rem")};
 `
 
-const EditorStudioMetaSection = styled.section`
-  width: min(100%, var(--article-readable-width, 48rem));
+const EditorStudioMetaSection = styled.section<{ $compact?: boolean }>`
+  width: 100%;
+  max-width: var(--article-readable-width, 48rem);
+  min-width: 0;
   display: grid;
-  gap: 0.9rem;
+  gap: ${({ $compact }) => ($compact ? "0.72rem" : "0.9rem")};
 `
 
-const EditorTagRow = styled.div`
+const EditorTagRow = styled.div<{ $compact?: boolean }>`
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.55rem;
+  gap: ${({ $compact }) => ($compact ? "0.44rem" : "0.55rem")};
   min-height: 32px;
 `
 
@@ -9427,10 +9342,10 @@ const EditorHeaderAuthor = styled.div`
   min-width: 0;
 `
 
-const EditorHeaderAvatar = styled.div`
+const EditorHeaderAvatar = styled.div<{ $compact?: boolean }>`
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: ${({ $compact }) => ($compact ? "40px" : "48px")};
+  height: ${({ $compact }) => ($compact ? "40px" : "48px")};
   flex-shrink: 0;
   border-radius: 999px;
   overflow: hidden;
@@ -9449,41 +9364,43 @@ const EditorHeaderAvatar = styled.div`
   }
 `
 
-const EditorHeaderAuthorText = styled.div`
+const EditorHeaderAuthorText = styled.div<{ $compact?: boolean }>`
   display: grid;
-  gap: 0.18rem;
+  gap: ${({ $compact }) => ($compact ? "0.12rem" : "0.18rem")};
   min-width: 0;
 
   strong {
     color: ${({ theme }) => theme.colors.gray12};
-    font-size: 1rem;
+    font-size: ${({ $compact }) => ($compact ? "0.94rem" : "1rem")};
     font-weight: 700;
     overflow-wrap: anywhere;
   }
 
   span {
     color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.9rem;
+    font-size: ${({ $compact }) => ($compact ? "0.82rem" : "0.9rem")};
     font-weight: 500;
   }
 `
 
-const EditorHeaderMetaPill = styled.span`
+const EditorHeaderMetaPill = styled.span<{ $compact?: boolean }>`
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 0.82rem;
+  min-height: ${({ $compact }) => ($compact ? "30px" : "34px")};
+  padding: ${({ $compact }) => ($compact ? "0 0.72rem" : "0 0.82rem")};
   border-radius: 999px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   background: ${({ theme }) => theme.colors.gray2};
   color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.82rem;
+  font-size: ${({ $compact }) => ($compact ? "0.74rem" : "0.82rem")};
   font-weight: 650;
   line-height: 1;
 `
 
 const EditorStudioCanvas = styled.section`
-  width: min(100%, var(--article-readable-width, 48rem));
+  width: 100%;
+  max-width: var(--article-readable-width, 48rem);
+  min-width: 0;
   min-height: clamp(28rem, 70vh, 56rem);
   display: grid;
   gap: 0.72rem;
@@ -9568,6 +9485,63 @@ const EditorStudioPreviewHeaderFrame = styled.div<{ $compact?: boolean }>`
   padding: 0 0 1rem;
   border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
   overflow: hidden;
+
+  ${({ $compact, theme }) =>
+    $compact
+      ? css`
+          > header .taxonomyRow {
+            gap: 0.42rem;
+            margin-bottom: 0.72rem;
+          }
+
+          > header .taxonomyRow > span,
+          > header .staticTag {
+            min-height: 28px;
+            padding: 0.3rem 0.64rem;
+            font-size: 0.76rem;
+          }
+
+          > header .title {
+            font-size: clamp(1.56rem, 2.5vw, 2.2rem);
+            line-height: 1.12;
+            max-width: 100%;
+            letter-spacing: -0.03em;
+          }
+
+          > header .metaRow {
+            margin-top: 0.92rem;
+            gap: 0.72rem;
+          }
+
+          > header .avatar {
+            width: 40px;
+            height: 40px;
+          }
+
+          > header .authorText strong {
+            font-size: 0.94rem;
+          }
+
+          > header .metaText,
+          > header .stats {
+            gap: 0.34rem;
+            font-size: 0.82rem;
+          }
+
+          > header .shareFeedbackPill,
+          > header .statChip,
+          > header .likeButton,
+          > header .shareButton {
+            min-height: 34px;
+            font-size: 0.8rem;
+          }
+
+          > header .thumbnail {
+            margin-top: 1.15rem;
+            border-radius: 12px;
+          }
+        `
+      : ""}
 `
 
 const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
@@ -9608,7 +9582,9 @@ const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
 `
 
 const EditorStudioResultPanel = styled.section`
-  width: min(100%, var(--article-readable-width, 48rem));
+  width: 100%;
+  max-width: var(--article-readable-width, 48rem);
+  min-width: 0;
   border-top: 1px solid ${({ theme }) => theme.colors.gray5};
   padding-top: 0.9rem;
 
@@ -9642,8 +9618,8 @@ const EditorStudioResultPanel = styled.section`
 `
 
 const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
-  width: ${({ $compact }) => ($compact ? "100%" : "min(100%, var(--article-readable-width, 48rem))")};
-  max-width: 100%;
+  width: 100%;
+  max-width: ${({ $compact }) => ($compact ? "100%" : "var(--article-readable-width, 48rem)")};
   min-width: 0;
   margin-inline: auto;
   overflow-x: hidden;
@@ -9654,6 +9630,57 @@ const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
     min-width: 0;
     overflow-x: hidden;
   }
+
+  ${({ $compact, theme }) =>
+    $compact
+      ? css`
+          > .aq-markdown {
+            font-size: 0.96rem;
+            line-height: 1.8;
+          }
+
+          > .aq-markdown > * {
+            max-width: 100%;
+          }
+
+          > .aq-markdown h1 {
+            font-size: clamp(1.82rem, 2.4vw, 2.25rem);
+            line-height: 1.18;
+          }
+
+          > .aq-markdown h2 {
+            font-size: clamp(1.54rem, 2vw, 1.85rem);
+            line-height: 1.24;
+          }
+
+          > .aq-markdown h3 {
+            font-size: clamp(1.26rem, 1.6vw, 1.44rem);
+            line-height: 1.28;
+          }
+
+          > .aq-markdown blockquote,
+          > .aq-markdown pre,
+          > .aq-markdown .aq-callout,
+          > .aq-markdown details,
+          > .aq-markdown .aq-table-shell,
+          > .aq-markdown .aq-code-shell,
+          > .aq-markdown .aq-bookmark-card,
+          > .aq-markdown .aq-embed-shell {
+            max-width: 100%;
+            margin-inline: 0;
+          }
+
+          > .aq-markdown img,
+          > .aq-markdown figure {
+            max-width: 100%;
+          }
+
+          > .aq-markdown hr {
+            margin-block: 1.15rem;
+            border-color: ${theme.colors.gray5};
+          }
+        `
+      : ""}
 `
 
 const PreviewCard = styled.div`

@@ -192,21 +192,17 @@ type NestedListItemDropIndicatorState =
       width: number
     }
 
-type DropIndicatorState =
-  | {
-      visible: boolean
-      insertionIndex: number
-      top: number
-      left: number
-      width: number
-    }
-  | {
-      visible: false
-      insertionIndex: number
-      top: number
-      left: number
-      width: number
-    }
+type DropIndicatorState = {
+  visible: boolean
+  insertionIndex: number
+  top: number
+  left: number
+  width: number
+  highlightTop: number
+  highlightLeft: number
+  highlightWidth: number
+  highlightHeight: number
+}
 
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
 
@@ -585,6 +581,10 @@ const BlockEditorShell = ({
     top: 0,
     left: 0,
     width: 0,
+    highlightTop: 0,
+    highlightLeft: 0,
+    highlightWidth: 0,
+    highlightHeight: 0,
   })
   const [draggedNestedListItemState, setDraggedNestedListItemState] = useState<DraggedNestedListItemState>(null)
   const [nestedListItemDropIndicatorState, setNestedListItemDropIndicatorState] = useState<NestedListItemDropIndicatorState>({
@@ -669,12 +669,20 @@ const BlockEditorShell = ({
           top: 0,
           left: 0,
           width: 0,
+          highlightTop: 0,
+          highlightLeft: 0,
+          highlightWidth: 0,
+          highlightHeight: 0,
         }
       }
 
       const rootRect = elements[0]?.parentElement?.getBoundingClientRect()
       let insertionIndex = elements.length
       let top = elements[elements.length - 1].getBoundingClientRect().bottom
+      let highlightTop = 0
+      let highlightLeft = 0
+      let highlightWidth = 0
+      let highlightHeight = 0
 
       for (let index = 0; index < elements.length; index += 1) {
         const rect = elements[index].getBoundingClientRect()
@@ -682,8 +690,20 @@ const BlockEditorShell = ({
         if (clientY < midpoint) {
           insertionIndex = index
           top = rect.top
+          highlightTop = Math.round(rect.top - 4)
+          highlightLeft = Math.round(rect.left - 8)
+          highlightWidth = Math.round(rect.width + 16)
+          highlightHeight = Math.round(rect.height + 8)
           break
         }
+      }
+
+      if (insertionIndex === elements.length) {
+        const tailRect = elements[elements.length - 1].getBoundingClientRect()
+        highlightTop = Math.round(tailRect.bottom + 6)
+        highlightLeft = Math.round(tailRect.left)
+        highlightWidth = Math.round(tailRect.width)
+        highlightHeight = 18
       }
 
       return {
@@ -691,6 +711,10 @@ const BlockEditorShell = ({
         top: Math.round(top),
         left: Math.round(rootRect?.left || elements[0].getBoundingClientRect().left),
         width: Math.round(rootRect?.width || elements[0].getBoundingClientRect().width),
+        highlightTop,
+        highlightLeft,
+        highlightWidth,
+        highlightHeight,
       }
     },
     [getTopLevelBlockElements]
@@ -720,6 +744,43 @@ const BlockEditorShell = ({
       return getTopLevelBlockElements().indexOf(element as HTMLElement)
     },
     [getContentRoot, getTopLevelBlockElements]
+  )
+
+  const findTopLevelBlockIndexByClientPosition = useCallback(
+    (clientX: number, clientY: number) => {
+      const elements = getTopLevelBlockElements()
+      if (!elements.length) return null
+
+      let bestIndex: number | null = null
+      let bestDistance = Number.POSITIVE_INFINITY
+
+      for (let index = 0; index < elements.length; index += 1) {
+        const rect = elements[index].getBoundingClientRect()
+        const expandedTop = rect.top - 10
+        const expandedBottom = rect.bottom + 10
+        const expandedLeft = rect.left - 28
+        const expandedRight = rect.right + 16
+        const inside =
+          clientY >= expandedTop &&
+          clientY <= expandedBottom &&
+          clientX >= expandedLeft &&
+          clientX <= expandedRight
+
+        if (inside) {
+          return index
+        }
+
+        const centerY = rect.top + rect.height / 2
+        const distance = Math.abs(clientY - centerY)
+        if (distance < bestDistance) {
+          bestDistance = distance
+          bestIndex = index
+        }
+      }
+
+      return bestIndex
+    },
+    [getTopLevelBlockElements]
   )
 
   const findNestedListItemDragContextFromTarget = useCallback(
@@ -2689,7 +2750,7 @@ const BlockEditorShell = ({
     setBlockHandleState({
       visible: true,
       blockIndex,
-      left: Math.max(16, Math.round(rect.left - 54)),
+      left: Math.max(12, Math.round(rect.left - 68)),
       top: Math.round(rect.top + 8),
       bottom: Math.round(rect.bottom + 12),
       width: Math.round(rect.width),
@@ -2704,6 +2765,49 @@ const BlockEditorShell = ({
     selectionTick,
   ])
 
+  useEffect(() => {
+    const elements = getTopLevelBlockElements()
+    const dropTargetIndex =
+      draggedBlockState && dropIndicatorState.insertionIndex < elements.length
+        ? dropIndicatorState.insertionIndex
+        : null
+
+    elements.forEach((element, index) => {
+      if (index === hoveredBlockIndex && !draggedBlockState) {
+        element.setAttribute("data-block-hovered", "true")
+      } else {
+        element.removeAttribute("data-block-hovered")
+      }
+
+      if (index === selectedBlockIndex) {
+        element.setAttribute("data-block-selected", "true")
+      } else {
+        element.removeAttribute("data-block-selected")
+      }
+
+      if (draggedBlockState && index === draggedBlockState.sourceIndex) {
+        element.setAttribute("data-block-dragging", "true")
+      } else {
+        element.removeAttribute("data-block-dragging")
+      }
+
+      if (dropTargetIndex !== null && index === dropTargetIndex) {
+        element.setAttribute("data-block-drop-target", "true")
+      } else {
+        element.removeAttribute("data-block-drop-target")
+      }
+    })
+
+    return () => {
+      elements.forEach((element) => {
+        element.removeAttribute("data-block-hovered")
+        element.removeAttribute("data-block-selected")
+        element.removeAttribute("data-block-dragging")
+        element.removeAttribute("data-block-drop-target")
+      })
+    }
+  }, [draggedBlockState, dropIndicatorState.insertionIndex, getTopLevelBlockElements, hoveredBlockIndex, selectedBlockIndex])
+
   const handleViewportPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const rowResizeState = tableRowResizeRef.current
@@ -2714,9 +2818,19 @@ const BlockEditorShell = ({
       if (isCoarsePointer) return
       const cell = getTableCellFromTarget(event.target)
       setViewportRowResizeHot(isRowResizeHandleTarget(cell, event.clientX, event.clientY))
-      setHoveredBlockIndex(findTopLevelBlockIndexFromTarget(event.target))
+      setHoveredBlockIndex(
+        findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY) ??
+          findTopLevelBlockIndexFromTarget(event.target)
+      )
     },
-    [findTopLevelBlockIndexFromTarget, getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, setViewportRowResizeHot]
+    [
+      findTopLevelBlockIndexByClientPosition,
+      findTopLevelBlockIndexFromTarget,
+      getTableCellFromTarget,
+      isCoarsePointer,
+      isRowResizeHandleTarget,
+      setViewportRowResizeHot,
+    ]
   )
 
   const handleViewportPointerLeave = useCallback(() => {
@@ -2984,7 +3098,6 @@ const BlockEditorShell = ({
       </Toolbar>
 
       <QuickInsertBar aria-label="빠른 블록 삽입">
-        <QuickInsertHint>슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.</QuickInsertHint>
         <QuickInsertActions>
           {quickInsertActions.map((action) => (
             <QuickInsertButton
@@ -3258,8 +3371,9 @@ const BlockEditorShell = ({
             )}
           </FloatingBubbleToolbar>
         ) : null}
-        {!isCoarsePointer && blockHandleState.visible ? (
+        {!isCoarsePointer ? (
           <BlockHandleRail
+            data-visible={blockHandleState.visible}
             style={{
               left: `${blockHandleState.left}px`,
               top: `${blockHandleState.top}px`,
@@ -3267,7 +3381,22 @@ const BlockEditorShell = ({
           >
             <BlockHandleButton
               type="button"
+              aria-label="블록 추가"
+              title="블록 추가"
+              onClick={(event) => {
+                event.stopPropagation()
+                openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <BlockHandlePlus aria-hidden="true">
+                <span />
+                <span />
+              </BlockHandlePlus>
+            </BlockHandleButton>
+            <BlockHandleButton
+              type="button"
               aria-label="블록 이동"
+              title="블록 이동"
               data-variant="drag"
               data-testid="block-drag-handle"
               onPointerDown={(event) => {
@@ -3284,19 +3413,27 @@ const BlockEditorShell = ({
                 })
               }}
             >
-              ⋮⋮
-            </BlockHandleButton>
-            <BlockHandleButton
-              type="button"
-              aria-label="삽입"
-              onClick={(event) => {
-                event.stopPropagation()
-                openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
-              }}
-            >
-              +
+              <BlockHandleGrip aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </BlockHandleGrip>
             </BlockHandleButton>
           </BlockHandleRail>
+        ) : null}
+        {dropIndicatorState.visible ? (
+          <BlockDropTargetHighlight
+            data-tail={dropIndicatorState.insertionIndex === getTopLevelBlockElements().length}
+            style={{
+              left: `${dropIndicatorState.highlightLeft}px`,
+              top: `${dropIndicatorState.highlightTop}px`,
+              width: `${dropIndicatorState.highlightWidth}px`,
+              height: `${dropIndicatorState.highlightHeight}px`,
+            }}
+          />
         ) : null}
         {dropIndicatorState.visible ? (
           <BlockDropIndicator
@@ -4018,10 +4155,42 @@ const EditorViewport = styled.div`
   ${({ theme }) => markdownContentTypography(".aq-block-editor__content", theme)}
 
   .aq-block-editor__content > * {
-    width: min(100%, var(--compose-pane-readable-width, var(--article-readable-width, 48rem)));
+    width: 100%;
+    max-width: var(--compose-pane-readable-width, var(--article-readable-width, 48rem));
     min-width: 0;
     margin-left: auto;
     margin-right: auto;
+    border-radius: 0.9rem;
+    transition:
+      background-color 140ms ease,
+      box-shadow 140ms ease,
+      transform 140ms ease,
+      opacity 140ms ease;
+  }
+
+  .aq-block-editor__content > *[data-block-hovered="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.08)"};
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.18);
+  }
+
+  .aq-block-editor__content > *[data-block-selected="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.24);
+  }
+
+  .aq-block-editor__content > *[data-block-drop-target="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.11)" : "rgba(59, 130, 246, 0.09)"};
+    box-shadow:
+      0 0 0 1px rgba(59, 130, 246, 0.28),
+      inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+  }
+
+  .aq-block-editor__content > *[data-block-dragging="true"] {
+    opacity: 0.42;
+    transform: scale(0.992);
   }
 
   .aq-block-editor__content p.is-editor-empty:first-of-type::before {
@@ -4052,7 +4221,8 @@ const EditorViewport = styled.div`
 
   .aq-block-editor__content ul[data-type="taskList"],
   .aq-block-editor__content ul[data-task-list="true"] {
-    width: min(100%, var(--compose-pane-readable-width, var(--article-readable-width, 48rem)));
+    width: 100%;
+    max-width: var(--compose-pane-readable-width, var(--article-readable-width, 48rem));
     list-style: none;
     padding-left: 0;
   }
@@ -4064,11 +4234,22 @@ const EditorViewport = styled.div`
     gap: 0.72rem;
     margin: 0.45rem 0;
     cursor: grab;
+    border-radius: 0.8rem;
+    transition:
+      background-color 140ms ease,
+      box-shadow 140ms ease;
   }
 
   .aq-block-editor__content li[data-type="taskItem"]:active,
   .aq-block-editor__content li[data-task-item="true"]:active {
     cursor: grabbing;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"]:hover,
+  .aq-block-editor__content li[data-task-item="true"]:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.06)" : "rgba(59, 130, 246, 0.06)"};
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.14);
   }
 
   .aq-block-editor__content li[data-type="taskItem"] > label,
@@ -4200,26 +4381,89 @@ const BlockHandleRail = styled.div`
   position: fixed;
   z-index: 55;
   display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.18rem;
+  opacity: 0;
+  transform: translate3d(-3px, 0, 0);
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+
+  &[data-visible="true"] {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    pointer-events: auto;
+  }
 `
 
 const BlockHandleButton = styled.button`
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 0.7rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.62)" : "rgba(255, 255, 255, 0.98)"};
-  color: var(--color-gray11);
+  width: 1.56rem;
+  height: 1.56rem;
+  border-radius: 0.48rem;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.76rem;
-  font-weight: 800;
-  box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 8px 14px rgba(0, 0, 0, 0.12)" : "0 8px 14px rgba(15, 23, 42, 0.08)"};
+  font-weight: 700;
+  box-shadow: none;
+  opacity: 0.86;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
 
   &[data-variant="drag"] {
     cursor: grab;
-    letter-spacing: -0.1em;
+  }
+
+  &:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.06)"};
+    color: var(--color-gray12);
+    opacity: 1;
+  }
+`
+
+const BlockHandleGrip = styled.span`
+  display: grid;
+  grid-template-columns: repeat(2, 0.18rem);
+  grid-auto-rows: 0.18rem;
+  gap: 0.12rem;
+
+  span {
+    width: 0.18rem;
+    height: 0.18rem;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.78;
+  }
+`
+
+const BlockHandlePlus = styled.span`
+  position: relative;
+  width: 0.82rem;
+  height: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  span {
+    position: absolute;
+    display: block;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  span:first-of-type {
+    width: 0.82rem;
+    height: 1.6px;
+  }
+
+  span:last-of-type {
+    width: 1.6px;
+    height: 0.82rem;
   }
 `
 
@@ -4231,6 +4475,21 @@ const BlockDropIndicator = styled.div`
   background: ${({ theme }) => theme.colors.blue8};
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
   pointer-events: none;
+`
+
+const BlockDropTargetHighlight = styled.div`
+  position: fixed;
+  z-index: 53;
+  border-radius: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+  pointer-events: none;
+
+  &[data-tail="true"] {
+    border-radius: 0.7rem;
+    background: rgba(59, 130, 246, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14);
+  }
 `
 
 const MobileBlockActionBar = styled.div`
@@ -4369,13 +4628,6 @@ const QuickInsertBar = styled.div`
   display: grid;
   gap: 0.7rem;
   padding: 0.1rem 0 0.2rem;
-`
-
-const QuickInsertHint = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.84rem;
-  line-height: 1.55;
 `
 
 const QuickInsertActions = styled.div`

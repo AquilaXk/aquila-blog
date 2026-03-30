@@ -10,6 +10,14 @@ import {
 } from "src/apis/backend/notifications"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
+import {
+  canProbeNotificationStreamRecovery,
+  createNotificationStreamRecoveryState,
+  markNotificationPollingFallbackEntered,
+  recordNotificationStreamFailure,
+  resetNotificationStreamFailures,
+  shouldSwitchNotificationStreamToPolling,
+} from "src/layouts/RootLayout/Header/notificationStreamRecovery"
 import { formatShortDateTime } from "src/libs/utils"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
@@ -22,7 +30,6 @@ type Props = {
 
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 30_000
-const SSE_RECOVERY_PROBE_MS = 120_000
 const HIDDEN_GRACE_CLOSE_MS = 45_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
 const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
@@ -137,6 +144,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const streamLifecycleRef = useRef<EventSourceLifecycleState>("idle")
   const reconnectTimerRef = useRef<number | null>(null)
   const reconnectAttemptRef = useRef(0)
+  const recoveryStateRef = useRef(createNotificationStreamRecoveryState())
   const initialLastEventId = useMemo(() => loadStoredLastEventId(), [])
   const lastEventIdRef = useRef<string | null>(initialLastEventId)
   const [streamMode, setStreamMode] = useState<"sse" | "poll">(preferPolling ? "poll" : "sse")
@@ -289,6 +297,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setIsSnapshotFallback(false)
       setNotificationAccessState("pending")
       reconnectAttemptRef.current = 0
+      recoveryStateRef.current = createNotificationStreamRecoveryState()
       setLastNotificationEventId(null)
       clearStoredSnapshot()
       setStreamMode(preferPolling ? "poll" : "sse")
@@ -377,9 +386,18 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setIsReady(false)
       const nextAttempt = reconnectAttemptRef.current + 1
       reconnectAttemptRef.current = nextAttempt
+      recoveryStateRef.current = recordNotificationStreamFailure(recoveryStateRef.current, Date.now())
+
+      if (shouldSwitchNotificationStreamToPolling(recoveryStateRef.current, Date.now())) {
+        closeEventSource(false)
+        recoveryStateRef.current = markNotificationPollingFallbackEntered(recoveryStateRef.current, Date.now())
+        setStreamMode("poll")
+        return
+      }
 
       if (nextAttempt > STREAM_MAX_RECONNECT_ATTEMPTS) {
         closeEventSource(false)
+        recoveryStateRef.current = markNotificationPollingFallbackEntered(recoveryStateRef.current, Date.now())
         setStreamMode("poll")
         return
       }
@@ -433,6 +451,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         markStreamOpen()
         const recovered = reconnectAttemptRef.current > 0
         reconnectAttemptRef.current = 0
+        recoveryStateRef.current = resetNotificationStreamFailures(recoveryStateRef.current)
         setIsReady(true)
         setIsSnapshotFallback(false)
 
@@ -443,6 +462,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
       const handleHeartbeat = (_event: MessageEvent<string>) => {
         markStreamOpen()
+        recoveryStateRef.current = resetNotificationStreamFailures(recoveryStateRef.current)
         setIsReady(true)
       }
 
@@ -570,13 +590,26 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     if (!isRealtimeActive) return
     if (!isDocumentVisible) return
     if (preferPolling) return
-    if (streamMode !== "poll") return
-    if (notificationAccessState !== "ready") return
+      if (streamMode !== "poll") return
+    if (
+      !canProbeNotificationStreamRecovery({
+        state: recoveryStateRef.current,
+        nowMs: Date.now(),
+        enabled,
+        isDocumentVisible,
+        preferPolling,
+        streamMode,
+        notificationAccessState,
+      })
+    ) {
+      return
+    }
 
     const timer = window.setTimeout(() => {
       reconnectAttemptRef.current = 0
+      recoveryStateRef.current = resetNotificationStreamFailures(recoveryStateRef.current)
       setStreamMode("sse")
-    }, SSE_RECOVERY_PROBE_MS)
+    }, 0)
 
     return () => {
       window.clearTimeout(timer)

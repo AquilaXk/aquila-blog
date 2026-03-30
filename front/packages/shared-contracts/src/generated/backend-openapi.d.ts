@@ -470,6 +470,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/notifications/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["notificationStreamDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/mail/signup": {
         parameters: {
             query?: never;
@@ -1515,6 +1531,38 @@ export interface components {
             /** Format: date-time */
             oldestEligiblePurgeAfter?: string;
             sampleEligibleObjectKeys?: string[];
+        };
+        StreamDiagnostics: {
+            /** Format: int32 */
+            memberEmitterCount?: number;
+            /** Format: int32 */
+            globalEmitterCount?: number;
+            /** Format: int64 */
+            oldestEmitterAgeSeconds?: number;
+            /** Format: int32 */
+            maxEmittersPerMember?: number;
+            /** Format: int32 */
+            maxGlobalEmitters?: number;
+            /** Format: int64 */
+            heartbeatSeconds?: number;
+            /** Format: int64 */
+            replayProbeSeconds?: number;
+            /** Format: int32 */
+            replayBatchSize?: number;
+            /** Format: int64 */
+            connectedCount?: number;
+            /** Format: int64 */
+            reconnectSubscribeCount?: number;
+            /** Format: int64 */
+            disconnectCount?: number;
+            /** Format: int64 */
+            replayBatchCount?: number;
+            /** Format: int64 */
+            replayNotificationCount?: number;
+            /** Format: int64 */
+            heartbeatSentCount?: number;
+            /** Format: int64 */
+            sendFailureCount?: number;
         };
         SignupMailDiagnostics: {
             status?: string;
@@ -2565,6 +2613,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["SearchRuntimeFlags"];
+                };
+            };
+        };
+    };
+    notificationStreamDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["StreamDiagnostics"];
                 };
             };
         };

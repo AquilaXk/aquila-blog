@@ -1,5 +1,6 @@
 package com.back.global.system.adapter.web
 
+import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
@@ -67,6 +68,9 @@ class ApiV1AdmSystemControllerTest {
 
     @MockitoBean
     private lateinit var signupMailDiagnosticsService: SignupMailDiagnosticsService
+
+    @MockitoBean
+    private lateinit var memberNotificationSseService: MemberNotificationSseService
 
     @MockitoBean
     private lateinit var authSecurityEventService: AuthSecurityEventService
@@ -211,6 +215,48 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$[0].loginIdentifier") { value("admin@example.com") }
             jsonPath("$[0].ipSecurityEnabled") { value(true) }
             jsonPath("$[0].requestPath") { value("/member/api/v1/auth/login") }
+        }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 SSE 스트림 진단 상태를 조회할 수 있다`() {
+        given(memberNotificationSseService.diagnostics())
+            .willReturn(
+                MemberNotificationSseService.StreamDiagnostics(
+                    memberEmitterCount = 1,
+                    globalEmitterCount = 3,
+                    oldestEmitterAgeSeconds = 48,
+                    maxEmittersPerMember = 3,
+                    maxGlobalEmitters = 2000,
+                    heartbeatSeconds = 20,
+                    replayProbeSeconds = 60,
+                    replayBatchSize = 50,
+                    connectedCount = 11,
+                    reconnectSubscribeCount = 4,
+                    disconnectCount = 8,
+                    replayBatchCount = 6,
+                    replayNotificationCount = 17,
+                    heartbeatSentCount = 31,
+                    sendFailureCount = 2,
+                ),
+            )
+
+        mvc.get("/system/api/v1/adm/notifications/stream").andExpect {
+            status { isOk() }
+            jsonPath("$.memberEmitterCount") { value(1) }
+            jsonPath("$.globalEmitterCount") { value(3) }
+            jsonPath("$.oldestEmitterAgeSeconds") { value(48) }
+            jsonPath("$.heartbeatSeconds") { value(20) }
+            jsonPath("$.replayProbeSeconds") { value(60) }
+            jsonPath("$.replayBatchSize") { value(50) }
+            jsonPath("$.connectedCount") { value(11) }
+            jsonPath("$.reconnectSubscribeCount") { value(4) }
+            jsonPath("$.disconnectCount") { value(8) }
+            jsonPath("$.replayBatchCount") { value(6) }
+            jsonPath("$.replayNotificationCount") { value(17) }
+            jsonPath("$.heartbeatSentCount") { value(31) }
+            jsonPath("$.sendFailureCount") { value(2) }
         }
     }
 

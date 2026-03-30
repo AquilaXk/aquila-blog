@@ -152,7 +152,7 @@ test.describe("editor studio state", () => {
     expect(blockEditorSource).not.toContain("buildStructuredInsertContent")
     expect(blockEditorSource).not.toContain("insertRawMarkdownBlock")
     expect(blockEditorSource).toContain("const QuickInsertBar = styled.div`")
-    expect(blockEditorSource).toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
+    expect(blockEditorSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
   })
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {

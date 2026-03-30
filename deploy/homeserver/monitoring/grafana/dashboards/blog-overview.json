@@ -395,6 +395,136 @@
       ],
       "title": "Back scrape health (min up)",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1200
+              },
+              {
+                "color": "red",
+                "value": 1500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(member_notification_sse_global_emitters{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "global_emitters",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Notification SSE emitters",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(member_notification_sse_reconnect_subscribe_total{job=\"back\",service=\"aquila-back\"}[10m])) or on() vector(0)",
+          "legendFormat": "reconnect/10m",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(member_notification_sse_send_failure_total{job=\"back\",service=\"aquila-back\"}[10m])) or on() vector(0)",
+          "legendFormat": "send_failure/10m",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "editorMode": "code",
+          "expr": "sum(increase(member_notification_sse_replay_notification_total{job=\"back\",service=\"aquila-back\"}[10m])) or on() vector(0)",
+          "legendFormat": "replay_notification/10m",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Notification SSE recovery activity",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -414,6 +544,6 @@
   "timezone": "browser",
   "title": "Aquila Blog Overview",
   "uid": "blog-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

@@ -25,6 +25,7 @@ PREWARM_CONNECT_TIMEOUT_SECONDS="${PREWARM_CONNECT_TIMEOUT_SECONDS:-2}"
 PREWARM_MAX_TIME_SECONDS="${PREWARM_MAX_TIME_SECONDS:-6}"
 PREWARM_RETRIES="${PREWARM_RETRIES:-2}"
 PREWARM_BACKOFF_SECONDS="${PREWARM_BACKOFF_SECONDS:-1}"
+STREAM_DRAIN_SECONDS="${STREAM_DRAIN_SECONDS:-15}"
 RUNTIME_SPLIT_ENABLED="${RUNTIME_SPLIT_ENABLED:-false}"
 RUNTIME_SPLIT_STAGE="${RUNTIME_SPLIT_STAGE:-A}"
 AUTO_MEMORY_TUNER_ENABLED="${AUTO_MEMORY_TUNER_ENABLED:-true}"
@@ -90,8 +91,19 @@ normalize_positive_int() {
   echo "${fallback}"
 }
 
+normalize_non_negative_int() {
+  local raw="$1"
+  local fallback="$2"
+  if [[ "${raw}" =~ ^[0-9]+$ ]]; then
+    echo "${raw}"
+    return
+  fi
+  echo "${fallback}"
+}
+
 RUNTIME_SPLIT_ENABLED="$(normalize_bool "${RUNTIME_SPLIT_ENABLED}")"
 RUNTIME_SPLIT_STAGE="$(normalize_runtime_split_stage "${RUNTIME_SPLIT_STAGE}")"
+STREAM_DRAIN_SECONDS="$(normalize_non_negative_int "${STREAM_DRAIN_SECONDS}" "15")"
 AUTO_MEMORY_TUNER_ENABLED="$(normalize_bool "${AUTO_MEMORY_TUNER_ENABLED}")"
 AUTO_MEMORY_TUNER_MAX_BUDGET_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_MAX_BUDGET_MB}" "2816")"
 AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB="$(normalize_positive_int "${AUTO_MEMORY_TUNER_SYSTEM_RESERVE_MB}" "2048")"
@@ -1249,6 +1261,65 @@ check_backend_health() {
   return 1
 }
 
+check_notification_sse_route() {
+  local api_domain="$1"
+  local admin_email admin_password
+  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
+  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
+
+  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
+    echo "notification sse probe skipped: missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD"
+    return 0
+  fi
+
+  local probe_output
+  probe_output="$(
+    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
+      set -eu
+      api_domain="$1"
+      admin_email="$2"
+      admin_password="$3"
+      cookie_jar="$(mktemp)"
+      login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
+      login_code="$(
+        curl -sS \
+          --connect-timeout 3 \
+          --max-time 12 \
+          -c "${cookie_jar}" \
+          -o /dev/null \
+          -w "%{http_code}" \
+          -H "Host: ${api_domain}" \
+          -H "Content-Type: application/json" \
+          --data "${login_payload}" \
+          "http://caddy:80/member/api/v1/auth/login" || true
+      )"
+      echo "login_status=${login_code}"
+      if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
+        exit 11
+      fi
+
+      stream_body="$(
+        curl -sS -N \
+          --connect-timeout 3 \
+          --max-time 35 \
+          -b "${cookie_jar}" \
+          -H "Host: ${api_domain}" \
+          "http://caddy:80/member/api/v1/notifications/stream" || true
+      )"
+      printf "%s\n" "${stream_body}" | tr -d "\r"
+    ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+  )"
+
+  if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
+    echo "notification sse probe ok: connected+heartbeat observed"
+    return 0
+  fi
+
+  echo "notification sse probe failed" >&2
+  echo "${probe_output}" >&2
+  return 1
+}
+
 switch_caddy_upstream() {
   local target="$1"
   local host
@@ -1358,6 +1429,22 @@ stop_backend_if_running() {
   echo "inactive backend already stopped: ${backend}"
 }
 
+drain_and_stop_backend_if_running() {
+  local backend="$1"
+  if ! is_backend_running "${backend}"; then
+    echo "inactive backend already stopped: ${backend}"
+    return
+  fi
+
+  if (( STREAM_DRAIN_SECONDS > 0 )); then
+    echo "draining old backend connections: ${backend} wait=${STREAM_DRAIN_SECONDS}s"
+    sleep "${STREAM_DRAIN_SECONDS}"
+  fi
+
+  compose stop "${backend}" || true
+  echo "stopped inactive backend after drain: ${backend}"
+}
+
 ensure_steady_state_guard() {
   local installer="${SCRIPT_DIR}/install_steady_state_guard_cron.sh"
   if [[ ! -x "${installer}" ]]; then
@@ -1395,7 +1482,7 @@ rollback_to_backend() {
   echo "${rollback_backend}" > "${STATE_FILE}"
   local inactive_backend
   inactive_backend="$(other_backend "${rollback_backend}")"
-  stop_backend_if_running "${inactive_backend}"
+  drain_and_stop_backend_if_running "${inactive_backend}"
   return 0
 }
 
@@ -1482,8 +1569,15 @@ if ! is_healthy_http_code "${post_code}"; then
   exit 1
 fi
 
+if ! check_notification_sse_route "${api_domain}"; then
+  echo "post-switch notification sse verify failed" >&2
+  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  compose stop "${next_backend}" || true
+  exit 1
+fi
+
 echo "${next_backend}" > "${STATE_FILE}"
-stop_backend_if_running "${active_backend}"
+drain_and_stop_backend_if_running "${active_backend}"
 ensure_steady_state_guard || true
 
 check_cloudflared_runtime

@@ -610,26 +610,20 @@ const MarkdownRendererRoot = styled.div`
   .aq-mermaid-stage > svg .nodeLabel p,
   .aq-mermaid-stage > svg .edgeLabel p {
     margin: 0;
-  }
-
-  .aq-mermaid-stage > svg .nodeLabel,
-  .aq-mermaid-stage > svg .edgeLabel {
-    dominant-baseline: middle;
-    alignment-baseline: middle;
+    line-height: 1.35;
   }
 
   .aq-mermaid-stage > svg .nodeLabel > text,
   .aq-mermaid-stage > svg .edgeLabel > text,
   .aq-mermaid-stage > svg .label text {
-    dominant-baseline: middle;
-    alignment-baseline: middle;
+    white-space: pre;
   }
 
   .aq-mermaid-stage > svg .nodeLabel > text > tspan,
   .aq-mermaid-stage > svg .edgeLabel > text > tspan,
   .aq-mermaid-stage > svg .label text > tspan {
-    dominant-baseline: middle;
-    alignment-baseline: middle;
+    dominant-baseline: auto !important;
+    alignment-baseline: baseline !important;
     transform: none;
   }
 

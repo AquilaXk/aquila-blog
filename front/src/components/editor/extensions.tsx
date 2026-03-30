@@ -339,6 +339,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
+  const [isCodeSelectionActive, setIsCodeSelectionActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
@@ -377,7 +378,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     previewRootRef,
     `editor-mermaid:${normalizedSource}`,
     isPreviewVisible && normalizedSource.length > 0,
-    { observeMutations: false }
+    { observeMutations: false, allowDesktopWideLane: false }
   )
 
   return (
@@ -390,7 +391,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         </MermaidWindowDots>
         <MermaidEditorTitleGroup>
           <strong>Mermaid</strong>
-          <span>코드와 다이어그램을 같은 블록에서 바로 수정합니다.</span>
         </MermaidEditorTitleGroup>
         <MermaidViewModeRail role="tablist" aria-label="Mermaid 보기 모드">
           {MERMAID_VIEW_MODE_OPTIONS.map((option) => (
@@ -411,18 +411,28 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         {showCodePane ? (
           <MermaidCodePane>
             <MermaidPaneLabel>Mermaid 코드</MermaidPaneLabel>
-            <MermaidCodeEditorShell>
+            <MermaidCodeEditorShell data-selection-active={isCodeSelectionActive}>
               <MermaidCodeHighlight
+                className="aq-mermaid-code-highlight"
                 ref={codeHighlightRef}
                 aria-hidden="true"
                 dangerouslySetInnerHTML={{ __html: highlightedSource }}
               />
               <MermaidCodeTextarea
+                className="aq-mermaid-code-input"
                 ref={textareaRef}
                 value={draftSource}
+                wrap="off"
                 spellCheck={false}
                 data-view-mode={viewMode}
-                onBlur={flushCommit}
+                onBlur={() => {
+                  setIsCodeSelectionActive(false)
+                  flushCommit()
+                }}
+                onSelect={(event) => {
+                  const target = event.currentTarget
+                  setIsCodeSelectionActive(target.selectionStart !== target.selectionEnd)
+                }}
                 onScroll={(event) => {
                   const target = event.currentTarget
                   if (codeHighlightRef.current) {
@@ -432,6 +442,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 }}
                 onChange={(event) => {
                   const nextValue = event.target.value
+                  setIsCodeSelectionActive(false)
                   setDraftSource(nextValue)
                   scheduleCommit({ source: nextValue })
                 }}
@@ -2004,6 +2015,15 @@ const MermaidCodeEditorShell = styled.div`
   border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   overflow: hidden;
+
+  &[data-selection-active="true"] .aq-mermaid-code-highlight {
+    opacity: 0;
+  }
+
+  &[data-selection-active="true"] .aq-mermaid-code-input {
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#dbe2ea")};
+    -webkit-text-fill-color: currentColor;
+  }
 `
 
 const MermaidCodeHighlight = styled.pre`
@@ -2046,6 +2066,7 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
   position: relative;
   z-index: 1;
   min-height: 13rem;
+  overflow: auto;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2056,6 +2077,8 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
   font-size: 0.97rem;
   line-height: 1.7;
   white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
   box-shadow: none;
   text-shadow: none;
   -webkit-text-fill-color: transparent;
@@ -2066,7 +2089,10 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
 
   &::selection {
     background: rgba(59, 130, 246, 0.28);
-    color: transparent;
+  }
+
+  &::-moz-selection {
+    background: rgba(59, 130, 246, 0.28);
   }
 `
 

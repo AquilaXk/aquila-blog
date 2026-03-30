@@ -464,7 +464,7 @@ jobs:
               echo "minimal backup restore failed before rollback script: ${BACKUP_DIR}" >&2
             fi
 
-            if ! RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
+            if ! env -u BACK_IMAGE RUNTIME_SPLIT_ENABLED="${ROLLBACK_RUNTIME_SPLIT_ENABLED}" ./deploy/homeserver/rollback_last_deploy.sh "${BACKUP_DIR}"; then
               echo "rollback script failed after minimal backup restore: ${BACKUP_DIR} (reason=${reason})" >&2
             fi
           }
@@ -505,9 +505,8 @@ jobs:
             echo "HOME_BACK_IMAGE is empty. abort deploy to avoid stale image rollout." >&2
             exit 1
           fi
-          BACK_IMAGE="${HOME_BACK_IMAGE}"
-          export BACK_IMAGE
-          echo "staged deploy image in shell env only: ${BACK_IMAGE}"
+          STAGED_BACK_IMAGE="${HOME_BACK_IMAGE}"
+          echo "staged deploy image in shell env only: ${STAGED_BACK_IMAGE}"
 
           extract_env_value() {
             local key="$1"
@@ -527,6 +526,10 @@ jobs:
           resolve_local_repo_digest() {
             local image_ref="$1"
             docker image inspect --format '{{index .RepoDigests 0}}' "${image_ref}" 2>/dev/null | head -n 1 | tr -d '\r'
+          }
+
+          compose_with_staged_back_image() {
+            BACK_IMAGE="${STAGED_BACK_IMAGE}" docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml "$@"
           }
 
           ensure_image_key_from_local_digest() {
@@ -585,7 +588,7 @@ jobs:
           }
 
           require_nonempty_env_key "CF_TUNNEL_TOKEN"
-          require_pinned_image_value "BACK_IMAGE" "${BACK_IMAGE}"
+          require_pinned_image_value "BACK_IMAGE" "${STAGED_BACK_IMAGE}"
           ensure_image_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
           ensure_image_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
           ensure_image_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"
@@ -612,21 +615,37 @@ jobs:
             exit 1
           }
 
+          run_pgroonga_query() {
+            local code="$1"
+            local sql="$2"
+            local output
+            local output_one_line
+            local sql_one_line
+
+            if ! output="$(compose_with_staged_back_image exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"$sql\"" 2>&1)"; then
+              output_one_line="$(printf '%s' "${output}" | tr '\r\n' ' ' | xargs || true)"
+              sql_one_line="$(printf '%s' "${sql}" | tr '\r\n' ' ' | xargs || true)"
+              pgroonga_precheck_fail "${code}" "sql=${sql_one_line:-empty} output=${output_one_line:-empty}"
+            fi
+
+            printf '%s' "${output}" | tr -d '\r' | xargs || true
+          }
+
           echo "pgroonga precheck target db=${TARGET_DB_NAME}"
-          docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml up -d db_1 >/dev/null
+          compose_with_staged_back_image up -d db_1 >/dev/null
 
           echo "pgroonga install attempt"
-          if ! docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -v ON_ERROR_STOP=1 -c \"CREATE EXTENSION IF NOT EXISTS pgroonga;\""; then
+          if ! compose_with_staged_back_image exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -v ON_ERROR_STOP=1 -c \"CREATE EXTENSION IF NOT EXISTS pgroonga;\""; then
             pgroonga_precheck_fail "install_failed" "create_extension_failed"
           fi
 
-          PGROONGA_EXT_OK="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pgroonga');\"" 2>/dev/null | tr -d '\r' | xargs || true)"
+          PGROONGA_EXT_OK="$(run_pgroonga_query "extension_check_exec_failed" "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pgroonga');")"
           echo "pgroonga extension check result: ${PGROONGA_EXT_OK:-empty}"
           if [ "${PGROONGA_EXT_OK}" != "t" ]; then
             pgroonga_precheck_fail "extension_missing" "pg_extension_not_found value=${PGROONGA_EXT_OK:-empty}"
           fi
 
-          PGROONGA_OP_OK="$(docker compose --env-file deploy/homeserver/.env.prod -f deploy/homeserver/docker-compose.prod.yml exec -T db_1 sh -lc "psql -U postgres -d '${TARGET_DB_NAME}' -tAc \"SELECT (ARRAY['ping'::text, 'pong'::text] &@~ 'ping');\"" 2>/dev/null | tr -d '\r' | xargs || true)"
+          PGROONGA_OP_OK="$(run_pgroonga_query "operator_check_exec_failed" "SELECT (ARRAY['ping'::text, 'pong'::text] &@~ 'ping');")"
           echo "pgroonga operator check result: ${PGROONGA_OP_OK:-empty}"
           if [ "${PGROONGA_OP_OK}" != "t" ]; then
             pgroonga_precheck_fail "operator_failed" "andatilde_operator_check_failed value=${PGROONGA_OP_OK:-empty}"

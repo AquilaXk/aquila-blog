@@ -106,7 +106,8 @@ class TaskProcessingScheduledJob(
      * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
      */
     @Scheduled(fixedDelayString = "\${custom.task.processor.fixedDelayMs}")
-    @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M")
+    // Queue polling is short-lived; keeping the orphan lock window tight avoids multi-hour ready backlog stalls.
+    @SchedulerLock(name = "processTasks", lockAtLeastFor = "PT1M", lockAtMostFor = "PT2M")
     fun processTasks() {
         val safeBatchSize = batchSize.coerceIn(1, 500)
         recoverStaleProcessingTasks(safeBatchSize)

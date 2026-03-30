@@ -606,6 +606,43 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `검색 목록 조회는 멀티 토큰 검색에서 구문 미일치 제목도 후보 상단에 유지한다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val tokenA = "spring${System.currentTimeMillis()}"
+            val tokenB = "websocket"
+            val keyword = "$tokenA $tokenB"
+            val titleMatchedPost =
+                postFacade.write(
+                    actor,
+                    "$tokenA 실시간 $tokenB 설계",
+                    "멀티 토큰 제목 매치 검증 본문",
+                    true,
+                    true,
+                )
+            val contentPhrasePost =
+                postFacade.write(
+                    actor,
+                    "본문 exact phrase 매치",
+                    "이 글은 본문에서만 $keyword 를 포함합니다.",
+                    true,
+                    true,
+                )
+
+            mvc
+                .get("/post/api/v1/posts/search") {
+                    param("kw", keyword)
+                    param("page", "1")
+                    param("pageSize", "30")
+                    param("sort", PostSearchSortType1.MODIFIED_AT.name)
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.content.length()") { value(2) }
+                    jsonPath("$.content[0].id") { value(titleMatchedPost.id) }
+                    jsonPath("$.content[1].id") { value(contentPhrasePost.id) }
+                }
+        }
+
+        @Test
         fun `검색 목록 조회는 hashtag 의도를 태그 필터로 인식한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "search-hashtag-${System.currentTimeMillis()}"

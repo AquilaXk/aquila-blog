@@ -19,51 +19,8 @@ type Params = {
 }
 
 const EMPTY_POSTS: TPost[] = []
-const EMPTY_TOKENS: string[] = []
 const OFFSET_INITIAL_PAGE_PARAM = 1
 type ExplorePageParam = number
-const DAY_MS = 24 * 60 * 60 * 1000
-
-const tokenizeSearchKeyword = (value: string) =>
-  value
-    .toLowerCase()
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2)
-
-const toSafeTimestamp = (value?: string) => {
-  if (!value) return 0
-  const timestamp = Date.parse(value)
-  return Number.isFinite(timestamp) ? timestamp : 0
-}
-
-const toSearchRelevanceScore = (post: TPost, tokens: string[]) => {
-  if (!tokens.length) return 0
-
-  const title = post.title.toLowerCase()
-  const summary = (post.summary || "").toLowerCase()
-  const tags = (post.tags || []).map((tag) => tag.toLowerCase())
-
-  const lexicalScore = tokens.reduce((score, token) => {
-    let nextScore = score
-    if (title.includes(token)) nextScore += 4
-    if (summary.includes(token)) nextScore += 2
-    if (tags.some((tag) => tag.includes(token))) nextScore += 3.5
-    return nextScore
-  }, 0)
-
-  const popularitySignal =
-    (post.likesCount ?? 0) * 3 +
-    (post.commentsCount ?? 0) * 4 +
-    Math.max(0, Math.trunc((post.hitCount ?? 0) / 50))
-  const popularityScore = Math.log10(1 + popularitySignal)
-
-  const createdAt = toSafeTimestamp(post.createdTime || post.date?.start_date)
-  const ageDays = createdAt > 0 ? Math.max(0, (Date.now() - createdAt) / DAY_MS) : 365
-  const recencyScore = Math.max(0, 2.2 - ageDays / 30)
-
-  return lexicalScore + popularityScore + recencyScore
-}
 
 const useExplorePostsQuery = ({
   kw,
@@ -76,10 +33,6 @@ const useExplorePostsQuery = ({
   const normalizedTag = typeof tag === "string" ? tag.trim() || undefined : undefined
   const searchMode = normalizedKw.length > 0 && !normalizedTag
   const feedMode = normalizedKw.length === 0 && !normalizedTag
-  const keywordTokens = useMemo(
-    () => (searchMode ? tokenizeSearchKeyword(normalizedKw) : EMPTY_TOKENS),
-    [normalizedKw, searchMode]
-  )
 
   const query = useInfiniteQuery({
     enabled,
@@ -170,34 +123,11 @@ const useExplorePostsQuery = ({
       }
     }
 
-    if (searchMode && keywordTokens.length) {
-      const relevanceScores = new Map<string, number>()
-      regular.forEach((post) => {
-        relevanceScores.set(String(post.id), toSearchRelevanceScore(post, keywordTokens))
-      })
-
-      regular.sort((left, right) => {
-          const scoreDiff =
-            (relevanceScores.get(String(right.id)) ?? 0) - (relevanceScores.get(String(left.id)) ?? 0)
-          if (Math.abs(scoreDiff) > 0.0001) return scoreDiff
-
-          const leftCreatedAt = toSafeTimestamp(left.createdTime || left.date?.start_date)
-          const rightCreatedAt = toSafeTimestamp(right.createdTime || right.date?.start_date)
-          if (leftCreatedAt !== rightCreatedAt) return rightCreatedAt - leftCreatedAt
-          const leftId = Number(left.id)
-          const rightId = Number(right.id)
-          if (Number.isFinite(leftId) && Number.isFinite(rightId)) {
-            return rightId - leftId
-          }
-          return String(right.id).localeCompare(String(left.id))
-      })
-    }
-
     return {
       pinnedPosts: pinned,
       regularPosts: regular,
     }
-  }, [keywordTokens, query.data, searchMode])
+  }, [query.data])
 
   return {
     pinnedPosts,

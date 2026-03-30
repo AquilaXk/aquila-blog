@@ -26,6 +26,12 @@ import java.time.Instant
 class PostRepositoryImpl(
     private val queryFactory: JPAQueryFactory,
 ) : PostRepositoryCustom {
+    private data class KeywordRelevanceWeights(
+        val title: Int,
+        val tag: Int,
+        val content: Int,
+    )
+
     companion object {
         private const val META_TAGS_INDEX_ATTR_NAME = "metaTagsIndex"
     }
@@ -201,22 +207,11 @@ class PostRepositoryImpl(
 
     private fun buildKwPredicate(kw: String): BooleanExpression {
         val normalizedKeyword = kw.trim()
-        val keywordTokens =
-            normalizedKeyword
-                .split(Regex("\\s+"))
-                .map { it.trim() }
-                .filter { it.length >= 2 }
-                .distinct()
-                .take(4)
-
+        val keywordTerms = buildKeywordTerms(normalizedKeyword)
         val basePredicate = buildKeywordTokenPredicate(normalizedKeyword)
 
-        return keywordTokens.fold(basePredicate) { acc, token ->
-            if (token.equals(normalizedKeyword, ignoreCase = true)) {
-                acc
-            } else {
-                acc.or(buildKeywordTokenPredicate(token))
-            }
+        return keywordTerms.drop(1).fold(basePredicate) { acc, token ->
+            acc.or(buildKeywordTokenPredicate(token))
         }
     }
 
@@ -374,10 +369,63 @@ class PostRepositoryImpl(
     /**
      * Velog의 검색 랭킹 전략(제목 우선 + 보조 신호)을 반영해
      * title > tags(metaTagsIndex) > content 순서로 점수를 부여한다.
+     * 멀티 토큰 검색은 exact phrase와 token hit를 함께 반영해 후보 풀이 recency로 과도하게 쏠리지 않게 유지한다.
      */
     private fun buildKeywordRelevanceExpression(keyword: String): NumberExpression<Int> {
-        val likePattern = buildEscapedLikePattern(keyword)
-        val tagToken = buildTagLikeToken(keyword) ?: "||"
+        val keywordTerms = buildKeywordTerms(keyword)
+        if (keywordTerms.isEmpty()) return zeroScore()
+
+        return keywordTerms.withIndex().fold(zeroScore()) { acc, (index, term) ->
+            val weights =
+                if (index == 0) {
+                    KeywordRelevanceWeights(title = 300, tag = 120, content = 40)
+                } else {
+                    KeywordRelevanceWeights(title = 110, tag = 45, content = 20)
+                }
+
+            acc
+                .add(buildLikeScore(post.title, buildEscapedLikePattern(term), weights.title))
+                .add(buildTagScore(term, weights.tag))
+                .add(buildLikeScore(post.content, buildEscapedLikePattern(term), weights.content))
+        }
+    }
+
+    private fun buildKeywordTerms(keyword: String): List<String> {
+        val normalizedKeyword = keyword.trim().lowercase()
+        if (normalizedKeyword.isBlank()) return emptyList()
+
+        val splitTokens =
+            normalizedKeyword
+                .split(Regex("\\s+"))
+                .map(String::trim)
+                .filter { it.length >= 2 }
+                .distinct()
+                .take(4)
+
+        return buildList(splitTokens.size + 1) {
+            add(normalizedKeyword)
+            addAll(splitTokens.filterNot { it == normalizedKeyword })
+        }
+    }
+
+    private fun buildLikeScore(
+        target: Any,
+        likePattern: String,
+        weight: Int,
+    ): NumberExpression<Int> =
+        Expressions.numberTemplate(
+            Int::class.java,
+            "case when lower({0}) like {1} then {2} else 0 end",
+            target,
+            Expressions.constant(likePattern),
+            Expressions.constant(weight),
+        )
+
+    private fun buildTagScore(
+        term: String,
+        weight: Int,
+    ): NumberExpression<Int> {
+        val tagToken = buildTagLikeToken(term) ?: "||"
         val hasTagMatch =
             JPAExpressions
                 .selectOne()
@@ -390,29 +438,15 @@ class PostRepositoryImpl(
                         .and(postAttr.strValue.lower().like(tagToken)),
                 ).exists()
 
-        val titleScore =
-            Expressions.numberTemplate(
-                Int::class.java,
-                "case when lower({0}) like {1} then 300 else 0 end",
-                post.title,
-                Expressions.constant(likePattern),
-            )
-        val tagScore =
-            Expressions.numberTemplate(
-                Int::class.java,
-                "case when {0} then 120 else 0 end",
-                hasTagMatch,
-            )
-        val contentScore =
-            Expressions.numberTemplate(
-                Int::class.java,
-                "case when lower({0}) like {1} then 40 else 0 end",
-                post.content,
-                Expressions.constant(likePattern),
-            )
-
-        return titleScore.add(tagScore).add(contentScore)
+        return Expressions.numberTemplate(
+            Int::class.java,
+            "case when {0} then {1} else 0 end",
+            hasTagMatch,
+            Expressions.constant(weight),
+        )
     }
+
+    private fun zeroScore(): NumberExpression<Int> = Expressions.numberTemplate(Int::class.java, "0")
 
     private fun buildEscapedLikePattern(raw: String): String {
         val normalized = raw.trim().lowercase()

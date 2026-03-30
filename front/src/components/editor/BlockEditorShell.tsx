@@ -3150,6 +3150,7 @@ const BlockEditorShell = ({
         ref={imageFileInputRef}
         type="file"
         accept="image/*"
+        data-testid="editor-image-file-input"
         onChange={(event) => {
           void handleImageInputChange(event)
         }}
@@ -3158,6 +3159,7 @@ const BlockEditorShell = ({
       <HiddenFileInput
         ref={attachmentFileInputRef}
         type="file"
+        data-testid="editor-attachment-file-input"
         onChange={(event) => {
           void handleAttachmentInputChange(event)
         }}

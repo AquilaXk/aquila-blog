@@ -48,7 +48,7 @@ const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
 const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
 const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
-const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1440
+const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1366
 const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1201
 const DETAIL_RAIL_GAP_FROM_HEADER_PX = 20
 const STICKY_BLOCKING_OVERFLOW_VALUES = new Set(["auto", "scroll", "hidden", "clip"])
@@ -1431,7 +1431,7 @@ const StyledWrapper = styled.div`
     }
   }
 
-  @media (max-width: 1439px) {
+  @media (max-width: 1365px) {
     .detailLayout {
       width: auto;
       margin-left: 0;
@@ -1606,7 +1606,7 @@ const CompactTocSection = styled.section`
     font-weight: 700;
   }
 
-  @media (max-width: 1439px) {
+  @media (max-width: 1365px) {
     display: block;
   }
 `

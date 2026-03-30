@@ -7,6 +7,8 @@ const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const isSsrAuthBackendDisconnectedForPerf =
   (process.env.BACKEND_INTERNAL_URL || "").trim().replace(/\/+$/, "") === "http://127.0.0.1:1"
+const allowAdminDashboardLoginFallback =
+  process.env.PERF_ALLOW_ADMIN_LOGIN_FALLBACK === "true" || isSsrAuthBackendDisconnectedForPerf
 const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/dashboard", "/admin/profile", "/admin/posts", "/admin/tools"]
 
 const mockTagCounts = [
@@ -916,10 +918,16 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
 
       // admin/dashboard는 SSR auth guard를 통과하지 못하면 /login fallback을 탈 수 있다.
       // (예: perf CI의 backend 단절 모드, 로컬 미로그인 상태, SSR auth backend 비가용)
-      // 이 경우에는 login 레이아웃의 폭/스크롤 회귀만 검증하고 dashboard 검증은 건너뛴다.
+      // 단, 이 fallback 허용은 명시 플래그(PERF_ALLOW_ADMIN_LOGIN_FALLBACK=true) 또는
+      // backend 단절 perf 모드에서만 허용한다. 기본은 dashboard 진입 실패를 테스트 실패로 본다.
       if (snapshot.route === "/login") {
+        if (!allowAdminDashboardLoginFallback) {
+          throw new Error(
+            `[perf] admin-dashboard unexpected fallback=/login (set PERF_ALLOW_ADMIN_LOGIN_FALLBACK=true only when intentionally testing auth fallback)`
+          )
+        }
         console.info(
-          `[perf] admin-dashboard fallback=/login backendDisconnected=${String(isSsrAuthBackendDisconnectedForPerf)}`
+          `[perf] admin-dashboard fallback=/login backendDisconnected=${String(isSsrAuthBackendDisconnectedForPerf)} allowFallback=${String(allowAdminDashboardLoginFallback)}`
         )
         const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
         const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0

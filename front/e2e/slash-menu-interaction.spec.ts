@@ -109,7 +109,7 @@ test.describe("block editor slash menu interaction", () => {
   test("파일 블록은 업로드 결과 기반 첨부 카드로 삽입된다", async ({ page }) => {
     await page.goto("/_qa/block-editor-slash")
 
-    const attachmentInput = page.locator("input[type='file']").nth(1)
+    const attachmentInput = page.getByTestId("editor-attachment-file-input")
     await attachmentInput.setInputFiles({
       name: "spec.pdf",
       mimeType: "application/pdf",

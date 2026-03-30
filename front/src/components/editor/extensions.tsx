@@ -377,7 +377,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     previewRootRef,
     `editor-mermaid:${normalizedSource}`,
     isPreviewVisible && normalizedSource.length > 0,
-    { observeMutations: false, forceScheme: "dark" }
+    { observeMutations: false }
   )
 
   return (
@@ -2026,19 +2026,19 @@ const MermaidCodeHighlight = styled.pre`
   }
 
   .token-keyword {
-    color: #68b8ff;
+    color: ${({ theme }) => (theme.scheme === "light" ? "#0969da" : "#68b8ff")};
   }
 
   .token-string {
-    color: #c7ea61;
+    color: ${({ theme }) => (theme.scheme === "light" ? "#1a7f37" : "#c7ea61")};
   }
 
   .token-operator {
-    color: #ffc857;
+    color: ${({ theme }) => (theme.scheme === "light" ? "#9a6700" : "#ffc857")};
   }
 
   .token-comment {
-    color: rgba(148, 163, 184, 0.88);
+    color: ${({ theme }) => (theme.scheme === "light" ? "#6e7781" : "rgba(148, 163, 184, 0.88)")};
   }
 `
 

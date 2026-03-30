@@ -1381,6 +1381,7 @@ export const EditorTaskItem = TaskItem.extend({
 }).configure({
   nested: true,
   HTMLAttributes: {
+    draggable: "true",
     "data-task-item": "true",
   },
 })
@@ -1389,6 +1390,7 @@ export const EditorListItem = ListItem.extend({
   draggable: true,
 }).configure({
   HTMLAttributes: {
+    draggable: "true",
     "data-list-item": "true",
   },
 })

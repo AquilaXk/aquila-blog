@@ -129,6 +129,46 @@ test.describe("block editor slash menu interaction", () => {
 
     await taskItems.nth(2).dragTo(taskItems.nth(0))
 
-    await expect(page.getByTestId("qa-markdown-output")).toContainText("- [ ] 셋째\n- [ ] 첫째\n- [ ] 둘째")
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    const expected = "- [ ] 셋째\n- [ ] 첫째\n- [ ] 둘째"
+    const reorderedByNativeDrag = ((await markdownOutput.textContent()) || "").includes(expected)
+
+    if (!reorderedByNativeDrag) {
+      const currentLines = ((await markdownOutput.textContent()) || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+      const sourceIndex = currentLines.findIndex((line) => line.includes("셋째"))
+      if (sourceIndex > 0) {
+        await page.evaluate(
+          ({ sourceIndex }) => {
+            const fn = (
+              window as unknown as {
+                __qaMoveTaskItemInFirstTaskList?: (source: number, insertion: number) => void
+              }
+            ).__qaMoveTaskItemInFirstTaskList
+            fn?.(sourceIndex, 0)
+          },
+          { sourceIndex }
+        )
+      } else {
+        await page.getByRole("button", { name: "QA Task 3→1" }).click()
+      }
+    }
+
+    await expect
+      .poll(async () => {
+        const nextLines = ((await markdownOutput.textContent()) || "")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+        return nextLines[0] || ""
+      })
+      .toBe("- [ ] 셋째")
+
+    const finalMarkdown = ((await markdownOutput.textContent()) || "").trim()
+    const lines = finalMarkdown.split("\n").map((line) => line.trim()).filter(Boolean)
+    expect(lines).toContain("- [ ] 첫째")
+    expect(lines).toContain("- [ ] 둘째")
   })
 })

@@ -5,6 +5,8 @@ const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
+const isSsrAuthBackendDisconnectedForPerf =
+  (process.env.BACKEND_INTERNAL_URL || "").trim().replace(/\/+$/, "") === "http://127.0.0.1:1"
 const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/dashboard", "/admin/profile", "/admin/posts", "/admin/tools"]
 
 const mockTagCounts = [
@@ -909,9 +911,21 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
     }
 
     if (scenario.name === "admin-dashboard-ipad-mini-768") {
-      expect(snapshot.route).toBe("/admin/dashboard")
       expect(snapshot.viewport.width).toBe(768)
       expect(snapshot.viewport.height).toBe(1024)
+
+      // perf CI에서 BACKEND_INTERNAL_URL이 127.0.0.1:1이면 SSR auth guard가 /login fallback을 탄다.
+      // 이 모드에서는 리다이렉트를 정상으로 인정하고, dashboard 레이아웃 검증은 backend 연결 가능 모드에서만 수행한다.
+      if (snapshot.route === "/login") {
+        expect(isSsrAuthBackendDisconnectedForPerf).toBe(true)
+        const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+        const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+        expect(htmlScrollWidth).toBeLessThanOrEqual(768)
+        expect(bodyScrollWidth).toBeLessThanOrEqual(768)
+        continue
+      }
+
+      expect(snapshot.route).toBe("/admin/dashboard")
       expect(snapshot.dashboardServiceRailRect).not.toBeNull()
       expect(snapshot.dashboardPanelGridRect).not.toBeNull()
       expect(snapshot.dashboardFirstPanelRect).not.toBeNull()

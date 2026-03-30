@@ -260,6 +260,21 @@ const mockDetailRailEndpoint = async (page: Page, postId: number) => {
 }
 
 const mockAdminMonitoringEndpoints = async (page: Page) => {
+  await page.unroute("**/member/api/v1/auth/me").catch(() => {})
+  await page.route("**/member/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 1,
+        name: "관리자",
+        nickname: "aquila",
+        email: "aquilaxk10@gmail.com",
+        authorities: ["ROLE_ADMIN"],
+      }),
+    })
+  })
+
   await page.route("**/system/api/v1/adm/health", async (route) => {
     await route.fulfill({
       status: 200,

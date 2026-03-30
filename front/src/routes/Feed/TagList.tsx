@@ -339,7 +339,7 @@ const StyledWrapper = styled.div`
 
   .desktopList button .count {
     font-size: 0.72rem;
-    color: ${({ theme }) => theme.colors.gray8};
+    color: ${({ theme }) => theme.colors.gray10};
     font-variant-numeric: tabular-nums;
   }
 

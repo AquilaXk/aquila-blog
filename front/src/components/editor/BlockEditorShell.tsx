@@ -3041,34 +3041,9 @@ const BlockEditorShell = ({
               : undefined
           }
         >
-          <SlashMenuHeader>
-            <SlashMenuTitleGroup>
-              <strong>블록 삽입</strong>
-              <span>
-                문단 안에서 <code>/검색어</code>를 입력하면 자동으로 필터링됩니다.
-              </span>
-            </SlashMenuTitleGroup>
-            <SlashMenuCloseButton
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => closeSlashMenu(true)}
-            >
-              닫기
-            </SlashMenuCloseButton>
-          </SlashMenuHeader>
           <SlashQuerySummary>
-            <strong>/</strong>
-            <span>{slashQuery.trim().length ? slashQuery : "검색어를 입력하세요"}</span>
+            <span>/ {slashQuery.trim().length ? slashQuery : "검색어를 입력하세요"}</span>
           </SlashQuerySummary>
-          <SlashMenuStatusRow>
-            <SlashMenuResultCount>{flatSlashEntries.length}개 결과</SlashMenuResultCount>
-            <SlashMenuHintList>
-              <SlashMenuHintPill>tab 이동</SlashMenuHintPill>
-              <SlashMenuHintPill>↵ 삽입</SlashMenuHintPill>
-              <SlashMenuHintPill>⌫ 제거</SlashMenuHintPill>
-              <SlashMenuHintPill>esc 닫기</SlashMenuHintPill>
-            </SlashMenuHintList>
-          </SlashMenuStatusRow>
           <SlashMenuBody>
             {slashSections.length ? (
               slashSections.map((section) => (
@@ -3097,7 +3072,6 @@ const BlockEditorShell = ({
                           <SlashActionMain>
                             <SlashActionTitleRow>
                               <strong>{action.label}</strong>
-                              <SlashActionSectionTag>{section.title}</SlashActionSectionTag>
                             </SlashActionTitleRow>
                             {action.helper ? <span>{action.helper}</span> : null}
                           </SlashActionMain>
@@ -3112,10 +3086,6 @@ const BlockEditorShell = ({
               <SlashEmptyState>검색 결과가 없습니다.</SlashEmptyState>
             )}
           </SlashMenuBody>
-          <SlashMenuFooter>
-            <strong>메뉴 닫기</strong>
-            <span>esc</span>
-          </SlashMenuFooter>
         </SlashMenu>
       ) : null}
 
@@ -3831,16 +3801,16 @@ const SlashMenu = styled.div`
   z-index: 70;
   display: flex;
   flex-direction: column;
-  gap: 0.72rem;
-  width: min(38rem, calc(100vw - 2rem));
-  padding: 0.9rem;
+  gap: 0.4rem;
+  width: min(38rem, calc(100vw - 1.5rem));
+  padding: 0.45rem 0.45rem 0.35rem;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 1.25rem;
+  border-radius: 1rem;
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.98)" : "rgba(255, 255, 255, 0.98)"};
+    theme.scheme === "dark" ? "rgba(28, 28, 28, 0.98)" : "rgba(255, 255, 255, 0.98)"};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 24px 48px rgba(0, 0, 0, 0.22)" : "0 24px 48px rgba(15, 23, 42, 0.14)"};
-  backdrop-filter: blur(18px);
+    theme.scheme === "dark" ? "0 18px 36px rgba(0, 0, 0, 0.22)" : "0 18px 36px rgba(15, 23, 42, 0.14)"};
+  backdrop-filter: blur(12px);
   transform-origin: top left;
   animation: ${slashMenuFadeInFromBottom} 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
   transition: left 120ms cubic-bezier(0.2, 0.8, 0.2, 1), top 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -3857,122 +3827,29 @@ const SlashMenu = styled.div`
   }
 `
 
-const SlashMenuHeader = styled.div`
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding-bottom: 0.1rem;
-`
-
-const SlashMenuTitleGroup = styled.div`
-  display: grid;
-  gap: 0.16rem;
-
-  strong {
-    font-size: 0.98rem;
-    color: var(--color-gray12);
-  }
-
-  span {
-    color: var(--color-gray10);
-    font-size: 0.76rem;
-    line-height: 1.45;
-  }
-
-  code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-      "Courier New", monospace;
-    font-size: 0.74rem;
-  }
-`
-
-const SlashMenuCloseButton = styled.button`
-  min-height: 1.9rem;
-  padding: 0 0.62rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.52)" : "rgba(255, 255, 255, 0.9)"};
-  color: var(--color-gray10);
-  font-size: 0.76rem;
-  font-weight: 800;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
-
-  &:hover,
-  &:focus-visible {
-    border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.16)"};
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(24, 29, 38, 0.82)" : "rgba(248, 250, 252, 0.96)"};
-    color: var(--color-gray12);
-  }
-`
-
 const SlashQuerySummary = styled.div`
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  min-height: 2.9rem;
-  border-radius: 0.9rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  min-height: 2.35rem;
+  border-radius: 0.75rem;
+  border: 0;
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(12, 16, 22, 0.9)" : "rgba(245, 247, 250, 0.92)"};
-  padding: 0 0.95rem;
-
-  strong {
-    color: ${({ theme }) => theme.colors.blue9};
-    font-size: 0.98rem;
-    font-weight: 900;
-  }
+    theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(15, 23, 42, 0.04)"};
+  padding: 0 0.75rem;
 
   span {
-    color: var(--color-gray12);
-    font-size: 0.88rem;
+    color: var(--color-gray10);
+    font-size: 0.92rem;
     font-weight: 600;
   }
 `
 
-const SlashMenuStatusRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-`
-
-const SlashMenuResultCount = styled.span`
-  color: var(--color-gray10);
-  font-size: 0.76rem;
-  font-weight: 700;
-`
-
-const SlashMenuHintList = styled.div`
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-`
-
-const SlashMenuHintPill = styled.span`
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.55rem;
-  padding: 0 0.5rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.52)" : "rgba(255, 255, 255, 0.88)"};
-  color: var(--color-gray10);
-  font-size: 0.72rem;
-  font-weight: 700;
-`
-
 const SlashMenuBody = styled.div`
   display: grid;
-  gap: 0.9rem;
-  max-height: min(62vh, 32rem);
+  gap: 0.4rem;
+  max-height: min(62vh, 30rem);
   overflow-y: auto;
-  padding-right: 0.15rem;
+  padding: 0.1rem 0.1rem 0.15rem 0;
 
   scrollbar-width: thin;
 
@@ -3989,10 +3866,11 @@ const SlashMenuBody = styled.div`
 
 const SlashMenuSection = styled.section`
   display: grid;
-  gap: 0.42rem;
+  gap: 0.15rem;
 
   & + & {
-    padding-top: 0.28rem;
+    margin-top: 0.15rem;
+    padding-top: 0.55rem;
     border-top: 1px solid ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.04)" : "rgba(15, 23, 42, 0.05)"};
   }
@@ -4001,9 +3879,10 @@ const SlashMenuSection = styled.section`
 const SlashMenuSectionLabel = styled.strong`
   display: inline-flex;
   align-items: center;
-  min-height: 1.4rem;
+  min-height: 1.2rem;
+  padding: 0 0.5rem;
   color: var(--color-gray10);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 800;
 `
 
@@ -4016,128 +3895,85 @@ const SlashActionIcon = styled.span`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.35rem;
-  height: 2.35rem;
-  border-radius: 0.82rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(12, 16, 22, 0.84)" : "rgba(245, 247, 250, 0.96)"};
+  min-width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
   color: var(--color-gray12);
-  font-size: 0.82rem;
-  font-weight: 800;
+  font-size: 0.92rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
 `
 
 const SlashActionMain = styled.span`
   display: grid;
-  gap: 0.1rem;
+  gap: 0.02rem;
   text-align: left;
 
   strong {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     color: var(--color-gray12);
+    font-weight: 700;
   }
 
   span {
     color: var(--color-gray10);
-    font-size: 0.76rem;
-    line-height: 1.45;
+    font-size: 0.75rem;
+    line-height: 1.35;
   }
 `
 
 const SlashActionTitleRow = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.25rem;
   flex-wrap: wrap;
-`
-
-const SlashActionSectionTag = styled.span`
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.3rem;
-  padding: 0 0.42rem;
-  border-radius: 999px;
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(96, 165, 250, 0.14)" : "rgba(59, 130, 246, 0.08)"};
-  color: ${({ theme }) => theme.colors.blue9};
-  font-size: 0.68rem;
-  font-weight: 800;
 `
 
 const SlashActionHint = styled.span`
   color: var(--color-gray10);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: -0.01em;
 `
 
 const SlashActionButton = styled.button`
-  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.8rem;
-  min-height: 3.35rem;
-  border-radius: 0.9rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.48)" : "rgba(255, 255, 255, 0.96)"};
-  padding: 0.8rem 0.9rem 0.8rem 1.05rem;
+  gap: 0.55rem;
+  min-height: 2.7rem;
+  border-radius: 0.75rem;
+  border: 0;
+  background: transparent;
+  padding: 0.45rem 0.55rem;
   text-align: left;
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
-    border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.24)" : "rgba(59, 130, 246, 0.16)"};
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(24, 29, 38, 0.74)" : "rgba(248, 250, 252, 0.98)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 12px 24px rgba(0, 0, 0, 0.14)" : "0 10px 22px rgba(15, 23, 42, 0.06)"};
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(15, 23, 42, 0.04)"};
   }
 
   &[data-active="true"] {
-    border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.42)" : "rgba(59, 130, 246, 0.28)"};
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(30, 41, 59, 0.7)" : "rgba(239, 246, 255, 0.92)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 14px 28px rgba(15, 23, 42, 0.22)" : "0 12px 24px rgba(59, 130, 246, 0.12)"};
-    transform: translateY(-1px);
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.06)"};
   }
 
   &[data-active="true"][data-input-mode="keyboard"] {
-    border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.48)" : "rgba(59, 130, 246, 0.32)"};
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark"
-        ? "0 16px 30px rgba(15, 23, 42, 0.24), inset 0 0 0 1px rgba(96, 165, 250, 0.18)"
-        : "0 14px 26px rgba(59, 130, 246, 0.14), inset 0 0 0 1px rgba(59, 130, 246, 0.12)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.07)"};
   }
 
   &[data-active="true"][data-input-mode="pointer"] {
-    transform: translateY(-0.5px);
-    box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 12px 24px rgba(15, 23, 42, 0.18)" : "0 10px 22px rgba(59, 130, 246, 0.1)"};
-  }
-
-  &[data-active="true"]::before {
-    content: "";
-    position: absolute;
-    left: 0.42rem;
-    top: 0.52rem;
-    bottom: 0.52rem;
-    width: 3px;
-    border-radius: 999px;
-    background: ${({ theme }) => theme.colors.blue8};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.06)"};
   }
 
   &[data-active="true"] ${SlashActionIcon} {
-    border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(96, 165, 250, 0.38)" : "rgba(59, 130, 246, 0.22)"};
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(30, 41, 59, 0.92)" : "rgba(219, 234, 254, 0.95)"};
+    color: ${({ theme }) => theme.colors.gray12};
   }
 
   &:disabled {
@@ -4153,32 +3989,12 @@ const SlashActionButton = styled.button`
 const SlashEmptyState = styled.div`
   display: grid;
   place-items: center;
-  min-height: 8rem;
-  border-radius: 1rem;
-  border: 1px dashed ${({ theme }) => theme.colors.gray6};
+  min-height: 6rem;
+  border-radius: 0.75rem;
+  border: 0;
   color: var(--color-gray10);
-  font-size: 0.86rem;
-  font-weight: 700;
-`
-
-const SlashMenuFooter = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding-top: 0.2rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray6};
-
-  strong {
-    font-size: 0.84rem;
-    color: var(--color-gray12);
-  }
-
-  span {
-    color: var(--color-gray10);
-    font-size: 0.8rem;
-    font-weight: 700;
-  }
+  font-size: 0.8rem;
+  font-weight: 600;
 `
 
 const EditorViewport = styled.div`

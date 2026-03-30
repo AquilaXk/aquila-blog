@@ -81,6 +81,10 @@ import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/lib
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
 import type { TPost } from "src/types"
+import {
+  toEditorActualPreviewRoute,
+  writeEditorActualPreviewSnapshot,
+} from "./editorActualPreview"
 
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
@@ -3593,10 +3597,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         : "새 글 작성"
   const publishActionDescription =
     publishActionType === "create"
-      ? "공개 범위와 카드 결과를 확인한 뒤 발행합니다."
+      ? "공개 범위를 정리하고, 최종 검수는 실제 보기에서 확인한 뒤 발행합니다."
       : publishActionType === "modify"
-        ? "공개 범위와 카드 결과를 확인한 뒤 변경 내용을 반영합니다."
-        : "공개 범위와 카드 결과를 확인한 뒤 새 글로 작성합니다."
+        ? "공개 범위를 정리하고, 최종 검수는 실제 보기에서 확인한 뒤 변경 내용을 반영합니다."
+        : "공개 범위를 정리하고, 최종 검수는 실제 보기에서 확인한 뒤 새 글로 작성합니다."
   const publishActionButtonText =
     publishActionType === "create"
       ? loadingKey === "writePost"
@@ -3654,11 +3658,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const isCompactManageSurface = isCompactMobileLayout && studioSurface === "manage"
   const showSelectedPanelInManageSurface = !isCompactMobileLayout || activeMobileStudioStep !== "list" || hasSelectedManagedPost
   const [previewNowIso] = useState(() => new Date().toISOString())
-  if (!sessionMember) {
-    return null
-  }
-
-  const member = sessionMember
+  const member = sessionMember || initialMember
   const displayName = member.nickname || member.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const previewViewportConfig = PREVIEW_CARD_VIEWPORTS[previewViewport]
@@ -3710,6 +3710,42 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     actorCanModify: false,
     actorCanDelete: false,
   }
+  const openActualPreview = useCallback(() => {
+    if (typeof window === "undefined") return
+
+    const previewId = postId.trim() || "draft-preview"
+
+    writeEditorActualPreviewSnapshot(previewId, {
+      id: previewId,
+      title: postTitle,
+      content: previewContent,
+      summary: resolvedPreviewSummary,
+      tags: postTags,
+      visibility: postVisibility,
+      thumbnailUrl: effectiveThumbnailUrl,
+      authorName: displayName,
+      authorImageUrl: previewAuthorAvatarSrc,
+      createdAt: previewNowIso,
+    })
+
+    window.open(toEditorActualPreviewRoute(previewId), "_blank", "noopener,noreferrer")
+  }, [
+    displayName,
+    effectiveThumbnailUrl,
+    postId,
+    postTags,
+    postTitle,
+    postVisibility,
+    previewAuthorAvatarSrc,
+    previewContent,
+    previewNowIso,
+    resolvedPreviewSummary,
+  ])
+
+  if (!sessionMember) {
+    return null
+  }
+
   const composeViewModeOptions: { value: ComposeViewMode; label: string; icon: "edit" | "split" | "eye" }[] = [
     { value: "editor", label: "작성", icon: "edit" },
     { value: "split", label: "작성+미리보기", icon: "split" },
@@ -5698,12 +5734,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                     <FieldHelp>메인 피드 노출은 전체 공개에서만 활성화됩니다.</FieldHelp>
                   </VisibilityCard>
                   <PreviewResultPanel>
-                    <PreviewResultHeader>
-                      <div>
-                        <SectionKicker>실제 카드 결과</SectionKicker>
-                        <strong>{previewViewportConfig.label}</strong>
-                        <span>제목, 요약, 썸네일 잘림만 확인합니다.</span>
-                      </div>
+                  <PreviewResultHeader>
+                    <div>
+                      <SectionKicker>실제 카드 결과</SectionKicker>
+                      <strong>{previewViewportConfig.label}</strong>
+                      <span>제목, 요약, 썸네일 잘림만 확인합니다.</span>
+                    </div>
                       <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
                         {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
                           const viewportConfig = PREVIEW_CARD_VIEWPORTS[viewport]
@@ -5828,6 +5864,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 </PostPreviewSetup>
               </PublishModalBody>
               <PublishModalFooter>
+                <Button type="button" onClick={openActualPreview}>
+                  실제 보기
+                </Button>
                 <Button
                   type="button"
                   disabled={

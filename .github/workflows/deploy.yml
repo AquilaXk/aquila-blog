@@ -564,6 +564,12 @@ jobs:
             local key="$1"
             local value
             value="$(extract_env_value "${key}")"
+            require_pinned_image_value "${key}" "${value}"
+          }
+
+          require_pinned_image_value() {
+            local key="$1"
+            local value="$2"
             if [ -z "${value}" ]; then
               echo "required image env key is missing: ${key}" >&2
               exit 1
@@ -579,7 +585,7 @@ jobs:
           }
 
           require_nonempty_env_key "CF_TUNNEL_TOKEN"
-          require_pinned_image_key "BACK_IMAGE"
+          require_pinned_image_value "BACK_IMAGE" "${BACK_IMAGE}"
           ensure_image_key_from_local_digest "CLOUDFLARED_IMAGE" "cloudflare/cloudflared:latest"
           ensure_image_key_from_local_digest "DB_IMAGE" "jangka512/pgj:latest"
           ensure_image_key_from_local_digest "MINIO_IMAGE" "minio/minio:latest"

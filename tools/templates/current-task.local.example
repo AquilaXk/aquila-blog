@@ -1,0 +1,10 @@
+# 로컬 전용 파일 예시입니다. 이 파일을 `.codex/current-task.local`로 복사해 사용합니다.
+# git 추적 대상이 아니며, 컨텍스트 압축/복구 후 stale 작업 재개를 막기 위한 현재 상태값입니다.
+
+status=active
+task=회원가입 메일 큐 정체 해결
+allow=back/src/main/kotlin/com/back/global/task/*
+allow=back/src/test/kotlin/com/back/global/task/*
+allow=deploy/homeserver/docker-compose.prod.yml
+deny=front/*
+done_when=ktlintCheck + 대상 테스트 green + 관련 문서 갱신

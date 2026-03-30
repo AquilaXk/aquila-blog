@@ -1,5 +1,8 @@
+import { request as httpRequest } from "node:http"
+import { request as httpsRequest } from "node:https"
 import { lookup } from "node:dns/promises"
 import { isIP } from "node:net"
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib"
 
 const ALLOWED_UNFURL_HOST_SUFFIXES = [
   "github.com",
@@ -76,6 +79,18 @@ const isPrivateIpv4 = (ip: string) => {
 
 const normalizeIpv6 = (ip: string) => ip.trim().toLowerCase()
 
+type ResolvedPublicAddress = {
+  address: string
+  family: number
+}
+
+const resolveDefaultPort = (protocol: string) => {
+  if (protocol === "http:" || protocol === "https:") {
+    return DEFAULT_PORT_BY_PROTOCOL[protocol]
+  }
+  throw new Error("http/https URL만 지원합니다.")
+}
+
 const isPrivateIpv6 = (ip: string) => {
   const normalized = normalizeIpv6(ip)
 
@@ -89,7 +104,7 @@ const isPrivateIpv6 = (ip: string) => {
   )
 }
 
-const assertPublicResolvedHostname = async (hostname: string) => {
+const resolvePublicAddress = async (hostname: string): Promise<ResolvedPublicAddress> => {
   if (isIP(hostname)) {
     throw new Error("IP 주소 직접 unfurl은 허용되지 않습니다.")
   }
@@ -108,6 +123,11 @@ const assertPublicResolvedHostname = async (hostname: string) => {
   if (hasPrivateAddress) {
     throw new Error("비공개 네트워크로 해석되는 링크는 unfurl할 수 없습니다.")
   }
+
+  return (
+    resolvedAddresses.find(({ family }) => family === 4) ||
+    resolvedAddresses[0]
+  )
 }
 
 const isAllowedUnfurlHost = (hostname: string) => {
@@ -116,6 +136,21 @@ const isAllowedUnfurlHost = (hostname: string) => {
     (suffix) =>
       normalizedHostname === suffix || normalizedHostname.endsWith(`.${suffix}`)
   )
+}
+
+const hasUnsafeParentPathSegment = (rawUrl: string) => {
+  const rawPath = rawUrl
+    .replace(/^[a-z]+:\/\/[^/]+/i, "")
+    .split(/[?#]/, 1)[0]
+
+  const rawSegments = rawPath.split("/")
+  return rawSegments.some((segment) => {
+    try {
+      return decodeURIComponent(segment) === ".."
+    } catch {
+      return segment === ".."
+    }
+  })
 }
 
 const assertSafeUnfurlUrl = (rawUrl: string) => {
@@ -140,6 +175,10 @@ const assertSafeUnfurlUrl = (rawUrl: string) => {
     throw new Error("허용된 외부 링크만 unfurl할 수 있습니다.")
   }
 
+  if (hasUnsafeParentPathSegment(rawUrl)) {
+    throw new Error("상위 경로 이동이 포함된 URL은 unfurl할 수 없습니다.")
+  }
+
   if (
     parsedUrl.port &&
     parsedUrl.port !== DEFAULT_PORT_BY_PROTOCOL[parsedUrl.protocol]
@@ -158,6 +197,93 @@ const assertSafeUnfurlUrl = (rawUrl: string) => {
 
 export const normalizeSafeUnfurlUrl = (rawUrl: string) => assertSafeUnfurlUrl(rawUrl)
 
+const decodeResponseBuffer = (buffer: Buffer, encoding: string) => {
+  const normalizedEncoding = encoding.trim().toLowerCase()
+  if (!normalizedEncoding || normalizedEncoding === "identity") return buffer
+
+  if (normalizedEncoding === "gzip") return gunzipSync(buffer)
+  if (normalizedEncoding === "deflate") return inflateSync(buffer)
+  if (normalizedEncoding === "br") return brotliDecompressSync(buffer)
+  return buffer
+}
+
+const fetchViaResolvedPublicAddress = async ({
+  currentUrl,
+  signal,
+  headers,
+}: {
+  currentUrl: URL
+  signal: AbortSignal
+  headers: HeadersInit
+}) => {
+  const resolvedAddress = await resolvePublicAddress(currentUrl.hostname)
+  const port = Number.parseInt(currentUrl.port || resolveDefaultPort(currentUrl.protocol), 10)
+  const requestHeaders = new Headers(headers)
+  requestHeaders.set("host", currentUrl.host)
+  requestHeaders.set("accept-encoding", "gzip, deflate, br")
+
+  const clientRequest =
+    currentUrl.protocol === "https:"
+      ? httpsRequest
+      : httpRequest
+
+  return await new Promise<Response>((resolve, reject) => {
+    const request = clientRequest(
+      {
+        protocol: currentUrl.protocol,
+        hostname: resolvedAddress.address,
+        family: resolvedAddress.family,
+        port,
+        path: `${currentUrl.pathname}${currentUrl.search}`,
+        method: "GET",
+        headers: Object.fromEntries(requestHeaders.entries()),
+        signal,
+        ...(currentUrl.protocol === "https:" ? { servername: currentUrl.hostname } : {}),
+      },
+      (response) => {
+        const rawChunks: Buffer[] = []
+
+        response.on("data", (chunk) => {
+          rawChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+        })
+        response.on("error", reject)
+        response.on("end", async () => {
+          try {
+            const rawBody = Buffer.concat(rawChunks)
+            const contentEncoding = `${response.headers["content-encoding"] || ""}`
+            const decodedBody = decodeResponseBuffer(rawBody, contentEncoding)
+            const responseHeaders = new Headers()
+            Object.entries(response.headers).forEach(([key, value]) => {
+              if (typeof value === "string") {
+                responseHeaders.set(key, value)
+                return
+              }
+              if (Array.isArray(value)) {
+                responseHeaders.set(key, value.join(", "))
+              }
+            })
+            responseHeaders.delete("content-encoding")
+            resolve(
+              new Response(
+                decodedBody.toString("utf8"),
+                {
+                  status: response.statusCode || 502,
+                  headers: responseHeaders,
+                }
+              )
+            )
+          } catch (error) {
+            reject(error)
+          }
+        })
+      }
+    )
+
+    request.on("error", reject)
+    request.end()
+  })
+}
+
 export const fetchSafeUnfurlResponse = async ({
   initialUrl,
   signal,
@@ -170,11 +296,8 @@ export const fetchSafeUnfurlResponse = async ({
   let currentUrl = assertSafeUnfurlUrl(initialUrl)
 
   for (let redirectCount = 0; redirectCount <= MAX_UNFURL_REDIRECTS; redirectCount += 1) {
-    await assertPublicResolvedHostname(currentUrl.hostname)
-
-    const response = await fetch(currentUrl.toString(), {
-      method: "GET",
-      redirect: "manual",
+    const response = await fetchViaResolvedPublicAddress({
+      currentUrl,
       headers,
       signal,
     })

@@ -85,7 +85,6 @@ import type { TPost } from "src/types"
 const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
-const ARTICLE_READABLE_WIDTH_PX = 48 * 16
 
 const toEditorPostRoute = (id: string | number) => `/editor/${encodeURIComponent(String(id))}`
 
@@ -1377,9 +1376,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement>(null)
-  const previewSurfaceRef = useRef<HTMLElement | null>(null)
   const titleFieldRef = useRef<HTMLTextAreaElement | null>(null)
-  const [previewSurfaceWidth, setPreviewSurfaceWidth] = useState(0)
 
   const previewContentLength = previewContent.length
   const previewMermaidBlockCount = useMemo(
@@ -1568,27 +1565,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     if (isWideEditorViewport) return
     setEditorStudioViewMode((prev) => (prev === "split" ? "editor" : prev))
   }, [isWideEditorViewport])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const surface = previewSurfaceRef.current
-    if (!surface) return
-
-    const sync = () => {
-      setPreviewSurfaceWidth(surface.clientWidth)
-    }
-
-    sync()
-
-    if (typeof ResizeObserver !== "function") return
-
-    const observer = new ResizeObserver(() => {
-      sync()
-    })
-    observer.observe(surface)
-
-    return () => observer.disconnect()
-  }, [editorStudioViewMode, isWideEditorViewport])
 
   useEffect(() => {
     setStudioSurface("compose")
@@ -3740,11 +3716,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     { value: "preview", label: "미리보기", icon: "eye" },
   ]
   const isCompactSplitPreview = editorStudioViewMode === "split" && isWideEditorViewport
-  const splitPreviewScale =
-    isCompactSplitPreview && previewSurfaceWidth > 0
-      ? Math.min(1, previewSurfaceWidth / ARTICLE_READABLE_WIDTH_PX)
-      : 1
-  const isScaledSplitPreview = isCompactSplitPreview && splitPreviewScale < 0.999
   const editorStudioViewModeOptions = composeViewModeOptions.filter(
     (option) => isWideEditorViewport || option.value !== "split"
   )
@@ -4094,24 +4065,17 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               <strong>실시간 미리보기</strong>
               <span>
                 {isCompactSplitPreview
-                  ? "실제 공개 본문 폭을 유지한 채 축소해서 보여줍니다."
+                  ? "현재 패널 폭에 맞춰 가볍게 확인합니다."
                   : "실제 공개 글과 같은 본문 폭 기준으로 확인합니다."}
               </span>
             </div>
-            <EditorPreviewWidthBadge>실제 본문 폭 기준</EditorPreviewWidthBadge>
+            <EditorPreviewWidthBadge>
+              {isCompactSplitPreview ? "패널 폭 기준" : "실제 본문 폭 기준"}
+            </EditorPreviewWidthBadge>
           </EditorStudioPreviewHeader>
 
-          <EditorStudioPreviewSurface
-            ref={previewSurfaceRef}
-            style={
-              {
-                "--preview-render-width": `${ARTICLE_READABLE_WIDTH_PX}px`,
-                "--preview-scale": splitPreviewScale,
-              } as CSSProperties
-            }
-            data-preview-density={isCompactSplitPreview ? "compact" : "full"}
-          >
-            <EditorStudioPreviewArticle $scaled={isScaledSplitPreview}>
+          <EditorStudioPreviewSurface data-preview-density={isCompactSplitPreview ? "compact" : "full"}>
+            <EditorStudioPreviewArticle>
               <PreviewContentFrame $compact={isCompactSplitPreview}>
                 <EditorStudioPreviewHeaderFrame $compact={isCompactSplitPreview}>
                   <PostHeader
@@ -9542,29 +9506,17 @@ const EditorStudioPreviewSurface = styled.section`
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow: visible;
+  overflow: hidden;
   min-width: 0;
 `
 
-const EditorStudioPreviewArticle = styled.article<{ $scaled?: boolean }>`
+const EditorStudioPreviewArticle = styled.article`
   display: grid;
   gap: 0;
   min-width: 0;
-  width: ${({ $scaled }) => ($scaled ? "var(--preview-render-width, 100%)" : "100%")};
-  max-width: ${({ $scaled }) => ($scaled ? "none" : "100%")};
+  width: 100%;
+  max-width: 100%;
   margin-inline: auto;
-  transform-origin: top center;
-
-  ${({ $scaled }) =>
-    $scaled
-      ? `
-    zoom: var(--preview-scale, 1);
-
-    @supports not (zoom: 1) {
-      transform: scale(var(--preview-scale, 1));
-    }
-  `
-      : ""}
 `
 
 const EditorStudioPreviewHeaderFrame = styled.div<{ $compact?: boolean }>`
@@ -9648,7 +9600,7 @@ const EditorStudioResultPanel = styled.section`
 `
 
 const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
-  width: min(100%, var(--article-readable-width, 48rem));
+  width: ${({ $compact }) => ($compact ? "100%" : "min(100%, var(--article-readable-width, 48rem))")};
   max-width: 100%;
   min-width: 0;
   margin-inline: auto;

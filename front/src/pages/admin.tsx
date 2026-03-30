@@ -21,7 +21,7 @@ export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ r
 
 const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const { me, authStatus } = useAuthSession()
-  const sessionMember = authStatus === "loading" ? initialMember : me
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const systemHealthQuery = useQuery({

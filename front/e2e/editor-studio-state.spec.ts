@@ -145,7 +145,14 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).not.toContain("--preview-scale")
     expect(editorStudioSource).toContain("const EditorExitAction = styled.button`")
     expect(editorStudioSource).toContain("min-height: 42px;")
-    expect(editorStudioSource).toContain("실제 본문 폭 기준")
+    expect(editorStudioSource).not.toContain("실제 본문 폭 기준")
+    expect(editorStudioSource).not.toContain("실시간 미리보기")
+    expect(editorStudioSource).toContain('data-testid="editor-preview-body"')
+    expect(editorStudioSource).not.toContain('data-testid="editor-preview-post-header"')
+    expect(editorStudioSource).not.toContain("<PostHeader")
+    expect(editorStudioSource).toContain('? "112rem" : "1600px"')
+    expect(editorStudioSource).toContain("> .aq-markdown blockquote {")
+    expect(editorStudioSource).toContain("border-radius: 12px;")
 
     expect(blockEditorSource).not.toContain("Markdown 편집")
     expect(blockEditorSource).not.toContain('label: "원문 블록"')
@@ -153,6 +160,8 @@ test.describe("editor studio state", () => {
     expect(blockEditorSource).not.toContain("insertRawMarkdownBlock")
     expect(blockEditorSource).toContain("const QuickInsertBar = styled.div`")
     expect(blockEditorSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
+    expect(blockEditorSource).toContain(".aq-block-editor__content blockquote {")
+    expect(blockEditorSource).toContain("border-radius: 12px;")
   })
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {

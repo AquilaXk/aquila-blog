@@ -58,7 +58,7 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "QA 콜아웃" }).click()
     await page.getByRole("button", { name: "QA 수식" }).click()
 
-    const attachmentInput = page.locator("input[type='file']").nth(1)
+    const attachmentInput = page.getByTestId("editor-attachment-file-input")
     await attachmentInput.setInputFiles({
       name: "architecture.pdf",
       mimeType: "application/pdf",
@@ -67,10 +67,75 @@ test.describe("block editor authoring flow", () => {
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
     await expect(markdownOutput).toContainText("> [!TIP] 핵심 포인트")
-    await expect(markdownOutput).toContainText("$$")
+    await expect(markdownOutput).toContainText("$수식$")
     await expect(markdownOutput).toContainText(":::file https://example.com/files/architecture.pdf")
     await expect(markdownOutput).toContainText('"mimeType":"application/pdf"')
     await expect(markdownOutput).toContainText('"columnAlignments":["center"]')
     await expect(markdownOutput).toContainText('"backgroundColor":"#fef3c7"')
+  })
+
+  test("블록 핸들 + 메뉴 삽입은 hover 블록 기준을 유지한다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("첫 줄")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째 줄")
+
+    const firstParagraph = editor.locator("p").first()
+    await firstParagraph.hover()
+
+    const addBlockButton = page.getByRole("button", { name: "블록 추가" })
+    await expect(addBlockButton).toBeVisible()
+    await addBlockButton.click()
+
+    const blockMenu = page.locator("[data-block-menu-root='true']")
+    await expect(blockMenu).toBeVisible()
+    await blockMenu.getByRole("button", { name: "인용문" }).click()
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    const markdown = await markdownOutput.innerText()
+
+    const firstLineIndex = markdown.indexOf("첫 줄")
+    const quoteIndex = markdown.indexOf("> 인용문")
+    const secondLineIndex = markdown.indexOf("둘째 줄")
+
+    expect(firstLineIndex).toBeGreaterThanOrEqual(0)
+    expect(quoteIndex).toBeGreaterThan(firstLineIndex)
+    expect(secondLineIndex).toBeGreaterThan(quoteIndex)
+  })
+
+  test("블록 드래그 시 source/destination 피드백이 동시에 보인다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("첫 줄")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째 줄")
+
+    const firstParagraph = editor.locator("p").first()
+    const secondParagraph = editor.locator("p").nth(1)
+
+    await firstParagraph.hover()
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+
+    const dragBox = await dragHandle.boundingBox()
+    const secondBox = await secondParagraph.boundingBox()
+    if (!dragBox || !secondBox) {
+      throw new Error("드래그 좌표를 계산할 수 없습니다.")
+    }
+
+    await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(secondBox.x + Math.min(24, secondBox.width / 3), secondBox.y + secondBox.height / 2)
+
+    await expect(page.getByTestId("block-drag-ghost")).toBeVisible()
+    await expect(page.getByTestId("block-drop-indicator").first()).toBeVisible()
+    await expect(page.getByTestId("block-drop-target-highlight").first()).toBeVisible()
+
+    await page.mouse.up()
   })
 })

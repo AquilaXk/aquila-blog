@@ -207,18 +207,23 @@ const parseToggleStart = (line: string) => {
 }
 
 const parseCalloutStart = (line: string) => {
-  const match = line.match(/^\s*>\s*\[!([A-Za-z]+)\](?:\s*(.*))?$/)
+  const match = line.match(/^\s*>\s?(.*)$/)
   if (!match) return null
 
-  const rawLabel = (match[1] || "").toUpperCase()
+  const header = (match[1] || "").trim().match(/^\[!([A-Za-z]+)\](?:\s*(.*))?$/)
+  if (!header) return null
+
+  const rawLabel = (header[1] || "").toUpperCase()
   const kind = CALL_OUT_KIND_MAP[rawLabel] || "info"
 
   return {
     kind,
-    title: (match[2] || "").trim(),
+    title: (header[2] || "").trim(),
     label: CALL_OUT_KIND_MAP[rawLabel] ? null : rawLabel,
   }
 }
+
+const parseAsideStart = (line: string) => line.match(/^\s*<aside(?:\s+[^>]*)?>(.*)$/i)
 
 const parseSingleLineFormulaBlock = (line: string) => {
   const match = line.match(SINGLE_LINE_FORMULA_BLOCK_PATTERN)
@@ -781,6 +786,7 @@ const isSupportedBlockStart = (line: string, nextLine?: string) =>
   (isLikelyTableRow(line) && Boolean(nextLine && isTableSeparatorLine(nextLine))) ||
   Boolean(parseToggleStart(line)) ||
   Boolean(parseCalloutStart(line)) ||
+  Boolean(parseAsideStart(line)) ||
   Boolean(parseCardMetadataComment(line)) ||
   Boolean(line.trim().match(CUSTOM_DIRECTIVE_PATTERN)) ||
   Boolean(parseSingleLineFormulaBlock(line)) ||
@@ -902,6 +908,81 @@ export const parseMarkdownToEditorDoc = (markdown: string): BlockEditorDoc => {
           createToggleNode({
             title: toggleStart.title,
             body: bodyLines.join("\n").trim(),
+          })
+        )
+      }
+
+      index = pointer
+      continue
+    }
+
+    const asideStart = parseAsideStart(line)
+    if (asideStart) {
+      pendingDirectiveMetadata = null
+      const collected = [line]
+      const bodyLines: string[] = []
+      let pointer = index + 1
+      let closed = false
+
+      const appendAsideContent = (value: string) => {
+        if (value.length === 0) return
+        bodyLines.push(value)
+      }
+
+      const openingTail = asideStart[1] || ""
+      if (openingTail.includes("</aside>")) {
+        appendAsideContent(openingTail.replace(/<\/aside>\s*$/i, "").trimEnd())
+        closed = true
+      } else {
+        appendAsideContent(openingTail)
+      }
+
+      while (!closed && pointer < lines.length) {
+        const current = lines[pointer]
+        collected.push(current)
+
+        if (/<\/aside>\s*$/i.test(current)) {
+          appendAsideContent(current.replace(/<\/aside>\s*$/i, "").trimEnd())
+          pointer += 1
+          closed = true
+          break
+        }
+
+        bodyLines.push(current)
+        pointer += 1
+      }
+
+      if (!closed) {
+        content.push(createRawBlockNode(collected.join("\n"), "manual-raw"))
+        index = pointer
+        continue
+      }
+
+      const normalizedBodyLines = bodyLines.map((bodyLine) => bodyLine.trim())
+      const firstContentIndex = normalizedBodyLines.findIndex((bodyLine) => bodyLine.length > 0)
+      const header =
+        firstContentIndex >= 0
+          ? normalizedBodyLines[firstContentIndex].match(/^\[!([A-Za-z]+)\](?:\s*(.*))?$/)
+          : null
+
+      if (header) {
+        const rawLabel = (header[1] || "").toUpperCase()
+        const kind = CALL_OUT_KIND_MAP[rawLabel] || "info"
+        const promoted = promoteCalloutTitle((header[2] || "").trim(), normalizedBodyLines.slice(firstContentIndex + 1))
+        content.push(
+          createCalloutNode({
+            kind,
+            title: promoted.title,
+            body: promoted.bodyLines.join("\n").trim(),
+            ...(CALL_OUT_KIND_MAP[rawLabel] ? {} : { label: rawLabel }),
+          })
+        )
+      } else {
+        content.push(
+          createCalloutNode({
+            kind: "info",
+            title: "",
+            body: normalizedBodyLines.join("\n").trim(),
           })
         )
       }

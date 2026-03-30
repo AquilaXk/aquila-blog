@@ -26,7 +26,7 @@ const env = getMonitoringEnv()
 
 const AdminDashboardPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const { me, authStatus } = useAuthSession()
-  const sessionMember = authStatus === "loading" ? initialMember : me
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const systemHealthQuery = useQuery({
     queryKey: ["admin", "dashboard", "system-health"],
     queryFn: (): Promise<SystemHealthPayload> => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),

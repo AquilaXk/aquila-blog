@@ -76,7 +76,7 @@ const CODE_LANGUAGE_STORAGE_KEY = "aq.editor.preferredCodeLanguage"
 let preferredCodeLanguage = "text"
 
 const CODE_LANGUAGE_OPTIONS: CodeLanguageOption[] = [
-  { value: "text", label: "일반 텍스트", keywords: ["plain text", "plaintext"] },
+  { value: "text", label: "TXT", keywords: ["plain text", "plaintext", "txt"] },
   { value: "bash", label: "Bash", keywords: ["shell", "sh"] },
   { value: "shell", label: "Shell", keywords: ["bash", "sh"] },
   { value: "javascript", label: "JavaScript", keywords: ["js"] },
@@ -1891,15 +1891,21 @@ const MermaidPreviewPane = styled.div`
 `
 
 const CodeBlockEditorWrapper = styled(NodeViewWrapper)`
+  --aq-code-block-radius: 14px;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-self: stretch;
   overflow: visible;
   margin: 1rem 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  border-radius: var(--aq-code-block-radius);
   background: #2b2d3a;
   position: relative;
   z-index: 0;
+  background-clip: padding-box;
 
   &[data-selected="true"] {
     border-color: rgba(148, 163, 184, 0.28);
@@ -1915,6 +1921,9 @@ const CodeBlockEditorHeader = styled.div`
   padding: 0.84rem 0.96rem 0.76rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(180deg, #3a3f59, #363b54);
+  border-top-left-radius: var(--aq-code-block-radius);
+  border-top-right-radius: var(--aq-code-block-radius);
+  overflow: hidden;
 `
 
 const CodeWindowDots = styled.div`
@@ -2039,8 +2048,11 @@ const CodeLanguageOptionButton = styled.button`
 `
 
 const CodeBlockEditorSurface = styled.div`
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 var(--aq-code-block-radius) var(--aq-code-block-radius);
 
   .aq-code-editor-content {
     overflow: auto;

@@ -159,7 +159,7 @@ type ParsedCalloutHeader = {
 }
 
 const LANGUAGE_LABEL_MAP: Record<string, string> = {
-  text: "일반 텍스트",
+  text: "TXT",
   js: "JavaScript",
   javascript: "JavaScript",
   ts: "TypeScript",
@@ -527,7 +527,7 @@ export const extractCodeMetaFromPreChildren = (children: ReactNode) => {
 
 export const toLanguageLabel = (lang: string) => {
   const normalized = lang.trim().toLowerCase()
-  if (!normalized) return "일반 텍스트"
+  if (!normalized) return "TXT"
   return LANGUAGE_LABEL_MAP[normalized] || normalized.toUpperCase()
 }
 

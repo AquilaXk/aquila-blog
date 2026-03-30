@@ -32,6 +32,7 @@ type Props = {
   onDeletePost?: () => void
   interactiveTags?: boolean
   showEngagement?: boolean
+  showThumbnail?: boolean
 }
 
 const PostHeader: React.FC<Props> = ({
@@ -52,6 +53,7 @@ const PostHeader: React.FC<Props> = ({
   onDeletePost,
   interactiveTags = true,
   showEngagement = true,
+  showThumbnail = true,
 }) => {
   const authorName = data.author?.[0]?.name || CONFIG.profile.name
   const authorImageSrc = data.author?.[0]?.profile_photo || CONFIG.profile.image
@@ -184,7 +186,7 @@ const PostHeader: React.FC<Props> = ({
         ) : null}
       </div>
 
-      {thumbnailSrc && (
+      {showThumbnail && thumbnailSrc && (
         <div className="thumbnail">
           <img
             src={thumbnailSrc}

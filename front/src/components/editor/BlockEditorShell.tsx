@@ -162,6 +162,10 @@ type DraggedBlockState =
   | {
       sourceIndex: number
       pointerId: number
+      previewWidth: number
+      previewHeight: number
+      previewHtml: string
+      previewLabel: string
     }
   | null
 
@@ -576,6 +580,7 @@ const BlockEditorShell = ({
     top: 0,
   })
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
+  const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>({
     visible: false,
     insertionIndex: 0,
@@ -2705,11 +2710,13 @@ const BlockEditorShell = ({
     if (typeof window === "undefined" || !draggedBlockState) return
 
     const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== draggedBlockState.pointerId) return
       const nextIndicator = resolveDropIndicatorByClientY(event.clientY)
       setDropIndicatorState({
         visible: true,
         ...nextIndicator,
       })
+      setDragGhostPosition({ x: event.clientX, y: event.clientY })
     }
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -2728,6 +2735,7 @@ const BlockEditorShell = ({
       )
 
       setDraggedBlockState(null)
+      setDragGhostPosition(null)
       setDropIndicatorState((prev) => ({ ...prev, visible: false }))
       window.removeEventListener("pointermove", handlePointerMove)
       window.removeEventListener("pointerup", handlePointerUp)
@@ -2743,6 +2751,18 @@ const BlockEditorShell = ({
       window.removeEventListener("pointercancel", handlePointerUp)
     }
   }, [draggedBlockState, mutateTopLevelBlocks, resolveDropIndicatorByClientY])
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !draggedBlockState) return
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = "grabbing"
+    document.body.style.userSelect = "none"
+    return () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+    }
+  }, [draggedBlockState])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -2848,6 +2868,13 @@ const BlockEditorShell = ({
         return
       }
       if (isCoarsePointer) return
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest("[data-block-handle-rail='true']") || target?.closest("[data-block-menu-root='true']")) {
+        if (blockHandleState.visible) {
+          setHoveredBlockIndex(blockHandleState.blockIndex)
+        }
+        return
+      }
       const cell = getTableCellFromTarget(event.target)
       setViewportRowResizeHot(isRowResizeHandleTarget(cell, event.clientX, event.clientY))
       setHoveredBlockIndex(
@@ -2856,6 +2883,8 @@ const BlockEditorShell = ({
       )
     },
     [
+      blockHandleState.blockIndex,
+      blockHandleState.visible,
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
       getTableCellFromTarget,
@@ -3407,6 +3436,7 @@ const BlockEditorShell = ({
         ) : null}
         {!isCoarsePointer ? (
           <BlockHandleRail
+            data-block-handle-rail="true"
             data-visible={blockHandleState.visible}
             style={{
               left: `${blockHandleState.left}px`,
@@ -3436,10 +3466,27 @@ const BlockEditorShell = ({
               onPointerDown={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
+                const sourceIndex = blockHandleState.blockIndex
+                const sourceElement = getTopLevelBlockElementByIndex(sourceIndex)
+                const sourceRect = sourceElement?.getBoundingClientRect()
+                const previewWidth = sourceRect
+                  ? Math.round(Math.min(Math.max(sourceRect.width, 320), Math.max(320, window.innerWidth - 48)))
+                  : 480
+                const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
+                const previewLabel = sourceElement?.textContent?.trim().slice(0, 100) || "블록 이동"
+                const previewHtml = sourceElement?.innerHTML || `<p>${previewLabel}</p>`
                 const indicator = resolveDropIndicatorByClientY(event.clientY)
                 setDraggedBlockState({
-                  sourceIndex: blockHandleState.blockIndex,
+                  sourceIndex,
                   pointerId: event.pointerId,
+                  previewWidth,
+                  previewHeight,
+                  previewHtml,
+                  previewLabel,
+                })
+                setDragGhostPosition({
+                  x: event.clientX,
+                  y: event.clientY,
                 })
                 setDropIndicatorState({
                   visible: true,
@@ -3458,8 +3505,29 @@ const BlockEditorShell = ({
             </BlockHandleButton>
           </BlockHandleRail>
         ) : null}
+        {draggedBlockState && dragGhostPosition ? (
+          <DraggedBlockGhost
+            aria-hidden="true"
+            data-testid="block-drag-ghost"
+            style={{
+              left: `${Math.round(dragGhostPosition.x + 18)}px`,
+              top: `${Math.round(dragGhostPosition.y + 16)}px`,
+              width: `${draggedBlockState.previewWidth}px`,
+            }}
+          >
+            <DraggedBlockGhostBadge>
+              <span aria-hidden="true">↕</span>
+              <strong>글 옮기기</strong>
+            </DraggedBlockGhostBadge>
+            <DraggedBlockGhostCard
+              style={{ maxHeight: `${draggedBlockState.previewHeight}px` }}
+              dangerouslySetInnerHTML={{ __html: draggedBlockState.previewHtml }}
+            />
+          </DraggedBlockGhost>
+        ) : null}
         {dropIndicatorState.visible ? (
           <BlockDropTargetHighlight
+            data-testid="block-drop-target-highlight"
             data-tail={dropIndicatorState.insertionIndex === getTopLevelBlockElements().length}
             style={{
               left: `${dropIndicatorState.highlightLeft}px`,
@@ -3471,6 +3539,7 @@ const BlockEditorShell = ({
         ) : null}
         {dropIndicatorState.visible ? (
           <BlockDropIndicator
+            data-testid="block-drop-indicator"
             style={{
               left: `${dropIndicatorState.left}px`,
               top: `${dropIndicatorState.top}px`,
@@ -4202,6 +4271,18 @@ const EditorViewport = styled.div`
       opacity 140ms ease;
   }
 
+  .aq-block-editor__content h1,
+  .aq-block-editor__content h2,
+  .aq-block-editor__content h3,
+  .aq-block-editor__content h4 {
+    text-align: left !important;
+  }
+
+  .aq-block-editor__content .aq-code-editor-content,
+  .aq-block-editor__content .aq-code-editor-content > div {
+    text-align: left;
+  }
+
   .aq-block-editor__content > *[data-block-hovered="true"] {
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(59, 130, 246, 0.08)" : "rgba(59, 130, 246, 0.08)"};
@@ -4223,8 +4304,14 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content > *[data-block-dragging="true"] {
-    opacity: 0.42;
-    transform: scale(0.992);
+    opacity: 0.34;
+    transform: scale(0.994);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.14)" : "rgba(59, 130, 246, 0.12)"};
+    box-shadow:
+      inset 0 0 0 1px rgba(59, 130, 246, 0.28),
+      0 0 0 1px rgba(59, 130, 246, 0.2);
+    filter: saturate(0.9);
   }
 
   .aq-block-editor__content p.is-editor-empty:first-of-type::before {
@@ -4233,6 +4320,24 @@ const EditorViewport = styled.div`
     float: left;
     height: 0;
     pointer-events: none;
+  }
+
+  .aq-block-editor__content blockquote {
+    margin: 1rem 0;
+    padding: 0.82rem 0.96rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
+    border-radius: 12px;
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  .aq-block-editor__content blockquote > :first-of-type {
+    margin-top: 0;
+  }
+
+  .aq-block-editor__content blockquote > :last-child {
+    margin-bottom: 0;
   }
 
   .aq-block-editor__content pre {
@@ -4298,7 +4403,7 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content table {
-    width: max-content;
+    width: max(100%, max-content);
     min-width: 100%;
     max-width: none;
     margin: 0;
@@ -4312,9 +4417,11 @@ const EditorViewport = styled.div`
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    box-sizing: border-box;
+    contain: inline-size;
     overflow-x: auto;
     overflow-y: hidden;
-    margin: 1rem auto;
+    margin: 1rem 0;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     border-radius: 16px;
     background: ${({ theme }) =>
@@ -4418,6 +4525,13 @@ const BlockHandleRail = styled.div`
   flex-direction: row;
   align-items: flex-start;
   gap: 0.18rem;
+  padding: 0.12rem;
+  border-radius: 0.72rem;
+  border: 1px solid ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(71, 85, 105, 0.14)"};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.52)" : "rgba(255, 255, 255, 0.84)"};
+  backdrop-filter: blur(6px);
   opacity: 0;
   transform: translate3d(-3px, 0, 0);
   pointer-events: none;
@@ -4433,20 +4547,27 @@ const BlockHandleRail = styled.div`
 `
 
 const BlockHandleButton = styled.button`
-  width: 1.56rem;
-  height: 1.56rem;
-  border-radius: 0.48rem;
-  border: 0;
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.44rem;
+  height: 1.44rem;
+  border-radius: 0.42rem;
+  border: 1px solid transparent;
   background: transparent;
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.76rem;
   font-weight: 700;
   box-shadow: none;
-  opacity: 0.86;
+  opacity: 0.8;
+  cursor: pointer;
   transition:
     background-color 120ms ease,
     color 120ms ease,
-    opacity 120ms ease;
+    opacity 120ms ease,
+    border-color 120ms ease;
 
   &[data-variant="drag"] {
     cursor: grab;
@@ -4454,9 +4575,16 @@ const BlockHandleButton = styled.button`
 
   &:hover {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.06)"};
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.06)"};
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.26)" : "rgba(71, 85, 105, 0.2)"};
     color: var(--color-gray12);
     opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.5);
+    outline-offset: 1px;
   }
 `
 
@@ -4501,28 +4629,124 @@ const BlockHandlePlus = styled.span`
   }
 `
 
+const DraggedBlockGhost = styled.div`
+  position: fixed;
+  z-index: 58;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  filter: drop-shadow(0 20px 30px rgba(15, 23, 42, 0.3));
+`
+
+const DraggedBlockGhostBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.55rem;
+  margin: 0 0 0.32rem 0.18rem;
+  padding: 0 0.56rem;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.34);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(17, 24, 39, 0.92)" : "rgba(248, 250, 252, 0.96)"};
+  color: ${({ theme }) => theme.colors.blue4};
+
+  span {
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  strong {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: ${({ theme }) => theme.colors.blue3};
+  }
+`
+
+const DraggedBlockGhostCard = styled.div`
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.9)" : "rgba(255, 255, 255, 0.96)"};
+  box-shadow:
+    0 0 0 1px rgba(59, 130, 246, 0.18),
+    0 10px 22px rgba(15, 23, 42, 0.22);
+  padding: 0.72rem 0.88rem;
+  opacity: 0.92;
+
+  > * {
+    margin: 0 !important;
+  }
+
+  p,
+  li,
+  td,
+  th {
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  pre,
+  .aq-code-shell,
+  .aq-table-shell,
+  .tableWrapper {
+    max-width: 100%;
+    overflow: hidden;
+  }
+`
+
 const BlockDropIndicator = styled.div`
   position: fixed;
-  z-index: 54;
-  height: 3px;
+  z-index: 56;
+  height: 4px;
   border-radius: 999px;
-  background: ${({ theme }) => theme.colors.blue8};
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.95), rgba(59, 130, 246, 0.98));
+  box-shadow:
+    0 0 0 1px rgba(37, 99, 235, 0.2),
+    0 4px 10px rgba(37, 99, 235, 0.22);
   pointer-events: none;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.98);
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.28);
+    transform: translateY(-50%);
+  }
+
+  &::before {
+    left: -3px;
+  }
+
+  &::after {
+    right: -3px;
+  }
 `
 
 const BlockDropTargetHighlight = styled.div`
   position: fixed;
-  z-index: 53;
+  z-index: 55;
   border-radius: 1rem;
-  background: rgba(59, 130, 246, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.18);
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.2)" : "rgba(59, 130, 246, 0.14)"};
+  box-shadow:
+    inset 0 0 0 1px rgba(37, 99, 235, 0.28),
+    0 0 0 1px rgba(37, 99, 235, 0.22);
+  outline: 1px dashed rgba(37, 99, 235, 0.34);
+  outline-offset: -3px;
   pointer-events: none;
 
   &[data-tail="true"] {
     border-radius: 0.7rem;
-    background: rgba(59, 130, 246, 0.08);
-    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.16)" : "rgba(59, 130, 246, 0.1)"};
+    box-shadow:
+      inset 0 0 0 1px rgba(37, 99, 235, 0.24),
+      0 0 0 1px rgba(37, 99, 235, 0.18);
   }
 `
 

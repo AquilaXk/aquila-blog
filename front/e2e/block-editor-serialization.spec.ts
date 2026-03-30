@@ -91,6 +91,44 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("토글 본문입니다.")
   })
 
+  test("<aside> 콜아웃은 에디터 파서에서 직접 calloutBlock 으로 승격된다", () => {
+    const markdown = [
+      "<aside>",
+      "[!WARNING] 사전 점검",
+      "DB 연결 문자열을 먼저 확인하세요.",
+      "롤백 경로도 준비합니다.",
+      "</aside>",
+    ].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const callout = doc.content?.find((node) => node.type === "calloutBlock")
+
+    expect(callout).toBeTruthy()
+    expect(callout?.attrs?.kind).toBe("warning")
+    expect(callout?.attrs?.title).toBe("사전 점검")
+    expect(callout?.attrs?.body).toContain("DB 연결 문자열을 먼저 확인하세요.")
+
+    const serialized = serializeEditorDocToMarkdown(doc)
+    expect(serialized).toContain("> [!WARNING] 사전 점검")
+    expect(serialized).toContain("> DB 연결 문자열을 먼저 확인하세요.")
+  })
+
+  test("헤더가 없는 <aside>도 info 콜아웃으로 보존된다", () => {
+    const markdown = [
+      "<aside>",
+      "요약: 운영 중에는 SSE 연결 수와 브로커 큐 길이를 함께 모니터링해야 합니다.",
+      "</aside>",
+    ].join("\n")
+
+    const doc = parseMarkdownToEditorDoc(markdown)
+    const callout = doc.content?.find((node) => node.type === "calloutBlock")
+
+    expect(callout).toBeTruthy()
+    expect(callout?.attrs?.kind).toBe("info")
+    expect(callout?.attrs?.title).toBe("")
+    expect(callout?.attrs?.body).toContain("요약: 운영 중에는 SSE 연결 수와 브로커 큐 길이를 함께 모니터링해야 합니다.")
+  })
+
   test("직접 생성한 블록 노드도 markdown serializer 와 같은 canonical 결과를 만든다", () => {
     const doc = {
       type: "doc",

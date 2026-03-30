@@ -9,6 +9,11 @@ const useWebServer = process.env.PLAYWRIGHT_USE_WEBSERVER !== "false"
 const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
 const useLiveFailFast = process.env.PLAYWRIGHT_LIVE_FAIL_FAST === "true"
 const inheritedEnv = { ...process.env }
+const resolvedBackendInternalUrl = inheritedEnv.BACKEND_INTERNAL_URL || "http://127.0.0.1:1"
+const shouldEnableAdminGuardQaBypassByDefault =
+  resolvedBackendInternalUrl.replace(/\/+$/, "") === "http://127.0.0.1:1"
+const resolvedAdminGuardQaBypass =
+  inheritedEnv.ADMIN_GUARD_QA_BYPASS || (shouldEnableAdminGuardQaBypassByDefault ? "true" : "false")
 
 if (inheritedEnv.FORCE_COLOR && Object.prototype.hasOwnProperty.call(inheritedEnv, "NO_COLOR")) {
   delete inheritedEnv.NO_COLOR
@@ -56,7 +61,8 @@ export default defineConfig({
           ...inheritedEnv,
           ENABLE_QA_ROUTES: inheritedEnv.ENABLE_QA_ROUTES || "true",
           NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:3000",
-          BACKEND_INTERNAL_URL: process.env.BACKEND_INTERNAL_URL || "http://127.0.0.1:1",
+          BACKEND_INTERNAL_URL: resolvedBackendInternalUrl,
+          ADMIN_GUARD_QA_BYPASS: resolvedAdminGuardQaBypass,
         },
         timeout: 120_000,
         reuseExistingServer: !process.env.CI,

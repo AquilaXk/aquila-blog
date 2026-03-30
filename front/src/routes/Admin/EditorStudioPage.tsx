@@ -1,4 +1,3 @@
-import { css } from "@emotion/react"
 import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
@@ -48,7 +47,6 @@ import {
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
-import PostHeader from "src/routes/Detail/PostDetail/PostHeader"
 import {
   applyThumbnailTransformToUrl,
   clampThumbnailFocusX,
@@ -81,7 +79,6 @@ import {
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
-import type { TPost } from "src/types"
 import {
   toEditorActualPreviewRoute,
   writeEditorActualPreviewSnapshot,
@@ -3676,39 +3673,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ""
   ).trim()
   const previewDateText = formatDate(previewNowIso, "ko")
-  const resolvedPreviewStatus: TPost["status"] =
-    postVisibility === "PRIVATE"
-      ? ["Private"]
-      : postVisibility === "PUBLIC_UNLISTED"
-        ? ["PublicOnDetail"]
-        : ["Public"]
-  const previewPostHeaderData: TPost = {
-    id: postId.trim() || "draft-preview",
-    date: { start_date: previewNowIso },
-    type: ["Post"],
-    slug: postId.trim() || "draft-preview",
-    tags: postTags,
-    summary: resolvedPreviewSummary || undefined,
-    author: [
-      {
-        id: String(member.id),
-        name: displayName,
-        profile_photo: previewAuthorAvatarSrc || undefined,
-      },
-    ],
-    title: postTitle.trim() || "제목을 입력하세요",
-    status: resolvedPreviewStatus,
-    createdTime: previewNowIso,
-    modifiedTime: previewNowIso,
-    fullWidth: false,
-    thumbnail: effectiveThumbnailUrl || undefined,
-    likesCount: 0,
-    commentsCount: 0,
-    hitCount: 0,
-    actorHasLiked: false,
-    actorCanModify: false,
-    actorCanDelete: false,
-  }
   const openActualPreview = useCallback(() => {
     if (typeof window === "undefined") return
 
@@ -3986,8 +3950,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         </EditorStudioTopBarActions>
       </EditorStudioTopBar>
 
-      <EditorStudioFrame $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
-        <EditorStudioWritingColumn $viewMode={editorStudioViewMode} $compact={isCompactSplitPreview}>
+      <EditorStudioFrame data-testid="editor-studio-frame" $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
+        <EditorStudioWritingColumn data-testid="editor-writing-column" $viewMode={editorStudioViewMode} $compact={isCompactSplitPreview}>
           <EditorStudioMetaSection $compact={isCompactSplitPreview}>
             <EditorTagRow aria-label="태그 입력" $compact={isCompactSplitPreview}>
               {postTags.map((tag) => (
@@ -4066,35 +4030,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
         </EditorStudioWritingColumn>
 
-        <EditorStudioPreviewColumn $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
-          <EditorStudioPreviewHeader $compact={isCompactSplitPreview}>
-            <div>
-              <strong>실시간 미리보기</strong>
-              <span>
-                {isCompactSplitPreview
-                  ? "현재 패널 폭에 맞춰 가볍게 확인합니다."
-                  : "실제 공개 글과 같은 본문 폭 기준으로 확인합니다."}
-              </span>
-            </div>
-            <EditorPreviewWidthBadge>
-              {isCompactSplitPreview ? "패널 폭 기준" : "실제 본문 폭 기준"}
-            </EditorPreviewWidthBadge>
-          </EditorStudioPreviewHeader>
-
+        <EditorStudioPreviewColumn data-testid="editor-preview-column" $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
           <EditorStudioPreviewSurface data-preview-density={isCompactSplitPreview ? "compact" : "full"}>
             <EditorStudioPreviewArticle>
-              <PreviewContentFrame $compact={isCompactSplitPreview}>
-                <EditorStudioPreviewHeaderFrame $compact={isCompactSplitPreview}>
-                  <PostHeader
-                    data={previewPostHeaderData}
-                    interactiveTags={false}
-                    showEngagement={false}
-                  />
-                </EditorStudioPreviewHeaderFrame>
-              </PreviewContentFrame>
-
-              <EditorStudioPreviewArticleBody ref={previewScrollRef} $compact={isCompactSplitPreview}>
-                <PreviewContentFrame $compact={isCompactSplitPreview}>
+              <EditorStudioPreviewArticleBody data-testid="editor-preview-body" ref={previewScrollRef} $compact={isCompactSplitPreview}>
+                <PreviewContentFrame>
                   {isPreviewHeavyDocument && !isCompactSplitPreview ? (
                     <PreviewHintNotice>
                       긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
@@ -9184,7 +9124,7 @@ const EditorStudioRoot = styled.main<{ $splitAvailable?: boolean; $viewMode?: Co
   width: min(
     100%,
     ${({ $splitAvailable, $viewMode }) =>
-      $splitAvailable && $viewMode === "split" ? "104rem" : "1600px"}
+      $splitAvailable && $viewMode === "split" ? "112rem" : "1600px"}
   );
   margin: 0 auto;
   padding: 1.4rem 1.6rem 2rem;
@@ -9288,13 +9228,14 @@ const EditorStudioSaveState = styled.span`
 `
 
 const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
-  --editor-split-gap: clamp(2.4rem, 3vw, 3.5rem);
+  --editor-split-gap: clamp(2.9rem, 3.4vw, 4.2rem);
   --editor-split-pane-width: var(--article-readable-width, 48rem);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: ${({ $viewMode }) => ($viewMode === "split" ? "2rem" : "1.4rem")};
   align-items: start;
   justify-content: center;
+  overflow-x: clip;
 
   @media (min-width: 1024px) {
     grid-template-columns: ${({ $viewMode, $splitAvailable }) =>
@@ -9309,6 +9250,7 @@ const EditorStudioWritingColumn = styled.section<{ $viewMode: ComposeViewMode; $
   ${({ $viewMode }) => ($viewMode === "preview" ? "display: none;" : "display: grid;")}
   min-width: 0;
   gap: ${({ $compact }) => ($compact ? "0.88rem" : "1rem")};
+  overflow-x: clip;
 `
 
 const EditorStudioMetaSection = styled.section<{ $compact?: boolean }>`
@@ -9414,49 +9356,12 @@ const EditorStudioPreviewColumn = styled.aside<{ $viewMode: ComposeViewMode; $sp
   top: calc(var(--app-header-height, 64px) + 1rem);
   min-width: 0;
   gap: 0.8rem;
+  overflow-x: clip;
 
   @media (max-width: 1023px) {
     display: ${({ $viewMode }) => ($viewMode === "preview" ? "grid" : "none")};
     position: static;
   }
-`
-
-const EditorStudioPreviewHeader = styled.div<{ $compact?: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  min-width: 0;
-
-  strong {
-    display: block;
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: ${({ $compact }) => ($compact ? "0.92rem" : "0.95rem")};
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: ${({ $compact }) => ($compact ? "0.76rem" : "0.78rem")};
-  }
-
-  @media (max-width: 720px) {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-`
-
-const EditorPreviewWidthBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 0.85rem;
-  border-radius: 999px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.8rem;
-  font-weight: 650;
-  white-space: nowrap;
 `
 
 const EditorStudioPreviewSurface = styled.section`
@@ -9477,72 +9382,6 @@ const EditorStudioPreviewArticle = styled.article`
   width: min(100%, var(--article-readable-width, 48rem));
   max-width: 100%;
   margin-inline: auto;
-`
-
-const EditorStudioPreviewHeaderFrame = styled.div<{ $compact?: boolean }>`
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  padding: 0 0 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
-  overflow: hidden;
-
-  ${({ $compact, theme }) =>
-    $compact
-      ? css`
-          > header .taxonomyRow {
-            gap: 0.42rem;
-            margin-bottom: 0.72rem;
-          }
-
-          > header .taxonomyRow > span,
-          > header .staticTag {
-            min-height: 28px;
-            padding: 0.3rem 0.64rem;
-            font-size: 0.76rem;
-          }
-
-          > header .title {
-            font-size: clamp(1.56rem, 2.5vw, 2.2rem);
-            line-height: 1.12;
-            max-width: 100%;
-            letter-spacing: -0.03em;
-          }
-
-          > header .metaRow {
-            margin-top: 0.92rem;
-            gap: 0.72rem;
-          }
-
-          > header .avatar {
-            width: 40px;
-            height: 40px;
-          }
-
-          > header .authorText strong {
-            font-size: 0.94rem;
-          }
-
-          > header .metaText,
-          > header .stats {
-            gap: 0.34rem;
-            font-size: 0.82rem;
-          }
-
-          > header .shareFeedbackPill,
-          > header .statChip,
-          > header .likeButton,
-          > header .shareButton {
-            min-height: 34px;
-            font-size: 0.8rem;
-          }
-
-          > header .thumbnail {
-            margin-top: 1.15rem;
-            border-radius: 12px;
-          }
-        `
-      : ""}
 `
 
 const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
@@ -9618,9 +9457,9 @@ const EditorStudioResultPanel = styled.section`
   }
 `
 
-const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
+const PreviewContentFrame = styled.div`
   width: 100%;
-  max-width: ${({ $compact }) => ($compact ? "100%" : "var(--article-readable-width, 48rem)")};
+  max-width: var(--article-readable-width, 48rem);
   min-width: 0;
   margin-inline: auto;
   overflow-x: hidden;
@@ -9632,56 +9471,24 @@ const PreviewContentFrame = styled.div<{ $compact?: boolean }>`
     overflow-x: hidden;
   }
 
-  ${({ $compact, theme }) =>
-    $compact
-      ? css`
-          > .aq-markdown {
-            font-size: 0.96rem;
-            line-height: 1.8;
-          }
+  > .aq-markdown blockquote {
+    margin: 1rem 0;
+    padding: 0.82rem 0.96rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
+    border-radius: 12px;
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
 
-          > .aq-markdown > * {
-            max-width: 100%;
-          }
+  > .aq-markdown blockquote > :first-of-type {
+    margin-top: 0;
+  }
 
-          > .aq-markdown h1 {
-            font-size: clamp(1.82rem, 2.4vw, 2.25rem);
-            line-height: 1.18;
-          }
+  > .aq-markdown blockquote > :last-child {
+    margin-bottom: 0;
+  }
 
-          > .aq-markdown h2 {
-            font-size: clamp(1.54rem, 2vw, 1.85rem);
-            line-height: 1.24;
-          }
-
-          > .aq-markdown h3 {
-            font-size: clamp(1.26rem, 1.6vw, 1.44rem);
-            line-height: 1.28;
-          }
-
-          > .aq-markdown blockquote,
-          > .aq-markdown pre,
-          > .aq-markdown .aq-callout,
-          > .aq-markdown details,
-          > .aq-markdown .aq-table-shell,
-          > .aq-markdown .aq-code-shell,
-          > .aq-markdown .aq-bookmark-card,
-          > .aq-markdown .aq-embed-shell {
-            max-width: 100%;
-            margin-inline: 0;
-          }
-
-          > .aq-markdown img,
-          > .aq-markdown figure {
-            max-width: 100%;
-          }
-
-          > .aq-markdown hr {
-            margin-block: 1.15rem;
-            border-color: ${theme.colors.gray5};
-          }
-        `
-      : ""}
 `
 
 const PreviewCard = styled.div`

@@ -27,16 +27,11 @@ import {
   FEED_EXPLORER_RESTORE_KEY_PREFIX,
   FEED_EXPLORER_SNAPSHOT_SUFFIX,
 } from "./feedRestoreCache"
-import {
-  TABLET_LANDSCAPE_MAX_PX,
-  TABLET_LANDSCAPE_MIN_PX,
-} from "src/layouts/RootLayout/layoutTiers"
 
 const LOAD_MORE_THROTTLE_MS = 800
 const LOAD_MORE_OBSERVER_THROTTLE_MS = 180
 const FEED_TAG_RAIL_GAP_PX = 32
 const FEED_POST_COLUMN_MAX_WIDTH_REM = 52
-const FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM = 44
 const FEED_EXPLORER_RESTORE_TTL_MS = 15 * 60_000
 const FEED_EXPLORER_RESTORE_MAX_PAGES = 8
 const FEED_EXPLORER_ORDER: "asc" | "desc" = "desc"
@@ -790,10 +785,6 @@ const ExplorerCard = styled.section`
     margin-inline: auto;
   }
 
-  @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
-    --feed-post-column-max-width: ${FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM}rem;
-  }
-
   @media (min-width: ${FEED_TAG_RAIL_DESKTOP_MIN_PX}px) {
     grid-template-columns: var(--feed-tag-rail-width) minmax(0, var(--feed-post-column-max-width));
     column-gap: var(--feed-tag-rail-gap);
@@ -818,10 +809,6 @@ const FeedBody = styled.section`
   --feed-post-column-max-width: ${FEED_POST_COLUMN_MAX_WIDTH_REM}rem;
   min-width: 0;
   overflow: visible;
-
-  @media (min-width: ${TABLET_LANDSCAPE_MIN_PX}px) and (max-width: ${TABLET_LANDSCAPE_MAX_PX}px) {
-    --feed-post-column-max-width: ${FEED_TABLET_LANDSCAPE_POST_COLUMN_MAX_WIDTH_REM}rem;
-  }
 
   .tagColumn {
     min-width: 0;

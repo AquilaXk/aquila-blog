@@ -11,9 +11,11 @@ export type MetaConfigProps = {
 }
 
 const MetaConfig: React.FC<MetaConfigProps> = (props) => {
+  const browserTabTitle = "AquilaLog"
+
   return (
     <Head>
-      <title>{props.title}</title>
+      <title>{browserTabTitle}</title>
       <meta name="robots" content="follow, index" />
       <meta charSet="UTF-8" />
       <meta name="description" content={props.description} />

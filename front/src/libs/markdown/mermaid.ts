@@ -265,3 +265,135 @@ export const extractNormalizedMermaidSource = (raw: string): string => {
 
   return normalizeSequenceParticipantAliases(normalized).trim()
 }
+
+const FLOWCHART_HEADER_PATTERN = /^\s*(?:flowchart|graph)\b/i
+const WRAP_LINE_MAX_UNITS = 18
+const WRAP_MIN_TRIGGER_UNITS = 24
+const MERMAID_WRAP_SKIP_DIRECTIVE_PATTERN =
+  /^\s*(?:%%|subgraph\b|end\b|style\b|linkStyle\b|classDef\b|class\b|click\b)/i
+
+const computeTextUnits = (text: string) =>
+  Array.from(text).reduce((total, char) => {
+    const codePoint = char.codePointAt(0) || 0
+    const isWide =
+      (codePoint >= 0x1100 && codePoint <= 0x11ff) ||
+      (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
+      (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
+      (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
+      (codePoint >= 0xff01 && codePoint <= 0xff60) ||
+      (codePoint >= 0xffe0 && codePoint <= 0xffe6)
+    return total + (isWide ? 1.7 : 1)
+  }, 0)
+
+const mergeSoftWrapChunks = (chunks: string[]) => {
+  const lines: string[] = []
+  let current = ""
+
+  chunks.forEach((chunk) => {
+    const trimmed = chunk.trim()
+    if (!trimmed) return
+    const next = current ? `${current} ${trimmed}` : trimmed
+    if (computeTextUnits(next) <= WRAP_LINE_MAX_UNITS) {
+      current = next
+      return
+    }
+    if (current) lines.push(current)
+    current = trimmed
+  })
+
+  if (current) lines.push(current)
+  return lines
+}
+
+const splitLongToken = (token: string) => {
+  const output: string[] = []
+  let current = ""
+
+  Array.from(token).forEach((char) => {
+    const next = `${current}${char}`
+    if (computeTextUnits(next) > WRAP_LINE_MAX_UNITS && current.length > 0) {
+      output.push(current)
+      current = char
+      return
+    }
+    current = next
+  })
+
+  if (current) output.push(current)
+  return output
+}
+
+const toSoftWrappedText = (label: string) => {
+  const normalized = label.replace(/\s+/g, " ").trim()
+  if (!normalized) return normalized
+  if (/<br\s*\/?>/i.test(normalized) || /\\n/.test(normalized)) return normalized
+  if (/https?:\/\/|www\./i.test(normalized)) return normalized
+  if (computeTextUnits(normalized) < WRAP_MIN_TRIGGER_UNITS) return normalized
+
+  const baseTokens = normalized.split(/\s+/).filter(Boolean)
+  const expandedTokens = baseTokens.flatMap((token) => {
+    if (computeTextUnits(token) <= WRAP_LINE_MAX_UNITS) return [token]
+    if (/[/|,+>\-–—]/.test(token)) {
+      return token
+        .split(/([/|,+>\-–—])/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    }
+    return splitLongToken(token)
+  })
+
+  const lines = mergeSoftWrapChunks(expandedTokens)
+  if (lines.length <= 1) return normalized
+  return lines.join("<br/>")
+}
+
+const wrapNodeLabel = (label: string) => {
+  const trimmed = label.trim()
+  const quotedMatch = trimmed.match(/^(['"`])(.*)\1$/)
+  const inner = quotedMatch ? quotedMatch[2] : trimmed
+  const wrapped = toSoftWrappedText(inner)
+  if (wrapped === inner) return label
+  const escaped = wrapped.replace(/"/g, '\\"')
+  return `"${escaped}"`
+}
+
+const wrapEdgeLabel = (label: string) => toSoftWrappedText(label)
+
+const applySoftWrapToFlowchartLine = (line: string) => {
+  if (!line.trim() || MERMAID_WRAP_SKIP_DIRECTIVE_PATTERN.test(line)) return line
+
+  let nextLine = line.replace(/\|([^|\n]+)\|/g, (full, label) => {
+    const wrapped = wrapEdgeLabel(label)
+    return wrapped === label ? full : `|${wrapped}|`
+  })
+
+  const replacers: Array<{ regex: RegExp; open: string; close: string }> = [
+    { regex: /\[\[([^\]\n]+)\]\]/g, open: "[[", close: "]]" },
+    { regex: /\(\(([^\)\n]+)\)\)/g, open: "((", close: "))" },
+    { regex: /\[\(([^\)\n]+)\)\]/g, open: "[(", close: ")]" },
+    { regex: /\(\[([^\]\n]+)\]\)/g, open: "([", close: "])" },
+    { regex: /\[([^\]\n]+)\]/g, open: "[", close: "]" },
+    { regex: /\{([^}\n]+)\}/g, open: "{", close: "}" },
+    { regex: /\(([^()\n]+)\)/g, open: "(", close: ")" },
+  ]
+
+  replacers.forEach(({ regex, open, close }) => {
+    nextLine = nextLine.replace(regex, (full, label) => {
+      const wrapped = wrapNodeLabel(label)
+      return wrapped === label ? full : `${open}${wrapped}${close}`
+    })
+  })
+
+  return nextLine
+}
+
+export const applyMermaidSoftWrapHints = (source: string) => {
+  const normalized = source.trim()
+  if (!normalized) return normalized
+  if (!FLOWCHART_HEADER_PATTERN.test(normalized)) return normalized
+
+  return normalized
+    .split("\n")
+    .map((line) => applySoftWrapToFlowchartLine(line))
+    .join("\n")
+}

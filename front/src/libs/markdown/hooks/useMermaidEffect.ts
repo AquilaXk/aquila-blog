@@ -1,6 +1,6 @@
 import { RefObject, useEffect } from "react"
 import useScheme from "src/hooks/useScheme"
-import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
+import { applyMermaidSoftWrapHints, extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { acquireBodyScrollLock } from "src/libs/utils/bodyScrollLock"
 
 const MERMAID_SOURCE_PATTERN =
@@ -28,13 +28,73 @@ const MERMAID_VISUAL_PRESET: MermaidVisualPreset = "github"
 const GITHUB_MERMAID_FONT_STACK =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"'
 const DESKTOP_MERMAID_MIN_VIEWPORT_PX = 1201
-const MERMAID_DESKTOP_WIDE_MAX_PX = 1100
+const MERMAID_DESKTOP_WIDE_MAX_PX = 980
 const MERMAID_DESKTOP_SAFE_MARGIN_PX = 24
 const MERMAID_EXPAND_THRESHOLD_PX = 80
 const MERMAID_VIEWPORT_ROOT_MARGIN = "360px 0px"
+const MERMAID_RENDER_TIMEOUT_MS = 2600
+const MERMAID_COMPLEX_EDGE_THRESHOLD = 80
+const MERMAID_COMPLEX_NODE_THRESHOLD = 72
+const MERMAID_COMPLEX_SOURCE_THRESHOLD = 16000
+const MERMAID_COMPLEX_SCALE_CAP = 0.88
+const MERMAID_CACHE_MAX_ENTRIES = 120
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+type MermaidComplexityLevel = "normal" | "high"
+type MermaidComplexitySummary = {
+  level: MermaidComplexityLevel
+  edgeCount: number
+  nodeCount: number
+}
+
+type MermaidRenderCacheEntry = {
+  svg: string
+  complexity: MermaidComplexityLevel
+}
+
+const mermaidRenderCache = new Map<string, MermaidRenderCacheEntry>()
+
+const buildMermaidCacheKey = (source: string, themeKey: string, wideLane: boolean) =>
+  `${themeKey}:${wideLane ? "wide" : "contained"}:${source}`
+
+const readMermaidCache = (cacheKey: string) => {
+  const cached = mermaidRenderCache.get(cacheKey)
+  if (!cached) return null
+  mermaidRenderCache.delete(cacheKey)
+  mermaidRenderCache.set(cacheKey, cached)
+  return cached
+}
+
+const writeMermaidCache = (cacheKey: string, value: MermaidRenderCacheEntry) => {
+  if (mermaidRenderCache.has(cacheKey)) {
+    mermaidRenderCache.delete(cacheKey)
+  }
+  mermaidRenderCache.set(cacheKey, value)
+  if (mermaidRenderCache.size <= MERMAID_CACHE_MAX_ENTRIES) return
+  const oldestKey = mermaidRenderCache.keys().next().value
+  if (oldestKey) {
+    mermaidRenderCache.delete(oldestKey)
+  }
+}
+
+const estimateMermaidComplexity = (source: string): MermaidComplexitySummary => {
+  const edgeCount = (source.match(/(?:-->|==>|-.->|-\.->|--x|x--|o--|--o|<-->|<--|<->|=>|<=)/g) || [])
+    .length
+  const nodeCount = (source.match(/(?:\[[^\]\n]+\]|\{[^}\n]+\}|\(\([^\)\n]+\)\)|\([^\)\n]+\))/g) || []).length
+  const level: MermaidComplexityLevel =
+    source.length >= MERMAID_COMPLEX_SOURCE_THRESHOLD ||
+    edgeCount >= MERMAID_COMPLEX_EDGE_THRESHOLD ||
+    nodeCount >= MERMAID_COMPLEX_NODE_THRESHOLD
+      ? "high"
+      : "normal"
+  return {
+    level,
+    edgeCount,
+    nodeCount,
+  }
+}
 
 const createGithubMermaidConfig = (scheme: "dark" | "light") => {
   const isDark = scheme === "dark"
@@ -68,6 +128,7 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
           actorBorder: "#30363d",
           actorTextColor: "#f0f6fc",
           fontFamily: GITHUB_MERMAID_FONT_STACK,
+          fontSize: "14px",
         }
       : {
           darkMode: false,
@@ -94,6 +155,7 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
           actorBorder: "#d0d7de",
           actorTextColor: "#24292f",
           fontFamily: GITHUB_MERMAID_FONT_STACK,
+          fontSize: "14px",
         },
     securityLevel: "strict" as const,
     suppressErrorRendering: true,
@@ -135,6 +197,7 @@ const resolveMermaidPreset = (scheme: "dark" | "light") => {
 interface MermaidEffectOptions {
   observeMutations?: boolean
   forceScheme?: "dark" | "light"
+  allowDesktopWideLane?: boolean
 }
 
 const useMermaidEffect = (
@@ -146,6 +209,7 @@ const useMermaidEffect = (
   const [scheme] = useScheme()
   const shouldLogMermaidWarnings = process.env.NODE_ENV !== "production"
   const observeMutations = options?.observeMutations ?? true
+  const allowDesktopWideLane = options?.allowDesktopWideLane ?? true
   const effectiveScheme = options?.forceScheme ?? (scheme === "dark" ? "dark" : "light")
 
   useEffect(() => {
@@ -177,6 +241,9 @@ const useMermaidEffect = (
     const escapeMermaidHtml = (value: string) =>
       value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
+    const isMermaidRenderTimeoutError = (error: unknown) =>
+      String(error || "").includes("MERMAID_RENDER_TIMEOUT")
+
     const toMermaidErrorMessage = (error: unknown) => {
       const normalized = String(error || "")
         .replace(/\s+/g, " ")
@@ -184,6 +251,9 @@ const useMermaidEffect = (
       const lineMatch = normalized.match(/line\s+(\d+)/i)
       if (lineMatch) {
         return `${lineMatch[1]}번째 줄 근처 문법을 확인해 주세요.`
+      }
+      if (isMermaidRenderTimeoutError(error)) {
+        return "다이어그램이 복잡해 렌더 시간이 초과되었습니다. 노드/연결을 나누거나 확대 보기로 확인해 주세요."
       }
       if (normalized.toLowerCase().includes("parse error")) {
         return "문법을 해석하지 못했습니다. 블록 문법을 다시 확인해 주세요."
@@ -490,6 +560,26 @@ const useMermaidEffect = (
         return extractNormalizedMermaidSource(raw)
       }
 
+      const renderMermaidWithTimeout = async (
+        mermaidInstance: Awaited<ReturnType<typeof getMermaid>>,
+        renderId: string,
+        sourceToRender: string
+      ) => {
+        let timeoutId: number | null = null
+        try {
+          const timed = new Promise<never>((_, reject) => {
+            timeoutId = window.setTimeout(() => {
+              reject(new Error(`MERMAID_RENDER_TIMEOUT:${MERMAID_RENDER_TIMEOUT_MS}`))
+            }, MERMAID_RENDER_TIMEOUT_MS)
+          })
+          return await Promise.race([mermaidInstance.render(renderId, sourceToRender), timed])
+        } finally {
+          if (timeoutId !== null) {
+            window.clearTimeout(timeoutId)
+          }
+        }
+      }
+
       const renderSingleBlock = async (i: number) => {
         if (disposed) return
         const block = blocks[i]
@@ -506,16 +596,20 @@ const useMermaidEffect = (
           blockDataLanguage === "mermaid" ||
           codeClassName.includes("language-mermaid") ||
           codeDataLanguage === "mermaid"
-        const source = normalizeMermaidSource(
-          block.getAttribute("data-mermaid-source") ||
-            block.dataset.mermaidSource ||
-            codeBlock?.textContent ||
-            block.textContent ||
-            ""
+        const source = applyMermaidSoftWrapHints(
+          normalizeMermaidSource(
+            block.getAttribute("data-mermaid-source") ||
+              block.dataset.mermaidSource ||
+              codeBlock?.textContent ||
+              block.textContent ||
+              ""
+          )
         )
         if (!source) return
         const looksLikeMermaid = isMermaidSource(source)
         if (!hasMermaidHint && !looksLikeMermaid) return
+        const complexity = estimateMermaidComplexity(source)
+        block.dataset.mermaidComplexity = complexity.level
         if (!block.dataset.mermaidRendered) {
           block.dataset.mermaidRendered = "pending"
           block.dataset.mermaidPreset = preset.mode
@@ -541,7 +635,10 @@ const useMermaidEffect = (
           return
         }
 
-        const renderSourceIntoBlock = async (sourceToRender: string) => {
+        const renderSourceIntoBlock = async (
+          sourceToRender: string,
+          complexityLevel: MermaidComplexityLevel
+        ) => {
           const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
           const isDesktopViewport = window.matchMedia(
             `(min-width: ${DESKTOP_MERMAID_MIN_VIEWPORT_PX}px)`
@@ -558,16 +655,26 @@ const useMermaidEffect = (
           block.innerHTML = ""
           block.appendChild(stage)
 
-          const renderId = `aq-mermaid-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-          lastMermaidParseWarning = null
-          const { svg, bindFunctions } = await mermaid.render(renderId, sourceToRender)
-          if (lastMermaidParseWarning) {
-            throw new Error(lastMermaidParseWarning)
+          const cacheKey = buildMermaidCacheKey(sourceToRender, preset.themeKey, allowDesktopWideLane)
+          const cached = readMermaidCache(cacheKey)
+          let renderedSvg = cached?.svg || ""
+
+          if (!renderedSvg) {
+            const renderId = `aq-mermaid-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+            lastMermaidParseWarning = null
+            const rendered = await renderMermaidWithTimeout(mermaid, renderId, sourceToRender)
+            if (lastMermaidParseWarning) {
+              throw new Error(lastMermaidParseWarning)
+            }
+            renderedSvg = rendered.svg
+            writeMermaidCache(cacheKey, {
+              svg: renderedSvg,
+              complexity: complexityLevel,
+            })
           }
           if (disposed) return
 
-          stage.innerHTML = svg
-          bindFunctions?.(stage)
+          stage.innerHTML = renderedSvg
 
           const svgElement = stage.querySelector("svg")
           if (!svgElement) throw new Error("Mermaid SVG 생성 실패")
@@ -596,9 +703,9 @@ const useMermaidEffect = (
           let maxDisplayWidth = containerWidth
           let wideBleedLeft = 0
           let wideBleedRight = 0
+          const detailLayout = allowDesktopWideLane ? block.closest<HTMLElement>(".detailLayout") : null
 
-          if (isDesktopViewport && exceedsArticleWidth) {
-            const detailLayout = block.closest<HTMLElement>(".detailLayout")
+          if (isDesktopViewport && detailLayout && exceedsArticleWidth) {
             const leftRail = detailLayout?.querySelector<HTMLElement>(".leftRail")
             const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
             const liveBlockRect = block.getBoundingClientRect()
@@ -641,16 +748,24 @@ const useMermaidEffect = (
               }
             }
           }
+          if (complexityLevel === "high") {
+            maxDisplayWidth = Math.min(maxDisplayWidth, Math.max(containerWidth, 860))
+          }
 
-          const maxReadableHeight = Math.min(520, Math.floor(window.innerHeight * 0.68))
+          const maxReadableHeight = isMobileViewport
+            ? Math.min(520, Math.floor(window.innerHeight * 0.68))
+            : Math.min(760, Math.floor(window.innerHeight * 0.74))
           const usesDesktopWideLane = maxDisplayWidth > containerWidth + 24
 
           let scale = 1
           if (intrinsicWidth > maxDisplayWidth) {
             scale = Math.min(scale, maxDisplayWidth / intrinsicWidth)
           }
-          if (isMobileViewport && intrinsicHeight * scale > maxReadableHeight) {
+          if (intrinsicHeight * scale > maxReadableHeight) {
             scale = Math.min(scale, maxReadableHeight / intrinsicHeight)
+          }
+          if (complexityLevel === "high") {
+            scale = Math.min(scale, MERMAID_COMPLEX_SCALE_CAP)
           }
 
           const targetWidth = intrinsicWidth * scale
@@ -659,11 +774,11 @@ const useMermaidEffect = (
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
           const stageWidth = usesDesktopWideLane ? maxDisplayWidth : containerWidth
-          const isMobileHeightClamped =
-            isMobileViewport && intrinsicHeight > maxReadableHeight + MERMAID_EXPAND_THRESHOLD_PX
+          const isHeightClamped = intrinsicHeight > maxReadableHeight + MERMAID_EXPAND_THRESHOLD_PX
           const needsExpandAction =
             intrinsicWidth > maxDisplayWidth + MERMAID_EXPAND_THRESHOLD_PX ||
-            isMobileHeightClamped
+            isHeightClamped ||
+            complexityLevel === "high"
           stage.style.width = `${stageWidth}px`
           stage.style.minHeight = `${roundedHeight}px`
           stage.style.display = "flex"
@@ -686,6 +801,7 @@ const useMermaidEffect = (
           svgElement.style.minHeight = "0"
           svgElement.style.objectFit = "contain"
           svgElement.style.margin = "0 auto"
+          svgElement.style.textRendering = "geometricPrecision"
           svgElement.removeAttribute("width")
           svgElement.removeAttribute("height")
 
@@ -697,7 +813,7 @@ const useMermaidEffect = (
             expandButton.className = "aq-mermaid-expand-btn"
             expandButton.textContent = "확대 보기"
             expandButton.addEventListener("click", () => {
-              openMermaidOverlay(svg)
+              openMermaidOverlay(renderedSvg)
             })
             block.appendChild(expandButton)
           }
@@ -708,7 +824,7 @@ const useMermaidEffect = (
         }
 
         try {
-          await renderSourceIntoBlock(source)
+          await renderSourceIntoBlock(source, complexity.level)
 
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = preset.themeKey
@@ -718,6 +834,7 @@ const useMermaidEffect = (
           block.classList.remove("aq-mermaid-error")
         } catch (error) {
           const isSyntaxError = isMermaidSyntaxError(error)
+          const isTimeoutError = isMermaidRenderTimeoutError(error)
           if (isNegativeRectWidthError(error) && scheduleRetry(i, block)) {
             return
           }
@@ -725,7 +842,7 @@ const useMermaidEffect = (
           const fallbackSource = stripRiskyFlowchartDirectives(source).trim()
           if (fallbackSource && fallbackSource !== source) {
             try {
-              await renderSourceIntoBlock(fallbackSource)
+              await renderSourceIntoBlock(fallbackSource, complexity.level)
               block.dataset.mermaidSource = fallbackSource
               block.dataset.mermaidTheme = preset.themeKey
               block.dataset.mermaidPreset = preset.mode
@@ -741,11 +858,11 @@ const useMermaidEffect = (
                   console.warn("[mermaid] fallback render failed", fallbackError)
                 }
               }
-              if (!isMermaidSyntaxError(fallbackError) && scheduleRetry(i, block)) return
+              if (!isMermaidSyntaxError(fallbackError) && !isMermaidRenderTimeoutError(fallbackError) && scheduleRetry(i, block)) return
             }
           }
 
-          if (!isSyntaxError && scheduleRetry(i, block)) return
+          if (!isSyntaxError && !isTimeoutError && scheduleRetry(i, block)) return
 
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = preset.themeKey
@@ -893,7 +1010,15 @@ const useMermaidEffect = (
         scheduledRunFrame = null
       }
     }
-  }, [contentKey, effectiveScheme, enabled, observeMutations, rootRef, shouldLogMermaidWarnings])
+  }, [
+    allowDesktopWideLane,
+    contentKey,
+    effectiveScheme,
+    enabled,
+    observeMutations,
+    rootRef,
+    shouldLogMermaidWarnings,
+  ])
 
   return
 }

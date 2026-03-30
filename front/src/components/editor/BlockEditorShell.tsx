@@ -104,6 +104,10 @@ export type BlockEditorQaActions = {
   selectTableAxis: (axis: "row" | "column") => void
   setActiveTableCellAlign: (align: "left" | "center" | "right" | null) => void
   setActiveTableCellBackground: (color: string | null) => void
+  addTableRowAfter: () => void
+  addTableColumnAfter: () => void
+  deleteSelectedTableRow: () => void
+  deleteSelectedTableColumn: () => void
   focusDocumentEnd: () => void
   appendCalloutBlock: () => void
   appendFormulaBlock: () => void
@@ -146,8 +150,17 @@ type ToolbarAction = {
 type FloatingBubbleState = {
   visible: boolean
   mode: "text" | "image" | "table"
+  anchor: "center" | "left"
   left: number
   top: number
+}
+
+type TableQuickRailState = {
+  visible: boolean
+  left: number
+  top: number
+  width: number
+  height: number
 }
 
 type TopLevelBlockHandleState = {
@@ -566,6 +579,9 @@ const BlockEditorShell = ({
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
+  const hoveredBlockClearTimerRef = useRef<number | null>(null)
+  const bubbleHideTimerRef = useRef<number | null>(null)
+  const bubbleToolbarHoveredRef = useRef(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState("")
@@ -591,8 +607,16 @@ const BlockEditorShell = ({
   const [bubbleState, setBubbleState] = useState<FloatingBubbleState>({
     visible: false,
     mode: "text",
+    anchor: "center",
     left: 0,
     top: 0,
+  })
+  const [tableQuickRailState, setTableQuickRailState] = useState<TableQuickRailState>({
+    visible: false,
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
   })
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
@@ -618,6 +642,40 @@ const BlockEditorShell = ({
     width: 0,
   })
   const [selectionTick, setSelectionTick] = useState(0)
+
+  const cancelHoveredBlockClear = useCallback(() => {
+    if (hoveredBlockClearTimerRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(hoveredBlockClearTimerRef.current)
+      hoveredBlockClearTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleHoveredBlockClear = useCallback(() => {
+    cancelHoveredBlockClear()
+    if (typeof window === "undefined") return
+    hoveredBlockClearTimerRef.current = window.setTimeout(() => {
+      setHoveredBlockIndex(null)
+      hoveredBlockClearTimerRef.current = null
+    }, 260)
+  }, [cancelHoveredBlockClear])
+
+  const cancelBubbleHide = useCallback(() => {
+    if (bubbleHideTimerRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(bubbleHideTimerRef.current)
+      bubbleHideTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleBubbleHide = useCallback(() => {
+    cancelBubbleHide()
+    if (typeof window === "undefined") return
+    bubbleHideTimerRef.current = window.setTimeout(() => {
+      if (!bubbleToolbarHoveredRef.current) {
+        setBubbleState((prev) => ({ ...prev, visible: false }))
+      }
+      bubbleHideTimerRef.current = null
+    }, 220)
+  }, [cancelBubbleHide])
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
   )
@@ -1414,7 +1472,8 @@ const BlockEditorShell = ({
     const syncBubble = () => {
       const activeEditor = editorRef.current
       if (!activeEditor) {
-        setBubbleState((prev) => ({ ...prev, visible: false }))
+        scheduleBubbleHide()
+        setTableQuickRailState((prev) => ({ ...prev, visible: false }))
         return
       }
 
@@ -1428,16 +1487,48 @@ const BlockEditorShell = ({
         !activeEditor.isActive("rawMarkdownBlock")
 
       if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
-        setBubbleState((prev) => ({ ...prev, visible: false }))
+        if (bubbleToolbarHoveredRef.current) return
+        scheduleBubbleHide()
+        setTableQuickRailState((prev) => ({ ...prev, visible: false }))
         return
       }
 
+      cancelBubbleHide()
+      if (isTableActive) {
+        const anchorDom = activeEditor.view.domAtPos(selection.from).node
+        const anchorElement =
+          anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
+        const tableElement =
+          anchorElement?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+        const tableRect = tableElement?.getBoundingClientRect()
+
+        if (tableRect) {
+          setTableQuickRailState({
+            visible: true,
+            left: Math.round(Math.max(12, tableRect.left - 46)),
+            top: Math.round(tableRect.top + 10),
+            width: Math.round(tableRect.width),
+            height: Math.round(tableRect.height),
+          })
+          setBubbleState({
+            visible: true,
+            mode: "table",
+            anchor: "left",
+            left: Math.round(tableRect.left + 12),
+            top: Math.round(tableRect.top),
+          })
+          return
+        }
+      }
+
+      setTableQuickRailState((prev) => ({ ...prev, visible: false }))
+
       const startCoords = activeEditor.view.coordsAtPos(selection.from)
       const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
-
       setBubbleState({
         visible: true,
         mode: isImageNodeSelected ? "image" : canShowTextToolbar ? "text" : "table",
+        anchor: "center",
         left: Math.round((startCoords.left + endCoords.right) / 2),
         top: Math.round(Math.min(startCoords.top, endCoords.top)),
       })
@@ -1449,8 +1540,16 @@ const BlockEditorShell = ({
     return () => {
       currentEditor.off("selectionUpdate", syncBubble)
       currentEditor.off("transaction", syncBubble)
+      cancelBubbleHide()
     }
-  }, [editor])
+  }, [cancelBubbleHide, editor, scheduleBubbleHide])
+
+  useEffect(() => {
+    return () => {
+      cancelHoveredBlockClear()
+      cancelBubbleHide()
+    }
+  }, [cancelBubbleHide, cancelHoveredBlockClear])
 
   useEffect(() => {
     if (!editor) return
@@ -1721,6 +1820,7 @@ const BlockEditorShell = ({
 
   const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
   const isInlineCodeActive = editor?.isActive("code") ?? false
+  const isTableMode = isTableSelectionActive(editor)
 
   const applyInlineColor = useCallback(
     (color?: string | null) => {
@@ -1823,6 +1923,18 @@ const BlockEditorShell = ({
       },
       setActiveTableCellBackground: (color) => {
         updateActiveTableCellAttrs({ backgroundColor: color })
+      },
+      addTableRowAfter: () => {
+        editor?.chain().focus().addRowAfter().run()
+      },
+      addTableColumnAfter: () => {
+        editor?.chain().focus().addColumnAfter().run()
+      },
+      deleteSelectedTableRow: () => {
+        editor?.chain().focus().deleteRow().run()
+      },
+      deleteSelectedTableColumn: () => {
+        editor?.chain().focus().deleteColumn().run()
       },
       focusDocumentEnd: () => {
         editor?.chain().focus("end").run()
@@ -2741,6 +2853,7 @@ const BlockEditorShell = ({
   const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
 
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
+    if (isTableMode) return
     setBlockMenuState((prev) =>
       prev && prev.blockIndex === blockIndex
         ? null
@@ -2750,7 +2863,7 @@ const BlockEditorShell = ({
             top: Math.round(anchorRect.bottom + 8),
           }
     )
-  }, [])
+  }, [isTableMode])
 
   const moveBlockByStep = useCallback(
     (blockIndex: number, delta: -1 | 1) => {
@@ -2874,6 +2987,10 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
+    if (isTableMode) {
+      setBlockHandleState((prev) => ({ ...prev, visible: false }))
+      return
+    }
     const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex
     if (blockIndex === null) {
       setBlockHandleState((prev) => ({ ...prev, visible: false }))
@@ -2893,13 +3010,12 @@ const BlockEditorShell = ({
     const rect = blockElement.getBoundingClientRect()
     const railRect = blockHandleRailRef.current?.getBoundingClientRect()
     const railWidth = railRect?.width || 54
-    const railHeight = railRect?.height || 28
-    const centeredTop = Math.round(rect.top + Math.max(0, (rect.height - railHeight) / 2))
+    const anchoredTop = Math.round(rect.top + 6)
     setBlockHandleState({
       visible: true,
       blockIndex,
       left: Math.max(12, Math.round(rect.left - railWidth - 10)),
-      top: centeredTop,
+      top: anchoredTop,
       bottom: Math.round(rect.bottom + 12),
       width: Math.round(rect.width),
     })
@@ -2907,6 +3023,7 @@ const BlockEditorShell = ({
     editor,
     getTopLevelBlockElementByIndex,
     hoveredBlockIndex,
+    isTableMode,
     isCoarsePointer,
     isTopLevelBlockHandleEligible,
     selectedBlockIndex,
@@ -2958,12 +3075,17 @@ const BlockEditorShell = ({
 
   const handleViewportPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      cancelHoveredBlockClear()
       const rowResizeState = tableRowResizeRef.current
       if (rowResizeState) {
         setViewportRowResizeHot(true)
         return
       }
       if (isCoarsePointer) return
+      if (isTableMode) {
+        setHoveredBlockIndex(null)
+        return
+      }
       const target = event.target instanceof Element ? event.target : null
       if (target?.closest("[data-block-handle-rail='true']") || target?.closest("[data-block-menu-root='true']")) {
         if (blockHandleState.visible) {
@@ -2981,21 +3103,23 @@ const BlockEditorShell = ({
     [
       blockHandleState.blockIndex,
       blockHandleState.visible,
+      cancelHoveredBlockClear,
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
       getTableCellFromTarget,
       isCoarsePointer,
+      isTableMode,
       isRowResizeHandleTarget,
       setViewportRowResizeHot,
     ]
   )
 
   const handleViewportPointerLeave = useCallback(() => {
-    setHoveredBlockIndex(null)
+    scheduleHoveredBlockClear()
     if (!tableRowResizeRef.current) {
       setViewportRowResizeHot(false)
     }
-  }, [setViewportRowResizeHot])
+  }, [scheduleHoveredBlockClear, setViewportRowResizeHot])
 
   const handleViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -3383,6 +3507,16 @@ const BlockEditorShell = ({
       >
         {editor && bubbleState.visible ? (
           <FloatingBubbleToolbar
+            data-testid={bubbleState.mode === "table" ? "table-bubble-toolbar" : undefined}
+            data-anchor={bubbleState.anchor}
+            onPointerEnter={() => {
+              bubbleToolbarHoveredRef.current = true
+              cancelBubbleHide()
+            }}
+            onPointerLeave={() => {
+              bubbleToolbarHoveredRef.current = false
+              scheduleBubbleHide()
+            }}
             style={{
               left: `${bubbleState.left}px`,
               top: `${bubbleState.top}px`,
@@ -3530,11 +3664,60 @@ const BlockEditorShell = ({
             )}
           </FloatingBubbleToolbar>
         ) : null}
+        {!isCoarsePointer && tableQuickRailState.visible && isTableMode ? (
+          <>
+            <TableAxisRail
+              data-testid="table-column-rail"
+              data-axis="column"
+              style={{
+                left: `${tableQuickRailState.left + 52}px`,
+                top: `${Math.max(12, tableQuickRailState.top - 40)}px`,
+                width: `${Math.max(180, Math.min(tableQuickRailState.width, 360))}px`,
+              }}
+            >
+              <TableQuickRailButton type="button" title="열 선택" onClick={() => selectCurrentTableAxis("column")}>
+                열 선택
+              </TableQuickRailButton>
+              <TableQuickRailButton type="button" title="열 추가" onClick={() => editor?.chain().focus().addColumnAfter().run()}>
+                +열
+              </TableQuickRailButton>
+              <TableQuickRailButton type="button" title="열 삭제" onClick={() => editor?.chain().focus().deleteColumn().run()}>
+                -열
+              </TableQuickRailButton>
+            </TableAxisRail>
+            <TableAxisRail
+              data-testid="table-row-rail"
+              data-axis="row"
+              style={{
+                left: `${tableQuickRailState.left}px`,
+                top: `${tableQuickRailState.top}px`,
+                height: `${Math.max(112, Math.min(tableQuickRailState.height, 220))}px`,
+              }}
+            >
+              <TableQuickRailButton type="button" title="행 선택" onClick={() => selectCurrentTableAxis("row")}>
+                행 선택
+              </TableQuickRailButton>
+              <TableQuickRailButton type="button" title="행 추가" onClick={() => editor?.chain().focus().addRowAfter().run()}>
+                +행
+              </TableQuickRailButton>
+              <TableQuickRailButton type="button" title="행 삭제" onClick={() => editor?.chain().focus().deleteRow().run()}>
+                -행
+              </TableQuickRailButton>
+            </TableAxisRail>
+          </>
+        ) : null}
         {!isCoarsePointer ? (
           <BlockHandleRail
             ref={blockHandleRailRef}
             data-block-handle-rail="true"
             data-visible={blockHandleState.visible}
+            onPointerEnter={() => {
+              cancelHoveredBlockClear()
+              setHoveredBlockIndex(blockHandleState.blockIndex)
+            }}
+            onPointerLeave={() => {
+              scheduleHoveredBlockClear()
+            }}
             style={{
               left: `${blockHandleState.left}px`,
               top: `${blockHandleState.top}px`,
@@ -3723,6 +3906,13 @@ const BlockEditorShell = ({
         {blockMenuState ? (
           <FloatingBlockMenu
             data-block-menu-root="true"
+            onPointerEnter={() => {
+              cancelHoveredBlockClear()
+              setHoveredBlockIndex(blockMenuState.blockIndex)
+            }}
+            onPointerLeave={() => {
+              scheduleHoveredBlockClear()
+            }}
             style={{
               left: `${blockMenuState.left}px`,
               top: `${blockMenuState.top}px`,
@@ -4623,6 +4813,20 @@ const EditorViewport = styled.div`
         ? "0 18px 38px rgba(2, 6, 23, 0.28)"
         : "0 18px 38px rgba(15, 23, 42, 0.08)"};
     -webkit-overflow-scrolling: touch;
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease,
+      background 140ms ease;
+  }
+
+  .aq-block-editor__content .tableWrapper:hover {
+    border-color: rgba(59, 130, 246, 0.24);
+    box-shadow:
+      ${({ theme }) =>
+        theme.scheme === "dark"
+          ? "0 18px 38px rgba(2, 6, 23, 0.28)"
+          : "0 18px 38px rgba(15, 23, 42, 0.08)"},
+      0 0 0 1px rgba(59, 130, 246, 0.12);
   }
 
   .aq-block-editor__content thead th {
@@ -4673,6 +4877,15 @@ const EditorViewport = styled.div`
     background: rgba(96, 165, 250, 0.62);
     border-radius: 999px;
     pointer-events: none;
+    opacity: 0.28;
+    transition: opacity 120ms ease, background-color 120ms ease;
+  }
+
+  .aq-block-editor__content .tableWrapper:hover .column-resize-handle,
+  .aq-block-editor__content th:hover .column-resize-handle,
+  .aq-block-editor__content td:hover .column-resize-handle {
+    opacity: 1;
+    background: rgba(59, 130, 246, 0.88);
   }
 
   .aq-block-editor__content.resize-cursor {
@@ -4703,8 +4916,62 @@ const FloatingBubbleToolbar = styled.div`
   transform: translate(-50%, calc(-100% - 0.65rem));
   pointer-events: none;
 
+  &[data-anchor="left"] {
+    transform: translate(0, calc(-100% - 0.65rem));
+  }
+
   > * {
     pointer-events: auto;
+  }
+`
+
+const TableAxisRail = styled.div`
+  position: fixed;
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+
+  &[data-axis="column"] {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+
+  &[data-axis="row"] {
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+`
+
+const TableQuickRailButton = styled.button`
+  all: unset;
+  box-sizing: border-box;
+  min-width: 2rem;
+  height: 1.72rem;
+  padding: 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.55rem;
+  border: 1px solid ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(71, 85, 105, 0.14)"};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.8)" : "rgba(255, 255, 255, 0.92)"};
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+
+  &:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(30, 41, 59, 0.94)" : "rgba(239, 246, 255, 0.98)"};
+    border-color: rgba(59, 130, 246, 0.28);
+    color: var(--color-gray12);
   }
 `
 

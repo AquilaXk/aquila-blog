@@ -571,6 +571,127 @@ test("깃허브 호환용 mermaid info 블록도 렌더 경로를 탄다", async
   await expect(page.locator("pre code", { hasText: /^info$/ })).toHaveCount(0)
 })
 
+test("긴 Mermaid 라벨은 자동 줄바꿈 힌트를 적용해 렌더된다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/781**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 781,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "머메이드 긴 라벨 줄바꿈 테스트",
+        content: [
+          "```mermaid",
+          "flowchart TD",
+          '  A["SSE 알림이 잠깐 되다가 멈추는 현상을 추적한 트러블슈팅 기록입니다"] --> B{"20초 내 heartbeat 수신 여부와 재연결 누락 여부를 함께 확인해야 하나요?"}',
+          "  B -->|Yes| C[정상]",
+          "  B -->|No| D[점검]",
+          "```",
+        ].join("\n"),
+        tags: [],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/781/hit**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/781")
+  await expect(page.getByText("머메이드 긴 라벨 줄바꿈 테스트")).toBeVisible()
+  await expect
+    .poll(async () => await page.locator("pre.aq-mermaid[data-mermaid-rendered='true']").count(), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(0)
+  await expect
+    .poll(async () => {
+      return (
+        (await page.locator("pre.aq-mermaid[data-mermaid-rendered='true']").first().getAttribute("data-mermaid-source")) ||
+        ""
+      )
+    })
+    .toContain("<br/>")
+})
+
+test("복잡한 Mermaid는 복잡도 가드를 표시하고 확대 버튼을 유지한다", async ({ page }) => {
+  const chainLines = Array.from({ length: 82 }, (_, index) => {
+    return `  N${index}[노드 ${index}] --> N${index + 1}[노드 ${index + 1}]`
+  })
+
+  await page.route("**/post/api/v1/posts/782**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 782,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "머메이드 복잡도 가드 테스트",
+        content: ["```mermaid", "flowchart TD", ...chainLines, "```"].join("\n"),
+        tags: [],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/782/hit**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/782")
+  await expect(page.getByText("머메이드 복잡도 가드 테스트")).toBeVisible()
+  await expect
+    .poll(async () => await page.locator("pre.aq-mermaid[data-mermaid-rendered='true']").count(), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(0)
+  await expect(page.locator("pre.aq-mermaid[data-mermaid-complexity='high']")).toHaveCount(1)
+  await expect(page.locator("pre.aq-mermaid[data-mermaid-expandable='true'] .aq-mermaid-expand-btn")).toBeVisible()
+})
+
 test("잘못된 닫힘 fence(```4) 입력도 복구되어 머메이드와 후속 마크다운이 함께 정상 렌더된다", async ({ page }) => {
   await page.route("**/post/api/v1/posts/778**", async (route) => {
     await route.fulfill({

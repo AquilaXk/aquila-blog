@@ -138,4 +138,105 @@ test.describe("block editor authoring flow", () => {
 
     await page.mouse.up()
   })
+
+  test("table mode에서는 block rail이 숨고 table quick rail/toolbar가 유지된다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    await page.getByRole("button", { name: "테이블" }).click()
+
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+    await expect(page.getByTestId("table-row-rail")).toBeVisible()
+    await expect(page.getByTestId("table-bubble-toolbar")).toBeVisible()
+    await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
+
+    const toolbar = page.getByTestId("table-bubble-toolbar")
+    await toolbar.hover()
+    await expect(toolbar).toBeVisible()
+
+    await page.getByRole("button", { title: "행 추가" }).click()
+    await expect(page.locator("table tr")).toHaveCount(3)
+  })
+
+  test("table QA actions로 열/행 추가와 삭제가 round-trip 된다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstCell = page.locator("table th, table td").first()
+    await firstCell.click()
+
+    await page.getByRole("button", { name: "QA 행 추가" }).click()
+    await page.getByRole("button", { name: "QA 열 추가" }).click()
+    await expect(page.locator("table tr")).toHaveCount(3)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
+
+    await page.getByRole("button", { name: "QA 열 선택" }).click()
+    await page.getByRole("button", { name: "QA 열 삭제" }).click()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(2)
+
+    await firstCell.click()
+    await page.getByRole("button", { name: "QA 행 삭제" }).click()
+    await expect(page.locator("table tr")).toHaveCount(2)
+  })
+
+  test("table row resize handle은 drag 후 row height를 유지한다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.hover()
+
+    const beforeHeight = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).closest("tr")!.getBoundingClientRect().height)
+    )
+
+    const box = await firstHeaderCell.boundingBox()
+    if (!box) {
+      throw new Error("첫 번째 표 헤더 셀 좌표를 계산할 수 없습니다.")
+    }
+
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height - 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height + 28)
+    await page.mouse.up()
+
+    const afterHeight = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).closest("tr")!.getBoundingClientRect().height)
+    )
+
+    expect(afterHeight).toBeGreaterThan(beforeHeight)
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"rowHeights"')
+  })
+
+  test("table column resize handle은 drag 후 column width 메타를 유지한다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.hover()
+
+    const beforeWidth = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().width)
+    )
+
+    const box = await firstHeaderCell.boundingBox()
+    if (!box) {
+      throw new Error("첫 번째 표 헤더 셀 너비 좌표를 계산할 수 없습니다.")
+    }
+
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width + 28, box.y + box.height / 2)
+    await page.mouse.up()
+
+    const afterWidth = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().width)
+    )
+
+    expect(afterWidth).toBeGreaterThan(beforeWidth)
+    await expect(page.getByTestId("qa-markdown-output")).toContainText('"columnWidths"')
+  })
 })

@@ -106,6 +106,18 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
         <button type="button" onClick={() => qaActionsRef.current?.setActiveTableCellBackground("#fef3c7")}>
           QA 노랑 배경
         </button>
+        <button type="button" onClick={() => qaActionsRef.current?.addTableRowAfter()}>
+          QA 행 추가
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.addTableColumnAfter()}>
+          QA 열 추가
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.deleteSelectedTableRow()}>
+          QA 행 삭제
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.deleteSelectedTableColumn()}>
+          QA 열 삭제
+        </button>
         <button type="button" onClick={() => qaActionsRef.current?.focusDocumentEnd()}>
           QA 끝으로 이동
         </button>

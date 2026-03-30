@@ -9289,6 +9289,7 @@ const EditorStudioSaveState = styled.span`
 
 const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
   --editor-split-gap: clamp(2.4rem, 3vw, 3.5rem);
+  --editor-split-pane-width: var(--article-readable-width, 48rem);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: ${({ $viewMode }) => ($viewMode === "split" ? "2rem" : "1.4rem")};
@@ -9298,7 +9299,7 @@ const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailab
   @media (min-width: 1024px) {
     grid-template-columns: ${({ $viewMode, $splitAvailable }) =>
       $splitAvailable && $viewMode === "split"
-        ? "minmax(0, var(--article-readable-width, 48rem)) minmax(0, var(--article-readable-width, 48rem))"
+        ? "minmax(0, var(--editor-split-pane-width)) minmax(0, var(--editor-split-pane-width))"
         : "minmax(0, 1fr)"};
     gap: ${({ $viewMode }) => ($viewMode === "split" ? "var(--editor-split-gap)" : "1.4rem")};
   }
@@ -9473,7 +9474,7 @@ const EditorStudioPreviewArticle = styled.article`
   display: grid;
   gap: 0;
   min-width: 0;
-  width: 100%;
+  width: min(100%, var(--article-readable-width, 48rem));
   max-width: 100%;
   margin-inline: auto;
 `

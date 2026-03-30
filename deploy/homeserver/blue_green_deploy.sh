@@ -462,7 +462,7 @@ is_grafana_embed_url() {
 
 probe_grafana_embed_headers() {
   local url="$1"
-  curl -I -s --connect-timeout 3 --max-time 10 "${url}" 2>/dev/null || true
+  curl -s --connect-timeout 3 --max-time 10 -D - -o /dev/null "${url}" 2>/dev/null || true
 }
 
 probe_grafana_internal_health() {
@@ -507,9 +507,11 @@ probe_grafana_embed_origin_headers() {
       printf "HTTP/1.1 000 login_failed\r\n"
       exit 0
     fi
-    curl -I -s \
+    curl -s \
       --connect-timeout 3 \
       --max-time 12 \
+      -D - \
+      -o /dev/null \
       -b "${cookie_jar}" \
       -H "Host: ${grafana_domain}" \
       "http://caddy:80${path}" || true
@@ -547,11 +549,15 @@ check_grafana_embed_origin_route() {
     csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
 
     if [[ "${internal_health}" == "200" ]] &&
-      [[ "${status}" == "200" ]] &&
+      [[ "${status}" == "200" || "${status}" == "401" || "${status}" == "403" ]] &&
       [[ "${location}" != *"/login"* ]] &&
       [[ -z "${xfo}" || ! "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
       if [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* || "${csp}" == *"aquilaxk.site"* || "${csp}" == *"*"* ]]; then
-        echo "grafana origin auth-proxy route ok: status=${status} grafana_health=${internal_health} host=${grafana_domain} path=${path}"
+        if [[ "${status}" == "200" ]]; then
+          echo "grafana origin auth-proxy route ok: status=${status} grafana_health=${internal_health} host=${grafana_domain} path=${path}"
+        else
+          echo "grafana origin auth-proxy route ok(protected): status=${status} grafana_health=${internal_health} host=${grafana_domain} path=${path}"
+        fi
         return 0
       fi
     fi

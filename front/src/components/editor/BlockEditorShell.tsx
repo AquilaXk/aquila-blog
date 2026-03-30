@@ -106,6 +106,7 @@ export type BlockEditorQaActions = {
   focusDocumentEnd: () => void
   appendCalloutBlock: () => void
   appendFormulaBlock: () => void
+  moveTaskItemInFirstTaskList: (sourceIndex: number, insertionIndex: number) => void
 }
 
 type BlockInsertSection = "basic" | "structure" | "media"
@@ -1704,6 +1705,26 @@ const BlockEditorShell = ({
     [editor]
   )
 
+  const moveTaskItemInFirstTaskList = useCallback(
+    (sourceIndex: number, insertionIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+      const doc = currentEditor.getJSON() as BlockEditorDoc
+      const blocks = Array.isArray(doc.content) ? (doc.content as BlockEditorDoc[]) : []
+      const firstListIndex = blocks.findIndex(
+        (block) => block?.type === "taskList" || block?.type === "bulletList" || block?.type === "orderedList"
+      )
+      if (firstListIndex < 0) return
+
+      mutateTopLevelBlocks(
+        (nextDoc) =>
+          moveNestedListItemToInsertionIndex(nextDoc, firstListIndex, [], sourceIndex, insertionIndex),
+        firstListIndex
+      )
+    },
+    [mutateTopLevelBlocks]
+  )
+
   useEffect(() => {
     if (!onQaActionsReady) return
 
@@ -1746,12 +1767,23 @@ const BlockEditorShell = ({
           ])
         )
       },
+      moveTaskItemInFirstTaskList: (sourceIndex, insertionIndex) => {
+        moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
+      },
     })
 
     return () => {
       onQaActionsReady(null)
     }
-  }, [editor, insertBlocksAtIndex, onQaActionsReady, selectCurrentTableAxis, updateActiveTableCellAttrs, withTrailingParagraph])
+  }, [
+    editor,
+    insertBlocksAtIndex,
+    moveTaskItemInFirstTaskList,
+    onQaActionsReady,
+    selectCurrentTableAxis,
+    updateActiveTableCellAttrs,
+    withTrailingParagraph,
+  ])
 
   const activeTableCellNodeType =
     editor?.isActive("tableHeader") ?? false ? "tableHeader" : "tableCell"

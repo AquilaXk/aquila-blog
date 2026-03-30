@@ -60,6 +60,19 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
     setMarkdown(seed.replace(/\\n/g, "\n"))
   }, [router.isReady, router.query.seed])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    ;(window as unknown as { __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void }).__qaMoveTaskItemInFirstTaskList =
+      (sourceIndex, insertionIndex) => {
+        qaActionsRef.current?.moveTaskItemInFirstTaskList(sourceIndex, insertionIndex)
+      }
+
+    return () => {
+      delete (window as unknown as { __qaMoveTaskItemInFirstTaskList?: (sourceIndex: number, insertionIndex: number) => void })
+        .__qaMoveTaskItemInFirstTaskList
+    }
+  }, [])
+
   return (
     <main
       style={{
@@ -101,6 +114,9 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
         </button>
         <button type="button" onClick={() => qaActionsRef.current?.appendFormulaBlock()}>
           QA 수식
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.moveTaskItemInFirstTaskList(2, 0)}>
+          QA Task 3→1
         </button>
       </section>
 

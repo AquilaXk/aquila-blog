@@ -49,4 +49,19 @@ test.describe("editor unfurl api safety", () => {
       message: "허용된 외부 링크만 unfurl할 수 있습니다.",
     })
   })
+
+  test("상위 경로 이동이 포함된 URL은 서버 fetch 전에 차단한다", async ({ request }) => {
+    const response = await request.get("/api/editor/unfurl", {
+      params: {
+        url: "https://github.com/%2e%2e/private",
+      },
+    })
+
+    expect(response.status()).toBe(400)
+    const payload = await response.json()
+    expect(payload).toEqual({
+      ok: false,
+      message: "상위 경로 이동이 포함된 URL은 unfurl할 수 없습니다.",
+    })
+  })
 })

@@ -132,13 +132,19 @@ const resolveMermaidPreset = (scheme: "dark" | "light") => {
   }
 }
 
+interface MermaidEffectOptions {
+  observeMutations?: boolean
+}
+
 const useMermaidEffect = (
   rootRef?: RefObject<HTMLElement>,
   contentKey?: string,
-  enabled = true
+  enabled = true,
+  options?: MermaidEffectOptions
 ) => {
   const [scheme] = useScheme()
   const shouldLogMermaidWarnings = process.env.NODE_ENV !== "production"
+  const observeMutations = options?.observeMutations ?? true
 
   useEffect(() => {
     if (!enabled) return
@@ -239,18 +245,34 @@ const useMermaidEffect = (
     }
 
     const shouldScheduleFromMutations = (mutations: MutationRecord[]) => {
+      const isInternalMermaidRenderNode = (node: Node | null) => {
+        if (!node) return false
+        const element =
+          node instanceof Element ? node : node.nodeType === Node.TEXT_NODE ? node.parentElement : null
+        if (!element) return false
+        return Boolean(
+          element.closest(
+            ".aq-mermaid-stage, .aq-mermaid-expand-btn, [data-aq-mermaid-overlay='true']"
+          )
+        )
+      }
+
       for (const mutation of mutations) {
         if (mutation.type === "characterData") {
+          if (isInternalMermaidRenderNode(mutation.target)) continue
           if (isMermaidMutationTarget(mutation.target)) return true
           continue
         }
 
+        if (isInternalMermaidRenderNode(mutation.target)) continue
         if (isMermaidMutationTarget(mutation.target)) return true
 
         for (const node of Array.from(mutation.addedNodes)) {
+          if (isInternalMermaidRenderNode(node)) continue
           if (isMermaidMutationTarget(node)) return true
         }
         for (const node of Array.from(mutation.removedNodes)) {
+          if (isInternalMermaidRenderNode(node)) continue
           if (isMermaidMutationTarget(node)) return true
         }
       }
@@ -843,8 +865,9 @@ const useMermaidEffect = (
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleRun) : null
     resizeObserver?.observe(root)
     mutationObserver =
-      typeof MutationObserver !== "undefined"
+      observeMutations && typeof MutationObserver !== "undefined"
         ? new MutationObserver((mutations) => {
+            if (running) return
             if (!shouldScheduleFromMutations(mutations)) return
             scheduleRun()
           })
@@ -868,7 +891,7 @@ const useMermaidEffect = (
         scheduledRunFrame = null
       }
     }
-  }, [contentKey, enabled, rootRef, scheme, shouldLogMermaidWarnings])
+  }, [contentKey, enabled, observeMutations, rootRef, scheme, shouldLogMermaidWarnings])
 
   return
 }

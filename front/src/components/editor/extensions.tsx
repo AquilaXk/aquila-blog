@@ -373,7 +373,12 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
 
   const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
   const highlightedSource = useMemo(() => renderMermaidHighlightedSource(draftSource), [draftSource])
-  useMermaidEffect(previewRootRef, `editor-mermaid:${normalizedSource}`, isPreviewVisible && normalizedSource.length > 0)
+  useMermaidEffect(
+    previewRootRef,
+    `editor-mermaid:${normalizedSource}`,
+    isPreviewVisible && normalizedSource.length > 0,
+    { observeMutations: false }
+  )
 
   return (
     <MermaidEditorWrapper data-selected={selected}>
@@ -440,10 +445,12 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
             <MermaidPreviewCard>
               {normalizedSource ? (
                 isPreviewVisible ? (
-                  <pre className="aq-mermaid" data-aq-mermaid="true" data-mermaid-rendered="pending">
-                    <code>{normalizedSource}</code>
-                    <div className="aq-mermaid-stage" />
-                  </pre>
+                  <pre
+                    className="aq-mermaid"
+                    data-aq-mermaid="true"
+                    data-mermaid-rendered="pending"
+                    data-mermaid-source={normalizedSource}
+                  />
                 ) : (
                   <MermaidPreviewPlaceholder>
                     블록이 화면에 들어오면 다이어그램 미리보기를 렌더합니다.
@@ -1840,6 +1847,7 @@ const MermaidPreviewCard = styled.div`
 
   .aq-mermaid {
     margin: 0;
+    min-height: 8rem;
   }
 `
 
@@ -2051,7 +2059,8 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
   line-height: 1.7;
   white-space: pre;
   box-shadow: none;
-  text-shadow: 0 0 0 #dbe2ea;
+  text-shadow: none;
+  -webkit-text-fill-color: transparent;
 
   &[data-view-mode="code"] {
     min-height: 22rem;

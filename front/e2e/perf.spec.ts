@@ -899,14 +899,14 @@ test("public 핵심 화면은 dark/light 테마 서피스 계층을 유지한다
       const fingerprint = await getThemeSurfaceFingerprint(page)
       const expected = {
         dark: {
-          bodyBg: "rgb(13, 15, 18)",
-          headerBgChannel: "13, 15, 18",
-          searchBg: "rgb(13, 15, 18)",
-          searchBorder: "rgb(35, 41, 50)",
-          cardBg: "rgb(13, 15, 18)",
-          cardBorder: "rgb(29, 34, 43)",
-          authShellBg: "rgb(13, 15, 18)",
-          authShellBorder: "rgb(35, 41, 50)",
+          bodyBg: "rgb(18, 18, 18)",
+          headerBgChannel: "18, 18, 18",
+          searchBg: "rgb(18, 18, 18)",
+          searchBorder: "rgb(45, 45, 45)",
+          cardBg: "rgb(18, 18, 18)",
+          cardBorder: "rgb(38, 38, 38)",
+          authShellBg: "rgb(18, 18, 18)",
+          authShellBorder: "rgb(45, 45, 45)",
           toggleLabel: "라이트 모드로 전환",
         },
         light: {

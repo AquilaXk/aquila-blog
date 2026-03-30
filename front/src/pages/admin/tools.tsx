@@ -3,12 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import type { SimpleIcon } from "simple-icons"
-import { siGrafana, siPrometheus, siUptimekuma } from "simple-icons"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
-import AppIcon from "src/components/icons/AppIcon"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
@@ -139,13 +136,8 @@ type PageDto<T> = {
 type ActionCardTone = "read" | "write" | "danger" | "infra"
 type InlineNoticeTone = "warning" | "danger" | "success"
 type DiagnosticTab = "mail" | "queue" | "cleanup" | "auth"
-type ExecutionDomain = "overview" | "monitoring" | "diagnostics" | "execution" | "mutation"
-type DashboardFrameState = "idle" | "loading" | "ready" | "error"
+type ExecutionDomain = "overview" | "diagnostics" | "execution" | "mutation"
 type ExecutionResultFilter = "all" | "success" | "error" | "stale"
-type MonitoringBrandIcon = {
-  icon?: SimpleIcon
-  fallbackIcon?: "service"
-}
 
 type ExecutionEntry = {
   id: string
@@ -165,7 +157,6 @@ const HEALTH_CACHE_MS = 10_000
 const RESULTS_FILTER_STORAGE_KEY = "admin.tools.resultsFilter.v1"
 const SECTION_IDS = {
   overview: "ops-overview",
-  monitoring: "ops-monitoring",
   diagnostics: "ops-diagnostics",
   execution: "ops-execution",
   mutation: "ops-mutation",
@@ -176,7 +167,6 @@ type SectionKey = keyof typeof SECTION_IDS
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   overview: "개요",
-  monitoring: "모니터링",
   diagnostics: "진단",
   execution: "실행",
   mutation: "실데이터 테스트",
@@ -260,24 +250,6 @@ const combineFreshnessTones = (...tones: Array<"fresh" | "aging" | "stale" | nul
 
 const formatRetryPolicy = (policy: TaskRetryPolicy) =>
   `${policy.maxRetries}회 / ${policy.baseDelaySeconds}초 시작 / x${policy.backoffMultiplier.toFixed(1)} / 최대 ${policy.maxDelaySeconds}초`
-
-const MonitoringBrandMark = ({ brand, title }: { brand: MonitoringBrandIcon; title: string }) => {
-  if (brand.icon) {
-    return (
-      <ToolIcon aria-hidden="true" style={{ color: `#${brand.icon.hex}` }}>
-        <svg viewBox="0 0 24 24" focusable="false" aria-label={title}>
-          <path d={brand.icon.path} fill="currentColor" />
-        </svg>
-      </ToolIcon>
-    )
-  }
-
-  return (
-    <ToolIcon aria-hidden="true">
-      <AppIcon name={brand.fallbackIcon || "service"} />
-    </ToolIcon>
-  )
-}
 
 const getSystemHealthSummary = (health: SystemHealthPayload | null) => {
   if (!health?.details || typeof health.details !== "object") return []
@@ -372,9 +344,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>([])
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
   const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(null)
-  const [dashboardOpen, setDashboardOpen] = useState(false)
-  const [dashboardFrameState, setDashboardFrameState] = useState<DashboardFrameState>("idle")
-  const [dashboardFrameKey, setDashboardFrameKey] = useState(0)
   const [, setIsMobileLayout] = useState(false)
   const [activeSection, setActiveSection] = useState<SectionKey>("overview")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
@@ -386,17 +355,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   })
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false)
-  const defaultUptimeStatusPath = process.env.NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH?.trim() || "/status/aquila"
-  const monitoringEmbedUrl =
-    process.env.NEXT_PUBLIC_MONITORING_EMBED_URL?.trim() ||
-    process.env.NEXT_PUBLIC_GRAFANA_EMBED_URL?.trim() ||
-    defaultUptimeStatusPath
-  const monitoringEmbedLooksLikeGrafana =
-    monitoringEmbedUrl.includes("grafana") ||
-    monitoringEmbedUrl.includes("/d/") ||
-    monitoringEmbedUrl.includes("/public-dashboards/")
-  const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || defaultUptimeStatusPath
-  const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
   const systemHealthQuery = useQuery({
     queryKey: SYSTEM_HEALTH_QUERY_KEY,
     queryFn: async (): Promise<SystemHealthPayload> => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
@@ -592,19 +550,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   }, [])
 
   useEffect(() => {
-    if (!dashboardOpen) return
-
-    const onWindowError = (event: ErrorEvent) => {
-      const message = event.message || ""
-      if (!message.includes("Failed to read a named property 'scrollY' from 'Window'")) return
-      event.preventDefault()
-    }
-
-    window.addEventListener("error", onWindowError)
-    return () => window.removeEventListener("error", onWindowError)
-  }, [dashboardOpen])
-
-  useEffect(() => {
     if (!sectionJumpTarget || typeof window === "undefined") return
 
     const timeout = window.setTimeout(() => {
@@ -798,7 +743,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       label: "서버 상태",
       status: systemHealthStatus === "UP" ? "정상" : "오류",
       detail: systemHealthSummary[0] || `최근 확인 ${systemHealthFetchedAt}`,
-      section: "monitoring" as SectionKey,
+      section: "overview" as SectionKey,
     },
     {
       label: "메일",
@@ -865,7 +810,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       cleanupFreshness.tone,
       authFreshness.tone
     ),
-    monitoring: systemHealthFreshness.tone,
     diagnostics: combineFreshnessTones(
       mailFreshness.tone,
       taskQueueFreshness.tone,
@@ -901,19 +845,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     }
   }
 
-  const toggleDashboard = () => {
-    setDashboardOpen((prev) => {
-      const next = !prev
-      setDashboardFrameState(next ? "loading" : "idle")
-      return next
-    })
-  }
-
-  const retryDashboard = () => {
-    setDashboardFrameState("loading")
-    setDashboardFrameKey((prev) => prev + 1)
-  }
-
   if (!sessionMember) return null
 
   const isBusy = Boolean(loadingKey)
@@ -922,45 +853,12 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     : activeSection === "diagnostics"
       ? `${SECTION_LABELS[activeSection]} · ${DIAGNOSTIC_TAB_LABELS[activeDiagnosticTab]}`
       : SECTION_LABELS[activeSection]
-  const monitoringItems = [
-    uptimeKumaUrl
-      ? {
-          key: "uptime",
-          brand: { icon: siUptimekuma },
-          title: "Uptime Kuma",
-          description: "",
-          href: uptimeKumaUrl,
-          status: systemHealthStatus === "UP" ? "정상" : "확인 필요",
-        }
-      : null,
-    prometheusUrl
-      ? {
-          key: "prometheus",
-          brand: { icon: siPrometheus },
-          title: "Prometheus",
-          description: "",
-          href: prometheusUrl,
-          status: "외부 대시보드",
-        }
-      : null,
-    monitoringEmbedUrl
-      ? {
-          key: "grafana",
-          brand: monitoringEmbedLooksLikeGrafana ? { icon: siGrafana } : { fallbackIcon: "service" as const },
-          title: monitoringEmbedLooksLikeGrafana ? "Grafana" : "대시보드",
-          description: "",
-          href: monitoringEmbedUrl,
-          status: monitoringEmbedLooksLikeGrafana ? "장기 추이 분석" : "외부 대시보드",
-        }
-      : null,
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item))
-
   return (
     <Main>
       <OpsOverview id={SECTION_IDS.overview} data-ops-section="overview">
         <OverviewHeader>
           <div>
-            <h1>운영 센터</h1>
+            <h1>운영 진단</h1>
           </div>
           <OverviewMeta>
             <StatusBadge data-tone={getStatusTone(overviewStatusLabel)}>{overviewStatusLabel}</StatusBadge>
@@ -975,20 +873,25 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           <Link href="/admin" passHref legacyBehavior>
             <NavLink>관리자 허브</NavLink>
           </Link>
+          <Link href="/admin/dashboard" passHref legacyBehavior>
+            <NavLink>운영 대시보드</NavLink>
+          </Link>
           <Link href="/admin/posts" passHref legacyBehavior>
             <NavLink>글 작업 공간</NavLink>
           </Link>
         </HeaderLinks>
 
         <OverviewContent>
-          <FeaturedStatusCard type="button" onClick={() => focusSection("monitoring")}>
-            <CardEyebrow>서비스 상태</CardEyebrow>
-            <CardMainLine>
-              <strong>{systemHealthStatus === "UP" ? "정상" : systemHealthStatus}</strong>
-              <StatusDot data-tone={systemHealthStatus === "UP" ? "success" : "danger"} />
-            </CardMainLine>
-            <CardDetail>{systemHealthSummary[0] || `최근 확인 ${systemHealthFetchedAt}`}</CardDetail>
-          </FeaturedStatusCard>
+          <Link href="/admin/dashboard" passHref legacyBehavior>
+            <FeaturedStatusCard as="a">
+              <CardEyebrow>운영 대시보드</CardEyebrow>
+              <CardMainLine>
+                <strong>{systemHealthStatus === "UP" ? "정상" : systemHealthStatus}</strong>
+                <StatusDot data-tone={systemHealthStatus === "UP" ? "success" : "danger"} />
+              </CardMainLine>
+              <CardDetail>{systemHealthSummary[0] || `최근 확인 ${systemHealthFetchedAt}`}</CardDetail>
+            </FeaturedStatusCard>
+          </Link>
 
           <StatusCardGrid>
             {statusCards.slice(1).map((card) => (
@@ -1042,7 +945,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </SectionNavStatus>
           {([
             { key: "overview", label: "개요" },
-            { key: "monitoring", label: "모니터링" },
             { key: "diagnostics", label: "진단" },
             { key: "execution", label: "실행" },
             { key: "mutation", label: "실데이터 테스트", tone: "danger" },
@@ -1062,96 +964,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
         </SectionNav>
 
         <WorkspaceColumn>
-          <WorkspaceSection id={SECTION_IDS.monitoring} data-ops-section="monitoring">
-            <SectionHeading>
-              <SectionTitleBlock>
-                <h2>모니터링</h2>
-              </SectionTitleBlock>
-              <HeadingMetaRow>
-                <FreshnessBadge data-tone={systemHealthFreshness.tone}>{systemHealthFreshness.label}</FreshnessBadge>
-                <StatusBadge data-tone={systemHealthStatus === "UP" ? "success" : "warning"}>
-                  {systemHealthStatus === "UP" ? "정상" : "확인 필요"}
-                </StatusBadge>
-              </HeadingMetaRow>
-            </SectionHeading>
-
-            <MonitoringGrid>
-              {monitoringItems.map((item) => (
-                <MonitoringCard key={item.key}>
-                  <MonitoringBrandMark brand={item.brand} title={item.title} />
-                  <MonitoringCopy>
-                    <strong>{item.title}</strong>
-                    {item.description ? <span>{item.description}</span> : null}
-                  </MonitoringCopy>
-                  <MonitoringMeta>
-                    <ToolStatus>{item.status}</ToolStatus>
-                    <LaunchLink href={item.href} target="_blank" rel="noreferrer noopener">
-                      {item.title} 열기
-                    </LaunchLink>
-                  </MonitoringMeta>
-                </MonitoringCard>
-              ))}
-            </MonitoringGrid>
-
-            {monitoringEmbedUrl ? (
-              <DetailsPanel open={dashboardOpen}>
-                <DetailsSummary
-                  onClick={(event) => {
-                    event.preventDefault()
-                    toggleDashboard()
-                  }}
-                >
-                  <span>대시보드 보기</span>
-                  <small>{dashboardOpen ? "숨기기" : "열기"}</small>
-                </DetailsSummary>
-                {dashboardOpen ? (
-                  <DashboardFrameShell data-state={dashboardFrameState}>
-                    {dashboardFrameState !== "ready" ? (
-                      <DashboardFramePlaceholder data-state={dashboardFrameState}>
-                        <div className="copy">
-                          <strong>
-                            {dashboardFrameState === "error" ? "대시보드를 불러오지 못했습니다." : "대시보드 로딩 중"}
-                          </strong>
-                          <span>
-                            {dashboardFrameState === "error"
-                              ? "외부 대시보드 응답 또는 embed 설정을 확인한 뒤 다시 시도하세요."
-                              : "iframe이 준비되면 이 영역을 실제 대시보드로 교체합니다."}
-                          </span>
-                        </div>
-                        {dashboardFrameState === "loading" ? (
-                          <div className="skeleton" aria-hidden="true">
-                            <span className="line wide" />
-                            <span className="line medium" />
-                            <span className="panel" />
-                          </div>
-                        ) : (
-                          <ActionRow>
-                            <QuietButton type="button" onClick={retryDashboard}>
-                              다시 시도
-                            </QuietButton>
-                            <LaunchLink href={monitoringEmbedUrl} target="_blank" rel="noreferrer noopener">
-                              새 탭에서 열기
-                            </LaunchLink>
-                          </ActionRow>
-                        )}
-                      </DashboardFramePlaceholder>
-                    ) : null}
-                    <MonitoringFrame
-                      key={dashboardFrameKey}
-                      src={monitoringEmbedUrl}
-                      loading="lazy"
-                      title="Monitoring Dashboard"
-                      referrerPolicy="no-referrer"
-                      data-state={dashboardFrameState}
-                      onLoad={() => setDashboardFrameState("ready")}
-                      onError={() => setDashboardFrameState("error")}
-                    />
-                  </DashboardFrameShell>
-                ) : null}
-              </DetailsPanel>
-            ) : null}
-          </WorkspaceSection>
-
           <WorkspaceSection id={SECTION_IDS.diagnostics} data-ops-section="diagnostics">
             <SectionHeading>
               <SectionTitleBlock>
@@ -2363,11 +2175,6 @@ const FreshnessOverviewButton = styled.button`
   }
 `
 
-const MonitoringGrid = styled.div`
-  display: grid;
-  gap: 0.7rem;
-`
-
 const SubSectionHeading = styled.div`
   display: flex;
   align-items: baseline;
@@ -2386,74 +2193,6 @@ const SubSectionHeading = styled.div`
     font-size: 0.82rem;
     font-weight: 700;
   }
-`
-
-const MonitoringCard = styled.article`
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.85rem;
-  align-items: center;
-  padding: 0.9rem 0.95rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray1};
-
-  @media (max-width: 760px) {
-    grid-template-columns: auto 1fr;
-  }
-`
-
-const ToolIcon = styled.div`
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray12};
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-
-  svg {
-    width: 1.3rem;
-    height: 1.3rem;
-    display: block;
-  }
-`
-
-const MonitoringCopy = styled.div`
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-
-  strong {
-    font-size: 0.95rem;
-  }
-
-  span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.82rem;
-    line-height: 1.5;
-  }
-`
-
-const MonitoringMeta = styled.div`
-  display: grid;
-  gap: 0.4rem;
-  justify-items: end;
-
-  @media (max-width: 760px) {
-    grid-column: 1 / -1;
-    justify-items: start;
-  }
-`
-
-const ToolStatus = styled.span`
-  color: ${({ theme }) => theme.colors.gray10};
-  font-size: 0.78rem;
-  font-weight: 700;
 `
 
 const LaunchLink = styled.a`
@@ -2506,104 +2245,6 @@ const DetailsSummary = styled.summary`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.78rem;
     font-weight: 700;
-  }
-`
-
-const DashboardFrameShell = styled.div`
-  position: relative;
-  width: calc(100% - 1.2rem);
-  min-height: 420px;
-  margin: 0 0.6rem 0.8rem;
-`
-
-const DashboardFramePlaceholder = styled.div`
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  display: grid;
-  align-content: start;
-  gap: 0.9rem;
-  padding: 1.1rem;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background: ${({ theme }) => theme.colors.gray1};
-
-  .copy {
-    display: grid;
-    gap: 0.26rem;
-  }
-
-  .copy strong {
-    font-size: 0.96rem;
-    letter-spacing: -0.02em;
-  }
-
-  .copy span {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.84rem;
-    line-height: 1.55;
-  }
-
-  .skeleton {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .line,
-  .panel {
-    border-radius: 999px;
-    background: ${({ theme }) => theme.colors.gray3};
-    animation: ops-dashboard-pulse 1.18s ease-in-out infinite;
-  }
-
-  .line {
-    height: 0.9rem;
-  }
-
-  .line.wide {
-    width: min(18rem, 62%);
-  }
-
-  .line.medium {
-    width: min(13rem, 44%);
-  }
-
-  .panel {
-    height: 16rem;
-    border-radius: 18px;
-  }
-
-  &[data-state="error"] {
-    border-color: ${({ theme }) => theme.colors.statusDangerBorder};
-  }
-
-  @keyframes ops-dashboard-pulse {
-    0% {
-      opacity: 0.72;
-    }
-    50% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0.72;
-    }
-  }
-`
-
-const MonitoringFrame = styled.iframe`
-  position: relative;
-  z-index: 0;
-  display: block;
-  width: 100%;
-  min-height: 420px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  border-radius: 14px;
-  background: transparent;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-
-  &[data-state="ready"] {
-    opacity: 1;
   }
 `
 

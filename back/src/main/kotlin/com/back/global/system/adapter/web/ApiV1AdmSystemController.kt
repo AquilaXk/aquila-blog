@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorS
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthSecurityEventDto
 import com.back.global.security.application.AuthSecurityEventService
+import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.application.TaskDlqReplayResult
@@ -19,8 +20,11 @@ import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -131,6 +135,19 @@ class ApiV1AdmSystemController(
     fun signupMailDiagnostics(
         @RequestParam(defaultValue = "false") checkConnection: Boolean,
     ): SignupMailDiagnostics = signupMailDiagnosticsService.diagnose(checkConnection = checkConnection)
+
+    @GetMapping("/grafana/auth-proxy")
+    @Transactional(readOnly = true)
+    fun grafanaAuthProxy(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): ResponseEntity<Void> =
+        ResponseEntity
+            .noContent()
+            .header("X-WEBAUTH-USER", securityUser.username)
+            .header("X-WEBAUTH-NAME", securityUser.nickname)
+            .header(HttpHeaders.CACHE_CONTROL, "private, no-store, max-age=0")
+            .header(HttpHeaders.PRAGMA, "no-cache")
+            .build()
 
     @GetMapping("/tasks")
     @Transactional(readOnly = true)

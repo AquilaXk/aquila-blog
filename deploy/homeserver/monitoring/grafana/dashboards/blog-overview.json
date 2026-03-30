@@ -83,7 +83,7 @@
           "refId": "A"
         }
       ],
-      "title": "API p95 latency",
+      "title": "HTTP p95 응답 시간",
       "type": "stat"
     },
     {
@@ -152,7 +152,7 @@
           "refId": "A"
         }
       ],
-      "title": "5xx ratio",
+      "title": "HTTP 5xx 비율",
       "type": "stat"
     },
     {
@@ -328,7 +328,7 @@
           "refId": "D"
         }
       ],
-      "title": "Task queue overview",
+      "title": "작업 큐 적체",
       "type": "timeseries"
     },
     {
@@ -523,7 +523,214 @@
           "refId": "C"
         }
       ],
-      "title": "Notification SSE recovery activity",
+      "title": "Notification SSE recovery",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 9,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum(increase({__name__=~\"http_server_requests_seconds_count|http_server_request_duration_seconds_count\",job=\"back\",service=\"aquila-back\",uri!~\"/actuator.*\"}[5m])) or on() vector(0)",
+          "legendFormat": "http_requests/5m",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "총 HTTP 요청 수",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.75
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "(sum(jvm_memory_used_bytes{job=\"back\",service=\"aquila-back\",area=\"heap\"}) / clamp_min(sum(jvm_memory_max_bytes{job=\"back\",service=\"aquila-back\",area=\"heap\"}), 1)) or on() vector(0)",
+          "legendFormat": "heap_used_ratio",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "JVM Heap 사용량",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 25
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "max(hikaricp_connections_active{job=\"back\",service=\"aquila-back\"}) or on() vector(0)",
+          "legendFormat": "active",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Hikari 활성 커넥션",
       "type": "timeseries"
     }
   ],
@@ -544,6 +751,6 @@
   "timezone": "browser",
   "title": "Aquila Blog Overview",
   "uid": "blog-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

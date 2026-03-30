@@ -518,6 +518,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/grafana/auth-proxy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["grafanaAuthProxy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/auth/security-events": {
         parameters: {
             query?: never;
@@ -2676,6 +2692,24 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["HealthResBody"];
                 };
+            };
+        };
+    };
+    grafanaAuthProxy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

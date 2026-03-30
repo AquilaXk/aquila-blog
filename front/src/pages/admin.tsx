@@ -102,19 +102,19 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       cta: "프로필 정리",
     },
     {
-      href: "/admin/tools",
-      title: "운영 진단",
-      description: "모니터링, 진단, 최근 실행 결과를 한 화면에서 점검합니다.",
-      cta: "진단 열기",
+      href: "/admin/dashboard",
+      title: "운영 대시보드",
+      description: "핵심 Grafana 패널과 외부 모니터링을 카드 단위로 확인합니다.",
+      cta: "대시보드 열기",
     },
   ]
 
   const nextActionCandidates: Array<AdminHubNextAction | null> = [
     systemHealthQuery.data?.status && systemHealthQuery.data.status !== "UP"
       ? {
-          href: "/admin/tools",
+          href: "/admin/dashboard",
           title: "서비스 상태 확인",
-          detail: `현재 상태가 ${systemHealthQuery.data.status}입니다. 운영 센터에서 시스템 상태와 모니터링을 먼저 점검하세요.`,
+          detail: `현재 상태가 ${systemHealthQuery.data.status}입니다. 운영 대시보드에서 모니터링 패널을 먼저 확인하세요.`,
           tone: "warn" as const,
         }
       : null,
@@ -166,9 +166,9 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
     systemHealthQuery.isSuccess && taskQueueQuery.isSuccess
       ? {
-          href: "/admin/tools",
-          title: "운영 센터 최근 결과 확인",
-          detail: "오늘 진단/실행 기록과 갱신 상태를 한 번에 확인할 수 있습니다.",
+          href: "/admin/dashboard",
+          title: "운영 대시보드 확인",
+          detail: "오늘 핵심 패널과 외부 모니터링 링크를 한 화면에서 점검할 수 있습니다.",
           tone: "neutral" as const,
         }
       : null,

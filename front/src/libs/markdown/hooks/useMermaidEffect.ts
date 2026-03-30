@@ -165,6 +165,44 @@ const useMermaidEffect = (
         .filter((line) => !/^\s*(style|linkStyle|classDef)\b/i.test(line))
         .join("\n")
 
+    const escapeMermaidHtml = (value: string) =>
+      value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+
+    const toMermaidErrorMessage = (error: unknown) => {
+      const normalized = String(error || "")
+        .replace(/\s+/g, " ")
+        .trim()
+      const lineMatch = normalized.match(/line\s+(\d+)/i)
+      if (lineMatch) {
+        return `${lineMatch[1]}번째 줄 근처 문법을 확인해 주세요.`
+      }
+      if (normalized.toLowerCase().includes("parse error")) {
+        return "문법을 해석하지 못했습니다. 블록 문법을 다시 확인해 주세요."
+      }
+      return "문법 또는 블록 구조를 확인해 주세요."
+    }
+
+    const renderMermaidErrorState = ({ source, error }: { source: string; error: unknown }) => {
+      const escapedSource = escapeMermaidHtml(source)
+      const escapedError = escapeMermaidHtml(String(error || "알 수 없는 오류"))
+      const guidance = toMermaidErrorMessage(error)
+      return `
+        <div class="aq-mermaid-error-state" role="status" aria-live="polite">
+          <div class="aq-mermaid-error-title">Mermaid 문법을 해석하지 못했습니다.</div>
+          <p class="aq-mermaid-error-description">${guidance}</p>
+          <p class="aq-mermaid-error-guidance">participant 이름에 특수문자가 있으면 <code>as "라벨"</code> 형식을 사용해 주세요.</p>
+          <details class="aq-mermaid-error-details">
+            <summary>원문 보기</summary>
+            <code class="aq-mermaid-error-code">${escapedSource}</code>
+          </details>
+          <details class="aq-mermaid-error-details">
+            <summary>파서 메시지</summary>
+            <code class="aq-mermaid-error-code">${escapedError}</code>
+          </details>
+        </div>
+      `
+    }
+
     const isNegativeRectWidthError = (error: unknown) => {
       const message = String(error)
       return message.includes("attribute width") && message.includes("negative value")
@@ -203,6 +241,7 @@ const useMermaidEffect = (
     }
 
     let mermaidOverlayCleanup: (() => void) | null = null
+    let lastMermaidParseWarning: string | null = null
 
     const getMermaid = async () => {
       if (!mermaidPromise) {
@@ -212,7 +251,8 @@ const useMermaidEffect = (
               parseError?: (error: unknown, hash: unknown) => void
             }
           ).parseError = (error) => {
-            throw new Error(String(error))
+            lastMermaidParseWarning = String(error || "Mermaid parse error")
+            console.warn("[mermaid] parse warning", error)
           }
 
           mermaid.initialize({
@@ -454,15 +494,10 @@ const useMermaidEffect = (
           if (scheduleRetry(i, block)) return
           block.dataset.mermaidRendered = "error"
           block.classList.add("aq-mermaid-error")
-          block.innerHTML = `
-            <div style="color:#b42318;font-weight:600;margin-bottom:0.5rem;">
-              Mermaid 렌더링 실패: 다이어그램 영역 너비를 계산할 수 없습니다.
-            </div>
-            <code style="white-space:pre-wrap;display:block;">${source
-              .replaceAll("&", "&amp;")
-              .replaceAll("<", "&lt;")
-              .replaceAll(">", "&gt;")}</code>
-          `
+          block.innerHTML = renderMermaidErrorState({
+            source,
+            error: "다이어그램 영역 너비를 계산할 수 없습니다. 레이아웃이 안정되면 다시 렌더링됩니다.",
+          })
           return
         }
 
@@ -484,7 +519,11 @@ const useMermaidEffect = (
           block.appendChild(stage)
 
           const renderId = `aq-mermaid-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          lastMermaidParseWarning = null
           const { svg, bindFunctions } = await mermaid.render(renderId, sourceToRender)
+          if (lastMermaidParseWarning) {
+            throw new Error(lastMermaidParseWarning)
+          }
           if (disposed) return
 
           stage.innerHTML = svg
@@ -665,23 +704,13 @@ const useMermaidEffect = (
 
           if (scheduleRetry(i, block)) return
 
-          const escapedSource = source
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
-
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = preset.themeKey
           block.dataset.mermaidPreset = preset.mode
           block.dataset.mermaidRendered = "error"
           block.classList.add("aq-mermaid-error")
           block.style.minHeight = ""
-          block.innerHTML = `
-            <div class="aq-mermaid-error-state">
-              <div class="aq-mermaid-error-title">Mermaid를 렌더하지 못했습니다.</div>
-              <code class="aq-mermaid-error-code">${escapedSource}</code>
-            </div>
-          `
+          block.innerHTML = renderMermaidErrorState({ source, error })
           const signature = `${source}:${String(error)}`
           if (!loggedErrorSignatures.has(signature)) {
             loggedErrorSignatures.add(signature)

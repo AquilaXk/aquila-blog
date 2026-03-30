@@ -36,7 +36,7 @@ val testInfraMode =
     providers
         .gradleProperty("testInfraMode")
         .orElse(providers.environmentVariable("TEST_INFRA_MODE"))
-        .orElse("compose")
+        .orElse("auto")
 val testInfraMarkerFile =
     layout.buildDirectory
         .file("tmp/testInfra/running.marker")
@@ -193,6 +193,16 @@ fun Project.stopTestInfra() {
     }
 }
 
+fun Test.commandLineIncludePatternsOrEmpty(): Set<String> {
+    val getter =
+        filter.javaClass.methods.firstOrNull { method ->
+            method.name == "getCommandLineIncludePatterns" && method.parameterCount == 0
+        } ?: return emptySet()
+
+    val raw = getter.invoke(filter) as? Iterable<*> ?: return emptySet()
+    return raw.mapNotNull { it?.toString() }.toSet()
+}
+
 dependencies {
     // Spring
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -290,7 +300,7 @@ tasks {
     }
 
     withType<Test> {
-        val composeInfraEnabled = testInfraMode.get().equals("compose", ignoreCase = true)
+        val infraMode = testInfraMode.get().trim().lowercase()
         val resolvedTestMaxHeapMb =
             providers
                 .gradleProperty("testMaxHeapMb")
@@ -307,12 +317,32 @@ tasks {
         environment("SPRING__DATA__REDIS__PASSWORD", resolvedTestRedisPassword.get())
         environment("CUSTOM__TEST__DB_PORT", resolvedTestDbPort.get())
         environment("CUSTOM__TEST__REDIS_PORT", resolvedTestRedisPort.get())
-        if (composeInfraEnabled) {
-            doFirst {
+        doFirst {
+            val commandLineIncludes = commandLineIncludePatternsOrEmpty()
+            val hasCommandLineIncludes = commandLineIncludes.isNotEmpty()
+            val onlyTestcontainersIncludes =
+                hasCommandLineIncludes &&
+                    commandLineIncludes.all { include ->
+                        include.startsWith("com.back.infrastructure.")
+                    }
+            val composeInfraEnabled =
+                when (infraMode) {
+                    "compose" -> true
+                    "none" -> false
+                    else -> !onlyTestcontainersIncludes
+                }
+
+            if (composeInfraEnabled) {
                 project.startTestInfra()
+            } else {
+                logger.lifecycle(
+                    "test infra bootstrap skipped (mode={}, includePatterns={})",
+                    infraMode,
+                    commandLineIncludes,
+                )
             }
-            finalizedBy(testInfraDown)
         }
+        finalizedBy(testInfraDown)
     }
 
     named<Test>("test") {

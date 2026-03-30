@@ -154,16 +154,33 @@ inspect_grafana_embed_headers() {
   curl -I -s --max-time 10 "${url}" 2>/dev/null || true
 }
 
+inspect_grafana_internal_health() {
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 10 \
+    -o /dev/null \
+    -s \
+    -w '%{http_code}' \
+    "http://grafana:3000/api/health" 2>/dev/null || true
+}
+
 grafana_embed_headers_are_healthy() {
   local url="$1"
-  local headers status location xfo csp
+  local headers status location xfo csp internal_health
+  internal_health="$(inspect_grafana_internal_health)"
   headers="$(inspect_grafana_embed_headers "${url}")"
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
   csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
 
+  if [[ "${internal_health}" != "200" ]]; then
+    return 1
+  fi
   if [[ -z "${status}" || "${status}" == "none" ]]; then
+    return 1
+  fi
+  if [[ "${status}" != "200" && "${status}" != "401" && "${status}" != "403" ]]; then
     return 1
   fi
   if [[ -n "${location}" && "${location}" == *"/login"* ]]; then

@@ -141,7 +141,8 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain('width: min(100%, var(--article-readable-width, 48rem));')
     expect(editorStudioSource).not.toContain("const LIVE_PREVIEW_RENDER_WIDTHS: Record<PreviewViewportMode, number> = {")
     expect(editorStudioSource).not.toContain('aria-label="미리보기 기기 폭"')
-    expect(editorStudioSource).toContain('zoom: var(--preview-scale, 1);')
+    expect(editorStudioSource).not.toContain('zoom: var(--preview-scale, 1);')
+    expect(editorStudioSource).not.toContain("--preview-scale")
     expect(editorStudioSource).toContain("const EditorExitAction = styled.button`")
     expect(editorStudioSource).toContain("min-height: 42px;")
     expect(editorStudioSource).toContain("실제 본문 폭 기준")
@@ -156,9 +157,11 @@ test.describe("editor studio state", () => {
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+    const navBarSource = readFileSync(path.resolve(__dirname, "../src/layouts/RootLayout/Header/NavBar.tsx"), "utf8")
 
     expect(editorStudioSource).toContain("const sessionMember = me || initialMember")
     expect(editorStudioSource).toContain("if (!sessionMember) {")
     expect(editorStudioSource).toContain("if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return")
+    expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 })

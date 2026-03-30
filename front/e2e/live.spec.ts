@@ -184,7 +184,7 @@ const openAdminNewPostEntry = async (page: Page) => {
 }
 
 const appendTextToBlockEditor = async (page: Page, text: string) => {
-  const blockEditor = page.locator(".aq-block-editor__content[contenteditable='true']").first()
+  const blockEditor = page.locator("[data-testid='block-editor-prosemirror']").first()
   await expect(blockEditor).toBeVisible()
   await expect(blockEditor).toHaveAttribute("contenteditable", "true")
 

@@ -98,8 +98,11 @@ const NavBar: React.FC = () => {
   const handleLogout = async () => {
     await logout()
 
-    if (router.pathname.startsWith("/admin")) {
-      const target = toLoginPath(nextPath, "/admin")
+    const isProtectedAuthoringRoute = router.pathname.startsWith("/admin") || router.pathname.startsWith("/editor")
+
+    if (isProtectedAuthoringRoute) {
+      const fallbackPath = router.pathname.startsWith("/editor") ? "/editor/new" : "/admin"
+      const target = toLoginPath(nextPath, fallbackPath)
       if (router.asPath !== target) {
         await replaceRoute(router, target, { preferHardNavigation: true })
       }

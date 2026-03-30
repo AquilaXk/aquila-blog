@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# Prevent child commands from consuming the parent ssh heredoc stdin.
+exec </dev/null
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_ROOT="${SCRIPT_DIR}/.deploy-backups"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"

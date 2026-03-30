@@ -108,6 +108,8 @@ export type BlockEditorQaActions = {
   addTableColumnAfter: () => void
   deleteSelectedTableRow: () => void
   deleteSelectedTableColumn: () => void
+  resizeFirstTableRow: (deltaPx: number) => void
+  resizeFirstTableColumn: (deltaPx: number) => void
   focusDocumentEnd: () => void
   appendCalloutBlock: () => void
   appendFormulaBlock: () => void
@@ -1093,6 +1095,67 @@ const BlockEditorShell = ({
     }
   }, [])
 
+  const resizeFirstTableRowBy = useCallback((deltaPx: number) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+    const firstTableRow = viewportRef.current?.querySelector(".aq-block-editor__content table tr") as HTMLTableRowElement | null
+    if (!firstTableRow) return
+    const nextHeight = Math.max(
+      TABLE_MIN_ROW_HEIGHT_PX,
+      Math.round(firstTableRow.getBoundingClientRect().height + deltaPx)
+    )
+    commitTableRowHeight(firstTableRow, nextHeight)
+  }, [commitTableRowHeight])
+
+  const resizeFirstTableColumnBy = useCallback((deltaPx: number) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+    const firstCell = viewportRef.current?.querySelector(".aq-block-editor__content table tr:first-of-type > th, .aq-block-editor__content table tr:first-of-type > td") as HTMLElement | null
+    if (!firstCell) return
+
+    let domPosition = 0
+    try {
+      domPosition = currentEditor.view.posAtDOM(firstCell, 0)
+    } catch {
+      return
+    }
+    const resolvedPosition = currentEditor.state.doc.resolve(domPosition)
+
+    for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
+      const node = resolvedPosition.node(depth)
+      if (node.type.name !== "tableCell" && node.type.name !== "tableHeader") continue
+      const cellPosition = resolvedPosition.before(depth)
+      const cellNode = currentEditor.state.doc.nodeAt(cellPosition)
+      if (!cellNode) return
+      const currentWidth = Array.isArray(cellNode.attrs?.colwidth) && cellNode.attrs.colwidth[0]
+        ? Number(cellNode.attrs.colwidth[0])
+        : Math.round(firstCell.getBoundingClientRect().width)
+      const nextWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(currentWidth + deltaPx))
+      const transaction = currentEditor.state.tr.setNodeMarkup(cellPosition, undefined, {
+        ...cellNode.attrs,
+        colwidth: [nextWidth],
+      })
+      currentEditor.view.dispatch(transaction)
+      return
+    }
+  }, [])
+
+  const syncTableQuickRailFromElement = useCallback((element: Element | null) => {
+    const tableElement = element?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+    const tableRect = tableElement?.getBoundingClientRect()
+    if (!tableRect) {
+      setTableQuickRailState((prev) => ({ ...prev, visible: false }))
+      return
+    }
+    setTableQuickRailState({
+      visible: true,
+      left: Math.round(Math.max(12, tableRect.left - 46)),
+      top: Math.round(tableRect.top + 10),
+      width: Math.round(tableRect.width),
+      height: Math.round(tableRect.height),
+    })
+  }, [])
+
   const syncSerializedDoc = useCallback(
     (nextDoc: BlockEditorDoc) => {
       const serialized = serializeEditorDocToMarkdown(nextDoc)
@@ -1936,6 +1999,12 @@ const BlockEditorShell = ({
       deleteSelectedTableColumn: () => {
         editor?.chain().focus().deleteColumn().run()
       },
+      resizeFirstTableRow: (deltaPx) => {
+        resizeFirstTableRowBy(deltaPx)
+      },
+      resizeFirstTableColumn: (deltaPx) => {
+        resizeFirstTableColumnBy(deltaPx)
+      },
       focusDocumentEnd: () => {
         editor?.chain().focus("end").run()
       },
@@ -1978,6 +2047,8 @@ const BlockEditorShell = ({
     insertBlocksAtIndex,
     moveTaskItemInFirstTaskList,
     onQaActionsReady,
+    resizeFirstTableColumnBy,
+    resizeFirstTableRowBy,
     selectCurrentTableAxis,
     updateActiveTableCellAttrs,
     withTrailingParagraph,
@@ -3082,11 +3153,17 @@ const BlockEditorShell = ({
         return
       }
       if (isCoarsePointer) return
+      const target = event.target instanceof Element ? event.target : null
+      const hoveredTableElement = target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+      if (hoveredTableElement) {
+        syncTableQuickRailFromElement(hoveredTableElement)
+      } else if (!isTableMode) {
+        setTableQuickRailState((prev) => ({ ...prev, visible: false }))
+      }
       if (isTableMode) {
         setHoveredBlockIndex(null)
         return
       }
-      const target = event.target instanceof Element ? event.target : null
       if (target?.closest("[data-block-handle-rail='true']") || target?.closest("[data-block-menu-root='true']")) {
         if (blockHandleState.visible) {
           setHoveredBlockIndex(blockHandleState.blockIndex)
@@ -3111,11 +3188,13 @@ const BlockEditorShell = ({
       isTableMode,
       isRowResizeHandleTarget,
       setViewportRowResizeHot,
+      syncTableQuickRailFromElement,
     ]
   )
 
   const handleViewportPointerLeave = useCallback(() => {
     scheduleHoveredBlockClear()
+    setTableQuickRailState((prev) => ({ ...prev, visible: false }))
     if (!tableRowResizeRef.current) {
       setViewportRowResizeHot(false)
     }

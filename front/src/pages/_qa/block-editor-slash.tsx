@@ -118,6 +118,12 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
         <button type="button" onClick={() => qaActionsRef.current?.deleteSelectedTableColumn()}>
           QA 열 삭제
         </button>
+        <button type="button" onClick={() => qaActionsRef.current?.resizeFirstTableRow(28)}>
+          QA 행 리사이즈
+        </button>
+        <button type="button" onClick={() => qaActionsRef.current?.resizeFirstTableColumn(28)}>
+          QA 열 리사이즈
+        </button>
         <button type="button" onClick={() => qaActionsRef.current?.focusDocumentEnd()}>
           QA 끝으로 이동
         </button>

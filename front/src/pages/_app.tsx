@@ -18,6 +18,7 @@ function App({ Component, pageProps, emotionCache = clientSideEmotionCache }: Ap
   return (
     <CacheProvider value={emotionCache}>
       <Head>
+        <title>AquilaLog</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
       <QueryClientProvider client={queryClient}>

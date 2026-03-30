@@ -4406,6 +4406,35 @@ const EditorViewport = styled.div`
     text-align: left !important;
   }
 
+  .aq-block-editor__content blockquote {
+    width: 100%;
+    max-width: var(--compose-pane-readable-width, var(--article-readable-width, 48rem));
+    box-sizing: border-box;
+    margin: 0.95rem auto;
+    padding: 0.12rem 0 0.12rem 1rem;
+    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
+    border-radius: 0;
+    background: transparent !important;
+    color: ${({ theme }) => theme.colors.gray11};
+    box-shadow: none;
+  }
+
+  .aq-block-editor__content blockquote > :first-of-type {
+    margin-top: 0;
+  }
+
+  .aq-block-editor__content blockquote > :last-child {
+    margin-bottom: 0;
+  }
+
+  .aq-block-editor__content > blockquote[data-block-hovered="true"],
+  .aq-block-editor__content > blockquote[data-block-selected="true"],
+  .aq-block-editor__content > blockquote[data-block-drop-target="true"],
+  .aq-block-editor__content > blockquote[data-block-dragging="true"] {
+    background: transparent !important;
+    box-shadow: none;
+  }
+
   .aq-block-editor__content .aq-code-editor-content,
   .aq-block-editor__content .aq-code-editor-content > div {
     text-align: left;

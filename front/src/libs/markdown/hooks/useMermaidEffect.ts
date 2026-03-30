@@ -189,15 +189,15 @@ const useMermaidEffect = (
       const guidance = toMermaidErrorMessage(error)
       return `
         <div class="aq-mermaid-error-state" role="status" aria-live="polite">
-          <div class="aq-mermaid-error-title">Mermaid 문법을 해석하지 못했습니다.</div>
+          <div class="aq-mermaid-error-title">Mermaid를 렌더하지 못했습니다.</div>
           <p class="aq-mermaid-error-description">${guidance}</p>
-          <p class="aq-mermaid-error-guidance">participant 이름에 특수문자가 있으면 <code>as "라벨"</code> 형식을 사용해 주세요.</p>
+          <p class="aq-mermaid-error-guidance">특수문자나 긴 라벨은 따옴표로 감싸고, 블록/화살표 문법이 줄 단위로 닫혔는지 먼저 확인해 주세요.</p>
           <details class="aq-mermaid-error-details">
-            <summary>원문 보기</summary>
+            <summary>Mermaid 코드 보기</summary>
             <code class="aq-mermaid-error-code">${escapedSource}</code>
           </details>
           <details class="aq-mermaid-error-details">
-            <summary>파서 메시지</summary>
+            <summary>상세 오류 보기</summary>
             <code class="aq-mermaid-error-code">${escapedError}</code>
           </details>
         </div>

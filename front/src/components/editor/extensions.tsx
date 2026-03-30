@@ -39,7 +39,7 @@ import type {
 } from "./serialization"
 
 const RAW_BLOCK_REASON_LABELS: Record<string, string> = {
-  "unsupported-mermaid": "Mermaid 원문 블록",
+  "unsupported-mermaid": "Mermaid",
   "unsupported-callout": "콜아웃 원문 블록",
   "unsupported-toggle": "토글 원문 블록",
   "unsupported-table-alignment": "정렬 표 원문 블록",
@@ -271,16 +271,76 @@ export const InlineColorMark = Mark.create({
 type MermaidEditorViewMode = "code" | "split" | "preview"
 
 const MERMAID_VIEW_MODE_OPTIONS: Array<{ value: MermaidEditorViewMode; label: string }> = [
-  { value: "code", label: "코드" },
-  { value: "split", label: "코드+미리보기" },
-  { value: "preview", label: "미리보기" },
+  { value: "code", label: "코드 보기" },
+  { value: "split", label: "코드+Mermaid 보기" },
+  { value: "preview", label: "Mermaid 보기" },
 ]
+
+const MERMAID_KEYWORD_REGEX =
+  /\b(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|subgraph|end|direction|classDef|class|style|linkStyle|click)\b/g
+const MERMAID_ARROW_REGEX =
+  /(<-->|==>|-->|---|-.->|-\.->|==|=>|<=|<->|<--|--x|x--|o--|--o|\|\||:::|::)/g
+const MERMAID_STRING_REGEX = /"[^"\n]*"|'[^'\n]*'/g
+const MERMAID_COMMENT_REGEX = /^\s*%%.*$/
+
+const escapeEditorHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+
+const highlightMermaidLine = (rawLine: string) => {
+  if (!rawLine.length) return ""
+  if (MERMAID_COMMENT_REGEX.test(rawLine)) {
+    return `<span class="token-comment">${escapeEditorHtml(rawLine)}</span>`
+  }
+
+  const matches: Array<{ start: number; end: number; className: string }> = []
+  const pushMatches = (regex: RegExp, className: string) => {
+    regex.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(rawLine)) !== null) {
+      matches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        className,
+      })
+    }
+  }
+
+  pushMatches(MERMAID_STRING_REGEX, "token-string")
+  pushMatches(MERMAID_ARROW_REGEX, "token-operator")
+  pushMatches(MERMAID_KEYWORD_REGEX, "token-keyword")
+
+  matches.sort((left, right) => {
+    if (left.start !== right.start) return left.start - right.start
+    return left.end - right.end
+  })
+
+  let cursor = 0
+  let html = ""
+  for (const token of matches) {
+    if (token.start < cursor) continue
+    html += escapeEditorHtml(rawLine.slice(cursor, token.start))
+    html += `<span class="${token.className}">${escapeEditorHtml(rawLine.slice(token.start, token.end))}</span>`
+    cursor = token.end
+  }
+  html += escapeEditorHtml(rawLine.slice(cursor))
+  return html
+}
+
+const renderMermaidHighlightedSource = (source: string) =>
+  source
+    .split("\n")
+    .map((line) => `<span class="line">${highlightMermaidLine(line) || "<br />"}</span>`)
+    .join("")
 
 const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
@@ -312,14 +372,20 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   }, [showPreviewPane])
 
   const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
+  const highlightedSource = useMemo(() => renderMermaidHighlightedSource(draftSource), [draftSource])
   useMermaidEffect(previewRootRef, `editor-mermaid:${normalizedSource}`, isPreviewVisible && normalizedSource.length > 0)
 
   return (
     <MermaidEditorWrapper data-selected={selected}>
       <MermaidEditorHeader>
+        <MermaidWindowDots aria-hidden="true">
+          <span data-tone="red" />
+          <span data-tone="yellow" />
+          <span data-tone="green" />
+        </MermaidWindowDots>
         <MermaidEditorTitleGroup>
           <strong>Mermaid</strong>
-          <span>코드와 결과를 같은 블록에서 바로 검토합니다.</span>
+          <span>코드와 다이어그램을 같은 블록에서 바로 수정합니다.</span>
         </MermaidEditorTitleGroup>
         <MermaidViewModeRail role="tablist" aria-label="Mermaid 보기 모드">
           {MERMAID_VIEW_MODE_OPTIONS.map((option) => (
@@ -339,24 +405,38 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
       <MermaidEditorBody>
         {showCodePane ? (
           <MermaidCodePane>
-            <MermaidPaneLabel>코드</MermaidPaneLabel>
-            <MermaidCodeTextarea
-              ref={textareaRef}
-              value={draftSource}
-              spellCheck={false}
-              data-view-mode={viewMode}
-              onBlur={flushCommit}
-              onChange={(event) => {
-                const nextValue = event.target.value
-                setDraftSource(nextValue)
-                scheduleCommit({ source: nextValue })
-              }}
-            />
+            <MermaidPaneLabel>Mermaid 코드</MermaidPaneLabel>
+            <MermaidCodeEditorShell>
+              <MermaidCodeHighlight
+                ref={codeHighlightRef}
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: highlightedSource }}
+              />
+              <MermaidCodeTextarea
+                ref={textareaRef}
+                value={draftSource}
+                spellCheck={false}
+                data-view-mode={viewMode}
+                onBlur={flushCommit}
+                onScroll={(event) => {
+                  const target = event.currentTarget
+                  if (codeHighlightRef.current) {
+                    codeHighlightRef.current.scrollTop = target.scrollTop
+                    codeHighlightRef.current.scrollLeft = target.scrollLeft
+                  }
+                }}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setDraftSource(nextValue)
+                  scheduleCommit({ source: nextValue })
+                }}
+              />
+            </MermaidCodeEditorShell>
           </MermaidCodePane>
         ) : null}
         {showPreviewPane ? (
           <MermaidPreviewPane ref={previewRootRef}>
-            <MermaidPaneLabel>미리보기</MermaidPaneLabel>
+            <MermaidPaneLabel>Mermaid 결과</MermaidPaneLabel>
             <MermaidPreviewCard>
               {normalizedSource ? (
                 isPreviewVisible ? (
@@ -371,7 +451,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 )
               ) : (
                 <MermaidPreviewPlaceholder>
-                  Mermaid 원문을 입력하면 여기서 다이어그램 결과를 바로 확인할 수 있습니다.
+                  Mermaid 코드를 입력하면 여기서 다이어그램 결과를 바로 확인할 수 있습니다.
                 </MermaidPreviewPlaceholder>
               )}
             </MermaidPreviewCard>
@@ -1104,6 +1184,8 @@ const RawMarkdownBlockView = ({ node, selected }: NodeViewProps) => {
   const helperText =
     reason === "manual-raw"
       ? "이 블록은 원문 보존 전용입니다. 일반 작성은 다른 블록을 사용하세요."
+      : reason === "unsupported-mermaid"
+        ? "이전 원문 보존 카드입니다. 블록을 다시 열면 Mermaid 편집 블록으로 전환할 수 있습니다."
       : "현재 편집기에서 안전하게 구조화할 수 없어 원문을 보존했습니다."
   const preview = markdown.trim() || "(빈 원문 블록)"
 
@@ -1752,9 +1834,9 @@ const CompactBlockTextarea = styled(BlockTextarea)`
 const MermaidPreviewCard = styled.div`
   min-height: 12rem;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 1rem;
-  background: rgba(13, 15, 18, 0.94);
-  padding: 0.85rem;
+  border-radius: 0.95rem;
+  background: rgba(10, 12, 16, 0.98);
+  padding: 0.95rem 1rem;
 
   .aq-mermaid {
     margin: 0;
@@ -1762,73 +1844,117 @@ const MermaidPreviewCard = styled.div`
 `
 
 const MermaidEditorWrapper = styled(NodeViewWrapper)`
+  --aq-mermaid-block-radius: 14px;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  overflow: visible;
   overflow: hidden;
   margin: 1rem 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1rem;
-  background: #1c1f24;
+  border-radius: var(--aq-mermaid-block-radius);
+  background: #2b2d3a;
+  position: relative;
+  z-index: 0;
+  background-clip: padding-box;
 
   &[data-selected="true"] {
-    border-color: rgba(96, 165, 250, 0.4);
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.14);
+    border-color: rgba(148, 163, 184, 0.28);
+    box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.12);
   }
 `
 
 const MermaidEditorHeader = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.9rem 1rem 0.82rem;
+  gap: 0.75rem;
+  padding: 0.84rem 0.96rem 0.76rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(38, 42, 49, 0.98), rgba(30, 33, 39, 0.98));
+  background: linear-gradient(180deg, #3a3f59, #363b54);
+  border-top-left-radius: var(--aq-mermaid-block-radius);
+  border-top-right-radius: var(--aq-mermaid-block-radius);
+  overflow: hidden;
 
   @media (max-width: 720px) {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     align-items: stretch;
+  }
+`
+
+const MermaidWindowDots = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+
+  span {
+    width: 0.92rem;
+    height: 0.92rem;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  }
+
+  span[data-tone="red"] {
+    background: #ff5f56;
+  }
+
+  span[data-tone="yellow"] {
+    background: #ffbd2e;
+  }
+
+  span[data-tone="green"] {
+    background: #27c93f;
   }
 `
 
 const MermaidEditorTitleGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.14rem;
+  min-width: 0;
 
   strong {
     display: block;
     color: #f3f4f6;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     font-weight: 700;
   }
 
   span {
-    color: rgba(226, 232, 240, 0.68);
-    font-size: 0.78rem;
+    color: rgba(226, 232, 240, 0.64);
+    font-size: 0.74rem;
     line-height: 1.4;
   }
 `
 
 const MermaidViewModeRail = styled.div`
   display: inline-flex;
+  justify-self: end;
   align-items: center;
-  gap: 0.38rem;
-  padding: 0.26rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.9rem;
-  background: rgba(255, 255, 255, 0.04);
+  gap: 0.22rem;
+  padding: 0.24rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.82rem;
+  background: rgba(255, 255, 255, 0.035);
+
+  @media (max-width: 720px) {
+    justify-self: stretch;
+    width: fit-content;
+  }
 `
 
 const MermaidViewModeButton = styled.button`
   min-height: 2rem;
   border: 0;
-  border-radius: 0.68rem;
+  border-radius: 0.62rem;
   background: transparent;
   color: rgba(226, 232, 240, 0.7);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  padding: 0 0.72rem;
+  padding: 0 0.66rem;
 
   &[data-active="true"] {
     background: rgba(59, 130, 246, 0.16);
@@ -1840,6 +1966,7 @@ const MermaidViewModeButton = styled.button`
 const MermaidEditorBody = styled.div`
   display: flex;
   flex-direction: column;
+  background: rgba(19, 21, 26, 0.98);
 `
 
 const MermaidPaneLabel = styled.span`
@@ -1861,23 +1988,78 @@ const MermaidCodePane = styled.div`
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.95rem 1rem 1rem;
-  background: linear-gradient(180deg, rgba(22, 24, 29, 0.98), rgba(20, 22, 27, 0.98));
+  background: transparent;
+`
+
+const MermaidCodeEditorShell = styled.div`
+  position: relative;
+  min-height: 13rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 12, 16, 0.98);
+  overflow: hidden;
+`
+
+const MermaidCodeHighlight = styled.pre`
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 1rem;
+  pointer-events: none;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.97rem;
+  line-height: 1.7;
+  color: #dbe2ea;
+
+  .line {
+    display: block;
+    min-height: calc(0.97rem * 1.7);
+  }
+
+  .token-keyword {
+    color: #68b8ff;
+  }
+
+  .token-string {
+    color: #c7ea61;
+  }
+
+  .token-operator {
+    color: #ffc857;
+  }
+
+  .token-comment {
+    color: rgba(148, 163, 184, 0.88);
+  }
 `
 
 const MermaidCodeTextarea = styled(BlockTextarea)`
+  position: relative;
+  z-index: 1;
   min-height: 13rem;
-  border-radius: 0.95rem;
-  border-color: rgba(255, 255, 255, 0.06);
-  background: rgba(10, 12, 16, 0.98);
-  color: #dbe2ea;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: #f8fafc;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   font-size: 0.97rem;
   line-height: 1.7;
   white-space: pre;
+  box-shadow: none;
+  text-shadow: 0 0 0 #dbe2ea;
 
   &[data-view-mode="code"] {
     min-height: 22rem;
+  }
+
+  &::selection {
+    background: rgba(59, 130, 246, 0.28);
+    color: transparent;
   }
 `
 
@@ -1887,7 +2069,7 @@ const MermaidPreviewPane = styled.div`
   gap: 0.75rem;
   padding: 0.95rem 1rem 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(25, 27, 33, 0.98);
+  background: transparent;
 `
 
 const CodeBlockEditorWrapper = styled(NodeViewWrapper)`

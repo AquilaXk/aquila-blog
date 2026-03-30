@@ -126,33 +126,32 @@ test.describe("editor studio state", () => {
     expect(editorEditSource).toContain("const EditorPostPage: NextPage<AdminPageProps> = (props) => <EditorStudioPage {...props} />")
   })
 
-  test("editor studio는 v2 단일 경로와 split 미리보기 계약을 유지한다", () => {
+  test("editor studio는 v2 단일 경로와 단일 작성 모드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
     const blockEditorSource = readFileSync(path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"), "utf8")
 
     expect(editorStudioSource).not.toContain("BLOCK_EDITOR_V2_ENABLED")
     expect(editorStudioSource).not.toContain("EditorStudioLegacyToolbar")
     expect(editorStudioSource).not.toContain("RawMarkdownTextarea")
-    expect(editorStudioSource).toContain("--editor-split-pane-width")
-    expect(editorStudioSource).toMatch(
-      /minmax\(0, var\(--editor-split-pane-width\)\)\s+minmax\(0, var\(--editor-split-pane-width\)\)/
-    )
+    expect(editorStudioSource).toContain("const isCompactSplitPreview = false")
+    expect(editorStudioSource).toContain("width: min(100%, 1600px);")
+    expect(editorStudioSource).toContain("grid-template-columns: minmax(0, 1fr);")
     expect(editorStudioSource.match(/<LazyBlockEditorShell/g)?.length).toBe(2)
-    expect(editorStudioSource).toContain('width: min(100%, var(--article-readable-width, 48rem));')
+    expect(editorStudioSource).not.toContain("EditorStudioPreviewColumn")
+    expect(editorStudioSource).not.toContain('data-testid="editor-preview-body"')
+    expect(editorStudioSource).not.toContain("LazyMarkdownRenderer")
+    expect(editorStudioSource).not.toContain("공개 결과 미리보기")
+    expect(editorStudioSource).not.toContain("실제 보기")
+    expect(editorStudioSource).not.toContain("--editor-split-pane-width")
+    expect(editorStudioSource).not.toContain('? "112rem" : "1600px"')
     expect(editorStudioSource).not.toContain("const LIVE_PREVIEW_RENDER_WIDTHS: Record<PreviewViewportMode, number> = {")
     expect(editorStudioSource).not.toContain('aria-label="미리보기 기기 폭"')
     expect(editorStudioSource).not.toContain('zoom: var(--preview-scale, 1);')
     expect(editorStudioSource).not.toContain("--preview-scale")
     expect(editorStudioSource).toContain("const EditorExitAction = styled.button`")
     expect(editorStudioSource).toContain("min-height: 42px;")
-    expect(editorStudioSource).not.toContain("실제 본문 폭 기준")
-    expect(editorStudioSource).not.toContain("실시간 미리보기")
-    expect(editorStudioSource).toContain('data-testid="editor-preview-body"')
-    expect(editorStudioSource).not.toContain('data-testid="editor-preview-post-header"')
-    expect(editorStudioSource).not.toContain("<PostHeader")
-    expect(editorStudioSource).toContain('? "112rem" : "1600px"')
-    expect(editorStudioSource).toContain("> .aq-markdown blockquote {")
-    expect(editorStudioSource).toContain("border-radius: 12px;")
+    expect(editorStudioSource).toContain("const EditorStudioFrame = styled.div`")
+    expect(editorStudioSource).toContain("const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`")
 
     expect(blockEditorSource).not.toContain("Markdown 편집")
     expect(blockEditorSource).not.toContain('label: "원문 블록"')
@@ -161,7 +160,8 @@ test.describe("editor studio state", () => {
     expect(blockEditorSource).toContain("const QuickInsertBar = styled.div`")
     expect(blockEditorSource).not.toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
     expect(blockEditorSource).toContain(".aq-block-editor__content blockquote {")
-    expect(blockEditorSource).toContain("border-radius: 12px;")
+    expect(blockEditorSource).toContain("border-left: 4px solid")
+    expect(blockEditorSource).toContain("border-radius: 0;")
   })
 
   test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {

@@ -79,12 +79,8 @@ import {
 import { convertHtmlToMarkdown as convertHtmlClipboardToMarkdown } from "src/libs/markdown/htmlToMarkdown"
 import { buildPreviewSummaryFromMarkdown } from "src/libs/postSummary"
 import type { BlockEditorChangeMeta } from "src/components/editor/BlockEditorShell"
-import {
-  toEditorActualPreviewRoute,
-  writeEditorActualPreviewSnapshot,
-} from "./editorActualPreview"
 
-const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED === "true"
+const BLOCK_EDITOR_V2_MERMAID_ENABLED = process.env.NEXT_PUBLIC_EDITOR_V2_MERMAID_ENABLED !== "false"
 const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 
@@ -93,11 +89,6 @@ const toEditorPostRoute = (id: string | number) => `/editor/${encodeURIComponent
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
   loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>블록 에디터 준비 중...</div>,
-})
-
-const LazyMarkdownRenderer = dynamic(() => import("src/routes/Detail/components/MarkdownRenderer"), {
-  ssr: false,
-  loading: () => <div style={{ padding: "1rem 1.1rem", color: "var(--color-gray10)" }}>미리보기 렌더 준비 중...</div>,
 })
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null
@@ -280,7 +271,6 @@ type ThumbnailTransformState = {
 }
 
 type PreviewViewportMode = "desktop" | "tablet" | "mobile"
-type ComposeViewMode = "editor" | "split" | "preview"
 type ManageMobileStudioStep = "query" | "list"
 type ComposeMobileStudioStep = "edit" | "publish"
 
@@ -522,13 +512,8 @@ const normalizeMetaItems = (raw: string): string[] => {
 const normalizeMetaScalar = (raw: string) => raw.trim().replace(/^['"]|['"]$/g, "")
 
 const markdownImagePattern = /!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/
-const mermaidFenceRegex = /```mermaid\b[\s\S]*?```/gi
 const PREVIEW_SUMMARY_MAX_LENGTH = 150
 const PREVIEW_SUMMARY_MAX_CONTENT_LENGTH = 50_000
-const EDITOR_PREVIEW_HEAVY_LENGTH = 16_000
-const EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH = 8_000
-const EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS = 2
-const EDITOR_STUDIO_SPLIT_MIN_VIEWPORT_PX = 1680
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
@@ -538,9 +523,6 @@ const extractFirstMarkdownImage = (content: string): string => {
   const match = markdownImagePattern.exec(content)
   return match?.[1]?.trim() || ""
 }
-
-const countMarkdownMermaidBlocks = (content: string): number =>
-  (content.match(mermaidFenceRegex) || []).length
 
 const normalizeSafeImageUrl = (raw: string): string => {
   const value = raw.trim()
@@ -1356,14 +1338,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [activeMetaPanel, setActiveMetaPanel] = useState<"tag" | "category" | null>(null)
   const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
   const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
-  const [isComposePreviewOpen, setIsComposePreviewOpen] = useState(false)
   const postContentLiveRef = useRef(postContent)
   const blockEditorLoadGuardStateRef = useRef<BlockEditorLoadGuardState>({
     expectedBody: "",
     ignoreUntilMs: 0,
     ignoredInitialEmpty: false,
   })
-  const [previewContent, setPreviewContent] = useState(postContent)
   const thumbnailImageFileInputRef = useRef<HTMLInputElement>(null)
   const [thumbnailImageFileName, setThumbnailImageFileName] = useState("")
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
@@ -1377,17 +1357,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [mobileComposeStep, setMobileComposeStep] = useState<ComposeMobileStudioStep>("edit")
   const [studioSurface, setStudioSurface] = useState<StudioSurface>("compose")
   const [isCompactMobileLayout, setIsCompactMobileLayout] = useState(false)
-  const [isWideEditorViewport, setIsWideEditorViewport] = useState(false)
   const [isMobileThumbnailEditorOpen, setIsMobileThumbnailEditorOpen] = useState(false)
   const [isMobileMetaEditorOpen, setIsMobileMetaEditorOpen] = useState(false)
-  const previewScrollRef = useRef<HTMLDivElement>(null)
   const titleFieldRef = useRef<HTMLTextAreaElement | null>(null)
-
-  const previewContentLength = previewContent.length
-  const previewMermaidBlockCount = useMemo(
-    () => countMarkdownMermaidBlocks(previewContent),
-    [previewContent]
-  )
 
   useEffect(() => {
     postContentLiveRef.current = postContent
@@ -1419,17 +1391,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     blockEditorLoadGuardStateRef.current = nextGuardState
     setPostContent(nextMarkdown)
   }, [])
-
-  const isPreviewHeavyDocument = useMemo(() => {
-    if (previewContentLength >= EDITOR_PREVIEW_HEAVY_LENGTH) return true
-    if (
-      previewContentLength >= EDITOR_PREVIEW_HEAVY_MERMAID_LENGTH &&
-      previewMermaidBlockCount >= EDITOR_PREVIEW_HEAVY_MERMAID_BLOCKS
-    ) {
-      return true
-    }
-    return false
-  }, [previewContentLength, previewMermaidBlockCount])
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -1548,25 +1509,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const media = window.matchMedia(`(min-width: ${EDITOR_STUDIO_SPLIT_MIN_VIEWPORT_PX}px)`)
-    const sync = () => {
-      setIsWideEditorViewport(media.matches)
-    }
-
-    sync()
-
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", sync)
-      return () => media.removeEventListener("change", sync)
-    }
-
-    media.addListener(sync)
-    return () => media.removeListener(sync)
-  }, [])
-
-  useEffect(() => {
     setStudioSurface("compose")
   }, [])
 
@@ -1584,12 +1526,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     delete nextQuery.surface
     void replaceShallowRoutePreservingScroll(router, { query: nextQuery })
   }, [router])
-
-  useEffect(() => {
-    if (previewContent !== postContent) {
-      setPreviewContent(postContent)
-    }
-  }, [postContent, previewContent])
 
   const handleTitleFieldRef = useCallback((node: HTMLTextAreaElement | null) => {
     titleFieldRef.current = node
@@ -1610,7 +1546,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   useEffect(() => {
     syncTitleTextareaHeight(titleFieldRef.current)
-  }, [postTitle, isWideEditorViewport])
+  }, [postTitle])
 
   const handleListPageChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setListPage(sanitizeNumberInput(e.target.value))
@@ -3593,10 +3529,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         : "새 글 작성"
   const publishActionDescription =
     publishActionType === "create"
-      ? "공개 범위를 정리하고, 최종 검수는 실제 보기에서 확인한 뒤 발행합니다."
+      ? "공개 범위를 정리하고 카드 결과를 최종 검수한 뒤 발행합니다."
       : publishActionType === "modify"
-        ? "공개 범위를 정리하고, 최종 검수는 실제 보기에서 확인한 뒤 변경 내용을 반영합니다."
-        : "공개 범위를 정리하고, 최종 검수는 실제 보기에서 확인한 뒤 새 글로 작성합니다."
+        ? "공개 범위를 정리하고 카드 결과를 최종 검수한 뒤 변경 내용을 반영합니다."
+        : "공개 범위를 정리하고 카드 결과를 최종 검수한 뒤 새 글로 작성합니다."
   const publishActionButtonText =
     publishActionType === "create"
       ? loadingKey === "writePost"
@@ -3673,44 +3609,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ""
   ).trim()
   const previewDateText = formatDate(previewNowIso, "ko")
-  const openActualPreview = useCallback(() => {
-    if (typeof window === "undefined") return
-
-    const previewId = postId.trim() || "draft-preview"
-
-    writeEditorActualPreviewSnapshot(previewId, {
-      id: previewId,
-      title: postTitle,
-      content: previewContent,
-      summary: resolvedPreviewSummary,
-      tags: postTags,
-      visibility: postVisibility,
-      thumbnailUrl: effectiveThumbnailUrl,
-      authorName: displayName,
-      authorImageUrl: previewAuthorAvatarSrc,
-      createdAt: previewNowIso,
-    })
-
-    window.open(toEditorActualPreviewRoute(previewId), "_blank", "noopener,noreferrer")
-  }, [
-    displayName,
-    effectiveThumbnailUrl,
-    postId,
-    postTags,
-    postTitle,
-    postVisibility,
-    previewAuthorAvatarSrc,
-    previewContent,
-    previewNowIso,
-    resolvedPreviewSummary,
-  ])
 
   if (!sessionMember) {
     return null
   }
 
-  const editorStudioViewMode: ComposeViewMode = isWideEditorViewport ? "split" : "editor"
-  const isCompactSplitPreview = editorStudioViewMode === "split" && isWideEditorViewport
+  const isCompactSplitPreview = false
   const shouldShowGlobalNotice =
     globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
   const shouldShowPublishNotice = publishNotice.tone !== "idle"
@@ -3914,7 +3818,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   if (shouldShowEditorLoadingState) {
     return (
-      <EditorStudioRoot $splitAvailable={isWideEditorViewport} $viewMode={editorStudioViewMode}>
+      <EditorStudioRoot>
         <EditorStudioLoadingState>
           <strong>편집 화면을 준비하고 있습니다.</strong>
           <span>잠시만 기다려 주세요.</span>
@@ -3925,7 +3829,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   if (isDedicatedEditorRoute) {
     return (
-      <EditorStudioRoot $splitAvailable={isWideEditorViewport} $viewMode={editorStudioViewMode}>
+      <EditorStudioRoot>
       <input
         ref={thumbnailImageFileInputRef}
         type="file"
@@ -3950,8 +3854,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         </EditorStudioTopBarActions>
       </EditorStudioTopBar>
 
-      <EditorStudioFrame data-testid="editor-studio-frame" $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
-        <EditorStudioWritingColumn data-testid="editor-writing-column" $viewMode={editorStudioViewMode} $compact={isCompactSplitPreview}>
+      <EditorStudioFrame data-testid="editor-studio-frame">
+        <EditorStudioWritingColumn data-testid="editor-writing-column" $compact={isCompactSplitPreview}>
           <EditorStudioMetaSection $compact={isCompactSplitPreview}>
             <EditorTagRow aria-label="태그 입력" $compact={isCompactSplitPreview}>
               {postTags.map((tag) => (
@@ -4029,23 +3933,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
           {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
         </EditorStudioWritingColumn>
-
-        <EditorStudioPreviewColumn data-testid="editor-preview-column" $viewMode={editorStudioViewMode} $splitAvailable={isWideEditorViewport}>
-          <EditorStudioPreviewSurface data-preview-density={isCompactSplitPreview ? "compact" : "full"}>
-            <EditorStudioPreviewArticle>
-              <EditorStudioPreviewArticleBody data-testid="editor-preview-body" ref={previewScrollRef} $compact={isCompactSplitPreview}>
-                <PreviewContentFrame>
-                  {isPreviewHeavyDocument && !isCompactSplitPreview ? (
-                    <PreviewHintNotice>
-                      긴 본문 보호 모드입니다. Mermaid는 코드 블록으로 렌더합니다.
-                    </PreviewHintNotice>
-                  ) : null}
-                  <LazyMarkdownRenderer content={previewContent} disableMermaid={isPreviewHeavyDocument} />
-                </PreviewContentFrame>
-              </EditorStudioPreviewArticleBody>
-            </EditorStudioPreviewArticle>
-          </EditorStudioPreviewSurface>
-        </EditorStudioPreviewColumn>
       </EditorStudioFrame>
 
       {shouldShowResultPanel ? (
@@ -5541,27 +5428,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   </div>
                 </InlineDisclosure>
 
-                <InlineDisclosure open={isComposePreviewOpen}>
-                  <summary
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsComposePreviewOpen((prev) => !prev)
-                    }}
-                  >
-                    <strong>공개 결과 미리보기</strong>
-                    <span>{isComposePreviewOpen ? "닫기" : "열기"}</span>
-                  </summary>
-                  {isComposePreviewOpen && (
-                    <div className="body">
-                      <PreviewCard>
-                        <PreviewContentFrame>
-                          <LazyMarkdownRenderer content={postContent} />
-                        </PreviewContentFrame>
-                      </PreviewCard>
-                    </div>
-                  )}
-                </InlineDisclosure>
-
                 <InlineDisclosure open={isComposeUtilityOpen}>
                   <summary
                     onClick={(event) => {
@@ -5775,9 +5641,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                 </PostPreviewSetup>
               </PublishModalBody>
               <PublishModalFooter>
-                <Button type="button" onClick={openActualPreview}>
-                  실제 보기
-                </Button>
                 <Button
                   type="button"
                   disabled={
@@ -9120,12 +8983,8 @@ const PublishModalFooter = styled.div`
   }
 `
 
-const EditorStudioRoot = styled.main<{ $splitAvailable?: boolean; $viewMode?: ComposeViewMode }>`
-  width: min(
-    100%,
-    ${({ $splitAvailable, $viewMode }) =>
-      $splitAvailable && $viewMode === "split" ? "112rem" : "1600px"}
-  );
+const EditorStudioRoot = styled.main`
+  width: min(100%, 1600px);
   margin: 0 auto;
   padding: 1.4rem 1.6rem 2rem;
   display: grid;
@@ -9227,27 +9086,22 @@ const EditorStudioSaveState = styled.span`
   }
 `
 
-const EditorStudioFrame = styled.div<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
-  --editor-split-gap: clamp(2.9rem, 3.4vw, 4.2rem);
-  --editor-split-pane-width: var(--article-readable-width, 48rem);
+const EditorStudioFrame = styled.div`
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: ${({ $viewMode }) => ($viewMode === "split" ? "2rem" : "1.4rem")};
+  gap: 1.4rem;
   align-items: start;
   justify-content: center;
   overflow-x: clip;
 
   @media (min-width: 1024px) {
-    grid-template-columns: ${({ $viewMode, $splitAvailable }) =>
-      $splitAvailable && $viewMode === "split"
-        ? "minmax(0, var(--editor-split-pane-width)) minmax(0, var(--editor-split-pane-width))"
-        : "minmax(0, 1fr)"};
-    gap: ${({ $viewMode }) => ($viewMode === "split" ? "var(--editor-split-gap)" : "1.4rem")};
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.4rem;
   }
 `
 
-const EditorStudioWritingColumn = styled.section<{ $viewMode: ComposeViewMode; $compact?: boolean }>`
-  ${({ $viewMode }) => ($viewMode === "preview" ? "display: none;" : "display: grid;")}
+const EditorStudioWritingColumn = styled.section<{ $compact?: boolean }>`
+  display: grid;
   min-width: 0;
   gap: ${({ $compact }) => ($compact ? "0.88rem" : "1rem")};
   overflow-x: clip;
@@ -9349,78 +9203,6 @@ const EditorStudioCanvas = styled.section`
   gap: 0.72rem;
 `
 
-const EditorStudioPreviewColumn = styled.aside<{ $viewMode: ComposeViewMode; $splitAvailable: boolean }>`
-  ${({ $viewMode }) => ($viewMode === "editor" ? "display: none;" : "display: grid;")}
-  position: ${({ $viewMode, $splitAvailable }) =>
-    $splitAvailable && $viewMode === "split" ? "sticky" : "static"};
-  top: calc(var(--app-header-height, 64px) + 1rem);
-  min-width: 0;
-  gap: 0.8rem;
-  overflow-x: clip;
-
-  @media (max-width: 1023px) {
-    display: ${({ $viewMode }) => ($viewMode === "preview" ? "grid" : "none")};
-    position: static;
-  }
-`
-
-const EditorStudioPreviewSurface = styled.section`
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  overflow: hidden;
-  min-width: 0;
-`
-
-const EditorStudioPreviewArticle = styled.article`
-  display: grid;
-  gap: 0;
-  min-width: 0;
-  width: min(100%, var(--article-readable-width, 48rem));
-  max-width: 100%;
-  margin-inline: auto;
-`
-
-const EditorStudioPreviewArticleBody = styled.div<{ $compact?: boolean }>`
-  max-height: ${({ $compact }) => ($compact ? "calc(100vh - 14rem)" : "calc(100vh - 15rem)")};
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: ${({ $compact }) => ($compact ? "0.95rem 0 1.1rem" : "1.1rem 0 1.4rem")};
-  min-width: 0;
-
-  > div {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-  }
-
-  > div > .aq-markdown {
-    width: 100%;
-    margin: 0 auto;
-    min-width: 0;
-    overflow-x: hidden;
-  }
-
-  > div > .aq-markdown .aq-table-shell,
-  > div > .aq-markdown .aq-table-scroll {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  > div > .aq-markdown .aq-table-scroll {
-    overscroll-behavior-x: contain;
-  }
-
-  @media (max-width: 1200px) {
-    max-height: none;
-  }
-`
-
 const EditorStudioResultPanel = styled.section`
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
@@ -9455,54 +9237,6 @@ const EditorStudioResultPanel = styled.section`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.76rem;
   }
-`
-
-const PreviewContentFrame = styled.div`
-  width: 100%;
-  max-width: var(--article-readable-width, 48rem);
-  min-width: 0;
-  margin-inline: auto;
-  overflow-x: hidden;
-
-  > .aq-markdown {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: hidden;
-  }
-
-`
-
-const PreviewCard = styled.div`
-  height: var(--pane-body-height);
-  min-height: var(--pane-body-height);
-  max-height: var(--pane-body-height);
-  overflow: auto;
-  scrollbar-gutter: stable both-edges;
-  padding: 1rem 1rem 1.15rem;
-  box-sizing: border-box;
-  background: transparent;
-
-  > ${PreviewContentFrame} {
-    min-width: 0;
-  }
-
-  > ${PreviewContentFrame} > .aq-markdown {
-    width: 100%;
-    margin-top: 0;
-    margin-inline: 0;
-  }
-`
-
-const PreviewHintNotice = styled.div`
-  margin-bottom: 0.75rem;
-  padding: 0.52rem 0.62rem;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.78rem;
-  line-height: 1.5;
 `
 
 const WriterFooterBar = styled.div`

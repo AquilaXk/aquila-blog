@@ -21,7 +21,17 @@ http://{$MONITOR_DOMAIN:status.localhost} {
 # Grafana dashboard endpoint (optional).
 # Set GRAFANA_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
 http://{$GRAFANA_DOMAIN:grafana.localhost} {
+  forward_auth {$ADMIN_API_UPSTREAM:back_blue}:8080 {
+    uri /system/api/v1/adm/grafana/auth-proxy
+    copy_headers X-WEBAUTH-USER X-WEBAUTH-NAME
+    header_up Host {host}
+    header_up X-Forwarded-Proto https
+    header_up X-Forwarded-Port 443
+  }
+
   reverse_proxy grafana:3000 {
+    header_up X-WEBAUTH-USER {http.request.header.X-WEBAUTH-USER}
+    header_up X-WEBAUTH-NAME {http.request.header.X-WEBAUTH-NAME}
     # Admin UI iframe embed compatibility.
     header_down -X-Frame-Options
     header_down -Content-Security-Policy

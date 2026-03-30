@@ -8,6 +8,7 @@ import com.back.boundedContexts.post.application.service.PostSearchEngineMirrorS
 import com.back.global.security.application.AuthSecurityEventDto
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.application.TaskDlqReplayResult
@@ -36,7 +37,9 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
@@ -142,6 +145,28 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.queueRuntime.processTasksLockKey") { value("job-lock:default:processTasks") }
             jsonPath("$.queueRuntime.legacyOrphanLikely") { value(false) }
         }
+    }
+
+    @Test
+    fun `관리자는 grafana auth proxy 헤더를 조회할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+
+        mvc
+            .get("/system/api/v1/adm/grafana/auth-proxy") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isNoContent() }
+                header { string("X-WEBAUTH-USER", "admin@example.com") }
+                header { string("X-WEBAUTH-NAME", "관리자") }
+                header { string("Cache-Control", "private, no-store, max-age=0") }
+            }
     }
 
     @Test

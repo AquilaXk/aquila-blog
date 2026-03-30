@@ -1184,6 +1184,17 @@
         }
       }
     },
+    "/system/api/v1/adm/grafana/auth-proxy" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "grafanaAuthProxy",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/auth/security-events" : {
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],

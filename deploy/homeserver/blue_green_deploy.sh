@@ -384,6 +384,16 @@ probe_grafana_embed_headers() {
   curl -I -s --connect-timeout 3 --max-time 10 "${url}" 2>/dev/null || true
 }
 
+probe_grafana_internal_health() {
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 10 \
+    -o /dev/null \
+    -s \
+    -w '%{http_code}' \
+    "http://grafana:3000/api/health" 2>/dev/null || true
+}
+
 check_grafana_embed_public_route() {
   local url
   url="$(monitoring_embed_candidate_url)"
@@ -395,30 +405,34 @@ check_grafana_embed_public_route() {
   local attempts=20
   local sleep_seconds=3
   local try=1
-  local headers status location xfo csp
+  local headers status location xfo csp internal_health
 
   while (( try <= attempts )); do
+    internal_health="$(probe_grafana_internal_health)"
     headers="$(probe_grafana_embed_headers "${url}")"
     status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
     location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
     xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
     csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
 
-    if [[ -n "${status}" && "${location}" != *"/login"* ]] && [[ -z "${xfo}" || ! "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
+    if [[ "${internal_health}" == "200" ]] &&
+      [[ "${status}" == "200" || "${status}" == "401" || "${status}" == "403" ]] &&
+      [[ "${location}" != *"/login"* ]] &&
+      [[ -z "${xfo}" || ! "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
       if [[ -z "${csp}" || "${csp}" != *"frame-ancestors"* || "${csp}" == *"aquilaxk.site"* || "${csp}" == *"*"* ]]; then
-        echo "grafana embed public route ok: status=${status} url=${url}"
+        echo "grafana embed auth-proxy route ok: status=${status} grafana_health=${internal_health} url=${url}"
         return 0
       fi
     fi
 
     if (( try % 5 == 0 )); then
-      echo "waiting grafana embed route (${try}/${attempts}) status=${status:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
+      echo "waiting grafana embed auth-proxy route (${try}/${attempts}) status=${status:-none} grafana_health=${internal_health:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
     fi
     sleep "${sleep_seconds}"
     try=$((try + 1))
   done
 
-  echo "grafana embed public route check failed: url=${url} status=${status:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
+  echo "grafana embed auth-proxy route check failed: url=${url} status=${status:-none} grafana_health=${internal_health:-none} location=${location:-none} x-frame-options=${xfo:-none}" >&2
   if [[ -n "${csp}" ]]; then
     echo "grafana embed csp=${csp}" >&2
   fi
@@ -1569,6 +1583,7 @@ if ! is_healthy_http_code "${post_code}"; then
   exit 1
 fi
 
+echo "post-switch phase: notification sse verify"
 if ! check_notification_sse_route "${api_domain}"; then
   echo "post-switch notification sse verify failed" >&2
   rollback_to_backend "${active_backend}" "${api_domain}" || true
@@ -1578,10 +1593,27 @@ fi
 
 echo "${next_backend}" > "${STATE_FILE}"
 drain_and_stop_backend_if_running "${active_backend}"
+
+echo "post-switch phase: install steady-state guard"
 ensure_steady_state_guard || true
 
-check_cloudflared_runtime
-check_grafana_embed_public_route
+echo "post-switch phase: cloudflared runtime verify"
+if ! check_cloudflared_runtime; then
+  echo "post-switch cloudflared runtime verify failed" >&2
+  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  compose stop "${next_backend}" || true
+  exit 1
+fi
+
+echo "post-switch phase: grafana embed route verify"
+if ! check_grafana_embed_public_route; then
+  echo "post-switch grafana embed route verify failed" >&2
+  rollback_to_backend "${active_backend}" "${api_domain}" || true
+  compose stop "${next_backend}" || true
+  exit 1
+fi
+
+echo "post-switch phase: public read prewarm"
 prewarm_public_read_cache "${api_domain}"
 
 echo "post-switch verify ok (status=${post_code}); inactive backend stopped"

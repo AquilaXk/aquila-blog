@@ -48,10 +48,10 @@ const meta: Meta<typeof AdminHubSurface> = {
         cta: "프로필 정리",
       },
       {
-        href: "/admin/tools",
-        title: "운영 진단",
+        href: "/admin/dashboard",
+        title: "운영 대시보드",
         description: "",
-        cta: "진단 열기",
+        cta: "대시보드 열기",
       },
     ],
   },

@@ -185,6 +185,16 @@ inspect_grafana_embed_headers() {
   curl -I -s --max-time 10 "${url}" 2>/dev/null || true
 }
 
+inspect_grafana_internal_health() {
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 10 \
+    -o /dev/null \
+    -s \
+    -w '%{http_code}' \
+    "http://grafana:3000/api/health" 2>/dev/null || true
+}
+
 print_grafana_embed_status() {
   local url="$1"
   if [[ -z "${url}" ]]; then
@@ -197,7 +207,8 @@ print_grafana_embed_status() {
     return 0
   fi
 
-  local headers status location xfo csp
+  local headers status location xfo csp internal_health
+  internal_health="$(inspect_grafana_internal_health)"
   headers="$(inspect_grafana_embed_headers "${url}")"
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
@@ -205,6 +216,7 @@ print_grafana_embed_status() {
   csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
 
   echo "grafana embed url: ${url}"
+  echo "grafana internal health: ${internal_health:-none}"
   echo "grafana embed status: ${status:-none}"
   echo "grafana embed location: ${location:-<none>}"
   echo "grafana embed x-frame-options: ${xfo:-<none>}"
@@ -212,8 +224,14 @@ print_grafana_embed_status() {
     echo "grafana embed csp: ${csp}"
   fi
 
+  if [[ "${internal_health}" != "200" ]]; then
+    echo "WARN: grafana internal /api/health is not 200; grafana container or upstream health를 먼저 확인하세요."
+  fi
+  if [[ "${status}" == "401" || "${status}" == "403" ]]; then
+    echo "INFO: grafana embed route is protected by auth.proxy (unauthenticated probe returned ${status})."
+  fi
   if [[ -n "${location}" && "${location}" == *"/login"* ]]; then
-    echo "WARN: grafana embed url redirects to /login (anonymous/public dashboard not active)"
+    echo "WARN: grafana embed route redirects to /login; auth.proxy 대신 grafana login flow가 노출되고 있습니다."
   fi
   if [[ -n "${xfo}" && "${xfo}" =~ [Dd][Ee][Nn][Yy]|[Ss][Aa][Mm][Ee][Oo][Rr][Ii][Gg][Ii][Nn] ]]; then
     echo "WARN: grafana embed response still sends frame-blocking X-Frame-Options=${xfo}"

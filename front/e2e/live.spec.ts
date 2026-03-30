@@ -484,6 +484,10 @@ test.describe("live production e2e", () => {
       })
       .toBeTruthy()
 
+    await page.goto("/admin/dashboard")
+    await expect(page.getByRole("heading", { name: "운영 대시보드" })).toBeVisible()
+    await expect(page.getByText("총 HTTP 요청 수").first()).toBeVisible()
+
     await page.goto("/admin/tools")
     await expect(page.getByRole("heading", { name: adminToolsHeadingPattern })).toBeVisible()
     await expect(page.getByRole("tab", { name: /^작업 큐 진단/ })).toBeVisible()

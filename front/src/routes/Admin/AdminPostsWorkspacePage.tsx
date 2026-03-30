@@ -1038,12 +1038,12 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
               <SupportMeta>프로필 열기</SupportMeta>
             </SupportLink>
           </Link>
-          <Link href="/admin/tools" passHref legacyBehavior>
+          <Link href="/admin/dashboard" passHref legacyBehavior>
             <SupportLink>
               <SupportCopy>
-                <strong>운영 진단</strong>
+                <strong>운영 대시보드</strong>
               </SupportCopy>
-              <SupportMeta>진단 열기</SupportMeta>
+              <SupportMeta>대시보드 열기</SupportMeta>
             </SupportLink>
           </Link>
         </SupportList>

@@ -635,24 +635,68 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-mermaid-error-state {
     border-radius: 12px;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    background: ${({ theme }) => theme.colors.gray1};
-    padding: 0.82rem 0.9rem;
+    border: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(217, 119, 6, 0.46)" : "rgba(217, 119, 6, 0.42)")};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(120, 53, 15, 0.16)" : "rgba(254, 243, 199, 0.88)")};
+    padding: 0.88rem 0.94rem;
   }
 
   .aq-mermaid-error-title {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#fde68a" : "#92400e")};
+    font-size: 0.9rem;
     font-weight: 700;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.36rem;
+  }
+
+  .aq-mermaid-error-description {
+    margin: 0 0 0.38rem;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(254, 240, 138, 0.92)" : "#7c2d12")};
+    font-size: 0.84rem;
+    line-height: 1.52;
+  }
+
+  .aq-mermaid-error-guidance {
+    margin: 0 0 0.52rem;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(254, 240, 138, 0.86)" : "#9a3412")};
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  .aq-mermaid-error-guidance code {
+    border-radius: 6px;
+    border: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 191, 36, 0.3)" : "rgba(217, 119, 6, 0.32)")};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(120, 53, 15, 0.24)" : "rgba(255, 251, 235, 0.92)")};
+    padding: 0.08rem 0.34rem;
+    font-size: 0.74rem;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#fde68a" : "#92400e")};
+  }
+
+  .aq-mermaid-error-details {
+    margin-top: 0.34rem;
+  }
+
+  .aq-mermaid-error-details > summary {
+    color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(253, 230, 138, 0.94)" : "#b45309")};
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .aq-mermaid-error-details > summary::-webkit-details-marker {
+    display: none;
   }
 
   .aq-mermaid-error-code {
     display: block;
     white-space: pre-wrap;
-    color: ${({ theme }) => theme.colors.gray11};
-    font-size: 0.86rem;
-    line-height: 1.56;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#fef3c7" : "#7c2d12")};
+    font-size: 0.78rem;
+    line-height: 1.5;
+    border-radius: 8px;
+    border: 1px solid ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 191, 36, 0.22)" : "rgba(217, 119, 6, 0.24)")};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(120, 53, 15, 0.18)" : "rgba(255, 251, 235, 0.82)")};
+    margin-top: 0.34rem;
+    padding: 0.48rem 0.58rem;
   }
 
   .aq-mermaid-expand-btn {

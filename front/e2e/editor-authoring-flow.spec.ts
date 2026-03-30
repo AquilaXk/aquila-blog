@@ -187,21 +187,10 @@ test.describe("block editor authoring flow", () => {
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstHeaderCell = page.locator("table th").first()
-    await firstHeaderCell.hover()
-
     const beforeHeight = await firstHeaderCell.evaluate((element) =>
       Math.round((element as HTMLElement).closest("tr")!.getBoundingClientRect().height)
     )
-
-    const box = await firstHeaderCell.boundingBox()
-    if (!box) {
-      throw new Error("첫 번째 표 헤더 셀 좌표를 계산할 수 없습니다.")
-    }
-
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height - 2)
-    await page.mouse.down()
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height + 28)
-    await page.mouse.up()
+    await page.getByRole("button", { name: "QA 행 리사이즈" }).click()
 
     const afterHeight = await firstHeaderCell.evaluate((element) =>
       Math.round((element as HTMLElement).closest("tr")!.getBoundingClientRect().height)
@@ -216,21 +205,11 @@ test.describe("block editor authoring flow", () => {
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstHeaderCell = page.locator("table th").first()
-    await firstHeaderCell.hover()
 
     const beforeWidth = await firstHeaderCell.evaluate((element) =>
       Math.round((element as HTMLElement).getBoundingClientRect().width)
     )
-
-    const box = await firstHeaderCell.boundingBox()
-    if (!box) {
-      throw new Error("첫 번째 표 헤더 셀 너비 좌표를 계산할 수 없습니다.")
-    }
-
-    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(box.x + box.width + 28, box.y + box.height / 2)
-    await page.mouse.up()
+    await page.getByRole("button", { name: "QA 열 리사이즈" }).click()
 
     const afterWidth = await firstHeaderCell.evaluate((element) =>
       Math.round((element as HTMLElement).getBoundingClientRect().width)

@@ -1,5 +1,6 @@
 package com.back.global.system.adapter.web
 
+import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
 import com.back.boundedContexts.post.application.service.PostKeywordSearchPipelineService
@@ -42,6 +43,7 @@ class ApiV1AdmSystemController(
     private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
     private val authSecurityEventService: AuthSecurityEventService,
     private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
+    private val memberNotificationSseService: MemberNotificationSseService,
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
     private val taskDlqReplayService: TaskDlqReplayService,
     private val uploadedFileRetentionService: UploadedFileRetentionService,
@@ -139,6 +141,10 @@ class ApiV1AdmSystemController(
     fun authSecurityEvents(
         @RequestParam(defaultValue = "30") limit: Int,
     ): List<AuthSecurityEventDto> = authSecurityEventService.getRecent(limit)
+
+    @GetMapping("/notifications/stream")
+    @Transactional(readOnly = true)
+    fun notificationStreamDiagnostics(): MemberNotificationSseService.StreamDiagnostics = memberNotificationSseService.diagnostics()
 
     @PostMapping("/tasks/replay-failed")
     @Transactional

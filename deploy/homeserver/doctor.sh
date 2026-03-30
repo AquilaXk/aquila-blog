@@ -43,6 +43,122 @@ trim_quotes() {
   printf '%s' "${value}"
 }
 
+notification_sse_probe_output() {
+  local api_domain="$1"
+  local admin_email admin_password
+  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
+  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
+
+  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
+    echo "notification sse probe: skip (missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD)"
+    return 0
+  fi
+
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
+    set -eu
+    api_domain="$1"
+    admin_email="$2"
+    admin_password="$3"
+    cookie_jar="$(mktemp)"
+    trap "rm -f \"${cookie_jar}\"" EXIT
+    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
+    login_code="$(
+      curl -sS \
+        --connect-timeout 3 \
+        --max-time 12 \
+        -c "${cookie_jar}" \
+        -o /dev/null \
+        -w "%{http_code}" \
+        -H "Host: ${api_domain}" \
+        -H "Content-Type: application/json" \
+        --data "${login_payload}" \
+        "http://caddy:80/member/api/v1/auth/login" || true
+    )"
+    echo "login_status=${login_code}"
+    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
+      exit 11
+    fi
+
+    stream_body="$(
+      curl -sS -N \
+        --connect-timeout 3 \
+        --max-time 35 \
+        -b "${cookie_jar}" \
+        -H "Host: ${api_domain}" \
+        "http://caddy:80/member/api/v1/notifications/stream" || true
+    )"
+    printf "%s\n" "${stream_body}" | tr -d "\r"
+  ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+}
+
+print_notification_sse_status() {
+  local api_domain
+  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  if [[ -z "${api_domain}" ]]; then
+    echo "notification sse: skip (missing API_DOMAIN)"
+    return 0
+  fi
+
+  local probe_output
+  probe_output="$(notification_sse_probe_output "${api_domain}")"
+  if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
+    echo "notification sse probe: OK (connected+heartbeat)"
+  else
+    echo "notification sse probe: FAIL"
+    printf '%s\n' "${probe_output}"
+  fi
+
+  local admin_email admin_password diagnostics_body diagnostics_code
+  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
+  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
+  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
+    echo "notification diagnostics: skip (missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD)"
+    return 0
+  fi
+
+  diagnostics_body="$(
+    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
+      set -eu
+      api_domain="$1"
+      admin_email="$2"
+      admin_password="$3"
+      cookie_jar="$(mktemp)"
+      trap "rm -f \"${cookie_jar}\"" EXIT
+      login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
+      login_code="$(
+        curl -sS \
+          --connect-timeout 3 \
+          --max-time 12 \
+          -c "${cookie_jar}" \
+          -o /dev/null \
+          -w "%{http_code}" \
+          -H "Host: ${api_domain}" \
+          -H "Content-Type: application/json" \
+          --data "${login_payload}" \
+          "http://caddy:80/member/api/v1/auth/login" || true
+      )"
+      if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
+        echo "HTTP_STATUS:000"
+        exit 0
+      fi
+      response="$(
+        curl -sS \
+          --connect-timeout 3 \
+          --max-time 10 \
+          -b "${cookie_jar}" \
+          -w $"\nHTTP_STATUS:%{http_code}\n" \
+          -H "Host: ${api_domain}" \
+          "http://caddy:80/system/api/v1/adm/notifications/stream" || true
+      )"
+      printf "%s\n" "${response}"
+    ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+  )"
+  diagnostics_code="$(printf '%s\n' "${diagnostics_body}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
+  [[ -n "${diagnostics_code}" ]] || diagnostics_code="none"
+  echo "notification diagnostics status: ${diagnostics_code}"
+  printf '%s\n' "${diagnostics_body}" | sed '/^HTTP_STATUS:/d'
+}
+
 monitoring_embed_candidate_url() {
   local url
   url="$(trim_quotes "$(env_value "NEXT_PUBLIC_MONITORING_EMBED_URL")")"
@@ -253,6 +369,8 @@ print_env_key_status "CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_TTL_SECONDS"
 print_env_key_status "CUSTOM__AI__SUMMARY__FAILURE_SIGNATURE_OPEN_SECONDS"
 print_env_key_status "CUSTOM__AI__SUMMARY__ADAPTIVE_RELAXED_FIRST_CONTENT_LENGTH"
 print_env_key_status "CUSTOM__AI__SUMMARY__ADAPTIVE_RELAXED_FIRST_CODE_FENCE_COUNT"
+print_env_key_status "CUSTOM__ADMIN__EMAIL"
+print_env_key_status "CUSTOM__ADMIN__PASSWORD"
 
 print_section "Steady Guard Cron"
 if command -v crontab >/dev/null 2>&1; then
@@ -297,6 +415,9 @@ fi
 
 print_section "Grafana Embed Route"
 print_grafana_embed_status "$(monitoring_embed_candidate_url)"
+
+print_section "Notification SSE"
+print_notification_sse_status
 
 print_section "Env AI Summary Sanity"
 ai_summary_enabled_raw="$(env_value "CUSTOM__AI__SUMMARY__ENABLED" | tr -d '"' | tr -d "'" | tr '[:upper:]' '[:lower:]')"

@@ -179,9 +179,11 @@ const LoginPage = () => {
             autoComplete="email"
           />
           {email.length > 0 && (
-            <GhostIconButton type="button" aria-label="이메일 입력 지우기" onClick={() => setEmail("")}>
-              <AppIcon name="close" />
-            </GhostIconButton>
+            <FieldActions>
+              <GhostIconButton type="button" aria-label="이메일 입력 지우기" onClick={() => setEmail("")}>
+                <AppIcon name="close" />
+              </GhostIconButton>
+            </FieldActions>
           )}
         </NaverField>
 
@@ -333,6 +335,16 @@ const NaverInput = styled.input`
   &[data-password="true"] {
     padding-right: 8.35rem;
   }
+`
+
+const FieldActions = styled.div`
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 `
 
 const PasswordActions = styled.div`

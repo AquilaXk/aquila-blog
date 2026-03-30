@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * MemberNotificationSseService는 유스케이스 단위 비즈니스 흐름을 조합하는 애플리케이션 서비스입니다.
@@ -33,6 +34,24 @@ class MemberNotificationSseService(
     @param:Value("\${custom.member.notification.sse.replayBatchSize:50}")
     private val replayBatchSize: Int,
 ) {
+    data class StreamDiagnostics(
+        val memberEmitterCount: Int,
+        val globalEmitterCount: Int,
+        val oldestEmitterAgeSeconds: Long,
+        val maxEmittersPerMember: Int,
+        val maxGlobalEmitters: Int,
+        val heartbeatSeconds: Long,
+        val replayProbeSeconds: Long,
+        val replayBatchSize: Int,
+        val connectedCount: Long,
+        val reconnectSubscribeCount: Long,
+        val disconnectCount: Long,
+        val replayBatchCount: Long,
+        val replayNotificationCount: Long,
+        val heartbeatSentCount: Long,
+        val sendFailureCount: Long,
+    )
+
     private val logger = LoggerFactory.getLogger(MemberNotificationSseService::class.java)
 
     companion object {
@@ -46,6 +65,13 @@ class MemberNotificationSseService(
     private val emitterConnectedAtEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
     private val emitterLastNotificationId = ConcurrentHashMap<SseEmitter, Long>()
     private val emitterLastReplayEpochMillis = ConcurrentHashMap<SseEmitter, Long>()
+    private val connectedCount = AtomicLong(0)
+    private val reconnectSubscribeCount = AtomicLong(0)
+    private val disconnectCount = AtomicLong(0)
+    private val replayBatchCount = AtomicLong(0)
+    private val replayNotificationCount = AtomicLong(0)
+    private val heartbeatSentCount = AtomicLong(0)
+    private val sendFailureCount = AtomicLong(0)
     private val heartbeatScheduler =
         Executors.newSingleThreadScheduledExecutor { runnable ->
             Thread(runnable, "member-notification-sse-heartbeat").apply {
@@ -74,6 +100,10 @@ class MemberNotificationSseService(
         emitter.onError { remove(memberId, emitter) }
 
         val replayFrom = parseLastNotificationId(lastEventIdRaw) ?: 0L
+        connectedCount.incrementAndGet()
+        if (replayFrom > 0L) {
+            reconnectSubscribeCount.incrementAndGet()
+        }
         val replayedLastId =
             replayMissedNotificationEvents(
                 memberId = memberId,
@@ -146,6 +176,7 @@ class MemberNotificationSseService(
             )
             return true
         } catch (_: Exception) {
+            sendFailureCount.incrementAndGet()
             memberId?.let { remove(it, emitter) }
             return false
         }
@@ -163,6 +194,7 @@ class MemberNotificationSseService(
             eventName = "heartbeat",
             data = mapOf("heartbeatAt" to heartbeatAt.toString()),
         )
+        heartbeatSentCount.incrementAndGet()
     }
 
     /**
@@ -198,14 +230,17 @@ class MemberNotificationSseService(
         memberId: Long,
         emitter: SseEmitter,
     ) {
+        val removedOwner = emitterOwners.remove(emitter)
         heartbeatTasks.remove(emitter)?.cancel(true)
-        emitterOwners.remove(emitter)
         emitterConnectedAtEpochMillis.remove(emitter)
         emitterLastNotificationId.remove(emitter)
         emitterLastReplayEpochMillis.remove(emitter)
         emittersByMemberId[memberId]?.remove(emitter)
         if (emittersByMemberId[memberId].isNullOrEmpty()) {
             emittersByMemberId.remove(memberId)
+        }
+        if (removedOwner != null) {
+            disconnectCount.incrementAndGet()
         }
     }
 
@@ -273,6 +308,7 @@ class MemberNotificationSseService(
                 limit = safeLimit,
             )
         if (notifications.isEmpty()) return lastNotificationId
+        replayBatchCount.incrementAndGet()
         val unreadCount =
             runCatching { memberNotificationRepository.countUnreadByReceiverId(memberId).toInt() }
                 .onFailure { exception ->
@@ -316,6 +352,7 @@ class MemberNotificationSseService(
             }
             latestId = notification.id
             emitterLastNotificationId[emitter] = latestId
+            replayNotificationCount.incrementAndGet()
         }
         return latestId
     }
@@ -332,6 +369,31 @@ class MemberNotificationSseService(
     }
 
     private fun notificationEventId(notificationId: Long): String = "notification-$notificationId"
+
+    fun diagnostics(): StreamDiagnostics {
+        val now = Instant.now().toEpochMilli()
+        val oldestConnectedAt = emitterConnectedAtEpochMillis.values.minOrNull()
+        return StreamDiagnostics(
+            memberEmitterCount = emittersByMemberId.count { !it.value.isNullOrEmpty() },
+            globalEmitterCount = emitterConnectedAtEpochMillis.size,
+            oldestEmitterAgeSeconds =
+                oldestConnectedAt
+                    ?.let { connectedAt -> ((now - connectedAt).coerceAtLeast(0) / 1_000) }
+                    ?: 0,
+            maxEmittersPerMember = maxEmittersPerMember.coerceAtLeast(1),
+            maxGlobalEmitters = maxGlobalEmitters.coerceAtLeast(100),
+            heartbeatSeconds = heartbeatSeconds.coerceAtLeast(3),
+            replayProbeSeconds = replayProbeSeconds.coerceAtLeast(heartbeatSeconds).coerceAtLeast(3),
+            replayBatchSize = replayBatchSize.coerceIn(1, MAX_REPLAY_NOTIFICATIONS),
+            connectedCount = connectedCount.get(),
+            reconnectSubscribeCount = reconnectSubscribeCount.get(),
+            disconnectCount = disconnectCount.get(),
+            replayBatchCount = replayBatchCount.get(),
+            replayNotificationCount = replayNotificationCount.get(),
+            heartbeatSentCount = heartbeatSentCount.get(),
+            sendFailureCount = sendFailureCount.get(),
+        )
+    }
 
     @PreDestroy
     fun shutdownHeartbeatScheduler() {

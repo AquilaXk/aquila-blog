@@ -71,3 +71,32 @@ groups:
         annotations:
           summary: "Search index async sync lag p95 is high"
           description: "post.search_index.task.lag p95 > 120s for 10m."
+
+  - name: aquila-notification-sse
+    rules:
+      - alert: AquilaNotificationSseEmitterSaturated
+        expr: max(member_notification_sse_global_emitters{job="back",service="aquila-back"}) > 1500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification SSE emitter count is high"
+          description: "global emitters > 1500 for 10m. Check reconnect storm, tab churn, or drain failures."
+
+      - alert: AquilaNotificationSseReconnectSpike
+        expr: sum(increase(member_notification_sse_reconnect_subscribe_total{job="back",service="aquila-back"}[10m])) > 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification SSE reconnect spike detected"
+          description: "reconnect subscribe count increased sharply in the last 10m. Check QUIC/H3 instability, deploy cutover, or network churn."
+
+      - alert: AquilaNotificationSseSendFailureSpike
+        expr: sum(increase(member_notification_sse_send_failure_total{job="back",service="aquila-back"}[10m])) > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notification SSE send failures are increasing"
+          description: "send failure count increased more than 5 in 10m. Check upstream disconnect storm, replay pressure, and transport stability."

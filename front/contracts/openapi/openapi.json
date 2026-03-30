@@ -1121,6 +1121,24 @@
         }
       }
     },
+    "/system/api/v1/adm/notifications/stream" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "notificationStreamDiagnostics",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StreamDiagnostics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/mail/signup" : {
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -3615,6 +3633,71 @@
             "items" : {
               "type" : "string"
             }
+          }
+        }
+      },
+      "StreamDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "memberEmitterCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "globalEmitterCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "oldestEmitterAgeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "maxEmittersPerMember" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "maxGlobalEmitters" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "heartbeatSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "replayProbeSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "replayBatchSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "connectedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reconnectSubscribeCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "disconnectCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "replayBatchCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "replayNotificationCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "heartbeatSentCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "sendFailureCount" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },

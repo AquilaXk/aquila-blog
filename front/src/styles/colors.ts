@@ -16,18 +16,18 @@ import {
 export type Colors = typeof colors.light & typeof colors.dark
 
 const nearBlackDarkGray = {
-  gray1: "#0d0f12",
-  gray2: "#12151a",
-  gray3: "#171b21",
-  gray4: "#1d222b",
-  gray5: "#232932",
-  gray6: "#2a3038",
-  gray7: "#343c47",
-  gray8: "#404a58",
-  gray9: "#5a6678",
-  gray10: "#a6adbb",
-  gray11: "#c9d0da",
-  gray12: "#f3f4f6",
+  gray1: "#121212",
+  gray2: "#181818",
+  gray3: "#1f1f1f",
+  gray4: "#262626",
+  gray5: "#2d2d2d",
+  gray6: "#363636",
+  gray7: "#414141",
+  gray8: "#4f4f4f",
+  gray9: "#666666",
+  gray10: "#b2b2b2",
+  gray11: "#d8d8d8",
+  gray12: "#f5f5f5",
 }
 
 const balancedLightGray = {
@@ -66,13 +66,13 @@ const semanticDark = {
   accentControl: blueDark.blue9,
   accentControlHover: blueDark.blue10,
   accentControlText: "#f8fafc",
-  accentSurfaceSubtle: "rgba(59, 130, 246, 0.12)",
-  accentSurfaceStrong: "rgba(59, 130, 246, 0.18)",
+  accentSurfaceSubtle: "rgba(59, 130, 246, 0.09)",
+  accentSurfaceStrong: "rgba(59, 130, 246, 0.14)",
   accentBorder: blueDark.blue8,
-  statusSuccessSurface: "rgba(34, 197, 94, 0.14)",
+  statusSuccessSurface: "rgba(34, 197, 94, 0.11)",
   statusSuccessBorder: greenDark.green8,
   statusSuccessText: greenDark.green11,
-  statusDangerSurface: "rgba(239, 68, 68, 0.14)",
+  statusDangerSurface: "rgba(239, 68, 68, 0.11)",
   statusDangerBorder: redDark.red8,
   statusDangerText: redDark.red11,
 }

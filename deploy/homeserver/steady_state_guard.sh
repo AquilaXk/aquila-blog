@@ -14,6 +14,7 @@ DEPLOY_LOCK_DIR="${SCRIPT_DIR}/.deploy.lock"
 DEPLOY_LOCK_TTL_SECONDS="${DEPLOY_LOCK_TTL_SECONDS:-21600}"
 GRAFANA_DS_STATE_FILE="${SCRIPT_DIR}/.grafana-datasource-state"
 GRAFANA_EMBED_STATE_FILE="${SCRIPT_DIR}/.grafana-embed-state"
+NOTIFICATION_SSE_STATE_FILE="${SCRIPT_DIR}/.notification-sse-state"
 
 log() {
   echo "[steady-guard] $(date -Is) $*"
@@ -61,6 +62,8 @@ GRAFANA_DS_FAIL_COUNT=0
 GRAFANA_DS_LAST_RECREATE_EPOCH=0
 GRAFANA_EMBED_FAIL_COUNT=0
 GRAFANA_EMBED_LAST_RECREATE_EPOCH=0
+NOTIFICATION_SSE_FAIL_COUNT=0
+NOTIFICATION_SSE_LAST_RECREATE_EPOCH=0
 
 load_grafana_ds_state() {
   GRAFANA_DS_FAIL_COUNT=0
@@ -102,6 +105,27 @@ load_grafana_embed_state() {
 
 save_grafana_embed_state() {
   printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${GRAFANA_EMBED_FAIL_COUNT}" "${GRAFANA_EMBED_LAST_RECREATE_EPOCH}" > "${GRAFANA_EMBED_STATE_FILE}"
+}
+
+load_notification_sse_state() {
+  NOTIFICATION_SSE_FAIL_COUNT=0
+  NOTIFICATION_SSE_LAST_RECREATE_EPOCH=0
+  [[ -f "${NOTIFICATION_SSE_STATE_FILE}" ]] || return 0
+
+  local fail_count_raw last_recreate_raw
+  fail_count_raw="$(awk -F= '$1 == "fail_count" {print $2; exit}' "${NOTIFICATION_SSE_STATE_FILE}" 2>/dev/null || true)"
+  last_recreate_raw="$(awk -F= '$1 == "last_recreate_epoch" {print $2; exit}' "${NOTIFICATION_SSE_STATE_FILE}" 2>/dev/null || true)"
+
+  if [[ "${fail_count_raw}" =~ ^[0-9]+$ ]]; then
+    NOTIFICATION_SSE_FAIL_COUNT="${fail_count_raw}"
+  fi
+  if [[ "${last_recreate_raw}" =~ ^[0-9]+$ ]]; then
+    NOTIFICATION_SSE_LAST_RECREATE_EPOCH="${last_recreate_raw}"
+  fi
+}
+
+save_notification_sse_state() {
+  printf 'fail_count=%s\nlast_recreate_epoch=%s\n' "${NOTIFICATION_SSE_FAIL_COUNT}" "${NOTIFICATION_SSE_LAST_RECREATE_EPOCH}" > "${NOTIFICATION_SSE_STATE_FILE}"
 }
 
 monitoring_embed_candidate_url() {
@@ -473,6 +497,129 @@ check_grafana_embed_route() {
   return 1
 }
 
+probe_notification_sse_route() {
+  local api_domain="$1"
+  local admin_email admin_password
+  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
+  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
+
+  if [[ -z "${admin_email}" || -z "${admin_password}" ]]; then
+    log "skip notification sse route check (missing CUSTOM__ADMIN__EMAIL or CUSTOM__ADMIN__PASSWORD)"
+    return 0
+  fi
+
+  local probe_output
+  probe_output="$(
+    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
+      set -eu
+      api_domain="$1"
+      admin_email="$2"
+      admin_password="$3"
+      cookie_jar="$(mktemp)"
+      trap "rm -f \"${cookie_jar}\"" EXIT
+      login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
+      login_code="$(
+        curl -sS \
+          --connect-timeout 3 \
+          --max-time 12 \
+          -c "${cookie_jar}" \
+          -o /dev/null \
+          -w "%{http_code}" \
+          -H "Host: ${api_domain}" \
+          -H "Content-Type: application/json" \
+          --data "${login_payload}" \
+          "http://caddy:80/member/api/v1/auth/login" || true
+      )"
+      echo "login_status=${login_code}"
+      if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
+        exit 11
+      fi
+
+      stream_body="$(
+        curl -sS -N \
+          --connect-timeout 3 \
+          --max-time 35 \
+          -b "${cookie_jar}" \
+          -H "Host: ${api_domain}" \
+          "http://caddy:80/member/api/v1/notifications/stream" || true
+      )"
+      printf "%s\n" "${stream_body}" | tr -d "\r"
+    ' sh "${api_domain}" "${admin_email}" "${admin_password}" 2>&1 || true
+  )"
+
+  if [[ "${probe_output}" == *"event: connected"* && "${probe_output}" == *"event: heartbeat"* ]]; then
+    return 0
+  fi
+
+  printf '%s' "${probe_output}"
+  return 1
+}
+
+check_notification_sse_route() {
+  local api_domain
+  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  if [[ -z "${api_domain}" ]]; then
+    log "FAIL missing API_DOMAIN in ${ENV_FILE}"
+    return 1
+  fi
+
+  local fail_threshold cooldown_seconds
+  fail_threshold="$(normalize_positive_int "$(env_value "NOTIFICATION_SSE_FAIL_THRESHOLD")" "2")"
+  cooldown_seconds="$(normalize_non_negative_int "$(env_value "NOTIFICATION_SSE_RECREATE_COOLDOWN_SECONDS")" "900")"
+
+  load_notification_sse_state
+
+  local probe_output
+  if probe_output="$(probe_notification_sse_route "${api_domain}")"; then
+    if (( NOTIFICATION_SSE_FAIL_COUNT > 0 )); then
+      log "OK notification sse route recovered consecutive_failures=${NOTIFICATION_SSE_FAIL_COUNT}"
+    else
+      log "OK notification sse route connected+heartbeat"
+    fi
+    NOTIFICATION_SSE_FAIL_COUNT=0
+    save_notification_sse_state
+    return 0
+  fi
+
+  NOTIFICATION_SSE_FAIL_COUNT=$(( NOTIFICATION_SSE_FAIL_COUNT + 1 ))
+  save_notification_sse_state
+  log "WARN notification sse unhealthy consecutive_failures=${NOTIFICATION_SSE_FAIL_COUNT} threshold=${fail_threshold}"
+
+  if (( NOTIFICATION_SSE_FAIL_COUNT < fail_threshold )); then
+    log "WARN notification sse probe output: ${probe_output}"
+    return 1
+  fi
+
+  local now elapsed_since_recreate
+  now="$(date +%s)"
+  elapsed_since_recreate=$(( now - NOTIFICATION_SSE_LAST_RECREATE_EPOCH ))
+  if (( NOTIFICATION_SSE_LAST_RECREATE_EPOCH > 0 && elapsed_since_recreate < cooldown_seconds )); then
+    local cooldown_remaining
+    cooldown_remaining=$(( cooldown_seconds - elapsed_since_recreate ))
+    log "WARN notification sse recreate skipped due cooldown remaining_seconds=${cooldown_remaining}"
+    log "WARN notification sse probe output: ${probe_output}"
+    return 1
+  fi
+
+  log "WARN notification sse threshold reached; recreating caddy"
+  compose up -d --force-recreate caddy >/dev/null || true
+  compose exec -T caddy caddy reload --config "${CADDY_CONTAINER_FILE}" >/dev/null || true
+  NOTIFICATION_SSE_LAST_RECREATE_EPOCH="${now}"
+  save_notification_sse_state
+  sleep 3
+
+  if probe_output="$(probe_notification_sse_route "${api_domain}")"; then
+    NOTIFICATION_SSE_FAIL_COUNT=0
+    save_notification_sse_state
+    log "OK notification sse repaired connected+heartbeat"
+    return 0
+  fi
+
+  log "FAIL notification sse route still unhealthy after_recreate=true"
+  log "FAIL notification sse probe output: ${probe_output}"
+  return 1
+}
+
 deploy_lock_is_active() {
   if [[ ! -d "${DEPLOY_LOCK_DIR}" ]]; then
     return 1
@@ -515,8 +662,9 @@ main() {
   if check_api_readiness; then ok=$((ok + 1)); fi
   if check_grafana_prometheus_datasource; then ok=$((ok + 1)); fi
   if check_grafana_embed_route; then ok=$((ok + 1)); fi
+  if check_notification_sse_route; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 6 ]]; then
+  if [[ "${ok}" -ne 7 ]]; then
     compose logs --no-color --tail=80 caddy grafana >&2 || true
     exit 1
   fi

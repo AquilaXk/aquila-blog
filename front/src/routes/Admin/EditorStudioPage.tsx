@@ -1298,7 +1298,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const router = useRouter()
   const queryClient = useQueryClient()
   const { me, authStatus, setMe } = useAuthSession()
-  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
+  // SSR admin 스냅샷이 있는 전용 편집 라우트는 hydration/auth race 동안에도
+  // 최초 보호 상태를 유지해야 한다. bare `me === null`만 보고 즉시 로그인으로
+  // 보내면 WebKit 같은 브라우저에서 false logout redirect가 발생할 수 있다.
+  const sessionMember = me || initialMember
   const [result, setResult] = useState<string>("")
   const [loadingKey, setLoadingKey] = useState<string>("")
   const [postId, setPostId] = useState("")
@@ -3197,7 +3200,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   useEffect(() => {
     if (authStatus === "loading" || authStatus === "unavailable") return
 
-    if (!me) {
+    if (!sessionMember) {
       const target = toLoginPath(router.asPath || activeEditorRoute, activeEditorRoute)
       if (!redirectingRef.current && router.asPath !== target) {
         redirectingRef.current = true
@@ -3214,7 +3217,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return
     }
 
-    if (!me.isAdmin) {
+    if (!sessionMember.isAdmin) {
       if (!redirectingRef.current && router.asPath !== "/") {
         redirectingRef.current = true
         void (async () => {
@@ -3229,7 +3232,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       }
       return
     }
-  }, [activeEditorRoute, authStatus, me, router])
+  }, [activeEditorRoute, authStatus, router, sessionMember])
 
   useEffect(() => {
     if (!sessionMember) return
@@ -3274,7 +3277,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [restoreLocalDraft, router])
 
   useEffect(() => {
-    if (!router.isReady || !isDedicatedEditorRoute || authStatus !== "authenticated" || !sessionMember?.isAdmin) return
+    if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return
     if (router.pathname !== EDITOR_NEW_ROUTE_PATH) return
     if (autoCreatedTempDraftRef.current) return
 
@@ -3284,7 +3287,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       redirectToEditor: true,
       source: source || undefined,
     })
-  }, [authStatus, handleLoadOrCreateTempPost, isDedicatedEditorRoute, router, sessionMember?.isAdmin])
+  }, [handleLoadOrCreateTempPost, isDedicatedEditorRoute, router, sessionMember?.isAdmin])
 
   const uploadPostImageFile = useCallback(async (file: File): Promise<UploadPostImageResult> => {
     const prepared = await preparePostImageForUpload(file)

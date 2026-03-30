@@ -153,4 +153,12 @@ test.describe("editor studio state", () => {
     expect(blockEditorSource).toContain("const QuickInsertBar = styled.div`")
     expect(blockEditorSource).toContain("슬래시(`/`)나 `+` 없이도 자주 쓰는 블록을 바로 넣을 수 있습니다.")
   })
+
+  test("editor studio는 SSR 관리자 스냅샷을 hydration auth race 동안 유지한다", () => {
+    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+
+    expect(editorStudioSource).toContain("const sessionMember = me || initialMember")
+    expect(editorStudioSource).toContain("if (!sessionMember) {")
+    expect(editorStudioSource).toContain("if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return")
+  })
 })

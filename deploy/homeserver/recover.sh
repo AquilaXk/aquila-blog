@@ -16,7 +16,25 @@ compose() {
 
 env_value() {
   local key="$1"
-  awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+  awk -F= -v key="${key}" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/\r/, "", value)
+      print value
+    }
+  ' "${ENV_FILE}" | tail -n 1
+}
+
+upsert_env_key() {
+  local key="$1"
+  local value="$2"
+  if grep -qE "^${key}=" "${ENV_FILE}"; then
+    grep -vE "^${key}=" "${ENV_FILE}" > "${ENV_FILE}.tmp"
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}.tmp"
+    mv "${ENV_FILE}.tmp" "${ENV_FILE}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+  fi
 }
 
 trim_quotes() {
@@ -28,8 +46,59 @@ trim_quotes() {
   echo "${value}"
 }
 
+container_image_for_service_any_state() {
+  local service="$1"
+  local container_id
+  container_id="$(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=blog_home" \
+      --filter "label=com.docker.compose.service=${service}" 2>/dev/null | head -n 1 || true
+  )"
+  if [[ -z "${container_id}" ]]; then
+    return 0
+  fi
+
+  docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
+}
+
+repair_back_image_if_missing() {
+  local value repaired_value state_backend
+  value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  if [[ -n "${value}" ]]; then
+    echo "recover BACK_IMAGE preserved: ${value}"
+    return 0
+  fi
+
+  state_backend="$(cat "${SCRIPT_DIR}/.active_backend" 2>/dev/null || true)"
+  if [[ "${state_backend}" == "back_blue" || "${state_backend}" == "back_green" ]]; then
+    repaired_value="$(container_image_for_service_any_state "${state_backend}" || true)"
+    if [[ -n "${repaired_value}" ]]; then
+      echo "recover BACK_IMAGE repair source=state_backend_container backend=${state_backend} image=${repaired_value}"
+    fi
+  fi
+
+  if [[ -z "${repaired_value}" ]]; then
+    for backend in back_blue back_green; do
+      repaired_value="$(container_image_for_service_any_state "${backend}" || true)"
+      if [[ -n "${repaired_value}" ]]; then
+        echo "recover BACK_IMAGE repair source=${backend}_container image=${repaired_value}"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "${repaired_value}" ]]; then
+    echo "BACK_IMAGE is empty in ${ENV_FILE} and no repair source is available." >&2
+    exit 1
+  fi
+
+  upsert_env_key "BACK_IMAGE" "${repaired_value}"
+  echo "recover repaired missing BACK_IMAGE=${repaired_value}"
+}
+
 require_back_image() {
   local value
+  repair_back_image_if_missing
   value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
 
   if [[ -z "${value}" ]]; then

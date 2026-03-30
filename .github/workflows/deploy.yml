@@ -599,14 +599,17 @@ jobs:
 
           enabled_value="$(awk -F= '$1=="CUSTOM__AI__SUMMARY__ENABLED"{print tolower($2)}' deploy/homeserver/.env.prod | tail -n 1 | tr -d '"' | tr -d '[:space:]')"
           api_key_value="$(awk -F= '$1=="CUSTOM__AI__SUMMARY__GEMINI__API_KEY"{print substr($0, index($0, "=")+1)}' deploy/homeserver/.env.prod | tail -n 1)"
+          echo "ai summary guard: enabled=${enabled_value:-false} api_key_present=$([ -n "${api_key_value}" ] && echo true || echo false)"
           if [ "${enabled_value}" = "true" ] && [ -z "${api_key_value}" ]; then
             echo "CUSTOM__AI__SUMMARY__ENABLED=true but CUSTOM__AI__SUMMARY__GEMINI__API_KEY is empty." >&2
             exit 1
           fi
 
+          echo "persisting BACK_IMAGE to deploy/homeserver/.env.prod"
           upsert_env_key "BACK_IMAGE" "${HOME_BACK_IMAGE}" "deploy/homeserver/.env.prod"
           BACK_IMAGE="$(extract_env_value "BACK_IMAGE")"
           export BACK_IMAGE
+          echo "persisted BACK_IMAGE=${BACK_IMAGE:-unset}"
 
           echo "Deploying image: ${BACK_IMAGE:-unset}"
 

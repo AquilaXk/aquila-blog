@@ -174,7 +174,28 @@ compose_up_no_deps_with_retry() {
 
 env_value() {
   local key="$1"
-  awk -F= -v key="${key}" '$1 == key {print substr($0, index($0, "=") + 1); exit}' "${ENV_FILE}"
+  awk -F= -v key="${key}" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/\r/, "", value)
+      print value
+    }
+  ' "${ENV_FILE}" | tail -n 1
+}
+
+backup_metadata_value() {
+  local key="$1"
+  local metadata_file="${BACKUP_DIR}/metadata.env"
+  if [[ ! -f "${metadata_file}" ]]; then
+    return 0
+  fi
+  awk -F= -v key="${key}" '
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/\r/, "", value)
+      print value
+    }
+  ' "${metadata_file}" | tail -n 1
 }
 
 upsert_env_key() {
@@ -196,6 +217,58 @@ trim_quotes() {
   value="${value%\'}"
   value="${value#\'}"
   echo "${value}"
+}
+
+container_image_for_service_any_state() {
+  local service="$1"
+  local container_id
+  container_id="$(
+    docker ps -aq \
+      --filter "label=com.docker.compose.project=blog_home" \
+      --filter "label=com.docker.compose.service=${service}" 2>/dev/null | head -n 1 || true
+  )"
+  if [[ -z "${container_id}" ]]; then
+    return 0
+  fi
+
+  docker inspect --format '{{.Config.Image}}' "${container_id}" 2>/dev/null | tr -d '\r' | head -n 1 || true
+}
+
+repair_back_image_if_missing() {
+  local current_value repaired_value metadata_image
+  current_value="$(trim_quotes "$(env_value "BACK_IMAGE")")"
+  if [[ -n "${current_value}" ]]; then
+    echo "rollback BACK_IMAGE preserved: ${current_value}"
+    return 0
+  fi
+
+  metadata_image="$(trim_quotes "$(backup_metadata_value "active_backend_image")")"
+  if [[ -n "${metadata_image}" ]]; then
+    repaired_value="${metadata_image}"
+    echo "rollback BACK_IMAGE repair source=backup_metadata image=${repaired_value}"
+  fi
+
+  if [[ -z "${repaired_value}" && -n "${target_backend:-}" ]]; then
+    repaired_value="$(container_image_for_service_any_state "${target_backend}" || true)"
+    if [[ -n "${repaired_value}" ]]; then
+      echo "rollback BACK_IMAGE repair source=target_backend_container backend=${target_backend} image=${repaired_value}"
+    fi
+  fi
+
+  if [[ -z "${repaired_value}" && -n "${inactive_backend:-}" ]]; then
+    repaired_value="$(container_image_for_service_any_state "${inactive_backend}" || true)"
+    if [[ -n "${repaired_value}" ]]; then
+      echo "rollback BACK_IMAGE repair source=inactive_backend_container backend=${inactive_backend} image=${repaired_value}"
+    fi
+  fi
+
+  if [[ -z "${repaired_value}" ]]; then
+    echo "rollback failed: BACK_IMAGE missing in restored env and no repair source available" >&2
+    return 1
+  fi
+
+  upsert_env_key "BACK_IMAGE" "${repaired_value}"
+  echo "rollback repaired missing BACK_IMAGE=${repaired_value}"
 }
 
 resolve_prod_db_name() {
@@ -526,6 +599,7 @@ if [[ -f "${STATE_FILE}" ]]; then
 fi
 inactive_backend="$(other_backend "${target_backend}")"
 
+repair_back_image_if_missing
 persist_single_runtime_caddy_upstreams "${target_backend}"
 
 warn_unsupported_docker_engine

@@ -175,6 +175,16 @@ monitoring_embed_candidate_url() {
   printf '%s' "${url}"
 }
 
+monitoring_embed_candidate_path() {
+  local url
+  url="$(monitoring_embed_candidate_url)"
+  if [[ -z "${url}" ]]; then
+    echo "/d/blog-overview/main?orgId=1&kiosk"
+    return 0
+  fi
+  printf '%s' "${url}" | sed -E 's#https?://[^/]+##'
+}
+
 is_grafana_embed_url() {
   local url="$1"
   [[ "${url}" == *"grafana"* || "${url}" == *"/d/"* || "${url}" == *"/public-dashboards/"* ]]
@@ -193,6 +203,79 @@ inspect_grafana_internal_health() {
     -s \
     -w '%{http_code}' \
     "http://grafana:3000/api/health" 2>/dev/null || true
+}
+
+inspect_grafana_origin_auth_proxy_headers() {
+  local api_domain="$1"
+  local grafana_domain="$2"
+  local path="$3"
+  local admin_email="$4"
+  local admin_password="$5"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
+    set -eu
+    api_domain="$1"
+    grafana_domain="$2"
+    path="$3"
+    admin_email="$4"
+    admin_password="$5"
+    cookie_jar="$(mktemp)"
+    trap "rm -f \"${cookie_jar}\"" EXIT
+    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
+    login_code="$(
+      curl -sS \
+        --connect-timeout 3 \
+        --max-time 12 \
+        -c "${cookie_jar}" \
+        -o /dev/null \
+        -w "%{http_code}" \
+        -H "Host: ${api_domain}" \
+        -H "Content-Type: application/json" \
+        --data "${login_payload}" \
+        "http://caddy:80/member/api/v1/auth/login" || true
+    )"
+    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
+      printf "HTTP/1.1 000 login_failed\r\n"
+      exit 0
+    fi
+    curl -I -s \
+      --connect-timeout 3 \
+      --max-time 12 \
+      -b "${cookie_jar}" \
+      -H "Host: ${grafana_domain}" \
+      "http://caddy:80${path}" || true
+  ' sh "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
+}
+
+print_grafana_origin_status() {
+  local api_domain grafana_domain path admin_email admin_password
+  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
+  path="$(monitoring_embed_candidate_path)"
+  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
+  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
+
+  if [[ -z "${grafana_domain}" || -z "${api_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
+    echo "grafana origin auth-proxy: skip (missing GRAFANA_DOMAIN/API_DOMAIN/admin credentials)"
+    return 0
+  fi
+
+  local headers status location xfo csp internal_health
+  internal_health="$(inspect_grafana_internal_health)"
+  headers="$(inspect_grafana_origin_auth_proxy_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
+  location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
+  xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
+  csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
+
+  echo "grafana origin host: ${grafana_domain}"
+  echo "grafana origin path: ${path}"
+  echo "grafana internal health: ${internal_health:-none}"
+  echo "grafana origin auth status: ${status:-none}"
+  echo "grafana origin location: ${location:-<none>}"
+  echo "grafana origin x-frame-options: ${xfo:-<none>}"
+  if [[ -n "${csp}" ]]; then
+    echo "grafana origin csp: ${csp}"
+  fi
 }
 
 print_grafana_embed_status() {
@@ -215,11 +298,11 @@ print_grafana_embed_status() {
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
   csp="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="content-security-policy" {print $2}' | tr -d '\r' | head -n 1)"
 
-  echo "grafana embed url: ${url}"
+  echo "grafana public embed url: ${url}"
   echo "grafana internal health: ${internal_health:-none}"
-  echo "grafana embed status: ${status:-none}"
-  echo "grafana embed location: ${location:-<none>}"
-  echo "grafana embed x-frame-options: ${xfo:-<none>}"
+  echo "grafana public embed status: ${status:-none}"
+  echo "grafana public embed location: ${location:-<none>}"
+  echo "grafana public embed x-frame-options: ${xfo:-<none>}"
   if [[ -n "${csp}" ]]; then
     echo "grafana embed csp: ${csp}"
   fi
@@ -432,6 +515,7 @@ if [[ -n "${api_site}" && -n "${back_site}" && "${api_site}" != "${back_site}" ]
 fi
 
 print_section "Grafana Embed Route"
+print_grafana_origin_status
 print_grafana_embed_status "$(monitoring_embed_candidate_url)"
 
 print_section "Notification SSE"

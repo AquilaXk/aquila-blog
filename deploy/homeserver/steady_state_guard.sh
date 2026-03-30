@@ -144,6 +144,16 @@ monitoring_embed_candidate_url() {
   printf '%s' "${url}"
 }
 
+monitoring_embed_candidate_path() {
+  local url
+  url="$(monitoring_embed_candidate_url)"
+  if [[ -z "${url}" ]]; then
+    echo "/d/blog-overview/main?orgId=1&kiosk"
+    return 0
+  fi
+  printf '%s' "${url}" | sed -E 's#https?://[^/]+##'
+}
+
 is_grafana_embed_url() {
   local url="$1"
   [[ "${url}" == *"grafana"* || "${url}" == *"/d/"* || "${url}" == *"/public-dashboards/"* ]]
@@ -165,10 +175,9 @@ inspect_grafana_internal_health() {
 }
 
 grafana_embed_headers_are_healthy() {
-  local url="$1"
-  local headers status location xfo csp internal_health
-  internal_health="$(inspect_grafana_internal_health)"
-  headers="$(inspect_grafana_embed_headers "${url}")"
+  local headers="$1"
+  local internal_health="$2"
+  local status location xfo csp
   status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
   location="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="location" {print $2}' | tr -d '\r' | head -n 1)"
   xfo="$(printf '%s\n' "${headers}" | awk -F': ' 'tolower($1)=="x-frame-options" {print $2}' | tr -d '\r' | head -n 1)"
@@ -194,6 +203,47 @@ grafana_embed_headers_are_healthy() {
   fi
 
   return 0
+}
+
+probe_grafana_embed_origin_headers() {
+  local api_domain="$1"
+  local grafana_domain="$2"
+  local path="$3"
+  local admin_email="$4"
+  local admin_password="$5"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 sh -lc '
+    set -eu
+    api_domain="$1"
+    grafana_domain="$2"
+    path="$3"
+    admin_email="$4"
+    admin_password="$5"
+    cookie_jar="$(mktemp)"
+    trap "rm -f \"${cookie_jar}\"" EXIT
+    login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
+    login_code="$(
+      curl -sS \
+        --connect-timeout 3 \
+        --max-time 12 \
+        -c "${cookie_jar}" \
+        -o /dev/null \
+        -w "%{http_code}" \
+        -H "Host: ${api_domain}" \
+        -H "Content-Type: application/json" \
+        --data "${login_payload}" \
+        "http://caddy:80/member/api/v1/auth/login" || true
+    )"
+    if ! printf "%s" "${login_code}" | grep -Eq "^2[0-9][0-9]$"; then
+      printf "HTTP/1.1 000 login_failed\r\n"
+      exit 0
+    fi
+    curl -I -s \
+      --connect-timeout 3 \
+      --max-time 12 \
+      -b "${cookie_jar}" \
+      -H "Host: ${grafana_domain}" \
+      "http://caddy:80${path}" || true
+  ' sh "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true
 }
 
 host_caddy_sha256() {
@@ -455,10 +505,18 @@ check_grafana_prometheus_datasource() {
 }
 
 check_grafana_embed_route() {
-  local url
-  url="$(monitoring_embed_candidate_url)"
-  if [[ -z "${url}" ]] || ! is_grafana_embed_url "${url}"; then
-    log "skip grafana embed route check (no grafana monitoring embed url configured)"
+  local api_domain grafana_domain path admin_email admin_password
+  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  grafana_domain="$(trim_quotes "$(env_value "GRAFANA_DOMAIN")")"
+  path="$(monitoring_embed_candidate_path)"
+  admin_email="$(trim_quotes "$(env_value "CUSTOM__ADMIN__EMAIL")")"
+  admin_password="$(trim_quotes "$(env_value "CUSTOM__ADMIN__PASSWORD")")"
+  if [[ -z "${grafana_domain}" ]]; then
+    log "skip grafana origin route check (no GRAFANA_DOMAIN configured)"
+    return 0
+  fi
+  if [[ -z "${api_domain}" || -z "${admin_email}" || -z "${admin_password}" ]]; then
+    log "skip grafana origin route check (missing API_DOMAIN or admin credentials)"
     return 0
   fi
 
@@ -468,11 +526,15 @@ check_grafana_embed_route() {
 
   load_grafana_embed_state
 
-  if grafana_embed_headers_are_healthy "${url}"; then
+  local headers internal_health
+  internal_health="$(inspect_grafana_internal_health)"
+  headers="$(probe_grafana_embed_origin_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+
+  if grafana_embed_headers_are_healthy "${headers}" "${internal_health}"; then
     if (( GRAFANA_EMBED_FAIL_COUNT > 0 )); then
-      log "OK grafana embed route recovered consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} url=${url}"
+      log "OK grafana origin route recovered consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} host=${grafana_domain} path=${path}"
     else
-      log "OK grafana embed route url=${url}"
+      log "OK grafana origin route host=${grafana_domain} path=${path}"
     fi
     GRAFANA_EMBED_FAIL_COUNT=0
     save_grafana_embed_state
@@ -481,7 +543,7 @@ check_grafana_embed_route() {
 
   GRAFANA_EMBED_FAIL_COUNT=$(( GRAFANA_EMBED_FAIL_COUNT + 1 ))
   save_grafana_embed_state
-  log "WARN grafana embed unhealthy consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} threshold=${fail_threshold} url=${url}"
+  log "WARN grafana origin route unhealthy consecutive_failures=${GRAFANA_EMBED_FAIL_COUNT} threshold=${fail_threshold} host=${grafana_domain} path=${path}"
 
   if (( GRAFANA_EMBED_FAIL_COUNT < fail_threshold )); then
     return 1
@@ -497,20 +559,22 @@ check_grafana_embed_route() {
     return 1
   fi
 
-  log "WARN grafana embed threshold reached; recreating caddy and grafana"
+  log "WARN grafana origin route threshold reached; recreating caddy and grafana"
   compose up -d --force-recreate caddy grafana >/dev/null || true
   GRAFANA_EMBED_LAST_RECREATE_EPOCH="${now}"
   save_grafana_embed_state
   sleep 3
 
-  if grafana_embed_headers_are_healthy "${url}"; then
+  internal_health="$(inspect_grafana_internal_health)"
+  headers="$(probe_grafana_embed_origin_headers "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}")"
+  if grafana_embed_headers_are_healthy "${headers}" "${internal_health}"; then
     GRAFANA_EMBED_FAIL_COUNT=0
     save_grafana_embed_state
-    log "OK grafana embed repaired url=${url}"
+    log "OK grafana origin route repaired host=${grafana_domain} path=${path}"
     return 0
   fi
 
-  log "FAIL grafana embed route still unhealthy after_recreate=true url=${url}"
+  log "FAIL grafana origin route still unhealthy after_recreate=true host=${grafana_domain} path=${path}"
   return 1
 }
 

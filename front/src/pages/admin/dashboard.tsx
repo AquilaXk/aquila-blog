@@ -62,7 +62,7 @@ const AdminDashboardPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           </TopActions>
         </TopRow>
 
-        <ServiceRail>
+        <ServiceRail data-ui="monitoring-service-rail">
           {monitoringItems.map((item) => (
             <ServiceCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
               <ServiceIcon>{renderMonitoringBrand(item.brand.icon, item.brand.fallbackIcon, item.title)}</ServiceIcon>
@@ -74,11 +74,11 @@ const AdminDashboardPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           ))}
         </ServiceRail>
 
-        <PanelGrid>
+        <PanelGrid data-ui="monitoring-panel-grid">
           {DASHBOARD_PANEL_CARDS.map((panel) => {
             const panelUrl = grafanaDashboardUrl ? buildGrafanaPanelEmbedUrl(grafanaDashboardUrl, panel.panelId) : ""
             return (
-              <PanelCard key={panel.key}>
+              <PanelCard key={panel.key} data-ui="monitoring-panel-card">
                 <PanelHeader>
                   <div>
                     <strong>{panel.title}</strong>

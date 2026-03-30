@@ -5,7 +5,7 @@ const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
-const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/profile", "/admin/posts", "/admin/tools"]
+const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/dashboard", "/admin/profile", "/admin/posts", "/admin/tools"]
 
 const mockTagCounts = [
   { tag: "perf", count: 10 },
@@ -259,6 +259,22 @@ const mockDetailRailEndpoint = async (page: Page, postId: number) => {
   })
 }
 
+const mockAdminMonitoringEndpoints = async (page: Page) => {
+  await page.route("**/system/api/v1/adm/health", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "UP",
+        details: {
+          ping: { status: "UP" },
+          db: { status: "UP" },
+        },
+      }),
+    })
+  })
+}
+
 const installClsObserver = async (page: Page) => {
   await page.addInitScript(() => {
     ;(window as unknown as { __aqCls?: number }).__aqCls = 0
@@ -382,6 +398,9 @@ const getVisualLayoutFingerprint = async (page: Page) =>
       desktopTagRailRect: readRect(".desktopPanel"),
       leftRailRect: readRect(".leftRailInner"),
       rightRailRect: readRect(".rightRailInner"),
+      dashboardServiceRailRect: readRect('[data-ui="monitoring-service-rail"]'),
+      dashboardPanelGridRect: readRect('[data-ui="monitoring-panel-grid"]'),
+      dashboardFirstPanelRect: readRect('[data-ui="monitoring-panel-card"]'),
     }
   })
 
@@ -698,6 +717,7 @@ test("상세 좌/우 레일 sticky는 스크롤 전후 좌표를 안정적으로
 test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
   await mockDetailRailEndpoint(page, 991)
+  await mockAdminMonitoringEndpoints(page)
 
   const scenarios = [
     { name: "home-desktop-1440", viewport: { width: 1440, height: 900 }, route: "/" },
@@ -706,6 +726,7 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
     { name: "detail-desktop-1440", viewport: { width: 1440, height: 900 }, route: "/posts/991" },
     { name: "detail-iphone15pro-393", viewport: { width: 393, height: 852 }, route: "/posts/991" },
     { name: "detail-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/posts/991" },
+    { name: "admin-dashboard-ipad-mini-768", viewport: { width: 768, height: 1024 }, route: "/admin/dashboard" },
   ] as const
 
   for (const scenario of scenarios) {
@@ -863,6 +884,34 @@ test("핵심 화면 레이아웃 스냅샷(desktop/iPhone15/iPad mini)을 유지
       expect(htmlScrollWidth).toBeGreaterThanOrEqual(1420)
       expect(bodyScrollWidth).toBeLessThanOrEqual(1440)
       expect(bodyScrollWidth).toBeGreaterThanOrEqual(1420)
+      continue
+    }
+
+    if (scenario.name === "admin-dashboard-ipad-mini-768") {
+      expect(snapshot.route).toBe("/admin/dashboard")
+      expect(snapshot.viewport.width).toBe(768)
+      expect(snapshot.viewport.height).toBe(1024)
+      expect(snapshot.dashboardServiceRailRect).not.toBeNull()
+      expect(snapshot.dashboardPanelGridRect).not.toBeNull()
+      expect(snapshot.dashboardFirstPanelRect).not.toBeNull()
+
+      const serviceRailWidth = snapshot.dashboardServiceRailRect?.width ?? 0
+      const panelGridWidth = snapshot.dashboardPanelGridRect?.width ?? 0
+      const firstPanelWidth = snapshot.dashboardFirstPanelRect?.width ?? 0
+      const firstPanelY = snapshot.dashboardFirstPanelRect?.y ?? 0
+      const htmlScrollWidth = snapshot.scrollWidth?.html ?? 0
+      const bodyScrollWidth = snapshot.scrollWidth?.body ?? 0
+
+      expect(serviceRailWidth).toBeGreaterThanOrEqual(720)
+      expect(serviceRailWidth).toBeLessThanOrEqual(744)
+      expect(panelGridWidth).toBeGreaterThanOrEqual(720)
+      expect(panelGridWidth).toBeLessThanOrEqual(744)
+      expect(firstPanelWidth).toBeGreaterThanOrEqual(720)
+      expect(firstPanelWidth).toBeLessThanOrEqual(744)
+      expect(firstPanelY).toBeGreaterThanOrEqual(290)
+      expect(firstPanelY).toBeLessThanOrEqual(430)
+      expect(htmlScrollWidth).toBeLessThanOrEqual(768)
+      expect(bodyScrollWidth).toBeLessThanOrEqual(768)
       continue
     }
 

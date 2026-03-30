@@ -2874,11 +2874,15 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
-    const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex ?? selectedBlockIndex
+    const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex
+    if (blockIndex === null) {
+      setBlockHandleState((prev) => ({ ...prev, visible: false }))
+      return
+    }
     const blockElement = getTopLevelBlockElementByIndex(blockIndex)
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
     const shouldShow = Boolean(
-      blockElement && canShowHandle && (isCoarsePointer || hoveredBlockIndex !== null || editor.isFocused)
+      blockElement && canShowHandle && (isCoarsePointer || hoveredBlockIndex !== null)
     )
 
     if (!shouldShow || !blockElement) {
@@ -4479,6 +4483,11 @@ const EditorViewport = styled.div`
     pointer-events: none;
   }
 
+  .aq-block-editor__content ::selection {
+    background: rgba(59, 130, 246, 0.24);
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#ffffff")};
+  }
+
   .aq-block-editor__content pre {
     overflow: auto;
     border-radius: 1rem;
@@ -4551,13 +4560,36 @@ const EditorViewport = styled.div`
 
   .aq-block-editor__content li[data-type="taskItem"] > label,
   .aq-block-editor__content li[data-task-item="true"] > label {
-    margin-top: 0.28rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.12rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"] > label input[type="checkbox"],
+  .aq-block-editor__content li[data-task-item="true"] > label input[type="checkbox"] {
+    margin: 0.22rem 0 0;
+    width: 0.95rem;
+    height: 0.95rem;
+    accent-color: ${({ theme }) => (theme.scheme === "dark" ? "#4493f8" : "#0969da")};
   }
 
   .aq-block-editor__content li[data-type="taskItem"] > div,
   .aq-block-editor__content li[data-task-item="true"] > div {
     flex: 1;
     min-width: 0;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"] > div > :first-child,
+  .aq-block-editor__content li[data-task-item="true"] > div > :first-child {
+    margin-top: 0;
+  }
+
+  .aq-block-editor__content li[data-type="taskItem"] > div > :last-child,
+  .aq-block-editor__content li[data-task-item="true"] > div > :last-child {
+    margin-bottom: 0;
   }
 
   .aq-block-editor__content table {

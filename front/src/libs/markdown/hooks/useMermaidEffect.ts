@@ -134,6 +134,7 @@ const resolveMermaidPreset = (scheme: "dark" | "light") => {
 
 interface MermaidEffectOptions {
   observeMutations?: boolean
+  forceScheme?: "dark" | "light"
 }
 
 const useMermaidEffect = (
@@ -145,6 +146,7 @@ const useMermaidEffect = (
   const [scheme] = useScheme()
   const shouldLogMermaidWarnings = process.env.NODE_ENV !== "production"
   const observeMutations = options?.observeMutations ?? true
+  const effectiveScheme = options?.forceScheme ?? (scheme === "dark" ? "dark" : "light")
 
   useEffect(() => {
     if (!enabled) return
@@ -163,7 +165,7 @@ const useMermaidEffect = (
     const maxRetryCount = 6
     const retryBaseDelayMs = 150
     const maxRunRetryCount = 3
-    const preset = resolveMermaidPreset(scheme === "dark" ? "dark" : "light")
+    const preset = resolveMermaidPreset(effectiveScheme)
     let mermaidPromise: Promise<any> | null = null
 
     const stripRiskyFlowchartDirectives = (source: string) =>
@@ -891,7 +893,7 @@ const useMermaidEffect = (
         scheduledRunFrame = null
       }
     }
-  }, [contentKey, enabled, observeMutations, rootRef, scheme, shouldLogMermaidWarnings])
+  }, [contentKey, effectiveScheme, enabled, observeMutations, rootRef, shouldLogMermaidWarnings])
 
   return
 }

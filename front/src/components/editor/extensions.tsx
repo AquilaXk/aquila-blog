@@ -377,7 +377,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     previewRootRef,
     `editor-mermaid:${normalizedSource}`,
     isPreviewVisible && normalizedSource.length > 0,
-    { observeMutations: false }
+    { observeMutations: false, forceScheme: "dark" }
   )
 
   return (
@@ -1810,25 +1810,20 @@ export const EditorCodeBlock = CodeBlock.extend({
   },
 })
 
-const sharedTextareaStyles = ({ minHeight = "6rem" }: { minHeight?: string } = {}) => `
-  min-height: ${minHeight};
+const BlockTextarea = styled.textarea<{ rows?: number }>`
+  min-height: ${({ rows }) => (rows ? `${Math.max(Number(rows) * 1.8, 6)}rem` : "6rem")};
   width: 100%;
   resize: none;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: 0.95rem;
-  background: rgba(10, 12, 16, 0.92);
-  color: var(--color-gray12);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.92)")};
+  color: ${({ theme }) => theme.colors.gray12};
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   font-size: 0.88rem;
   line-height: 1.6;
   padding: 1rem;
-`
-
-const BlockTextarea = styled.textarea<{ rows?: number }>`
-  ${({ rows }) =>
-    sharedTextareaStyles({ minHeight: rows ? `${Math.max(Number(rows) * 1.8, 6)}rem` : "6rem" })}
 `
 
 const CompactBlockTextarea = styled(BlockTextarea)`
@@ -1840,9 +1835,9 @@ const CompactBlockTextarea = styled(BlockTextarea)`
 
 const MermaidPreviewCard = styled.div`
   min-height: 12rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   border-radius: 0.95rem;
-  background: rgba(10, 12, 16, 0.98);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   padding: 0.95rem 1rem;
 
   .aq-mermaid {
@@ -1862,16 +1857,17 @@ const MermaidEditorWrapper = styled(NodeViewWrapper)`
   overflow: visible;
   overflow: hidden;
   margin: 1rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: var(--aq-mermaid-block-radius);
-  background: #2b2d3a;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "#2b2d3a")};
   position: relative;
   z-index: 0;
   background-clip: padding-box;
 
   &[data-selected="true"] {
-    border-color: rgba(148, 163, 184, 0.28);
-    box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.12);
+    border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(148, 163, 184, 0.28)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "0 0 0 1px rgba(59, 130, 246, 0.18)" : "0 0 0 1px rgba(226, 232, 240, 0.12)"};
   }
 `
 
@@ -1881,8 +1877,9 @@ const MermaidEditorHeader = styled.div`
   align-items: center;
   gap: 0.75rem;
   padding: 0.84rem 0.96rem 0.76rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, #3a3f59, #363b54);
+  border-bottom: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? `linear-gradient(180deg, ${theme.colors.gray2}, ${theme.colors.gray3})` : "linear-gradient(180deg, #3a3f59, #363b54)"};
   border-top-left-radius: var(--aq-mermaid-block-radius);
   border-top-right-radius: var(--aq-mermaid-block-radius);
   overflow: hidden;
@@ -1926,13 +1923,13 @@ const MermaidEditorTitleGroup = styled.div`
 
   strong {
     display: block;
-    color: #f3f4f6;
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#f3f4f6")};
     font-size: 0.92rem;
     font-weight: 700;
   }
 
   span {
-    color: rgba(226, 232, 240, 0.64);
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray10 : "rgba(226, 232, 240, 0.64)")};
     font-size: 0.74rem;
     line-height: 1.4;
   }
@@ -1944,9 +1941,9 @@ const MermaidViewModeRail = styled.div`
   align-items: center;
   gap: 0.22rem;
   padding: 0.24rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.1)")};
   border-radius: 0.82rem;
-  background: rgba(255, 255, 255, 0.035);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.035)")};
 
   @media (max-width: 720px) {
     justify-self: stretch;
@@ -1959,22 +1956,23 @@ const MermaidViewModeButton = styled.button`
   border: 0;
   border-radius: 0.62rem;
   background: transparent;
-  color: rgba(226, 232, 240, 0.7);
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray10 : "rgba(226, 232, 240, 0.7)")};
   font-size: 0.74rem;
   font-weight: 700;
   padding: 0 0.66rem;
 
   &[data-active="true"] {
-    background: rgba(59, 130, 246, 0.16);
-    color: #eff6ff;
-    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.42);
+    background: ${({ theme }) => (theme.scheme === "light" ? "rgba(37, 99, 235, 0.1)" : "rgba(59, 130, 246, 0.16)")};
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue9 : "#eff6ff")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "inset 0 0 0 1px rgba(37, 99, 235, 0.28)" : "inset 0 0 0 1px rgba(96, 165, 250, 0.42)"};
   }
 `
 
 const MermaidEditorBody = styled.div`
   display: flex;
   flex-direction: column;
-  background: rgba(19, 21, 26, 0.98);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(19, 21, 26, 0.98)")};
 `
 
 const MermaidPaneLabel = styled.span`
@@ -1984,8 +1982,8 @@ const MermaidPaneLabel = styled.span`
   min-height: 1.7rem;
   padding: 0 0.62rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(226, 232, 240, 0.82);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : "rgba(255, 255, 255, 0.05)")};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray10 : "rgba(226, 232, 240, 0.82)")};
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -2003,8 +2001,8 @@ const MermaidCodeEditorShell = styled.div`
   position: relative;
   min-height: 13rem;
   border-radius: 0.95rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(10, 12, 16, 0.98);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   overflow: hidden;
 `
 
@@ -2020,7 +2018,7 @@ const MermaidCodeHighlight = styled.pre`
     "Courier New", monospace;
   font-size: 0.97rem;
   line-height: 1.7;
-  color: #dbe2ea;
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#dbe2ea")};
 
   .line {
     display: block;
@@ -2052,7 +2050,7 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
   border-radius: 0;
   background: transparent;
   color: transparent;
-  caret-color: #f8fafc;
+  caret-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#f8fafc")};
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   font-size: 0.97rem;
@@ -2077,7 +2075,7 @@ const MermaidPreviewPane = styled.div`
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.95rem 1rem 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   background: transparent;
 `
 
@@ -2091,16 +2089,17 @@ const CodeBlockEditorWrapper = styled(NodeViewWrapper)`
   align-self: stretch;
   overflow: visible;
   margin: 1rem 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: var(--aq-code-block-radius);
-  background: #2b2d3a;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "#2b2d3a")};
   position: relative;
   z-index: 0;
   background-clip: padding-box;
 
   &[data-selected="true"] {
-    border-color: rgba(148, 163, 184, 0.28);
-    box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.12);
+    border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(148, 163, 184, 0.28)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "0 0 0 1px rgba(59, 130, 246, 0.18)" : "0 0 0 1px rgba(226, 232, 240, 0.12)"};
   }
 `
 
@@ -2110,8 +2109,9 @@ const CodeBlockEditorHeader = styled.div`
   align-items: center;
   gap: 0.75rem;
   padding: 0.84rem 0.96rem 0.76rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, #3a3f59, #363b54);
+  border-bottom: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? `linear-gradient(180deg, ${theme.colors.gray2}, ${theme.colors.gray3})` : "linear-gradient(180deg, #3a3f59, #363b54)"};
   border-top-left-radius: var(--aq-code-block-radius);
   border-top-right-radius: var(--aq-code-block-radius);
   overflow: hidden;
@@ -2154,8 +2154,8 @@ const CodeLanguageButton = styled.button`
   gap: 0.45rem;
   min-height: 2.1rem;
   border-radius: 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.12)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.04)")};
   color: #ff9d62;
   font-size: 0.78rem;
   font-weight: 700;
@@ -2166,7 +2166,7 @@ const CodeLanguageButton = styled.button`
   svg {
     width: 0.95rem;
     height: 0.95rem;
-    color: rgba(255, 255, 255, 0.62);
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray10 : "rgba(255, 255, 255, 0.62)")};
   }
 `
 
@@ -2180,18 +2180,19 @@ const CodeLanguagePopover = styled.div`
   flex-direction: column;
   gap: 0.6rem;
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: 1rem;
-  background: rgba(30, 31, 36, 0.98);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(30, 31, 36, 0.98)")};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 14px 28px rgba(15, 23, 42, 0.12)" : "0 18px 36px rgba(0, 0, 0, 0.3)"};
 `
 
 const CodeLanguageSearchInput = styled.input`
   min-height: 2.6rem;
   width: 100%;
   border-radius: 0.85rem;
-  border: 1px solid rgba(59, 130, 246, 0.6);
-  background: rgba(17, 24, 39, 0.88);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(59, 130, 246, 0.6)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(17, 24, 39, 0.88)")};
   color: var(--color-gray12);
   font-size: 0.96rem;
   padding: 0 0.95rem;
@@ -2234,7 +2235,7 @@ const CodeLanguageOptionButton = styled.button`
 
   &[data-active="true"],
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray3 : "rgba(255, 255, 255, 0.08)")};
   }
 `
 
@@ -2249,7 +2250,7 @@ const CodeBlockEditorSurface = styled.div`
     overflow: auto;
     padding: 1.05rem 1.18rem 1.6rem;
     background: transparent;
-    color: #a9b7c6;
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#a9b7c6")};
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
     font-size: 0.88rem;
@@ -2363,10 +2364,11 @@ const CalloutEmojiTrigger = styled.button`
   gap: 0.32rem;
   min-width: 2.3rem;
   height: 2.3rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid
+    ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.12)")};
   border-radius: 999px;
   padding: 0 0.68rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.08)")};
   color: var(--ad-accent);
   font-size: 1rem;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -2374,12 +2376,12 @@ const CalloutEmojiTrigger = styled.button`
   svg {
     width: 0.92rem;
     height: 0.92rem;
-    color: rgba(255, 255, 255, 0.68);
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray10 : "rgba(255, 255, 255, 0.68)")};
   }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.18);
+    background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : "rgba(255, 255, 255, 0.12)")};
+    border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray7 : "rgba(255, 255, 255, 0.18)")};
   }
 `
 
@@ -2393,10 +2395,12 @@ const CalloutEmojiPopover = styled.div`
   flex-direction: column;
   gap: 0.45rem;
   padding: 0.55rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid
+    ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: 1rem;
-  background: rgba(30, 31, 36, 0.98);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(30, 31, 36, 0.98)")};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 14px 28px rgba(15, 23, 42, 0.12)" : "0 18px 36px rgba(0, 0, 0, 0.3)"};
 `
 
 const CalloutEmojiOptionList = styled.div`
@@ -2431,12 +2435,12 @@ const CalloutEmojiOptionButton = styled.button`
   svg {
     width: 0.98rem;
     height: 0.98rem;
-    color: #e5e7eb;
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray10 : "#e5e7eb")};
   }
 
   &[data-active="true"],
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray3 : "rgba(255, 255, 255, 0.08)")};
   }
 `
 
@@ -2549,9 +2553,9 @@ const ChecklistActionButton = styled.button`
   min-height: 2rem;
   padding: 0 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(96, 165, 250, 0.28);
-  background: rgba(59, 130, 246, 0.12);
-  color: #dbeafe;
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(96, 165, 250, 0.28)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? "rgba(37, 99, 235, 0.08)" : "rgba(59, 130, 246, 0.12)")};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue9 : "#dbeafe")};
   font-size: 0.76rem;
   font-weight: 700;
 `
@@ -2562,13 +2566,14 @@ const LinkCardEditorWrapper = styled(NodeViewWrapper)`
   gap: 0.72rem;
   margin: 0.9rem 0;
   padding: 1rem 1.05rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: 1rem;
-  background: rgba(17, 19, 24, 0.94);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(17, 19, 24, 0.94)")};
 
   &[data-selected="true"] {
-    border-color: rgba(96, 165, 250, 0.32);
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+    border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(96, 165, 250, 0.32)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "0 0 0 1px rgba(37, 99, 235, 0.16)" : "0 0 0 1px rgba(96, 165, 250, 0.12)"};
   }
 `
 
@@ -2588,8 +2593,8 @@ const LinkCardFieldInput = styled.input`
   min-height: 2.6rem;
   width: 100%;
   border-radius: 0.88rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.03)")};
   color: var(--color-gray12);
   font-size: 0.94rem;
   padding: 0 0.92rem;
@@ -2598,7 +2603,7 @@ const LinkCardFieldInput = styled.input`
 const LinkCardTextarea = styled(CompactBlockTextarea)`
   min-height: 4.6rem;
   border-radius: 0.88rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.03)")};
   font-family: inherit;
   font-size: 0.92rem;
 `
@@ -2610,8 +2615,8 @@ const LinkCardPreview = styled.div`
   align-items: start;
   padding: 0.84rem 0.9rem;
   border-radius: 0.92rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : "rgba(255, 255, 255, 0.025)")};
 
   &[data-kind="file"] {
     grid-template-columns: 1fr;
@@ -2622,7 +2627,7 @@ const LinkCardPreviewThumb = styled.div`
   overflow: hidden;
   border-radius: 0.82rem;
   aspect-ratio: 16 / 10;
-  background: rgba(255, 255, 255, 0.05);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray3 : "rgba(255, 255, 255, 0.05)")};
 
   img {
     display: block;
@@ -2670,7 +2675,7 @@ const LinkCardPreviewCopy = styled.div`
 
 const LinkCardPreviewHint = styled.div`
   grid-column: 1 / -1;
-  color: #93c5fd;
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue9 : "#93c5fd")};
   font-size: 0.75rem;
   font-weight: 600;
 `
@@ -2681,13 +2686,14 @@ const FormulaEditorWrapper = styled(NodeViewWrapper)`
   gap: 0.72rem;
   margin: 0.9rem 0;
   padding: 1rem 1.05rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: 1rem;
-  background: rgba(17, 19, 24, 0.94);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(17, 19, 24, 0.94)")};
 
   &[data-selected="true"] {
-    border-color: rgba(96, 165, 250, 0.32);
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.12);
+    border-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(96, 165, 250, 0.32)")};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light" ? "0 0 0 1px rgba(37, 99, 235, 0.16)" : "0 0 0 1px rgba(96, 165, 250, 0.12)"};
   }
 `
 
@@ -2712,14 +2718,14 @@ const FormulaEditorHeader = styled.div`
 const FormulaEditorTextarea = styled(CompactBlockTextarea)`
   min-height: 5rem;
   border-radius: 0.88rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.03)")};
 `
 
 const FormulaPreview = styled.div`
   padding: 0.9rem 1rem;
   border-radius: 0.88rem;
-  background: rgba(255, 255, 255, 0.03);
-  color: #e5e7eb;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : "rgba(255, 255, 255, 0.03)")};
+  color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#e5e7eb")};
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   font-size: 0.84rem;
@@ -2730,8 +2736,8 @@ const FormulaPreview = styled.div`
 const FormulaRenderedPreview = styled.div`
   padding: 1rem 1.05rem;
   border-radius: 0.88rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 12, 16, 0.78);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : "rgba(10, 12, 16, 0.78)")};
   overflow-x: auto;
 
   .katex-display {
@@ -2739,7 +2745,7 @@ const FormulaRenderedPreview = styled.div`
   }
 
   .aq-formula-fallback {
-    color: #e5e7eb;
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#e5e7eb")};
   }
 `
 
@@ -2756,9 +2762,9 @@ const InlineFormulaChip = styled.button`
   gap: 0.28rem;
   min-height: 1.9rem;
   padding: 0.18rem 0.56rem;
-  border: 1px solid rgba(96, 165, 250, 0.28);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(96, 165, 250, 0.28)")};
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
+  background: ${({ theme }) => (theme.scheme === "light" ? "rgba(37, 99, 235, 0.08)" : "rgba(59, 130, 246, 0.12)")};
   color: var(--color-gray12);
   cursor: pointer;
 
@@ -2777,9 +2783,10 @@ const InlineFormulaPopover = styled.span`
   min-width: 15rem;
   padding: 0.74rem;
   border-radius: 0.82rem;
-  border: 1px solid rgba(96, 165, 250, 0.22);
-  background: rgba(10, 12, 16, 0.98);
-  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.28);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue7 : "rgba(96, 165, 250, 0.22)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 12px 24px rgba(15, 23, 42, 0.12)" : "0 18px 34px rgba(2, 6, 23, 0.28)"};
 
   strong {
     color: var(--color-gray11);
@@ -2792,8 +2799,8 @@ const InlineFormulaInput = styled.input`
   min-height: 2.3rem;
   width: 100%;
   border-radius: 0.72rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(255, 255, 255, 0.04)")};
   color: var(--color-gray12);
   font-size: 0.9rem;
   padding: 0 0.78rem;
@@ -2805,10 +2812,11 @@ const RawBlockWrapper = styled(NodeViewWrapper)`
   gap: 0;
   margin: 1.2rem 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
   border-radius: 14px;
   background: transparent;
-  box-shadow: 0 18px 38px rgba(2, 6, 23, 0.34);
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "light" ? "0 12px 24px rgba(15, 23, 42, 0.1)" : "0 18px 38px rgba(2, 6, 23, 0.34)"};
 
   &[data-selected="true"] {
     border-color: rgba(59, 130, 246, 0.3);
@@ -2822,8 +2830,9 @@ const RawBlockHeader = styled.div`
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.84rem 0.96rem 0.76rem;
-  background: linear-gradient(180deg, #3a3f59, #363b54);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: ${({ theme }) =>
+    theme.scheme === "light" ? `linear-gradient(180deg, ${theme.colors.gray2}, ${theme.colors.gray3})` : "linear-gradient(180deg, #3a3f59, #363b54)"};
+  border-bottom: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
 
   strong {
     font-size: 0.78rem;
@@ -2864,7 +2873,7 @@ const RawBlockBody = styled.div`
   display: grid;
   gap: 0.85rem;
   padding: 1rem 1.1rem 1.15rem;
-  background: #2b2d3a;
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "#2b2d3a")};
 `
 
 const RawBlockSummary = styled.div`
@@ -2885,9 +2894,9 @@ const RawBlockSummary = styled.div`
 const RawBlockActionButton = styled.button`
   min-height: 2.15rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 157, 98, 0.26);
-  background: rgba(255, 157, 98, 0.12);
-  color: #ffbd93;
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? "rgba(217, 119, 6, 0.35)" : "rgba(255, 157, 98, 0.26)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? "rgba(245, 158, 11, 0.12)" : "rgba(255, 157, 98, 0.12)")};
+  color: ${({ theme }) => (theme.scheme === "light" ? "#b45309" : "#ffbd93")};
   font-size: 0.78rem;
   font-weight: 700;
   padding: 0 0.9rem;
@@ -2902,8 +2911,8 @@ const RawBlockPreview = styled.pre`
   margin: 0;
   overflow: auto;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(11, 14, 20, 0.42);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray2 : "rgba(11, 14, 20, 0.42)")};
   color: var(--color-gray12);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -2937,17 +2946,17 @@ const ImageToolbarGroup = styled.div`
 const ImageToolbarButton = styled.button`
   min-height: 2rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(18, 21, 26, 0.95);
+  border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.08)")};
+  background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(18, 21, 26, 0.95)")};
   color: var(--color-gray10);
   font-size: 0.82rem;
   font-weight: 700;
   padding: 0 0.85rem;
 
   &[data-active="true"] {
-    border-color: rgba(59, 130, 246, 0.54);
-    background: rgba(37, 99, 235, 0.18);
-    color: #93c5fd;
+    border-color: ${({ theme }) => (theme.scheme === "light" ? "rgba(37, 99, 235, 0.42)" : "rgba(59, 130, 246, 0.54)")};
+    background: ${({ theme }) => (theme.scheme === "light" ? "rgba(37, 99, 235, 0.1)" : "rgba(37, 99, 235, 0.18)")};
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.blue9 : "#93c5fd")};
   }
 `
 

@@ -224,11 +224,15 @@ const StyledWrapper = styled.header`
     margin-bottom: 1rem;
 
     > span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
       min-height: 32px;
       padding: 0.38rem 0.78rem;
       border-radius: 999px;
       font-size: 0.86rem;
-      line-height: 1;
+      line-height: 1.2;
       font-weight: 600;
     }
   }
@@ -241,7 +245,7 @@ const StyledWrapper = styled.header`
     border-radius: 999px;
     border: 1px solid ${({ theme }) => theme.colors.gray6};
     font-size: 0.86rem;
-    line-height: 1;
+    line-height: 1.2;
     font-weight: 600;
     color: ${({ theme }) => theme.colors.gray11};
     background-color: ${({ theme }) => theme.colors.gray3};

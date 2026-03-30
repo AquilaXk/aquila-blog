@@ -5,7 +5,6 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
   ChangeEvent,
-  CSSProperties,
   useCallback,
   useEffect,
   useMemo,
@@ -388,54 +387,6 @@ const PUBLISH_VISIBILITY_OPTIONS: Array<{
   },
 ]
 
-const TAG_TONES = [
-  {
-    bg: "rgba(59, 130, 246, 0.12)",
-    border: "rgba(96, 165, 250, 0.36)",
-    text: "#bfdbfe",
-    shadow: "none",
-    divider: "rgba(147, 197, 253, 0.22)",
-    buttonBg: "rgba(15, 23, 42, 0.1)",
-    buttonText: "#bfdbfe",
-  },
-  {
-    bg: "rgba(20, 184, 166, 0.12)",
-    border: "rgba(45, 212, 191, 0.34)",
-    text: "#99f6e4",
-    shadow: "none",
-    divider: "rgba(153, 246, 228, 0.2)",
-    buttonBg: "rgba(15, 23, 42, 0.1)",
-    buttonText: "#99f6e4",
-  },
-  {
-    bg: "rgba(139, 92, 246, 0.12)",
-    border: "rgba(167, 139, 250, 0.34)",
-    text: "#ddd6fe",
-    shadow: "none",
-    divider: "rgba(196, 181, 253, 0.2)",
-    buttonBg: "rgba(15, 23, 42, 0.1)",
-    buttonText: "#ddd6fe",
-  },
-  {
-    bg: "rgba(249, 115, 22, 0.12)",
-    border: "rgba(251, 146, 60, 0.34)",
-    text: "#fed7aa",
-    shadow: "none",
-    divider: "rgba(253, 186, 116, 0.22)",
-    buttonBg: "rgba(15, 23, 42, 0.1)",
-    buttonText: "#fed7aa",
-  },
-  {
-    bg: "rgba(16, 185, 129, 0.12)",
-    border: "rgba(52, 211, 153, 0.34)",
-    text: "#a7f3d0",
-    shadow: "none",
-    divider: "rgba(110, 231, 183, 0.2)",
-    buttonBg: "rgba(15, 23, 42, 0.1)",
-    buttonText: "#a7f3d0",
-  },
-] as const
-
 const SHOW_LEGACY_PROFILE_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_PROFILE_STUDIO === "true"
 const SHOW_LEGACY_CONTENT_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_CONTENT_STUDIO === "true"
 const SHOW_LEGACY_UTILITY_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_UTILITY_STUDIO === "true"
@@ -466,23 +417,6 @@ const dedupeStrings = (items: string[]) =>
         .filter(Boolean)
     )
   )
-
-const hashString = (value: string) =>
-  Array.from(value).reduce((acc, char) => acc * 31 + char.charCodeAt(0), 7)
-
-const getTagToneStyle = (value: string): CSSProperties => {
-  const tone = TAG_TONES[Math.abs(hashString(value)) % TAG_TONES.length]
-
-  return {
-    "--tag-chip-bg": tone.bg,
-    "--tag-chip-border": tone.border,
-    "--tag-chip-text": tone.text,
-    "--tag-chip-shadow": tone.shadow,
-    "--tag-chip-divider": tone.divider,
-    "--tag-chip-button-bg": tone.buttonBg,
-    "--tag-chip-button-text": tone.buttonText,
-  } as CSSProperties
-}
 
 const isComposingKeyboardEvent = (
   event: React.KeyboardEvent<HTMLElement>
@@ -3527,12 +3461,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       : publishActionType === "modify"
         ? "수정 설정"
         : "새 글 작성"
-  const publishActionDescription =
-    publishActionType === "create"
-      ? "공개 범위를 정리하고 카드 결과를 최종 검수한 뒤 발행합니다."
-      : publishActionType === "modify"
-        ? "공개 범위를 정리하고 카드 결과를 최종 검수한 뒤 변경 내용을 반영합니다."
-        : "공개 범위를 정리하고 카드 결과를 최종 검수한 뒤 새 글로 작성합니다."
   const publishActionButtonText =
     publishActionType === "create"
       ? loadingKey === "writePost"
@@ -3666,7 +3594,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
         <strong>썸네일 위치 조정</strong>
-        <span>드래그로 위치를 바꾸고, 휠 또는 슬라이더로 확대/축소합니다.</span>
       </PreviewEditorSectionHeader>
       <PreviewThumbFrame
         ref={previewThumbFrameRef}
@@ -3695,7 +3622,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ) : (
           <div className="placeholder">
             <em>썸네일 없음</em>
-            <span>본문 첫 이미지가 있으면 자동으로 사용됩니다.</span>
           </div>
         )}
       </PreviewThumbFrame>
@@ -3737,8 +3663,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const previewMetaEditorPanel = (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
-        <strong>썸네일 소스</strong>
-        <span>카드에 사용할 대표 이미지를 정리합니다.</span>
+        <strong>썸네일 이미지</strong>
       </PreviewEditorSectionHeader>
       <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
       <Input
@@ -3770,7 +3695,15 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           disabled={disabled("uploadThumbnail")}
           onClick={() => thumbnailImageFileInputRef.current?.click()}
         >
-          {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
+          {loadingKey === "uploadThumbnail" ? (
+            "업로드 중..."
+          ) : (
+            <>
+              썸네일 파일
+              <br />
+              업로드
+            </>
+          )}
         </Button>
         <Button
           type="button"
@@ -3783,7 +3716,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             setPreviewThumbnailSourceUrl("")
           }}
         >
-          본문 첫 이미지 가져오기
+          <>
+            본문 첫 이미지
+            <br />
+            가져오기
+          </>
         </Button>
         <Button
           type="button"
@@ -3795,7 +3732,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             setPreviewThumbnailSourceUrl("")
           }}
       >
-          자동 모드로 되돌리기
+          <>
+            자동 모드로
+            <br />
+            되돌리기
+          </>
         </Button>
       </MetaActionRow>
       {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
@@ -3859,7 +3800,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           <EditorStudioMetaSection $compact={isCompactSplitPreview}>
             <EditorTagRow aria-label="태그 입력" $compact={isCompactSplitPreview}>
               {postTags.map((tag) => (
-                <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
+                <SelectedTagChip key={tag}>
                   <span className="label">{tag}</span>
                   <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
                     ×
@@ -3953,7 +3894,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             <PublishModalHeader>
               <div>
                 <h4>{publishActionTitle}</h4>
-                <p>{publishActionDescription}</p>
               </div>
             </PublishModalHeader>
             <PublishModalBody>
@@ -3985,7 +3925,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                     <div>
                       <SectionKicker>카드 미리보기</SectionKicker>
                       <strong>{previewViewportConfig.label}</strong>
-                      <span>제목, 요약, 썸네일 잘림만 확인합니다.</span>
                     </div>
                     <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
                       {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
@@ -4068,7 +4007,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               <PostPreviewSetup>
                 <PostPreviewHeader>
                   <strong>카드 요소 편집</strong>
-                  <span>썸네일 위치와 카드 요약을 발행 전에 정리합니다.</span>
                 </PostPreviewHeader>
                 {isCompactMobileLayout ? (
                   <CompactPublishEditorStack>
@@ -5111,7 +5049,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   </div>
                   <InlineTagList>
                     {postTags.map((tag) => (
-                      <SelectedTagChip key={tag} style={getTagToneStyle(tag)}>
+                      <SelectedTagChip key={tag}>
                         <span className="label">{tag}</span>
                         <button type="button" onClick={() => removeTagFromPost(tag)} aria-label={`${tag} 삭제`}>
                           ×
@@ -5395,7 +5333,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                           <TagCatalogChipGroup
                             key={tag}
                             data-active={postTags.includes(tag)}
-                            style={postTags.includes(tag) ? getTagToneStyle(tag) : undefined}
                           >
                             <TagCatalogToggle
                               type="button"
@@ -5483,7 +5420,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
               <PublishModalHeader>
                 <div>
                   <h4>{publishActionTitle}</h4>
-                  <p>{publishActionDescription}</p>
                 </div>
               </PublishModalHeader>
               <PublishModalBody>
@@ -5515,7 +5451,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                     <div>
                       <SectionKicker>실제 카드 결과</SectionKicker>
                       <strong>{previewViewportConfig.label}</strong>
-                      <span>제목, 요약, 썸네일 잘림만 확인합니다.</span>
                     </div>
                       <PreviewViewportTabs role="tablist" aria-label="포스트 카드 미리보기 기기">
                         {PREVIEW_CARD_VIEWPORT_ORDER.map((viewport) => {
@@ -7654,6 +7589,12 @@ const MetaActionRow = styled.div`
   display: flex;
   gap: 0.55rem;
   flex-wrap: wrap;
+
+  > button {
+    text-align: center;
+    white-space: normal;
+    line-height: 1.32;
+  }
 `
 
 const PublishSettingsSummary = styled.div`
@@ -7883,13 +7824,11 @@ const SelectedTagChip = styled.span`
   max-width: 100%;
   min-height: 32px;
   border-radius: 999px;
-  border: 1px solid var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
-  background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray3};
   overflow: hidden;
-  box-shadow: var(--tag-chip-shadow, none);
   transition:
     border-color 0.18s ease,
-    box-shadow 0.18s ease,
     transform 0.18s ease,
     background 0.18s ease;
 
@@ -7905,7 +7844,7 @@ const SelectedTagChip = styled.span`
     text-overflow: ellipsis;
     white-space: nowrap;
     padding: 0.38rem 0.78rem;
-    color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+    color: ${({ theme }) => theme.colors.gray11};
     font-size: 0.86rem;
     font-weight: 600;
     line-height: 1;
@@ -7923,9 +7862,9 @@ const SelectedTagChip = styled.span`
     min-width: 1.92rem;
     padding: 0 0.52rem;
     border: 0;
-    border-left: 1px solid var(--tag-chip-divider, rgba(147, 197, 253, 0.24));
-    background: var(--tag-chip-button-bg, rgba(15, 23, 42, 0.16));
-    color: var(--tag-chip-button-text, ${({ theme }) => theme.colors.blue11});
+    border-left: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray10};
     cursor: pointer;
     flex: 0 0 auto;
     font-size: 0.98rem;
@@ -7937,8 +7876,8 @@ const SelectedTagChip = styled.span`
 
     &:hover {
       transform: none;
-      background: rgba(15, 23, 42, 0.16);
-      color: currentColor;
+      background: ${({ theme }) => theme.colors.gray4};
+      color: ${({ theme }) => theme.colors.gray12};
     }
   }
 `
@@ -7955,14 +7894,12 @@ const TagCatalogChipGroup = styled.div`
   overflow: hidden;
   transition:
     border-color 0.18s ease,
-    box-shadow 0.18s ease,
     transform 0.18s ease,
     background 0.18s ease;
 
   &[data-active="true"] {
-    border-color: var(--tag-chip-border, ${({ theme }) => theme.colors.blue8});
-    background: var(--tag-chip-bg, ${({ theme }) => theme.colors.blue3});
-    box-shadow: var(--tag-chip-shadow, none);
+    border-color: ${({ theme }) => theme.colors.gray7};
+    background: ${({ theme }) => theme.colors.gray3};
   }
 
   &:hover {
@@ -8013,15 +7950,15 @@ const TagCatalogToggle = styled.button`
   }
 
   &[data-active="true"] {
-    color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+    color: ${({ theme }) => theme.colors.gray12};
 
     &:hover {
       background: transparent;
-      color: var(--tag-chip-text, ${({ theme }) => theme.colors.blue12});
+      color: ${({ theme }) => theme.colors.gray12};
     }
 
     .count {
-      background: rgba(15, 23, 42, 0.2);
+      background: ${({ theme }) => theme.colors.gray4};
     }
   }
 `
@@ -8047,9 +7984,9 @@ const TagCatalogDeleteButton = styled.button`
     transform 0.18s ease;
 
   &[data-active="true"] {
-    border-left-color: var(--tag-chip-divider, rgba(147, 197, 253, 0.24));
-    background: var(--tag-chip-button-bg, rgba(15, 23, 42, 0.16));
-    color: var(--tag-chip-button-text, ${({ theme }) => theme.colors.blue11});
+    border-left-color: ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) => theme.colors.gray2};
+    color: ${({ theme }) => theme.colors.gray11};
   }
 
   &:hover:not(:disabled) {
@@ -9111,6 +9048,7 @@ const EditorStudioMetaSection = styled.section<{ $compact?: boolean }>`
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
   min-width: 0;
+  margin-inline: auto;
   display: grid;
   gap: ${({ $compact }) => ($compact ? "0.72rem" : "0.9rem")};
 `
@@ -9198,6 +9136,7 @@ const EditorStudioCanvas = styled.section`
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
   min-width: 0;
+  margin-inline: auto;
   min-height: clamp(28rem, 70vh, 56rem);
   display: grid;
   gap: 0.72rem;
@@ -9207,6 +9146,7 @@ const EditorStudioResultPanel = styled.section`
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
   min-width: 0;
+  margin-inline: auto;
   border-top: 1px solid ${({ theme }) => theme.colors.gray5};
   padding-top: 0.9rem;
 

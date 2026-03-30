@@ -1129,7 +1129,10 @@ const HeroSection = styled.section`
   padding: 1.25rem 1.15rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: linear-gradient(180deg, rgba(29, 78, 216, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%);
+  background: ${({ theme }) =>
+    theme.scheme === "light"
+      ? "linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(241, 247, 255, 0.96) 100%)"
+      : "linear-gradient(180deg, rgba(29, 78, 216, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%)"};
 `
 
 const HeroLabel = styled.span`
@@ -1460,7 +1463,10 @@ const RecentListSkeleton = styled.div`
     display: block;
     height: 56px;
     border-radius: 14px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.1), rgba(255,255,255,0.06));
+    background: ${({ theme }) =>
+      theme.scheme === "light"
+        ? "linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16))"
+        : "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.1), rgba(255,255,255,0.06))"};
   }
 `
 
@@ -1891,7 +1897,10 @@ const ListSkeleton = styled.div`
     display: block;
     height: 12px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+    background: ${({ theme }) =>
+      theme.scheme === "light"
+        ? "linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.28), rgba(148, 163, 184, 0.16))"
+        : "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06))"};
   }
 
   .line.short {

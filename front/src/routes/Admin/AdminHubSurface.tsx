@@ -2,6 +2,7 @@ import styled from "@emotion/styled"
 import Link from "next/link"
 import AppIcon from "src/components/icons/AppIcon"
 import ProfileImage from "src/components/ProfileImage"
+import type { Theme } from "@emotion/react"
 
 export type AdminHubPrimaryAction = {
   href: string
@@ -156,6 +157,41 @@ const AdminHubSurface = ({
 
 export default AdminHubSurface
 
+const statusItemSurface = (theme: Theme) =>
+  theme.scheme === "light"
+    ? theme.colors.gray1
+    : "linear-gradient(180deg, rgba(58, 86, 122, 0.22) 0%, rgba(31, 43, 65, 0.42) 100%)"
+
+const statusItemShadow = (theme: Theme) =>
+  theme.scheme === "light"
+    ? "inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 8px 20px rgba(15, 23, 42, 0.06)"
+    : "inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(59, 130, 246, 0.08), 0 16px 34px rgba(17, 24, 39, 0.18)"
+
+const nextActionSurface = (theme: Theme) =>
+  theme.scheme === "light"
+    ? theme.colors.gray1
+    : "linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.9) 100%)"
+
+const heroPanelSurface = (theme: Theme) =>
+  theme.scheme === "light"
+    ? theme.colors.gray1
+    : "linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(32, 39, 52, 0.76) 100%)"
+
+const shortcutSurface = (theme: Theme) =>
+  theme.scheme === "light"
+    ? theme.colors.gray1
+    : "linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.85) 100%)"
+
+const shortcutSurfaceHover = (theme: Theme) =>
+  theme.scheme === "light"
+    ? theme.colors.gray2
+    : "linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(34, 41, 54, 0.92) 100%)"
+
+const profileCompactSurface = (theme: Theme) =>
+  theme.scheme === "light"
+    ? theme.colors.gray1
+    : "linear-gradient(180deg, rgba(58, 86, 122, 0.14) 0%, rgba(30, 35, 46, 0.9) 100%)"
+
 const Main = styled.main`
   max-width: 1120px;
   margin: 0 auto;
@@ -202,26 +238,23 @@ const StatusItem = styled.div`
   padding: 1rem 1.1rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.blue7};
-  background: linear-gradient(180deg, rgba(58, 86, 122, 0.28) 0%, rgba(31, 43, 65, 0.38) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(59, 130, 246, 0.08),
-    0 16px 34px rgba(17, 24, 39, 0.18);
+  background: ${({ theme }) => statusItemSurface(theme)};
+  box-shadow: ${({ theme }) => statusItemShadow(theme)};
 
   &[data-tone="good"] {
     border-color: ${({ theme }) => theme.colors.green7};
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.04),
-      0 0 0 1px rgba(74, 222, 128, 0.08),
-      0 16px 34px rgba(17, 24, 39, 0.18);
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light"
+        ? "inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(74, 222, 128, 0.14), 0 8px 20px rgba(15, 23, 42, 0.06)"
+        : "inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(74, 222, 128, 0.08), 0 16px 34px rgba(17, 24, 39, 0.18)"};
   }
 
   &[data-tone="warn"] {
     border-color: ${({ theme }) => theme.colors.orange7};
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.04),
-      0 0 0 1px rgba(251, 191, 36, 0.08),
-      0 16px 34px rgba(17, 24, 39, 0.18);
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "light"
+        ? "inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(251, 191, 36, 0.14), 0 8px 20px rgba(15, 23, 42, 0.06)"
+        : "inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px rgba(251, 191, 36, 0.08), 0 16px 34px rgba(17, 24, 39, 0.18)"};
   }
 
   span {
@@ -265,7 +298,7 @@ const NextActionLink = styled.a`
   padding: 0.88rem 0.96rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.9) 100%);
+  background: ${({ theme }) => nextActionSurface(theme)};
   color: inherit;
   text-decoration: none;
   transition:
@@ -323,7 +356,7 @@ const HeroPanel = styled.section`
   padding: 1.18rem 1.2rem;
   border-radius: 18px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(32, 39, 52, 0.76) 100%);
+  background: ${({ theme }) => heroPanelSurface(theme)};
 `
 
 const HeroBody = styled.div`
@@ -468,7 +501,7 @@ const ShortcutLink = styled.a`
   padding: 1rem 1.08rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: linear-gradient(180deg, rgba(58, 86, 122, 0.12) 0%, rgba(30, 35, 46, 0.85) 100%);
+  background: ${({ theme }) => shortcutSurface(theme)};
   color: inherit;
   text-decoration: none;
   transition:
@@ -478,7 +511,7 @@ const ShortcutLink = styled.a`
 
   &:hover {
     border-color: ${({ theme }) => theme.colors.blue7};
-    background: linear-gradient(180deg, rgba(58, 86, 122, 0.18) 0%, rgba(34, 41, 54, 0.92) 100%);
+    background: ${({ theme }) => shortcutSurfaceHover(theme)};
   }
 
   @media (max-width: 640px) {
@@ -545,7 +578,7 @@ const ProfileCompact = styled.section`
   padding: 1rem 1.08rem;
   border-radius: 16px;
   border: 1px solid ${({ theme }) => theme.colors.gray5};
-  background: linear-gradient(180deg, rgba(58, 86, 122, 0.14) 0%, rgba(30, 35, 46, 0.9) 100%);
+  background: ${({ theme }) => profileCompactSurface(theme)};
 
   @media (max-width: 760px) {
     grid-template-columns: auto minmax(0, 1fr);

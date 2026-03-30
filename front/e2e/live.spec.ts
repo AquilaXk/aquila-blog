@@ -184,24 +184,48 @@ const openAdminNewPostEntry = async (page: Page) => {
 }
 
 const appendTextToBlockEditor = async (page: Page, text: string) => {
-  const blockEditor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  const blockEditor = page.locator(".aq-block-editor__content[contenteditable='true']").first()
   await expect(blockEditor).toBeVisible()
   await expect(blockEditor).toHaveAttribute("contenteditable", "true")
-
   await blockEditor.click({ position: { x: 24, y: 24 } })
+  await expect
+    .poll(async () => {
+      return blockEditor.evaluate((node) => {
+        if (!(node instanceof HTMLElement)) return false
+        const active = document.activeElement
+        return active === node || !!active?.closest(".aq-block-editor__content[contenteditable='true']")
+      })
+    })
+    .toBe(true)
+
   await blockEditor.evaluate((node) => {
     if (!(node instanceof HTMLElement)) return
     node.focus()
     const selection = window.getSelection()
     if (!selection) return
     const range = document.createRange()
-    range.selectNodeContents(node)
+
+    const textWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+    let lastTextNode: Text | null = null
+    while (textWalker.nextNode()) {
+      const candidate = textWalker.currentNode
+      if (candidate instanceof Text) {
+        lastTextNode = candidate
+      }
+    }
+
+    if (lastTextNode) {
+      range.setStart(lastTextNode, lastTextNode.textContent?.length ?? 0)
+    } else {
+      const fallbackBlock = node.querySelector("p, li, h1, h2, h3, h4, blockquote, pre") ?? node
+      range.selectNodeContents(fallbackBlock)
+    }
     range.collapse(false)
     selection.removeAllRanges()
     selection.addRange(range)
   })
 
-  await page.keyboard.insertText(text)
+  await page.keyboard.type(text)
   await expect
     .poll(async () => {
       return blockEditor.evaluate((node) => {

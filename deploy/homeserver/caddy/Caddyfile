@@ -40,7 +40,7 @@ http://{$GRAFANA_DOMAIN:grafana.localhost} {
 # Prometheus UI endpoint (optional).
 # Set PROMETHEUS_DOMAIN in .env.prod and Cloudflare Tunnel Public Hostname.
 http://{$PROMETHEUS_DOMAIN:prometheus.localhost} {
-  basicauth {
+  basic_auth {
     {$PROMETHEUS_BASIC_AUTH_USER:promviewer} {$PROMETHEUS_BASIC_AUTH_HASH:$2y$05$g4sdUn.YYoUOjAy/41KhSOBCQvOnwTNJ/jmdl/95o8YKEoq/gddPC}
   }
 
@@ -109,7 +109,6 @@ http://{$API_DOMAIN} {
 
     reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
-      header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
       header_down -Strict-Transport-Security
@@ -141,7 +140,6 @@ http://{$API_DOMAIN} {
 
     reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
-      header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
       header_down -Strict-Transport-Security
@@ -159,7 +157,6 @@ http://{$API_DOMAIN} {
 
     reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
-      header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
       header_down -Strict-Transport-Security
@@ -178,7 +175,6 @@ http://{$API_DOMAIN} {
   handle @publicReadFallback {
     reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
-      header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
       header_down -Strict-Transport-Security
@@ -196,7 +192,6 @@ http://{$API_DOMAIN} {
   handle @adminApi {
     reverse_proxy {$ADMIN_API_UPSTREAM:back_blue}:8080 {
       header_up Host {host}
-      header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
       header_down -Strict-Transport-Security
@@ -216,7 +211,6 @@ http://{$API_DOMAIN} {
       # Caddy is plain HTTP. Spring uses forwarded headers to compute OAuth2
       # callback URLs, so we pin the upstream scheme/host to the external URL.
       header_up Host {host}
-      header_up X-Forwarded-Host {host}
       header_up X-Forwarded-Proto https
       header_up X-Forwarded-Port 443
       header_down -Strict-Transport-Security

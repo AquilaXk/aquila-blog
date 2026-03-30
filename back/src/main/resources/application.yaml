@@ -52,6 +52,8 @@ spring:
       port: ${custom.site.redisPort}
       password: ${SPRING__DATA__REDIS__PASSWORD:}
       database: ${custom.site.redisDatabase}
+      repositories:
+        enabled: false
   datasource:
     url: jdbc:postgresql://${custom.site.dbHost}:${custom.site.dbPort}/${custom.site.dbName}?reWriteBatchedInserts=true
     username: postgres

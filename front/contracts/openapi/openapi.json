@@ -3670,6 +3670,33 @@
           },
           "taskQueue" : {
             "$ref" : "#/components/schemas/TaskTypeDiagnostics"
+          },
+          "queueRuntime" : {
+            "$ref" : "#/components/schemas/TaskProcessingLockDiagnostics"
+          }
+        }
+      },
+      "TaskProcessingLockDiagnostics" : {
+        "type" : "object",
+        "properties" : {
+          "currentNodeWorkerEnabled" : {
+            "type" : "boolean"
+          },
+          "currentNodeApiMode" : {
+            "type" : "string"
+          },
+          "processTasksLockKey" : {
+            "type" : "string"
+          },
+          "processTasksLockExists" : {
+            "type" : "boolean"
+          },
+          "processTasksLockTtlSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "legacyOrphanLikely" : {
+            "type" : "boolean"
           }
         }
       },

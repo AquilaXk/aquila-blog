@@ -1534,6 +1534,16 @@ export interface components {
             checkedAt?: string;
             verifyPath?: string;
             taskQueue?: components["schemas"]["TaskTypeDiagnostics"];
+            queueRuntime?: components["schemas"]["TaskProcessingLockDiagnostics"];
+        };
+        TaskProcessingLockDiagnostics: {
+            currentNodeWorkerEnabled?: boolean;
+            currentNodeApiMode?: string;
+            processTasksLockKey?: string;
+            processTasksLockExists?: boolean;
+            /** Format: int64 */
+            processTasksLockTtlSeconds?: number;
+            legacyOrphanLikely?: boolean;
         };
         HealthChecks: {
             db?: string;

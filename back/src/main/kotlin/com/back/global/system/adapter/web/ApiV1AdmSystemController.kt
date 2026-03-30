@@ -106,7 +106,7 @@ class ApiV1AdmSystemController(
             when {
                 db != "UP" -> "DOWN"
                 redis == "DOWN" -> "DEGRADED"
-                signupMail in setOf("MISCONFIGURED", "UNAVAILABLE", "CONNECTION_FAILED") -> "DEGRADED"
+                signupMail in setOf("MISCONFIGURED", "UNAVAILABLE", "CONNECTION_FAILED", "QUEUE_LOCKED") -> "DEGRADED"
                 else -> "UP"
             }
 

@@ -12,6 +12,7 @@ import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.task.application.TaskDlqReplayResult
 import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskExecutionSample
+import com.back.global.task.application.TaskProcessingLockDiagnostics
 import com.back.global.task.application.TaskQueueDiagnostics
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import com.back.global.task.application.TaskRetryPolicy
@@ -102,7 +103,16 @@ class ApiV1AdmSystemControllerTest {
             jsonPath("$.version") { isString() }
             jsonPath("$.checks.db") { value("UP") }
             jsonPath("$.checks.redis") { value("DISABLED") }
-            jsonPath("$.checks.signupMail") { value(anyOf(equalTo("TEST_MODE"), equalTo("READY"), equalTo("MISCONFIGURED"))) }
+            jsonPath("$.checks.signupMail") {
+                value(
+                    anyOf(
+                        equalTo("TEST_MODE"),
+                        equalTo("READY"),
+                        equalTo("MISCONFIGURED"),
+                        equalTo("QUEUE_LOCKED"),
+                    ),
+                )
+            }
         }
     }
 
@@ -113,9 +123,20 @@ class ApiV1AdmSystemControllerTest {
 
         mvc.get("/system/api/v1/adm/mail/signup").andExpect {
             status { isOk() }
-            jsonPath("$.status") { value(anyOf(equalTo("TEST_MODE"), equalTo("READY"), equalTo("MISCONFIGURED"))) }
+            jsonPath("$.status") {
+                value(
+                    anyOf(
+                        equalTo("TEST_MODE"),
+                        equalTo("READY"),
+                        equalTo("MISCONFIGURED"),
+                        equalTo("QUEUE_LOCKED"),
+                    ),
+                )
+            }
             jsonPath("$.adapter") { isString() }
             jsonPath("$.verifyPath") { value("/signup/verify") }
+            jsonPath("$.queueRuntime.processTasksLockKey") { value("job-lock:default:processTasks") }
+            jsonPath("$.queueRuntime.legacyOrphanLikely") { value(false) }
         }
     }
 
@@ -355,6 +376,15 @@ class ApiV1AdmSystemControllerTest {
             checkedAt = Instant.parse("2026-03-13T00:00:00Z"),
             verifyPath = "/signup/verify",
             taskQueue = sampleTaskTypeDiagnostics(),
+            queueRuntime =
+                TaskProcessingLockDiagnostics(
+                    currentNodeWorkerEnabled = false,
+                    currentNodeApiMode = "admin",
+                    processTasksLockKey = "job-lock:default:processTasks",
+                    processTasksLockExists = false,
+                    processTasksLockTtlSeconds = null,
+                    legacyOrphanLikely = false,
+                ),
         )
 
     private fun taskQueueDiagnostics(): TaskQueueDiagnostics =

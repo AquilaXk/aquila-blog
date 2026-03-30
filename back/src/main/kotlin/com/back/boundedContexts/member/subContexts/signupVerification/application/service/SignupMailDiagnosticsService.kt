@@ -4,6 +4,8 @@ import com.back.boundedContexts.member.subContexts.signupVerification.applicatio
 import com.back.boundedContexts.member.subContexts.signupVerification.dto.SendSignupVerificationMailPayload
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.task.application.TaskProcessingLockDiagnostics
+import com.back.global.task.application.TaskProcessingLockDiagnosticsService
 import com.back.global.task.application.TaskQueueDiagnosticsService
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
@@ -33,6 +35,7 @@ data class SignupMailDiagnostics(
     val checkedAt: Instant,
     val verifyPath: String,
     val taskQueue: com.back.global.task.application.TaskTypeDiagnostics,
+    val queueRuntime: TaskProcessingLockDiagnostics,
 )
 
 /**
@@ -44,6 +47,7 @@ class SignupMailDiagnosticsService(
     private val signupVerificationMailSenderProvider: ObjectProvider<SignupVerificationMailSenderPort>,
     private val javaMailSenderProvider: ObjectProvider<JavaMailSender>,
     private val taskQueueDiagnosticsService: TaskQueueDiagnosticsService,
+    private val taskProcessingLockDiagnosticsService: TaskProcessingLockDiagnosticsService,
     @Value("\${spring.mail.host:}")
     private val host: String,
     @Value("\${spring.mail.port:587}")
@@ -76,6 +80,28 @@ class SignupMailDiagnosticsService(
         val missing = buildMissingKeys()
         val checkedAt = Instant.now()
         val taskQueue = taskQueueDiagnosticsService.diagnoseTaskType(signupMailTaskType)
+        val queueRuntime = taskProcessingLockDiagnosticsService.diagnose()
+
+        if (queueRuntime.legacyOrphanLikely) {
+            return SignupMailDiagnostics(
+                status = "QUEUE_LOCKED",
+                adapter = adapter,
+                host = host.ifBlank { null },
+                port = if (host.isBlank()) null else port,
+                mailFrom = mailFrom.ifBlank { null },
+                usernameConfigured = username.isNotBlank(),
+                passwordConfigured = password.isNotBlank(),
+                smtpAuth = smtpAuth,
+                startTlsEnabled = startTlsEnabled,
+                missing = missing,
+                canConnect = null,
+                connectionError = "Legacy processTasks lock is blocking ready tasks",
+                checkedAt = checkedAt,
+                verifyPath = normalizeVerifyPath(),
+                taskQueue = taskQueue,
+                queueRuntime = queueRuntime,
+            )
+        }
 
         if (adapter == "TestSignupVerificationMailSenderAdapter") {
             return SignupMailDiagnostics(
@@ -94,6 +120,7 @@ class SignupMailDiagnosticsService(
                 checkedAt = checkedAt,
                 verifyPath = normalizeVerifyPath(),
                 taskQueue = taskQueue,
+                queueRuntime = queueRuntime,
             )
         }
 
@@ -114,6 +141,7 @@ class SignupMailDiagnosticsService(
                 checkedAt = checkedAt,
                 verifyPath = normalizeVerifyPath(),
                 taskQueue = taskQueue,
+                queueRuntime = queueRuntime,
             )
         }
 
@@ -147,6 +175,7 @@ class SignupMailDiagnosticsService(
             checkedAt = checkedAt,
             verifyPath = normalizeVerifyPath(),
             taskQueue = taskQueue,
+            queueRuntime = queueRuntime,
         )
     }
 

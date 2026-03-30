@@ -5,7 +5,6 @@ import { useRouter } from "next/router"
 import { useEffect, useMemo, useState } from "react"
 import AppIcon from "src/components/icons/AppIcon"
 import { AdminPageProps } from "src/libs/server/adminPage"
-import { formatDate } from "src/libs/utils"
 import type { TPost } from "src/types"
 import PostHeader from "src/routes/Detail/PostDetail/PostHeader"
 import {

@@ -2060,13 +2060,6 @@ const SectionHeading = styled.div`
   }
 `
 
-const HeadingMetaRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-`
-
 const StatusBadge = styled.span`
   display: inline-flex;
   align-items: center;
@@ -2192,24 +2185,6 @@ const SubSectionHeading = styled.div`
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
     font-weight: 700;
-  }
-`
-
-const LaunchLink = styled.a`
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: ${({ theme }) => theme.colors.blue9};
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-decoration: none;
-
-  &:hover {
-    color: ${({ theme }) => theme.colors.blue10};
   }
 `
 

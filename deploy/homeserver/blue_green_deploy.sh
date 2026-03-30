@@ -34,6 +34,15 @@ AUTO_MEMORY_TUNER_MIN_BUDGET_MB="${AUTO_MEMORY_TUNER_MIN_BUDGET_MB:-1280}"
 LAST_COMPOSE_UP_SERVICES=""
 LAST_COMPOSE_UP_OUTPUT=""
 
+run_diagnostic_command() {
+  local timeout_seconds="${DIAGNOSTIC_TIMEOUT_SECONDS:-15}"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --foreground "${timeout_seconds}" "$@"
+    return
+  fi
+  "$@"
+}
+
 normalize_bool() {
   local raw="$1"
   case "$(echo "${raw}" | tr '[:upper:]' '[:lower:]')" in
@@ -236,9 +245,9 @@ emit_backend_diagnostics() {
   cid="$(backend_container_id_any_state "${backend}")"
 
   echo "----- ${backend} diagnostics -----"
-  compose ps -a "${backend}" || true
+  run_diagnostic_command compose ps -a "${backend}" || true
   if [[ -n "${cid}" ]]; then
-    docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" || true
+    run_diagnostic_command docker inspect --format "${backend} image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} restart={{.RestartCount}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}" "${cid}" || true
   else
     echo "${backend} container=none"
   fi
@@ -248,7 +257,7 @@ emit_backend_diagnostics() {
     printf '%s\n' "${LAST_COMPOSE_UP_OUTPUT}"
   fi
 
-  compose logs --no-color --tail=200 "${backend}" || true
+  run_diagnostic_command compose logs --no-color --tail=200 "${backend}" || true
   echo "----- end ${backend} diagnostics -----"
 }
 
@@ -275,23 +284,23 @@ check_cloudflared_runtime() {
 
   if [[ "${status}" != "running" || "${restarting}" == "true" ]]; then
     echo "cloudflared is not healthy: status=${status}, restarting=${restarting}" >&2
-    compose logs --no-color --tail=120 cloudflared >&2 || true
+    run_diagnostic_command compose logs --no-color --tail=120 cloudflared >&2 || true
     return 1
   fi
 
   if [[ "${restart_count}" =~ ^[0-9]+$ ]] && (( restart_count > 5 )); then
     echo "cloudflared restart count is too high: ${restart_count}" >&2
-    compose logs --no-color --tail=120 cloudflared >&2 || true
+    run_diagnostic_command compose logs --no-color --tail=120 cloudflared >&2 || true
     return 1
   fi
 
   local cf_logs
-  cf_logs="$(compose logs --no-color --tail=240 cloudflared || true)"
+  cf_logs="$(run_diagnostic_command compose logs --no-color --tail=240 cloudflared || true)"
   if ! cloudflared_registration_log_exists "${cf_logs}"; then
     echo "cloudflared registration log missing in recent logs; restarting cloudflared once" >&2
     compose restart cloudflared >/dev/null || true
     sleep 2
-    cf_logs="$(compose logs --no-color --tail=320 cloudflared || true)"
+    cf_logs="$(run_diagnostic_command compose logs --no-color --tail=320 cloudflared || true)"
     if ! cloudflared_registration_log_exists "${cf_logs}"; then
       echo "cloudflared tunnel registration log not found" >&2
       echo "${cf_logs}" >&2
@@ -974,7 +983,7 @@ ensure_caddy_mount_sync() {
   fi
 
   echo "caddy config sync failed after recreate: host=${host_upstream:-none}, mounted=${mounted_upstream:-none}, host_sha=${host_hash:-none}, mounted_sha=${mounted_hash:-none}, legacy_back_active=${legacy_token}" >&2
-  compose logs --no-color --tail=120 caddy >&2 || true
+  run_diagnostic_command compose logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
 
@@ -1205,8 +1214,8 @@ check_backend_health() {
 
     if (( attempt % HEALTHCHECK_LOG_EVERY_N_TRIES == 0 )); then
       echo "----- ${backend} progress logs (try ${attempt}) -----"
-      compose ps "${backend}" || true
-      compose logs --no-color --tail=60 "${backend}" || true
+      run_diagnostic_command compose ps "${backend}" || true
+      run_diagnostic_command compose logs --no-color --tail=60 "${backend}" || true
       echo "----- end progress logs -----"
     fi
 
@@ -1271,7 +1280,7 @@ verify_caddy_route() {
     attempt=$((attempt + 1))
   done
 
-  compose logs --no-color --tail=120 caddy >&2 || true
+  run_diagnostic_command compose logs --no-color --tail=120 caddy >&2 || true
   return 1
 }
 

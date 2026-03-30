@@ -138,6 +138,7 @@ const useMermaidEffect = (
   enabled = true
 ) => {
   const [scheme] = useScheme()
+  const shouldLogMermaidWarnings = process.env.NODE_ENV !== "production"
 
   useEffect(() => {
     if (!enabled) return
@@ -208,6 +209,22 @@ const useMermaidEffect = (
       return message.includes("attribute width") && message.includes("negative value")
     }
 
+    const isMermaidSyntaxError = (error: unknown) => {
+      const normalized = String(error || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase()
+      if (!normalized) return false
+
+      return (
+        normalized.includes("parse error") ||
+        normalized.includes("syntax error") ||
+        normalized.includes("lexical error") ||
+        normalized.includes("expecting") ||
+        normalized.includes("unknown diagram")
+      )
+    }
+
     const isMermaidMutationTarget = (node: Node | null) => {
       if (!node) return false
       if (node.nodeType === Node.TEXT_NODE) {
@@ -252,7 +269,6 @@ const useMermaidEffect = (
             }
           ).parseError = (error) => {
             lastMermaidParseWarning = String(error || "Mermaid parse error")
-            console.warn("[mermaid] parse warning", error)
           }
 
           mermaid.initialize({
@@ -677,6 +693,7 @@ const useMermaidEffect = (
           block.dataset.mermaidRetryCount = "0"
           block.classList.remove("aq-mermaid-error")
         } catch (error) {
+          const isSyntaxError = isMermaidSyntaxError(error)
           if (isNegativeRectWidthError(error) && scheduleRetry(i, block)) {
             return
           }
@@ -696,13 +713,15 @@ const useMermaidEffect = (
               const signature = `fallback:${fallbackSource}:${String(fallbackError)}`
               if (!loggedErrorSignatures.has(signature)) {
                 loggedErrorSignatures.add(signature)
-                console.warn("[mermaid] fallback render failed", fallbackError)
+                if (shouldLogMermaidWarnings) {
+                  console.warn("[mermaid] fallback render failed", fallbackError)
+                }
               }
-              if (scheduleRetry(i, block)) return
+              if (!isMermaidSyntaxError(fallbackError) && scheduleRetry(i, block)) return
             }
           }
 
-          if (scheduleRetry(i, block)) return
+          if (!isSyntaxError && scheduleRetry(i, block)) return
 
           block.dataset.mermaidSource = source
           block.dataset.mermaidTheme = preset.themeKey
@@ -714,7 +733,9 @@ const useMermaidEffect = (
           const signature = `${source}:${String(error)}`
           if (!loggedErrorSignatures.has(signature)) {
             loggedErrorSignatures.add(signature)
-            console.warn("[mermaid] render failed", error)
+            if (shouldLogMermaidWarnings) {
+              console.warn("[mermaid] render failed", error)
+            }
           }
         }
       }
@@ -728,7 +749,9 @@ const useMermaidEffect = (
             await renderSingleBlock(index)
           })
           .catch((error) => {
-            console.warn("[mermaid] queued render failed", error)
+            if (shouldLogMermaidWarnings) {
+              console.warn("[mermaid] queued render failed", error)
+            }
           })
           .finally(() => {
             renderingIndices.delete(index)
@@ -789,7 +812,9 @@ const useMermaidEffect = (
             await renderMermaidBlocks()
             runRetryCount = 0
           } catch (error) {
-            console.warn(error)
+            if (shouldLogMermaidWarnings) {
+              console.warn(error)
+            }
             if (!disposed && runRetryCount < maxRunRetryCount) {
               runRetryCount += 1
               const delay = 220 * runRetryCount
@@ -843,7 +868,7 @@ const useMermaidEffect = (
         scheduledRunFrame = null
       }
     }
-  }, [contentKey, enabled, rootRef, scheme])
+  }, [contentKey, enabled, rootRef, scheme, shouldLogMermaidWarnings])
 
   return
 }

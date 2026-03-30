@@ -68,6 +68,22 @@ test.describe("block editor serialization", () => {
     expect(source).toContain("A[첫 줄\n둘째 줄] --> B[완료]")
   })
 
+  test("sequenceDiagram participant 특수문자 식별자는 alias로 정규화한다", () => {
+    const source = extractNormalizedMermaidSource(
+      [
+        "```mermaid",
+        "sequenceDiagram",
+        "  participant Endpoint(/ws-stomp)    participant Int",
+        "  Int->>Endpoint(/ws-stomp): connect",
+        "```",
+      ].join("\n")
+    )
+
+    expect(source).toContain('participant Endpoint_ws_stomp as "Endpoint(/ws-stomp)"')
+    expect(source).toContain("participant Int")
+    expect(source).toContain("Int->>Endpoint_ws_stomp: connect")
+  })
+
   test("callout 과 toggle 블록은 canonical markdown 로 round-trip 된다", () => {
     const markdown = [
       "> [!TIP] 핵심 포인트",

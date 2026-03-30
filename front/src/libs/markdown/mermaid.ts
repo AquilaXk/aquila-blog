@@ -5,6 +5,115 @@ const normalizeFenceChars = (raw: string) => raw.replace(/[｀´ˋ'‘’]/g, "`
 const stripInvisibleChars = (raw: string) => raw.replace(/[\u200B-\u200D\uFEFF]/g, "")
 const normalizeHtmlLineBreaks = (raw: string) => raw.replace(/<br\s*\/?>/gi, "\n")
 
+const SEQUENCE_DECLARATION_REGEX = /\b(participant|actor)\s+(.+?)(?=\s+(?:participant|actor)\s+|$)/gi
+const MERMAID_IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+const stripWrappingQuotes = (value: string) => {
+  const trimmed = value.trim()
+  const match = trimmed.match(/^["'`](.*)["'`]$/)
+  return match ? match[1] : trimmed
+}
+
+const buildMermaidIdentifier = (
+  raw: string,
+  kind: "participant" | "actor",
+  usedIdentifiers: Set<string>
+) => {
+  const preferred =
+    stripWrappingQuotes(raw)
+      .replace(/<br\s*\/?>/gi, "_")
+      .replace(/[^A-Za-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "") || (kind === "actor" ? "Actor" : "Participant")
+  const base = /^[0-9]/.test(preferred) ? `${kind}_${preferred}` : preferred
+
+  let candidate = base
+  let suffix = 2
+  while (usedIdentifiers.has(candidate)) {
+    candidate = `${base}_${suffix}`
+    suffix += 1
+  }
+  usedIdentifiers.add(candidate)
+  return candidate
+}
+
+const normalizeSequenceParticipantAliases = (source: string) => {
+  const lines = source.split("\n")
+  const normalized: string[] = []
+  const aliasByRawToken = new Map<string, string>()
+  const usedIdentifiers = new Set<string>()
+  let inSequenceDiagram = false
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!inSequenceDiagram && /^sequenceDiagram\b/i.test(trimmed)) {
+      inSequenceDiagram = true
+      normalized.push(line)
+      continue
+    }
+
+    if (!inSequenceDiagram) {
+      normalized.push(line)
+      continue
+    }
+
+    const declarationMatches = Array.from(trimmed.matchAll(SEQUENCE_DECLARATION_REGEX))
+    const normalizedTrimmed = trimmed.replace(/\s+/g, " ").trim().toLowerCase()
+    const isOnlyDeclarationsLine =
+      declarationMatches.length > 0 &&
+      declarationMatches
+        .map((match) => `${match[1]} ${match[2]}`.trim())
+        .join(" ")
+        .trim()
+        .toLowerCase() === normalizedTrimmed
+
+    if (isOnlyDeclarationsLine) {
+      const indent = line.match(/^\s*/)?.[0] || ""
+      declarationMatches.forEach((match) => {
+        const kind = (match[1].toLowerCase() === "actor" ? "actor" : "participant") as
+          | "participant"
+          | "actor"
+        const declarationBody = (match[2] || "").trim()
+        if (!declarationBody) return
+
+        const aliasMatch = declarationBody.match(/^(.+?)\s+as\s+(.+)$/i)
+        if (aliasMatch) {
+          const identifier = aliasMatch[1].trim()
+          if (MERMAID_IDENTIFIER_PATTERN.test(identifier)) {
+            usedIdentifiers.add(identifier)
+          }
+          normalized.push(`${indent}${kind} ${declarationBody}`)
+          return
+        }
+
+        if (MERMAID_IDENTIFIER_PATTERN.test(declarationBody)) {
+          usedIdentifiers.add(declarationBody)
+          normalized.push(`${indent}${kind} ${declarationBody}`)
+          return
+        }
+
+        const identifier = buildMermaidIdentifier(declarationBody, kind, usedIdentifiers)
+        aliasByRawToken.set(declarationBody, identifier)
+        const label = stripWrappingQuotes(declarationBody).replace(/"/g, '\\"')
+        normalized.push(`${indent}${kind} ${identifier} as "${label}"`)
+      })
+      continue
+    }
+
+    if (aliasByRawToken.size > 0 && /-{1,2}.+>/.test(line)) {
+      let rewritten = line
+      aliasByRawToken.forEach((identifier, rawToken) => {
+        rewritten = rewritten.split(rawToken).join(identifier)
+      })
+      normalized.push(rewritten)
+      continue
+    }
+
+    normalized.push(line)
+  }
+
+  return normalized.join("\n")
+}
+
 const parseFenceLine = (rawLine: string) => {
   const normalized = normalizeFenceChars(stripInvisibleChars(rawLine)).trim()
   const unescapedEscapedFence = normalized.replaceAll("\\`", "`").replaceAll("\\~", "~")
@@ -152,7 +261,7 @@ export const extractNormalizedMermaidSource = (raw: string): string => {
   if (!normalized) return ""
 
   const fencedSource = extractFirstFencedMermaidSource(normalized)
-  if (fencedSource) return fencedSource
+  if (fencedSource) return normalizeSequenceParticipantAliases(fencedSource).trim()
 
-  return normalized
+  return normalizeSequenceParticipantAliases(normalized).trim()
 }

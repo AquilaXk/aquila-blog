@@ -9471,24 +9471,6 @@ const PreviewContentFrame = styled.div`
     overflow-x: hidden;
   }
 
-  > .aq-markdown blockquote {
-    margin: 1rem 0;
-    padding: 0.82rem 0.96rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
-    border-radius: 12px;
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  > .aq-markdown blockquote > :first-of-type {
-    margin-top: 0;
-  }
-
-  > .aq-markdown blockquote > :last-child {
-    margin-bottom: 0;
-  }
-
 `
 
 const PreviewCard = styled.div`

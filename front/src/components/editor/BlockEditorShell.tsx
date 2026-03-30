@@ -5,6 +5,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Table } from "@tiptap/extension-table"
+import { NodeSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
@@ -156,6 +157,17 @@ type TopLevelBlockHandleState = {
   top: number
   bottom: number
   width: number
+}
+
+type PendingBlockDragState = {
+  sourceIndex: number
+  pointerId: number
+  startX: number
+  startY: number
+  previewWidth: number
+  previewHeight: number
+  previewHtml: string
+  previewLabel: string
 }
 
 type DraggedBlockState =
@@ -546,6 +558,9 @@ const BlockEditorShell = ({
   const inlineColorMenuRef = useRef<HTMLDetailsElement>(null)
   const slashMenuRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const blockHandleRailRef = useRef<HTMLDivElement>(null)
+  const pendingBlockDragRef = useRef<PendingBlockDragState | null>(null)
+  const pendingBlockDragCleanupRef = useRef<(() => void) | null>(null)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const pendingAttachmentInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
@@ -725,6 +740,49 @@ const BlockEditorShell = ({
     },
     [getTopLevelBlockElements]
   )
+
+  const clearPendingBlockDrag = useCallback(() => {
+    pendingBlockDragRef.current = null
+    if (pendingBlockDragCleanupRef.current) {
+      pendingBlockDragCleanupRef.current()
+      pendingBlockDragCleanupRef.current = null
+    }
+  }, [])
+
+  const beginBlockDragFromPending = useCallback(
+    (pending: PendingBlockDragState, clientX: number, clientY: number) => {
+      const indicator = resolveDropIndicatorByClientY(clientY)
+      setDraggedBlockState({
+        sourceIndex: pending.sourceIndex,
+        pointerId: pending.pointerId,
+        previewWidth: pending.previewWidth,
+        previewHeight: pending.previewHeight,
+        previewHtml: pending.previewHtml,
+        previewLabel: pending.previewLabel,
+      })
+      setDragGhostPosition({
+        x: clientX,
+        y: clientY,
+      })
+      setDropIndicatorState({
+        visible: true,
+        ...indicator,
+      })
+    },
+    [resolveDropIndicatorByClientY]
+  )
+
+  const selectTopLevelBlock = useCallback((blockIndex: number) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+    const { doc, tr } = currentEditor.state
+    if (doc.childCount === 0) return
+    const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
+    const position = getTopLevelBlockPosition(currentEditor, clampedIndex)
+    const selection = NodeSelection.create(doc, position)
+    currentEditor.view.dispatch(tr.setSelection(selection))
+    currentEditor.view.focus()
+  }, [])
 
   const isTopLevelBlockHandleEligible = useCallback((blockIndex: number) => {
     const currentEditor = editorRef.current
@@ -1032,6 +1090,7 @@ const BlockEditorShell = ({
         link: false,
         codeBlock: false,
         listItem: false,
+        listKeymap: false,
       }),
       Link.configure({
         openOnClick: false,
@@ -1083,6 +1142,28 @@ const BlockEditorShell = ({
         if (!currentEditor) return false
         const normalizedKey = event.key.toLowerCase()
         const hasPrimaryModifier = isPrimaryModifierPressed(event)
+        const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
+          node?: { isBlock?: boolean }
+        }
+        const isTopLevelBlockNodeSelection = Boolean(
+          selection.$from.depth === 0 && selection.node?.isBlock
+        )
+
+        if (
+          !hasPrimaryModifier &&
+          !event.altKey &&
+          !event.shiftKey &&
+          (event.key === "Backspace" || event.key === "Delete") &&
+          isTopLevelBlockNodeSelection
+        ) {
+          event.preventDefault()
+          const blockIndex = getTopLevelBlockIndexFromSelection(currentEditor)
+          const contentLength = (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
+          const nextFocusIndex = Math.max(0, Math.min(blockIndex, Math.max(contentLength - 2, 0)))
+          mutateTopLevelBlocks((doc) => deleteTopLevelBlockAt(doc, blockIndex), nextFocusIndex)
+          setBlockMenuState(null)
+          return true
+        }
 
         if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "b") {
           event.preventDefault()
@@ -2452,6 +2533,7 @@ const BlockEditorShell = ({
     { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
+    { id: "inline-code", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "인라인 코드", run: () => editor?.chain().focus().toggleCode().run(), active: editor?.isActive("code") ?? false },
     { id: "inline-formula", label: <span aria-hidden="true">ƒx</span>, ariaLabel: "인라인 수식", run: insertInlineFormula, active: editor?.isActive("inlineFormula") ?? false },
     { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => imageFileInputRef.current?.click(), active: false },
     { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
@@ -2774,6 +2856,12 @@ const BlockEditorShell = ({
   }, [])
 
   useEffect(() => {
+    return () => {
+      clearPendingBlockDrag()
+    }
+  }, [clearPendingBlockDrag])
+
+  useEffect(() => {
     if (typeof window === "undefined") return
     const sync = () => setSelectionTick((prev) => prev + 1)
     window.addEventListener("scroll", sync, true)
@@ -2799,11 +2887,15 @@ const BlockEditorShell = ({
     }
 
     const rect = blockElement.getBoundingClientRect()
+    const railRect = blockHandleRailRef.current?.getBoundingClientRect()
+    const railWidth = railRect?.width || 54
+    const railHeight = railRect?.height || 28
+    const centeredTop = Math.round(rect.top + Math.max(0, (rect.height - railHeight) / 2))
     setBlockHandleState({
       visible: true,
       blockIndex,
-      left: Math.max(12, Math.round(rect.left - 68)),
-      top: Math.round(rect.top + 8),
+      left: Math.max(12, Math.round(rect.left - railWidth - 10)),
+      top: centeredTop,
       bottom: Math.round(rect.bottom + 12),
       width: Math.round(rect.width),
     })
@@ -3436,6 +3528,7 @@ const BlockEditorShell = ({
         ) : null}
         {!isCoarsePointer ? (
           <BlockHandleRail
+            ref={blockHandleRailRef}
             data-block-handle-rail="true"
             data-visible={blockHandleState.visible}
             style={{
@@ -3463,7 +3556,14 @@ const BlockEditorShell = ({
               title="블록 이동"
               data-variant="drag"
               data-testid="block-drag-handle"
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                clearPendingBlockDrag()
+                selectTopLevelBlock(blockHandleState.blockIndex)
+              }}
               onPointerDown={(event) => {
+                if (event.button !== 0) return
                 event.preventDefault()
                 event.stopPropagation()
                 const sourceIndex = blockHandleState.blockIndex
@@ -3475,23 +3575,51 @@ const BlockEditorShell = ({
                 const previewHeight = sourceRect ? Math.round(Math.min(Math.max(sourceRect.height, 44), 320)) : 120
                 const previewLabel = sourceElement?.textContent?.trim().slice(0, 100) || "블록 이동"
                 const previewHtml = sourceElement?.innerHTML || `<p>${previewLabel}</p>`
-                const indicator = resolveDropIndicatorByClientY(event.clientY)
-                setDraggedBlockState({
+                const pendingState: PendingBlockDragState = {
                   sourceIndex,
                   pointerId: event.pointerId,
+                  startX: event.clientX,
+                  startY: event.clientY,
                   previewWidth,
                   previewHeight,
                   previewHtml,
                   previewLabel,
-                })
-                setDragGhostPosition({
-                  x: event.clientX,
-                  y: event.clientY,
-                })
-                setDropIndicatorState({
-                  visible: true,
-                  ...indicator,
-                })
+                }
+                selectTopLevelBlock(sourceIndex)
+                clearPendingBlockDrag()
+                pendingBlockDragRef.current = pendingState
+
+                const DRAG_THRESHOLD_PX = 5
+
+                const handlePendingPointerMove = (moveEvent: PointerEvent) => {
+                  const pending = pendingBlockDragRef.current
+                  if (!pending || moveEvent.pointerId !== pending.pointerId) return
+
+                  const distance = Math.hypot(
+                    moveEvent.clientX - pending.startX,
+                    moveEvent.clientY - pending.startY
+                  )
+                  if (distance < DRAG_THRESHOLD_PX) return
+
+                  clearPendingBlockDrag()
+                  beginBlockDragFromPending(pending, moveEvent.clientX, moveEvent.clientY)
+                }
+
+                const handlePendingPointerDone = (doneEvent: PointerEvent) => {
+                  const pending = pendingBlockDragRef.current
+                  if (!pending || doneEvent.pointerId !== pending.pointerId) return
+                  clearPendingBlockDrag()
+                }
+
+                window.addEventListener("pointermove", handlePendingPointerMove)
+                window.addEventListener("pointerup", handlePendingPointerDone)
+                window.addEventListener("pointercancel", handlePendingPointerDone)
+
+                pendingBlockDragCleanupRef.current = () => {
+                  window.removeEventListener("pointermove", handlePendingPointerMove)
+                  window.removeEventListener("pointerup", handlePendingPointerDone)
+                  window.removeEventListener("pointercancel", handlePendingPointerDone)
+                }
               }}
             >
               <BlockHandleGrip aria-hidden="true">
@@ -4322,24 +4450,6 @@ const EditorViewport = styled.div`
     pointer-events: none;
   }
 
-  .aq-block-editor__content blockquote {
-    margin: 1rem 0;
-    padding: 0.82rem 0.96rem;
-    border: 1px solid ${({ theme }) => theme.colors.gray6};
-    border-left: 4px solid ${({ theme }) => theme.colors.gray7};
-    border-radius: 12px;
-    background: ${({ theme }) => theme.colors.gray2};
-    color: ${({ theme }) => theme.colors.gray12};
-  }
-
-  .aq-block-editor__content blockquote > :first-of-type {
-    margin-top: 0;
-  }
-
-  .aq-block-editor__content blockquote > :last-child {
-    margin-bottom: 0;
-  }
-
   .aq-block-editor__content pre {
     overflow: auto;
     border-radius: 1rem;
@@ -4356,6 +4466,25 @@ const EditorViewport = styled.div`
   .aq-block-editor__content code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
+    font-size: 0.92em;
+    line-height: inherit;
+    border-radius: 0.42rem;
+    background: rgba(255, 255, 255, 0.075);
+    color: #ff6b6b;
+    padding: 0.14em 0.4em 0.16em;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    letter-spacing: -0.01em;
+  }
+
+  .aq-block-editor__content pre code {
+    font-size: inherit;
+    line-height: inherit;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    box-shadow: none;
+    letter-spacing: 0;
   }
 
   .aq-block-editor__content ul[data-type="taskList"],

@@ -124,6 +124,10 @@ CLOUDFLARED_HAS_REGISTRATION="false"
 if cloudflared_registration_log_exists "${CLOUDFLARED_LOGS}"; then
   CLOUDFLARED_HAS_REGISTRATION="true"
 fi
+CLOUDFLARED_REGISTRATION_WARN="false"
+if [[ "${CLOUDFLARED_HAS_REGISTRATION}" != "true" ]]; then
+  CLOUDFLARED_REGISTRATION_WARN="true"
+fi
 
 log "active_backend=${ACTIVE_BACKEND:-none}"
 log "expected_image=${EXPECTED_BACK_IMAGE:-none}"
@@ -174,8 +178,10 @@ elif [[ "${CLOUDFLARED_STATUS}" != "running" || "${CLOUDFLARED_RESTARTING}" == "
   remember_failure "cloudflared_unhealthy status=${CLOUDFLARED_STATUS} restarting=${CLOUDFLARED_RESTARTING}"
 elif [[ "${CLOUDFLARED_RESTART_COUNT}" =~ ^[0-9]+$ ]] && (( CLOUDFLARED_RESTART_COUNT > 5 )); then
   remember_failure "cloudflared_restart_count=${CLOUDFLARED_RESTART_COUNT}"
-elif [[ "${CLOUDFLARED_HAS_REGISTRATION}" != "true" ]]; then
-  remember_failure "cloudflared_registration_log_missing"
+fi
+
+if [[ "${CLOUDFLARED_REGISTRATION_WARN}" == "true" ]]; then
+  log "WARN cloudflared_registration_log_missing_recent_tail (container는 running 상태이며 readiness 결과를 우선 판단)"
 fi
 
 log "compose_ps_begin"

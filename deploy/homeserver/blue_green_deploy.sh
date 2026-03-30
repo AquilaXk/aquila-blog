@@ -302,7 +302,53 @@ cloudflared_registration_log_exists() {
   return 1
 }
 
+probe_cloudflared_public_readiness_code() {
+  local api_domain="$1"
+  local connect_timeout="${CLOUDFLARED_PUBLIC_CONNECT_TIMEOUT_SECONDS:-5}"
+  local max_time="${CLOUDFLARED_PUBLIC_MAX_TIME_SECONDS:-15}"
+  if [[ -z "${api_domain}" ]]; then
+    echo ""
+    return 0
+  fi
+
+  curl -sS \
+    --connect-timeout "${connect_timeout}" \
+    -m "${max_time}" \
+    -o /dev/null \
+    -w "%{http_code}" \
+    "https://${api_domain}${HEALTHCHECK_PATH}" || true
+}
+
+check_cloudflared_public_readiness() {
+  local api_domain="$1"
+  local retries="${CLOUDFLARED_PUBLIC_READINESS_RETRIES:-5}"
+  local sleep_seconds="${CLOUDFLARED_PUBLIC_READINESS_SLEEP_SECONDS:-2}"
+  local attempt=1
+  local code
+
+  if [[ -z "${api_domain}" ]]; then
+    echo "skip cloudflared public readiness: API_DOMAIN is empty"
+    return 0
+  fi
+
+  while [[ "${attempt}" -le "${retries}" ]]; do
+    code="$(probe_cloudflared_public_readiness_code "${api_domain}")"
+    if is_healthy_http_code "${code}"; then
+      echo "cloudflared public readiness ok: domain=${api_domain} status=${code} attempt=${attempt}/${retries}"
+      return 0
+    fi
+
+    echo "cloudflared public readiness pending: domain=${api_domain} status=${code:-none} attempt=${attempt}/${retries}" >&2
+    sleep "${sleep_seconds}"
+    attempt=$((attempt + 1))
+  done
+
+  echo "cloudflared public readiness failed: domain=${api_domain} status=${code:-none} attempts=${retries}" >&2
+  return 1
+}
+
 check_cloudflared_runtime() {
+  local api_domain="${1:-}"
   local cid
   cid="$(compose ps -q cloudflared | head -n 1)"
   if [[ -z "${cid}" ]]; then
@@ -329,19 +375,44 @@ check_cloudflared_runtime() {
 
   local cf_logs
   cf_logs="$(run_compose_diagnostic logs --no-color --tail=240 cloudflared || true)"
-  if ! cloudflared_registration_log_exists "${cf_logs}"; then
-    echo "cloudflared registration log missing in recent logs; restarting cloudflared once" >&2
+  local has_registration_log="false"
+  if cloudflared_registration_log_exists "${cf_logs}"; then
+    has_registration_log="true"
+  fi
+
+  if [[ "${has_registration_log}" != "true" ]]; then
+    echo "WARN cloudflared registration log missing in recent tail; verifying public readiness before restart" >&2
+    if check_cloudflared_public_readiness "${api_domain}"; then
+      echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}, registration=missing_recent_tail"
+      return 0
+    fi
+
+    echo "cloudflared public readiness failed; restarting cloudflared once" >&2
     compose restart cloudflared >/dev/null || true
     sleep 2
+
+    status="$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null || echo "unknown")"
+    restarting="$(docker inspect --format '{{.State.Restarting}}' "${cid}" 2>/dev/null || echo "unknown")"
+    restart_count="$(docker inspect --format '{{.RestartCount}}' "${cid}" 2>/dev/null || echo "0")"
+    if [[ "${status}" != "running" || "${restarting}" == "true" ]]; then
+      echo "cloudflared is not healthy after restart: status=${status}, restarting=${restarting}" >&2
+      run_compose_diagnostic logs --no-color --tail=120 cloudflared >&2 || true
+      return 1
+    fi
+
     cf_logs="$(run_compose_diagnostic logs --no-color --tail=320 cloudflared || true)"
-    if ! cloudflared_registration_log_exists "${cf_logs}"; then
-      echo "cloudflared tunnel registration log not found" >&2
+    if cloudflared_registration_log_exists "${cf_logs}"; then
+      has_registration_log="true"
+    fi
+
+    if ! check_cloudflared_public_readiness "${api_domain}"; then
+      echo "cloudflared runtime verify failed after restart" >&2
       echo "${cf_logs}" >&2
       return 1
     fi
   fi
 
-  echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}"
+  echo "cloudflared runtime check ok: status=${status}, restart_count=${restart_count}, registration=${has_registration_log}"
 }
 
 env_value() {
@@ -1642,7 +1713,7 @@ fi
 compose_up_with_retry "${services_to_boot[@]}"
 compose_up_no_deps_with_retry prometheus grafana
 ensure_caddy_mount_sync
-check_cloudflared_runtime
+check_cloudflared_runtime "${api_domain}"
 check_grafana_embed_origin_route
 warn_grafana_embed_public_route
 ensure_db_runtime_guards || true
@@ -1691,7 +1762,7 @@ echo "post-switch phase: install steady-state guard"
 ensure_steady_state_guard || true
 
 echo "post-switch phase: cloudflared runtime verify"
-if ! check_cloudflared_runtime; then
+if ! check_cloudflared_runtime "${api_domain}"; then
   echo "post-switch cloudflared runtime verify failed" >&2
   rollback_to_backend "${active_backend}" "${api_domain}" || true
   compose stop "${next_backend}" || true

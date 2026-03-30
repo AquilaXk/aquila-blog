@@ -376,8 +376,10 @@ const getVisualLayoutFingerprint = async (page: Page) =>
       return style.display !== "none" && style.visibility !== "hidden" && Number.parseFloat(style.opacity) > 0
     }
 
+    const route = window.location.pathname
+
     return {
-      route: window.location.pathname,
+      route,
       viewport: {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -398,9 +400,13 @@ const getVisualLayoutFingerprint = async (page: Page) =>
       desktopTagRailRect: readRect(".desktopPanel"),
       leftRailRect: readRect(".leftRailInner"),
       rightRailRect: readRect(".rightRailInner"),
-      dashboardServiceRailRect: readRect('[data-ui="monitoring-service-rail"]'),
-      dashboardPanelGridRect: readRect('[data-ui="monitoring-panel-grid"]'),
-      dashboardFirstPanelRect: readRect('[data-ui="monitoring-panel-card"]'),
+      ...(route === "/admin/dashboard"
+        ? {
+            dashboardServiceRailRect: readRect('[data-ui="monitoring-service-rail"]'),
+            dashboardPanelGridRect: readRect('[data-ui="monitoring-panel-grid"]'),
+            dashboardFirstPanelRect: readRect('[data-ui="monitoring-panel-card"]'),
+          }
+        : {}),
     }
   })
 

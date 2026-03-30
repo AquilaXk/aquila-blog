@@ -22,7 +22,7 @@ Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오
 - `문제가 터졌을 때 복구 가능한 구조`를 만들었습니다.
   - 공개 읽기 경로 fallback, 캐시 fail-open, degraded 응답, 권한/런타임 경계 테스트를 유지합니다.
 - `문서화와 검증`을 같은 레벨로 다룹니다.
-  - 설계 문서, 트러블슈팅 포트폴리오, OpenAPI 드리프트 체크, Playwright smoke/perf/a11y/live, Storybook gate를 함께 운영합니다.
+  - 설계 문서, 트러블슈팅 문서, OpenAPI 드리프트 체크, Playwright smoke/perf/a11y/live, Storybook gate를 함께 운영합니다.
 
 ## 핵심 기능
 

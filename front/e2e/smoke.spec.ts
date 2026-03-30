@@ -14,26 +14,31 @@ const mockAvatarAsset = async (page: Page) => {
   })
 }
 
+const createExplorePost = (overrides: Partial<Record<string, unknown>> & { title: string }) => ({
+  id: 101,
+  createdAt: "2026-03-16T00:00:00Z",
+  modifiedAt: "2026-03-16T00:00:00Z",
+  authorId: 1,
+  authorName: "관리자",
+  authorUsername: "aquila",
+  authorProfileImgUrl: "/avatar.png",
+  summary: "탐색 API 스모크",
+  tags: ["테스트태그"],
+  category: ["백엔드"],
+  published: true,
+  listed: true,
+  likesCount: 0,
+  commentsCount: 0,
+  hitCount: 0,
+  ...overrides,
+})
+
 const createExplorePage = (title: string, tag = "테스트태그") => ({
   content: [
-    {
-      id: 101,
-      createdAt: "2026-03-16T00:00:00Z",
-      modifiedAt: "2026-03-16T00:00:00Z",
-      authorId: 1,
-      authorName: "관리자",
-      authorUsername: "aquila",
-      authorProfileImgUrl: "/avatar.png",
+    createExplorePost({
       title,
-      summary: "탐색 API 스모크",
       tags: [tag],
-      category: ["백엔드"],
-      published: true,
-      listed: true,
-      likesCount: 0,
-      commentsCount: 0,
-      hitCount: 0,
-    },
+    }),
   ],
   pageable: {
     pageNumber: 0,
@@ -209,6 +214,83 @@ test("검색 입력은 search API의 kw 파라미터를 통해 백엔드 탐색�
 
   await expect.poll(() => capturedKw.some((value) => value === "alpha")).toBeTruthy()
   await expect(page.getByText("검색:alpha")).toBeVisible()
+})
+
+test("검색 모드는 백엔드가 반환한 순서를 그대로 유지한다", async ({ page }) => {
+  await mockAvatarAsset(page)
+  await page.route("**/post/api/v1/posts/feed**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(createExplorePage("기본목록")),
+    })
+  })
+  await page.route("**/post/api/v1/posts/tags", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ tag: "테스트태그", count: 3 }]),
+    })
+  })
+  await page.route("**/post/api/v1/posts/search**", async (route) => {
+    const url = new URL(route.request().url())
+    const kw = url.searchParams.get("kw") || ""
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        content: [
+          createExplorePost({
+            id: 301,
+            title: "본문 exact phrase 매치",
+            summary: `백엔드 순위 1: ${kw}`,
+            tags: ["운영"],
+            createdAt: "2026-01-01T00:00:00Z",
+            modifiedAt: "2026-01-01T00:00:00Z",
+          }),
+          createExplorePost({
+            id: 302,
+            title: "alpha beta 제목 매치",
+            summary: "클라이언트 재정렬이면 앞으로 오면 안 된다",
+            tags: ["검색"],
+            createdAt: "2026-03-16T00:00:00Z",
+            modifiedAt: "2026-03-16T00:00:00Z",
+            likesCount: 80,
+            commentsCount: 20,
+            hitCount: 4000,
+          }),
+          createExplorePost({
+            id: 303,
+            title: "태그 매치",
+            summary: "태그로만 강한 문서",
+            tags: ["alpha", "beta"],
+            createdAt: "2026-03-15T00:00:00Z",
+            modifiedAt: "2026-03-15T00:00:00Z",
+          }),
+        ],
+        pageable: {
+          pageNumber: 0,
+          pageSize: 30,
+          totalElements: 3,
+          totalPages: 1,
+        },
+      }),
+    })
+  })
+
+  await page.goto("/")
+  const searchInput = page.getByLabel("Search posts by keyword")
+  await searchInput.fill("alpha beta")
+
+  await expect(page.getByText("본문 exact phrase 매치")).toBeVisible()
+  const titles = await page.locator("a[href^='/posts/'] h2").evaluateAll((elements) =>
+    elements.map((element) => element.textContent?.trim() || "").filter(Boolean)
+  )
+  expect(titles.slice(0, 3)).toEqual([
+    "본문 exact phrase 매치",
+    "alpha beta 제목 매치",
+    "태그 매치",
+  ])
 })
 
 test("태그 쿼리 파라미터는 explore API의 tag 파라미터로 백엔드 탐색을 요청한다", async ({ page }) => {

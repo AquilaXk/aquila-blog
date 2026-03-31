@@ -75,6 +75,26 @@ const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
   }
 }
 
+const gotoLoginForAdmin = async (page: Page, timeoutMs: number) => {
+  try {
+    await page.goto("/login?next=%2Fadmin")
+  } catch (error) {
+    if (!isNavigationInterruptedError(error)) throw error
+  }
+
+  if (/\/admin(\/|$)/.test(page.url())) return "admin" as const
+  if (/\/login(\/|$|\?)/.test(page.url())) return "login" as const
+
+  try {
+    await page.waitForURL(/\/(login|admin)(\/|$|\?)/, { timeout: Math.min(timeoutMs, 8_000) })
+  } catch {
+    // keep current url and let caller decide by assertion/retry.
+  }
+
+  if (/\/admin(\/|$)/.test(page.url())) return "admin" as const
+  return "login" as const
+}
+
 type UiLoginOutcome =
   | { kind: "response"; response: Response }
   | { kind: "admin-url" }
@@ -337,8 +357,8 @@ const loginThroughUi = async (
   let lastFailure = "unknown"
 
   for (let attempt = 1; attempt <= liveLoginAttempts; attempt += 1) {
-    await page.goto("/login?next=%2Fadmin")
-    if (/\/admin(\/|$)/.test(page.url())) return
+    const route = await gotoLoginForAdmin(page, liveUiRedirectTimeoutMs)
+    if (route === "admin") return
 
     await expect(page.getByRole("heading", { name: "로그인" })).toBeVisible()
     await page.getByLabel("이메일").fill(loginEmail)

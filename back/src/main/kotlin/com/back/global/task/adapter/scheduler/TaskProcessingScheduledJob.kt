@@ -224,7 +224,9 @@ class TaskProcessingScheduledJob(
     private fun resolvePerTypeLimit(taskType: String): Int {
         explicitPerTypeMaxConcurrent[taskType]?.let { return it }
         if (!perTypeAutoTuneEnabled) return workerConcurrency
-        return perTypeDynamicLimits[taskType] ?: 0
+        // Auto-tune refresh 지연/예산 소진으로 limit map이 비어도 task type을 영구 0 permit로 막지 않는다.
+        // 전체 동시성은 worker semaphore가 제한하므로, 미지정 타입은 최소 1 슬롯으로 처리 기회를 보장한다.
+        return perTypeDynamicLimits[taskType] ?: perTypeAutoTuneMinConcurrent.coerceIn(1, workerConcurrency)
     }
 
     private fun parsePerTypeMaxConcurrent(raw: String): Map<String, Int> =

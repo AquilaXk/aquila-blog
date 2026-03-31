@@ -12,6 +12,10 @@ import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
+import org.springframework.http.HttpStatus
+import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.mock.web.MockHttpServletResponse
+import org.springframework.web.context.request.ServletWebRequest
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 
 @DisplayName("ApiV1MemberNotificationController 단위 테스트")
@@ -33,11 +37,55 @@ class ApiV1MemberNotificationControllerTest {
                 memberNotificationSseService = memberNotificationSseService,
                 rq = rq,
             )
+        val webRequest = ServletWebRequest(MockHttpServletRequest(), MockHttpServletResponse())
 
-        val result = controller.getSnapshot()
+        val result = controller.getSnapshot(webRequest)
 
-        assertThat(result.items).isEmpty()
-        assertThat(result.unreadCount).isZero()
+        assertThat(result.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(result.body?.items).isEmpty()
+        assertThat(result.body?.unreadCount).isZero()
+        assertThat(result.headers.eTag).isNotBlank()
+    }
+
+    @Test
+    @DisplayName("snapshot은 If-None-Match가 동일하면 304 Not Modified를 반환한다")
+    fun `snapshot if none match returns not modified`() {
+        val memberNotificationApplicationService = mock(MemberNotificationApplicationService::class.java)
+        val memberNotificationSseService = mock(MemberNotificationSseService::class.java)
+        val rq = mock(Rq::class.java)
+        val actor = Member(id = 11, username = "user11", password = null, nickname = "유저11", email = "u11@test.com")
+
+        given(rq.actorOrNull).willReturn(actor)
+        given(memberNotificationApplicationService.getSnapshotSafe(actor))
+            .willReturn(
+                MemberNotificationApplicationService.NotificationSnapshot(
+                    items = emptyList(),
+                    unreadCount = 0,
+                ),
+            )
+
+        val controller =
+            ApiV1MemberNotificationController(
+                memberNotificationApplicationService = memberNotificationApplicationService,
+                memberNotificationSseService = memberNotificationSseService,
+                rq = rq,
+            )
+
+        val firstWebRequest = ServletWebRequest(MockHttpServletRequest(), MockHttpServletResponse())
+        val firstResponse = controller.getSnapshot(firstWebRequest)
+        val eTag = requireNotNull(firstResponse.headers.eTag)
+
+        val cachedRequest =
+            MockHttpServletRequest().apply {
+                addHeader("If-None-Match", eTag)
+            }
+        val secondWebRequest = ServletWebRequest(cachedRequest, MockHttpServletResponse())
+        val secondResponse = controller.getSnapshot(secondWebRequest)
+
+        assertThat(firstResponse.statusCode).isEqualTo(HttpStatus.OK)
+        assertThat(eTag).isNotBlank()
+        assertThat(secondResponse.statusCode).isEqualTo(HttpStatus.NOT_MODIFIED)
+        assertThat(secondResponse.body).isNull()
     }
 
     @Test

@@ -39,7 +39,7 @@ const GET_REQUEST_POLICY_REGISTRY: Array<{
   },
   {
     matcher: /^\/member\/api\/v1\/notifications\/snapshot/i,
-    policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 4_000 },
+    policy: { cacheMode: "revalidate", retryCount: 0, staleIfError: false, timeoutMs: 4_000 },
   },
   {
     matcher: /^\/member\/api\/v1\/notifications(\/|$)/i,

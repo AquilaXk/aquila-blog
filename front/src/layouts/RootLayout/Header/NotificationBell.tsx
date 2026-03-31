@@ -28,14 +28,35 @@ type Props = {
   enabled: boolean
 }
 
+type NotificationTransportMode = "auto" | "polling-only" | "sse"
+
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 30_000
+const POLLING_JITTER_RATIO = 0.2
 const HIDDEN_GRACE_CLOSE_MS = 45_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
 const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
 const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
 
 type EventSourceLifecycleState = "idle" | "connecting" | "open"
+
+const resolveNotificationTransportMode = (): NotificationTransportMode => {
+  const raw = (process.env.NEXT_PUBLIC_NOTIFICATION_STREAM_MODE || "").trim().toLowerCase()
+  if (raw === "poll" || raw === "polling" || raw === "polling-only") return "polling-only"
+  if (raw === "sse" || raw === "realtime") return "sse"
+  // 운영에서는 SSE 장기 연결 노이즈 대신 polling 안정성을 기본으로 사용한다.
+  if (process.env.NODE_ENV === "production") return "polling-only"
+  return "auto"
+}
+
+const NOTIFICATION_TRANSPORT_MODE = resolveNotificationTransportMode()
+
+const getNextPollingDelayMs = (baseMs: number) => {
+  const jitter = Math.floor(baseMs * POLLING_JITTER_RATIO)
+  const minDelay = Math.max(1_000, baseMs - jitter)
+  const maxDelay = baseMs + jitter
+  return Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay
+}
 
 const isLoopbackHost = (hostname: string) =>
   hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]"
@@ -118,6 +139,8 @@ const loadStoredSnapshot = (): StoredNotificationSnapshot | null => {
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
   const preferPolling = useMemo(() => {
+    if (NOTIFICATION_TRANSPORT_MODE === "polling-only") return true
+    if (NOTIFICATION_TRANSPORT_MODE === "sse") return false
     if (typeof window === "undefined") return false
 
     try {
@@ -572,7 +595,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
       timer = window.setTimeout(() => {
         void run()
-      }, POLLING_INTERVAL_MS)
+      }, getNextPollingDelayMs(POLLING_INTERVAL_MS))
     }
 
     void run()

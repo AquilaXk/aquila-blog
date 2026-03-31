@@ -38,7 +38,8 @@ export const Global = () => {
           font-style: ${pretendard.style.fontStyle};
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
-          font-synthesis: none;
+          /* Pretendard local bundle has no italic face, so allow style synthesis only. */
+          font-synthesis: style;
         }
 
         @media (max-width: 1199px) {

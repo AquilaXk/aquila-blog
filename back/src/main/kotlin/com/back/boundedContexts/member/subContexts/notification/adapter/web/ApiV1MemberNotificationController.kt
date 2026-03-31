@@ -7,7 +7,10 @@ import com.back.global.rsData.RsData
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
+import org.springframework.http.CacheControl
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -16,7 +19,10 @@ import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /**
  * ApiV1MemberNotificationController는 웹 계층에서 HTTP 요청/응답을 처리하는 클래스입니다.
@@ -38,6 +44,11 @@ class ApiV1MemberNotificationController(
 
     data class UnreadCountResBody(
         val unreadCount: Int,
+    )
+
+    private data class SnapshotPayload(
+        val memberId: Long?,
+        val body: SnapshotResBody,
     )
 
     @GetMapping
@@ -64,36 +75,89 @@ class ApiV1MemberNotificationController(
     }
 
     @GetMapping("/snapshot")
-    fun getSnapshot(): SnapshotResBody {
-        return runCatching {
-            val actor = rq.actorOrNull ?: return SnapshotResBody(items = emptyList(), unreadCount = 0)
-            val snapshot =
-                runCatching { memberNotificationApplicationService.getSnapshotSafe(actor) }
-                    .onFailure { exception ->
-                        logger.warn(
-                            "notification_snapshot_fallback actorId={} reason={}",
-                            actor.id,
-                            exception::class.java.simpleName,
-                            exception,
-                        )
-                    }.getOrElse {
-                        MemberNotificationApplicationService.NotificationSnapshot(
-                            items = emptyList(),
-                            unreadCount = 0,
-                        )
-                    }
-            SnapshotResBody(
-                items = snapshot.items,
-                unreadCount = snapshot.unreadCount,
-            )
-        }.getOrElse { exception ->
-            logger.error(
-                "notification_snapshot_unexpected_fallback reason={}",
-                exception::class.java.simpleName,
-                exception,
-            )
-            SnapshotResBody(items = emptyList(), unreadCount = 0)
+    fun getSnapshot(webRequest: WebRequest): ResponseEntity<SnapshotResBody> {
+        val payload =
+            runCatching {
+                val actor =
+                    rq.actorOrNull ?: return@runCatching SnapshotPayload(
+                        memberId = null,
+                        body = SnapshotResBody(items = emptyList(), unreadCount = 0),
+                    )
+                val snapshot =
+                    runCatching { memberNotificationApplicationService.getSnapshotSafe(actor) }
+                        .onFailure { exception ->
+                            logger.warn(
+                                "notification_snapshot_fallback actorId={} reason={}",
+                                actor.id,
+                                exception::class.java.simpleName,
+                                exception,
+                            )
+                        }.getOrElse {
+                            MemberNotificationApplicationService.NotificationSnapshot(
+                                items = emptyList(),
+                                unreadCount = 0,
+                            )
+                        }
+                SnapshotPayload(
+                    memberId = actor.id,
+                    body =
+                        SnapshotResBody(
+                            items = snapshot.items,
+                            unreadCount = snapshot.unreadCount,
+                        ),
+                )
+            }.getOrElse { exception ->
+                logger.error(
+                    "notification_snapshot_unexpected_fallback reason={}",
+                    exception::class.java.simpleName,
+                    exception,
+                )
+                SnapshotPayload(
+                    memberId = null,
+                    body = SnapshotResBody(items = emptyList(), unreadCount = 0),
+                )
+            }
+        val eTag = buildSnapshotETag(payload)
+        if (webRequest.checkNotModified(eTag)) {
+            return ResponseEntity
+                .status(HttpStatus.NOT_MODIFIED)
+                .cacheControl(CacheControl.noCache())
+                .eTag(eTag)
+                .build()
         }
+        return ResponseEntity
+            .ok()
+            .cacheControl(CacheControl.noCache())
+            .eTag(eTag)
+            .body(payload.body)
+    }
+
+    private fun buildSnapshotETag(payload: SnapshotPayload): String {
+        val seed =
+            buildString {
+                append(payload.memberId ?: -1L)
+                append('|')
+                append(payload.body.unreadCount)
+                append('|')
+                payload.body.items.forEach { item ->
+                    append(item.id)
+                    append(':')
+                    append(item.createdAt.toEpochMilli())
+                    append(':')
+                    append(item.type.name)
+                    append(':')
+                    append(item.actorId)
+                    append(':')
+                    append(item.postId)
+                    append(':')
+                    append(item.commentId)
+                    append(':')
+                    append(item.isRead)
+                    append(';')
+                }
+            }
+        val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray(StandardCharsets.UTF_8))
+        return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
     }
 
     @GetMapping("/unread-count")

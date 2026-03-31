@@ -42,6 +42,7 @@ yarn dev
 | `NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH` | 관리자 도구의 상태 페이지 임베드 경로 |
 | `NEXT_PUBLIC_MONITORING_EMBED_URL` | 관리자 도구의 모니터링 iframe URL(예: Grafana kiosk URL) |
 | `NEXT_PUBLIC_PROMETHEUS_URL` | 관리자 도구의 Prometheus 바로가기 URL |
+| `NEXT_PUBLIC_NOTIFICATION_STREAM_MODE` | 알림 전송 모드(`auto`, `polling-only`, `sse`) |
 | `UPTIME_KUMA_PROXY_ORIGIN` | `/status/*` rewrite 대상 오리진 |
 | `PLAYWRIGHT_BASE_URL` | live E2E 대상 URL |
 | `BUNDLE_BUDGET_MARGIN_PERCENT` | 번들 예산 허용 오차(%) |
@@ -52,6 +53,7 @@ yarn dev
 - 로그인 상태 조회는 `/member/api/v1/auth/me` 기반.
 - SSR에서 auth 스냅샷(`authMeProbe`)을 주입하고, 비로그인 확정 상태에서는 클라이언트 재검증 호출을 생략.
 - 비로그인 새로고침 시 `auth/me 401` 콘솔 노이즈를 줄이기 위한 억제 로직이 포함되어 있음.
+- 알림 채널은 production에서 `polling-only`를 기본값으로 사용하며, snapshot 요청은 ETag/304 조건부 요청으로 대역폭을 절감한다.
 
 관련 코드:
 

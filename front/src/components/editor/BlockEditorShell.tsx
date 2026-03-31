@@ -1582,13 +1582,20 @@ const BlockEditorShell = ({
 
         if (hasPrimaryModifier && !event.altKey && !event.shiftKey && normalizedKey === "z") {
           event.preventDefault()
-          currentEditor.chain().focus().undo().run()
+          // Guard against OS key repeat causing multiple undo steps in one press.
+          if (event.repeat) return true
+          if (currentEditor.can().chain().focus().undo().run()) {
+            currentEditor.chain().focus().undo().run()
+          }
           return true
         }
 
         if (hasPrimaryModifier && !event.altKey && event.shiftKey && normalizedKey === "z") {
           event.preventDefault()
-          currentEditor.chain().focus().redo().run()
+          if (event.repeat) return true
+          if (currentEditor.can().chain().focus().redo().run()) {
+            currentEditor.chain().focus().redo().run()
+          }
           return true
         }
 

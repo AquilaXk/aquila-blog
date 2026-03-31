@@ -462,6 +462,10 @@ const StyledWrapper = styled.div`
   }
 
   @media (min-width: 769px) and (max-width: ${FEED_TAG_RAIL_CHIP_MAX_PX}px) {
+    .chipRail {
+      justify-content: center;
+    }
+
     .chipRail button {
       min-height: 34px;
       padding: 0.28rem 0.82rem;

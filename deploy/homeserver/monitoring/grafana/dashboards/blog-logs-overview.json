@@ -27,7 +27,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "최근 30분 백엔드 error 로그 카운트",
+      "description": "최근 30분 백엔드 error 로그 비율(%)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -68,7 +68,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "((sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"} |= \"ERROR\" [5m])) / clamp_min(sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"}[5m])), 1))) or vector(0)",
+          "expr": "(sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"} |= \"ERROR\" [5m])) / sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"}[5m]))) * 100",
           "legendFormat": "error_ratio",
           "queryType": "range",
           "refId": "A"

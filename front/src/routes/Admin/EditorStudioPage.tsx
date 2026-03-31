@@ -84,6 +84,14 @@ const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 
 const toEditorPostRoute = (id: string | number) => `/editor/${encodeURIComponent(String(id))}`
+const normalizeEditorReturnRoute = (value: string) => {
+  const normalized = value.trim()
+  if (!normalized.startsWith("/") || normalized.startsWith("//")) return ""
+  if (/[\r\n]/.test(normalized)) return ""
+  if (/^\/(?:https?:|javascript:)/i.test(normalized)) return ""
+  if (normalized.startsWith("/editor")) return ""
+  return normalized
+}
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
@@ -2328,7 +2336,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
   }
 
-  const handleLoadOrCreateTempPost = useCallback(async (options?: { redirectToEditor?: boolean; source?: string }) => {
+  const handleLoadOrCreateTempPost = useCallback(async (options?: { redirectToEditor?: boolean; source?: string; returnTo?: string }) => {
     try {
       setLoadingKey("postTemp")
       setPublishStatus({ tone: "loading", text: "새 글을 준비하고 있습니다..." }, "page")
@@ -2375,9 +2383,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       }
       setResult(pretty(response as unknown as JsonValue))
       if (options?.redirectToEditor && tempPost.id) {
-        const destination = options.source
-          ? `${toEditorPostRoute(tempPost.id)}?source=${encodeURIComponent(options.source)}`
-          : toEditorPostRoute(tempPost.id)
+        const query = new URLSearchParams()
+        if (options.source) query.set("source", options.source)
+        if (options.returnTo) query.set("returnTo", options.returnTo)
+        const destination = query.size > 0 ? `${toEditorPostRoute(tempPost.id)}?${query.toString()}` : toEditorPostRoute(tempPost.id)
         await replaceRoute(router, destination)
       }
     } catch (error) {
@@ -2839,6 +2848,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     if (postId.trim()) return toEditorPostRoute(postId.trim())
     return EDITOR_NEW_ROUTE_PATH
   }, [postId])
+  const dedicatedEditorReturnRoute = useMemo(() => {
+    if (!isDedicatedEditorRoute) return ADMIN_POSTS_WORKSPACE_ROUTE
+    const rawReturnTo = typeof router.query.returnTo === "string" ? router.query.returnTo : ""
+    return normalizeEditorReturnRoute(rawReturnTo) || ADMIN_POSTS_WORKSPACE_ROUTE
+  }, [isDedicatedEditorRoute, router.query.returnTo])
 
   useEffect(() => {
     if (adminPostRows.length === 0) {
@@ -3146,9 +3160,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
     autoCreatedTempDraftRef.current = true
     const source = typeof router.query.source === "string" ? router.query.source.trim() : ""
+    const returnTo = typeof router.query.returnTo === "string" ? normalizeEditorReturnRoute(router.query.returnTo) : ""
     void handleLoadOrCreateTempPost({
       redirectToEditor: true,
       source: source || undefined,
+      returnTo: returnTo || undefined,
     })
   }, [handleLoadOrCreateTempPost, isDedicatedEditorRoute, router, sessionMember?.isAdmin])
 
@@ -3780,7 +3796,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       />
 
       <EditorStudioTopBar>
-        <EditorExitAction type="button" onClick={() => void pushRoute(router, ADMIN_POSTS_WORKSPACE_ROUTE)}>
+        <EditorExitAction type="button" onClick={() => void pushRoute(router, dedicatedEditorReturnRoute)}>
           ← 나가기
         </EditorExitAction>
         <EditorStudioTopBarActions>
@@ -8957,9 +8973,10 @@ const EditorStudioTopBar = styled.div`
   gap: 1rem;
   min-height: 48px;
 
-  @media (max-width: 1120px) {
-    align-items: flex-start;
+  @media (max-width: 1200px) {
+    align-items: stretch;
     flex-direction: column;
+    gap: 0.7rem;
   }
 `
 
@@ -8996,12 +9013,13 @@ const EditorStudioTopBarActions = styled.div`
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
 
-  @media (max-width: 1120px) {
+  @media (max-width: 1200px) {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 `
 
@@ -9009,6 +9027,8 @@ const EditorStudioSaveState = styled.span`
   color: ${({ theme }) => theme.colors.gray10};
   font-size: 0.84rem;
   font-weight: 600;
+  white-space: nowrap;
+  text-align: right;
 
   &[data-tone="success"] {
     color: ${({ theme }) => theme.colors.green10};
@@ -9020,6 +9040,10 @@ const EditorStudioSaveState = styled.span`
 
   &[data-tone="error"] {
     color: ${({ theme }) => theme.colors.red10};
+  }
+
+  @media (max-width: 680px) {
+    width: 100%;
   }
 `
 

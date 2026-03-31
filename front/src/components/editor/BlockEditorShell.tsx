@@ -2996,11 +2996,23 @@ const BlockEditorShell = ({
     []
   )
 
+  const syncSlashMenuWhileComposing = useCallback(() => {
+    const nextSlashState = resolveSlashMenuState()
+    if (!nextSlashState) {
+      return
+    }
+
+    setSlashQuery(nextSlashState.query)
+    setIsSlashMenuOpen(true)
+    setSlashMenuState(nextSlashState.menuState)
+  }, [resolveSlashMenuState])
+
   useEffect(() => {
     if (!editor) return
 
     const syncSlashMenu = () => {
       if (isSlashImeComposing || editor.view.composing) {
+        syncSlashMenuWhileComposing()
         return
       }
 
@@ -3017,13 +3029,12 @@ const BlockEditorShell = ({
       editor.off("transaction", syncSlashMenu)
       editor.off("focus", syncSlashMenu)
     }
-  }, [applyResolvedSlashMenuState, editor, isSlashImeComposing, resolveSlashMenuState])
+  }, [applyResolvedSlashMenuState, editor, isSlashImeComposing, resolveSlashMenuState, syncSlashMenuWhileComposing])
 
   useEffect(() => {
     if (typeof window === "undefined" || !isSlashMenuOpen) return
 
     const syncSlashMenuPlacement = () => {
-      if (isSlashImeComposing || editor?.view.composing) return
       const nextSlashState = resolveSlashMenuState()
       if (!nextSlashState) return
       setSlashQuery(nextSlashState.query)
@@ -4035,6 +4046,11 @@ const BlockEditorShell = ({
         tabIndex={-1}
         onCompositionStart={() => {
           setIsSlashImeComposing(true)
+        }}
+        onCompositionUpdate={() => {
+          requestAnimationFrame(() => {
+            syncSlashMenuWhileComposing()
+          })
         }}
         onCompositionEnd={() => {
           setIsSlashImeComposing(false)

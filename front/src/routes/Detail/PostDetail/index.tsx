@@ -759,7 +759,11 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
   const handleEditPost = async () => {
     if (!data) return
-    await pushRoute(router, `/editor/${encodeURIComponent(String(data.id))}`)
+    const returnTo = router.asPath || toCanonicalPostPath(data.id)
+    await pushRoute(
+      router,
+      `/editor/${encodeURIComponent(String(data.id))}?returnTo=${encodeURIComponent(returnTo)}`
+    )
   }
 
   const handleDeletePost = async () => {

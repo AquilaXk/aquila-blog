@@ -139,7 +139,7 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.up()
   })
 
-  test("table mode에서는 block rail이 숨고 table quick rail/toolbar가 유지된다", async ({ page }) => {
+  test("table mode에서는 block rail이 숨고 table handle/menu가 유지된다", async ({ page }) => {
     await page.goto("/_qa/block-editor-slash")
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -150,14 +150,13 @@ test.describe("block editor authoring flow", () => {
 
     await expect(page.getByTestId("table-column-rail")).toBeVisible()
     await expect(page.getByTestId("table-row-rail")).toBeVisible()
-    await expect(page.getByTestId("table-bubble-toolbar")).toBeVisible()
+    await expect(page.getByTestId("table-corner-handle")).toBeVisible()
+    await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
 
-    const toolbar = page.getByTestId("table-bubble-toolbar")
-    await toolbar.hover()
-    await expect(toolbar).toBeVisible()
-
-    await toolbar.getByRole("button", { name: "행 아래", exact: true }).click()
+    await page.getByTestId("table-row-rail").getByRole("button", { name: "행 선택" }).click()
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await page.getByTestId("table-row-menu").getByRole("button", { name: "아래에 삽입" }).click()
     await expect(page.locator("table tr")).toHaveCount(3)
   })
 
@@ -192,11 +191,14 @@ test.describe("block editor authoring flow", () => {
     )
     await page.getByRole("button", { name: "QA 행 리사이즈" }).click()
 
-    const afterHeight = await firstHeaderCell.evaluate((element) =>
-      Math.round((element as HTMLElement).closest("tr")!.getBoundingClientRect().height)
-    )
+    await expect
+      .poll(async () =>
+        firstHeaderCell.evaluate((element) =>
+          Math.round((element as HTMLElement).closest("tr")!.getBoundingClientRect().height)
+        )
+      )
+      .toBeGreaterThan(beforeHeight)
 
-    expect(afterHeight).toBeGreaterThan(beforeHeight)
     await expect(page.getByTestId("qa-markdown-output")).toContainText('"rowHeights"')
   })
 
@@ -211,11 +213,13 @@ test.describe("block editor authoring flow", () => {
     )
     await page.getByRole("button", { name: "QA 열 리사이즈" }).click()
 
-    const afterWidth = await firstHeaderCell.evaluate((element) =>
-      Math.round((element as HTMLElement).getBoundingClientRect().width)
-    )
-
-    expect(afterWidth).toBeGreaterThan(beforeWidth)
+    await expect
+      .poll(async () =>
+        firstHeaderCell.evaluate((element) =>
+          Math.round((element as HTMLElement).getBoundingClientRect().width)
+        )
+      )
+      .toBeGreaterThan(beforeWidth)
     await expect(page.getByTestId("qa-markdown-output")).toContainText('"columnWidths"')
   })
 })

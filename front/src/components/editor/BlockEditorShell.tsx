@@ -151,7 +151,7 @@ type ToolbarAction = {
 
 type FloatingBubbleState = {
   visible: boolean
-  mode: "text" | "image" | "table"
+  mode: "text" | "image"
   anchor: "center" | "left"
   left: number
   top: number
@@ -163,7 +163,21 @@ type TableQuickRailState = {
   top: number
   width: number
   height: number
+  rowTop: number
+  rowHeight: number
+  columnLeft: number
+  columnWidth: number
 }
+
+type TableMenuKind = "row" | "column" | "table"
+
+type TableMenuState =
+  | {
+      kind: TableMenuKind
+      left: number
+      top: number
+    }
+  | null
 
 type TopLevelBlockHandleState = {
   visible: boolean
@@ -528,6 +542,18 @@ const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
   return position
 }
 
+const resolveDocPosSafe = (editor: TiptapEditor, pos: number) => {
+  if (!Number.isFinite(pos)) return null
+  const normalizedPos = Math.round(pos)
+  const maxPos = editor.state.doc.content.size
+  if (normalizedPos < 0 || normalizedPos > maxPos) return null
+  try {
+    return editor.state.doc.resolve(normalizedPos)
+  } catch {
+    return null
+  }
+}
+
 const isTableSelectionActive = (editor?: TiptapEditor | null) =>
   Boolean(
     editor &&
@@ -619,7 +645,12 @@ const BlockEditorShell = ({
     top: 0,
     width: 0,
     height: 0,
+    rowTop: 0,
+    rowHeight: 0,
+    columnLeft: 0,
+    columnWidth: 0,
   })
+  const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableQuickRailStateRef = useRef(tableQuickRailState)
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
@@ -1077,7 +1108,8 @@ const BlockEditorShell = ({
     } catch {
       return
     }
-    const resolvedPosition = currentEditor.state.doc.resolve(domPosition)
+    const resolvedPosition = resolveDocPosSafe(currentEditor, domPosition)
+    if (!resolvedPosition) return
 
     for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
       if (resolvedPosition.node(depth).type.name !== "tableRow") continue
@@ -1120,7 +1152,8 @@ const BlockEditorShell = ({
     } catch {
       return
     }
-    const resolvedPosition = currentEditor.state.doc.resolve(domPosition)
+    const resolvedPosition = resolveDocPosSafe(currentEditor, domPosition)
+    if (!resolvedPosition) return
 
     for (let depth = resolvedPosition.depth; depth > 0; depth -= 1) {
       const node = resolvedPosition.node(depth)
@@ -1148,12 +1181,22 @@ const BlockEditorShell = ({
       setTableQuickRailState((prev) => ({ ...prev, visible: false }))
       return
     }
+    const activeCell =
+      (viewportRef.current?.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null) ||
+      (element?.closest("th, td") as HTMLElement | null) ||
+      (tableElement?.querySelector("th, td") as HTMLElement | null)
+    const activeCellRect = activeCell?.getBoundingClientRect()
+    const activeRowRect = activeCell?.closest("tr")?.getBoundingClientRect()
     setTableQuickRailState({
       visible: true,
       left: Math.round(Math.max(12, tableRect.left - 46)),
       top: Math.round(tableRect.top + 10),
       width: Math.round(tableRect.width),
       height: Math.round(tableRect.height),
+      rowTop: Math.round(activeRowRect?.top ?? tableRect.top + 52),
+      rowHeight: Math.round(activeRowRect?.height ?? 44),
+      columnLeft: Math.round(activeCellRect?.left ?? tableRect.left + 72),
+      columnWidth: Math.round(activeCellRect?.width ?? 120),
     })
   }, [])
 
@@ -1541,7 +1584,9 @@ const BlockEditorShell = ({
       const activeEditor = editorRef.current
       if (!activeEditor) {
         scheduleBubbleHide()
-        setTableQuickRailState((prev) => ({ ...prev, visible: false }))
+        setTableQuickRailState((prev) =>
+          tableMenuState ? prev : { ...prev, visible: false }
+        )
         return
       }
 
@@ -1555,58 +1600,34 @@ const BlockEditorShell = ({
         !activeEditor.isActive("rawMarkdownBlock")
 
       if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
-        const quickRail = tableQuickRailStateRef.current
-        if (quickRail.visible) {
-          setBubbleState({
-            visible: true,
-            mode: "table",
-            anchor: "left",
-            left: Math.round(quickRail.left + 58),
-            top: Math.round(quickRail.top),
-          })
-          return
-        }
         if (bubbleToolbarHoveredRef.current) return
         scheduleBubbleHide()
-        setTableQuickRailState((prev) => ({ ...prev, visible: false }))
+        setTableQuickRailState((prev) =>
+          tableMenuState ? prev : { ...prev, visible: false }
+        )
         return
       }
 
-      cancelBubbleHide()
       if (isTableActive) {
+        cancelBubbleHide()
+        setBubbleState((prev) => ({ ...prev, visible: false }))
         const anchorDom = activeEditor.view.domAtPos(selection.from).node
         const anchorElement =
           anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
-        const tableElement =
-          anchorElement?.closest(".aq-table-shell, .tableWrapper, table") ?? null
-        const tableRect = tableElement?.getBoundingClientRect()
-
-        if (tableRect) {
-          setTableQuickRailState({
-            visible: true,
-            left: Math.round(Math.max(12, tableRect.left - 46)),
-            top: Math.round(tableRect.top + 10),
-            width: Math.round(tableRect.width),
-            height: Math.round(tableRect.height),
-          })
-          setBubbleState({
-            visible: true,
-            mode: "table",
-            anchor: "left",
-            left: Math.round(tableRect.left + 12),
-            top: Math.round(tableRect.top),
-          })
+        if (anchorElement?.closest(".aq-table-shell, .tableWrapper, table")) {
+          syncTableQuickRailFromElement(anchorElement)
           return
         }
       }
 
+      cancelBubbleHide()
       setTableQuickRailState((prev) => ({ ...prev, visible: false }))
 
       const startCoords = activeEditor.view.coordsAtPos(selection.from)
       const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
       setBubbleState({
         visible: true,
-        mode: isImageNodeSelected ? "image" : canShowTextToolbar ? "text" : "table",
+        mode: isImageNodeSelected ? "image" : "text",
         anchor: "center",
         left: Math.round((startCoords.left + endCoords.right) / 2),
         top: Math.round(Math.min(startCoords.top, endCoords.top)),
@@ -1621,45 +1642,7 @@ const BlockEditorShell = ({
       currentEditor.off("transaction", syncBubble)
       cancelBubbleHide()
     }
-  }, [cancelBubbleHide, editor, scheduleBubbleHide])
-
-  useEffect(() => {
-    if (isCoarsePointer) return
-    const currentEditor = editorRef.current
-    if (!currentEditor) return
-    const tableActive = isTableSelectionActive(currentEditor)
-
-    if (tableQuickRailState.visible && !tableActive) {
-      setBubbleState((prev) => {
-        const nextLeft = Math.round(tableQuickRailState.left + 58)
-        const nextTop = Math.round(tableQuickRailState.top)
-        if (
-          prev.visible &&
-          prev.mode === "table" &&
-          prev.anchor === "left" &&
-          Math.abs(prev.left - nextLeft) <= 1 &&
-          Math.abs(prev.top - nextTop) <= 1
-        ) {
-          return prev
-        }
-        return {
-          visible: true,
-          mode: "table",
-          anchor: "left",
-          left: nextLeft,
-          top: nextTop,
-        }
-      })
-      return
-    }
-
-    if (!tableQuickRailState.visible && !tableActive && !bubbleToolbarHoveredRef.current) {
-      setBubbleState((prev) => {
-        if (!prev.visible || prev.mode !== "table") return prev
-        return { ...prev, visible: false }
-      })
-    }
-  }, [isCoarsePointer, tableQuickRailState.left, tableQuickRailState.top, tableQuickRailState.visible])
+  }, [cancelBubbleHide, editor, scheduleBubbleHide, syncTableQuickRailFromElement, tableMenuState])
 
   useEffect(() => {
     return () => {
@@ -1939,6 +1922,15 @@ const BlockEditorShell = ({
   const isInlineCodeActive = editor?.isActive("code") ?? false
   const isTableMode = isTableSelectionActive(editor)
 
+  useEffect(() => {
+    const currentEditor = editorRef.current
+    if (!currentEditor || !isTableMode) return
+    const anchorDom = currentEditor.view.domAtPos(currentEditor.state.selection.from).node
+    const anchorElement = anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
+    if (!anchorElement) return
+    syncTableQuickRailFromElement(anchorElement)
+  }, [isTableMode, selectionTick, syncTableQuickRailFromElement])
+
   const applyInlineColor = useCallback(
     (color?: string | null) => {
       if (!editor) return
@@ -1978,35 +1970,42 @@ const BlockEditorShell = ({
     (axis: "row" | "column") => {
       if (!editor || !isTableSelectionActive(editor)) return
 
-      const rect = selectedRect(editor.state)
-      const anchorCellPos =
-        rect.tableStart +
-        rect.map.positionAt(
-          rect.top,
-          rect.left,
-          rect.table
-        )
-      const headCellPos =
-        rect.tableStart +
-        rect.map.positionAt(
-          rect.bottom - 1,
-          rect.right - 1,
-          rect.table
-        )
+      let anchorCellPos = -1
+      let headCellPos = -1
+      try {
+        const rect = selectedRect(editor.state)
+        if (rect.bottom <= rect.top || rect.right <= rect.left) return
+        anchorCellPos = rect.tableStart + rect.map.positionAt(rect.top, rect.left, rect.table)
+        headCellPos = rect.tableStart + rect.map.positionAt(rect.bottom - 1, rect.right - 1, rect.table)
+      } catch {
+        return
+      }
+
+      const anchorResolved = resolveDocPosSafe(editor, anchorCellPos)
+      const headResolved = resolveDocPosSafe(editor, headCellPos)
+      if (!anchorResolved || !headResolved) return
 
       const selection =
         axis === "row"
-          ? CellSelection.rowSelection(editor.state.doc.resolve(anchorCellPos), editor.state.doc.resolve(headCellPos))
-          : CellSelection.colSelection(
-              editor.state.doc.resolve(anchorCellPos),
-              editor.state.doc.resolve(headCellPos)
-            )
+          ? CellSelection.rowSelection(anchorResolved, headResolved)
+          : CellSelection.colSelection(anchorResolved, headResolved)
 
       editor.view.dispatch(editor.state.tr.setSelection(selection))
       editor.view.focus()
     },
     [editor]
   )
+
+  const selectActiveTableBlock = useCallback(() => {
+    if (!editor) return
+    const blockIndex = getTopLevelBlockIndexFromSelection(editor)
+    const position = getTopLevelBlockPosition(editor, blockIndex)
+    const targetNode = editor.state.doc.nodeAt(position)
+    if (!targetNode || targetNode.type.name !== "table") return
+    const selection = NodeSelection.create(editor.state.doc, position)
+    editor.view.dispatch(editor.state.tr.setSelection(selection))
+    editor.view.focus()
+  }, [editor])
 
   const moveTaskItemInFirstTaskList = useCallback(
     (sourceIndex: number, insertionIndex: number) => {
@@ -2111,6 +2110,11 @@ const BlockEditorShell = ({
   const activeTableCellNodeType =
     editor?.isActive("tableHeader") ?? false ? "tableHeader" : "tableCell"
   const activeTableCellAttrs = editor?.getAttributes(activeTableCellNodeType) || {}
+
+  useEffect(() => {
+    if (isTableMode) return
+    setTableMenuState(null)
+  }, [isTableMode])
 
   const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -2977,6 +2981,29 @@ const BlockEditorShell = ({
 
   const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
 
+  const closeTableMenu = useCallback(() => setTableMenuState(null), [])
+
+  const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect) => {
+    const menuWidth = 308
+    const nextLeft =
+      typeof window !== "undefined"
+        ? Math.min(
+            Math.max(16, Math.round(anchorRect.left)),
+            Math.max(16, window.innerWidth - menuWidth - 16)
+          )
+        : Math.round(anchorRect.left)
+
+    setTableMenuState((prev) =>
+      prev && prev.kind === kind
+        ? null
+        : {
+            kind,
+            left: nextLeft,
+            top: Math.round(anchorRect.bottom + 8),
+          }
+    )
+  }, [])
+
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
     if (isTableMode) return
     setBlockMenuState((prev) =>
@@ -3209,10 +3236,20 @@ const BlockEditorShell = ({
       }
       if (isCoarsePointer) return
       const target = event.target instanceof Element ? event.target : null
+      if (
+        target?.closest("[data-table-menu-root='true']") ||
+        target?.closest("[data-table-axis-rail='true']") ||
+        target?.closest("[data-table-corner-handle='true']")
+      ) {
+        if (isTableMode) {
+          setHoveredBlockIndex(null)
+        }
+        return
+      }
       const hoveredTableElement = target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
-      if (hoveredTableElement) {
+      if (hoveredTableElement && isTableMode) {
         syncTableQuickRailFromElement(hoveredTableElement)
-      } else if (!isTableMode) {
+      } else if (!isTableMode && !tableMenuState) {
         setTableQuickRailState((prev) => ({ ...prev, visible: false }))
       }
       if (isTableMode) {
@@ -3244,16 +3281,19 @@ const BlockEditorShell = ({
       isRowResizeHandleTarget,
       setViewportRowResizeHot,
       syncTableQuickRailFromElement,
+      tableMenuState,
     ]
   )
 
   const handleViewportPointerLeave = useCallback(() => {
     scheduleHoveredBlockClear()
-    setTableQuickRailState((prev) => ({ ...prev, visible: false }))
+    setTableQuickRailState((prev) =>
+      isTableMode || tableMenuState ? prev : { ...prev, visible: false }
+    )
     if (!tableRowResizeRef.current) {
       setViewportRowResizeHot(false)
     }
-  }, [scheduleHoveredBlockClear, setViewportRowResizeHot])
+  }, [isTableMode, scheduleHoveredBlockClear, setViewportRowResizeHot, tableMenuState])
 
   const handleViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -3377,6 +3417,31 @@ const BlockEditorShell = ({
       window.removeEventListener("keydown", close)
     }
   }, [blockMenuState])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !tableMenuState) return
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof PointerEvent) {
+        const target = event.target
+        if (
+          target instanceof Element &&
+          (target.closest("[data-table-menu-root='true']") ||
+            target.closest("[data-table-axis-rail='true']") ||
+            target.closest("[data-table-corner-handle='true']"))
+        ) {
+          return
+        }
+      }
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return
+      setTableMenuState(null)
+    }
+    window.addEventListener("pointerdown", close)
+    window.addEventListener("keydown", close)
+    return () => {
+      window.removeEventListener("pointerdown", close)
+      window.removeEventListener("keydown", close)
+    }
+  }, [tableMenuState])
 
   return (
     <Shell className={className}>
@@ -3639,9 +3704,8 @@ const BlockEditorShell = ({
         onDrop={handleViewportDrop}
         onDragEnd={handleViewportDragEnd}
       >
-        {editor && bubbleState.visible ? (
+        {editor && bubbleState.visible && (bubbleState.mode === "text" || bubbleState.mode === "image") ? (
           <FloatingBubbleToolbar
-            data-testid={bubbleState.mode === "table" ? "table-bubble-toolbar" : undefined}
             data-anchor={bubbleState.anchor}
             onPointerEnter={() => {
               bubbleToolbarHoveredRef.current = true
@@ -3689,156 +3753,221 @@ const BlockEditorShell = ({
                   전체 폭
                 </ToolbarButton>
               </BubbleToolbar>
-            ) : (
-              <BubbleToolbar data-layout="table">
-                <ToolbarButton type="button" onClick={() => editor.chain().focus().addRowBefore().run()}>
-                  행 위
-                </ToolbarButton>
-                <ToolbarButton type="button" onClick={() => editor.chain().focus().addRowAfter().run()}>
-                  행 아래
-                </ToolbarButton>
-                <ToolbarButton type="button" onClick={() => editor.chain().focus().addColumnBefore().run()}>
-                  열 왼쪽
-                </ToolbarButton>
-                <ToolbarButton type="button" onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                  열 오른쪽
-                </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("tableHeader")} onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-                  헤더
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  onClick={() => selectCurrentTableAxis("row")}
-                >
-                  행 선택
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  onClick={() => selectCurrentTableAxis("column")}
-                >
-                  열 선택
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  onClick={() => editor.chain().focus().mergeCells().run()}
-                >
-                  셀 병합
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  onClick={() => editor.chain().focus().splitCell().run()}
-                >
-                  셀 분리
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.textAlign === "left"}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
-                >
-                  좌측
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.textAlign === "center"}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
-                >
-                  가운데
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.textAlign === "right"}
-                  onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
-                >
-                  우측
-                </ToolbarButton>
-                <ToolbarButton
-                  type="button"
-                  data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
-                >
-                  기본
-                </ToolbarButton>
-                <TablePresetSwatches aria-label="표 셀 배경 preset">
-                  {TABLE_CELL_COLOR_PRESETS.map((preset) => (
-                    <TablePresetSwatch
-                      key={preset.value}
-                      type="button"
-                      title={preset.label}
-                      aria-label={`${preset.label} 배경`}
-                      data-active={activeTableCellAttrs.backgroundColor === preset.value}
-                      style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
-                      onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
-                    />
-                  ))}
-                </TablePresetSwatches>
-                <TableColorInput
-                  type="color"
-                  aria-label="표 셀 배경색 선택"
-                  value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
-                  onChange={(event) =>
-                    updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
-                  }
-                />
-                <ToolbarButton
-                  type="button"
-                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
-                >
-                  배경 해제
-                </ToolbarButton>
-                <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteRow().run()}>
-                  행 삭제
-                </ToolbarButton>
-                <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => editor.chain().focus().deleteColumn().run()}>
-                  열 삭제
-                </ToolbarButton>
-                <ToolbarButton type="button" data-variant="danger" onClick={() => editor.chain().focus().deleteTable().run()}>
-                  표 삭제
-                </ToolbarButton>
-              </BubbleToolbar>
-            )}
+            ) : null}
           </FloatingBubbleToolbar>
         ) : null}
         {!isCoarsePointer && tableQuickRailState.visible ? (
           <>
-            <TableAxisRail
-              data-testid="table-column-rail"
-              data-axis="column"
+            <TableCornerHandle
+              data-table-corner-handle="true"
+              data-testid="table-corner-handle"
               style={{
-                left: `${tableQuickRailState.left + 52}px`,
-                top: `${Math.max(12, tableQuickRailState.top - 40)}px`,
-                width: `${Math.max(180, Math.min(tableQuickRailState.width, 360))}px`,
+                left: `${tableQuickRailState.left + 54}px`,
+                top: `${Math.max(12, tableQuickRailState.top - 42)}px`,
               }}
             >
-              <TableQuickRailButton type="button" title="열 선택" onClick={() => selectCurrentTableAxis("column")}>
-                열 선택
-              </TableQuickRailButton>
-              <TableQuickRailButton type="button" title="열 추가" onClick={() => editor?.chain().focus().addColumnAfter().run()}>
-                +열
-              </TableQuickRailButton>
-              <TableQuickRailButton type="button" title="열 삭제" onClick={() => editor?.chain().focus().deleteColumn().run()}>
-                -열
+              <TableHandleButton
+                type="button"
+                title="표 선택"
+                aria-label="표 선택"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  selectActiveTableBlock()
+                  openTableMenu("table", event.currentTarget.getBoundingClientRect())
+                }}
+              >
+                표
+              </TableHandleButton>
+            </TableCornerHandle>
+            <TableAxisRail
+              data-testid="table-column-rail"
+              data-table-axis-rail="true"
+              data-axis="column"
+              style={{
+                left: `${Math.max(tableQuickRailState.left + 108, tableQuickRailState.columnLeft - 22)}px`,
+                top: `${Math.max(12, tableQuickRailState.top - 42)}px`,
+              }}
+            >
+              <TableQuickRailButton
+                type="button"
+                title="열 선택"
+                aria-label="열 선택"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  selectCurrentTableAxis("column")
+                  openTableMenu("column", event.currentTarget.getBoundingClientRect())
+                }}
+              >
+                열
               </TableQuickRailButton>
             </TableAxisRail>
             <TableAxisRail
               data-testid="table-row-rail"
+              data-table-axis-rail="true"
               data-axis="row"
               style={{
                 left: `${tableQuickRailState.left}px`,
-                top: `${tableQuickRailState.top}px`,
-                height: `${Math.max(112, Math.min(tableQuickRailState.height, 220))}px`,
+                top: `${Math.max(tableQuickRailState.top + 42, tableQuickRailState.rowTop + Math.round(Math.max(0, tableQuickRailState.rowHeight / 2 - 16)))}px`,
               }}
             >
-              <TableQuickRailButton type="button" title="행 선택" onClick={() => selectCurrentTableAxis("row")}>
-                행 선택
-              </TableQuickRailButton>
-              <TableQuickRailButton type="button" title="행 추가" onClick={() => editor?.chain().focus().addRowAfter().run()}>
-                +행
-              </TableQuickRailButton>
-              <TableQuickRailButton type="button" title="행 삭제" onClick={() => editor?.chain().focus().deleteRow().run()}>
-                -행
+              <TableQuickRailButton
+                type="button"
+                title="행 선택"
+                aria-label="행 선택"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  selectCurrentTableAxis("row")
+                  openTableMenu("row", event.currentTarget.getBoundingClientRect())
+                }}
+              >
+                행
               </TableQuickRailButton>
             </TableAxisRail>
           </>
+        ) : null}
+        {tableMenuState ? (
+          <FloatingTableMenu
+            data-table-menu-root="true"
+            data-testid={`table-${tableMenuState.kind}-menu`}
+            style={{
+              left: `${tableMenuState.left}px`,
+              top: `${tableMenuState.top}px`,
+            }}
+          >
+            <FloatingBlockMenuHeader>
+              {tableMenuState.kind === "row"
+                ? "행 메뉴"
+                : tableMenuState.kind === "column"
+                  ? "열 메뉴"
+                  : "표 메뉴"}
+            </FloatingBlockMenuHeader>
+            <FloatingBlockActionList>
+              {tableMenuState.kind === "row" ? (
+                <>
+                  <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("row"); closeTableMenu() }}>
+                    행 선택
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addRowBefore().run(); closeTableMenu() }}>
+                    위에 삽입
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addRowAfter().run(); closeTableMenu() }}>
+                    아래에 삽입
+                  </FloatingBlockActionButton>
+                </>
+              ) : tableMenuState.kind === "column" ? (
+                <>
+                  <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("column"); closeTableMenu() }}>
+                    열 선택
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addColumnBefore().run(); closeTableMenu() }}>
+                    왼쪽에 삽입
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addColumnAfter().run(); closeTableMenu() }}>
+                    오른쪽에 삽입
+                  </FloatingBlockActionButton>
+                </>
+              ) : (
+                <>
+                  <FloatingBlockActionButton type="button" onClick={() => { selectActiveTableBlock(); closeTableMenu() }}>
+                    표 선택
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() => { editor.chain().focus().toggleHeaderRow().run(); closeTableMenu() }}
+                  >
+                    제목 행
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().mergeCells().run(); closeTableMenu() }}>
+                    셀 병합
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().splitCell().run(); closeTableMenu() }}>
+                    셀 분리
+                  </FloatingBlockActionButton>
+                </>
+              )}
+            </FloatingBlockActionList>
+            <FloatingBlockMenuDivider />
+            <TableMenuSectionTitle>정렬</TableMenuSectionTitle>
+            <TableMenuButtonRow>
+              <ToolbarButton
+                type="button"
+                data-active={activeTableCellAttrs.textAlign === "left"}
+                onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
+              >
+                좌측
+              </ToolbarButton>
+              <ToolbarButton
+                type="button"
+                data-active={activeTableCellAttrs.textAlign === "center"}
+                onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
+              >
+                가운데
+              </ToolbarButton>
+              <ToolbarButton
+                type="button"
+                data-active={activeTableCellAttrs.textAlign === "right"}
+                onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
+              >
+                우측
+              </ToolbarButton>
+            </TableMenuButtonRow>
+            <TableMenuSectionTitle>배경</TableMenuSectionTitle>
+            <TableMenuButtonRow>
+              <ToolbarButton
+                type="button"
+                data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+                onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
+              >
+                기본
+              </ToolbarButton>
+              <ToolbarButton
+                type="button"
+                onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
+              >
+                배경 해제
+              </ToolbarButton>
+            </TableMenuButtonRow>
+            <TablePresetSwatches aria-label="표 셀 배경 preset">
+              {TABLE_CELL_COLOR_PRESETS.map((preset) => (
+                <TablePresetSwatch
+                  key={preset.value}
+                  type="button"
+                  title={preset.label}
+                  aria-label={`${preset.label} 배경`}
+                  data-active={activeTableCellAttrs.backgroundColor === preset.value}
+                  style={{ "--table-swatch-color": preset.value } as React.CSSProperties}
+                  onClick={() => updateActiveTableCellAttrs({ backgroundColor: preset.value })}
+                />
+              ))}
+              <TableColorInput
+                type="color"
+                aria-label="표 셀 배경색 선택"
+                value={normalizeTableColorInputValue(activeTableCellAttrs.backgroundColor)}
+                onChange={(event) =>
+                  updateActiveTableCellAttrs({ backgroundColor: event.currentTarget.value })
+                }
+              />
+            </TablePresetSwatches>
+            <FloatingBlockMenuDivider />
+            <FloatingBlockActionList>
+              {tableMenuState.kind === "row" ? (
+                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => { editor.chain().focus().deleteRow().run(); closeTableMenu() }}>
+                  행 삭제
+                </FloatingBlockActionButton>
+              ) : tableMenuState.kind === "column" ? (
+                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => { editor.chain().focus().deleteColumn().run(); closeTableMenu() }}>
+                  열 삭제
+                </FloatingBlockActionButton>
+              ) : (
+                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => { editor.chain().focus().deleteTable().run(); closeTableMenu() }}>
+                  표 삭제
+                </FloatingBlockActionButton>
+              )}
+            </FloatingBlockActionList>
+          </FloatingTableMenu>
         ) : null}
         {!isCoarsePointer ? (
           <BlockHandleRail
@@ -5077,6 +5206,14 @@ const TableAxisRail = styled.div`
   }
 `
 
+const TableCornerHandle = styled.div`
+  position: fixed;
+  z-index: 58;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`
+
 const TableQuickRailButton = styled.button`
   all: unset;
   box-sizing: border-box;
@@ -5107,6 +5244,42 @@ const TableQuickRailButton = styled.button`
     border-color: rgba(59, 130, 246, 0.28);
     color: var(--color-gray12);
   }
+`
+
+const TableHandleButton = styled(TableQuickRailButton)`
+  min-width: 2.4rem;
+  height: 1.9rem;
+  padding: 0 0.7rem;
+  font-size: 0.76rem;
+  border-radius: 0.62rem;
+`
+
+const FloatingTableMenu = styled.div`
+  position: fixed;
+  z-index: 65;
+  width: min(19rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem;
+  border-radius: 0.9rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 18, 24, 0.96)" : "rgba(255, 255, 255, 0.98)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 14px 22px rgba(0, 0, 0, 0.15)" : "0 14px 22px rgba(15, 23, 42, 0.1)"};
+`
+
+const TableMenuSectionTitle = styled.span`
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-gray10);
+`
+
+const TableMenuButtonRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
 `
 
 const BlockHandleRail = styled.div`

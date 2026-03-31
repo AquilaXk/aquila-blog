@@ -339,7 +339,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
-  const [isCodeSelectionActive, setIsCodeSelectionActive] = useState(false)
+  const [isCodeFocused, setIsCodeFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
@@ -411,7 +411,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         {showCodePane ? (
           <MermaidCodePane>
             <MermaidPaneLabel>Mermaid 코드</MermaidPaneLabel>
-            <MermaidCodeEditorShell data-selection-active={isCodeSelectionActive}>
+            <MermaidCodeEditorShell data-code-focused={isCodeFocused}>
               <MermaidCodeHighlight
                 className="aq-mermaid-code-highlight"
                 ref={codeHighlightRef}
@@ -425,13 +425,10 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 wrap="off"
                 spellCheck={false}
                 data-view-mode={viewMode}
+                onFocus={() => setIsCodeFocused(true)}
                 onBlur={() => {
-                  setIsCodeSelectionActive(false)
+                  setIsCodeFocused(false)
                   flushCommit()
-                }}
-                onSelect={(event) => {
-                  const target = event.currentTarget
-                  setIsCodeSelectionActive(target.selectionStart !== target.selectionEnd)
                 }}
                 onScroll={(event) => {
                   const target = event.currentTarget
@@ -442,7 +439,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 }}
                 onChange={(event) => {
                   const nextValue = event.target.value
-                  setIsCodeSelectionActive(false)
                   setDraftSource(nextValue)
                   scheduleCommit({ source: nextValue })
                 }}
@@ -2016,11 +2012,11 @@ const MermaidCodeEditorShell = styled.div`
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   overflow: hidden;
 
-  &[data-selection-active="true"] .aq-mermaid-code-highlight {
+  &[data-code-focused="true"] .aq-mermaid-code-highlight {
     opacity: 0;
   }
 
-  &[data-selection-active="true"] .aq-mermaid-code-input {
+  &[data-code-focused="true"] .aq-mermaid-code-input {
     color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#dbe2ea")};
     -webkit-text-fill-color: currentColor;
   }
@@ -2089,10 +2085,12 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
 
   &::selection {
     background: rgba(59, 130, 246, 0.28);
+    color: inherit;
   }
 
   &::-moz-selection {
     background: rgba(59, 130, 246, 0.28);
+    color: inherit;
   }
 `
 
@@ -2303,10 +2301,11 @@ const MermaidPreviewPlaceholder = styled.div`
 `
 
 const CalloutEditorWrapper = styled(NodeViewWrapper)`
-  --ad-accent: #f6ad55;
-  --ad-header-bg: rgba(246, 173, 85, 0.15);
-  --ad-body-bg: rgba(246, 173, 85, 0.07);
-  --ad-border: rgba(246, 173, 85, 0.26);
+  --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#f6ad55" : "#c46a10")};
+  --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.2)" : "#fff1d8")};
+  --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.12)" : "#fff8e8")};
+  --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.36)" : "#e9c27d")};
+  --ad-text: ${({ theme }) => (theme.scheme === "dark" ? "#e6edf6" : "#1f2937")};
   display: flex;
   flex-direction: column;
   gap: 0.48rem;
@@ -2317,45 +2316,45 @@ const CalloutEditorWrapper = styled(NodeViewWrapper)`
   }
 
   &[data-kind="tip"] {
-    --ad-accent: #f6ad55;
-    --ad-header-bg: rgba(246, 173, 85, 0.15);
-    --ad-body-bg: rgba(246, 173, 85, 0.07);
-    --ad-border: rgba(246, 173, 85, 0.26);
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#f6ad55" : "#c46a10")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.2)" : "#fff1d8")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.12)" : "#fff8e8")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.36)" : "#e9c27d")};
   }
 
   &[data-kind="info"] {
-    --ad-accent: #38bdf8;
-    --ad-header-bg: rgba(56, 189, 248, 0.14);
-    --ad-body-bg: rgba(56, 189, 248, 0.06);
-    --ad-border: rgba(56, 189, 248, 0.24);
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4cc9f0" : "#0b63a8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.2)" : "#e9f4ff")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.12)" : "#f4f9ff")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.38)" : "#9cc4e8")};
   }
 
   &[data-kind="warning"] {
-    --ad-accent: #fb7185;
-    --ad-header-bg: rgba(251, 113, 133, 0.15);
-    --ad-body-bg: rgba(251, 113, 133, 0.07);
-    --ad-border: rgba(251, 113, 133, 0.26);
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#fb7185" : "#b42344")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.2)" : "#fdecef")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.12)" : "#fff6f8")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.38)" : "#e8a8b8")};
   }
 
   &[data-kind="outline"] {
-    --ad-accent: #94a3b8;
-    --ad-header-bg: rgba(148, 163, 184, 0.14);
-    --ad-body-bg: rgba(148, 163, 184, 0.06);
-    --ad-border: rgba(148, 163, 184, 0.22);
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#94a3b8" : "#475569")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "#eef2f6")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.12)" : "#f8fafc")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : "#c7d1dd")};
   }
 
   &[data-kind="example"] {
-    --ad-accent: #4ade80;
-    --ad-header-bg: rgba(74, 222, 128, 0.14);
-    --ad-body-bg: rgba(74, 222, 128, 0.06);
-    --ad-border: rgba(74, 222, 128, 0.24);
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4ade80" : "#166534")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.2)" : "#e8f7ef")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.12)" : "#f4fcf7")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.36)" : "#9fd9b4")};
   }
 
   &[data-kind="summary"] {
-    --ad-accent: #818cf8;
-    --ad-header-bg: rgba(129, 140, 248, 0.14);
-    --ad-body-bg: rgba(129, 140, 248, 0.06);
-    --ad-border: rgba(129, 140, 248, 0.24);
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#a78bfa" : "#5b4ab8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(167, 139, 250, 0.2)" : "#efecff")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(167, 139, 250, 0.12)" : "#f7f5ff")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(167, 139, 250, 0.38)" : "#bfb3eb")};
   }
 `
 
@@ -2495,7 +2494,7 @@ const CalloutBodyTextarea = styled(CompactBlockTextarea)`
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--color-gray12);
+  color: var(--ad-text);
   font-family: inherit;
   font-size: 0.95rem;
   line-height: 1.65;

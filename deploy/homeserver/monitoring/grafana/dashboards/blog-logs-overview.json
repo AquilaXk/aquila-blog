@@ -68,8 +68,8 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (service) (count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"} |= \"ERROR\" [5m]))",
-          "legendFormat": "{{service}}",
+          "expr": "((sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"} |= \"ERROR\" [5m])) / clamp_min(sum(count_over_time({compose_project=\"blog_home\",service=~\"back_.*|back.*\"}[5m])), 1))) or vector(0)",
+          "legendFormat": "error_ratio",
           "queryType": "range",
           "refId": "A"
         }
@@ -152,6 +152,44 @@
       ],
       "title": "RequestId Trace",
       "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "requestId 키가 포함된 최근 로그 샘플",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "expr": "{compose_project=\"blog_home\",service=~\"back_.*|back.*|caddy\"} |~ \"(?i)(x-request-id|requestid|request_id)\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "RequestId Recent Logs",
+      "type": "logs"
     }
   ],
   "refresh": "10s",
@@ -188,6 +226,6 @@
   "timezone": "browser",
   "title": "Aquila Logs Overview",
   "uid": "blog-logs-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

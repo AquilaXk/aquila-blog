@@ -1455,9 +1455,10 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 1200px) {
     .detailLayout {
-      width: auto;
-      margin-left: 0;
-      grid-template-columns: minmax(0, 49rem);
+      width: min(100%, var(--article-readable-width, 48rem));
+      margin: 0 auto;
+      grid-template-columns: minmax(0, 1fr);
+      justify-content: center;
       gap: 0;
     }
 

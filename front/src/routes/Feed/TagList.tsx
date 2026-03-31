@@ -237,7 +237,7 @@ const StyledWrapper = styled.div`
     justify-content: center;
     font-size: 1.02rem;
     line-height: 1;
-    transform: rotate(-28deg) translateY(-0.02rem);
+    transform: rotate(62deg) translateY(-0.02rem);
     transform-origin: 48% 56%;
   }
 

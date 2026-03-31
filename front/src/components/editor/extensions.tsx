@@ -374,7 +374,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
-  const [isCodeSelectionActive, setIsCodeSelectionActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
@@ -409,10 +408,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
 
   const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
   const highlightedSource = useMemo(() => renderMermaidHighlightedSource(draftSource), [draftSource])
-
-  const syncSelectionState = (target: HTMLTextAreaElement) => {
-    setIsCodeSelectionActive(target.selectionStart !== target.selectionEnd)
-  }
 
   useMermaidEffect(
     previewRootRef,
@@ -451,7 +446,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         {showCodePane ? (
           <MermaidCodePane>
             <MermaidPaneLabel>Mermaid 코드</MermaidPaneLabel>
-            <MermaidCodeEditorShell data-selection-active={isCodeSelectionActive}>
+            <MermaidCodeEditorShell>
               <MermaidCodeHighlight
                 className="aq-mermaid-code-highlight"
                 ref={codeHighlightRef}
@@ -465,15 +460,9 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 wrap="off"
                 spellCheck={false}
                 data-view-mode={viewMode}
-                onPointerDown={() => setIsCodeSelectionActive(true)}
-                onFocus={(event) => syncSelectionState(event.currentTarget)}
                 onBlur={() => {
-                  setIsCodeSelectionActive(false)
                   flushCommit()
                 }}
-                onSelect={(event) => syncSelectionState(event.currentTarget)}
-                onPointerUp={(event) => syncSelectionState(event.currentTarget)}
-                onKeyUp={(event) => syncSelectionState(event.currentTarget)}
                 onScroll={(event) => {
                   const target = event.currentTarget
                   if (codeHighlightRef.current) {
@@ -484,7 +473,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 onChange={(event) => {
                   const nextValue = event.target.value
                   setDraftSource(nextValue)
-                  syncSelectionState(event.currentTarget)
                   scheduleCommit({ source: nextValue })
                 }}
               />
@@ -1896,6 +1884,18 @@ const MermaidPreviewCard = styled.div`
     margin: 0;
     min-height: 8rem;
   }
+
+  .aq-mermaid-stage > svg .nodeLabel p,
+  .aq-mermaid-stage > svg .edgeLabel p {
+    margin: 0;
+    line-height: 1.22;
+    white-space: pre-line;
+  }
+
+  .aq-mermaid-stage > svg .nodeLabel,
+  .aq-mermaid-stage > svg .edgeLabel {
+    overflow: visible;
+  }
 `
 
 const MermaidEditorWrapper = styled(NodeViewWrapper)`
@@ -2056,15 +2056,6 @@ const MermaidCodeEditorShell = styled.div`
   border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   overflow: hidden;
-
-  &[data-selection-active="true"] .aq-mermaid-code-highlight {
-    opacity: 0;
-  }
-
-  &[data-selection-active="true"] .aq-mermaid-code-input {
-    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#dbe2ea")};
-    -webkit-text-fill-color: currentColor;
-  }
 `
 
 const MermaidCodeHighlight = styled.pre`

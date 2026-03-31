@@ -84,9 +84,12 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
       }}
     >
       <header style={{ display: "grid", gap: "0.25rem" }}>
-        <strong>Block Editor Slash QA</strong>
+        <strong>BlockEditorShell 엔진 QA</strong>
         <span style={{ color: "#8b95a7", fontSize: "0.92rem" }}>
-          slash command 상호작용 검증용 로컬 페이지
+          slash, rail, table, serialization 같은 에디터 엔진 동작만 검증합니다.
+        </span>
+        <span style={{ color: "#64748b", fontSize: "0.82rem" }}>
+          실제 글쓰기 화면 레이아웃과 제목 입력칸 회귀는 <code>/editor</code> 전용 테스트에서 검증합니다.
         </span>
       </header>
 

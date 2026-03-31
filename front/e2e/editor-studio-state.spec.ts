@@ -173,4 +173,14 @@ test.describe("editor studio state", () => {
     expect(editorStudioSource).toContain("if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return")
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
+
+  test("QA route는 EditorStudioPage가 아니라 BlockEditorShell 엔진 테스트베드 역할만 유지한다", () => {
+    const qaSource = readFileSync(path.resolve(__dirname, "../src/pages/_qa/block-editor-slash.tsx"), "utf8")
+
+    expect(qaSource).toContain('import type { BlockEditorQaActions } from "src/components/editor/BlockEditorShell"')
+    expect(qaSource).toContain('dynamic(() => import("src/components/editor/BlockEditorShell")')
+    expect(qaSource).not.toContain("EditorStudioPage")
+    expect(qaSource).toContain("BlockEditorShell 엔진 QA")
+    expect(qaSource).toContain("실제 글쓰기 화면 레이아웃과 제목 입력칸 회귀는")
+  })
 })

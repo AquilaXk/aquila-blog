@@ -19,63 +19,49 @@ const loginThroughUi = async (page: Parameters<typeof test>[0]["page"]) => {
 test.describe("editor live visual regression", () => {
   test.skip(!hasUiLoginCredentials, "E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD가 필요합니다.")
 
-  test("split 미리보기는 좌우 패널이 겹치지 않고 헤더 썸네일을 숨기며 인용구 카드 톤을 유지한다", async ({
+  test("실제 /editor/new는 제품 셸 기준으로 제목/본문 정렬을 유지하고 QA affordance를 노출하지 않는다", async ({
     page,
   }) => {
     test.slow()
-    await page.setViewportSize({ width: 1752, height: 1000 })
+    await page.setViewportSize({ width: 1512, height: 982 })
     await loginThroughUi(page)
 
     await page.goto("/editor/new")
     await page.waitForURL(/\/editor(\/|$)/, { timeout: 30000 })
     await expect(page.getByTestId("editor-writing-column")).toBeVisible()
-    await expect(page.getByTestId("editor-preview-column")).toBeVisible()
+    await expect(page.getByTestId("editor-preview-column")).toHaveCount(0)
+    await expect(page.getByText("BlockEditorShell 엔진 QA")).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "제목 1" })).toBeVisible()
+    await expect(page.getByPlaceholder("제목을 입력하세요").first()).toBeVisible()
 
     await page.getByPlaceholder("제목을 입력하세요").first().fill("실화면 회귀 점검 제목")
 
     const editor = page.getByTestId("block-editor-prosemirror").first()
     await editor.click()
-    await page.keyboard.type("인용 스타일 동기화를 확인합니다.")
-    await page.getByRole("button", { name: "인용문" }).first().click()
+    await page.getByRole("button", { name: "제목 1" }).click()
+    await page.keyboard.type("헤딩 정렬 확인")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("본문 정렬 확인")
 
-    const previewQuote = page.getByTestId("editor-preview-body").locator("blockquote").first()
-    await expect(previewQuote).toBeVisible()
-    await expect(page.getByTestId("editor-preview-column")).not.toContainText("실화면 회귀 점검 제목")
-    await expect(page.getByTestId("editor-preview-column").locator(".thumbnail")).toHaveCount(0)
+    const heading = editor.locator(".aq-block-editor__content h1").first()
+    const paragraph = editor.locator(".aq-block-editor__content p").filter({ hasText: "본문 정렬 확인" }).first()
+    await expect(heading).toBeVisible()
+    await expect(paragraph).toBeVisible()
 
-    const writingBox = await page.getByTestId("editor-writing-column").boundingBox()
-    const previewBox = await page.getByTestId("editor-preview-column").boundingBox()
-    expect(writingBox).not.toBeNull()
-    expect(previewBox).not.toBeNull()
-    if (!writingBox || !previewBox) return
-
-    expect(writingBox.x + writingBox.width).toBeLessThanOrEqual(previewBox.x + 1)
-
-    const editorQuote = page.getByTestId("block-editor-prosemirror").locator("blockquote").first()
-    await expect(editorQuote).toBeVisible()
-
-    const editorQuoteStyle = await editorQuote.evaluate((node) => {
+    const headingStyle = await heading.evaluate((node) => {
       const style = window.getComputedStyle(node)
       return {
-        backgroundColor: style.backgroundColor,
-        borderLeftWidth: Number.parseFloat(style.borderLeftWidth || "0"),
-        borderRadius: Number.parseFloat(style.borderRadius || "0"),
+        textAlign: style.textAlign,
       }
     })
-    const previewQuoteStyle = await previewQuote.evaluate((node) => {
-      const style = window.getComputedStyle(node)
-      return {
-        backgroundColor: style.backgroundColor,
-        borderLeftWidth: Number.parseFloat(style.borderLeftWidth || "0"),
-        borderRadius: Number.parseFloat(style.borderRadius || "0"),
-      }
-    })
+    expect(headingStyle.textAlign).toBe("left")
 
-    expect(editorQuoteStyle.borderLeftWidth).toBeGreaterThanOrEqual(4)
-    expect(editorQuoteStyle.borderRadius).toBeGreaterThan(0)
-    expect(previewQuoteStyle.borderLeftWidth).toBeGreaterThanOrEqual(4)
-    expect(previewQuoteStyle.borderRadius).toBeGreaterThan(0)
-    expect(previewQuoteStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
-    expect(previewQuoteStyle.backgroundColor).toBe(editorQuoteStyle.backgroundColor)
+    const headingBox = await heading.boundingBox()
+    const paragraphBox = await paragraph.boundingBox()
+    expect(headingBox).not.toBeNull()
+    expect(paragraphBox).not.toBeNull()
+    if (!headingBox || !paragraphBox) return
+
+    expect(Math.abs(headingBox.x - paragraphBox.x)).toBeLessThanOrEqual(4)
   })
 })

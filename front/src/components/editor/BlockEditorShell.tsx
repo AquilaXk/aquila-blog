@@ -188,6 +188,14 @@ type TopLevelBlockHandleState = {
   width: number
 }
 
+type BlockSelectionOverlayState = {
+  visible: boolean
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 type PendingBlockDragState = {
   sourceIndex: number
   pointerId: number
@@ -542,6 +550,52 @@ const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
   return position
 }
 
+const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
+  const { doc, tr } = editor.state
+  if (doc.childCount === 0) return
+  const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
+  const position = getTopLevelBlockPosition(editor, clampedIndex)
+  const selection = NodeSelection.create(doc, position)
+  editor.view.dispatch(tr.setSelection(selection))
+  editor.view.focus()
+}
+
+const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
+  const rect = blockElement.getBoundingClientRect()
+  if (typeof window === "undefined") return Math.round(rect.top + 6)
+
+  const lineAnchorElement =
+    (blockElement.matches("p, h1, h2, h3, h4, blockquote")
+      ? blockElement
+      : blockElement.querySelector(":scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > blockquote")) ||
+    blockElement
+
+  const computedStyle = window.getComputedStyle(lineAnchorElement as Element)
+  const fontSize = Number.parseFloat(computedStyle.fontSize || "16")
+  const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight || "")
+  const lineHeight =
+    Number.isFinite(parsedLineHeight) && parsedLineHeight > 0 ? parsedLineHeight : fontSize * 1.42
+
+  return Math.round(rect.top + Math.max(0, (lineHeight - railHeight) / 2))
+}
+
+const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
+  Boolean(
+    node &&
+      (node.type === "paragraph" ||
+        node.type === "heading" ||
+        node.type === "blockquote" ||
+        node.type === "bulletList" ||
+        node.type === "orderedList" ||
+        node.type === "taskList")
+  )
+
+const isTabBlockSelectionEligible = (editor: TiptapEditor, blockIndex: number | null) => {
+  if (blockIndex === null || isTableSelectionActive(editor)) return false
+  const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
+  return shouldCenterBlockHandleForNode(blocks[blockIndex] ?? null)
+}
+
 const resolveDocPosSafe = (editor: TiptapEditor, pos: number) => {
   if (!Number.isFinite(pos)) return null
   const normalizedPos = Math.round(pos)
@@ -624,6 +678,9 @@ const BlockEditorShell = ({
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
+  const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
+  const selectedBlockNodeIndexRef = useRef<number | null>(null)
+  const keyboardBlockSelectionStickyRef = useRef(false)
   const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
     visible: false,
     blockIndex: 0,
@@ -631,6 +688,13 @@ const BlockEditorShell = ({
     top: 0,
     bottom: 0,
     width: 0,
+  })
+  const [blockSelectionOverlayState, setBlockSelectionOverlayState] = useState<BlockSelectionOverlayState>({
+    visible: false,
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
   })
   const [bubbleState, setBubbleState] = useState<FloatingBubbleState>({
     visible: false,
@@ -773,6 +837,56 @@ const BlockEditorShell = ({
     [getTopLevelBlockElements]
   )
 
+  const syncSelectedBlockNodeSurface = useCallback(
+    (blockIndex: number | null) => {
+      const elements = getTopLevelBlockElements()
+      elements.forEach((element, index) => {
+        if (blockIndex !== null && index === blockIndex) {
+          element.setAttribute("data-block-selected", "true")
+        } else {
+          element.removeAttribute("data-block-selected")
+        }
+      })
+    },
+    [getTopLevelBlockElements]
+  )
+
+  useEffect(() => {
+    syncSelectedBlockNodeSurface(selectedBlockNodeIndex)
+  }, [selectedBlockNodeIndex, selectionTick, syncSelectedBlockNodeSurface])
+
+  useEffect(() => {
+    if (selectedBlockNodeIndex === null || !keyboardBlockSelectionStickyRef.current) {
+      setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+      return
+    }
+
+    const syncOverlay = () => {
+      const blockElement = getTopLevelBlockElementByIndex(selectedBlockNodeIndex)
+      if (!blockElement) {
+        setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+        return
+      }
+      const rect = blockElement.getBoundingClientRect()
+      setBlockSelectionOverlayState({
+        visible: true,
+        left: Math.round(rect.left - 6),
+        top: Math.round(rect.top - 4),
+        width: Math.round(rect.width + 12),
+        height: Math.round(rect.height + 8),
+      })
+    }
+
+    syncOverlay()
+    if (typeof window === "undefined") return
+    window.addEventListener("resize", syncOverlay)
+    window.addEventListener("scroll", syncOverlay, true)
+    return () => {
+      window.removeEventListener("resize", syncOverlay)
+      window.removeEventListener("scroll", syncOverlay, true)
+    }
+  }, [getTopLevelBlockElementByIndex, selectedBlockNodeIndex, selectionTick])
+
   const resolveDropIndicatorByClientY = useCallback(
     (clientY: number) => {
       const elements = getTopLevelBlockElements()
@@ -867,14 +981,47 @@ const BlockEditorShell = ({
   const selectTopLevelBlock = useCallback((blockIndex: number) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
-    const { doc, tr } = currentEditor.state
-    if (doc.childCount === 0) return
-    const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
-    const position = getTopLevelBlockPosition(currentEditor, clampedIndex)
-    const selection = NodeSelection.create(doc, position)
-    currentEditor.view.dispatch(tr.setSelection(selection))
-    currentEditor.view.focus()
+    selectTopLevelBlockNode(currentEditor, blockIndex)
   }, [])
+
+  const clearNativeTextSelection = useCallback(() => {
+    if (typeof window === "undefined") return
+    window.requestAnimationFrame(() => {
+      const domSelection = window.getSelection()
+      if (domSelection?.type === "Range" && domSelection.toString()) {
+        domSelection.removeAllRanges()
+      }
+    })
+  }, [])
+
+  const promoteTopLevelBlockSelection = useCallback(
+    (blockIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      keyboardBlockSelectionStickyRef.current = true
+      selectTopLevelBlockNode(currentEditor, blockIndex)
+      setSelectedBlockIndex(blockIndex)
+      setSelectedBlockNodeIndex(blockIndex)
+      syncSelectedBlockNodeSurface(blockIndex)
+      setSelectionTick((prev) => prev + 1)
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          const domSelection = window.getSelection()
+          if (domSelection?.type === "Range" && domSelection.toString()) {
+            domSelection.removeAllRanges()
+          }
+          viewportRef.current?.focus()
+          setSelectedBlockNodeIndex(blockIndex)
+          syncSelectedBlockNodeSurface(blockIndex)
+          setSelectionTick((prev) => prev + 1)
+        })
+      } else {
+        clearNativeTextSelection()
+      }
+      return true
+    },
+    [clearNativeTextSelection, syncSelectedBlockNodeSurface]
+  )
 
   const isTopLevelBlockHandleEligible = useCallback((blockIndex: number) => {
     const currentEditor = editorRef.current
@@ -1309,6 +1456,7 @@ const BlockEditorShell = ({
       handleKeyDown: (_, event) => {
         const currentEditor = editorRef.current
         if (!currentEditor) return false
+        if (event.defaultPrevented) return false
         const normalizedKey = event.key.toLowerCase()
         const hasPrimaryModifier = isPrimaryModifierPressed(event)
         const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
@@ -1322,15 +1470,34 @@ const BlockEditorShell = ({
           !hasPrimaryModifier &&
           !event.altKey &&
           !event.shiftKey &&
+          event.key === "Tab" &&
+          !isTopLevelBlockNodeSelection
+        ) {
+          const targetBlockIndex =
+            hoveredBlockIndex ??
+            findTopLevelBlockIndexFromTarget(event.target) ??
+            getTopLevelBlockIndexFromSelection(currentEditor)
+          if (!isTabBlockSelectionEligible(currentEditor, targetBlockIndex)) return false
+          event.preventDefault()
+          return promoteTopLevelBlockSelection(targetBlockIndex)
+        }
+
+        if (
+          !hasPrimaryModifier &&
+          !event.altKey &&
+          !event.shiftKey &&
           (event.key === "Backspace" || event.key === "Delete") &&
-          isTopLevelBlockNodeSelection
+          (isTopLevelBlockNodeSelection || selectedBlockNodeIndexRef.current !== null)
         ) {
           event.preventDefault()
-          const blockIndex = getTopLevelBlockIndexFromSelection(currentEditor)
+          const blockIndex = selectedBlockNodeIndexRef.current ?? getTopLevelBlockIndexFromSelection(currentEditor)
           const contentLength = (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
           const nextFocusIndex = Math.max(0, Math.min(blockIndex, Math.max(contentLength - 2, 0)))
           mutateTopLevelBlocks((doc) => deleteTopLevelBlockAt(doc, blockIndex), nextFocusIndex)
           setBlockMenuState(null)
+          keyboardBlockSelectionStickyRef.current = false
+          setSelectedBlockNodeIndex(null)
+          syncSelectedBlockNodeSurface(null)
           return true
         }
 
@@ -1404,6 +1571,12 @@ const BlockEditorShell = ({
           event.preventDefault()
           currentEditor.chain().focus().redo().run()
           return true
+        }
+
+        if (selectedBlockNodeIndexRef.current !== null) {
+          keyboardBlockSelectionStickyRef.current = false
+          setSelectedBlockNodeIndex(null)
+          syncSelectedBlockNodeSurface(null)
         }
 
         return false
@@ -1521,10 +1694,41 @@ const BlockEditorShell = ({
   }, [disabled, editor])
 
   useEffect(() => {
+    selectedBlockNodeIndexRef.current = selectedBlockNodeIndex
+  }, [selectedBlockNodeIndex])
+
+  useEffect(() => {
+    const root = getContentRoot()
+    if (!root) return
+    if (selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current) {
+      root.setAttribute("data-keyboard-block-selection", "true")
+      return
+    }
+    root.removeAttribute("data-keyboard-block-selection")
+  }, [getContentRoot, selectedBlockNodeIndex, selectionTick])
+
+  useEffect(() => {
     if (!editor) return
     const notifySelection = () => {
+      const selection = editor.state.selection as typeof editor.state.selection & {
+        node?: { isBlock?: boolean }
+      }
+      const nextBlockIndex = getTopLevelBlockIndexFromSelection(editor)
+      const isTopLevelBlockNodeSelection = Boolean(
+        selection.$from.depth === 0 && selection.node?.isBlock
+      )
       setSelectionTick((prev) => prev + 1)
-      setSelectedBlockIndex(getTopLevelBlockIndexFromSelection(editor))
+      setSelectedBlockIndex(nextBlockIndex)
+      if (isTopLevelBlockNodeSelection) {
+        keyboardBlockSelectionStickyRef.current = false
+        setSelectedBlockNodeIndex(nextBlockIndex)
+        syncSelectedBlockNodeSurface(nextBlockIndex)
+        return
+      }
+      if (!keyboardBlockSelectionStickyRef.current) {
+        setSelectedBlockNodeIndex(null)
+        syncSelectedBlockNodeSurface(null)
+      }
     }
     notifySelection()
     editor.on("selectionUpdate", notifySelection)
@@ -1533,7 +1737,52 @@ const BlockEditorShell = ({
       editor.off("selectionUpdate", notifySelection)
       editor.off("transaction", notifySelection)
     }
-  }, [editor])
+  }, [editor, syncSelectedBlockNodeSurface])
+
+  useEffect(() => {
+    if (!editor || typeof document === "undefined" || typeof window === "undefined") return
+
+    const handleKeyDownCapture = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (slashMenuState) return
+
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+      const editorDom = currentEditor.view.dom
+      const activeElement = document.activeElement
+      const domSelection = window.getSelection()
+      const anchorElement =
+        domSelection?.anchorNode instanceof Element
+          ? domSelection.anchorNode
+          : domSelection?.anchorNode?.parentElement ?? null
+      const selectionInsideEditor =
+        (activeElement instanceof Element && editorDom.contains(activeElement)) ||
+        (anchorElement instanceof Element && editorDom.contains(anchorElement))
+      const targetBlockIndex =
+        hoveredBlockIndex ??
+        findTopLevelBlockIndexFromTarget(anchorElement ?? activeElement ?? event.target) ??
+        getTopLevelBlockIndexFromSelection(currentEditor)
+      if (!selectionInsideEditor && hoveredBlockIndex === null) return
+      if (!isTabBlockSelectionEligible(currentEditor, targetBlockIndex)) return
+      const selection = currentEditor.state.selection as typeof currentEditor.state.selection & {
+        node?: { isBlock?: boolean }
+      }
+      const isTopLevelBlockNodeSelection = Boolean(
+        selection.$from.depth === 0 && selection.node?.isBlock
+      )
+      if (isTopLevelBlockNodeSelection) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      promoteTopLevelBlockSelection(targetBlockIndex)
+    }
+
+    document.addEventListener("keydown", handleKeyDownCapture, true)
+    return () => {
+      document.removeEventListener("keydown", handleKeyDownCapture, true)
+    }
+  }, [editor, findTopLevelBlockIndexFromTarget, hoveredBlockIndex, promoteTopLevelBlockSelection, slashMenuState])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -3162,7 +3411,12 @@ const BlockEditorShell = ({
     const rect = blockElement.getBoundingClientRect()
     const railRect = blockHandleRailRef.current?.getBoundingClientRect()
     const railWidth = railRect?.width || 54
-    const anchoredTop = Math.round(rect.top + 6)
+    const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
+    const blockNode = blocks[blockIndex]
+    const railHeight = railRect?.height || 40
+    const anchoredTop = shouldCenterBlockHandleForNode(blockNode)
+      ? resolveBlockHandleAnchorTop(blockElement, railHeight)
+      : Math.round(rect.top + 6)
     setBlockHandleState({
       visible: true,
       blockIndex,
@@ -3197,12 +3451,6 @@ const BlockEditorShell = ({
         element.removeAttribute("data-block-hovered")
       }
 
-      if (index === selectedBlockIndex) {
-        element.setAttribute("data-block-selected", "true")
-      } else {
-        element.removeAttribute("data-block-selected")
-      }
-
       if (draggedBlockState && index === draggedBlockState.sourceIndex) {
         element.setAttribute("data-block-dragging", "true")
       } else {
@@ -3219,12 +3467,11 @@ const BlockEditorShell = ({
     return () => {
       elements.forEach((element) => {
         element.removeAttribute("data-block-hovered")
-        element.removeAttribute("data-block-selected")
         element.removeAttribute("data-block-dragging")
         element.removeAttribute("data-block-drop-target")
       })
     }
-  }, [draggedBlockState, dropIndicatorState.insertionIndex, getTopLevelBlockElements, hoveredBlockIndex, selectedBlockIndex])
+  }, [draggedBlockState, dropIndicatorState.insertionIndex, getTopLevelBlockElements, hoveredBlockIndex])
 
   const handleViewportPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -3268,6 +3515,11 @@ const BlockEditorShell = ({
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY) ??
           findTopLevelBlockIndexFromTarget(event.target)
       )
+      if (selectedBlockNodeIndex !== null) {
+        keyboardBlockSelectionStickyRef.current = false
+        setSelectedBlockNodeIndex(null)
+        syncSelectedBlockNodeSurface(null)
+      }
     },
     [
       blockHandleState.blockIndex,
@@ -3279,7 +3531,9 @@ const BlockEditorShell = ({
       isCoarsePointer,
       isTableMode,
       isRowResizeHandleTarget,
+      selectedBlockNodeIndex,
       setViewportRowResizeHot,
+      syncSelectedBlockNodeSurface,
       syncTableQuickRailFromElement,
       tableMenuState,
     ]
@@ -3295,8 +3549,59 @@ const BlockEditorShell = ({
     }
   }, [isTableMode, scheduleHoveredBlockClear, setViewportRowResizeHot, tableMenuState])
 
+  const handleViewportKeyDownCapture = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+
+      if (
+        !event.defaultPrevented &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === "Backspace" || event.key === "Delete") &&
+        selectedBlockNodeIndexRef.current !== null
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        const blockIndex = selectedBlockNodeIndexRef.current
+        const contentLength = (currentEditor.getJSON() as BlockEditorDoc).content?.length ?? 0
+        const nextFocusIndex = Math.max(0, Math.min(blockIndex, Math.max(contentLength - 2, 0)))
+        mutateTopLevelBlocks((doc) => deleteTopLevelBlockAt(doc, blockIndex), nextFocusIndex)
+        setBlockMenuState(null)
+        keyboardBlockSelectionStickyRef.current = false
+        setSelectedBlockNodeIndex(null)
+        syncSelectedBlockNodeSurface(null)
+        currentEditor.view.focus()
+        return
+      }
+
+      if (event.defaultPrevented) return
+      if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      if (slashMenuState) return
+
+      const targetBlockIndex =
+        hoveredBlockIndex ??
+        findTopLevelBlockIndexFromTarget(event.target) ??
+        getTopLevelBlockIndexFromSelection(currentEditor)
+
+      if (!isTabBlockSelectionEligible(currentEditor, targetBlockIndex)) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      promoteTopLevelBlockSelection(targetBlockIndex)
+    },
+    [findTopLevelBlockIndexFromTarget, hoveredBlockIndex, mutateTopLevelBlocks, promoteTopLevelBlockSelection, slashMenuState, syncSelectedBlockNodeSurface]
+  )
+
   const handleViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (selectedBlockNodeIndex !== null) {
+        keyboardBlockSelectionStickyRef.current = false
+        setSelectedBlockNodeIndex(null)
+        syncSelectedBlockNodeSurface(null)
+      }
       if (isCoarsePointer || tableRowResizeRef.current) return
       const cell = getTableCellFromTarget(event.target)
       if (!isRowResizeHandleTarget(cell, event.clientX, event.clientY) || !cell) return
@@ -3304,7 +3609,7 @@ const BlockEditorShell = ({
       event.stopPropagation()
       startTableRowResize(cell, event.clientY)
     },
-    [getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, startTableRowResize]
+    [getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, selectedBlockNodeIndex, startTableRowResize, syncSelectedBlockNodeSurface]
   )
 
   const handleViewportDragStart = useCallback(
@@ -3687,6 +3992,7 @@ const BlockEditorShell = ({
       <EditorViewport
         data-testid="block-editor-viewport"
         ref={viewportRef}
+        tabIndex={-1}
         onCompositionStart={() => {
           setIsSlashImeComposing(true)
         }}
@@ -3696,6 +4002,7 @@ const BlockEditorShell = ({
             applyResolvedSlashMenuState(resolveSlashMenuState())
           })
         }}
+        onKeyDownCapture={handleViewportKeyDownCapture}
         onPointerMove={handleViewportPointerMove}
         onPointerLeave={handleViewportPointerLeave}
         onPointerDown={handleViewportPointerDown}
@@ -4102,6 +4409,18 @@ const BlockEditorShell = ({
               dangerouslySetInnerHTML={{ __html: draggedBlockState.previewHtml }}
             />
           </DraggedBlockGhost>
+        ) : null}
+        {blockSelectionOverlayState.visible ? (
+          <BlockSelectionOverlay
+            aria-hidden="true"
+            data-testid="keyboard-block-selection-overlay"
+            style={{
+              left: `${blockSelectionOverlayState.left}px`,
+              top: `${blockSelectionOverlayState.top}px`,
+              width: `${blockSelectionOverlayState.width}px`,
+              height: `${blockSelectionOverlayState.height}px`,
+            }}
+          />
         ) : null}
         {dropIndicatorState.visible ? (
           <BlockDropTargetHighlight
@@ -4941,6 +5260,11 @@ const EditorViewport = styled.div`
     color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#ffffff")};
   }
 
+  .aq-block-editor__content[data-keyboard-block-selection="true"] ::selection {
+    background: transparent;
+    color: inherit;
+  }
+
   .aq-block-editor__content pre {
     overflow: auto;
     border-radius: 1rem;
@@ -5512,6 +5836,16 @@ const BlockDropTargetHighlight = styled.div`
       inset 0 0 0 1px rgba(37, 99, 235, 0.24),
       0 0 0 1px rgba(37, 99, 235, 0.18);
   }
+`
+
+const BlockSelectionOverlay = styled.div`
+  position: fixed;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 0.95rem;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.24);
 `
 
 const MobileBlockActionBar = styled.div`

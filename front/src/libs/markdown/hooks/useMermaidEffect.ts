@@ -276,6 +276,20 @@ const useMermaidEffect = (
         .filter((line) => !/^\s*(style|linkStyle|classDef)\b/i.test(line))
         .join("\n")
 
+    // Mermaid htmlLabels(<foreignObject>)는 전역 타이포/line-height 영향으로 CJK 줄바꿈 라벨이 잘릴 수 있어
+    // 렌더 직후 라벨 스타일을 최소값으로 고정해 작성/상세 모두 동일한 가독성을 유지한다.
+    const stabilizeMermaidSvgLabels = (svgElement: SVGSVGElement) => {
+      svgElement.querySelectorAll<HTMLElement>(".nodeLabel p, .edgeLabel p").forEach((labelParagraph) => {
+        labelParagraph.style.margin = "0"
+        labelParagraph.style.lineHeight = "1.22"
+        labelParagraph.style.whiteSpace = "pre-line"
+      })
+
+      svgElement.querySelectorAll<SVGElement>(".nodeLabel, .edgeLabel").forEach((labelContainer) => {
+        labelContainer.style.overflow = "visible"
+      })
+    }
+
     const escapeMermaidHtml = (value: string) =>
       value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
@@ -716,6 +730,7 @@ const useMermaidEffect = (
 
           const svgElement = stage.querySelector("svg")
           if (!svgElement) throw new Error("Mermaid SVG 생성 실패")
+          stabilizeMermaidSvgLabels(svgElement)
 
           const viewBox = svgElement.getAttribute("viewBox") || ""
           const viewBoxValues = viewBox

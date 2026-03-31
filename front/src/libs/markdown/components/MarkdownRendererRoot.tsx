@@ -610,7 +610,13 @@ const MarkdownRendererRoot = styled.div`
   .aq-mermaid-stage > svg .nodeLabel p,
   .aq-mermaid-stage > svg .edgeLabel p {
     margin: 0;
-    line-height: 1.45;
+    line-height: 1.22;
+    white-space: pre-line;
+  }
+
+  .aq-mermaid-stage > svg .nodeLabel,
+  .aq-mermaid-stage > svg .edgeLabel {
+    overflow: visible;
   }
 
   .aq-mermaid-error-state {

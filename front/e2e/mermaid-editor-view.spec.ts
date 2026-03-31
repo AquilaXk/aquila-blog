@@ -17,5 +17,8 @@ test.describe("mermaid editor view", () => {
     expect(source).toContain('<MermaidCodePane>')
     expect(source).toContain('<MermaidPreviewPane ref={previewRootRef}>')
     expect(source).toContain('"unsupported-mermaid": "Mermaid"')
+    expect(source).not.toContain("data-selection-active")
+    expect(source).not.toContain("setIsCodeSelectionActive")
+    expect(source).not.toContain("onPointerDown={() => setIsCodeSelectionActive(true)}")
   })
 })

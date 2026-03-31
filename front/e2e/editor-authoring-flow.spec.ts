@@ -83,7 +83,7 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.press("Enter")
     await page.keyboard.type("둘째 줄")
 
-    const firstParagraph = editor.locator("p").first()
+    const firstParagraph = editor.locator("p", { hasText: "첫 줄" }).first()
     await firstParagraph.hover()
 
     const addBlockButton = page.getByRole("button", { name: "블록 추가" })
@@ -104,6 +104,30 @@ test.describe("block editor authoring flow", () => {
     expect(firstLineIndex).toBeGreaterThanOrEqual(0)
     expect(quoteIndex).toBeGreaterThan(firstLineIndex)
     expect(secondLineIndex).toBeGreaterThan(quoteIndex)
+  })
+
+  test("텍스트 블록에서 Tab은 부분 선택이 아니라 블록 선택으로 승격된다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("노션 예시")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째 줄")
+
+    const firstParagraph = editor.locator("p", { hasText: "노션 예시" }).first()
+    await firstParagraph.click()
+    await page.keyboard.press("Tab")
+
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const selection = window.getSelection()
+          return selection ? selection.toString() : ""
+        })
+      )
+      .toBe("")
   })
 
   test("블록 드래그 시 source/destination 피드백이 동시에 보인다", async ({ page }) => {

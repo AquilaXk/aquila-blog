@@ -128,7 +128,6 @@ class ApiV1MemberNotificationController(
         @RequestParam(name = "lastEventId", required = false) lastEventIdQuery: String?,
     ): SseEmitter {
         response.setHeader("Cache-Control", "no-cache, no-transform")
-        response.setHeader("Connection", "keep-alive")
         response.setHeader("X-Accel-Buffering", "no")
         return memberNotificationSseService.subscribe(
             memberId = rq.actor.id,

@@ -285,7 +285,7 @@ const useMermaidEffect = (
         )
         .forEach((labelElement) => {
           labelElement.style.margin = "0"
-          labelElement.style.lineHeight = "1.34"
+          labelElement.style.lineHeight = "1.18"
           labelElement.style.whiteSpace = "pre-line"
           labelElement.style.overflowWrap = "anywhere"
           labelElement.style.wordBreak = "keep-all"

@@ -916,20 +916,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           )}
           {data.type[0] === "Post" ? (
             <MobileSummaryBar aria-label="빠른 이동 및 반응">
-              {showStickyToc ? (
-                <button
-                  type="button"
-                  data-active={Boolean(activeTocId)}
-                  data-tone="accent"
-                  title={activeTocItem?.text || "목차 열기"}
-                  aria-label={activeTocItem ? `현재 섹션 ${activeTocIndex + 1} / ${visibleTocItems.length}` : "목차 열기"}
-                  onClick={() => scrollSectionIntoView(compactTocSectionRef.current)}
-                >
-                  <AppIcon name="list" />
-                  <span>목차</span>
-                  <strong>{tocProgressLabel}</strong>
-                </button>
-              ) : null}
               <button
                 type="button"
                 data-active={engagement.actorHasLiked}
@@ -1620,7 +1606,7 @@ const MobileSummaryBar = styled.div`
     top: calc(var(--app-header-height, 64px) + 0.4rem);
     z-index: 14;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.45rem;
     padding: 0.16rem 0 0.4rem;
     margin-bottom: 0.18rem;

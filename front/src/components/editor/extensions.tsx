@@ -374,7 +374,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
   const [isPreviewVisible, setIsPreviewVisible] = useState(false)
-  const [isCodeSelectionActive, setIsCodeSelectionActive] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
@@ -409,16 +408,6 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
 
   const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
   const highlightedSource = useMemo(() => renderMermaidHighlightedSource(draftSource), [draftSource])
-
-  const syncCodeSelectionState = () => {
-    const element = textareaRef.current
-    if (!element) {
-      setIsCodeSelectionActive(false)
-      return
-    }
-
-    setIsCodeSelectionActive(element.selectionStart !== element.selectionEnd)
-  }
 
   useMermaidEffect(
     previewRootRef,
@@ -457,7 +446,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         {showCodePane ? (
           <MermaidCodePane>
             <MermaidPaneLabel>Mermaid 코드</MermaidPaneLabel>
-            <MermaidCodeEditorShell data-selection-active={isCodeSelectionActive}>
+            <MermaidCodeEditorShell>
               <MermaidCodeHighlight
                 className="aq-mermaid-code-highlight"
                 ref={codeHighlightRef}
@@ -472,12 +461,8 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
                 spellCheck={false}
                 data-view-mode={viewMode}
                 onBlur={() => {
-                  setIsCodeSelectionActive(false)
                   flushCommit()
                 }}
-                onKeyUp={syncCodeSelectionState}
-                onMouseUp={syncCodeSelectionState}
-                onSelect={syncCodeSelectionState}
                 onScroll={(event) => {
                   const target = event.currentTarget
                   if (codeHighlightRef.current) {
@@ -1913,10 +1898,7 @@ const MermaidPreviewCard = styled.div`
   .aq-mermaid-stage > svg .nodeLabel span,
   .aq-mermaid-stage > svg .edgeLabel span {
     margin: 0;
-    line-height: 1.18;
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-    word-break: keep-all;
+    line-height: 1.12;
   }
 `
 
@@ -2078,10 +2060,6 @@ const MermaidCodeEditorShell = styled.div`
   border: 1px solid ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray6 : "rgba(255, 255, 255, 0.06)")};
   background: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray1 : "rgba(10, 12, 16, 0.98)")};
   overflow: hidden;
-
-  &[data-selection-active="true"] .aq-mermaid-code-highlight {
-    opacity: 0;
-  }
 `
 
 const MermaidCodeHighlight = styled.pre`
@@ -2130,7 +2108,7 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: transparent;
+  color: transparent !important;
   caret-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#f8fafc")};
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -2141,7 +2119,7 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
   overflow-wrap: normal;
   box-shadow: none;
   text-shadow: none;
-  -webkit-text-fill-color: transparent;
+  -webkit-text-fill-color: transparent !important;
 
   &[data-view-mode="code"] {
     min-height: 22rem;
@@ -2149,13 +2127,13 @@ const MermaidCodeTextarea = styled(BlockTextarea)`
 
   &::selection {
     background: rgba(59, 130, 246, 0.28);
-    color: transparent;
-    -webkit-text-fill-color: transparent;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
   }
 
   &::-moz-selection {
     background: rgba(59, 130, 246, 0.28);
-    color: transparent;
+    color: transparent !important;
   }
 `
 

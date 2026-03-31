@@ -87,7 +87,7 @@ class ApiV1PostImageController(
             objectKey = key,
             contentType = file.contentType.orEmpty(),
             fileSize = file.size,
-            purpose = UploadedFilePurpose.POST_FILE,
+            purpose = UploadedFilePurpose.POST_IMAGE,
         )
         val encodedKey =
             URLEncoder
@@ -132,7 +132,7 @@ class ApiV1PostImageController(
             objectKey = key,
             contentType = file.contentType.orEmpty(),
             fileSize = file.size,
-            purpose = UploadedFilePurpose.POST_IMAGE,
+            purpose = UploadedFilePurpose.POST_FILE,
         )
         val encodedKey =
             URLEncoder

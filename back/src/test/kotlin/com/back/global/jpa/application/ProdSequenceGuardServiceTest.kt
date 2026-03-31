@@ -2,6 +2,8 @@ package com.back.global.jpa.application
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.contains
+import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
@@ -54,6 +56,23 @@ class ProdSequenceGuardServiceTest {
             service.repairIfSequenceDrift(
                 DataIntegrityViolationException("중복 키 값이 고유 제약 조건 \"uploaded_file_pkey\"을 위반했습니다."),
             )
+
+        assertThat(repaired).isTrue()
+        verify(jdbcTemplate).execute("ALTER SEQUENCE IF EXISTS public.uploaded_file_seq INCREMENT BY 1")
+        verify(jdbcTemplate).execute(
+            "SELECT setval('public.uploaded_file_seq', COALESCE((SELECT MAX(id) FROM public.uploaded_file), 0) + 1, false)",
+        )
+    }
+
+    @Test
+    fun `uploaded_file 전용 보정은 ALTER 실패 시 setval-only fallback으로 복구한다`() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        doThrow(RuntimeException("permission denied for sequence uploaded_file_seq"))
+            .`when`(jdbcTemplate)
+            .execute(contains("ALTER SEQUENCE IF EXISTS public.uploaded_file_seq"))
+        val service = ProdSequenceGuardService(jdbcTemplate, sequenceGuardOnStartup = false)
+
+        val repaired = service.repairUploadedFileSequence()
 
         assertThat(repaired).isTrue()
         verify(jdbcTemplate).execute("ALTER SEQUENCE IF EXISTS public.uploaded_file_seq INCREMENT BY 1")

@@ -52,26 +52,57 @@ class ProdSequenceGuardService(
 
     fun repairUploadedFileSequence(): Boolean {
         val target = sequenceTargetsByConstraint[UPLOADED_FILE_CONSTRAINT_KEY] ?: return false
-        return repairSequence(target)
+        return repairSequence(target, allowSetvalOnlyFallback = true)
     }
 
-    private fun repairSequence(target: SequenceTarget): Boolean =
+    private fun repairSequence(
+        target: SequenceTarget,
+        allowSetvalOnlyFallback: Boolean = false,
+    ): Boolean {
+        val fullRepairSucceeded =
+            runCatching {
+                jdbcTemplate.execute("ALTER SEQUENCE IF EXISTS public.${target.sequence} INCREMENT BY ${target.allocationSize}")
+                jdbcTemplate.execute(
+                    "SELECT setval('public.${target.sequence}', COALESCE((SELECT MAX(id) FROM public.${target.table}), 0) + ${target.allocationSize}, false)",
+                )
+                true
+            }.onSuccess {
+                log.warn(
+                    "Repaired sequence drift: table={}, sequence={}, allocationSize={}",
+                    target.table,
+                    target.sequence,
+                    target.allocationSize,
+                )
+            }.onFailure { exception ->
+                log.error(
+                    "Failed to repair sequence drift: table={}, sequence={}, allocationSize={}",
+                    target.table,
+                    target.sequence,
+                    target.allocationSize,
+                    exception,
+                )
+            }.getOrElse { false }
+
+        if (fullRepairSucceeded || !allowSetvalOnlyFallback) return fullRepairSucceeded
+        return repairSequenceBySetvalOnly(target)
+    }
+
+    private fun repairSequenceBySetvalOnly(target: SequenceTarget): Boolean =
         runCatching {
-            jdbcTemplate.execute("ALTER SEQUENCE IF EXISTS public.${target.sequence} INCREMENT BY ${target.allocationSize}")
             jdbcTemplate.execute(
                 "SELECT setval('public.${target.sequence}', COALESCE((SELECT MAX(id) FROM public.${target.table}), 0) + ${target.allocationSize}, false)",
             )
             true
         }.onSuccess {
             log.warn(
-                "Repaired sequence drift: table={}, sequence={}, allocationSize={}",
+                "Repaired sequence drift with setval-only fallback: table={}, sequence={}, allocationSize={}",
                 target.table,
                 target.sequence,
                 target.allocationSize,
             )
         }.onFailure { exception ->
             log.error(
-                "Failed to repair sequence drift: table={}, sequence={}, allocationSize={}",
+                "Failed setval-only sequence repair: table={}, sequence={}, allocationSize={}",
                 target.table,
                 target.sequence,
                 target.allocationSize,

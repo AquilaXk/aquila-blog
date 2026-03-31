@@ -623,8 +623,8 @@ const MarkdownRendererRoot = styled.div`
     line-height: 1.18;
     display: inline-block;
     box-sizing: border-box;
-    padding-top: 0.14em;
-    padding-bottom: 0.14em;
+    padding-top: 0.08em;
+    padding-bottom: 0.18em;
   }
 
   .aq-mermaid-error-state {

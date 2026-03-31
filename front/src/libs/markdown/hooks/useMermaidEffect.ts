@@ -290,8 +290,8 @@ const useMermaidEffect = (
           labelElement.style.lineHeight = "1.18"
           labelElement.style.display = "inline-block"
           labelElement.style.boxSizing = "border-box"
-          labelElement.style.paddingTop = "0.14em"
-          labelElement.style.paddingBottom = "0.14em"
+          labelElement.style.paddingTop = "0.08em"
+          labelElement.style.paddingBottom = "0.18em"
         })
 
       svgElement

@@ -224,7 +224,7 @@ const OBSERVABILITY_PANEL_DEFS: Array<{
   {
     key: "logs-requestid",
     source: "logs",
-    panelId: 3,
+    panelId: 4,
     title: "RequestId 추적",
   },
 ]

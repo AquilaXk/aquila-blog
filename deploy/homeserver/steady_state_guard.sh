@@ -421,9 +421,10 @@ check_api_readiness() {
   return 1
 }
 
-query_grafana_prometheus_datasource() {
+query_grafana_datasource_by_uid() {
   local grafana_user="$1"
   local grafana_password="$2"
+  local datasource_uid="$3"
 
   local response code
   response="$(
@@ -433,18 +434,18 @@ query_grafana_prometheus_datasource() {
       -sS \
       -u "${grafana_user}:${grafana_password}" \
       -w $'\nHTTP_STATUS:%{http_code}\n' \
-      "http://grafana:3000/api/datasources/uid/prometheus" || true
+      "http://grafana:3000/api/datasources/uid/${datasource_uid}" || true
   )"
   code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
   [[ -n "${code}" ]] || code="none"
   printf '%s' "${code}"
-  if [[ "${code}" == "200" ]] && printf '%s' "${response}" | grep -q '"uid":"prometheus"'; then
+  if [[ "${code}" == "200" ]] && printf '%s' "${response}" | grep -q "\"uid\":\"${datasource_uid}\""; then
     return 0
   fi
   return 1
 }
 
-check_grafana_prometheus_datasource() {
+check_grafana_core_datasources() {
   local grafana_user grafana_password
   grafana_user="$(env_value "GRAFANA_ADMIN_USER")"
   grafana_password="$(env_value "GRAFANA_ADMIN_PASSWORD")"
@@ -457,12 +458,22 @@ check_grafana_prometheus_datasource() {
 
   load_grafana_ds_state
 
-  local status_code
-  if status_code="$(query_grafana_prometheus_datasource "${grafana_user}" "${grafana_password}")"; then
+  local prometheus_status loki_status
+  local prometheus_ok="false"
+  local loki_ok="false"
+
+  if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
+    prometheus_ok="true"
+  fi
+  if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
+    loki_ok="true"
+  fi
+
+  if [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]; then
     if (( GRAFANA_DS_FAIL_COUNT > 0 )); then
-      log "OK grafana datasource uid=prometheus recovered status=${status_code} consecutive_failures=${GRAFANA_DS_FAIL_COUNT}"
+      log "OK grafana datasources recovered prometheus=${prometheus_status} loki=${loki_status} consecutive_failures=${GRAFANA_DS_FAIL_COUNT}"
     else
-      log "OK grafana datasource uid=prometheus"
+      log "OK grafana datasources uid=prometheus,loki"
     fi
     GRAFANA_DS_FAIL_COUNT=0
     save_grafana_ds_state
@@ -471,7 +482,7 @@ check_grafana_prometheus_datasource() {
 
   GRAFANA_DS_FAIL_COUNT=$(( GRAFANA_DS_FAIL_COUNT + 1 ))
   save_grafana_ds_state
-  log "WARN grafana datasource unhealthy status=${status_code} consecutive_failures=${GRAFANA_DS_FAIL_COUNT} threshold=${fail_threshold}"
+  log "WARN grafana datasources unhealthy prometheus=${prometheus_status:-none} loki=${loki_status:-none} consecutive_failures=${GRAFANA_DS_FAIL_COUNT} threshold=${fail_threshold}"
 
   if (( GRAFANA_DS_FAIL_COUNT < fail_threshold )); then
     return 1
@@ -493,14 +504,22 @@ check_grafana_prometheus_datasource() {
   save_grafana_ds_state
   sleep 3
 
-  if status_code="$(query_grafana_prometheus_datasource "${grafana_user}" "${grafana_password}")"; then
+  prometheus_ok="false"
+  loki_ok="false"
+  if prometheus_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "prometheus")"; then
+    prometheus_ok="true"
+  fi
+  if loki_status="$(query_grafana_datasource_by_uid "${grafana_user}" "${grafana_password}" "loki")"; then
+    loki_ok="true"
+  fi
+  if [[ "${prometheus_ok}" == "true" && "${loki_ok}" == "true" ]]; then
     GRAFANA_DS_FAIL_COUNT=0
     save_grafana_ds_state
-    log "OK grafana datasource repaired uid=prometheus status=${status_code}"
+    log "OK grafana datasources repaired prometheus=${prometheus_status} loki=${loki_status}"
     return 0
   fi
 
-  log "FAIL grafana datasource uid=prometheus status=${status_code} after_recreate=true"
+  log "FAIL grafana datasources unhealthy after_recreate=true prometheus=${prometheus_status:-none} loki=${loki_status:-none}"
   return 1
 }
 
@@ -741,12 +760,12 @@ main() {
   if check_active_backend_image; then ok=$((ok + 1)); fi
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi
   if check_api_readiness; then ok=$((ok + 1)); fi
-  if check_grafana_prometheus_datasource; then ok=$((ok + 1)); fi
+  if check_grafana_core_datasources; then ok=$((ok + 1)); fi
   if check_grafana_embed_route; then ok=$((ok + 1)); fi
   if check_notification_sse_route; then ok=$((ok + 1)); fi
 
   if [[ "${ok}" -ne 7 ]]; then
-    compose logs --no-color --tail=80 caddy grafana >&2 || true
+    compose logs --no-color --tail=80 caddy grafana loki promtail >&2 || true
     exit 1
   fi
 }

@@ -1734,7 +1734,7 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin)
 fi
 compose_up_with_retry "${services_to_boot[@]}"
-compose_up_no_deps_with_retry prometheus grafana
+compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_caddy_mount_sync
 check_cloudflared_runtime "${api_domain}"
 check_grafana_embed_origin_route

@@ -100,3 +100,23 @@ groups:
         annotations:
           summary: "Notification SSE send failures are increasing"
           description: "send failure count increased more than 5 in 10m. Check upstream disconnect storm, replay pressure, and transport stability."
+
+  - name: aquila-monitoring-stack
+    rules:
+      - alert: AquilaLokiScrapeDown
+        expr: min(up{job="loki",service="aquila-loki"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki metrics scrape is down"
+          description: "Prometheus cannot scrape Loki for 3m. Check loki container and network."
+
+      - alert: AquilaPromtailScrapeDown
+        expr: min(up{job="promtail",service="aquila-promtail"}) < 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Promtail metrics scrape is down"
+          description: "Prometheus cannot scrape Promtail for 3m. Check promtail container and docker log mount."

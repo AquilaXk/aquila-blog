@@ -205,6 +205,74 @@ inspect_grafana_internal_health() {
     "http://grafana:3000/api/health" 2>/dev/null || true
 }
 
+inspect_loki_internal_ready() {
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 10 \
+    -o /dev/null \
+    -s \
+    -w '%{http_code}' \
+    "http://loki:3100/ready" 2>/dev/null || true
+}
+
+inspect_promtail_internal_ready() {
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 10 \
+    -o /dev/null \
+    -s \
+    -w '%{http_code}' \
+    "http://promtail:9080/ready" 2>/dev/null || true
+}
+
+inspect_grafana_loki_datasource_status() {
+  local admin_user admin_password response code
+  admin_user="$(trim_quotes "$(env_value "GRAFANA_ADMIN_USER")")"
+  admin_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
+  [[ -n "${admin_user}" ]] || admin_user="admin"
+  [[ -n "${admin_password}" ]] || admin_password="change_me_grafana_password"
+
+  response="$(
+    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+      --connect-timeout 3 \
+      --max-time 10 \
+      -sS \
+      -u "${admin_user}:${admin_password}" \
+      -w $'\nHTTP_STATUS:%{http_code}\n' \
+      "http://grafana:3000/api/datasources/uid/loki" 2>/dev/null || true
+  )"
+  code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n 1)"
+  [[ -n "${code}" ]] || code="none"
+  if [[ "${code}" == "200" ]] && printf '%s' "${response}" | grep -q '"uid":"loki"'; then
+    printf '%s' "${code}"
+    return 0
+  fi
+  printf '%s' "${code}"
+  return 1
+}
+
+print_monitoring_stack_status() {
+  local loki_ready promtail_ready grafana_loki_ds
+  loki_ready="$(inspect_loki_internal_ready)"
+  promtail_ready="$(inspect_promtail_internal_ready)"
+  grafana_loki_ds="$(inspect_grafana_loki_datasource_status || true)"
+  [[ -n "${grafana_loki_ds}" ]] || grafana_loki_ds="none"
+
+  echo "loki internal ready: ${loki_ready:-none}"
+  echo "promtail internal ready: ${promtail_ready:-none}"
+  echo "grafana loki datasource uid status: ${grafana_loki_ds}"
+
+  if [[ "${loki_ready}" != "200" ]]; then
+    echo "WARN: loki /ready is not 200; check loki container and storage mount."
+  fi
+  if [[ "${promtail_ready}" != "200" ]]; then
+    echo "WARN: promtail /ready is not 200; check docker.sock/containers mount and promtail config."
+  fi
+  if [[ "${grafana_loki_ds}" != "200" ]]; then
+    echo "WARN: grafana datasource uid=loki is not healthy."
+  fi
+}
+
 inspect_grafana_origin_auth_proxy_headers() {
   local api_domain="$1"
   local grafana_domain="$2"
@@ -518,6 +586,9 @@ print_section "Grafana Embed Route"
 print_grafana_origin_status
 print_grafana_embed_status "$(monitoring_embed_candidate_url)"
 
+print_section "Monitoring Stack (Loki/Promtail)"
+print_monitoring_stack_status
+
 print_section "Notification SSE"
 print_notification_sse_status
 
@@ -552,7 +623,7 @@ print_section "Compose PS"
 compose ps || true
 
 print_section "Container Health"
-for svc in back_blue back_green caddy cloudflared autoheal; do
+for svc in back_blue back_green caddy cloudflared autoheal loki promtail prometheus grafana; do
   cid="$(compose ps -q "${svc}" 2>/dev/null | head -n 1 || true)"
   if [[ -z "${cid}" ]]; then
     echo "${svc}: MISSING"
@@ -605,6 +676,12 @@ compose logs --no-color --tail=80 caddy || true
 
 print_section "Cloudflared Logs (tail 80)"
 compose logs --no-color --tail=80 cloudflared || true
+
+print_section "Loki Logs (tail 80)"
+compose logs --no-color --tail=80 loki || true
+
+print_section "Promtail Logs (tail 80)"
+compose logs --no-color --tail=80 promtail || true
 
 print_section "Autoheal Logs (tail 80)"
 compose logs --no-color --tail=80 autoheal || true

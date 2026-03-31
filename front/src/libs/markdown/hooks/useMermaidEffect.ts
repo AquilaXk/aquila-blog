@@ -159,7 +159,7 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
         },
     securityLevel: "strict" as const,
     suppressErrorRendering: true,
-    htmlLabels: false,
+    htmlLabels: true,
     flowchart: {
       curve: "linear" as const,
       useMaxWidth: true,
@@ -171,7 +171,7 @@ const createServiceMermaidConfig = (scheme: "dark" | "light") => ({
   theme: scheme === "dark" ? ("dark" as const) : ("neutral" as const),
   securityLevel: "strict" as const,
   suppressErrorRendering: true,
-  htmlLabels: false,
+  htmlLabels: true,
   flowchart: {
     curve: "linear" as const,
     useMaxWidth: true,

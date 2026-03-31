@@ -611,7 +611,7 @@ if [[ "${RUNTIME_SPLIT_ENABLED}" == "true" ]]; then
   services_to_boot+=(back_read back_admin back_worker)
 fi
 compose_up_with_retry "${services_to_boot[@]}"
-compose_up_no_deps_with_retry prometheus grafana
+compose_up_no_deps_with_retry loki promtail prometheus grafana
 ensure_db_runtime_guards || true
 reload_caddy
 ensure_caddy_mount_sync

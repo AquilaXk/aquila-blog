@@ -58,6 +58,34 @@ public_http_reachable() {
   [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]
 }
 
+query_grafana_datasource_uid_status() {
+  local uid="$1"
+  local grafana_user grafana_password
+  grafana_user="$(trim_quotes "$(env_value "GRAFANA_ADMIN_USER")")"
+  grafana_password="$(trim_quotes "$(env_value "GRAFANA_ADMIN_PASSWORD")")"
+  [[ -n "${grafana_user}" ]] || grafana_user="admin"
+  [[ -n "${grafana_password}" ]] || grafana_password="change_me_grafana_password"
+
+  local response code
+  response="$(
+    docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+      --connect-timeout 3 \
+      --max-time 8 \
+      -sS \
+      -u "${grafana_user}:${grafana_password}" \
+      -w $'\nHTTP_STATUS:%{http_code}\n' \
+      "http://grafana:3000/api/datasources/uid/${uid}" || true
+  )"
+  code="$(printf '%s\n' "${response}" | awk -F: '/^HTTP_STATUS:/ {print $2}' | tr -d '\r' | tail -n1)"
+  [[ -n "${code}" ]] || code="none"
+  if [[ "${code}" == "200" ]] && printf '%s' "${response}" | grep -q "\"uid\":\"${uid}\""; then
+    printf '%s' "${code}"
+    return 0
+  fi
+  printf '%s' "${code}"
+  return 1
+}
+
 require_file() {
   local path="$1"
   if [[ ! -f "${path}" ]]; then
@@ -129,6 +157,21 @@ if [[ "${CLOUDFLARED_HAS_REGISTRATION}" != "true" ]]; then
   CLOUDFLARED_REGISTRATION_WARN="true"
 fi
 
+LOKI_CONTAINER_ID="$(compose ps -q loki 2>/dev/null | head -n 1 || true)"
+LOKI_STATUS="$(docker inspect --format '{{.State.Status}}' "${LOKI_CONTAINER_ID}" 2>/dev/null || echo "missing")"
+LOKI_RESTARTING="$(docker inspect --format '{{.State.Restarting}}' "${LOKI_CONTAINER_ID}" 2>/dev/null || echo "unknown")"
+
+PROMTAIL_CONTAINER_ID="$(compose ps -q promtail 2>/dev/null | head -n 1 || true)"
+PROMTAIL_STATUS="$(docker inspect --format '{{.State.Status}}' "${PROMTAIL_CONTAINER_ID}" 2>/dev/null || echo "missing")"
+PROMTAIL_RESTARTING="$(docker inspect --format '{{.State.Restarting}}' "${PROMTAIL_CONTAINER_ID}" 2>/dev/null || echo "unknown")"
+
+GRAFANA_LOKI_DS_STATUS="none"
+if [[ "${LOKI_STATUS}" == "running" ]]; then
+  if GRAFANA_LOKI_DS_STATUS="$(query_grafana_datasource_uid_status "loki")"; then
+    :
+  fi
+fi
+
 log "active_backend=${ACTIVE_BACKEND:-none}"
 log "expected_image=${EXPECTED_BACK_IMAGE:-none}"
 log "active_image=${ACTIVE_BACKEND_IMAGE:-none}"
@@ -137,6 +180,9 @@ log "inactive_backend=${INACTIVE_BACKEND}"
 log "internal_readiness=${INTERNAL_HTTP_CODE:-none}"
 log "public_readiness=${PUBLIC_HTTP_CODE:-none}"
 log "cloudflared_status=${CLOUDFLARED_STATUS} restarting=${CLOUDFLARED_RESTARTING} restart_count=${CLOUDFLARED_RESTART_COUNT} registration=${CLOUDFLARED_HAS_REGISTRATION}"
+log "loki_status=${LOKI_STATUS} restarting=${LOKI_RESTARTING}"
+log "promtail_status=${PROMTAIL_STATUS} restarting=${PROMTAIL_RESTARTING}"
+log "grafana_loki_datasource_status=${GRAFANA_LOKI_DS_STATUS}"
 
 if [[ -z "${EXPECTED_BACK_IMAGE}" ]]; then
   remember_failure "missing_expected_back_image"
@@ -178,6 +224,22 @@ elif [[ "${CLOUDFLARED_STATUS}" != "running" || "${CLOUDFLARED_RESTARTING}" == "
   remember_failure "cloudflared_unhealthy status=${CLOUDFLARED_STATUS} restarting=${CLOUDFLARED_RESTARTING}"
 elif [[ "${CLOUDFLARED_RESTART_COUNT}" =~ ^[0-9]+$ ]] && (( CLOUDFLARED_RESTART_COUNT > 5 )); then
   remember_failure "cloudflared_restart_count=${CLOUDFLARED_RESTART_COUNT}"
+fi
+
+if [[ -z "${LOKI_CONTAINER_ID}" ]]; then
+  remember_failure "loki_container_missing"
+elif [[ "${LOKI_STATUS}" != "running" || "${LOKI_RESTARTING}" == "true" ]]; then
+  remember_failure "loki_unhealthy status=${LOKI_STATUS} restarting=${LOKI_RESTARTING}"
+fi
+
+if [[ -z "${PROMTAIL_CONTAINER_ID}" ]]; then
+  remember_failure "promtail_container_missing"
+elif [[ "${PROMTAIL_STATUS}" != "running" || "${PROMTAIL_RESTARTING}" == "true" ]]; then
+  remember_failure "promtail_unhealthy status=${PROMTAIL_STATUS} restarting=${PROMTAIL_RESTARTING}"
+fi
+
+if [[ "${LOKI_STATUS}" == "running" ]] && [[ "${GRAFANA_LOKI_DS_STATUS}" != "200" ]]; then
+  remember_failure "grafana_loki_datasource_unhealthy status=${GRAFANA_LOKI_DS_STATUS}"
 fi
 
 if [[ "${CLOUDFLARED_REGISTRATION_WARN}" == "true" ]]; then

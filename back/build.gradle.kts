@@ -238,6 +238,7 @@ dependencies {
 
     // SpringDoc
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
+    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
     // ShedLock
     implementation("net.javacrumbs.shedlock:shedlock-spring:7.6.0")

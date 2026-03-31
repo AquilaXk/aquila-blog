@@ -6,6 +6,10 @@ deleteDatasources:
     orgId: 1
   - name: prometheus
     orgId: 1
+  - name: Loki
+    orgId: 1
+  - name: loki
+    orgId: 1
 
 datasources:
   - name: prometheus
@@ -15,4 +19,11 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    editable: false
+  - name: loki
+    orgId: 1
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
     editable: false

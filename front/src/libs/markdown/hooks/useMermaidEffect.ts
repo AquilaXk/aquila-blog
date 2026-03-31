@@ -279,15 +279,24 @@ const useMermaidEffect = (
     // Mermaid htmlLabels(<foreignObject>)는 전역 타이포/line-height 영향으로 CJK 줄바꿈 라벨이 잘릴 수 있어
     // 렌더 직후 라벨 스타일을 최소값으로 고정해 작성/상세 모두 동일한 가독성을 유지한다.
     const stabilizeMermaidSvgLabels = (svgElement: SVGSVGElement) => {
-      svgElement.querySelectorAll<HTMLElement>(".nodeLabel p, .edgeLabel p").forEach((labelParagraph) => {
-        labelParagraph.style.margin = "0"
-        labelParagraph.style.lineHeight = "1.22"
-        labelParagraph.style.whiteSpace = "pre-line"
-      })
+      svgElement
+        .querySelectorAll<HTMLElement>(
+          ".nodeLabel p, .edgeLabel p, .nodeLabel div, .edgeLabel div, .nodeLabel span, .edgeLabel span"
+        )
+        .forEach((labelElement) => {
+          labelElement.style.margin = "0"
+          labelElement.style.lineHeight = "1.34"
+          labelElement.style.whiteSpace = "pre-line"
+          labelElement.style.overflowWrap = "anywhere"
+          labelElement.style.wordBreak = "keep-all"
+          labelElement.style.display = "block"
+        })
 
-      svgElement.querySelectorAll<SVGElement>(".nodeLabel, .edgeLabel").forEach((labelContainer) => {
-        labelContainer.style.overflow = "visible"
-      })
+      svgElement
+        .querySelectorAll<SVGElement>("foreignObject, .nodeLabel, .edgeLabel")
+        .forEach((labelContainer) => {
+          labelContainer.style.overflow = "visible"
+        })
     }
 
     const escapeMermaidHtml = (value: string) =>

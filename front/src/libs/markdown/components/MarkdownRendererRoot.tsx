@@ -607,16 +607,23 @@ const MarkdownRendererRoot = styled.div`
     overflow: visible;
   }
 
-  .aq-mermaid-stage > svg .nodeLabel p,
-  .aq-mermaid-stage > svg .edgeLabel p {
-    margin: 0;
-    line-height: 1.22;
-    white-space: pre-line;
-  }
-
+  .aq-mermaid-stage > svg foreignObject,
   .aq-mermaid-stage > svg .nodeLabel,
   .aq-mermaid-stage > svg .edgeLabel {
     overflow: visible;
+  }
+
+  .aq-mermaid-stage > svg .nodeLabel p,
+  .aq-mermaid-stage > svg .edgeLabel p,
+  .aq-mermaid-stage > svg .nodeLabel div,
+  .aq-mermaid-stage > svg .edgeLabel div,
+  .aq-mermaid-stage > svg .nodeLabel span,
+  .aq-mermaid-stage > svg .edgeLabel span {
+    margin: 0;
+    line-height: 1.34;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
   }
 
   .aq-mermaid-error-state {

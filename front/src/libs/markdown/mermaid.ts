@@ -3,8 +3,6 @@ const normalizeLineEndings = (raw: string) => raw.replace(/\r\n?/g, "\n")
 // 에디터/IME 환경에 따라 code fence가 백틱이 아닌 유사 문자(' 포함)로 입력되는 경우를 교정한다.
 const normalizeFenceChars = (raw: string) => raw.replace(/[｀´ˋ'‘’]/g, "`")
 const stripInvisibleChars = (raw: string) => raw.replace(/[\u200B-\u200D\uFEFF]/g, "")
-const normalizeHtmlLineBreaks = (raw: string) => raw.replace(/<br\s*\/?>/gi, "\n")
-
 const SEQUENCE_DECLARATION_REGEX = /\b(participant|actor)\s+(.+?)(?=\s+(?:participant|actor)\s+|$)/gi
 const MERMAID_IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -278,7 +276,7 @@ export const normalizeEscapedMarkdownFences = (raw: string): string => {
 }
 
 export const extractNormalizedMermaidSource = (raw: string): string => {
-  const normalized = normalizeHtmlLineBreaks(normalizeEscapedMarkdownFences(raw)).trim()
+  const normalized = normalizeEscapedMarkdownFences(raw).trim()
   if (!normalized) return ""
 
   const fencedSource = extractFirstFencedMermaidSource(normalized)

@@ -37,9 +37,9 @@ class ProdSequenceGuardService(
      */
     fun repairIfSequenceDrift(exception: DataIntegrityViolationException): Boolean {
         val message = exception.mostSpecificCause?.message ?: exception.message ?: return false
-        if (!message.contains("duplicate key value violates unique constraint", ignoreCase = true)) return false
+        if (!isDuplicateKeyViolation(exception, message)) return false
 
-        val constraintName = extractConstraintName(message) ?: return false
+        val constraintName = extractConstraintName(exception, message) ?: return false
         val target = sequenceTargetsByConstraint[constraintName.lowercase()] ?: return false
         return repairSequence(target)
     }
@@ -48,6 +48,11 @@ class ProdSequenceGuardService(
         sequenceTargetsByConstraint.values.distinctBy { it.table }.forEach { target ->
             repairSequence(target)
         }
+    }
+
+    fun repairUploadedFileSequence(): Boolean {
+        val target = sequenceTargetsByConstraint[UPLOADED_FILE_CONSTRAINT_KEY] ?: return false
+        return repairSequence(target)
     }
 
     private fun repairSequence(target: SequenceTarget): Boolean =
@@ -78,10 +83,61 @@ class ProdSequenceGuardService(
      * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
      * 애플리케이션 계층에서 트랜잭션 경계와 후속 처리(캐시/큐/이벤트)를 함께 관리합니다.
      */
-    private fun extractConstraintName(message: String): String? {
+    private fun extractConstraintName(
+        exception: DataIntegrityViolationException,
+        message: String,
+    ): String? {
+        val serverConstraint = extractServerConstraintName(exception).orEmpty()
+        if (serverConstraint.isNotBlank()) return serverConstraint
+
+        return extractConstraintNameFromMessage(message)
+            ?: sequenceTargetsByConstraint.keys.firstOrNull { key -> message.contains(key, ignoreCase = true) }
+    }
+
+    private fun extractConstraintNameFromMessage(message: String): String? {
         val match = CONSTRAINT_NAME_PATTERN.matcher(message)
         if (!match.find()) return null
         return match.group(1)
+    }
+
+    private fun isDuplicateKeyViolation(
+        exception: DataIntegrityViolationException,
+        message: String,
+    ): Boolean {
+        val sqlState = extractSqlState(exception)
+        if (!sqlState.isNullOrBlank()) {
+            return sqlState == DUPLICATE_KEY_SQLSTATE
+        }
+
+        return message.contains("duplicate key value violates unique constraint", ignoreCase = true) ||
+            (message.contains("중복 키 값") && message.contains("고유 제약 조건"))
+    }
+
+    private fun extractSqlState(exception: DataIntegrityViolationException): String? {
+        val cause = exception.mostSpecificCause ?: return null
+        return runCatching {
+            cause.javaClass.methods
+                .firstOrNull { method -> method.name == "getSQLState" || method.name == "getSqlState" }
+                ?.invoke(cause) as? String
+        }.getOrNull()
+    }
+
+    private fun extractServerConstraintName(exception: DataIntegrityViolationException): String? {
+        val cause = exception.mostSpecificCause ?: return null
+        return runCatching {
+            val serverErrorMessage =
+                cause.javaClass.methods
+                    .firstOrNull { method -> method.name == "getServerErrorMessage" }
+                    ?.invoke(cause)
+                    ?: return@runCatching null
+
+            val constraint =
+                serverErrorMessage.javaClass.methods
+                    .firstOrNull { method -> method.name == "getConstraint" }
+                    ?.invoke(serverErrorMessage) as? String
+
+            constraint?.trim()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
     }
 
     private data class SequenceTarget(
@@ -92,7 +148,10 @@ class ProdSequenceGuardService(
 
     companion object {
         private val log = LoggerFactory.getLogger(ProdSequenceGuardService::class.java)
-        private val CONSTRAINT_NAME_PATTERN = Pattern.compile("constraint\\s+\"([^\"]+)\"", Pattern.CASE_INSENSITIVE)
+        private const val DUPLICATE_KEY_SQLSTATE = "23505"
+        private const val UPLOADED_FILE_CONSTRAINT_KEY = "uploaded_file_pkey"
+        private val CONSTRAINT_NAME_PATTERN =
+            Pattern.compile("(?:constraint|제약\\s*조건)\\s+\"([^\"]+)\"", Pattern.CASE_INSENSITIVE)
         private val sequenceTargetsByConstraint: Map<String, SequenceTarget> =
             mapOf(
                 "member_pkey" to SequenceTarget("member", "member_seq", 50),

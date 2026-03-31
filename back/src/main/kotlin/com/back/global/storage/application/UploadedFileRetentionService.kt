@@ -149,7 +149,13 @@ class UploadedFileRetentionService(
 
     private fun repairSequenceDriftInRequiresNewTransaction(exception: DataIntegrityViolationException): Boolean =
         requiresNewTransactionTemplate.execute<Boolean> {
-            prodSequenceGuardService?.repairIfSequenceDrift(exception) == true
+            val repairedByConstraint = prodSequenceGuardService?.repairIfSequenceDrift(exception) == true
+            if (repairedByConstraint) {
+                return@execute true
+            }
+
+            // uploaded_file 등록 경로는 제약명 파싱 실패 시에도 전용 시퀀스 보정 fallback을 시도한다.
+            prodSequenceGuardService?.repairUploadedFileSequence() == true
         } ?: false
 
     /**

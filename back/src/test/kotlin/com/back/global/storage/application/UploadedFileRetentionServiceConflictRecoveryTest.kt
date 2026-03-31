@@ -73,6 +73,30 @@ class UploadedFileRetentionServiceConflictRecoveryTest {
         verifyNoInteractions(prodSequenceGuardService)
     }
 
+    @Test
+    fun `registerTempUpload은 제약명 파싱 실패 시 uploaded_file 전용 sequence fallback으로 복구한다`() {
+        val conflict = DataIntegrityViolationException("중복 키 값이 존재합니다.")
+        val repository = SequenceDriftRecoveringRepository(conflict)
+        `when`(prodSequenceGuardService.repairIfSequenceDrift(conflict)).thenReturn(false)
+        `when`(prodSequenceGuardService.repairUploadedFileSequence()).thenReturn(true)
+
+        val service = newService(repository)
+
+        assertDoesNotThrow {
+            service.registerTempUpload(
+                objectKey = "posts/2026/03/fallback.png",
+                contentType = "image/png",
+                fileSize = 1024,
+                purpose = UploadedFilePurpose.POST_IMAGE,
+            )
+        }
+
+        assertThat(repository.saveCallCount).isEqualTo(2)
+        assertThat(repository.findByObjectKey("posts/2026/03/fallback.png")).isNotNull
+        verify(prodSequenceGuardService).repairIfSequenceDrift(conflict)
+        verify(prodSequenceGuardService).repairUploadedFileSequence()
+    }
+
     private fun newService(repository: UploadedFileRepositoryPort): UploadedFileRetentionService =
         UploadedFileRetentionService(
             uploadedFileRepository = repository,

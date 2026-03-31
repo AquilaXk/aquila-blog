@@ -476,6 +476,7 @@ type TableRowResizeState = {
 }
 
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse), (max-width: 1024px)"
+const BLOCK_HANDLE_POSITION_EPSILON_PX = 0.4
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"
@@ -562,7 +563,7 @@ const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
 
 const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
   const rect = blockElement.getBoundingClientRect()
-  if (typeof window === "undefined") return Math.round(rect.top + 6)
+  if (typeof window === "undefined") return rect.top + 6
 
   const lineAnchorElement =
     (blockElement.matches("p, h1, h2, h3, h4, blockquote")
@@ -576,8 +577,22 @@ const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: numb
   const lineHeight =
     Number.isFinite(parsedLineHeight) && parsedLineHeight > 0 ? parsedLineHeight : fontSize * 1.42
 
-  return Math.round(rect.top + Math.max(0, (lineHeight - railHeight) / 2))
+  return rect.top + Math.max(0, (lineHeight - railHeight) / 2)
 }
+
+const isWithinBlockHandleEpsilon = (prev: number, next: number) =>
+  Math.abs(prev - next) <= BLOCK_HANDLE_POSITION_EPSILON_PX
+
+const isStableBlockHandleState = (
+  prev: TopLevelBlockHandleState,
+  next: TopLevelBlockHandleState
+) =>
+  prev.visible === next.visible &&
+  prev.blockIndex === next.blockIndex &&
+  isWithinBlockHandleEpsilon(prev.left, next.left) &&
+  isWithinBlockHandleEpsilon(prev.top, next.top) &&
+  isWithinBlockHandleEpsilon(prev.bottom, next.bottom) &&
+  isWithinBlockHandleEpsilon(prev.width, next.width)
 
 const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
   Boolean(
@@ -3381,24 +3396,36 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const sync = () => setSelectionTick((prev) => prev + 1)
+    let rafId: number | null = null
+    const sync = () => {
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        setSelectionTick((prev) => prev + 1)
+      })
+    }
     window.addEventListener("scroll", sync, true)
     window.addEventListener("resize", sync)
     return () => {
       window.removeEventListener("scroll", sync, true)
       window.removeEventListener("resize", sync)
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
     }
   }, [])
 
   useEffect(() => {
     if (!editor) return
+    const hideBlockHandle = () =>
+      setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
     if (isTableMode || tableQuickRailState.visible) {
-      setBlockHandleState((prev) => ({ ...prev, visible: false }))
+      hideBlockHandle()
       return
     }
     const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex
     if (blockIndex === null) {
-      setBlockHandleState((prev) => ({ ...prev, visible: false }))
+      hideBlockHandle()
       return
     }
     const blockElement = getTopLevelBlockElementByIndex(blockIndex)
@@ -3408,27 +3435,29 @@ const BlockEditorShell = ({
     )
 
     if (!shouldShow || !blockElement) {
-      setBlockHandleState((prev) => ({ ...prev, visible: false }))
+      hideBlockHandle()
       return
     }
 
     const rect = blockElement.getBoundingClientRect()
-    const railRect = blockHandleRailRef.current?.getBoundingClientRect()
-    const railWidth = railRect?.width || 54
+    const railElement = blockHandleRailRef.current
+    const railWidth = railElement?.offsetWidth || 54
     const blocks = ((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[]
     const blockNode = blocks[blockIndex]
-    const railHeight = railRect?.height || 40
+    const railHeight = railElement?.offsetHeight || 40
     const anchoredTop = shouldCenterBlockHandleForNode(blockNode)
       ? resolveBlockHandleAnchorTop(blockElement, railHeight)
-      : Math.round(rect.top + 6)
-    setBlockHandleState({
+      : rect.top + 6
+    const nextState: TopLevelBlockHandleState = {
       visible: true,
       blockIndex,
-      left: Math.max(12, Math.round(rect.left - railWidth - 10)),
+      left: Math.max(12, rect.left - railWidth - 10),
       top: anchoredTop,
-      bottom: Math.round(rect.bottom + 12),
-      width: Math.round(rect.width),
-    })
+      bottom: rect.bottom + 12,
+      width: rect.width,
+    }
+
+    setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
   }, [
     editor,
     getTopLevelBlockElementByIndex,

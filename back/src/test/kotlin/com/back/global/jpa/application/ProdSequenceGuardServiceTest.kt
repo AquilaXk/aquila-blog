@@ -46,6 +46,23 @@ class ProdSequenceGuardServiceTest {
     }
 
     @Test
+    fun `한글 로케일 duplicate 메시지도 uploaded_file 시퀀스 보정 타깃으로 인식한다`() {
+        val jdbcTemplate = mock(JdbcTemplate::class.java)
+        val service = ProdSequenceGuardService(jdbcTemplate, sequenceGuardOnStartup = false)
+
+        val repaired =
+            service.repairIfSequenceDrift(
+                DataIntegrityViolationException("중복 키 값이 고유 제약 조건 \"uploaded_file_pkey\"을 위반했습니다."),
+            )
+
+        assertThat(repaired).isTrue()
+        verify(jdbcTemplate).execute("ALTER SEQUENCE IF EXISTS public.uploaded_file_seq INCREMENT BY 1")
+        verify(jdbcTemplate).execute(
+            "SELECT setval('public.uploaded_file_seq', COALESCE((SELECT MAX(id) FROM public.uploaded_file), 0) + 1, false)",
+        )
+    }
+
+    @Test
     fun `시퀀스 대상이 아닌 unique 충돌은 보정하지 않는다`() {
         val jdbcTemplate = mock(JdbcTemplate::class.java)
         val service = ProdSequenceGuardService(jdbcTemplate, sequenceGuardOnStartup = false)

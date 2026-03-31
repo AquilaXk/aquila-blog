@@ -60,12 +60,12 @@ test.describe("block editor serialization", () => {
     expect(serialized).toContain("A[첫 줄<br>둘째 줄] --> B[완료]")
   })
 
-  test("mermaid 렌더 소스는 HTML 줄바꿈을 개행으로 정규화한다", () => {
+  test("mermaid 렌더 소스는 라벨의 HTML 줄바꿈 태그를 그대로 유지한다", () => {
     const source = extractNormalizedMermaidSource(
       ["```mermaid", "flowchart TD", "  A[첫 줄<br>둘째 줄] --> B[완료]", "```"].join("\n")
     )
 
-    expect(source).toContain("A[첫 줄\n둘째 줄] --> B[완료]")
+    expect(source).toContain("A[첫 줄<br>둘째 줄] --> B[완료]")
   })
 
   test("sequenceDiagram participant 특수문자 식별자는 alias로 정규화한다", () => {

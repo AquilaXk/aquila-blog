@@ -620,6 +620,7 @@ const BlockEditorShell = ({
     width: 0,
     height: 0,
   })
+  const tableQuickRailStateRef = useRef(tableQuickRailState)
   const [draggedBlockState, setDraggedBlockState] = useState<DraggedBlockState>(null)
   const [dragGhostPosition, setDragGhostPosition] = useState<{ x: number; y: number } | null>(null)
   const [dropIndicatorState, setDropIndicatorState] = useState<DropIndicatorState>({
@@ -1156,6 +1157,10 @@ const BlockEditorShell = ({
     })
   }, [])
 
+  useEffect(() => {
+    tableQuickRailStateRef.current = tableQuickRailState
+  }, [tableQuickRailState])
+
   const syncSerializedDoc = useCallback(
     (nextDoc: BlockEditorDoc) => {
       const serialized = serializeEditorDocToMarkdown(nextDoc)
@@ -1550,6 +1555,17 @@ const BlockEditorShell = ({
         !activeEditor.isActive("rawMarkdownBlock")
 
       if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
+        const quickRail = tableQuickRailStateRef.current
+        if (quickRail.visible) {
+          setBubbleState({
+            visible: true,
+            mode: "table",
+            anchor: "left",
+            left: Math.round(quickRail.left + 58),
+            top: Math.round(quickRail.top),
+          })
+          return
+        }
         if (bubbleToolbarHoveredRef.current) return
         scheduleBubbleHide()
         setTableQuickRailState((prev) => ({ ...prev, visible: false }))
@@ -1606,6 +1622,44 @@ const BlockEditorShell = ({
       cancelBubbleHide()
     }
   }, [cancelBubbleHide, editor, scheduleBubbleHide])
+
+  useEffect(() => {
+    if (isCoarsePointer) return
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+    const tableActive = isTableSelectionActive(currentEditor)
+
+    if (tableQuickRailState.visible && !tableActive) {
+      setBubbleState((prev) => {
+        const nextLeft = Math.round(tableQuickRailState.left + 58)
+        const nextTop = Math.round(tableQuickRailState.top)
+        if (
+          prev.visible &&
+          prev.mode === "table" &&
+          prev.anchor === "left" &&
+          Math.abs(prev.left - nextLeft) <= 1 &&
+          Math.abs(prev.top - nextTop) <= 1
+        ) {
+          return prev
+        }
+        return {
+          visible: true,
+          mode: "table",
+          anchor: "left",
+          left: nextLeft,
+          top: nextTop,
+        }
+      })
+      return
+    }
+
+    if (!tableQuickRailState.visible && !tableActive && !bubbleToolbarHoveredRef.current) {
+      setBubbleState((prev) => {
+        if (!prev.visible || prev.mode !== "table") return prev
+        return { ...prev, visible: false }
+      })
+    }
+  }, [isCoarsePointer, tableQuickRailState.left, tableQuickRailState.top, tableQuickRailState.visible])
 
   useEffect(() => {
     return () => {
@@ -3058,7 +3112,7 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
-    if (isTableMode) {
+    if (isTableMode || tableQuickRailState.visible) {
       setBlockHandleState((prev) => ({ ...prev, visible: false }))
       return
     }
@@ -3099,6 +3153,7 @@ const BlockEditorShell = ({
     isTopLevelBlockHandleEligible,
     selectedBlockIndex,
     selectionTick,
+    tableQuickRailState.visible,
   ])
 
   useEffect(() => {
@@ -3743,7 +3798,7 @@ const BlockEditorShell = ({
             )}
           </FloatingBubbleToolbar>
         ) : null}
-        {!isCoarsePointer && tableQuickRailState.visible && isTableMode ? (
+        {!isCoarsePointer && tableQuickRailState.visible ? (
           <>
             <TableAxisRail
               data-testid="table-column-rail"
@@ -3821,7 +3876,7 @@ const BlockEditorShell = ({
               aria-label="블록 이동"
               title="블록 이동"
               data-variant="drag"
-              data-testid="block-drag-handle"
+              data-testid={blockHandleState.visible ? "block-drag-handle" : undefined}
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()

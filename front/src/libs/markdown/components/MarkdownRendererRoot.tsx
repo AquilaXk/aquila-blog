@@ -610,21 +610,7 @@ const MarkdownRendererRoot = styled.div`
   .aq-mermaid-stage > svg .nodeLabel p,
   .aq-mermaid-stage > svg .edgeLabel p {
     margin: 0;
-    line-height: 1.35;
-  }
-
-  .aq-mermaid-stage > svg .nodeLabel > text,
-  .aq-mermaid-stage > svg .edgeLabel > text,
-  .aq-mermaid-stage > svg .label text {
-    white-space: pre;
-  }
-
-  .aq-mermaid-stage > svg .nodeLabel > text > tspan,
-  .aq-mermaid-stage > svg .edgeLabel > text > tspan,
-  .aq-mermaid-stage > svg .label text > tspan {
-    dominant-baseline: auto !important;
-    alignment-baseline: baseline !important;
-    transform: none;
+    line-height: 1.45;
   }
 
   .aq-mermaid-error-state {
@@ -808,9 +794,10 @@ const MarkdownRendererRoot = styled.div`
 
     table,
     .aq-table {
-      width: max-content;
+      width: 100%;
       min-width: 100%;
-      max-width: none;
+      max-width: 100%;
+      table-layout: fixed;
     }
 
     table thead,
@@ -1003,12 +990,12 @@ const MarkdownRendererRoot = styled.div`
 
   table,
   .aq-table {
-    width: max-content;
+    width: 100%;
     min-width: 100%;
-    max-width: none;
+    max-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    table-layout: auto;
+    table-layout: fixed;
     margin: 0;
     border: 0;
     background: transparent;
@@ -1016,6 +1003,7 @@ const MarkdownRendererRoot = styled.div`
 
   thead th,
   .aq-table thead th {
+    text-align: left !important;
     background: ${({ theme }) => theme.colors.gray3};
     font-weight: 700;
     border-bottom: 2px solid
@@ -1032,6 +1020,17 @@ const MarkdownRendererRoot = styled.div`
     vertical-align: top;
     min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  th > *,
+  td > *,
+  .aq-table th > *,
+  .aq-table td > * {
+    min-width: 0;
+    max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -1103,11 +1102,11 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-callout.aq-admonition {
     --ad-header-h: 52px;
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#38bdf8" : "#0f6fa8")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.14)" : "#e9f5fb")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.06)" : "#f7fbfe")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.24)" : "#bfe0f4")};
-    --ad-text: ${({ theme }) => theme.colors.gray11};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4cc9f0" : "#0b63a8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.2)" : "#e9f4ff")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.12)" : "#f4f9ff")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.38)" : "#9cc4e8")};
+    --ad-text: ${({ theme }) => (theme.scheme === "dark" ? "#e6edf6" : "#1f2937")};
     position: relative;
     display: block;
     border: 1px solid var(--ad-border);
@@ -1172,45 +1171,45 @@ const MarkdownRendererRoot = styled.div`
   }
 
   .aq-callout.aq-admonition-tip {
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#f6ad55" : "#b45309")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.15)" : "#fff1d6")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.07)" : "#fffbf3")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.26)" : "#f6d7a7")};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#f6ad55" : "#c46a10")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.2)" : "#fff1d8")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.12)" : "#fff8e8")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(246, 173, 85, 0.36)" : "#e9c27d")};
   }
 
   .aq-callout.aq-admonition-info {
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#38bdf8" : "#0f6fa8")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.14)" : "#e9f5fb")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.06)" : "#f7fbfe")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(56, 189, 248, 0.24)" : "#bfe0f4")};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4cc9f0" : "#0b63a8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.2)" : "#e9f4ff")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.12)" : "#f4f9ff")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(76, 201, 240, 0.38)" : "#9cc4e8")};
   }
 
   .aq-callout.aq-admonition-warning {
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#fb7185" : "#c2415c")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.15)" : "#fdf0f3")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.07)" : "#fff7f8")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.26)" : "#f2c7d0")};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#fb7185" : "#b42344")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.2)" : "#fdecef")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.12)" : "#fff6f8")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(251, 113, 133, 0.38)" : "#e8a8b8")};
   }
 
   .aq-callout.aq-admonition-outline {
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#94a3b8" : "#64748b")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.14)" : "#eef2f6")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.06)" : "#f8fafc")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "#d7dce3")};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#94a3b8" : "#475569")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "#eef2f6")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.12)" : "#f8fafc")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.34)" : "#c7d1dd")};
   }
 
   .aq-callout.aq-admonition-example {
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4ade80" : "#15803d")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.14)" : "#edf8f1")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.06)" : "#f7fcf8")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.24)" : "#cfe8d9")};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#4ade80" : "#166534")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.2)" : "#e8f7ef")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.12)" : "#f4fcf7")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(74, 222, 128, 0.36)" : "#9fd9b4")};
   }
 
   .aq-callout.aq-admonition-summary {
-    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#818cf8" : "#5b5fc7")};
-    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(129, 140, 248, 0.14)" : "#efeffd")};
-    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(129, 140, 248, 0.06)" : "#f8f8ff")};
-    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(129, 140, 248, 0.24)" : "#d7d8f2")};
+    --ad-accent: ${({ theme }) => (theme.scheme === "dark" ? "#a78bfa" : "#5b4ab8")};
+    --ad-header-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(167, 139, 250, 0.2)" : "#efecff")};
+    --ad-body-bg: ${({ theme }) => (theme.scheme === "dark" ? "rgba(167, 139, 250, 0.12)" : "#f7f5ff")};
+    --ad-border: ${({ theme }) => (theme.scheme === "dark" ? "rgba(167, 139, 250, 0.38)" : "#bfb3eb")};
   }
 `
 

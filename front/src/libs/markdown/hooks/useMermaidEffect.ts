@@ -285,7 +285,7 @@ const useMermaidEffect = (
         )
         .forEach((labelElement) => {
           labelElement.style.margin = "0"
-          labelElement.style.lineHeight = "1.12"
+          labelElement.style.lineHeight = "1.24"
         })
 
       svgElement

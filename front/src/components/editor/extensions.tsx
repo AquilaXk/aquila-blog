@@ -1898,7 +1898,7 @@ const MermaidPreviewCard = styled.div`
   .aq-mermaid-stage > svg .nodeLabel span,
   .aq-mermaid-stage > svg .edgeLabel span {
     margin: 0;
-    line-height: 1.12;
+    line-height: 1.24;
   }
 `
 

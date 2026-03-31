@@ -1419,6 +1419,7 @@ const BlockEditorShell = ({
       }),
       Table.configure({
         resizable: true,
+        renderWrapper: true,
         cellMinWidth: TABLE_MIN_COLUMN_WIDTH_PX,
       }),
       EditorTableRow,
@@ -1441,9 +1442,12 @@ const BlockEditorShell = ({
       ...(enableMermaidBlocks ? [MermaidBlock] : []),
     ],
     content: initialDocRef.current,
-    editable: !disabled,
+    // Keep editor initialization deterministic so table nodeView/plugin path
+    // does not diverge by first-render loading state.
+    editable: true,
     onCreate: ({ editor: createdEditor }) => {
       editorRef.current = createdEditor
+      createdEditor.setEditable(!disabled)
     },
     onDestroy: () => {
       editorRef.current = null

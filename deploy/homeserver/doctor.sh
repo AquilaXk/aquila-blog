@@ -59,14 +59,14 @@ notification_sse_probe_output() {
     api_domain="$1"
     admin_email="$2"
     admin_password="$3"
-    cookie_jar="$(mktemp)"
-    trap "rm -f \"${cookie_jar}\"" EXIT
+    login_headers="$(mktemp)"
+    trap "rm -f \"${login_headers}\"" EXIT
     login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
     login_code="$(
       curl -sS \
         --connect-timeout 3 \
         --max-time 12 \
-        -c "${cookie_jar}" \
+        -D "${login_headers}" \
         -o /dev/null \
         -w "%{http_code}" \
         -H "Host: ${api_domain}" \
@@ -79,11 +79,20 @@ notification_sse_probe_output() {
       exit 11
     fi
 
+    access_token="$(
+      grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+    )"
+    if [[ -z "${access_token}" ]]; then
+      echo "login_access_token=missing"
+      exit 12
+    fi
+
     stream_body="$(
       curl -sS -N \
         --connect-timeout 3 \
         --max-time 35 \
-        -b "${cookie_jar}" \
+        -H "Authorization: Bearer ${access_token}" \
+        -H "Accept: text/event-stream" \
         -H "Host: ${api_domain}" \
         "http://caddy:80/member/api/v1/notifications/stream" || true
     )"
@@ -122,14 +131,14 @@ print_notification_sse_status() {
       api_domain="$1"
       admin_email="$2"
       admin_password="$3"
-      cookie_jar="$(mktemp)"
-      trap "rm -f \"${cookie_jar}\"" EXIT
+      login_headers="$(mktemp)"
+      trap "rm -f \"${login_headers}\"" EXIT
       login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
       login_code="$(
         curl -sS \
           --connect-timeout 3 \
           --max-time 12 \
-          -c "${cookie_jar}" \
+          -D "${login_headers}" \
           -o /dev/null \
           -w "%{http_code}" \
           -H "Host: ${api_domain}" \
@@ -141,11 +150,19 @@ print_notification_sse_status() {
         echo "HTTP_STATUS:000"
         exit 0
       fi
+      access_token="$(
+        grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+      )"
+      if [[ -z "${access_token}" ]]; then
+        echo "HTTP_STATUS:000"
+        echo "login_access_token=missing"
+        exit 0
+      fi
       response="$(
         curl -sS \
           --connect-timeout 3 \
           --max-time 10 \
-          -b "${cookie_jar}" \
+          -H "Authorization: Bearer ${access_token}" \
           -w $"\nHTTP_STATUS:%{http_code}\n" \
           -H "Host: ${api_domain}" \
           "http://caddy:80/system/api/v1/adm/notifications/stream" || true
@@ -286,14 +303,14 @@ inspect_grafana_origin_auth_proxy_headers() {
     path="$3"
     admin_email="$4"
     admin_password="$5"
-    cookie_jar="$(mktemp)"
-    trap "rm -f \"${cookie_jar}\"" EXIT
+    login_headers="$(mktemp)"
+    trap "rm -f \"${login_headers}\"" EXIT
     login_payload="{\"email\":\"${admin_email}\",\"password\":\"${admin_password}\"}"
     login_code="$(
       curl -sS \
         --connect-timeout 3 \
         --max-time 12 \
-        -c "${cookie_jar}" \
+        -D "${login_headers}" \
         -o /dev/null \
         -w "%{http_code}" \
         -H "Host: ${api_domain}" \
@@ -305,10 +322,17 @@ inspect_grafana_origin_auth_proxy_headers() {
       printf "HTTP/1.1 000 login_failed\r\n"
       exit 0
     fi
+    access_token="$(
+      grep -i "^Set-Cookie: accessToken=" "${login_headers}" | head -n 1 | tr -d "\r" | sed -E "s/^Set-Cookie: accessToken=([^;]*).*/\1/I"
+    )"
+    if [[ -z "${access_token}" ]]; then
+      printf "HTTP/1.1 000 missing_access_token\r\n"
+      exit 0
+    fi
     curl -I -s \
       --connect-timeout 3 \
       --max-time 12 \
-      -b "${cookie_jar}" \
+      -H "Authorization: Bearer ${access_token}" \
       -H "Host: ${grafana_domain}" \
       "http://caddy:80${path}" || true
   ' sh "${api_domain}" "${grafana_domain}" "${path}" "${admin_email}" "${admin_password}" 2>/dev/null || true

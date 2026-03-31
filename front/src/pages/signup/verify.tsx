@@ -146,10 +146,10 @@ const SignupVerifyPage = () => {
     <AuthShell
       activeTab="signup"
       title="회원가입"
-      subtitle="이메일 확인이 끝났습니다. 이제 기본 계정 정보를 등록해주세요."
       eyebrow="Verified Email"
       heroTitle="환영합니다!"
       heroDescription="이메일은 확인 완료 상태로 잠겨 있습니다. 이제 닉네임과 비밀번호를 설정하면 됩니다."
+      hideTabs
       footer={
         <FooterText>
           다시 시작하려면 <Link href={toSignupPath(next)}>회원가입 처음으로</Link>
@@ -175,7 +175,6 @@ const SignupVerifyPage = () => {
           <Field>
             <FieldTop>
               <Label htmlFor="signup-nickname">프로필 이름</Label>
-              <FieldHint>댓글과 화면에 보일 이름</FieldHint>
             </FieldTop>
             <Input
               id="signup-nickname"
@@ -189,7 +188,6 @@ const SignupVerifyPage = () => {
           <Field>
             <FieldTop>
               <Label htmlFor="signup-password">비밀번호</Label>
-              <FieldHint>안전한 비밀번호 규칙 적용</FieldHint>
             </FieldTop>
             <PasswordRow>
               <Input
@@ -209,7 +207,6 @@ const SignupVerifyPage = () => {
           <Field>
             <FieldTop>
               <Label htmlFor="signup-password-confirm">비밀번호 확인</Label>
-              <FieldHint>같은 비밀번호 다시 입력</FieldHint>
             </FieldTop>
             <PasswordRow>
               <Input

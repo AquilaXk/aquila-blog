@@ -5,7 +5,7 @@ import { ReactNode } from "react"
 type AuthShellProps = {
   activeTab: "login" | "signup"
   title: string
-  subtitle: string
+  subtitle?: string
   eyebrow: string
   heroTitle: string
   heroDescription?: string
@@ -18,6 +18,7 @@ type AuthShellProps = {
   children: ReactNode
   loginHref?: string
   signupHref?: string
+  hideTabs?: boolean
 }
 
 const AuthShell = ({
@@ -29,6 +30,7 @@ const AuthShell = ({
   children,
   loginHref = "/login",
   signupHref = "/signup",
+  hideTabs = false,
 }: AuthShellProps) => {
   return (
     <Main>
@@ -38,22 +40,24 @@ const AuthShell = ({
           <Top>
             <Eyebrow>{eyebrow}</Eyebrow>
             <Title>{title}</Title>
-            <SubTitle>{subtitle}</SubTitle>
+            {subtitle ? <SubTitle>{subtitle}</SubTitle> : null}
           </Top>
 
-          <Tabs>
-            {activeTab === "login" ? (
-              <>
-                <ActiveTab>로그인</ActiveTab>
-                <PassiveTab href={signupHref}>회원가입</PassiveTab>
-              </>
-            ) : (
-              <>
-                <PassiveTab href={loginHref}>로그인</PassiveTab>
-                <ActiveTab>회원가입</ActiveTab>
-              </>
-            )}
-          </Tabs>
+          {hideTabs ? null : (
+            <Tabs>
+              {activeTab === "login" ? (
+                <>
+                  <ActiveTab>로그인</ActiveTab>
+                  <PassiveTab href={signupHref}>회원가입</PassiveTab>
+                </>
+              ) : (
+                <>
+                  <PassiveTab href={loginHref}>로그인</PassiveTab>
+                  <ActiveTab>회원가입</ActiveTab>
+                </>
+              )}
+            </Tabs>
+          )}
 
           <Body>{children}</Body>
           <Footer>{footer}</Footer>
@@ -77,9 +81,7 @@ const Main = styled.main`
 const Backdrop = styled.div`
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(circle at 16% -6%, rgba(59, 130, 246, 0.075), transparent 34%),
-    ${({ theme }) => theme.colors.gray1};
+  background: ${({ theme }) => theme.colors.gray1};
 `
 
 const Shell = styled.section`

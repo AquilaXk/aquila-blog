@@ -201,6 +201,7 @@ const createGithubMermaidConfig = (scheme: "dark" | "light") => {
     flowchart: {
       curve: "linear" as const,
       useMaxWidth: true,
+      padding: 20,
     },
   }
 }
@@ -213,6 +214,7 @@ const createServiceMermaidConfig = (scheme: "dark" | "light") => ({
   flowchart: {
     curve: "linear" as const,
     useMaxWidth: true,
+    padding: 20,
   },
 })
 
@@ -285,7 +287,11 @@ const useMermaidEffect = (
         )
         .forEach((labelElement) => {
           labelElement.style.margin = "0"
-          labelElement.style.lineHeight = "1.24"
+          labelElement.style.lineHeight = "1.18"
+          labelElement.style.display = "inline-block"
+          labelElement.style.boxSizing = "border-box"
+          labelElement.style.paddingTop = "0.14em"
+          labelElement.style.paddingBottom = "0.14em"
         })
 
       svgElement

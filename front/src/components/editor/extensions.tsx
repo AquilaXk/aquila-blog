@@ -412,7 +412,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   useMermaidEffect(
     previewRootRef,
     `editor-mermaid:${normalizedSource}`,
-    isPreviewVisible && normalizedSource.length > 0,
+    showPreviewPane && isPreviewVisible && normalizedSource.length > 0,
     { observeMutations: false, allowDesktopWideLane: false }
   )
 
@@ -634,10 +634,15 @@ const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   )
 }
 
+const CALLOUT_LIST_MARKER_PATTERN = /^(\s*)[-*+]\s+/gm
+const CALLOUT_BULLET_PATTERN = /^(\s*)•\s+/gm
+const toCalloutDisplayBody = (value: string) => value.replace(CALLOUT_LIST_MARKER_PATTERN, "$1• ")
+const toCalloutStoredBody = (value: string) => value.replace(CALLOUT_BULLET_PATTERN, "$1- ")
+
 const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
-  const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
+  const [draftBody, setDraftBody] = useState(() => toCalloutDisplayBody(String(node.attrs?.body || "")))
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const pickerId = useId()
@@ -649,7 +654,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   useEffect(() => {
     setDraftKind((node.attrs?.kind as CalloutKind) || "tip")
     setDraftTitle(String(node.attrs?.title || ""))
-    setDraftBody(String(node.attrs?.body || ""))
+    setDraftBody(toCalloutDisplayBody(String(node.attrs?.body || "")))
   }, [node.attrs?.kind, node.attrs?.title, node.attrs?.body])
 
   useEffect(() => {
@@ -675,10 +680,11 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   }, [isKindMenuOpen])
 
   const commit = (next: Partial<{ kind: CalloutKind; title: string; body: string }>) => {
+    const nextBody = next.body ?? draftBody
     const nextAttrs = {
       kind: next.kind ?? draftKind,
       title: next.title ?? draftTitle,
-      body: next.body ?? draftBody,
+      body: toCalloutStoredBody(nextBody),
     }
     scheduleCommit(nextAttrs)
   }
@@ -751,7 +757,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
             rows={3}
             onBlur={flushCommit}
             onChange={(event) => {
-              const nextBody = event.target.value
+              const nextBody = toCalloutDisplayBody(event.target.value)
               setDraftBody(nextBody)
               commit({ body: nextBody })
             }}

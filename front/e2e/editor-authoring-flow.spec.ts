@@ -147,6 +147,7 @@ test.describe("block editor authoring flow", () => {
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
     await firstTableCell.hover()
+    await page.getByRole("button", { name: "QA 열 선택" }).click()
 
     await expect(page.getByTestId("table-column-rail")).toBeVisible()
     await expect(page.getByTestId("table-row-rail")).toBeVisible()

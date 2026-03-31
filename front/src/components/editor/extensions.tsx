@@ -278,8 +278,28 @@ const MERMAID_VIEW_MODE_OPTIONS: Array<{ value: MermaidEditorViewMode; label: st
 
 const MERMAID_KEYWORD_REGEX =
   /\b(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|subgraph|end|direction|classDef|class|style|linkStyle|click)\b/g
-const MERMAID_ARROW_REGEX =
-  /(<-->|==>|-->|---|-.->|-\.->|==|=>|<=|<->|<--|--x|x--|o--|--o|\|\||:::|::)/g
+const MERMAID_ARROW_TOKENS = [
+  "<-->",
+  "-.->",
+  "==>",
+  "-->",
+  "---",
+  "--x",
+  "x--",
+  "o--",
+  "--o",
+  "<--",
+  "<->",
+  "=>",
+  "<=",
+  "==",
+  "||",
+  ":::",
+  "::",
+] as const
+const MERMAID_ARROW_TOKENS_BY_LENGTH = [...MERMAID_ARROW_TOKENS].sort(
+  (left, right) => right.length - left.length
+)
 const MERMAID_STRING_REGEX = /"[^"\n]*"|'[^'\n]*'/g
 const MERMAID_COMMENT_REGEX = /^\s*%%.*$/
 
@@ -296,7 +316,7 @@ const highlightMermaidLine = (rawLine: string) => {
   }
 
   const matches: Array<{ start: number; end: number; className: string }> = []
-  const pushMatches = (regex: RegExp, className: string) => {
+  const pushRegexMatches = (regex: RegExp, className: string) => {
     regex.lastIndex = 0
     let match: RegExpExecArray | null
     while ((match = regex.exec(rawLine)) !== null) {
@@ -307,14 +327,29 @@ const highlightMermaidLine = (rawLine: string) => {
       })
     }
   }
+  const pushTokenMatches = (tokens: readonly string[], className: string) => {
+    tokens.forEach((token) => {
+      let cursor = 0
+      while (cursor < rawLine.length) {
+        const start = rawLine.indexOf(token, cursor)
+        if (start < 0) break
+        matches.push({
+          start,
+          end: start + token.length,
+          className,
+        })
+        cursor = start + token.length
+      }
+    })
+  }
 
-  pushMatches(MERMAID_STRING_REGEX, "token-string")
-  pushMatches(MERMAID_ARROW_REGEX, "token-operator")
-  pushMatches(MERMAID_KEYWORD_REGEX, "token-keyword")
+  pushRegexMatches(MERMAID_STRING_REGEX, "token-string")
+  pushTokenMatches(MERMAID_ARROW_TOKENS_BY_LENGTH, "token-operator")
+  pushRegexMatches(MERMAID_KEYWORD_REGEX, "token-keyword")
 
   matches.sort((left, right) => {
     if (left.start !== right.start) return left.start - right.start
-    return left.end - right.end
+    return right.end - left.end
   })
 
   let cursor = 0

@@ -38,6 +38,24 @@ const MERMAID_COMPLEX_NODE_THRESHOLD = 72
 const MERMAID_COMPLEX_SOURCE_THRESHOLD = 16000
 const MERMAID_COMPLEX_SCALE_CAP = 0.88
 const MERMAID_CACHE_MAX_ENTRIES = 120
+const MERMAID_EDGE_TOKENS = [
+  "<-->",
+  "-.->",
+  "==>",
+  "-->",
+  "--x",
+  "x--",
+  "o--",
+  "--o",
+  "<--",
+  "<->",
+  "=>",
+  "<=",
+  "==",
+] as const
+const MERMAID_EDGE_TOKENS_BY_LENGTH = [...MERMAID_EDGE_TOKENS].sort(
+  (left, right) => right.length - left.length
+)
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -79,9 +97,29 @@ const writeMermaidCache = (cacheKey: string, value: MermaidRenderCacheEntry) => 
   }
 }
 
+const countMermaidEdgeTokens = (source: string) => {
+  let count = 0
+  let index = 0
+
+  while (index < source.length) {
+    let matched = false
+    for (const token of MERMAID_EDGE_TOKENS_BY_LENGTH) {
+      if (!source.startsWith(token, index)) continue
+      count += 1
+      index += token.length
+      matched = true
+      break
+    }
+    if (!matched) {
+      index += 1
+    }
+  }
+
+  return count
+}
+
 const estimateMermaidComplexity = (source: string): MermaidComplexitySummary => {
-  const edgeCount = (source.match(/(?:-->|==>|-.->|-\.->|--x|x--|o--|--o|<-->|<--|<->|=>|<=)/g) || [])
-    .length
+  const edgeCount = countMermaidEdgeTokens(source)
   const nodeCount = (source.match(/(?:\[[^\]\n]+\]|\{[^}\n]+\}|\(\([^\)\n]+\)\)|\([^\)\n]+\))/g) || []).length
   const level: MermaidComplexityLevel =
     source.length >= MERMAID_COMPLEX_SOURCE_THRESHOLD ||

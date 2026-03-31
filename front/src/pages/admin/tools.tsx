@@ -7,6 +7,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { buildGrafanaPanelEmbedUrl, buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
 export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   return await getAdminPageProps(req)
@@ -158,6 +159,7 @@ const RESULTS_FILTER_STORAGE_KEY = "admin.tools.resultsFilter.v1"
 const SECTION_IDS = {
   overview: "ops-overview",
   diagnostics: "ops-diagnostics",
+  observability: "ops-observability",
   execution: "ops-execution",
   mutation: "ops-mutation",
   results: "ops-results",
@@ -168,6 +170,7 @@ type SectionKey = keyof typeof SECTION_IDS
 const SECTION_LABELS: Record<SectionKey, string> = {
   overview: "개요",
   diagnostics: "진단",
+  observability: "관측",
   execution: "실행",
   mutation: "실데이터 테스트",
   results: "최근 실행 결과",
@@ -179,6 +182,52 @@ const DIAGNOSTIC_TAB_LABELS: Record<DiagnosticTab, string> = {
   cleanup: "파일 정리 진단",
   auth: "인증 보안 기록",
 }
+
+const MONITORING_ENV = getMonitoringEnv()
+
+const OBSERVABILITY_PANEL_DEFS: Array<{
+  key: string
+  source: "main" | "logs"
+  panelId: number
+  title: string
+}> = [
+  {
+    key: "api-p95",
+    source: "main",
+    panelId: 1,
+    title: "API p95 응답시간",
+  },
+  {
+    key: "http-5xx",
+    source: "main",
+    panelId: 2,
+    title: "HTTP 5xx 비율",
+  },
+  {
+    key: "task-queue",
+    source: "main",
+    panelId: 5,
+    title: "작업 큐 적체",
+  },
+  {
+    key: "cache-hit",
+    source: "main",
+    panelId: 4,
+    title: "post.read cache hit rate",
+  },
+  {
+    key: "logs-error-rate",
+    source: "logs",
+    panelId: 1,
+    title: "로그 ERROR 비율",
+  },
+  {
+    key: "logs-requestid",
+    source: "logs",
+    panelId: 3,
+    title: "RequestId 추적",
+  },
+]
 
 const isExecutionResultFilter = (value: string): value is ExecutionResultFilter =>
   value === "all" || value === "success" || value === "error" || value === "stale"
@@ -647,6 +696,23 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const authFreshness = getFreshnessMeta(authSecurityCheckedAt)
   const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
   const systemHealthFetchedAt = systemHealthQuery.dataUpdatedAt ? formatInstant(new Date(systemHealthQuery.dataUpdatedAt).toISOString()) : "-"
+  const monitoringItems = useMemo(
+    () => buildMonitoringItems(systemHealthStatus, MONITORING_ENV),
+    [systemHealthStatus]
+  )
+  const observabilityPanels = useMemo(() => {
+    const mainDashboardUrl = MONITORING_ENV.monitoringEmbedLooksLikeGrafana ? MONITORING_ENV.monitoringEmbedUrl : ""
+    const logsDashboardUrl = MONITORING_ENV.logsDashboardUrl
+    return OBSERVABILITY_PANEL_DEFS.map((panel) => {
+      const dashboardUrl = panel.source === "logs" ? logsDashboardUrl : mainDashboardUrl
+      const iframeUrl = dashboardUrl ? buildGrafanaPanelEmbedUrl(dashboardUrl, panel.panelId) : ""
+      return {
+        ...panel,
+        dashboardUrl,
+        iframeUrl,
+      }
+    })
+  }, [])
   const mailStatusLabel =
     mailDiagnostics?.status === "READY"
       ? "정상"
@@ -816,6 +882,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       cleanupFreshness.tone,
       authFreshness.tone
     ),
+    observability: systemHealthFreshness.tone,
     results: executions[0] ? getFreshnessMeta(executions[0].completedAt).tone : "stale",
   }
 
@@ -946,6 +1013,7 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           {([
             { key: "overview", label: "개요" },
             { key: "diagnostics", label: "진단" },
+            { key: "observability", label: "관측" },
             { key: "execution", label: "실행" },
             { key: "mutation", label: "실데이터 테스트", tone: "danger" },
             { key: "results", label: "최근 실행 결과" },
@@ -1308,6 +1376,50 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
                 )}
               </DiagnosticPanel>
             ) : null}
+          </WorkspaceSection>
+
+          <WorkspaceSection id={SECTION_IDS.observability} data-ops-section="observability">
+            <SectionHeading>
+              <SectionTitleBlock>
+                <h2>관측</h2>
+              </SectionTitleBlock>
+              <ReadonlyPill>임베드 중심</ReadonlyPill>
+            </SectionHeading>
+
+            {monitoringItems.length ? (
+              <MonitoringLinkRail>
+                {monitoringItems.map((item) => (
+                  <MonitoringLinkCard key={item.key} href={item.href} target="_blank" rel="noreferrer noopener">
+                    <strong>{item.title}</strong>
+                    <span>{item.status}</span>
+                  </MonitoringLinkCard>
+                ))}
+              </MonitoringLinkRail>
+            ) : null}
+
+            <ObservabilityEmbedGrid>
+              {observabilityPanels.map((panel) => (
+                <ObservabilityEmbedCard key={panel.key}>
+                  <EmbedHeader>
+                    <div>
+                      <strong>{panel.title}</strong>
+                      <span>{panel.source === "logs" ? "로그" : "지표"}</span>
+                    </div>
+                    {panel.dashboardUrl ? (
+                      <EmbedLaunchLink href={panel.dashboardUrl} target="_blank" rel="noreferrer noopener">
+                        새 창
+                      </EmbedLaunchLink>
+                    ) : null}
+                  </EmbedHeader>
+
+                  {panel.iframeUrl ? (
+                    <EmbedFrame src={panel.iframeUrl} title={panel.title} loading="lazy" referrerPolicy="no-referrer" />
+                  ) : (
+                    <EmbedFallback>임베드 URL 미설정</EmbedFallback>
+                  )}
+                </ObservabilityEmbedCard>
+              ))}
+            </ObservabilityEmbedGrid>
           </WorkspaceSection>
 
           <WorkspaceSection id={SECTION_IDS.execution} data-ops-section="execution">
@@ -2046,6 +2158,117 @@ const WorkspaceSection = styled.section`
     background: linear-gradient(180deg, ${({ theme }) => theme.colors.gray2} 0%, rgba(239, 68, 68, 0.08) 100%);
     border-color: ${({ theme }) => theme.colors.statusDangerBorder};
   }
+`
+
+const MonitoringLinkRail = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+
+  @media (max-width: 960px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const MonitoringLinkCard = styled.a`
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.78rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  text-decoration: none;
+  min-width: 0;
+
+  strong {
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.86rem;
+    font-weight: 780;
+    overflow-wrap: anywhere;
+  }
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.78rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+`
+
+const ObservabilityEmbedGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.72rem;
+
+  @media (max-width: 1080px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const ObservabilityEmbedCard = styled.article`
+  display: grid;
+  border-radius: 16px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray1};
+  overflow: hidden;
+`
+
+const EmbedHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.78rem 0.85rem;
+  border-bottom: 1px solid ${({ theme }) => theme.colors.gray5};
+
+  strong {
+    display: block;
+    color: ${({ theme }) => theme.colors.gray12};
+    font-size: 0.88rem;
+    font-weight: 780;
+    letter-spacing: -0.02em;
+  }
+
+  span {
+    display: block;
+    margin-top: 0.18rem;
+    color: ${({ theme }) => theme.colors.gray10};
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+`
+
+const EmbedLaunchLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 0.72rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray2};
+  color: ${({ theme }) => theme.colors.gray11};
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 760;
+  white-space: nowrap;
+`
+
+const EmbedFrame = styled.iframe`
+  width: 100%;
+  height: 320px;
+  border: 0;
+  background: ${({ theme }) => theme.colors.gray1};
+`
+
+const EmbedFallback = styled.div`
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 1rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.82rem;
+  line-height: 1.55;
 `
 
 const SectionHeading = styled.div`

@@ -85,6 +85,21 @@ export const DASHBOARD_PANEL_CARDS: MonitoringPanelCard[] = [
   },
 ]
 
+const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
+
+const extractUrlOrigin = (value: string) => {
+  try {
+    return new URL(value).origin
+  } catch {
+    return ""
+  }
+}
+
+const buildGrafanaDashboardUrl = (origin: string, uid: string, slug: string) => {
+  if (!origin) return ""
+  return `${stripTrailingSlash(origin)}/d/${uid}/${slug}?orgId=1&kiosk`
+}
+
 export const getMonitoringEnv = () => {
   const defaultUptimeStatusPath = process.env.NEXT_PUBLIC_UPTIME_KUMA_STATUS_PATH?.trim() || "/status/aquila"
   const monitoringEmbedUrl =
@@ -95,6 +110,11 @@ export const getMonitoringEnv = () => {
     monitoringEmbedUrl.includes("grafana") ||
     monitoringEmbedUrl.includes("/d/") ||
     monitoringEmbedUrl.includes("/public-dashboards/")
+  const monitoringOrigin = extractUrlOrigin(monitoringEmbedUrl)
+  const logsDashboardUrl =
+    process.env.NEXT_PUBLIC_LOGS_EMBED_URL?.trim() ||
+    process.env.NEXT_PUBLIC_GRAFANA_LOGS_EMBED_URL?.trim() ||
+    (monitoringEmbedLooksLikeGrafana ? buildGrafanaDashboardUrl(monitoringOrigin, "blog-logs-overview", "aquila-logs-overview") : "")
   const uptimeKumaUrl = process.env.NEXT_PUBLIC_UPTIME_KUMA_URL?.trim() || defaultUptimeStatusPath
   const prometheusUrl = process.env.NEXT_PUBLIC_PROMETHEUS_URL?.trim() || ""
 
@@ -102,6 +122,8 @@ export const getMonitoringEnv = () => {
     defaultUptimeStatusPath,
     monitoringEmbedUrl,
     monitoringEmbedLooksLikeGrafana,
+    monitoringOrigin,
+    logsDashboardUrl,
     uptimeKumaUrl,
     prometheusUrl,
   }

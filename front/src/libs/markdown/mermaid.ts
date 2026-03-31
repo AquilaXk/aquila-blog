@@ -14,6 +14,27 @@ const stripWrappingQuotes = (value: string) => {
   return match ? match[1] : trimmed
 }
 
+const escapeMermaidQuotedText = (value: string) => {
+  let escaped = ""
+  for (const char of value) {
+    if (char === "\\") {
+      escaped += "\\\\"
+      continue
+    }
+    if (char === '"') {
+      escaped += '\\"'
+      continue
+    }
+    if (char === "\n") {
+      escaped += "\\n"
+      continue
+    }
+    if (char === "\r") continue
+    escaped += char
+  }
+  return escaped
+}
+
 const buildMermaidIdentifier = (
   raw: string,
   kind: "participant" | "actor",
@@ -93,7 +114,7 @@ const normalizeSequenceParticipantAliases = (source: string) => {
 
         const identifier = buildMermaidIdentifier(declarationBody, kind, usedIdentifiers)
         aliasByRawToken.set(declarationBody, identifier)
-        const label = stripWrappingQuotes(declarationBody).replace(/"/g, '\\"')
+        const label = escapeMermaidQuotedText(stripWrappingQuotes(declarationBody))
         normalized.push(`${indent}${kind} ${identifier} as "${label}"`)
       })
       continue
@@ -353,7 +374,7 @@ const wrapNodeLabel = (label: string) => {
   const inner = quotedMatch ? quotedMatch[2] : trimmed
   const wrapped = toSoftWrappedText(inner)
   if (wrapped === inner) return label
-  const escaped = wrapped.replace(/"/g, '\\"')
+  const escaped = escapeMermaidQuotedText(wrapped)
   return `"${escaped}"`
 }
 

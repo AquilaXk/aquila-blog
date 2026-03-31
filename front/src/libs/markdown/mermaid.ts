@@ -286,8 +286,8 @@ export const extractNormalizedMermaidSource = (raw: string): string => {
 }
 
 const FLOWCHART_HEADER_PATTERN = /^\s*(?:flowchart|graph)\b/i
-const WRAP_LINE_MAX_UNITS = 18
-const WRAP_MIN_TRIGGER_UNITS = 24
+const WRAP_LINE_MAX_UNITS = 24
+const WRAP_MIN_TRIGGER_UNITS = 32
 const MERMAID_WRAP_SKIP_DIRECTIVE_PATTERN =
   /^\s*(?:%%|subgraph\b|end\b|style\b|linkStyle\b|classDef\b|class\b|click\b)/i
 

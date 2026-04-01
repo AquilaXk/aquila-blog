@@ -1518,6 +1518,105 @@ const BlockEditorShell = ({
     return true
   }, [syncSerializedDoc])
 
+  const buildSlashWholeParagraphReplacement = useCallback((itemId: string) => {
+    switch (itemId) {
+      case "paragraph":
+        return { blocks: [createParagraphNode("")], focusBlockIndex: 0 }
+      case "heading-1":
+        return { blocks: [createHeadingNode(1, "")], focusBlockIndex: 0 }
+      case "heading-2":
+        return { blocks: [createHeadingNode(2, "")], focusBlockIndex: 0 }
+      case "heading-3":
+        return { blocks: [createHeadingNode(3, "")], focusBlockIndex: 0 }
+      case "heading-4":
+        return { blocks: [createHeadingNode(4, "")], focusBlockIndex: 0 }
+      case "bullet-list":
+        return { blocks: [createBulletListNode([""])], focusBlockIndex: 0 }
+      case "ordered-list":
+        return { blocks: [createOrderedListNode([""])], focusBlockIndex: 0 }
+      case "checklist":
+        return { blocks: [createTaskListNode([{ checked: false, text: "" }])], focusBlockIndex: 0 }
+      case "quote":
+        return { blocks: [createBlockquoteNode("")], focusBlockIndex: 0 }
+      case "code-block":
+        return {
+          blocks: [createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")],
+          focusBlockIndex: 0,
+        }
+      case "table":
+        return {
+          blocks: [
+            createTableNode([
+              ["제목", "값"],
+              ["항목", "내용"],
+            ]),
+          ],
+          focusBlockIndex: 0,
+        }
+      case "callout":
+        return {
+          blocks: [
+            createCalloutNode({
+              kind: "tip",
+              title: "핵심 포인트",
+              body: "콜아웃 본문을 입력하세요.",
+            }),
+          ],
+          focusBlockIndex: 0,
+        }
+      case "toggle":
+        return {
+          blocks: [
+            createToggleNode({
+              title: "더 보기",
+              body: "토글 내부 본문을 입력하세요.",
+            }),
+          ],
+          focusBlockIndex: 0,
+        }
+      case "bookmark":
+        return {
+          blocks: [
+            createBookmarkNode({
+              url: "https://example.com",
+              title: "링크 제목",
+              description: "북마크 설명",
+            }),
+          ],
+          focusBlockIndex: 0,
+        }
+      case "embed":
+        return {
+          blocks: [
+            createEmbedNode({
+              url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              title: "임베드 제목",
+              caption: "임베드 캡션",
+            }),
+          ],
+          focusBlockIndex: 0,
+        }
+      case "formula":
+        return {
+          blocks: [createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" })],
+          focusBlockIndex: 0,
+        }
+      case "divider":
+        return {
+          blocks: [createHorizontalRuleNode(), createParagraphNode("")],
+          focusBlockIndex: 1,
+        }
+      case "mermaid":
+        if (!enableMermaidBlocks) return null
+        return {
+          blocks: [createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")],
+          focusBlockIndex: 0,
+        }
+      default:
+        return null
+    }
+  }, [enableMermaidBlocks])
+
   const transformCurrentParagraphViaSlash = useCallback((itemId: string) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return false
@@ -1525,34 +1624,13 @@ const BlockEditorShell = ({
     const { selection } = currentEditor.state
     if (selection.$from.parent.type.name !== "paragraph") return false
 
-    const replacementBlock = (() => {
-      switch (itemId) {
-        case "heading-1":
-          return createHeadingNode(1, "")
-        case "heading-2":
-          return createHeadingNode(2, "")
-        case "heading-3":
-          return createHeadingNode(3, "")
-        case "heading-4":
-          return createHeadingNode(4, "")
-        case "bullet-list":
-          return createBulletListNode([""])
-        case "ordered-list":
-          return createOrderedListNode([""])
-        case "checklist":
-          return createTaskListNode([{ checked: false, text: "" }])
-        case "quote":
-          return createBlockquoteNode("")
-        default:
-          return null
-      }
-    })()
-
-    if (!replacementBlock) {
+    const replacementSpec = buildSlashWholeParagraphReplacement(itemId)
+    if (!replacementSpec || replacementSpec.blocks.length === 0) {
       return false
     }
 
-    const replacementBlockType = replacementBlock.type ?? ""
+    const { blocks, focusBlockIndex = 0 } = replacementSpec
+    const replacementBlockType = blocks[0]?.type ?? ""
 
     if (["bulletList", "orderedList", "taskList"].includes(replacementBlockType)) {
       const currentBlockIndex = getTopLevelBlockIndexFromSelection(currentEditor)
@@ -1562,12 +1640,12 @@ const BlockEditorShell = ({
           : null
 
       if (nextSibling?.type.name === replacementBlockType) {
-        return replaceCurrentParagraphWithBlocks([replacementBlock, createParagraphNode()], 0)
+        return replaceCurrentParagraphWithBlocks([...blocks, createParagraphNode()], focusBlockIndex)
       }
     }
 
-    return replaceCurrentParagraphWithBlocks([replacementBlock], 0)
-  }, [replaceCurrentParagraphWithBlocks])
+    return replaceCurrentParagraphWithBlocks(blocks, focusBlockIndex)
+  }, [buildSlashWholeParagraphReplacement, replaceCurrentParagraphWithBlocks])
 
   const editor = useEditor({
     immediatelyRender: false,

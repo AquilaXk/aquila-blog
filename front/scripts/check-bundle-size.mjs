@@ -1,12 +1,34 @@
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import zlib from "node:zlib"
 
-const cwd = process.cwd()
-const nextDir = path.join(cwd, ".next")
+const invocationCwd = process.cwd()
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const frontRoot = path.resolve(scriptDir, "..")
+
+const resolvePath = (baseDir, value) =>
+  path.isAbsolute(value) ? value : path.join(baseDir, value)
+
+const detectProjectRoot = () => {
+  const candidates = [invocationCwd, frontRoot]
+  for (const candidate of candidates) {
+    const candidateManifestPath = path.join(candidate, ".next", "build-manifest.json")
+    if (fs.existsSync(candidateManifestPath)) {
+      return candidate
+    }
+  }
+  return frontRoot
+}
+
+const projectRoot = detectProjectRoot()
+const nextDir = path.join(projectRoot, ".next")
 const manifestPath = path.join(nextDir, "build-manifest.json")
-const baselinePath = path.join(cwd, process.env.BUNDLE_BASELINE_PATH || "scripts/bundle-budget-baseline.json")
-const reportDir = path.join(cwd, process.env.BUNDLE_REPORT_DIR || "test-results/bundle-size")
+const baselinePath = resolvePath(
+  projectRoot,
+  process.env.BUNDLE_BASELINE_PATH || "scripts/bundle-budget-baseline.json"
+)
+const reportDir = resolvePath(projectRoot, process.env.BUNDLE_REPORT_DIR || "test-results/bundle-size")
 const enforcementMode = (process.env.BUNDLE_BUDGET_ENFORCEMENT || "strict").toLowerCase()
 const marginPercent = Number(process.env.BUNDLE_BUDGET_MARGIN_PERCENT || "5")
 const routes =
@@ -23,7 +45,9 @@ if (!Number.isFinite(marginPercent) || marginPercent < 0) {
 }
 
 if (!fs.existsSync(manifestPath)) {
-  console.error("[bundle-size] build-manifest.json not found. Run `yarn build` first.")
+  console.error(
+    `[bundle-size] build-manifest.json not found. Run \`yarn build\` first. checked root=${projectRoot}`
+  )
   process.exit(1)
 }
 
@@ -242,7 +266,7 @@ const report = {
     generatedAt: new Date().toISOString(),
     enforcementMode,
     marginPercent,
-    baselinePath: path.relative(cwd, baselinePath),
+    baselinePath: path.relative(projectRoot, baselinePath),
     routes,
   },
   routes: routeResults,

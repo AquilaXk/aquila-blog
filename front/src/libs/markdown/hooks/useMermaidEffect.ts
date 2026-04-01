@@ -238,6 +238,7 @@ interface MermaidEffectOptions {
   observeMutations?: boolean
   forceScheme?: "dark" | "light"
   allowDesktopWideLane?: boolean
+  lazyViewport?: boolean
 }
 
 const useMermaidEffect = (
@@ -250,6 +251,7 @@ const useMermaidEffect = (
   const shouldLogMermaidWarnings = process.env.NODE_ENV !== "production"
   const observeMutations = options?.observeMutations ?? true
   const allowDesktopWideLane = options?.allowDesktopWideLane ?? true
+  const lazyViewport = options?.lazyViewport ?? true
   const effectiveScheme = options?.forceScheme ?? (scheme === "dark" ? "dark" : "light")
 
   useEffect(() => {
@@ -647,7 +649,9 @@ const useMermaidEffect = (
         if (disposed) return
         const block = blocks[i]
         if (!block) return
+        if (!block.isConnected) return
         const mermaid = await getMermaid()
+        if (disposed || !block.isConnected) return
         const codeBlock =
           block.querySelector<HTMLElement>("code.language-mermaid, code[data-language='mermaid'], code") || null
         const codeClassName = codeBlock?.className?.toLowerCase() || ""
@@ -702,6 +706,7 @@ const useMermaidEffect = (
           sourceToRender: string,
           complexityLevel: MermaidComplexityLevel
         ) => {
+          if (disposed || !block.isConnected) return
           const isMobileViewport = window.matchMedia("(max-width: 768px)").matches
           const isDesktopViewport = window.matchMedia(
             `(min-width: ${DESKTOP_MERMAID_MIN_VIEWPORT_PX}px)`
@@ -735,7 +740,7 @@ const useMermaidEffect = (
               complexity: complexityLevel,
             })
           }
-          if (disposed) return
+          if (disposed || !block.isConnected) return
 
           stage.innerHTML = renderedSvg
 
@@ -966,7 +971,7 @@ const useMermaidEffect = (
       intersectionObserver?.disconnect()
       intersectionObserver = null
 
-      if (typeof IntersectionObserver === "undefined") {
+      if (!lazyViewport || typeof IntersectionObserver === "undefined") {
         for (let i = 0; i < blocks.length; i += 1) {
           enqueueRender(i)
         }
@@ -1079,6 +1084,7 @@ const useMermaidEffect = (
     contentKey,
     effectiveScheme,
     enabled,
+    lazyViewport,
     observeMutations,
     rootRef,
     shouldLogMermaidWarnings,

@@ -165,8 +165,10 @@ class PostRepositoryImpl(
         pageable: Pageable,
         publicOnly: Boolean = false,
         tag: String? = null,
-        usePostTagIndexTable: Boolean = true,
+        usePostTagIndexTable: Boolean = false,
     ): Page<Post> {
+        // Keep legacy metaTagsIndex as the default path to avoid rollback-only commits
+        // when post_tag_index probing fails on partially migrated runtime nodes.
         val builder = BooleanBuilder()
         val safeTagToken = buildSafeTagToken(tag)
         val tagLikeToken = safeTagToken?.let { "%|$it|%" }
@@ -222,8 +224,10 @@ class PostRepositoryImpl(
         limit: Int,
         sortAscending: Boolean,
         tag: String?,
-        usePostTagIndexTable: Boolean = true,
+        usePostTagIndexTable: Boolean = false,
     ): List<Post> {
+        // Keep legacy metaTagsIndex as the default path to avoid rollback-only commits
+        // when post_tag_index probing fails on partially migrated runtime nodes.
         val safeLimit = limit.coerceIn(1, 100)
         val builder =
             BooleanBuilder()

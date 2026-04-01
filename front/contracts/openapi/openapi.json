@@ -4251,6 +4251,9 @@
           "actorName" : {
             "type" : "string"
           },
+          "actorProfileImageDirectUrl" : {
+            "type" : "string"
+          },
           "actorProfileImageUrl" : {
             "type" : "string"
           },

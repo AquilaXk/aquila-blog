@@ -326,10 +326,12 @@ class PostPublicReadQueryService(
         kw: String,
     ): Boolean {
         if (!shouldCacheSearchNegative(page, kw)) return false
+        val cacheKey = buildSearchCacheKey(page, pageSize, sort, kw)
         val cached =
-            cacheManager
-                .getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
-                ?.get(buildSearchCacheKey(page, pageSize, sort, kw), Boolean::class.java) == true
+            readNegativeCacheFlag(
+                cacheName = PostQueryCacheNames.SEARCH_NEGATIVE,
+                cacheKey = cacheKey,
+            )
         recordCacheResult(PostQueryCacheNames.SEARCH_NEGATIVE, if (cached) "hit" else "miss")
         return cached
     }
@@ -348,9 +350,10 @@ class PostPublicReadQueryService(
 
     private fun isDetailNegativeCached(id: Long): Boolean {
         val cached =
-            cacheManager
-                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
-                ?.get(id, Boolean::class.java) == true
+            readNegativeCacheFlag(
+                cacheName = PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE,
+                cacheKey = id,
+            )
         recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, if (cached) "hit" else "miss")
         return cached
     }
@@ -367,6 +370,78 @@ class PostPublicReadQueryService(
             .getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
             ?.evict(id)
     }
+
+    /**
+     * 음수 캐시는 "true" 센티널만 유효값으로 인정한다.
+     * 배포/직렬화 정책 전환으로 타입이 달라도 500으로 전파하지 않고 miss+evict로 복구한다.
+     */
+    private fun readNegativeCacheFlag(
+        cacheName: String,
+        cacheKey: Any,
+    ): Boolean {
+        val cache = cacheManager.getCache(cacheName) ?: return false
+        return try {
+            val rawValue = cache.get(cacheKey)?.get() ?: return false
+            if (rawValue.toBooleanSentinel() == true) {
+                true
+            } else {
+                logger.warn(
+                    "negative_cache_value_mismatch cache={} key={} valueType={} value={} -> evict",
+                    cacheName,
+                    sanitizeLogField(cacheKey.toString(), MAX_CACHE_KEY_LOG_LENGTH),
+                    rawValue::class.java.name,
+                    sanitizeLogField(rawValue.toString(), MAX_CACHE_VALUE_LOG_LENGTH),
+                )
+                cache.evict(cacheKey)
+                recordCacheResult(cacheName, "evict_mismatch")
+                false
+            }
+        } catch (exception: RuntimeException) {
+            logger.warn(
+                "negative_cache_read_failed cache={} key={} -> fallback miss",
+                cacheName,
+                sanitizeLogField(cacheKey.toString(), MAX_CACHE_KEY_LOG_LENGTH),
+                exception,
+            )
+            runCatching { cache.evict(cacheKey) }
+            recordCacheResult(cacheName, "evict_error")
+            false
+        }
+    }
+
+    private fun Any.toBooleanSentinel(): Boolean? =
+        when (this) {
+            is Boolean -> this
+            is String ->
+                when (this.trim().lowercase()) {
+                    "true",
+                    "1",
+                    "yes",
+                    "y",
+                    "on",
+                    -> true
+                    "false",
+                    "0",
+                    "no",
+                    "n",
+                    "off",
+                    -> false
+                    else -> null
+                }
+            is Number -> this.toInt() != 0
+            else -> null
+        }
+
+    private fun sanitizeLogField(
+        value: String,
+        maxLength: Int,
+    ): String =
+        value
+            .replace('\r', ' ')
+            .replace('\n', ' ')
+            .replace('\t', ' ')
+            .trim()
+            .take(maxLength)
 
     private fun getOrLoadPublicPostDetailContent(id: Long): PublicPostDetailContentCacheDto {
         val cached =
@@ -644,6 +719,8 @@ class PostPublicReadQueryService(
         private const val MAX_CACHEABLE_TAG_LENGTH = 24
         private const val MAX_CACHEABLE_TOTAL_LENGTH = 32
         private const val MAX_LOG_FIELD_LENGTH = 240
+        private const val MAX_CACHE_KEY_LOG_LENGTH = 120
+        private const val MAX_CACHE_VALUE_LOG_LENGTH = 80
         private const val MAX_CURSOR_PAGE_SIZE = 30
         private const val CURSOR_HMAC_ALGORITHM = "HmacSHA256"
         private const val CURSOR_SIGNATURE_BYTES = 18

@@ -1780,6 +1780,7 @@ export interface components {
             /** Format: int64 */
             actorId?: number;
             actorName?: string;
+            actorProfileImageDirectUrl?: string;
             actorProfileImageUrl?: string;
             /** Format: int64 */
             postId?: number;

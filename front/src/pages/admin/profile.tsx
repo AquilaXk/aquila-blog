@@ -2555,7 +2555,7 @@ const LinkRowCard = styled.div`
 
   .linkActionButtons {
     justify-content: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.5rem;
   }
 
@@ -2563,9 +2563,15 @@ const LinkRowCard = styled.div`
     white-space: nowrap;
   }
 
-  @media (max-width: 1280px) {
+  @media (max-width: 1440px) {
+    grid-template-columns: minmax(184px, 220px) minmax(0, 1fr);
+
+    .linkActions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+    }
+
     .linkActionButtons {
-      flex-wrap: wrap;
       justify-content: flex-start;
     }
   }
@@ -2700,6 +2706,11 @@ const LinkInputs = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.72rem;
+  min-width: 0;
+
+  @media (max-width: 1440px) {
+    grid-template-columns: 1fr;
+  }
 
   @media (max-width: 760px) {
     grid-template-columns: 1fr;

@@ -316,10 +316,14 @@ const MarkdownRendererComponent: FC<Props> = ({
   const { normalizedContent, renderKey, resolvedContentHtml, segments } = renderModel
   const { tableLayouts } = renderModel
 
-  useMermaidEffect(rootRef, renderKey, !disableMermaid)
+  useMermaidEffect(rootRef, renderKey, !disableMermaid, {
+    observeMutations: false,
+  })
   useResponsiveTableEffect(rootRef, renderKey)
   useInlineColorEffect(rootRef, renderKey)
-  usePrismEffect(rootRef, renderKey, true)
+  usePrismEffect(rootRef, renderKey, true, {
+    mutationDebounceMs: 96,
+  })
 
   useEffect(() => {
     imageRenderOrderRef.current = 0

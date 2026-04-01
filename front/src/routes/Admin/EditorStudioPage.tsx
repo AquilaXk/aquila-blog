@@ -5,6 +5,8 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
   ChangeEvent,
+  Profiler,
+  type ProfilerOnRenderCallback,
   useDeferredValue,
   useCallback,
   useEffect,
@@ -462,10 +464,41 @@ const PREVIEW_THUMBNAIL_ALLOWED_PATH_PREFIX = "/post/api/v1/images/posts/"
 const PREVIEW_THUMBNAIL_DISALLOWED_CHAR_REGEX = /[\u0000-\u001F\u007F<>"'`\\]/
 const PREVIEW_THUMBNAIL_ALLOWED_PATH_REGEX = /^\/post\/api\/v1\/images\/posts\/[A-Za-z0-9._~/%-]+$/
 const PREVIEW_THUMBNAIL_ALLOWED_QUERY_REGEX = /^\?(?:[A-Za-z0-9._~/%=&-]*)$/
+const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
+
+type RuntimeGuardWindow = Window & {
+  __AQ_RUNTIME_GUARD_ENABLED__?: boolean
+  __AQ_RUNTIME_GUARD__?: {
+    editorCommitSamples?: number[]
+  }
+}
 
 const extractFirstMarkdownImage = (content: string): string => {
   const match = markdownImagePattern.exec(content)
   return match?.[1]?.trim() || ""
+}
+
+const computeContentFingerprint = (content: string): string => {
+  // Lightweight FNV-1a style hash to gate repeated derived calculations.
+  let hash = 2166136261
+  for (let index = 0; index < content.length; index += 1) {
+    hash ^= content.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `${content.length}:${hash >>> 0}`
+}
+
+const recordEditorCommitDurationForRuntimeGuard = (actualDuration: number) => {
+  if (typeof window === "undefined" || !Number.isFinite(actualDuration) || actualDuration <= 0) return
+  const runtimeWindow = window as RuntimeGuardWindow
+  if (!runtimeWindow.__AQ_RUNTIME_GUARD_ENABLED__) return
+
+  const store = (runtimeWindow.__AQ_RUNTIME_GUARD__ ??= {})
+  const nextSamples = [...(store.editorCommitSamples ?? []), actualDuration]
+  if (nextSamples.length > EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT) {
+    nextSamples.splice(0, nextSamples.length - EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT)
+  }
+  store.editorCommitSamples = nextSamples
 }
 
 const normalizeSafeImageUrl = (raw: string): string => {
@@ -1285,6 +1318,15 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [isComposeAssistOpen, setIsComposeAssistOpen] = useState(false)
   const [isComposeUtilityOpen, setIsComposeUtilityOpen] = useState(false)
   const postContentLiveRef = useRef(postContent)
+  const deferredContentDerivedCacheRef = useRef<{
+    fingerprint: string
+    summary: string
+    firstImage: string
+  }>({
+    fingerprint: "",
+    summary: "",
+    firstImage: "",
+  })
   const blockEditorLoadGuardStateRef = useRef<BlockEditorLoadGuardState>({
     expectedBody: "",
     ignoreUntilMs: 0,
@@ -1312,8 +1354,12 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [postContent])
 
   const handleBlockEditorChange = useCallback((nextMarkdown: string, meta?: BlockEditorChangeMeta) => {
+    const previousMarkdown = postContentLiveRef.current
+    if (nextMarkdown === previousMarkdown) {
+      return
+    }
+
     let nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
-    postContentLiveRef.current = nextMarkdown
 
     if (meta?.editorFocused) {
       nextGuardState = {
@@ -1322,6 +1368,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ignoredInitialEmpty: true,
       }
       blockEditorLoadGuardStateRef.current = nextGuardState
+      postContentLiveRef.current = nextMarkdown
       startPostContentTransition(() => {
         setPostContent(nextMarkdown)
       })
@@ -1330,7 +1377,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
     if (shouldIgnoreBlockEditorEmptyUpdate({
       nextMarkdown,
-      currentMarkdown: postContentLiveRef.current,
+      currentMarkdown: previousMarkdown,
       guardState: nextGuardState,
     })) {
       blockEditorLoadGuardStateRef.current = markGuardEmptyUpdateIgnored(nextGuardState)
@@ -1338,6 +1385,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
 
     blockEditorLoadGuardStateRef.current = nextGuardState
+    postContentLiveRef.current = nextMarkdown
     setPostContent(nextMarkdown)
   }, [startPostContentTransition])
 
@@ -1665,17 +1713,33 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     return snapshot
   }, [])
 
+  const deferredContentDerived = useMemo(() => {
+    const fingerprint = computeContentFingerprint(deferredPostContent)
+    const cached = deferredContentDerivedCacheRef.current
+    if (cached.fingerprint === fingerprint) {
+      return cached
+    }
+
+    const next = {
+      fingerprint,
+      summary: makePreviewSummary(deferredPostContent),
+      firstImage: extractFirstMarkdownImage(deferredPostContent),
+    }
+    deferredContentDerivedCacheRef.current = next
+    return next
+  }, [deferredPostContent])
+
   const resolvedPreviewSummary = useMemo(() => {
     const manual = postSummary.trim()
     if (manual) return manual
-    return makePreviewSummary(deferredPostContent)
-  }, [deferredPostContent, postSummary])
+    return deferredContentDerived.summary
+  }, [deferredContentDerived.summary, postSummary])
 
   const resolvedPreviewThumbnail = useMemo(() => {
     const manual = stripThumbnailFocusFromUrl(normalizeSafeImageUrl(postThumbnailUrl))
     if (manual) return manual
-    return stripThumbnailFocusFromUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(deferredPostContent)))
-  }, [deferredPostContent, postThumbnailUrl])
+    return stripThumbnailFocusFromUrl(normalizeSafeImageUrl(deferredContentDerived.firstImage))
+  }, [deferredContentDerived.firstImage, postThumbnailUrl])
   const effectiveThumbnailUrl = useMemo(() => {
     const normalizedThumbnail = resolvedPreviewThumbnail.trim()
     if (!normalizedThumbnail) return ""
@@ -3441,9 +3505,19 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     listPage !== "1" ||
     listPageSize !== "30" ||
     (listScope === "active" && listSort !== "CREATED_AT")
-  const contentLength = deferredPostContent.trim().length
-  const lineCount = deferredPostContent ? deferredPostContent.split("\n").length : 0
-  const imageCount = (deferredPostContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
+  const deferredContentMetrics = useMemo(() => {
+    const trimmedLength = deferredPostContent.trim().length
+    const lineCount = deferredPostContent ? deferredPostContent.split("\n").length : 0
+    const imageCount = (deferredPostContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
+    return {
+      trimmedLength,
+      lineCount,
+      imageCount,
+    }
+  }, [deferredPostContent])
+  const contentLength = deferredContentMetrics.trimmedLength
+  const lineCount = deferredContentMetrics.lineCount
+  const imageCount = deferredContentMetrics.imageCount
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const composePageTitle = editorMode === "edit" ? "원고 편집" : "새 글"
   const composeSurfaceSubtitle = hasSelectedManagedPost
@@ -3475,8 +3549,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const composeCallToActionLabel =
     editorMode === "create" ? "발행 준비" : isTempDraftMode ? "새 글 작성" : "수정 사항 확인"
   const composeSummaryPreview = useMemo(
-    () => postSummary.trim() || makePreviewSummary(deferredPostContent),
-    [deferredPostContent, postSummary]
+    () => postSummary.trim() || deferredContentDerived.summary,
+    [deferredContentDerived.summary, postSummary]
   )
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
@@ -3801,18 +3875,27 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ? "새 글 작성"
         : "발행"
   const isBlockEditorDisabled = loadingKey.length > 0
+  const handleEditorProfilerRender = useCallback<ProfilerOnRenderCallback>(
+    (_id, _phase, actualDuration) => {
+      recordEditorCommitDurationForRuntimeGuard(actualDuration)
+    },
+    []
+  )
   const dedicatedEditorCanvas = useMemo(
     () => (
-      <LazyBlockEditorShell
-        value={postContent}
-        onChange={handleBlockEditorChange}
-        onUploadImage={handleBlockEditorImageUpload}
-        onUploadFile={handleBlockEditorFileUpload}
-        enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-        disabled={isBlockEditorDisabled}
-      />
+      <Profiler id="editor-dedicated-canvas" onRender={handleEditorProfilerRender}>
+        <LazyBlockEditorShell
+          value={postContent}
+          onChange={handleBlockEditorChange}
+          onUploadImage={handleBlockEditorImageUpload}
+          onUploadFile={handleBlockEditorFileUpload}
+          enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+          disabled={isBlockEditorDisabled}
+        />
+      </Profiler>
     ),
     [
+      handleEditorProfilerRender,
       handleBlockEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,
@@ -3822,16 +3905,19 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   )
   const composeEditorCanvas = useMemo(
     () => (
-      <LazyBlockEditorShell
-        value={postContent}
-        onChange={handleBlockEditorChange}
-        onUploadImage={handleBlockEditorImageUpload}
-        onUploadFile={handleBlockEditorFileUpload}
-        enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-        disabled={isBlockEditorDisabled}
-      />
+      <Profiler id="editor-compose-canvas" onRender={handleEditorProfilerRender}>
+        <LazyBlockEditorShell
+          value={postContent}
+          onChange={handleBlockEditorChange}
+          onUploadImage={handleBlockEditorImageUpload}
+          onUploadFile={handleBlockEditorFileUpload}
+          enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+          disabled={isBlockEditorDisabled}
+        />
+      </Profiler>
     ),
     [
+      handleEditorProfilerRender,
       handleBlockEditorChange,
       handleBlockEditorFileUpload,
       handleBlockEditorImageUpload,

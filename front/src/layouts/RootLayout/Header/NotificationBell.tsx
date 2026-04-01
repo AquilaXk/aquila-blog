@@ -150,6 +150,28 @@ const loadStoredSnapshot = (): StoredNotificationSnapshot | null => {
   }
 }
 
+const isSameNotification = (left: TMemberNotification, right: TMemberNotification) =>
+  left.id === right.id &&
+  left.type === right.type &&
+  left.createdAt === right.createdAt &&
+  left.actorId === right.actorId &&
+  left.actorName === right.actorName &&
+  left.actorProfileImageUrl === right.actorProfileImageUrl &&
+  left.postId === right.postId &&
+  left.commentId === right.commentId &&
+  left.postTitle === right.postTitle &&
+  left.commentPreview === right.commentPreview &&
+  left.message === right.message &&
+  left.isRead === right.isRead
+
+const isSameNotificationList = (left: TMemberNotification[], right: TMemberNotification[]) => {
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (!isSameNotification(left[i], right[i])) return false
+  }
+  return true
+}
+
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
   const preferPolling = useMemo(() => {
@@ -200,6 +222,8 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   )
   const isDocumentVisibleRef = useRef(isDocumentVisible)
   const pollingFailureStreakRef = useRef(0)
+  const itemsRef = useRef<TMemberNotification[]>([])
+  const unreadCountRef = useRef(0)
 
   const resolvePollingBaseIntervalMs = useCallback((failureStreak: number) => {
     let baseMs = POLLING_INTERVAL_MS
@@ -218,17 +242,57 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     return Math.max(POLLING_MIN_INTERVAL_MS, baseMs)
   }, [])
 
-  const pushNotification = useCallback((incoming: TMemberNotification) => {
-    setItems((prev) => {
-      const deduped = prev.filter((item) => item.id !== incoming.id)
-      return [incoming, ...deduped].slice(0, 20)
-    })
-  }, [])
-
   const setLastNotificationEventId = useCallback((eventId: string | null) => {
     const sanitized = sanitizeNotificationEventId(eventId)
     lastEventIdRef.current = sanitized
     persistLastEventId(sanitized)
+  }, [])
+
+  const applySnapshotState = useCallback(
+    ({
+      nextItems,
+      nextUnreadCount,
+      fallback,
+    }: {
+      nextItems: TMemberNotification[]
+      nextUnreadCount: number
+      fallback: boolean
+    }) => {
+      const sameItems = isSameNotificationList(itemsRef.current, nextItems)
+      const sameUnreadCount = unreadCountRef.current === nextUnreadCount
+
+      if (!sameItems) {
+        itemsRef.current = nextItems
+        setItems(nextItems)
+      }
+      if (!sameUnreadCount) {
+        unreadCountRef.current = nextUnreadCount
+        setUnreadCount(nextUnreadCount)
+      }
+
+      setLastNotificationEventId(toLatestNotificationEventId(nextItems))
+      setIsReady(true)
+      setIsSnapshotFallback(fallback)
+      setNotificationAccessState("ready")
+
+      if (!sameItems || !sameUnreadCount) {
+        persistSnapshot({
+          items: nextItems,
+          unreadCount: nextUnreadCount,
+        })
+      }
+    },
+    [setLastNotificationEventId]
+  )
+
+  const pushNotification = useCallback((incoming: TMemberNotification) => {
+    setItems((prev) => {
+      const deduped = prev.filter((item) => item.id !== incoming.id)
+      const next = [incoming, ...deduped].slice(0, 20)
+      if (isSameNotificationList(prev, next)) return prev
+      itemsRef.current = next
+      return next
+    })
   }, [])
 
   const clearHiddenCloseTimer = useCallback(() => {
@@ -256,19 +320,16 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
     try {
       const snapshot = await getNotificationSnapshot()
-      setItems(snapshot.items)
-      setUnreadCount(snapshot.unreadCount)
-      setLastNotificationEventId(toLatestNotificationEventId(snapshot.items))
-      setIsReady(true)
-      setIsSnapshotFallback(false)
-      setNotificationAccessState("ready")
-      persistSnapshot({
-        items: snapshot.items,
-        unreadCount: snapshot.unreadCount,
+      applySnapshotState({
+        nextItems: snapshot.items,
+        nextUnreadCount: snapshot.unreadCount,
+        fallback: false,
       })
       return "success"
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
+        itemsRef.current = []
+        unreadCountRef.current = 0
         setItems([])
         setUnreadCount(0)
         setIsReady(false)
@@ -282,12 +343,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
       const stored = loadStoredSnapshot()
       if (stored) {
-        setItems(stored.items)
-        setUnreadCount(stored.unreadCount)
-        setLastNotificationEventId(toLatestNotificationEventId(stored.items))
-        setIsReady(true)
-        setIsSnapshotFallback(true)
-        setNotificationAccessState("ready")
+        applySnapshotState({
+          nextItems: stored.items,
+          nextUnreadCount: stored.unreadCount,
+          fallback: true,
+        })
         return "snapshot-fallback"
       }
       setIsReady(false)
@@ -295,7 +355,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setNotificationAccessState("pending")
       return "error"
     }
-  }, [enabled, setLastNotificationEventId])
+  }, [applySnapshotState, enabled, setLastNotificationEventId])
 
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -311,6 +371,14 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   useEffect(() => {
     isDocumentVisibleRef.current = isDocumentVisible
   }, [isDocumentVisible])
+
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
+
+  useEffect(() => {
+    unreadCountRef.current = unreadCount
+  }, [unreadCount])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -346,6 +414,8 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       clearReconnectTimerRef.current()
       attachEventSourceRef.current = null
       closeEventSource(true)
+      itemsRef.current = []
+      unreadCountRef.current = 0
       setItems([])
       setUnreadCount(0)
       setOpen(false)
@@ -365,20 +435,21 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     const stored = loadStoredSnapshot()
     if (stored) {
       pollingFailureStreakRef.current = 0
-      setItems(stored.items)
-      setUnreadCount(stored.unreadCount)
-      setLastNotificationEventId(toLatestNotificationEventId(stored.items))
-      setIsReady(true)
-      setIsSnapshotFallback(true)
-      setNotificationAccessState("ready")
+      applySnapshotState({
+        nextItems: stored.items,
+        nextUnreadCount: stored.unreadCount,
+        fallback: true,
+      })
     } else {
+      itemsRef.current = []
+      unreadCountRef.current = 0
       setItems([])
       setUnreadCount(0)
       setIsReady(false)
       setIsSnapshotFallback(false)
       setNotificationAccessState("pending")
     }
-  }, [closeEventSource, enabled, preferPolling, setLastNotificationEventId])
+  }, [applySnapshotState, closeEventSource, enabled, preferPolling, setLastNotificationEventId])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -498,7 +569,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
             sanitizeNotificationEventId(event.lastEventId) || `notification-${payload.notification.id}`
           )
           pushNotification(payload.notification)
-          setUnreadCount(payload.unreadCount)
+          setUnreadCount((prev) => {
+            if (prev === payload.unreadCount) return prev
+            unreadCountRef.current = payload.unreadCount
+            return payload.unreadCount
+          })
           setIsReady(true)
           setIsSnapshotFallback(false)
         } catch {
@@ -813,8 +888,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     try {
       await markAllNotificationsRead()
       const nextItems = items.map((item) => ({ ...item, isRead: true }))
-      setUnreadCount(0)
-      setItems(nextItems)
+      unreadCountRef.current = 0
+      itemsRef.current = nextItems
+      setUnreadCount((prev) => (prev === 0 ? prev : 0))
+      setItems((prev) => (isSameNotificationList(prev, nextItems) ? prev : nextItems))
       persistSnapshot({
         items: nextItems,
         unreadCount: 0,
@@ -848,8 +925,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         await markNotificationRead(notification.id)
         const nextUnreadCount = Math.max(0, unreadCount - 1)
         const nextItems = items.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
-        setUnreadCount(nextUnreadCount)
-        setItems(nextItems)
+        unreadCountRef.current = nextUnreadCount
+        itemsRef.current = nextItems
+        setUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount))
+        setItems((prev) => (isSameNotificationList(prev, nextItems) ? prev : nextItems))
         persistSnapshot({
           items: nextItems,
           unreadCount: nextUnreadCount,

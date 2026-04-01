@@ -58,6 +58,16 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "QA 끝으로 이동" }).click()
 
     await page.getByRole("button", { name: "QA 콜아웃" }).click()
+    const calloutBodyField = page.locator("[data-callout-markdown-role='body']").first()
+    await expect(calloutBodyField).toBeVisible()
+    await calloutBodyField.fill("콜아웃 코드값")
+    await calloutBodyField.evaluate((element) => {
+      const textarea = element as HTMLTextAreaElement
+      textarea.focus()
+      textarea.setSelectionRange(0, textarea.value.length)
+    })
+    await page.getByRole("button", { name: "인라인 코드", exact: true }).first().click()
+
     await page.getByRole("button", { name: "QA 수식" }).click()
 
     const attachmentInput = page.getByTestId("editor-attachment-file-input")
@@ -69,6 +79,7 @@ test.describe("block editor authoring flow", () => {
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
     await expect(markdownOutput).toContainText("> [!TIP] 핵심 포인트")
+    await expect(markdownOutput).toContainText("> `콜아웃 코드값`")
     await expect(markdownOutput).toContainText("$수식$")
     await expect(markdownOutput).toContainText(":::file https://example.com/files/architecture.pdf")
     await expect(markdownOutput).toContainText('"mimeType":"application/pdf"')

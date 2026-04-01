@@ -173,17 +173,32 @@ export const buildGrafanaPanelEmbedUrl = (dashboardUrl: string, panelId: number)
   if (!dashboardUrl) return ""
   try {
     const url = new URL(dashboardUrl)
-    if (url.pathname.includes("/d-solo/")) {
+    const applyPanelDefaults = () => {
       url.searchParams.set("panelId", String(panelId))
       url.searchParams.set("kiosk", "tv")
       url.searchParams.set("theme", "light")
+      if (!url.searchParams.has("orgId")) {
+        url.searchParams.set("orgId", "1")
+      }
+      // Grafana 11 scene 기반 solo 렌더 경로를 강제해 iframe 로딩 고착을 줄인다.
+      if (!url.searchParams.has("__feature.dashboardSceneSolo")) {
+        url.searchParams.set("__feature.dashboardSceneSolo", "")
+      }
+      if (!url.searchParams.has("from")) {
+        url.searchParams.set("from", "now-6h")
+      }
+      if (!url.searchParams.has("to")) {
+        url.searchParams.set("to", "now")
+      }
+    }
+
+    if (url.pathname.includes("/d-solo/")) {
+      applyPanelDefaults()
       return url.toString()
     }
     if (url.pathname.includes("/d/")) {
       url.pathname = url.pathname.replace("/d/", "/d-solo/")
-      url.searchParams.set("panelId", String(panelId))
-      url.searchParams.set("kiosk", "tv")
-      url.searchParams.set("theme", "light")
+      applyPanelDefaults()
       return url.toString()
     }
     return dashboardUrl

@@ -149,6 +149,28 @@ const evaluateMetric = (baselineMetric, actualRow) => {
   }
 }
 
+const resolveActualMetric = (baselineMetric, latestByMetric) => {
+  const candidates = [
+    baselineMetric.metric,
+    ...(Array.isArray(baselineMetric.aliases)
+      ? baselineMetric.aliases.filter((value) => typeof value === "string" && value.trim().length > 0)
+      : []),
+  ]
+  for (const candidate of candidates) {
+    const row = latestByMetric.get(candidate)
+    if (row) {
+      return {
+        metric: candidate,
+        row,
+      }
+    }
+  }
+  return {
+    metric: baselineMetric.metric,
+    row: null,
+  }
+}
+
 const formatValue = (value, unit) => {
   if (value === null || value === undefined || !Number.isFinite(value)) return "-"
   if (unit === "ratio") return value.toFixed(4)
@@ -180,8 +202,8 @@ let passCount = 0
 let missingCount = 0
 
 for (const metricBaseline of baseline.metrics || []) {
-  const actual = latestByMetric.get(metricBaseline.metric)
-  const result = evaluateMetric(metricBaseline, actual)
+  const actualMetric = resolveActualMetric(metricBaseline, latestByMetric)
+  const result = evaluateMetric(metricBaseline, actualMetric.row)
   if (result.status === "fail") failCount += 1
   if (result.status === "warn") warnCount += 1
   if (result.status === "pass") passCount += 1
@@ -189,6 +211,7 @@ for (const metricBaseline of baseline.metrics || []) {
 
   comparisons.push({
     metric: metricBaseline.metric,
+    actualMetric: actualMetric.metric,
     label: metricBaseline.label || metricBaseline.metric,
     section: metricBaseline.section || "-",
     panel: metricBaseline.panel || "-",
@@ -213,11 +236,11 @@ summaryLines.push(`- warn: ${warnCount}`)
 summaryLines.push(`- fail: ${failCount}`)
 summaryLines.push(`- missing: ${missingCount}`)
 summaryLines.push("")
-summaryLines.push("| Metric | Section | Dashboard Panel | Value | Warn | Fail | Status |")
-summaryLines.push("| --- | --- | --- | ---: | ---: | ---: | --- |")
+summaryLines.push("| Metric | Actual Metric | Section | Dashboard Panel | Value | Warn | Fail | Status |")
+summaryLines.push("| --- | --- | --- | --- | ---: | ---: | ---: | --- |")
 for (const row of comparisons) {
   summaryLines.push(
-    `| ${row.label} | ${row.section} | ${row.panel} | ${formatValue(row.value, row.unit)} | ${formatValue(row.warn, row.unit)} | ${formatValue(row.fail, row.unit)} | ${row.status} |`
+    `| ${row.label} | ${row.actualMetric} | ${row.section} | ${row.panel} | ${formatValue(row.value, row.unit)} | ${formatValue(row.warn, row.unit)} | ${formatValue(row.fail, row.unit)} | ${row.status} |`
   )
 }
 

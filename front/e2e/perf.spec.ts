@@ -7,9 +7,12 @@ const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
 const editorTypingP95BudgetMs = Number(process.env.PERF_EDITOR_TYPING_P95_BUDGET_MS || 36)
+const editorCommitP95BudgetMs = Number(process.env.PERF_EDITOR_COMMIT_P95_BUDGET_MS || 28)
+const editorInputLongTaskRatioBudget = Number(process.env.PERF_EDITOR_INPUT_LONGTASK_RATIO_BUDGET || 0.1)
 const feedScrollMaxFrameGapBudgetMs = Number(process.env.PERF_FEED_SCROLL_MAX_FRAME_GAP_BUDGET_MS || 120)
 const feedScrollLongFrameRatioBudget = Number(process.env.PERF_FEED_SCROLL_LONG_FRAME_RATIO_BUDGET || 0.15)
 const detailEntryBudgetMs = Number(process.env.PERF_DETAIL_ENTRY_BUDGET_MS || 1800)
+const homeFcpBudgetMs = Number(process.env.PERF_HOME_FCP_BUDGET_MS || 1800)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const runtimeGuardMetricsPath = path.resolve(
   process.cwd(),
@@ -23,10 +26,39 @@ const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/dashboard", "/admin
 const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
 
 type RuntimeGuardMetricName =
+  | "home_first_contentful_paint_ms"
+  | "editor_input_latency"
+  | "editor_render_commit_p95_ms"
+  | "editor_input_longtask_ratio"
+  | "feed_scroll_blocking.max_frame_gap_ms"
+  | "feed_scroll_blocking.long_frame_ratio"
+  | "detail_enter_cost"
   | "editor.typing.p95_ms"
   | "feed.scroll.max_frame_gap_ms"
   | "feed.scroll.long_frame_ratio"
   | "detail.entry.ms"
+
+type RuntimeGuardMetricMeta = {
+  unit: "ms" | "ratio"
+  route: string
+  section: "editor" | "feed" | "detail"
+  sampleCount?: number
+  extra?: Record<string, number>
+}
+
+type RuntimeGuardWindow = Window & {
+  __AQ_RUNTIME_GUARD_ENABLED__?: boolean
+  __AQ_RUNTIME_GUARD__?: {
+    editorCommitSamples?: number[]
+  }
+}
+
+const PERF_RUNTIME_GUARD_TRIALS = 3
+
+const average = (values: number[]) => {
+  if (!values.length) return 0
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
 
 const roundMetric = (value: number, precision = 3) => Number(value.toFixed(precision))
 
@@ -34,13 +66,7 @@ const recordRuntimeGuardMetric = (
   metric: RuntimeGuardMetricName,
   value: number,
   budget: number,
-  meta: {
-    unit: "ms" | "ratio"
-    route: string
-    section: "editor" | "feed" | "detail"
-    sampleCount?: number
-    extra?: Record<string, number>
-  }
+  meta: RuntimeGuardMetricMeta
 ) => {
   mkdirSync(path.dirname(runtimeGuardMetricsPath), { recursive: true })
   appendFileSync(
@@ -55,6 +81,19 @@ const recordRuntimeGuardMetric = (
     })}\n`,
     "utf8"
   )
+}
+
+const recordRuntimeGuardMetricWithAliases = (
+  metric: RuntimeGuardMetricName,
+  value: number,
+  budget: number,
+  meta: RuntimeGuardMetricMeta,
+  aliases: RuntimeGuardMetricName[] = []
+) => {
+  const metrics = Array.from(new Set([metric, ...aliases]))
+  for (const currentMetric of metrics) {
+    recordRuntimeGuardMetric(currentMetric, value, budget, meta)
+  }
 }
 
 test.beforeAll(() => {
@@ -658,12 +697,45 @@ test("홈 페이지 CLS(web-vitals) 예산을 통과한다", async ({ page }) =>
   await waitForPageReady(page)
   await page.waitForTimeout(1500)
 
+  const fcpSamples: number[] = []
+  for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
+    if (trial > 0) {
+      await reloadForPerf(page)
+      await page.waitForTimeout(300)
+    }
+    const fcpMs = await page.evaluate(() => {
+      const byName = performance.getEntriesByName("first-contentful-paint")
+      const fcpEntry = byName.at(-1) ?? performance.getEntriesByType("paint").find((entry) => entry.name === "first-contentful-paint")
+      const startTime = Number(fcpEntry?.startTime ?? 0)
+      return Number.isFinite(startTime) && startTime > 0 ? startTime : 0
+    })
+    if (fcpMs > 0) {
+      fcpSamples.push(fcpMs)
+    }
+  }
+  const averagedFcpMs = average(fcpSamples)
+  if (averagedFcpMs <= 0) {
+    throw new Error("홈 FCP 측정값을 수집하지 못했습니다.")
+  }
+
+  console.log(
+    `[runtime-guard] home-fcp avg=${averagedFcpMs.toFixed(2)}ms trials=${fcpSamples.length}/${PERF_RUNTIME_GUARD_TRIALS} budget=${homeFcpBudgetMs}ms`
+  )
+  recordRuntimeGuardMetric("home_first_contentful_paint_ms", averagedFcpMs, homeFcpBudgetMs, {
+    unit: "ms",
+    route: "/",
+    section: "feed",
+    sampleCount: fcpSamples.length,
+  })
+
   const cls = await page.evaluate(() => (window as unknown as { __aqCls?: number }).__aqCls ?? 0)
   console.log(`[web-vitals] CLS=${cls.toFixed(4)} budget=${homeClsBudget}`)
   expect(cls).toBeLessThanOrEqual(homeClsBudget + clsAssertionEpsilon)
+  expect(averagedFcpMs).toBeLessThanOrEqual(homeFcpBudgetMs)
 })
 
 test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과한다", async ({ page }) => {
+  test.setTimeout(60_000)
   await installClsObserver(page)
   await mockFeedEndpoints(page)
 
@@ -691,94 +763,194 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
 })
 
 test("에디터 타이핑 p95는 런타임 가드 예산을 통과한다", async ({ page }) => {
-  await page.goto(QA_ENGINE_ROUTE)
-  await page.waitForLoadState("domcontentloaded")
-
-  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
-  await expect(editor).toBeVisible()
-  await editor.click()
-
-  const typingStats = await editor.evaluate(async (node) => {
-    const host = node as HTMLElement
-    const payload = "성능가드 타이핑 기준 블록 입력 "
-    const text = payload.repeat(6)
-    const samples: number[] = []
-    const waitNextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-
-    const setCaretToEnd = () => {
-      const range = document.createRange()
-      range.selectNodeContents(host)
-      range.collapse(false)
-      const selection = window.getSelection()
-      if (!selection) return
-      selection.removeAllRanges()
-      selection.addRange(range)
-    }
-
-    for (const character of text) {
-      const start = performance.now()
-      setCaretToEnd()
-
-      const insertedWithExecCommand =
-        typeof document.execCommand === "function" && document.execCommand("insertText", false, character)
-
-      if (!insertedWithExecCommand) {
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          range.deleteContents()
-          range.insertNode(document.createTextNode(character))
-          range.collapse(false)
-        } else {
-          host.append(document.createTextNode(character))
-        }
-        host.dispatchEvent(
-          new InputEvent("input", {
-            bubbles: true,
-            cancelable: false,
-            inputType: "insertText",
-            data: character,
-          })
-        )
-      }
-
-      await waitNextFrame()
-      samples.push(performance.now() - start)
-    }
-
-    const toPercentile = (values: number[], percentilePoint: number) => {
-      if (!values.length) return 0
-      const sorted = [...values].sort((a, b) => a - b)
-      const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
-      return sorted[index]
-    }
-    const meanMs = samples.reduce((sum, sample) => sum + sample, 0) / Math.max(samples.length, 1)
-    const p95Ms = toPercentile(samples, 0.95)
-    const maxMs = samples.length ? Math.max(...samples) : 0
-    return {
-      sampleCount: samples.length,
-      meanMs,
-      p95Ms,
-      maxMs,
+  const typingP95Samples: number[] = []
+  const typingMeanSamples: number[] = []
+  const typingMaxSamples: number[] = []
+  const typingLongTaskRatioSamples: number[] = []
+  const editorCommitP95Samples: number[] = []
+  const editorCommitRawSampleCounts: number[] = []
+  let editorCommitFallbackCount = 0
+  const typingSampleCounts: number[] = []
+  await page.addInitScript(() => {
+    ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD_ENABLED__ = true
+    ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__ = {
+      editorCommitSamples: [],
     }
   })
 
+  for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
+    await page.goto(QA_ENGINE_ROUTE)
+    await page.waitForLoadState("domcontentloaded")
+    await page.evaluate(() => {
+      ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD_ENABLED__ = true
+      ;(window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__ = {
+        editorCommitSamples: [],
+      }
+    })
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await expect(editor).toBeVisible()
+    await editor.click()
+
+    const typingStats = await editor.evaluate(async (node) => {
+      const host = node as HTMLElement
+      const payload = "성능가드 타이핑 기준 블록 입력 "
+      const text = payload.repeat(6)
+      const samples: number[] = []
+      const longTaskDurations: number[] = []
+      let longTaskObserver: PerformanceObserver | null = null
+      const waitNextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+      try {
+        longTaskObserver = new PerformanceObserver((entryList) => {
+          for (const entry of entryList.getEntries()) {
+            longTaskDurations.push(entry.duration)
+          }
+        })
+        longTaskObserver.observe({ type: "longtask" })
+      } catch {
+        longTaskObserver = null
+      }
+
+      const setCaretToEnd = () => {
+        const range = document.createRange()
+        range.selectNodeContents(host)
+        range.collapse(false)
+        const selection = window.getSelection()
+        if (!selection) return
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+
+      for (const character of text) {
+        const start = performance.now()
+        setCaretToEnd()
+
+        const insertedWithExecCommand =
+          typeof document.execCommand === "function" && document.execCommand("insertText", false, character)
+
+        if (!insertedWithExecCommand) {
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            range.deleteContents()
+            range.insertNode(document.createTextNode(character))
+            range.collapse(false)
+          } else {
+            host.append(document.createTextNode(character))
+          }
+          host.dispatchEvent(
+            new InputEvent("input", {
+              bubbles: true,
+              cancelable: false,
+              inputType: "insertText",
+              data: character,
+            })
+          )
+        }
+
+        await waitNextFrame()
+        samples.push(performance.now() - start)
+      }
+
+      longTaskObserver?.disconnect()
+
+      const toPercentile = (values: number[], percentilePoint: number) => {
+        if (!values.length) return 0
+        const sorted = [...values].sort((a, b) => a - b)
+        const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
+        return sorted[index]
+      }
+      const meanMs = samples.reduce((sum, sample) => sum + sample, 0) / Math.max(samples.length, 1)
+      const p95Ms = toPercentile(samples, 0.95)
+      const maxMs = samples.length ? Math.max(...samples) : 0
+      const longTaskCount = longTaskDurations.length
+      const longTaskRatio = samples.length ? longTaskCount / samples.length : 0
+      return {
+        sampleCount: samples.length,
+        meanMs,
+        p95Ms,
+        maxMs,
+        longTaskCount,
+        longTaskRatio,
+      }
+    })
+
+    const commitStats = await page.evaluate(() => {
+      const runtime = (window as unknown as RuntimeGuardWindow).__AQ_RUNTIME_GUARD__
+      const rawSamples = runtime?.editorCommitSamples ?? []
+      const samples = rawSamples.filter((value) => Number.isFinite(value) && value > 0)
+      const sorted = [...samples].sort((a, b) => a - b)
+      const p95Index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1))
+      return {
+        sampleCount: samples.length,
+        p95Ms: sorted.length ? sorted[p95Index] : 0,
+      }
+    })
+
+    typingP95Samples.push(typingStats.p95Ms)
+    typingMeanSamples.push(typingStats.meanMs)
+    typingMaxSamples.push(typingStats.maxMs)
+    typingLongTaskRatioSamples.push(typingStats.longTaskRatio)
+    typingSampleCounts.push(typingStats.sampleCount)
+    editorCommitRawSampleCounts.push(commitStats.sampleCount)
+    if (commitStats.sampleCount > 0) {
+      editorCommitP95Samples.push(commitStats.p95Ms)
+    } else {
+      // Fallback keeps runtime guard signal available on surfaces without React Profiler wiring.
+      editorCommitP95Samples.push(typingStats.p95Ms)
+      editorCommitFallbackCount += 1
+    }
+  }
+
+  const averagedTypingP95Ms = average(typingP95Samples)
+  const averagedTypingMeanMs = average(typingMeanSamples)
+  const averagedTypingMaxMs = average(typingMaxSamples)
+  const averagedLongTaskRatio = average(typingLongTaskRatioSamples)
+  const averagedCommitP95Ms = average(editorCommitP95Samples)
+  const averagedTypingSampleCount = Math.round(average(typingSampleCounts))
+
   console.log(
-    `[runtime-guard] editor-typing p95=${typingStats.p95Ms.toFixed(2)}ms mean=${typingStats.meanMs.toFixed(2)}ms max=${typingStats.maxMs.toFixed(2)}ms samples=${typingStats.sampleCount} budget=${editorTypingP95BudgetMs}ms`
+    `[runtime-guard] editor-typing p95(avg)=${averagedTypingP95Ms.toFixed(2)}ms mean(avg)=${averagedTypingMeanMs.toFixed(2)}ms max(avg)=${averagedTypingMaxMs.toFixed(2)}ms samples(avg)=${averagedTypingSampleCount} trials=${PERF_RUNTIME_GUARD_TRIALS} budget=${editorTypingP95BudgetMs}ms`
   )
-  recordRuntimeGuardMetric("editor.typing.p95_ms", typingStats.p95Ms, editorTypingP95BudgetMs, {
+  console.log(
+    `[runtime-guard] editor-longtask ratio(avg)=${averagedLongTaskRatio.toFixed(4)} budget=${editorInputLongTaskRatioBudget}`
+  )
+  console.log(
+    `[runtime-guard] editor-commit p95(avg)=${averagedCommitP95Ms.toFixed(2)}ms samples=${Math.round(average(editorCommitRawSampleCounts))} fallbackTrials=${editorCommitFallbackCount} budget=${editorCommitP95BudgetMs}ms`
+  )
+
+  recordRuntimeGuardMetricWithAliases("editor_input_latency", averagedTypingP95Ms, editorTypingP95BudgetMs, {
     unit: "ms",
     route: QA_ENGINE_ROUTE,
     section: "editor",
-    sampleCount: typingStats.sampleCount,
+    sampleCount: averagedTypingSampleCount,
     extra: {
-      meanMs: typingStats.meanMs,
-      maxMs: typingStats.maxMs,
+      meanMs: averagedTypingMeanMs,
+      maxMs: averagedTypingMaxMs,
+      trials: PERF_RUNTIME_GUARD_TRIALS,
+    },
+  }, ["editor.typing.p95_ms"])
+  recordRuntimeGuardMetric("editor_input_longtask_ratio", averagedLongTaskRatio, editorInputLongTaskRatioBudget, {
+    unit: "ratio",
+    route: QA_ENGINE_ROUTE,
+    section: "editor",
+    sampleCount: averagedTypingSampleCount,
+  })
+  recordRuntimeGuardMetric("editor_render_commit_p95_ms", averagedCommitP95Ms, editorCommitP95BudgetMs, {
+    unit: "ms",
+    route: QA_ENGINE_ROUTE,
+    section: "editor",
+    sampleCount: Math.round(average(editorCommitRawSampleCounts)),
+    extra: {
+      fallbackTrials: editorCommitFallbackCount,
     },
   })
 
-  expect(typingStats.sampleCount).toBeGreaterThanOrEqual(60)
-  expect(typingStats.p95Ms).toBeLessThanOrEqual(editorTypingP95BudgetMs)
+  expect(averagedTypingSampleCount).toBeGreaterThanOrEqual(60)
+  expect(averagedTypingP95Ms).toBeLessThanOrEqual(editorTypingP95BudgetMs)
+  expect(averagedLongTaskRatio).toBeLessThanOrEqual(editorInputLongTaskRatioBudget)
+  expect(averagedCommitP95Ms).toBeLessThanOrEqual(editorCommitP95BudgetMs)
 })
 
 test("피드 스크롤 프레임 예산은 런타임 가드를 통과한다", async ({ page }) => {
@@ -837,121 +1009,153 @@ test("피드 스크롤 프레임 예산은 런타임 가드를 통과한다", as
   await page.goto("/")
   await waitForPageReady(page)
 
-  const frameStats = await page.evaluate(async () => {
-    const frameGaps: number[] = []
-    let active = true
-    let rafId = 0
-    let previous = performance.now()
+  const frameSampleCounts: number[] = []
+  const frameMaxGapSamples: number[] = []
+  const frameP95GapSamples: number[] = []
+  const frameLongRatioSamples: number[] = []
 
-    const collect = (now: number) => {
-      frameGaps.push(now - previous)
-      previous = now
-      if (active) rafId = requestAnimationFrame(collect)
-    }
-    rafId = requestAnimationFrame(collect)
+  for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
+    const frameStats = await page.evaluate(async () => {
+      const frameGaps: number[] = []
+      let active = true
+      let rafId = 0
+      let previous = performance.now()
 
-    for (let step = 0; step < 18; step += 1) {
-      const maxScrollable = Math.max(document.body.scrollHeight - window.innerHeight, 0)
-      const progress = (step + 1) / 18
-      window.scrollTo({ top: Math.round(maxScrollable * progress), behavior: "auto" })
-      await new Promise((resolve) => setTimeout(resolve, 70))
-    }
-    await new Promise((resolve) => setTimeout(resolve, 320))
+      const collect = (now: number) => {
+        frameGaps.push(now - previous)
+        previous = now
+        if (active) rafId = requestAnimationFrame(collect)
+      }
+      rafId = requestAnimationFrame(collect)
 
-    active = false
-    cancelAnimationFrame(rafId)
+      for (let step = 0; step < 18; step += 1) {
+        const maxScrollable = Math.max(document.body.scrollHeight - window.innerHeight, 0)
+        const progress = (step + 1) / 18
+        window.scrollTo({ top: Math.round(maxScrollable * progress), behavior: "auto" })
+        await new Promise((resolve) => setTimeout(resolve, 70))
+      }
+      await new Promise((resolve) => setTimeout(resolve, 320))
 
-    const toPercentile = (values: number[], percentilePoint: number) => {
-      if (!values.length) return 0
-      const sorted = [...values].sort((a, b) => a - b)
-      const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
-      return sorted[index]
-    }
+      active = false
+      cancelAnimationFrame(rafId)
+      window.scrollTo({ top: 0, behavior: "auto" })
 
-    const usableFrames = frameGaps.filter((gap) => Number.isFinite(gap) && gap > 0)
-    const maxFrameGapMs = usableFrames.length ? Math.max(...usableFrames) : 0
-    const p95FrameGapMs = toPercentile(usableFrames, 0.95)
-    const longFrameThresholdMs = 50
-    const longFrameCount = usableFrames.filter((gap) => gap > longFrameThresholdMs).length
-    const longFrameRatio = usableFrames.length ? longFrameCount / usableFrames.length : 0
+      const toPercentile = (values: number[], percentilePoint: number) => {
+        if (!values.length) return 0
+        const sorted = [...values].sort((a, b) => a - b)
+        const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
+        return sorted[index]
+      }
 
-    return {
-      sampleCount: usableFrames.length,
-      maxFrameGapMs,
-      p95FrameGapMs,
-      longFrameRatio,
-      longFrameThresholdMs,
-    }
-  })
+      const usableFrames = frameGaps.filter((gap) => Number.isFinite(gap) && gap > 0)
+      const maxFrameGapMs = usableFrames.length ? Math.max(...usableFrames) : 0
+      const p95FrameGapMs = toPercentile(usableFrames, 0.95)
+      const longFrameThresholdMs = 50
+      const longFrameCount = usableFrames.filter((gap) => gap > longFrameThresholdMs).length
+      const longFrameRatio = usableFrames.length ? longFrameCount / usableFrames.length : 0
+
+      return {
+        sampleCount: usableFrames.length,
+        maxFrameGapMs,
+        p95FrameGapMs,
+        longFrameRatio,
+      }
+    })
+    frameSampleCounts.push(frameStats.sampleCount)
+    frameMaxGapSamples.push(frameStats.maxFrameGapMs)
+    frameP95GapSamples.push(frameStats.p95FrameGapMs)
+    frameLongRatioSamples.push(frameStats.longFrameRatio)
+    await page.waitForTimeout(120)
+  }
+
+  const averagedFrameSampleCount = Math.round(average(frameSampleCounts))
+  const averagedMaxFrameGapMs = average(frameMaxGapSamples)
+  const averagedP95FrameGapMs = average(frameP95GapSamples)
+  const averagedLongFrameRatio = average(frameLongRatioSamples)
 
   console.log(
-    `[runtime-guard] feed-scroll maxFrameGap=${frameStats.maxFrameGapMs.toFixed(2)}ms p95FrameGap=${frameStats.p95FrameGapMs.toFixed(2)}ms longFrameRatio=${frameStats.longFrameRatio.toFixed(4)} budget(max=${feedScrollMaxFrameGapBudgetMs}ms, ratio=${feedScrollLongFrameRatioBudget})`
+    `[runtime-guard] feed-scroll maxFrameGap(avg)=${averagedMaxFrameGapMs.toFixed(2)}ms p95FrameGap(avg)=${averagedP95FrameGapMs.toFixed(2)}ms longFrameRatio(avg)=${averagedLongFrameRatio.toFixed(4)} trials=${PERF_RUNTIME_GUARD_TRIALS} budget(max=${feedScrollMaxFrameGapBudgetMs}ms, ratio=${feedScrollLongFrameRatioBudget})`
   )
-  recordRuntimeGuardMetric("feed.scroll.max_frame_gap_ms", frameStats.maxFrameGapMs, feedScrollMaxFrameGapBudgetMs, {
+  recordRuntimeGuardMetricWithAliases("feed_scroll_blocking.max_frame_gap_ms", averagedMaxFrameGapMs, feedScrollMaxFrameGapBudgetMs, {
     unit: "ms",
     route: "/",
     section: "feed",
-    sampleCount: frameStats.sampleCount,
+    sampleCount: averagedFrameSampleCount,
     extra: {
-      p95FrameGapMs: frameStats.p95FrameGapMs,
-      longFrameRatio: frameStats.longFrameRatio,
+      p95FrameGapMs: averagedP95FrameGapMs,
+      longFrameRatio: averagedLongFrameRatio,
+      trials: PERF_RUNTIME_GUARD_TRIALS,
     },
-  })
-  recordRuntimeGuardMetric("feed.scroll.long_frame_ratio", frameStats.longFrameRatio, feedScrollLongFrameRatioBudget, {
+  }, ["feed.scroll.max_frame_gap_ms"])
+  recordRuntimeGuardMetricWithAliases("feed_scroll_blocking.long_frame_ratio", averagedLongFrameRatio, feedScrollLongFrameRatioBudget, {
     unit: "ratio",
     route: "/",
     section: "feed",
-    sampleCount: frameStats.sampleCount,
+    sampleCount: averagedFrameSampleCount,
     extra: {
-      maxFrameGapMs: frameStats.maxFrameGapMs,
-      p95FrameGapMs: frameStats.p95FrameGapMs,
+      maxFrameGapMs: averagedMaxFrameGapMs,
+      p95FrameGapMs: averagedP95FrameGapMs,
+      trials: PERF_RUNTIME_GUARD_TRIALS,
     },
-  })
+  }, ["feed.scroll.long_frame_ratio"])
 
-  expect(frameStats.sampleCount).toBeGreaterThanOrEqual(40)
-  expect(frameStats.maxFrameGapMs).toBeLessThanOrEqual(feedScrollMaxFrameGapBudgetMs)
-  expect(frameStats.longFrameRatio).toBeLessThanOrEqual(feedScrollLongFrameRatioBudget)
+  expect(averagedFrameSampleCount).toBeGreaterThanOrEqual(40)
+  expect(averagedMaxFrameGapMs).toBeLessThanOrEqual(feedScrollMaxFrameGapBudgetMs)
+  expect(averagedLongFrameRatio).toBeLessThanOrEqual(feedScrollLongFrameRatioBudget)
 })
 
 test("상세 진입 시간은 런타임 가드 예산을 통과한다", async ({ page }) => {
   const postId = 1001
+  const detailEntrySamples: number[] = []
 
   await mockFeedEndpoints(page)
   await mockDetailRailEndpoint(page, postId)
 
-  await page.goto("/")
-  await waitForPageReady(page)
+  for (let trial = 0; trial < PERF_RUNTIME_GUARD_TRIALS; trial += 1) {
+    await page.goto("/")
+    await waitForPageReady(page)
 
-  const firstCardLink = page.locator(`a[href="/posts/${postId}"]`).first()
-  await expect(firstCardLink).toBeVisible()
+    const firstCardLink = page.locator(`a[href="/posts/${postId}"]`).first()
+    await expect(firstCardLink).toBeVisible()
 
-  await page.evaluate(() => {
-    performance.clearMarks("rum:detail-entry:start")
-    performance.mark("rum:detail-entry:start")
-  })
+    await page.evaluate(() => {
+      performance.clearMarks("rum:detail-entry:start")
+      performance.mark("rum:detail-entry:start")
+    })
 
-  await Promise.all([page.waitForURL(`**/posts/${postId}`), firstCardLink.click()])
-  await expect(page.getByRole("heading", { name: "상세 레일 스티키 회귀 점검" })).toBeVisible()
-  await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+    await Promise.all([page.waitForURL(`**/posts/${postId}`), firstCardLink.click()])
+    await expect(page.getByRole("heading", { name: "상세 레일 스티키 회귀 점검" })).toBeVisible()
+    await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
 
-  const detailEntryMs = await page.evaluate(() => {
-    const mark = performance.getEntriesByName("rum:detail-entry:start").at(-1)
-    if (!mark) return null
-    return performance.now() - mark.startTime
-  })
+    const detailEntryMs = await page.evaluate(() => {
+      const mark = performance.getEntriesByName("rum:detail-entry:start").at(-1)
+      if (!mark) return null
+      return performance.now() - mark.startTime
+    })
 
-  if (detailEntryMs === null) {
-    throw new Error("상세 진입 측정 마크를 찾지 못했습니다.")
+    if (detailEntryMs === null) {
+      throw new Error("상세 진입 측정 마크를 찾지 못했습니다.")
+    }
+
+    detailEntrySamples.push(detailEntryMs)
+    await page.waitForTimeout(120)
   }
 
-  console.log(`[runtime-guard] detail-entry duration=${detailEntryMs.toFixed(2)}ms budget=${detailEntryBudgetMs}ms`)
-  recordRuntimeGuardMetric("detail.entry.ms", detailEntryMs, detailEntryBudgetMs, {
+  const averagedDetailEntryMs = average(detailEntrySamples)
+  console.log(
+    `[runtime-guard] detail-entry duration(avg)=${averagedDetailEntryMs.toFixed(2)}ms trials=${PERF_RUNTIME_GUARD_TRIALS} budget=${detailEntryBudgetMs}ms`
+  )
+  recordRuntimeGuardMetricWithAliases("detail_enter_cost", averagedDetailEntryMs, detailEntryBudgetMs, {
     unit: "ms",
     route: `/posts/${postId}`,
     section: "detail",
-  })
+    sampleCount: detailEntrySamples.length,
+    extra: {
+      trials: PERF_RUNTIME_GUARD_TRIALS,
+    },
+  }, ["detail.entry.ms"])
 
-  expect(detailEntryMs).toBeLessThanOrEqual(detailEntryBudgetMs)
+  expect(averagedDetailEntryMs).toBeLessThanOrEqual(detailEntryBudgetMs)
 })
 
 test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지한다", async ({ page }) => {

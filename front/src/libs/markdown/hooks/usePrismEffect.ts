@@ -170,80 +170,148 @@ const ensurePrismLanguages = async (languages: string[]) => {
   }
 }
 
-const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, enabled = true) => {
+type PrismEffectOptions = {
+  observeMutations?: boolean
+  mutationDebounceMs?: number
+}
+
+const PRISM_DEFAULT_MUTATION_DEBOUNCE_MS = 72
+
+const resolveElementFromNode = (node: Node | null): Element | null => {
+  if (!node) return null
+  if (node instanceof Element) return node
+  if (node.nodeType === Node.TEXT_NODE) return node.parentElement
+  return null
+}
+
+const resolveCodeBlockFromNode = (node: Node | null, root: HTMLElement) => {
+  const element = resolveElementFromNode(node)
+  if (!element) return null
+  const codeBlock = element.matches("pre > code") ? element : element.closest("pre > code")
+  if (!(codeBlock instanceof HTMLElement)) return null
+  if (!root.contains(codeBlock)) return null
+  return codeBlock
+}
+
+const isPrismTokenNode = (node: Node | null) => {
+  const element = resolveElementFromNode(node)
+  if (!element) return false
+  return Boolean(element.matches("span.token") || element.closest("span.token"))
+}
+
+const usePrismEffect = (
+  rootRef: RefObject<HTMLElement>,
+  contentKey: string,
+  enabled = true,
+  options?: PrismEffectOptions
+) => {
+  const observeMutations = options?.observeMutations ?? true
+  const mutationDebounceMs =
+    typeof options?.mutationDebounceMs === "number"
+      ? Math.max(16, options.mutationDebounceMs)
+      : PRISM_DEFAULT_MUTATION_DEBOUNCE_MS
+
   useEffect(() => {
     if (!enabled) return
 
     let disposed = false
     let running = false
+    let rerunRequested = false
+    let scheduledRunTimer: number | null = null
+    let fullRescanRequested = true
+    const pendingBlocks = new Set<HTMLElement>()
     const root = rootRef.current
     if (!root) return
 
-    const run = async () => {
-      if (disposed || running) return
-      running = true
-      try {
-        const codeBlocks = Array.from(root.querySelectorAll<HTMLElement>("pre > code"))
-        if (!codeBlocks.length) return
+    const collectTargetBlocks = () => {
+      if (fullRescanRequested) {
+        fullRescanRequested = false
+        pendingBlocks.clear()
+        return Array.from(root.querySelectorAll<HTMLElement>("pre > code"))
+      }
 
-        const languageByBlock = codeBlocks
-          .map((block) => ({
-            block,
-            rawLanguage: extractLanguage(block),
-            source: block.textContent || "",
-          }))
-          .map((entry) => {
-            const inferred = isGenericLanguage(entry.rawLanguage)
-              ? inferLanguageFromSource(entry.source)
-              : entry.rawLanguage
+      const targets = Array.from(pendingBlocks).filter((block) => block.isConnected && root.contains(block))
+      pendingBlocks.clear()
+      return targets
+    }
 
-            return {
-              ...entry,
-              language: inferred,
-              shouldHighlight:
-                inferred.length > 0 &&
-                inferred !== "mermaid" &&
-                (!blockHasShikiTheme(entry.block) || isGenericLanguage(entry.rawLanguage)),
-            }
-          })
-          .filter((entry) => entry.shouldHighlight)
+    const highlightBlocks = async (codeBlocks: HTMLElement[]) => {
+      if (!codeBlocks.length) return
 
-        const languages = languageByBlock
-          .map((entry) => entry.language)
-          .filter((language) => language !== "mermaid" && language !== "text")
+      const languageByBlock = codeBlocks
+        .map((block) => ({
+          block,
+          rawLanguage: extractLanguage(block),
+          source: block.textContent || "",
+        }))
+        .map((entry) => {
+          const inferred = isGenericLanguage(entry.rawLanguage)
+            ? inferLanguageFromSource(entry.source)
+            : entry.rawLanguage
 
-        if (!languages.length) return
-
-        const Prism = await loadPrismCore()
-        await ensurePrismLanguages(languages)
-        if (disposed) return
-
-        languageByBlock.forEach(({ block, language, source }) => {
-          if (language === "mermaid" || language === "text") return
-
-          const alreadyHighlighted =
-            block.dataset.prismLanguage === language &&
-            block.dataset.prismSource === source
-          if (alreadyHighlighted) return
-
-          const hasGrammar = Boolean(Prism.languages?.[language])
-          if (!hasGrammar) {
-            block.dataset.prismLanguage = language
-            block.dataset.prismSource = source
-            block.setAttribute("data-language", language)
-            return
+          return {
+            ...entry,
+            language: inferred,
+            shouldHighlight:
+              inferred.length > 0 &&
+              inferred !== "mermaid" &&
+              (!blockHasShikiTheme(entry.block) || isGenericLanguage(entry.rawLanguage)),
           }
+        })
+        .filter((entry) => entry.shouldHighlight)
 
-          Array.from(block.classList)
-            .filter((className) => className.startsWith("language-"))
-            .forEach((className) => block.classList.remove(className))
-          block.classList.add(`language-${language}`)
+      const languages = languageByBlock
+        .map((entry) => entry.language)
+        .filter((language) => language !== "mermaid" && language !== "text")
 
-          Prism.highlightElement(block)
+      if (!languages.length) return
+
+      const Prism = await loadPrismCore()
+      await ensurePrismLanguages(languages)
+      if (disposed) return
+
+      languageByBlock.forEach(({ block, language, source }) => {
+        if (language === "mermaid" || language === "text") return
+
+        const alreadyHighlighted =
+          block.dataset.prismLanguage === language &&
+          block.dataset.prismSource === source
+        if (alreadyHighlighted) return
+
+        const hasGrammar = Boolean(Prism.languages?.[language])
+        if (!hasGrammar) {
           block.dataset.prismLanguage = language
           block.dataset.prismSource = source
           block.setAttribute("data-language", language)
-        })
+          return
+        }
+
+        Array.from(block.classList)
+          .filter((className) => className.startsWith("language-"))
+          .forEach((className) => block.classList.remove(className))
+        block.classList.add(`language-${language}`)
+
+        Prism.highlightElement(block)
+        block.dataset.prismLanguage = language
+        block.dataset.prismSource = source
+        block.setAttribute("data-language", language)
+      })
+    }
+
+    const run = async () => {
+      if (disposed) return
+      if (running) {
+        rerunRequested = true
+        return
+      }
+      running = true
+      try {
+        do {
+          rerunRequested = false
+          const targets = collectTargetBlocks()
+          if (!targets.length) continue
+          await highlightBlocks(targets)
+        } while (!disposed && rerunRequested)
       } catch (error) {
         console.warn(error)
       } finally {
@@ -251,24 +319,91 @@ const usePrismEffect = (rootRef: RefObject<HTMLElement>, contentKey: string, ena
       }
     }
 
-    run()
-
-    const observer = new MutationObserver(() => {
+    const scheduleRun = ({ fullRescan = false, block }: { fullRescan?: boolean; block?: HTMLElement } = {}) => {
       if (disposed) return
-      run()
-    })
+      if (fullRescan) {
+        fullRescanRequested = true
+      }
+      if (block) {
+        pendingBlocks.add(block)
+      }
+      if (scheduledRunTimer !== null) return
+      scheduledRunTimer = window.setTimeout(() => {
+        scheduledRunTimer = null
+        void run()
+      }, mutationDebounceMs)
+    }
 
-    observer.observe(root, {
+    scheduleRun({ fullRescan: true })
+
+    const observer =
+      observeMutations && typeof MutationObserver !== "undefined"
+        ? new MutationObserver((mutations) => {
+            if (disposed) return
+
+            let hasRelevantMutation = false
+            for (const mutation of mutations) {
+              if (mutation.type === "characterData") {
+                if (isPrismTokenNode(mutation.target)) continue
+                const block = resolveCodeBlockFromNode(mutation.target, root)
+                if (!block) continue
+                hasRelevantMutation = true
+                scheduleRun({ block })
+                continue
+              }
+
+              if (mutation.type === "attributes") {
+                const block = resolveCodeBlockFromNode(mutation.target, root)
+                if (!block) continue
+                hasRelevantMutation = true
+                scheduleRun({ block })
+                continue
+              }
+
+              const targetBlock = resolveCodeBlockFromNode(mutation.target, root)
+              if (targetBlock && !isPrismTokenNode(mutation.target)) {
+                hasRelevantMutation = true
+                scheduleRun({ block: targetBlock })
+              }
+
+              for (const node of Array.from(mutation.addedNodes)) {
+                if (isPrismTokenNode(node)) continue
+                const addedBlock = resolveCodeBlockFromNode(node, root)
+                if (!addedBlock) continue
+                hasRelevantMutation = true
+                scheduleRun({ block: addedBlock })
+              }
+
+              for (const node of Array.from(mutation.removedNodes)) {
+                if (!(node instanceof Element)) continue
+                if (!node.matches("pre,code") && !node.querySelector("pre > code")) continue
+                hasRelevantMutation = true
+                scheduleRun({ fullRescan: true })
+                break
+              }
+            }
+
+            if (!hasRelevantMutation) return
+          })
+        : null
+
+    observer?.observe(root, {
       childList: true,
       subtree: true,
       characterData: true,
+      attributes: true,
+      attributeFilter: ["class", "data-language", "data-theme"],
     })
 
     return () => {
       disposed = true
-      observer.disconnect()
+      if (scheduledRunTimer !== null) {
+        window.clearTimeout(scheduledRunTimer)
+        scheduledRunTimer = null
+      }
+      observer?.disconnect()
     }
-  }, [contentKey, enabled, rootRef])
+  }, [contentKey, enabled, mutationDebounceMs, observeMutations, rootRef])
 }
 
 const blockHasShikiTheme = (block: HTMLElement) =>

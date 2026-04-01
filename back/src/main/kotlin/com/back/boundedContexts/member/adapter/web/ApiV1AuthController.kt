@@ -9,7 +9,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
-import com.back.boundedContexts.member.subContexts.session.application.service.MemberSessionService
+import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
@@ -47,7 +47,7 @@ class ApiV1AuthController(
     private val authCookieService: AuthCookieService,
     private val clientIpResolver: ClientIpResolver,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
-    private val memberSessionService: MemberSessionService,
+    private val memberSessionUseCase: MemberSessionUseCase,
 ) {
     companion object {
         private const val MAX_EMAIL_LENGTH = 320
@@ -126,7 +126,7 @@ class ApiV1AuthController(
             member.modifyApiKey(MemberPolicy.genApiKey())
         }
         val session =
-            memberSessionService.createSession(
+            memberSessionUseCase.createSession(
                 member = member,
                 rememberLoginEnabled = reqBody.rememberMe,
                 ipSecurityEnabled = reqBody.ipSecurity,
@@ -176,7 +176,7 @@ class ApiV1AuthController(
                 ?.trim()
                 .orEmpty()
         if (sessionKeyCookie.isNotBlank()) {
-            memberSessionService.revokeSession(sessionKeyCookie)
+            memberSessionUseCase.revokeSession(sessionKeyCookie)
         }
         authCookieService.expireAuthCookies()
         return RsData("200-1", "로그아웃 되었습니다.")

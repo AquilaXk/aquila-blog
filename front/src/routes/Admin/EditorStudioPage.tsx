@@ -3571,10 +3571,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   ).trim()
   const previewDateText = formatDate(previewNowIso, "ko")
 
-  if (!sessionMember) {
-    return null
-  }
-
   const isCompactSplitPreview = false
   const shouldShowGlobalNotice =
     globalNotice.tone !== "idle" || globalNotice.text !== GLOBAL_NOTICE_IDLE_TEXT
@@ -3623,7 +3619,57 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     text: `${currentVisibilityText} · ${postSummary.trim() ? "요약 입력됨" : "요약 자동 생성"}`,
   }
   const mobileComposeStatusSecondary = composeStatusEntries.find((item) => item.key === "draft") ?? null
-  const thumbnailEditorPanel = (
+  const isThumbnailUploadDisabled = disabled("uploadThumbnail")
+  const handleThumbnailZoomModalChange = useCallback(
+    (nextZoom: number) => {
+      commitPreviewThumbTransform({
+        ...previewThumbTransformRef.current,
+        zoom: clampThumbnailZoom(nextZoom),
+      })
+    },
+    [commitPreviewThumbTransform, previewThumbTransformRef]
+  )
+  const resetThumbnailZoomInModal = useCallback(() => {
+    commitPreviewThumbTransform({
+      ...previewThumbTransformRef.current,
+      zoom: DEFAULT_THUMBNAIL_ZOOM,
+    })
+  }, [commitPreviewThumbTransform, previewThumbTransformRef])
+  const handleThumbnailUrlModalChange = useCallback((nextValue: string) => {
+    setPostThumbnailUrl(nextValue)
+    const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
+    if (focusXFromInput !== null) {
+      setPostThumbnailFocusX(focusXFromInput)
+    }
+    const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
+    if (focusFromInput !== null) {
+      setPostThumbnailFocusY(focusFromInput)
+    }
+    const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
+    if (zoomFromInput !== null) {
+      setPostThumbnailZoom(zoomFromInput)
+    }
+    setPreviewThumbnailSourceUrl("")
+  }, [])
+  const applyFirstBodyImageToThumbnail = useCallback(() => {
+    const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
+    setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
+    setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
+    setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
+    setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
+    setPreviewThumbnailSourceUrl("")
+  }, [postContent])
+  const resetThumbnailToAutoMode = useCallback(() => {
+    setPostThumbnailUrl("")
+    setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
+    setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
+    setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
+    setPreviewThumbnailSourceUrl("")
+  }, [])
+  const openThumbnailFileInput = useCallback(() => {
+    thumbnailImageFileInputRef.current?.click()
+  }, [])
+  const thumbnailEditorPanel = useMemo(() => (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
         <strong>썸네일 위치 조정</strong>
@@ -3668,32 +3714,29 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             max={2.5}
             step={0.01}
             value={postThumbnailZoom}
-            onChange={(e) =>
-              commitPreviewThumbTransform({
-                ...previewThumbTransformRef.current,
-                zoom: clampThumbnailZoom(Number(e.target.value)),
-              })
-            }
+            onChange={(e) => handleThumbnailZoomModalChange(Number(e.target.value))}
           />
           <ZoomControlMeta>
             <ZoomValue>{postThumbnailZoom.toFixed(2)}x</ZoomValue>
-            <Button
-              type="button"
-              onClick={() =>
-                commitPreviewThumbTransform({
-                  ...previewThumbTransformRef.current,
-                  zoom: DEFAULT_THUMBNAIL_ZOOM,
-                })
-              }
-            >
+            <Button type="button" onClick={resetThumbnailZoomInModal}>
               배율 초기화
             </Button>
           </ZoomControlMeta>
         </ZoomControlRow>
       ) : null}
     </PreviewEditorSection>
-  )
-  const previewMetaEditorPanel = (
+  ), [
+    finalizePreviewThumbPointer,
+    handlePreviewThumbPointerDown,
+    handlePreviewThumbPointerMove,
+    handleThumbnailZoomModalChange,
+    isPreviewThumbDragging,
+    isPreviewThumbnailError,
+    postThumbnailZoom,
+    resetThumbnailZoomInModal,
+    safePreviewThumbnail,
+  ])
+  const previewMetaEditorPanel = useMemo(() => (
     <PreviewEditorSection>
       <PreviewEditorSectionHeader>
         <strong>썸네일 이미지</strong>
@@ -3703,30 +3746,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         id="post-thumbnail-url-modal"
         placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
         value={postThumbnailUrl}
-        onChange={(e) => {
-          const nextValue = e.target.value
-          setPostThumbnailUrl(nextValue)
-          const focusXFromInput = getThumbnailFocusXFromUrl(nextValue)
-          if (focusXFromInput !== null) {
-            setPostThumbnailFocusX(focusXFromInput)
-          }
-          const focusFromInput = getThumbnailFocusYFromUrl(nextValue)
-          if (focusFromInput !== null) {
-            setPostThumbnailFocusY(focusFromInput)
-          }
-          const zoomFromInput = getThumbnailZoomFromUrl(nextValue)
-          if (zoomFromInput !== null) {
-            setPostThumbnailZoom(zoomFromInput)
-          }
-          setPreviewThumbnailSourceUrl("")
-        }}
+        onChange={(e) => handleThumbnailUrlModalChange(e.target.value)}
       />
       <MetaActionRow>
         <Button
           type="button"
           title={POST_IMAGE_UPLOAD_RULE_LABEL}
-          disabled={disabled("uploadThumbnail")}
-          onClick={() => thumbnailImageFileInputRef.current?.click()}
+          disabled={isThumbnailUploadDisabled}
+          onClick={openThumbnailFileInput}
         >
           {loadingKey === "uploadThumbnail" ? (
             "업로드 중..."
@@ -3738,33 +3765,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             </>
           )}
         </Button>
-        <Button
-          type="button"
-          onClick={() => {
-            const extractedThumbnailUrl = normalizeSafeImageUrl(extractFirstMarkdownImage(postContent))
-            setPostThumbnailUrl(stripThumbnailFocusFromUrl(extractedThumbnailUrl))
-            setPostThumbnailFocusX(parseThumbnailFocusXFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_X))
-            setPostThumbnailFocusY(parseThumbnailFocusYFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_FOCUS_Y))
-            setPostThumbnailZoom(parseThumbnailZoomFromUrl(extractedThumbnailUrl, DEFAULT_THUMBNAIL_ZOOM))
-            setPreviewThumbnailSourceUrl("")
-          }}
-        >
+        <Button type="button" onClick={applyFirstBodyImageToThumbnail}>
           <>
             본문 첫 이미지
             <br />
             가져오기
           </>
         </Button>
-        <Button
-          type="button"
-          onClick={() => {
-            setPostThumbnailUrl("")
-            setPostThumbnailFocusX(DEFAULT_THUMBNAIL_FOCUS_X)
-            setPostThumbnailFocusY(DEFAULT_THUMBNAIL_FOCUS_Y)
-            setPostThumbnailZoom(DEFAULT_THUMBNAIL_ZOOM)
-            setPreviewThumbnailSourceUrl("")
-          }}
-      >
+        <Button type="button" onClick={resetThumbnailToAutoMode}>
           <>
             자동 모드로
             <br />
@@ -3774,7 +3782,16 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       </MetaActionRow>
       {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
     </PreviewEditorSection>
-  )
+  ), [
+    applyFirstBodyImageToThumbnail,
+    handleThumbnailUrlModalChange,
+    isThumbnailUploadDisabled,
+    loadingKey,
+    openThumbnailFileInput,
+    postThumbnailUrl,
+    resetThumbnailToAutoMode,
+    thumbnailImageFileName,
+  ])
   const editorPrimaryActionType: PublishActionType =
     editorMode === "create" ? "create" : isTempDraftMode ? "temp" : "modify"
   const editorPrimaryActionLabel =
@@ -3783,12 +3800,55 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       : editorPrimaryActionType === "temp"
         ? "새 글 작성"
         : "발행"
+  const isBlockEditorDisabled = loadingKey.length > 0
+  const dedicatedEditorCanvas = useMemo(
+    () => (
+      <LazyBlockEditorShell
+        value={postContent}
+        onChange={handleBlockEditorChange}
+        onUploadImage={handleBlockEditorImageUpload}
+        onUploadFile={handleBlockEditorFileUpload}
+        enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+        disabled={isBlockEditorDisabled}
+      />
+    ),
+    [
+      handleBlockEditorChange,
+      handleBlockEditorFileUpload,
+      handleBlockEditorImageUpload,
+      isBlockEditorDisabled,
+      postContent,
+    ]
+  )
+  const composeEditorCanvas = useMemo(
+    () => (
+      <LazyBlockEditorShell
+        value={postContent}
+        onChange={handleBlockEditorChange}
+        onUploadImage={handleBlockEditorImageUpload}
+        onUploadFile={handleBlockEditorFileUpload}
+        enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
+        disabled={isBlockEditorDisabled}
+      />
+    ),
+    [
+      handleBlockEditorChange,
+      handleBlockEditorFileUpload,
+      handleBlockEditorImageUpload,
+      isBlockEditorDisabled,
+      postContent,
+    ]
+  )
   const shouldShowEditorLoadingState =
     isDedicatedEditorRoute &&
     router.pathname === EDITOR_NEW_ROUTE_PATH &&
     !postId.trim() &&
     loadingKey === "postTemp"
   const shouldShowResultPanel = Boolean(loadingKey || result)
+
+  if (!sessionMember) {
+    return null
+  }
 
   if (shouldShowEditorLoadingState) {
     return (
@@ -3895,14 +3955,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           </EditorStudioMetaSection>
 
           <EditorStudioCanvas>
-            <LazyBlockEditorShell
-              value={postContent}
-              onChange={handleBlockEditorChange}
-              onUploadImage={handleBlockEditorImageUpload}
-              onUploadFile={handleBlockEditorFileUpload}
-              enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-              disabled={loadingKey.length > 0}
-            />
+            {dedicatedEditorCanvas}
           </EditorStudioCanvas>
 
           {shouldShowPublishNotice ? <PublishNotice data-tone={publishNotice.tone}>{publishNotice.text}</PublishNotice> : null}
@@ -5137,14 +5190,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                     <span>{imageCount}개 이미지</span>
                   </ComposeBodyMetrics>
                 </ComposeBodyHeader>
-                <LazyBlockEditorShell
-                  value={postContent}
-                  onChange={handleBlockEditorChange}
-                  onUploadImage={handleBlockEditorImageUpload}
-                  onUploadFile={handleBlockEditorFileUpload}
-                  enableMermaidBlocks={BLOCK_EDITOR_V2_MERMAID_ENABLED}
-                  disabled={loadingKey.length > 0}
-                />
+                {composeEditorCanvas}
               </ComposeBodySection>
 
               <WriterFooterBar>

@@ -2,7 +2,7 @@ package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
-import com.back.boundedContexts.member.subContexts.session.application.service.MemberSessionService
+import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.global.exception.application.AppException
 import com.back.global.security.config.oauth2.application.OAuth2State
 import com.back.global.security.domain.SecurityUser
@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional
 @Component
 class CustomOAuth2LoginSuccessHandler(
     private val actorApplicationService: ActorApplicationService,
-    private val memberSessionService: MemberSessionService,
+    private val memberSessionUseCase: MemberSessionUseCase,
     private val authCookieService: AuthCookieService,
     private val clientIpResolver: ClientIpResolver,
 ) : AuthenticationSuccessHandler {
@@ -46,7 +46,7 @@ class CustomOAuth2LoginSuccessHandler(
             actor.modifyApiKey(MemberPolicy.genApiKey())
         }
         val session =
-            memberSessionService.createSession(
+            memberSessionUseCase.createSession(
                 member = actor,
                 rememberLoginEnabled = true,
                 ipSecurityEnabled = false,

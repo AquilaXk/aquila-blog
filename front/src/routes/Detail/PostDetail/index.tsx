@@ -43,6 +43,8 @@ const renderRelatedSummary = (summary: string | undefined) => {
 const MarkdownRenderer = dynamic(() => import("../components/MarkdownRenderer"))
 
 const RELATED_SKELETON_COUNT = 3
+const RELATED_QUERY_PREFETCH_ROOT_MARGIN = "900px 0px"
+const RELATED_QUERY_IDLE_TIMEOUT_MS = 1200
 
 const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
@@ -217,6 +219,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const articleRef = useRef<HTMLElement | null>(null)
   const compactTocSectionRef = useRef<HTMLElement | null>(null)
   const commentsSectionRef = useRef<HTMLElement | null>(null)
+  const relatedPrefetchTriggerRef = useRef<HTMLDivElement | null>(null)
   const leftRailRef = useRef<HTMLElement | null>(null)
   const leftRailInnerRef = useRef<HTMLDivElement | null>(null)
   const rightRailRef = useRef<HTMLElement | null>(null)
@@ -227,6 +230,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const [activeTocId, setActiveTocId] = useState<string>("")
   const [commentsRailActive, setCommentsRailActive] = useState(false)
   const [showDetailedToc, setShowDetailedToc] = useState(false)
+  const [shouldFetchRelated, setShouldFetchRelated] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<"copied" | "shared" | "failed" | null>(null)
   const [leftHybridRailActive, setLeftHybridRailActive] = useState(false)
   const [rightHybridRailActive, setRightHybridRailActive] = useState(false)
@@ -285,6 +289,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     [data?.tags]
   )
   const authorId = useMemo(() => data?.author?.[0]?.id || "", [data?.author])
+  const detailType = data?.type[0]
 
   const relatedByTagQuery = useQuery({
     queryKey: queryKey.postsExplore({
@@ -302,7 +307,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         page: 1,
         pageSize: 10,
       }),
-    enabled: Boolean(relatedTag && data?.id),
+    enabled: Boolean(shouldFetchRelated && relatedTag && data?.id),
     staleTime: 300_000,
     retry: 1,
   })
@@ -319,7 +324,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
         excludePostId: data?.id ? String(data.id) : undefined,
         limit: RELATED_POSTS_LIMIT,
       }),
-    enabled: Boolean(authorId && data?.id),
+    enabled: Boolean(shouldFetchRelated && authorId && data?.id),
     staleTime: 300_000,
     retry: 1,
   })
@@ -332,8 +337,92 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   }, [data?.id, relatedByTagQuery.data?.posts])
 
   const relatedByAuthorPosts = useMemo(() => relatedByAuthorQuery.data || [], [relatedByAuthorQuery.data])
-  const showRelatedTagSkeleton = Boolean(data?.type[0] === "Post" && relatedTag && relatedByTagQuery.isPending)
-  const showRelatedAuthorSkeleton = Boolean(data?.type[0] === "Post" && authorId && relatedByAuthorQuery.isPending)
+  const showRelatedTagSkeleton = Boolean(
+    shouldFetchRelated && data?.type[0] === "Post" && relatedTag && relatedByTagQuery.isPending
+  )
+  const showRelatedAuthorSkeleton = Boolean(
+    shouldFetchRelated && data?.type[0] === "Post" && authorId && relatedByAuthorQuery.isPending
+  )
+
+  useEffect(() => {
+    const isPostDetail = detailType === "Post"
+    if (!isPostDetail || !data?.id) {
+      setShouldFetchRelated(false)
+      return
+    }
+    setShouldFetchRelated(false)
+  }, [data?.id, detailType])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      if (detailType === "Post" && data?.id) {
+        setShouldFetchRelated(true)
+      }
+      return
+    }
+    if (!data?.id || detailType !== "Post" || shouldFetchRelated) return
+
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: IdleRequestCallback,
+        options?: IdleRequestOptions
+      ) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+
+    let disposed = false
+    let observer: IntersectionObserver | null = null
+    let idleHandle: number | null = null
+    let idleMode: "idle" | "timeout" | null = null
+
+    const activateRelatedFetch = () => {
+      if (disposed) return
+      setShouldFetchRelated(true)
+    }
+
+    const triggerNode = relatedPrefetchTriggerRef.current
+    if (triggerNode && typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return
+          observer?.disconnect()
+          activateRelatedFetch()
+        },
+        {
+          root: null,
+          rootMargin: RELATED_QUERY_PREFETCH_ROOT_MARGIN,
+          threshold: 0.01,
+        }
+      )
+      observer.observe(triggerNode)
+    }
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      idleMode = "idle"
+      idleHandle = idleWindow.requestIdleCallback(
+        () => {
+          activateRelatedFetch()
+        },
+        { timeout: RELATED_QUERY_IDLE_TIMEOUT_MS }
+      )
+    } else {
+      idleMode = "timeout"
+      idleHandle = window.setTimeout(() => {
+        activateRelatedFetch()
+      }, RELATED_QUERY_IDLE_TIMEOUT_MS)
+    }
+
+    return () => {
+      disposed = true
+      observer?.disconnect()
+      if (idleHandle === null) return
+      if (idleMode === "idle" && typeof idleWindow.cancelIdleCallback === "function") {
+        idleWindow.cancelIdleCallback(idleHandle)
+        return
+      }
+      window.clearTimeout(idleHandle)
+    }
+  }, [data?.id, detailType, shouldFetchRelated])
 
   useEffect(() => {
     visibleTocItemsRef.current = visibleTocItems
@@ -1019,7 +1108,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
           <BodySection data-rum-section="body">
             <MarkdownRenderer content={renderedContent} />
           </BodySection>
-          {data.type[0] === "Post" && (showRelatedTagSkeleton || relatedByTagPosts.length > 0) && (
+          {data.type[0] === "Post" && <div ref={relatedPrefetchTriggerRef} className="relatedPrefetchTrigger" aria-hidden="true" />}
+          {data.type[0] === "Post" && shouldFetchRelated && (showRelatedTagSkeleton || relatedByTagPosts.length > 0) && (
             <RelatedSection aria-label="연관 글" data-rum-section="related-tag">
               <header>
                 <div className="headerCopy">
@@ -1053,7 +1143,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
               </ul>
             </RelatedSection>
           )}
-          {data.type[0] === "Post" && (showRelatedAuthorSkeleton || relatedByAuthorPosts.length > 0) && (
+          {data.type[0] === "Post" && shouldFetchRelated && (showRelatedAuthorSkeleton || relatedByAuthorPosts.length > 0) && (
             <RelatedSection aria-label="같은 작성자 글" data-rum-section="related-author">
               <header>
                 <div className="headerCopy">
@@ -1173,6 +1263,11 @@ const StyledWrapper = styled.div`
 
   article > * {
     min-width: 0;
+  }
+
+  .relatedPrefetchTrigger {
+    width: 100%;
+    height: 1px;
   }
 
   .leftRail,

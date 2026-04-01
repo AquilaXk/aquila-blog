@@ -2,7 +2,8 @@ package com.back.boundedContexts.member.subContexts.session.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
-import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
+import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
+import com.back.boundedContexts.member.subContexts.session.application.port.output.MemberSessionStorePort
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -12,10 +13,10 @@ import org.springframework.transaction.annotation.Transactional
  */
 @Service
 class MemberSessionService(
-    private val memberSessionRepository: MemberSessionRepository,
-) {
+    private val memberSessionStorePort: MemberSessionStorePort,
+) : MemberSessionUseCase {
     @Transactional
-    fun createSession(
+    override fun createSession(
         member: Member,
         rememberLoginEnabled: Boolean,
         ipSecurityEnabled: Boolean,
@@ -34,33 +35,33 @@ class MemberSessionService(
                 userAgent = userAgent?.take(512),
             )
         session.touchAuthenticated()
-        return memberSessionRepository.save(session)
+        return memberSessionStorePort.save(session)
     }
 
     @Transactional(readOnly = true)
-    fun findActiveSession(sessionKey: String): MemberSession? {
+    override fun findActiveSession(sessionKey: String): MemberSession? {
         if (sessionKey.isBlank()) return null
-        return memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(sessionKey)
+        return memberSessionStorePort.findBySessionKeyAndRevokedAtIsNull(sessionKey)
     }
 
     @Transactional(readOnly = true)
-    fun findActiveSession(
+    override fun findActiveSession(
         memberId: Long,
         sessionKey: String,
     ): MemberSession? {
         if (sessionKey.isBlank()) return null
-        return memberSessionRepository.findByMemberIdAndSessionKeyAndRevokedAtIsNull(memberId, sessionKey)
+        return memberSessionStorePort.findByMemberIdAndSessionKeyAndRevokedAtIsNull(memberId, sessionKey)
     }
 
     @Transactional
-    fun touchAuthenticated(memberSession: MemberSession) {
+    override fun touchAuthenticated(memberSession: MemberSession) {
         memberSession.touchAuthenticated()
     }
 
     @Transactional
-    fun revokeSession(sessionKey: String) {
+    override fun revokeSession(sessionKey: String) {
         if (sessionKey.isBlank()) return
-        val session = memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(sessionKey) ?: return
+        val session = memberSessionStorePort.findBySessionKeyAndRevokedAtIsNull(sessionKey) ?: return
         session.revoke()
     }
 }

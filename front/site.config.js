@@ -28,8 +28,10 @@ const CONFIG = {
   ],
   // blog setting (required)
   blog: {
-    title: "aquilaXk's Blog",
-    description: "백엔드 아키텍처, 운영 트러블슈팅, 성능 최적화를 기록합니다.",
+    title: "AquilaLog",
+    description: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
+    homeIntroTitle: "비밀스러운 IT 공작소",
+    homeIntroDescription: "비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다",
     scheme: "dark", // 'light' | 'dark' | 'system'
   },
 

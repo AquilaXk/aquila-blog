@@ -225,7 +225,7 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).toContainText("둘째 줄")
   })
 
-  test("블록 드래그 시 source/destination 피드백이 동시에 보인다", async ({ page }) => {
+  test("블록 드래그 시 source ghost와 destination 삽입선 피드백이 동시에 보인다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
@@ -253,7 +253,7 @@ test.describe("block editor authoring flow", () => {
 
     await expect(page.getByTestId("block-drag-ghost")).toBeVisible()
     await expect(page.getByTestId("block-drop-indicator").first()).toBeVisible()
-    await expect(page.getByTestId("block-drop-target-highlight").first()).toBeVisible()
+    await expect(page.getByTestId("block-drop-target-highlight")).toHaveCount(0)
 
     await page.mouse.up()
   })

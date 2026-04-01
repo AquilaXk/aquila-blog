@@ -1,12 +1,14 @@
 import styled from "@emotion/styled"
 import { useQuery } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
+import { IncomingMessage } from "http"
 import Link from "next/link"
 import type { SimpleIcon } from "simple-icons"
 import { apiFetch } from "src/apis/backend/client"
 import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { serverApiFetch } from "src/libs/server/backend"
 import {
   DASHBOARD_PANEL_CARDS,
   buildGrafanaPanelEmbedUrl,
@@ -18,23 +20,70 @@ type SystemHealthPayload = {
   status?: string
 }
 
-export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
-  return await getAdminPageProps(req)
+type AdminDashboardInitialSnapshot = {
+  systemHealth: SystemHealthPayload | null
+  fetchedAt: string | null
+}
+
+type AdminDashboardPageProps = AdminPageProps & {
+  initialSnapshot: AdminDashboardInitialSnapshot
+}
+
+const EMPTY_INITIAL_SNAPSHOT: AdminDashboardInitialSnapshot = {
+  systemHealth: null,
+  fetchedAt: null,
+}
+
+async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
+  try {
+    const response = await serverApiFetch(req, path)
+    if (!response.ok) return null
+    const contentLength = response.headers.get("content-length")
+    if (contentLength === "0") return null
+    return (await response.json()) as T
+  } catch {
+    return null
+  }
+}
+
+export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = async ({ req }) => {
+  const baseResult = await getAdminPageProps(req)
+  if ("redirect" in baseResult) return baseResult
+  if (!("props" in baseResult)) return baseResult
+  const baseProps = await baseResult.props
+  const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+
+  return {
+    props: {
+      ...baseProps,
+      initialSnapshot: {
+        systemHealth,
+        fetchedAt: systemHealth ? new Date().toISOString() : null,
+      },
+    },
+  }
 }
 
 const env = getMonitoringEnv()
 
-const AdminDashboardPage: NextPage<AdminPageProps> = ({ initialMember }) => {
+const AdminDashboardPage: NextPage<AdminDashboardPageProps> = ({
+  initialMember,
+  initialSnapshot = EMPTY_INITIAL_SNAPSHOT,
+}) => {
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const systemHealthQuery = useQuery({
     queryKey: ["admin", "dashboard", "system-health"],
     queryFn: (): Promise<SystemHealthPayload> => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
     enabled: Boolean(sessionMember?.isAdmin),
+    initialData: initialSnapshot.systemHealth ?? undefined,
+    initialDataUpdatedAt:
+      initialSnapshot.systemHealth && initialSnapshot.fetchedAt ? new Date(initialSnapshot.fetchedAt).getTime() : undefined,
     staleTime: 30_000,
     gcTime: 120_000,
     retry: 1,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   })
 
   if (!sessionMember) return null

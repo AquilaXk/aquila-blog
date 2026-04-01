@@ -105,11 +105,9 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
     scheduleSync()
 
     const handleResize = () => scheduleSync()
-    const handleScroll = () => scheduleSync()
 
     window.addEventListener("resize", handleResize, { passive: true })
     window.addEventListener("orientationchange", handleResize)
-    window.addEventListener("scroll", handleScroll, { passive: true })
 
     let observer: ResizeObserver | null = null
     if (typeof ResizeObserver !== "undefined") {
@@ -133,7 +131,6 @@ const Header: React.FC<Props> = ({ fullWidth }) => {
     return () => {
       window.removeEventListener("resize", handleResize)
       window.removeEventListener("orientationchange", handleResize)
-      window.removeEventListener("scroll", handleScroll)
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId)
       }

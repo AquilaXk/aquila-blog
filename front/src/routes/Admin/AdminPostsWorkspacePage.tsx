@@ -1,6 +1,7 @@
 import styled from "@emotion/styled"
 import { useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
+import { IncomingMessage } from "http"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -9,6 +10,7 @@ import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { serverApiFetch } from "src/libs/server/backend"
 import { isServerTempDraftPost } from "./editorTempDraft"
 
 type PostListScope = "active" | "deleted"
@@ -99,12 +101,27 @@ type ListState = {
   loadedAt: string
 }
 
+type AdminPostsWorkspaceInitialSnapshot = {
+  recentPosts: AdminPostListItem[]
+  recentFetchedAt: string | null
+  listState: ListState | null
+}
+
+type AdminPostsWorkspacePageProps = AdminPageProps & {
+  initialSnapshot: AdminPostsWorkspaceInitialSnapshot
+}
+
 const LOCAL_DRAFT_STORAGE_KEY = "admin.editor.localDraft.v1"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 const DEFAULT_PAGE = "1"
 const DEFAULT_PAGE_SIZE = "20"
 const DEFAULT_SORT: ListSort = "CREATED_AT"
 const LIST_SKELETON_ROW_COUNT = 5
+const EMPTY_INITIAL_SNAPSHOT: AdminPostsWorkspaceInitialSnapshot = {
+  recentPosts: [],
+  recentFetchedAt: null,
+  listState: null,
+}
 
 const toEditorRoute = (query?: Record<string, string>) => {
   if (query?.postId) {
@@ -203,19 +220,80 @@ const buildListEndpoint = (scope: PostListScope, options: { page: string; pageSi
   return `${endpoint}?${query.toString()}`
 }
 
-export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPageProps> = async (context) => {
-  return await getAdminPageProps(context.req)
+async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
+  try {
+    const response = await serverApiFetch(req, path)
+    if (!response.ok) return null
+    const contentLength = response.headers.get("content-length")
+    if (contentLength === "0") return null
+    return (await response.json()) as T
+  } catch {
+    return null
+  }
 }
 
-export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember }) => {
+export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorkspacePageProps> = async (context) => {
+  const baseResult = await getAdminPageProps(context.req)
+  if ("redirect" in baseResult) return baseResult
+  if (!("props" in baseResult)) return baseResult
+  const baseProps = await baseResult.props
+  const fetchedAt = new Date().toISOString()
+  const [recentResult, listResult] = await Promise.allSettled([
+    readJsonIfOk<PageDto<AdminPostListItem>>(
+      context.req,
+      buildListEndpoint("active", { page: "1", pageSize: "8", kw: "", sort: DEFAULT_SORT })
+    ),
+    readJsonIfOk<PageDto<AdminPostListItem>>(
+      context.req,
+      buildListEndpoint("active", {
+        page: DEFAULT_PAGE,
+        pageSize: DEFAULT_PAGE_SIZE,
+        kw: "",
+        sort: DEFAULT_SORT,
+      })
+    ),
+  ])
+
+  const recentSource = recentResult.status === "fulfilled" ? recentResult.value : null
+  const listSource = listResult.status === "fulfilled" ? listResult.value : null
+  const recentPosts = [...(recentSource?.content || [])]
+    .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
+    .slice(0, 5)
+  const listState =
+    listSource
+      ? {
+          rows: listSource.content || [],
+          total: listSource.pageable?.totalElements ?? listSource.content?.length ?? 0,
+          loadedAt: fetchedAt,
+        }
+      : null
+
+  return {
+    props: {
+      ...baseProps,
+      initialSnapshot: {
+        recentPosts,
+        recentFetchedAt: recentSource ? fetchedAt : null,
+        listState,
+      },
+    },
+  }
+}
+
+export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
+  initialMember,
+  initialSnapshot = EMPTY_INITIAL_SNAPSHOT,
+}) => {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { me, authStatus } = useAuthSession()
-  const sessionMember = authStatus === "loading" ? initialMember : me || initialMember
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
+  const hasInitialRecentPosts = initialSnapshot.recentFetchedAt !== null
+  const hasInitialListState = initialSnapshot.listState !== null
 
   const [localDraft, setLocalDraft] = useState<LocalDraftSummary | null>(null)
-  const [recentPosts, setRecentPosts] = useState<AdminPostListItem[]>([])
-  const [isRecentLoading, setIsRecentLoading] = useState(true)
+  const [recentPosts, setRecentPosts] = useState<AdminPostListItem[]>(() => initialSnapshot.recentPosts)
+  const [isRecentLoading, setIsRecentLoading] = useState(!hasInitialRecentPosts)
   const [recentError, setRecentError] = useState("")
 
   const [listScope, setListScope] = useState<PostListScope>("active")
@@ -225,8 +303,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   const [listSort, setListSort] = useState<ListSort>(DEFAULT_SORT)
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isStickyToolbarCompact, setIsStickyToolbarCompact] = useState(false)
-  const [listState, setListState] = useState<ListState>({ rows: [], total: 0, loadedAt: "" })
-  const [isListLoading, setIsListLoading] = useState(true)
+  const [listState, setListState] = useState<ListState>(() => initialSnapshot.listState || { rows: [], total: 0, loadedAt: "" })
+  const [isListLoading, setIsListLoading] = useState(!hasInitialListState)
   const [listError, setListError] = useState("")
   const [confirmState, setConfirmState] = useState<WorkspaceConfirmState>(null)
   const [toast, setToast] = useState<WorkspaceToastState>(null)
@@ -237,6 +315,8 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
   const listSectionRef = useRef<HTMLElement | null>(null)
   const listRequestIdRef = useRef(0)
   const recentRequestIdRef = useRef(0)
+  const skipInitialRecentFetchRef = useRef(hasInitialRecentPosts)
+  const skipInitialListFetchRef = useRef(hasInitialListState)
 
   const loadRecentPosts = useCallback(async () => {
     const requestId = recentRequestIdRef.current + 1
@@ -307,10 +387,18 @@ export const AdminPostWorkspacePage: NextPage<AdminPageProps> = ({ initialMember
 
   useEffect(() => {
     setLocalDraft(readLocalDraft())
+    if (skipInitialRecentFetchRef.current) {
+      skipInitialRecentFetchRef.current = false
+      return
+    }
     void loadRecentPosts()
   }, [loadRecentPosts])
 
   useEffect(() => {
+    if (skipInitialListFetchRef.current) {
+      skipInitialListFetchRef.current = false
+      return
+    }
     const timer = window.setTimeout(() => {
       void loadList()
     }, 140)

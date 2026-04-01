@@ -46,6 +46,8 @@ const HIDDEN_GRACE_CLOSE_MS = 45_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
 const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
 const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
+const AVATAR_PRELOAD_LIMIT = 8
+const AVATAR_PRELOAD_CACHE_MAX = 128
 
 type EventSourceLifecycleState = "idle" | "connecting" | "open"
 
@@ -156,6 +158,7 @@ const isSameNotification = (left: TMemberNotification, right: TMemberNotificatio
   left.createdAt === right.createdAt &&
   left.actorId === right.actorId &&
   left.actorName === right.actorName &&
+  left.actorProfileImageDirectUrl === right.actorProfileImageDirectUrl &&
   left.actorProfileImageUrl === right.actorProfileImageUrl &&
   left.postId === right.postId &&
   left.commentId === right.commentId &&
@@ -171,6 +174,9 @@ const isSameNotificationList = (left: TMemberNotification[], right: TMemberNotif
   }
   return true
 }
+
+const resolveNotificationAvatarSrc = (item: TMemberNotification) =>
+  item.actorProfileImageDirectUrl || item.actorProfileImageUrl || ""
 
 const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const router = useRouter()
@@ -224,6 +230,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   const pollingFailureStreakRef = useRef(0)
   const itemsRef = useRef<TMemberNotification[]>([])
   const unreadCountRef = useRef(0)
+  const preloadedAvatarSrcRef = useRef<Set<string>>(new Set())
 
   const resolvePollingBaseIntervalMs = useCallback((failureStreak: number) => {
     let baseMs = POLLING_INTERVAL_MS
@@ -248,6 +255,32 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     persistLastEventId(sanitized)
   }, [])
 
+  const prewarmNotificationAvatars = useCallback((nextItems: TMemberNotification[]) => {
+    if (typeof window === "undefined") return
+    const preloadedSet = preloadedAvatarSrcRef.current
+    const candidates = nextItems
+      .slice(0, AVATAR_PRELOAD_LIMIT)
+      .map((item) => resolveNotificationAvatarSrc(item).trim())
+      .filter(Boolean)
+
+    for (const src of candidates) {
+      if (preloadedSet.has(src)) continue
+      if (preloadedSet.size >= AVATAR_PRELOAD_CACHE_MAX) {
+        const overflowCount = preloadedSet.size - AVATAR_PRELOAD_CACHE_MAX + 1
+        const iterator = preloadedSet.values()
+        for (let i = 0; i < overflowCount; i += 1) {
+          const oldest = iterator.next()
+          if (oldest.done) break
+          preloadedSet.delete(oldest.value)
+        }
+      }
+      preloadedSet.add(src)
+      const img = new Image()
+      img.decoding = "async"
+      img.src = src
+    }
+  }, [])
+
   const applySnapshotState = useCallback(
     ({
       nextItems,
@@ -264,6 +297,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       if (!sameItems) {
         itemsRef.current = nextItems
         setItems(nextItems)
+        prewarmNotificationAvatars(nextItems)
       }
       if (!sameUnreadCount) {
         unreadCountRef.current = nextUnreadCount
@@ -282,10 +316,11 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         })
       }
     },
-    [setLastNotificationEventId]
+    [prewarmNotificationAvatars, setLastNotificationEventId]
   )
 
   const pushNotification = useCallback((incoming: TMemberNotification) => {
+    prewarmNotificationAvatars([incoming])
     setItems((prev) => {
       const deduped = prev.filter((item) => item.id !== incoming.id)
       const next = [incoming, ...deduped].slice(0, 20)
@@ -293,7 +328,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       itemsRef.current = next
       return next
     })
-  }, [])
+  }, [prewarmNotificationAvatars])
 
   const clearHiddenCloseTimer = useCallback(() => {
     if (hiddenCloseTimerRef.current !== null) {
@@ -990,7 +1025,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
             </div>
             {items.length > 0 ? (
               <ul className="list">
-                {items.map((item) => (
+                {items.map((item, index) => (
                   <li key={item.id}>
                     <button
                       type="button"
@@ -1000,8 +1035,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
                     >
                       <div className="avatar">
                         <ProfileImage
-                          src={item.actorProfileImageUrl}
+                          src={resolveNotificationAvatarSrc(item)}
                           alt={`${item.actorName} avatar`}
+                          priority={index < 3}
+                          loading={index < 3 ? "eager" : "lazy"}
                           fillContainer
                           width={40}
                           height={40}

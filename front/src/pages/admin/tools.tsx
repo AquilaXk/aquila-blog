@@ -1,17 +1,15 @@
 import styled from "@emotion/styled"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
+import { IncomingMessage } from "http"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { serverApiFetch } from "src/libs/server/backend"
 import { buildGrafanaPanelEmbedUrl, buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
-
-export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
-  return await getAdminPageProps(req)
-}
 
 type JsonValue = unknown
 
@@ -124,6 +122,23 @@ type ApiRsData<T> = {
   data: T
 }
 
+type AdminToolsInitialSnapshot = {
+  systemHealth: SystemHealthPayload | null
+  systemHealthFetchedAt: string | null
+  mailDiagnostics: SignupMailDiagnostics | null
+  taskQueueDiagnostics: TaskQueueDiagnostics | null
+  taskQueueCheckedAt: string | null
+  cleanupDiagnostics: UploadedFileCleanupDiagnostics | null
+  cleanupCheckedAt: string | null
+  authSecurityEvents: AuthSecurityEvent[]
+  authSecurityCheckedAt: string | null
+  seedPostId: string
+}
+
+type AdminToolsPageProps = AdminPageProps & {
+  initialSnapshot: AdminToolsInitialSnapshot
+}
+
 type SystemHealthPayload = {
   status?: string
   details?: Record<string, unknown>
@@ -132,6 +147,87 @@ type SystemHealthPayload = {
 
 type PageDto<T> = {
   content?: T[]
+}
+
+const EMPTY_INITIAL_SNAPSHOT: AdminToolsInitialSnapshot = {
+  systemHealth: null,
+  systemHealthFetchedAt: null,
+  mailDiagnostics: null,
+  taskQueueDiagnostics: null,
+  taskQueueCheckedAt: null,
+  cleanupDiagnostics: null,
+  cleanupCheckedAt: null,
+  authSecurityEvents: [],
+  authSecurityCheckedAt: null,
+  seedPostId: "1",
+}
+
+async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
+  try {
+    const response = await serverApiFetch(req, path)
+    if (!response.ok) return null
+
+    const contentLength = response.headers.get("content-length")
+    if (contentLength === "0") return null
+
+    return (await response.json()) as T
+  } catch {
+    return null
+  }
+}
+
+export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async ({ req }) => {
+  const baseResult = await getAdminPageProps(req)
+  if ("redirect" in baseResult) return baseResult
+  if (!("props" in baseResult)) return baseResult
+  const baseProps = await baseResult.props
+
+  const fetchedAt = new Date().toISOString()
+  const [
+    systemHealthResult,
+    mailResult,
+    taskQueueResult,
+    cleanupResult,
+    authEventsResult,
+    publicPostsResult,
+    adminPostsResult,
+  ] = await Promise.allSettled([
+    readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health"),
+    readJsonIfOk<SignupMailDiagnostics>(req, "/system/api/v1/adm/mail/signup"),
+    readJsonIfOk<TaskQueueDiagnostics>(req, "/system/api/v1/adm/tasks"),
+    readJsonIfOk<UploadedFileCleanupDiagnostics>(req, "/system/api/v1/adm/storage/cleanup"),
+    readJsonIfOk<AuthSecurityEvent[]>(req, "/system/api/v1/adm/auth/security-events?limit=30"),
+    readJsonIfOk<PageDto<{ id: number }>>(req, "/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT"),
+    readJsonIfOk<PageDto<{ id: number }>>(req, "/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
+  ])
+
+  const systemHealth = systemHealthResult.status === "fulfilled" ? systemHealthResult.value : null
+  const mailDiagnostics = mailResult.status === "fulfilled" ? mailResult.value : null
+  const taskQueueDiagnostics = taskQueueResult.status === "fulfilled" ? taskQueueResult.value : null
+  const cleanupDiagnostics = cleanupResult.status === "fulfilled" ? cleanupResult.value : null
+  const authSecurityEvents = authEventsResult.status === "fulfilled" ? authEventsResult.value || [] : []
+  const publicPostId =
+    publicPostsResult.status === "fulfilled" ? publicPostsResult.value?.content?.[0]?.id : undefined
+  const adminPostId =
+    adminPostsResult.status === "fulfilled" ? adminPostsResult.value?.content?.[0]?.id : undefined
+
+  return {
+    props: {
+      ...baseProps,
+      initialSnapshot: {
+        systemHealth,
+        systemHealthFetchedAt: systemHealth ? fetchedAt : null,
+        mailDiagnostics,
+        taskQueueDiagnostics,
+        taskQueueCheckedAt: taskQueueDiagnostics ? fetchedAt : null,
+        cleanupDiagnostics,
+        cleanupCheckedAt: cleanupDiagnostics ? fetchedAt : null,
+        authSecurityEvents,
+        authSecurityCheckedAt: authSecurityEvents.length ? fetchedAt : null,
+        seedPostId: String(publicPostId ?? adminPostId ?? 1),
+      },
+    },
+  }
 }
 
 type ActionCardTone = "read" | "write" | "danger" | "infra"
@@ -371,29 +467,32 @@ const getStatusTone = (status: string) => {
   return "warning"
 }
 
-const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
+const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialSnapshot = EMPTY_INITIAL_SNAPSHOT }) => {
   const queryClient = useQueryClient()
   const { me, authStatus } = useAuthSession()
-  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me
+  const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const [loadingKey, setLoadingKey] = useState("")
   const [executions, setExecutions] = useState<ExecutionEntry[]>([])
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null)
   const [resultsFilter, setResultsFilter] = useState<ExecutionResultFilter>("all")
-  const [postId, setPostId] = useState("1")
+  const [postId, setPostId] = useState(initialSnapshot.seedPostId)
   const [commentId, setCommentId] = useState("1")
   const [commentContent, setCommentContent] = useState("운영 테스트 댓글")
-  const [mailDiagnostics, setMailDiagnostics] = useState<SignupMailDiagnostics | null>(null)
+  const [mailDiagnostics, setMailDiagnostics] = useState<SignupMailDiagnostics | null>(initialSnapshot.mailDiagnostics)
   const [mailDiagnosticsError, setMailDiagnosticsError] = useState("")
-  const [taskQueueDiagnostics, setTaskQueueDiagnostics] = useState<TaskQueueDiagnostics | null>(null)
+  const [taskQueueDiagnostics, setTaskQueueDiagnostics] = useState<TaskQueueDiagnostics | null>(
+    initialSnapshot.taskQueueDiagnostics
+  )
   const [taskQueueDiagnosticsError, setTaskQueueDiagnosticsError] = useState("")
-  const [taskQueueCheckedAt, setTaskQueueCheckedAt] = useState<string | null>(null)
-  const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(null)
+  const [taskQueueCheckedAt, setTaskQueueCheckedAt] = useState<string | null>(initialSnapshot.taskQueueCheckedAt)
+  const [cleanupDiagnostics, setCleanupDiagnostics] = useState<UploadedFileCleanupDiagnostics | null>(
+    initialSnapshot.cleanupDiagnostics
+  )
   const [cleanupDiagnosticsError, setCleanupDiagnosticsError] = useState("")
-  const [cleanupCheckedAt, setCleanupCheckedAt] = useState<string | null>(null)
-  const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>([])
+  const [cleanupCheckedAt, setCleanupCheckedAt] = useState<string | null>(initialSnapshot.cleanupCheckedAt)
+  const [authSecurityEvents, setAuthSecurityEvents] = useState<AuthSecurityEvent[]>(initialSnapshot.authSecurityEvents)
   const [authSecurityEventsError, setAuthSecurityEventsError] = useState("")
-  const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(null)
-  const [, setIsMobileLayout] = useState(false)
+  const [authSecurityCheckedAt, setAuthSecurityCheckedAt] = useState<string | null>(initialSnapshot.authSecurityCheckedAt)
   const [activeSection, setActiveSection] = useState<SectionKey>("overview")
   const [sectionJumpTarget, setSectionJumpTarget] = useState<SectionKey | null>(null)
   const [activeDiagnosticTab, setActiveDiagnosticTab] = useState<DiagnosticTab>("mail")
@@ -408,9 +507,14 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     queryKey: SYSTEM_HEALTH_QUERY_KEY,
     queryFn: async (): Promise<SystemHealthPayload> => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
     enabled: Boolean(sessionMember?.isAdmin),
+    initialData: initialSnapshot.systemHealth ?? undefined,
+    initialDataUpdatedAt: initialSnapshot.systemHealthFetchedAt
+      ? new Date(initialSnapshot.systemHealthFetchedAt).getTime()
+      : undefined,
     staleTime: HEALTH_CACHE_MS,
     gcTime: 60_000,
     retry: 1,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
   })
 
@@ -569,34 +673,61 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
 
   useEffect(() => {
     void (async () => {
-      const [mailResult, taskResult, cleanupResult, authEventsResult, publicPostsResult, adminPostsResult] = await Promise.allSettled([
-        apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup"),
-        apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"),
-        apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"),
-        apiFetch<AuthSecurityEvent[]>("/system/api/v1/adm/auth/security-events?limit=30"),
-        apiFetch<PageDto<{ id: number }>>("/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT"),
-        apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
-      ])
+      const shouldFetchMail = !initialSnapshot.mailDiagnostics
+      const shouldFetchTaskQueue = !initialSnapshot.taskQueueDiagnostics
+      const shouldFetchCleanup = !initialSnapshot.cleanupDiagnostics
+      const shouldFetchAuthEvents = initialSnapshot.authSecurityEvents.length === 0
+      const shouldFetchPostSeed = !initialSnapshot.seedPostId || initialSnapshot.seedPostId === "1"
 
-      if (mailResult.status === "fulfilled") setMailDiagnostics(mailResult.value)
-      if (taskResult.status === "fulfilled") {
+      if (
+        !shouldFetchMail &&
+        !shouldFetchTaskQueue &&
+        !shouldFetchCleanup &&
+        !shouldFetchAuthEvents &&
+        !shouldFetchPostSeed
+      ) {
+        return
+      }
+
+      const [mailResult, taskResult, cleanupResult, authEventsResult, publicPostsResult, adminPostsResult] =
+        await Promise.allSettled([
+          shouldFetchMail ? apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup") : Promise.resolve(null),
+          shouldFetchTaskQueue ? apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks") : Promise.resolve(null),
+          shouldFetchCleanup
+            ? apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup")
+            : Promise.resolve(null),
+          shouldFetchAuthEvents
+            ? apiFetch<AuthSecurityEvent[]>("/system/api/v1/adm/auth/security-events?limit=30")
+            : Promise.resolve(null),
+          shouldFetchPostSeed
+            ? apiFetch<PageDto<{ id: number }>>("/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT")
+            : Promise.resolve(null),
+          shouldFetchPostSeed
+            ? apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT")
+            : Promise.resolve(null),
+        ])
+
+      if (mailResult.status === "fulfilled" && mailResult.value) setMailDiagnostics(mailResult.value)
+      if (taskResult.status === "fulfilled" && taskResult.value) {
         setTaskQueueDiagnostics(taskResult.value)
         setTaskQueueCheckedAt(new Date().toISOString())
       }
-      if (cleanupResult.status === "fulfilled") {
+      if (cleanupResult.status === "fulfilled" && cleanupResult.value) {
         setCleanupDiagnostics(cleanupResult.value)
         setCleanupCheckedAt(new Date().toISOString())
       }
-      if (authEventsResult.status === "fulfilled") {
+      if (authEventsResult.status === "fulfilled" && authEventsResult.value) {
         setAuthSecurityEvents(authEventsResult.value)
         setAuthSecurityCheckedAt(new Date().toISOString())
       }
-      const firstPublicPostId = publicPostsResult.status === "fulfilled" ? publicPostsResult.value.content?.[0]?.id : undefined
-      const firstAdminPostId = adminPostsResult.status === "fulfilled" ? adminPostsResult.value.content?.[0]?.id : undefined
+      const firstPublicPostId =
+        publicPostsResult.status === "fulfilled" ? publicPostsResult.value?.content?.[0]?.id : undefined
+      const firstAdminPostId =
+        adminPostsResult.status === "fulfilled" ? adminPostsResult.value?.content?.[0]?.id : undefined
       const seedPostId = firstPublicPostId ?? firstAdminPostId
       if (seedPostId != null) setPostId(String(seedPostId))
     })()
-  }, [])
+  }, [initialSnapshot])
 
   useEffect(() => {
     if (!sectionJumpTarget || typeof window === "undefined") return
@@ -619,19 +750,6 @@ const AdminToolsPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     if (typeof window === "undefined") return
     window.sessionStorage.setItem(RESULTS_FILTER_STORAGE_KEY, resultsFilter)
   }, [resultsFilter])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const media = window.matchMedia("(max-width: 960px)")
-    const sync = () => setIsMobileLayout(media.matches)
-    sync()
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", sync)
-      return () => media.removeEventListener("change", sync)
-    }
-    media.addListener(sync)
-    return () => media.removeListener(sync)
-  }, [])
 
   useEffect(() => {
     if (typeof window === "undefined") return

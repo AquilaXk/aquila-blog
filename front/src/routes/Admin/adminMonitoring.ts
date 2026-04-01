@@ -180,10 +180,8 @@ export const buildGrafanaPanelEmbedUrl = (dashboardUrl: string, panelId: number)
       if (!url.searchParams.has("orgId")) {
         url.searchParams.set("orgId", "1")
       }
-      // Grafana 11 scene 기반 solo 렌더 경로를 강제해 iframe 로딩 고착을 줄인다.
-      if (!url.searchParams.has("__feature.dashboardSceneSolo")) {
-        url.searchParams.set("__feature.dashboardSceneSolo", "")
-      }
+      // scene solo 강제 파라미터는 일부 패널에서 무한 로딩을 유발할 수 있어 제외한다.
+      url.searchParams.delete("__feature.dashboardSceneSolo")
       if (!url.searchParams.has("from")) {
         url.searchParams.set("from", "now-6h")
       }

@@ -3,10 +3,12 @@ import {
   AdminPostWorkspacePage,
   getAdminPostsWorkspacePageProps,
 } from "src/routes/Admin/AdminPostsWorkspacePage"
-import { AdminPageProps } from "src/libs/server/adminPage"
+import { InferGetServerSidePropsType } from "next"
 
 export const getServerSideProps = getAdminPostsWorkspacePageProps
 
-const AdminPostsPage: NextPage<AdminPageProps> = (props) => <AdminPostWorkspacePage {...props} />
+type AdminPostsPageProps = InferGetServerSidePropsType<typeof getServerSideProps>
+
+const AdminPostsPage: NextPage<AdminPostsPageProps> = (props) => <AdminPostWorkspacePage {...props} />
 
 export default AdminPostsPage

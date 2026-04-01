@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
+import { IncomingMessage } from "http"
 import { useMemo } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { serverApiFetch } from "src/libs/server/backend"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
 type AdminHubSystemHealthPayload = {
@@ -15,11 +17,61 @@ type AdminHubTaskQueuePayload = {
   staleProcessingCount?: number
 }
 
-export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
-  return await getAdminPageProps(req)
+type AdminHubInitialSnapshot = {
+  systemHealth: AdminHubSystemHealthPayload | null
+  taskQueue: AdminHubTaskQueuePayload | null
+  fetchedAt: string | null
 }
 
-const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
+type AdminHubPageProps = AdminPageProps & {
+  initialSnapshot: AdminHubInitialSnapshot
+}
+
+const EMPTY_INITIAL_SNAPSHOT: AdminHubInitialSnapshot = {
+  systemHealth: null,
+  taskQueue: null,
+  fetchedAt: null,
+}
+
+async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
+  try {
+    const response = await serverApiFetch(req, path)
+    if (!response.ok) return null
+    const contentLength = response.headers.get("content-length")
+    if (contentLength === "0") return null
+    return (await response.json()) as T
+  } catch {
+    return null
+  }
+}
+
+export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req }) => {
+  const baseResult = await getAdminPageProps(req)
+  if ("redirect" in baseResult) return baseResult
+  if (!("props" in baseResult)) return baseResult
+  const baseProps = await baseResult.props
+  const fetchedAt = new Date().toISOString()
+  const [systemHealthResult, taskQueueResult] = await Promise.allSettled([
+    readJsonIfOk<AdminHubSystemHealthPayload>(req, "/system/api/v1/adm/health"),
+    readJsonIfOk<AdminHubTaskQueuePayload>(req, "/system/api/v1/adm/tasks"),
+  ])
+
+  const systemHealth = systemHealthResult.status === "fulfilled" ? systemHealthResult.value : null
+  const taskQueue = taskQueueResult.status === "fulfilled" ? taskQueueResult.value : null
+
+  return {
+    props: {
+      ...baseProps,
+      initialSnapshot: {
+        systemHealth,
+        taskQueue,
+        fetchedAt: systemHealth || taskQueue ? fetchedAt : null,
+      },
+    },
+  }
+}
+
+const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialSnapshot = EMPTY_INITIAL_SNAPSHOT }) => {
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
@@ -28,19 +80,28 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     queryKey: ["admin", "hub", "system-health"],
     queryFn: (): Promise<AdminHubSystemHealthPayload> => apiFetch<AdminHubSystemHealthPayload>("/system/api/v1/adm/health"),
     enabled: Boolean(sessionMember?.isAdmin),
+    initialData: initialSnapshot.systemHealth ?? undefined,
+    initialDataUpdatedAt: initialSnapshot.systemHealth && initialSnapshot.fetchedAt
+      ? new Date(initialSnapshot.fetchedAt).getTime()
+      : undefined,
     staleTime: 30_000,
     gcTime: 120_000,
     retry: 1,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   })
   const taskQueueQuery = useQuery({
     queryKey: ["admin", "hub", "task-queue"],
     queryFn: (): Promise<AdminHubTaskQueuePayload> => apiFetch<AdminHubTaskQueuePayload>("/system/api/v1/adm/tasks"),
     enabled: Boolean(sessionMember?.isAdmin),
+    initialData: initialSnapshot.taskQueue ?? undefined,
+    initialDataUpdatedAt:
+      initialSnapshot.taskQueue && initialSnapshot.fetchedAt ? new Date(initialSnapshot.fetchedAt).getTime() : undefined,
     staleTime: 30_000,
     gcTime: 120_000,
     retry: 1,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   })
 
   const profileSrc = useMemo(

@@ -6,9 +6,33 @@ type CancelledErrorLike = {
   message?: unknown
 }
 
+type RequestCancelledErrorLike = {
+  cancelled?: unknown
+  type?: unknown
+  status?: unknown
+  statusText?: unknown
+  message?: unknown
+}
+
 const toCancelledErrorLike = (value: unknown): CancelledErrorLike | null => {
   if (typeof value !== "object" || value === null) return null
   return value as CancelledErrorLike
+}
+
+const toRequestCancelledErrorLike = (value: unknown): RequestCancelledErrorLike | null => {
+  if (typeof value !== "object" || value === null) return null
+  return value as RequestCancelledErrorLike
+}
+
+const hasCancelledKeyword = (value: unknown): boolean => {
+  if (typeof value !== "string") return false
+  const normalized = value.toLowerCase()
+  return (
+    normalized.includes("cancelled") ||
+    normalized.includes("canceled") ||
+    normalized.includes("aborted") ||
+    normalized.includes("request was aborted")
+  )
 }
 
 export const isNavigationCancelledError = (error: unknown): boolean => {
@@ -31,6 +55,25 @@ export const isNavigationCancelledError = (error: unknown): boolean => {
     return normalized.includes("cancelled") || normalized.includes("canceled")
   }
 
+  return false
+}
+
+export const isRequestCancelledError = (error: unknown): boolean => {
+  if (!error) return false
+  if (hasCancelledKeyword(error)) return true
+
+  const likeError = toRequestCancelledErrorLike(error)
+  if (!likeError) return false
+
+  if (likeError.cancelled === true) return true
+  if (hasCancelledKeyword(likeError.type)) return true
+
+  const status = likeError.status
+  if (typeof status === "number" && status === -1 && hasCancelledKeyword(likeError.statusText)) {
+    return true
+  }
+
+  if (hasCancelledKeyword(likeError.message)) return true
   return false
 }
 

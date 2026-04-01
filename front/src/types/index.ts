@@ -72,6 +72,7 @@ export type TMemberNotification = {
   createdAt: string
   actorId: number
   actorName: string
+  actorProfileImageDirectUrl?: string
   actorProfileImageUrl: string
   postId: number
   commentId: number

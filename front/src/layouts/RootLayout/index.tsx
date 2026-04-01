@@ -6,7 +6,7 @@ import styled from "@emotion/styled"
 import Scripts from "src/layouts/RootLayout/Scripts"
 import useGtagEffect from "./useGtagEffect"
 import { useRouter } from "next/router"
-import { isNavigationCancelledError } from "src/libs/router"
+import { isNavigationCancelledError, isRequestCancelledError } from "src/libs/router"
 import {
   CONTENT_MAX_WIDTH_PX,
   DESKTOP_LOCK_MAX_PX,
@@ -80,20 +80,33 @@ const RootLayout = ({ children }: Props) => {
     }
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (!isNavigationCancelledError(event.reason)) return
+      if (!isNavigationCancelledError(event.reason) && !isRequestCancelledError(event.reason)) return
       // Route competition can reject in-flight Next.js data loading; treat as expected cancellation.
       event.preventDefault()
     }
 
     const handleWindowError = (event: ErrorEvent) => {
       const reason = event.error ?? event.message
-      if (!isNavigationCancelledError(reason) && !isBenignRouteCancellationMessage(reason)) return
+      if (
+        !isNavigationCancelledError(reason) &&
+        !isRequestCancelledError(reason) &&
+        !isBenignRouteCancellationMessage(reason)
+      ) {
+        return
+      }
       event.preventDefault()
     }
 
     const originalConsoleError = window.console.error.bind(window.console)
     const filteredConsoleError: typeof window.console.error = (...args) => {
-      if (args.some((arg) => isNavigationCancelledError(arg) || isBenignRouteCancellationMessage(arg))) {
+      if (
+        args.some(
+          (arg) =>
+            isNavigationCancelledError(arg) ||
+            isRequestCancelledError(arg) ||
+            isBenignRouteCancellationMessage(arg)
+        )
+      ) {
         return
       }
       originalConsoleError(...args)

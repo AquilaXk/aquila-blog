@@ -180,7 +180,15 @@ const PostCard: React.FC<Props> = ({ data, layout = "regular" }) => {
             <div className="author">
               <span className="avatar" aria-hidden="true">
                 {author?.profile_photo ? (
-                  <ProfileImage src={author.profile_photo} alt="" fillContainer width={24} height={24} />
+                  <ProfileImage
+                    src={author.profile_photo}
+                    alt=""
+                    fillContainer
+                    width={24}
+                    height={24}
+                    priority={layout === "pinned"}
+                    loading={layout === "pinned" ? "eager" : "lazy"}
+                  />
                 ) : (
                   <span className="initial">{(author?.name || "A").slice(0, 1).toUpperCase()}</span>
                 )}

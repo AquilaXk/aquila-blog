@@ -771,19 +771,16 @@ const useMermaidEffect = (
           let wideBleedLeft = 0
           let wideBleedRight = 0
           const detailLayout = allowDesktopWideLane ? block.closest<HTMLElement>(".detailLayout") : null
+          const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
 
-          if (isDesktopViewport && detailLayout && exceedsArticleWidth) {
+          if (isDesktopViewport && detailLayout && exceedsArticleWidth && rightRail && rightRail.offsetParent !== null) {
             const leftRail = detailLayout?.querySelector<HTMLElement>(".leftRail")
-            const rightRail = detailLayout?.querySelector<HTMLElement>(".rightRail")
             const liveBlockRect = block.getBoundingClientRect()
             const leftBound =
               leftRail && leftRail.offsetParent !== null
                 ? leftRail.getBoundingClientRect().right + MERMAID_DESKTOP_SAFE_MARGIN_PX
                 : MERMAID_DESKTOP_SAFE_MARGIN_PX
-            const rightBound =
-              rightRail && rightRail.offsetParent !== null
-                ? rightRail.getBoundingClientRect().left - MERMAID_DESKTOP_SAFE_MARGIN_PX
-                : window.innerWidth - MERMAID_DESKTOP_SAFE_MARGIN_PX
+            const rightBound = rightRail.getBoundingClientRect().left - MERMAID_DESKTOP_SAFE_MARGIN_PX
             const safeLaneWidth = Math.max(containerWidth, Math.round(rightBound - leftBound))
             const desiredWideWidth = Math.max(
               containerWidth,
@@ -1006,6 +1003,10 @@ const useMermaidEffect = (
 
     const scheduleRun = () => {
       if (disposed) return
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        rerunRequested = true
+        return
+      }
       if (running) {
         rerunRequested = true
         return
@@ -1042,6 +1043,11 @@ const useMermaidEffect = (
     }
 
     scheduleRun()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleRun()
+      }
+    }
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleRun) : null
     resizeObserver?.observe(root)
     mutationObserver =
@@ -1056,6 +1062,7 @@ const useMermaidEffect = (
       subtree: true,
       characterData: true,
     })
+    document.addEventListener("visibilitychange", handleVisibilityChange)
 
     return () => {
       disposed = true
@@ -1063,6 +1070,7 @@ const useMermaidEffect = (
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
       intersectionObserver?.disconnect()
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
       retryTimers.forEach((timerId) => window.clearTimeout(timerId))
       retryTimers.clear()
       if (scheduledRunFrame !== null) {

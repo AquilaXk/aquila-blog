@@ -56,9 +56,9 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       tagsLoaded: false,
     }))
 
-  const adminProfilePromise = crawlerRequest
-    ? fetchServerAdminProfile(req, { timeoutMs: 1_500 })
-    : Promise.resolve<AdminProfile | null>(null)
+  const adminProfilePromise = fetchServerAdminProfile(req, {
+    timeoutMs: crawlerRequest ? 1_500 : 900,
+  })
 
   const [initialAdminProfile, authMember, bootstrapResult] = await Promise.all([
     adminProfilePromise,
@@ -107,7 +107,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.
   res.setHeader(
     "Cache-Control",
-    authMember === null && postsLoaded
+    authMember === null && postsLoaded && initialAdminProfile !== null
       ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )
@@ -125,8 +125,12 @@ type FeedPageProps = {
 }
 
 const FeedPage: NextPageWithLayout<FeedPageProps> = ({ initialAdminProfile }) => {
-  const feedTitle = initialAdminProfile?.homeIntroTitle || initialAdminProfile?.blogTitle || CONFIG.blog.title
-  const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.description
+  const feedTitle =
+    initialAdminProfile?.homeIntroTitle ||
+    initialAdminProfile?.blogTitle ||
+    CONFIG.blog.homeIntroTitle ||
+    CONFIG.blog.title
+  const feedDescription = initialAdminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
 
   const meta = {
     title: feedTitle,

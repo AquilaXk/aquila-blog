@@ -1464,34 +1464,36 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                             <AppIcon name="list" />
                             드래그 정렬
                           </DragHandleButton>
-                          {previewHref && isAllowedProfileLinkHref(section, item.href) ? (
-                            <PreviewAnchor href={previewHref} target="_blank" rel="noreferrer">
-                              열기
-                            </PreviewAnchor>
-                          ) : (
-                            <MiniButton type="button" disabled>
-                              열기
+                          <InlineActionRow className="linkActionButtons">
+                            {previewHref && isAllowedProfileLinkHref(section, item.href) ? (
+                              <PreviewAnchor href={previewHref} target="_blank" rel="noreferrer">
+                                열기
+                              </PreviewAnchor>
+                            ) : (
+                              <MiniButton type="button" disabled>
+                                열기
+                              </MiniButton>
+                            )}
+                            <MiniButton
+                              className="reorderButton"
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => moveLinkItem(section, index, -1)}
+                            >
+                              위로
                             </MiniButton>
-                          )}
-                          <MiniButton
-                            className="reorderButton"
-                            type="button"
-                            disabled={index === 0}
-                            onClick={() => moveLinkItem(section, index, -1)}
-                          >
-                            위로
-                          </MiniButton>
-                          <MiniButton
-                            className="reorderButton"
-                            type="button"
-                            disabled={index === visibleLinks.length - 1}
-                            onClick={() => moveLinkItem(section, index, 1)}
-                          >
-                            아래로
-                          </MiniButton>
-                          <DangerButton type="button" onClick={() => removeLinkItem(section, index)}>
-                            삭제
-                          </DangerButton>
+                            <MiniButton
+                              className="reorderButton"
+                              type="button"
+                              disabled={index === visibleLinks.length - 1}
+                              onClick={() => moveLinkItem(section, index, 1)}
+                            >
+                              아래로
+                            </MiniButton>
+                            <DangerButton type="button" onClick={() => removeLinkItem(section, index)}>
+                              삭제
+                            </DangerButton>
+                          </InlineActionRow>
                         </InlineActionRow>
                       </LinkRowCard>
                     )
@@ -1538,7 +1540,7 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
         ))}
       </MobileSectionRail>
 
-      <WorkspaceShell>
+      <WorkspaceShell $isHomeSection={isHomeSection}>
         <SectionRail aria-label="프로필 섹션">
           {WORKSPACE_SECTIONS.map((section) => (
             <SectionRailButton
@@ -1584,7 +1586,18 @@ const AdminProfileWorkspacePage: NextPage<AdminProfileWorkspacePageProps> = ({
                 </DockPrimaryButton>
               </ActionDockInner>
             </PreviewActionDock>
-          ) : null}
+          ) : (
+            <CompactOnlyActionDock>
+              <ActionDockInner>
+                <DockSecondaryButton type="button" disabled={!canSave} onClick={() => void handleSaveDraft()}>
+                  {loadingKey === "save" ? "저장 중..." : "임시 저장"}
+                </DockSecondaryButton>
+                <DockPrimaryButton type="button" disabled={!canPublish} onClick={() => void handlePublish()}>
+                  {loadingKey === "publish" ? "공개 중..." : "지금 공개하기"}
+                </DockPrimaryButton>
+              </ActionDockInner>
+            </CompactOnlyActionDock>
+          )}
         </EditorColumn>
 
         {!isHomeSection ? (
@@ -2023,9 +2036,10 @@ const SectionSwitchButton = styled.button`
   }
 `
 
-const WorkspaceShell = styled.section`
+const WorkspaceShell = styled.section<{ $isHomeSection: boolean }>`
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr) 312px;
+  grid-template-columns: ${({ $isHomeSection }) =>
+    $isHomeSection ? "188px minmax(0, 1fr)" : "188px minmax(0, 1fr) 312px"};
   gap: 1rem;
   align-items: start;
 
@@ -2494,7 +2508,7 @@ const LinkCardList = styled.div`
 const LinkRowCard = styled.div`
   position: relative;
   display: grid;
-  grid-template-columns: 216px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(184px, 200px) minmax(0, 1fr) auto;
   gap: 0.72rem;
   padding: 0.9rem;
   border-radius: 16px;
@@ -2533,8 +2547,27 @@ const LinkRowCard = styled.div`
   }
 
   .linkActions {
-    align-self: center;
+    align-self: flex-start;
     justify-content: flex-end;
+    gap: 0.38rem;
+    min-width: 0;
+  }
+
+  .linkActionButtons {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .linkActionButtons > * {
+    white-space: nowrap;
+  }
+
+  @media (max-width: 1280px) {
+    .linkActionButtons {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
   }
 
   @media (max-width: 1080px) {
@@ -2680,8 +2713,7 @@ const PreviewRail = styled.div`
   top: 0.88rem;
 
   @media (max-width: 1180px) {
-    position: static;
-    grid-column: 1 / -1;
+    display: none;
   }
 `
 
@@ -2753,8 +2785,16 @@ const PreviewActionDock = styled.div`
   justify-items: center;
 `
 
+const CompactOnlyActionDock = styled(PreviewActionDock)`
+  display: none;
+
+  @media (max-width: 1180px) {
+    display: grid;
+  }
+`
+
 const ActionDockInner = styled.div`
-  width: min(100%, 560px);
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;

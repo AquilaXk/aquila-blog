@@ -256,9 +256,12 @@ const usePrismEffect = (
               inferred.length > 0 &&
               inferred !== "mermaid" &&
               (!blockHasShikiTheme(entry.block) || isGenericLanguage(entry.rawLanguage)),
+            alreadyHighlighted:
+              entry.block.dataset.prismLanguage === inferred &&
+              entry.block.dataset.prismSource === entry.source,
           }
         })
-        .filter((entry) => entry.shouldHighlight)
+        .filter((entry) => entry.shouldHighlight && !entry.alreadyHighlighted)
 
       const languages = languageByBlock
         .map((entry) => entry.language)
@@ -272,11 +275,6 @@ const usePrismEffect = (
 
       languageByBlock.forEach(({ block, language, source }) => {
         if (language === "mermaid" || language === "text") return
-
-        const alreadyHighlighted =
-          block.dataset.prismLanguage === language &&
-          block.dataset.prismSource === source
-        if (alreadyHighlighted) return
 
         const hasGrammar = Boolean(Prism.languages?.[language])
         if (!hasGrammar) {

@@ -44,6 +44,7 @@ const FEED_EXPLORER_SNAPSHOT_MAX_PAGES = 4
 const FEED_EXPLORER_SNAPSHOT_MAX_BYTES = 260_000
 const FEED_EXPLORER_RESTORE_MAX_KEYS = 4
 const FEED_EXPLORER_IDLE_REVALIDATE_TIMEOUT_MS = 1200
+const FEED_EXPLORER_SCROLL_BUCKET_PX = 36
 type FeedExplorerRestoreState = {
   q: string
   tag: string
@@ -247,6 +248,11 @@ const parseFeedExplorerRestoreSnapshot = (raw: string | null): FeedExplorerResto
   }
 }
 
+const toPersistFingerprint = (state: Pick<FeedExplorerRestoreState, "q" | "tag" | "loadedPages" | "scrollY">) => {
+  const scrollBucket = Math.trunc(Math.max(0, state.scrollY) / FEED_EXPLORER_SCROLL_BUCKET_PX)
+  return `${state.q}\u0000${state.tag}\u0000${state.loadedPages}\u0000${scrollBucket}`
+}
+
 const extractSavedAt = (raw: string | null) => {
   if (!raw) return 0
   try {
@@ -402,6 +408,8 @@ const FeedExplorer = () => {
   const restoreTargetPagesRef = useRef(1)
   const hasInitializedRestoreRef = useRef(false)
   const hasRestoredScrollRef = useRef(false)
+  const lastPersistFingerprintRef = useRef("")
+  const cancelIdlePersistRef = useRef<(() => void) | null>(null)
   const restoreSnapshotRef = useRef({
     q: "",
     tag: "",
@@ -526,6 +534,7 @@ const FeedExplorer = () => {
   useEffect(() => {
     if (hasScheduledIdleRevalidateRef.current) return
     if (!hasAppliedRestoreSnapshotRef.current) return
+    if (!restoreQueryPagesRef.current?.length) return
 
     const restored = restoreStateRef.current
     if (!restored) return
@@ -570,9 +579,14 @@ const FeedExplorer = () => {
       loadedPages: Math.max(1, snapshot.loadedPagesCount),
       savedAt: Date.now(),
     }
+    const persistFingerprint = toPersistFingerprint(state)
+    if (lastPersistFingerprintRef.current === persistFingerprint) {
+      return
+    }
 
     try {
       window.sessionStorage.setItem(restoreKey, JSON.stringify(state))
+      lastPersistFingerprintRef.current = persistFingerprint
 
       const feedQueryKey = toFeedExplorerInfiniteQueryKey({
         kw: normalizedSnapshotQuery,
@@ -606,26 +620,41 @@ const FeedExplorer = () => {
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return
 
-    const handlePersist = () => {
+    const flushPersist = () => {
+      if (cancelIdlePersistRef.current) {
+        cancelIdlePersistRef.current()
+        cancelIdlePersistRef.current = null
+      }
       persistFeedExplorerState()
+    }
+    const scheduleIdlePersist = () => {
+      if (cancelIdlePersistRef.current) return
+      cancelIdlePersistRef.current = scheduleIdleRevalidate(() => {
+        cancelIdlePersistRef.current = null
+        persistFeedExplorerState()
+      })
     }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        persistFeedExplorerState()
+        flushPersist()
       }
     }
 
-    window.addEventListener("pagehide", handlePersist)
-    window.addEventListener("beforeunload", handlePersist)
+    window.addEventListener("pagehide", flushPersist)
+    window.addEventListener("beforeunload", flushPersist)
     document.addEventListener("visibilitychange", handleVisibilityChange)
-    router.events.on("routeChangeStart", handlePersist)
+    router.events.on("routeChangeStart", scheduleIdlePersist)
 
     return () => {
-      window.removeEventListener("pagehide", handlePersist)
-      window.removeEventListener("beforeunload", handlePersist)
+      if (cancelIdlePersistRef.current) {
+        cancelIdlePersistRef.current()
+        cancelIdlePersistRef.current = null
+      }
+      window.removeEventListener("pagehide", flushPersist)
+      window.removeEventListener("beforeunload", flushPersist)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
-      router.events.off("routeChangeStart", handlePersist)
+      router.events.off("routeChangeStart", scheduleIdlePersist)
     }
   }, [persistFeedExplorerState, router.events])
 

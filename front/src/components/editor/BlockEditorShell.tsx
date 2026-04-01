@@ -636,6 +636,39 @@ const getEditableTextPositionForTopLevelBlock = (editor: TiptapEditor, blockInde
   return getFirstEditableTextPositionInNode(topLevelBlock, blockPosition)
 }
 
+const focusEditorViewWithoutScroll = (editor: TiptapEditor) => {
+  if (typeof window === "undefined") {
+    editor.view.focus()
+    return
+  }
+
+  const previousScrollX = window.scrollX
+  const previousScrollY = window.scrollY
+  editor.view.focus()
+  if (window.scrollX !== previousScrollX || window.scrollY !== previousScrollY) {
+    window.scrollTo(previousScrollX, previousScrollY)
+  }
+}
+
+const focusElementWithoutScroll = (element: HTMLElement | null) => {
+  if (!element) return
+  if (typeof window === "undefined") {
+    element.focus()
+    return
+  }
+
+  const previousScrollX = window.scrollX
+  const previousScrollY = window.scrollY
+  try {
+    element.focus({ preventScroll: true })
+  } catch {
+    element.focus()
+  }
+  if (window.scrollX !== previousScrollX || window.scrollY !== previousScrollY) {
+    window.scrollTo(previousScrollX, previousScrollY)
+  }
+}
+
 const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
   const { doc, tr } = editor.state
   if (doc.childCount === 0) return
@@ -643,7 +676,7 @@ const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
   const position = getTopLevelBlockPosition(editor, clampedIndex)
   const selection = NodeSelection.create(doc, position)
   editor.view.dispatch(tr.setSelection(selection))
-  editor.view.focus()
+  focusEditorViewWithoutScroll(editor)
 }
 
 const resolveBlockHandleAnchorTop = (blockElement: HTMLElement, railHeight: number) => {
@@ -1204,11 +1237,20 @@ const BlockEditorShell = ({
 
   const clearNativeTextSelection = useCallback(() => {
     if (typeof window === "undefined") return
-    window.requestAnimationFrame(() => {
+    const clearRanges = () => {
       const domSelection = window.getSelection()
-      if (domSelection?.type === "Range" && domSelection.toString()) {
+      if (domSelection?.rangeCount) {
         domSelection.removeAllRanges()
       }
+    }
+
+    clearRanges()
+    window.requestAnimationFrame(() => {
+      clearRanges()
+      focusElementWithoutScroll(viewportRef.current)
+      window.requestAnimationFrame(() => {
+        clearRanges()
+      })
     })
   }, [])
 
@@ -1223,19 +1265,13 @@ const BlockEditorShell = ({
       setSelectedBlockNodeIndex(blockIndex)
       syncSelectedBlockNodeSurface(blockIndex)
       setSelectionTick((prev) => prev + 1)
+      clearNativeTextSelection()
       if (typeof window !== "undefined") {
         window.requestAnimationFrame(() => {
-          const domSelection = window.getSelection()
-          if (domSelection?.type === "Range" && domSelection.toString()) {
-            domSelection.removeAllRanges()
-          }
-          viewportRef.current?.focus()
           setSelectedBlockNodeIndex(blockIndex)
           syncSelectedBlockNodeSurface(blockIndex)
           setSelectionTick((prev) => prev + 1)
         })
-      } else {
-        clearNativeTextSelection()
       }
       return true
     },
@@ -4202,11 +4238,7 @@ const BlockEditorShell = ({
         element.removeAttribute("data-block-dragging")
       }
 
-      if (dropTargetIndex !== null && index === dropTargetIndex) {
-        element.setAttribute("data-block-drop-target", "true")
-      } else {
-        element.removeAttribute("data-block-drop-target")
-      }
+      element.removeAttribute("data-block-drop-target")
     })
 
     return () => {
@@ -5189,7 +5221,6 @@ const BlockEditorShell = ({
                   previewHtml,
                   previewLabel,
                 }
-                promoteTopLevelBlockSelection(sourceIndex)
                 clearPendingBlockDrag()
                 pendingBlockDragRef.current = pendingState
 
@@ -5205,6 +5236,7 @@ const BlockEditorShell = ({
                   )
                   if (distance < DRAG_THRESHOLD_PX) return
 
+                  promoteTopLevelBlockSelection(pending.sourceIndex)
                   clearPendingBlockDrag()
                   beginBlockDragFromPending(pending, moveEvent.clientX, moveEvent.clientY)
                 }
@@ -5266,18 +5298,6 @@ const BlockEditorShell = ({
               top: `${blockSelectionOverlayState.top}px`,
               width: `${blockSelectionOverlayState.width}px`,
               height: `${blockSelectionOverlayState.height}px`,
-            }}
-          />
-        ) : null}
-        {dropIndicatorState.visible ? (
-          <BlockDropTargetHighlight
-            data-testid="block-drop-target-highlight"
-            data-tail={dropIndicatorState.insertionIndex === getTopLevelBlockElements().length}
-            style={{
-              left: `${dropIndicatorState.highlightLeft}px`,
-              top: `${dropIndicatorState.highlightTop}px`,
-              width: `${dropIndicatorState.highlightWidth}px`,
-              height: `${dropIndicatorState.highlightHeight}px`,
             }}
           />
         ) : null}
@@ -6052,7 +6072,6 @@ const EditorViewport = styled.div`
 
   .aq-block-editor__content > blockquote[data-block-hovered="true"],
   .aq-block-editor__content > blockquote[data-block-selected="true"],
-  .aq-block-editor__content > blockquote[data-block-drop-target="true"],
   .aq-block-editor__content > blockquote[data-block-dragging="true"] {
     background: transparent !important;
     box-shadow: none;
@@ -6073,14 +6092,6 @@ const EditorViewport = styled.div`
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "rgba(59, 130, 246, 0.12)" : "rgba(59, 130, 246, 0.1)"};
     box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.24);
-  }
-
-  .aq-block-editor__content > *[data-block-drop-target="true"] {
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.11)" : "rgba(59, 130, 246, 0.09)"};
-    box-shadow:
-      0 0 0 1px rgba(59, 130, 246, 0.28),
-      inset 0 0 0 1px rgba(59, 130, 246, 0.08);
   }
 
   .aq-block-editor__content > *[data-block-dragging="true"] {
@@ -6659,29 +6670,6 @@ const BlockDropIndicator = styled.div`
 
   &::after {
     right: -3px;
-  }
-`
-
-const BlockDropTargetHighlight = styled.div`
-  position: fixed;
-  z-index: 55;
-  border-radius: 1rem;
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.2)" : "rgba(59, 130, 246, 0.14)"};
-  box-shadow:
-    inset 0 0 0 1px rgba(37, 99, 235, 0.28),
-    0 0 0 1px rgba(37, 99, 235, 0.22);
-  outline: 1px dashed rgba(37, 99, 235, 0.34);
-  outline-offset: -3px;
-  pointer-events: none;
-
-  &[data-tail="true"] {
-    border-radius: 0.7rem;
-    background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.16)" : "rgba(59, 130, 246, 0.1)"};
-    box-shadow:
-      inset 0 0 0 1px rgba(37, 99, 235, 0.24),
-      0 0 0 1px rgba(37, 99, 235, 0.18);
   }
 `
 

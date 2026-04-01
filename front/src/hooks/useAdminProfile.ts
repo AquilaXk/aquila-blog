@@ -1,4 +1,4 @@
-import { QueryClient, useQuery } from "@tanstack/react-query"
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import { queryKey } from "src/constants/queryKey"
@@ -70,22 +70,30 @@ export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminPro
 
 export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
   const isBrowser = typeof window !== "undefined"
+  const queryClient = useQueryClient()
+  const cacheKey = queryKey.adminProfile()
+  const cachedProfile = queryClient.getQueryData<AdminProfile | null>(cacheKey)
+  const seededProfile = cachedProfile ?? initialProfile
+  const hasSeedProfile = seededProfile != null
+
   const query = useQuery<AdminProfile | null>({
-    queryKey: queryKey.adminProfile(),
+    queryKey: cacheKey,
     queryFn: async () => {
       try {
         return await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
       } catch {
-        // 운영에서 adminProfile 조회 실패 시에도 화면은 기본 프로필로 안전하게 유지한다.
+        // 일시적인 네트워크 실패 시 기존 문구가 흔들리지 않도록 마지막 성공 캐시를 우선 유지한다.
+        const cached = queryClient.getQueryData<AdminProfile | null>(cacheKey)
+        if (cached !== undefined) return cached
         return initialProfile ?? null
       }
     },
     enabled: isBrowser,
-    initialData: initialProfile,
-    staleTime: initialProfile ? 60 * 1000 : 0,
+    initialData: seededProfile ?? undefined,
+    staleTime: hasSeedProfile ? 5 * 60 * 1000 : 0,
     retry: false,
     refetchOnWindowFocus: false,
-    refetchOnMount: !initialProfile,
+    refetchOnMount: !hasSeedProfile,
   })
 
   return query.data ?? initialProfile

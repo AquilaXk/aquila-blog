@@ -110,6 +110,20 @@ test("홈 피드 기본 UI가 렌더링된다", async ({ page }) => {
   await expect(page.getByRole("button", { name: "전체보기" })).toBeVisible()
 })
 
+test("홈 새로고침 이후에도 레거시 기본 문구로 되돌아가지 않는다", async ({ page }) => {
+  await mockFeedEndpoints(page)
+
+  await page.goto("/")
+  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
+  await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
+  await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
+
+  await page.reload()
+  await expect(page.getByRole("heading", { level: 1, name: "비밀스러운 IT 공작소" })).toBeVisible()
+  await expect(page.getByText("비밀스러운 지식들을 탐구하는데 목적을 두고 있습니다")).toBeVisible()
+  await expect(page.getByText("aquilaXk's Blog")).toHaveCount(0)
+})
+
 test("상단 내비 컨트롤은 공통 높이 토큰을 유지한다", async ({ page }) => {
   await mockFeedEndpoints(page)
   await page.route("**/member/api/v1/auth/me", async (route) => {
@@ -637,6 +651,8 @@ test("긴 Mermaid 라벨은 자동 줄바꿈 힌트를 적용해 렌더된다", 
 })
 
 test("복잡한 Mermaid는 복잡도 가드를 표시하고 확대 버튼을 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+
   const chainLines = Array.from({ length: 82 }, (_, index) => {
     return `  N${index}[노드 ${index}] --> N${index + 1}[노드 ${index + 1}]`
   })
@@ -690,6 +706,19 @@ test("복잡한 Mermaid는 복잡도 가드를 표시하고 확대 버튼을 유
     .toBeGreaterThan(0)
   await expect(page.locator("pre.aq-mermaid[data-mermaid-complexity='high']")).toHaveCount(1)
   await expect(page.locator("pre.aq-mermaid[data-mermaid-expandable='true'] .aq-mermaid-expand-btn")).toBeVisible()
+
+  const overflow = await page.evaluate(() => {
+    const html = document.documentElement
+    const body = document.body
+    return {
+      htmlClientWidth: html.clientWidth,
+      htmlScrollWidth: html.scrollWidth,
+      bodyClientWidth: body.clientWidth,
+      bodyScrollWidth: body.scrollWidth,
+    }
+  })
+  expect(overflow.htmlScrollWidth).toBeLessThanOrEqual(overflow.htmlClientWidth + 1)
+  expect(overflow.bodyScrollWidth).toBeLessThanOrEqual(overflow.bodyClientWidth + 1)
 })
 
 test("잘못된 닫힘 fence(```4) 입력도 복구되어 머메이드와 후속 마크다운이 함께 정상 렌더된다", async ({ page }) => {

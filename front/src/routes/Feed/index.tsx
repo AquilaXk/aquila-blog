@@ -17,8 +17,9 @@ type Props = {
 
 const Feed: React.FC<Props> = ({ initialAdminProfile = null }) => {
   const adminProfile = useAdminProfile(initialAdminProfile)
-  const introTitle = adminProfile?.homeIntroTitle || adminProfile?.blogTitle || CONFIG.blog.title
-  const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.description
+  const introTitle =
+    adminProfile?.homeIntroTitle || adminProfile?.blogTitle || CONFIG.blog.homeIntroTitle || CONFIG.blog.title
+  const introDescription = adminProfile?.homeIntroDescription || CONFIG.blog.homeIntroDescription || CONFIG.blog.description
 
   return (
     <StyledWrapper>

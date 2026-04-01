@@ -1112,6 +1112,9 @@ const removeLocalDraft = () => {
   window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY)
 }
 
+const buildLocalDraftFingerprint = (payload: Omit<LocalDraftPayload, "savedAt">) =>
+  JSON.stringify(payload)
+
 const parseResponseErrorBody = async (response: Response): Promise<string> => {
   const text = await response.text().catch(() => "")
   if (!text) return ""
@@ -1600,8 +1603,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     [isPublishModalOpen]
   )
 
-  const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
-    const payload: LocalDraftPayload = {
+  const localDraftCore = useMemo(
+    () => ({
       title: postTitle,
       content: postContent,
       summary: postSummary,
@@ -1612,11 +1615,37 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       tags: dedupeStrings(postTags),
       category: postCategory ? normalizeCategoryValue(postCategory) : "",
       visibility: postVisibility,
+    }),
+    [
+      postCategory,
+      postContent,
+      postSummary,
+      postTags,
+      postThumbnailFocusX,
+      postThumbnailFocusY,
+      postThumbnailZoom,
+      postThumbnailUrl,
+      postTitle,
+      postVisibility,
+    ]
+  )
+  const localDraftFingerprint = useMemo(
+    () => buildLocalDraftFingerprint(localDraftCore),
+    [localDraftCore]
+  )
+
+  const saveLocalDraft = useCallback((options?: { silent?: boolean }) => {
+    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) {
+      return
+    }
+
+    const payload: LocalDraftPayload = {
+      ...localDraftCore,
       savedAt: new Date().toISOString(),
     }
 
     persistLocalDraft(payload)
-    lastLocalDraftFingerprintRef.current = JSON.stringify(payload)
+    lastLocalDraftFingerprintRef.current = localDraftFingerprint
     setLocalDraftSavedAt(payload.savedAt)
 
     if (!options?.silent) {
@@ -1629,16 +1658,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       )
     }
   }, [
-    postCategory,
-    postContent,
-    postSummary,
-    postTags,
-    postThumbnailFocusX,
-    postThumbnailFocusY,
-    postThumbnailZoom,
-    postThumbnailUrl,
-    postTitle,
-    postVisibility,
+    localDraftCore,
+    localDraftFingerprint,
     setPublishStatus,
   ])
 
@@ -1661,6 +1682,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setPostVersion(null)
     lastWriteFingerprintRef.current = ""
     lastWriteIdempotencyKeyRef.current = ""
+    lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
+      title: draft.title,
+      content: draft.content,
+      summary: draft.summary,
+      thumbnailUrl: draft.thumbnailUrl,
+      thumbnailFocusX: draft.thumbnailFocusX,
+      thumbnailFocusY: draft.thumbnailFocusY,
+      thumbnailZoom: draft.thumbnailZoom,
+      tags: dedupeStrings(draft.tags),
+      category: draft.category ? normalizeCategoryValue(draft.category) : "",
+      visibility: draft.visibility,
+    })
 
     setPostTitle(draft.title)
     setPostContent(draft.content)
@@ -1687,6 +1720,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   const clearLocalDraft = useCallback(() => {
     removeLocalDraft()
+    lastLocalDraftFingerprintRef.current = ""
     setLocalDraftSavedAt("")
     setPublishStatus(
       {
@@ -2310,6 +2344,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
             : "비공개"
 
       removeLocalDraft()
+      lastLocalDraftFingerprintRef.current = ""
       setLocalDraftSavedAt("")
 
       setPublishStatus(
@@ -3098,6 +3133,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
     const localDraft = readLocalDraft()
     if (localDraft?.savedAt) {
+      lastLocalDraftFingerprintRef.current = buildLocalDraftFingerprint({
+        title: localDraft.title,
+        content: localDraft.content,
+        summary: localDraft.summary,
+        thumbnailUrl: localDraft.thumbnailUrl,
+        thumbnailFocusX: localDraft.thumbnailFocusX,
+        thumbnailFocusY: localDraft.thumbnailFocusY,
+        thumbnailZoom: localDraft.thumbnailZoom,
+        tags: dedupeStrings(localDraft.tags),
+        category: localDraft.category ? normalizeCategoryValue(localDraft.category) : "",
+        visibility: localDraft.visibility,
+      })
       setLocalDraftSavedAt(localDraft.savedAt)
     }
   }, [])
@@ -3134,6 +3181,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       postCategory.trim().length > 0
 
     if (!hasDraftContent) return
+    if (lastLocalDraftFingerprintRef.current === localDraftFingerprint) return
 
     const timerId = window.setTimeout(() => {
       saveLocalDraft({ silent: true })
@@ -3142,7 +3190,16 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     return () => {
       window.clearTimeout(timerId)
     }
-  }, [postCategory, postContent, postSummary, postTags, postThumbnailUrl, postTitle, saveLocalDraft])
+  }, [
+    localDraftFingerprint,
+    postCategory,
+    postContent,
+    postSummary,
+    postTags,
+    postThumbnailUrl,
+    postTitle,
+    saveLocalDraft,
+  ])
 
   useEffect(() => {
     setKnownTags((prev) =>
@@ -3401,7 +3458,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     void handleUploadThumbnailImage(file)
   }
 
-  const openPublishModal = (actionType: PublishActionType) => {
+  const openPublishModal = useCallback((actionType: PublishActionType) => {
     activateComposeSurface()
     setPublishActionType(actionType)
     setPublishModalNotice({
@@ -3426,7 +3483,13 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     if (isCompactMobileLayout) {
       setMobileComposeStep("publish")
     }
-  }
+  }, [
+    activateComposeSurface,
+    isCompactMobileLayout,
+    isPreviewThumbnailError,
+    publishModalHintByAction,
+    safePreviewThumbnail,
+  ])
 
   const closePublishModal = () => {
     if (
@@ -3931,6 +3994,54 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     !postId.trim() &&
     loadingKey === "postTemp"
   const shouldShowResultPanel = Boolean(loadingKey || result)
+  const handleExitDedicatedEditor = useCallback(() => {
+    void pushRoute(router, dedicatedEditorReturnRoute)
+  }, [dedicatedEditorReturnRoute, router])
+  const dedicatedEditorTopBar = useMemo(
+    () => (
+      <EditorStudioTopBar>
+        <EditorExitAction type="button" onClick={handleExitDedicatedEditor}>
+          ← 나가기
+        </EditorExitAction>
+        <EditorStudioTopBarActions>
+          {composeStatusText ? (
+            <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState>
+          ) : null}
+          <PrimaryButton
+            type="button"
+            disabled={publishActionTriggerDisabled}
+            onClick={() => openPublishModal(editorPrimaryActionType)}
+          >
+            {editorPrimaryActionLabel}
+          </PrimaryButton>
+        </EditorStudioTopBarActions>
+      </EditorStudioTopBar>
+    ),
+    [
+      composeStatusText,
+      composeStatusTone,
+      editorPrimaryActionLabel,
+      editorPrimaryActionType,
+      handleExitDedicatedEditor,
+      openPublishModal,
+      publishActionTriggerDisabled,
+    ]
+  )
+  const dedicatedEditorResultPanel = useMemo(
+    () =>
+      shouldShowResultPanel ? (
+        <EditorStudioResultPanel>
+          <details open={Boolean(loadingKey)}>
+            <summary>
+              <strong>{loadingKey ? "작업 응답 확인 중" : "최근 작업 응답"}</strong>
+              <span>{loadingKey ? `실행 중: ${loadingKey}` : "원본 응답을 확인할 수 있습니다"}</span>
+            </summary>
+            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
+          </details>
+        </EditorStudioResultPanel>
+      ) : null,
+    [loadingKey, result, shouldShowResultPanel]
+  )
 
   if (!sessionMember) {
     return null
@@ -3958,21 +4069,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         style={{ display: "none" }}
       />
 
-      <EditorStudioTopBar>
-        <EditorExitAction type="button" onClick={() => void pushRoute(router, dedicatedEditorReturnRoute)}>
-          ← 나가기
-        </EditorExitAction>
-        <EditorStudioTopBarActions>
-          {composeStatusText ? <EditorStudioSaveState data-tone={composeStatusTone}>{composeStatusText}</EditorStudioSaveState> : null}
-          <PrimaryButton
-            type="button"
-            disabled={publishActionTriggerDisabled}
-            onClick={() => openPublishModal(editorPrimaryActionType)}
-          >
-            {editorPrimaryActionLabel}
-          </PrimaryButton>
-        </EditorStudioTopBarActions>
-      </EditorStudioTopBar>
+      {dedicatedEditorTopBar}
 
       <EditorStudioFrame data-testid="editor-studio-frame">
         <EditorStudioWritingColumn data-testid="editor-writing-column" $compact={isCompactSplitPreview}>
@@ -4048,17 +4145,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         </EditorStudioWritingColumn>
       </EditorStudioFrame>
 
-      {shouldShowResultPanel ? (
-        <EditorStudioResultPanel>
-          <details open={Boolean(loadingKey)}>
-            <summary>
-              <strong>{loadingKey ? "작업 응답 확인 중" : "최근 작업 응답"}</strong>
-              <span>{loadingKey ? `실행 중: ${loadingKey}` : "원본 응답을 확인할 수 있습니다"}</span>
-            </summary>
-            <ResultPanel>{result || "// API 응답 결과가 여기에 표시됩니다."}</ResultPanel>
-          </details>
-        </EditorStudioResultPanel>
-      ) : null}
+      {dedicatedEditorResultPanel}
 
       {isPublishModalOpen && (
         <ModalBackdrop data-variant="drawer" onClick={closePublishModal}>

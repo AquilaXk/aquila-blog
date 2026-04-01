@@ -283,7 +283,9 @@ const LIST_ITEM_SELECTOR =
   "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
 const LIST_CONTAINER_SELECTOR =
   "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"
-const MARKDOWN_COMMIT_DEBOUNCE_MS = 80
+const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
+const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
+const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
 
 const getSlashSearchTerms = (item: BlockInsertCatalogItem) =>
   Array.from(
@@ -759,7 +761,10 @@ const BlockEditorShell = ({
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
   const pendingCommitEditorRef = useRef<TiptapEditor | null>(null)
   const pendingCommitFocusedRef = useRef(false)
+  const markdownCommitIdleHandleRef = useRef<number | null>(null)
+  const markdownCommitIdleModeRef = useRef<"idle" | "timeout" | null>(null)
   const markdownCommitTimerRef = useRef<number | null>(null)
+  const markdownCommitMaxWaitTimerRef = useRef<number | null>(null)
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
@@ -879,13 +884,37 @@ const BlockEditorShell = ({
   }, [cancelBubbleHide])
 
   const cancelPendingMarkdownCommit = useCallback(() => {
+    if (typeof window !== "undefined" && markdownCommitIdleHandleRef.current !== null) {
+      const idleWindow = window as Window & {
+        cancelIdleCallback?: (id: number) => void
+      }
+      if (
+        markdownCommitIdleModeRef.current === "idle" &&
+        typeof idleWindow.cancelIdleCallback === "function"
+      ) {
+        idleWindow.cancelIdleCallback(markdownCommitIdleHandleRef.current)
+      } else {
+        window.clearTimeout(markdownCommitIdleHandleRef.current)
+      }
+      markdownCommitIdleHandleRef.current = null
+      markdownCommitIdleModeRef.current = null
+    }
     if (markdownCommitTimerRef.current !== null && typeof window !== "undefined") {
       window.clearTimeout(markdownCommitTimerRef.current)
       markdownCommitTimerRef.current = null
     }
   }, [])
 
+  const clearPendingMarkdownCommitMaxWait = useCallback(() => {
+    if (markdownCommitMaxWaitTimerRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(markdownCommitMaxWaitTimerRef.current)
+      markdownCommitMaxWaitTimerRef.current = null
+    }
+  }, [])
+
   const flushPendingMarkdownCommit = useCallback(() => {
+    cancelPendingMarkdownCommit()
+    clearPendingMarkdownCommitMaxWait()
     const pendingEditor = pendingCommitEditorRef.current
     if (!pendingEditor) return
 
@@ -899,7 +928,7 @@ const BlockEditorShell = ({
 
     lastCommittedMarkdownRef.current = normalized
     onChange(markdown, { editorFocused: pendingCommitFocusedRef.current })
-  }, [onChange])
+  }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, onChange])
 
   const scheduleMarkdownCommit = useCallback(
     (nextEditor: TiptapEditor) => {
@@ -911,13 +940,45 @@ const BlockEditorShell = ({
         return
       }
 
-      if (markdownCommitTimerRef.current !== null) return
+      cancelPendingMarkdownCommit()
       markdownCommitTimerRef.current = window.setTimeout(() => {
         markdownCommitTimerRef.current = null
-        flushPendingMarkdownCommit()
+
+        const idleWindow = window as Window & {
+          requestIdleCallback?: (
+            callback: IdleRequestCallback,
+            options?: IdleRequestOptions
+          ) => number
+        }
+
+        if (typeof idleWindow.requestIdleCallback === "function") {
+          markdownCommitIdleModeRef.current = "idle"
+          markdownCommitIdleHandleRef.current = idleWindow.requestIdleCallback(
+            () => {
+              markdownCommitIdleHandleRef.current = null
+              markdownCommitIdleModeRef.current = null
+              flushPendingMarkdownCommit()
+            },
+            { timeout: MARKDOWN_COMMIT_IDLE_TIMEOUT_MS }
+          )
+          return
+        }
+
+        markdownCommitIdleModeRef.current = "timeout"
+        markdownCommitIdleHandleRef.current = window.setTimeout(() => {
+          markdownCommitIdleHandleRef.current = null
+          markdownCommitIdleModeRef.current = null
+          flushPendingMarkdownCommit()
+        }, 16)
       }, MARKDOWN_COMMIT_DEBOUNCE_MS)
+
+      if (markdownCommitMaxWaitTimerRef.current !== null) return
+      markdownCommitMaxWaitTimerRef.current = window.setTimeout(() => {
+        markdownCommitMaxWaitTimerRef.current = null
+        flushPendingMarkdownCommit()
+      }, MARKDOWN_COMMIT_MAX_WAIT_MS)
     },
-    [flushPendingMarkdownCommit]
+    [cancelPendingMarkdownCommit, flushPendingMarkdownCommit]
   )
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
@@ -2313,12 +2374,13 @@ const BlockEditorShell = ({
     }
 
     cancelPendingMarkdownCommit()
+    clearPendingMarkdownCommitMaxWait()
     pendingCommitEditorRef.current = null
 
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
     editor.commands.setContent(nextDoc, { emitUpdate: false })
     lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
-  }, [cancelPendingMarkdownCommit, editor, enableMermaidBlocks, value])
+  }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, editor, enableMermaidBlocks, value])
 
   useEffect(
     () => () => {

@@ -45,6 +45,133 @@ groups:
           summary: "API p95 latency is high"
           description: "p95 > 1s for 10m. Check DB/Redis/task queue pressure."
 
+      - alert: AquilaFeedLatencyP95High
+        expr: |
+          (
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              )
+            )
+            and on() (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ) > bool 0.05
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feed API p95 latency is high"
+          description: "feed p95 > 1s for 10m. Check post read cache hit, DB latency, and upstream proxy timing."
+
+      - alert: AquilaFeedLatencyP99High
+        expr: |
+          (
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              )
+            )
+            and on() (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ) > bool 0.05
+            )
+          ) > 2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Feed API p99 latency is high"
+          description: "feed p99 > 2s for 10m. Investigate outlier queries and upstream saturation."
+
+      - alert: AquilaFeedOutlierOver5sRatioHigh
+        expr: |
+          (
+            (
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed",le="+Inf"}[5m]
+                )
+              )
+              -
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_bucket|http_server_request_duration_seconds_bucket",job="back",service="aquila-back",uri="/post/api/v1/posts/feed",le=~"5|5\\.0"}[5m]
+                )
+              )
+            )
+            /
+            clamp_min(
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ),
+              0.001
+            )
+          ) > 0.03
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feed API >5s outlier ratio is high"
+          description: "More than 3% of feed requests exceed 5s for 10m. Verify cache hit ratio, DB plan drift, and timeout budget."
+
+      - alert: AquilaPostReadFeedCacheHitRatioLow
+        expr: |
+          (
+            sum(rate(post_read_cache_result_total{cache=~"post-feed-v4|post-feed-cursor-first-v1",result="hit"}[10m]))
+            /
+            clamp_min(
+              sum(rate(post_read_cache_result_total{cache=~"post-feed-v4|post-feed-cursor-first-v1",result=~"hit|miss"}[10m])),
+              0.001
+            )
+          ) < 0.35
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Post read feed cache hit ratio is low"
+          description: "Feed-related cache hit ratio stayed below 35% for 15m. Check cache key churn, TTL, and purge frequency."
+
+      - alert: AquilaFeedOriginErrorRateHigh
+        expr: |
+          (
+            sum(
+              rate(
+                {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed",status=~"5.."}[5m]
+              )
+            )
+            /
+            clamp_min(
+              sum(
+                rate(
+                  {__name__=~"http_server_requests_seconds_count|http_server_request_duration_seconds_count",job="back",service="aquila-back",uri="/post/api/v1/posts/feed"}[5m]
+                )
+              ),
+              0.001
+            )
+          ) > 0.02
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Feed origin error rate is high"
+          description: "Feed 5xx ratio exceeded 2% for 10m. Check backend exceptions, upstream timeout budget, and rollback criteria."
+
       - alert: AquilaBackScrapeDown
         expr: min(up{job="back",service="aquila-back"}) < 1
         for: 3m

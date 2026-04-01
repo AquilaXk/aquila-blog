@@ -1579,6 +1579,51 @@
         }
       }
     },
+    "/post/api/v1/posts/bootstrap" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getBootstrap",
+        "parameters" : [ {
+          "name" : "tag",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : ""
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 24
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "CREATED_AT",
+            "enum" : [ "CREATED_AT", "CREATED_AT_ASC", "MODIFIED_AT", "MODIFIED_AT_ASC" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PublicPostsBootstrapDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/images/**" : {
       "get" : {
         "tags" : [ "api-v-1-post-image-controller" ],
@@ -4026,6 +4071,20 @@
           },
           "nextCursor" : {
             "type" : "string"
+          }
+        }
+      },
+      "PublicPostsBootstrapDto" : {
+        "type" : "object",
+        "properties" : {
+          "feed" : {
+            "$ref" : "#/components/schemas/CursorFeedPageDto"
+          },
+          "tags" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TagCountDto"
+            }
           }
         }
       },

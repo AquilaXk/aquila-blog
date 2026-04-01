@@ -23,6 +23,11 @@ type CursorPageDto<T> = {
   nextCursor?: string | null
 }
 
+type PostsBootstrapDto = {
+  feed: CursorPageDto<ApiPostDto>
+  tags: ApiTagCountDto[]
+}
+
 type ApiPostDto = {
   id: number
   createdAt: string
@@ -313,6 +318,7 @@ const POSTS_FEED_API_PATH = asOpenApiPath("/post/api/v1/posts/feed")
 const POSTS_FEED_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/feed/cursor")
 const POSTS_EXPLORE_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/explore/cursor")
 const POSTS_TAGS_API_PATH = asOpenApiPath("/post/api/v1/posts/tags")
+const POSTS_BOOTSTRAP_API_PATH = "/post/api/v1/posts/bootstrap"
 const POSTS_ENDPOINT_TRACE_KEY = "posts:runtime-endpoints:v1"
 const POSTS_ENDPOINT_TRACE_MAX = 60
 let postsCache: TPost[] | null = null
@@ -523,6 +529,63 @@ const buildExploreCursorPath = ({
     params.set("cursor", cursor.trim())
   }
   return `${POSTS_EXPLORE_CURSOR_API_PATH}?${params.toString()}`
+}
+
+const buildBootstrapPath = ({
+  tag = "",
+  order = "desc",
+  pageSize = PAGE_SIZE,
+}: {
+  tag?: string
+  order?: "asc" | "desc"
+  pageSize?: number
+}) => {
+  const params = new URLSearchParams()
+  params.set("tag", tag.trim())
+  params.set("sort", toSortParam(order))
+  params.set("pageSize", String(toValidPageSize(pageSize)))
+  return `${POSTS_BOOTSTRAP_API_PATH}?${params.toString()}`
+}
+
+export const getPostsBootstrap = async ({
+  tag = "",
+  order = "desc",
+  pageSize = PAGE_SIZE,
+  signal,
+}: {
+  tag?: string
+  order?: "asc" | "desc"
+  pageSize?: number
+  signal?: AbortSignal
+}): Promise<{
+  posts: TPost[]
+  hasNext: boolean
+  nextCursor: string | null
+  pageSize: number
+  tagCounts: Record<string, number>
+}> => {
+  const response = await apiFetch<PostsBootstrapDto>(
+    (() => {
+      const endpoint = buildBootstrapPath({ tag, order, pageSize })
+      recordRuntimeEndpoint(endpoint, "cursor")
+      return endpoint
+    })(),
+    { signal }
+  )
+
+  const feed = response.feed
+  return {
+    posts: feed.content.map(mapPostDto),
+    hasNext: feed.hasNext === true,
+    nextCursor: typeof feed.nextCursor === "string" ? feed.nextCursor : null,
+    pageSize: Number.isFinite(feed.pageSize) ? Math.max(1, Math.trunc(feed.pageSize)) : toValidPageSize(pageSize),
+    tagCounts: response.tags.reduce<Record<string, number>>((acc, row) => {
+      const normalizedTag = typeof row.tag === "string" ? row.tag.trim() : ""
+      if (!normalizedTag) return acc
+      acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
+      return acc
+    }, {}),
+  }
 }
 
 export const getFeedPosts = async ({

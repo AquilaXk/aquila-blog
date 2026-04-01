@@ -481,6 +481,63 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `홈 bootstrap 조회는 feed와 tags를 함께 반환하고 단일 Cache-Control 정책을 사용한다`() {
+            val response =
+                mvc
+                    .get("/post/api/v1/posts/bootstrap") {
+                        param("pageSize", "24")
+                        param("sort", "CREATED_AT")
+                    }.andExpect {
+                        status { isOk() }
+                        match(handler().handlerType(ApiV1PostController::class.java))
+                        match(handler().methodName("getBootstrap"))
+                        jsonPath("$.feed.content") { isArray() }
+                        jsonPath("$.tags") { isArray() }
+                        header { exists(HttpHeaders.CACHE_CONTROL) }
+                        header { string("X-Cache-Policy", "bootstrap-max20-smax60-swr60") }
+                    }.andReturn()
+                    .response
+
+            val cacheControlHeaders = response.getHeaders(HttpHeaders.CACHE_CONTROL)
+            assertThat(cacheControlHeaders).hasSize(1)
+            assertThat(cacheControlHeaders.single())
+                .contains("public")
+                .contains("s-maxage")
+                .contains("stale-while-revalidate")
+            assertThat(response.getHeader(HttpHeaders.PRAGMA)).isNull()
+            assertThat(response.getHeader(HttpHeaders.EXPIRES)).isNull()
+        }
+
+        @Test
+        fun `홈 bootstrap 조회는 ETag 조건부 요청에 304를 반환한다`() {
+            val etag =
+                requireNotNull(
+                    mvc
+                        .get("/post/api/v1/posts/bootstrap") {
+                            param("pageSize", "24")
+                            param("sort", "CREATED_AT")
+                        }.andExpect {
+                            status { isOk() }
+                            header { exists(HttpHeaders.ETAG) }
+                        }.andReturn()
+                        .response
+                        .getHeader(HttpHeaders.ETAG),
+                )
+
+            assertThat(etag).isNotBlank()
+
+            mvc
+                .get("/post/api/v1/posts/bootstrap") {
+                    param("pageSize", "24")
+                    param("sort", "CREATED_AT")
+                    header(HttpHeaders.IF_NONE_MATCH, etag)
+                }.andExpect {
+                    status { isNotModified() }
+                    header { string(HttpHeaders.ETAG, etag) }
+                }
+        }
+
+        @Test
         fun `탐색 목록 조회는 tags 와 category 메타를 포함한다`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
             val uniqueTitle = "feed-meta-${System.currentTimeMillis()}"

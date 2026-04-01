@@ -60,6 +60,11 @@ class ApiV1PostController(
         val tag: String,
     )
 
+    data class PublicPostsBootstrapDto(
+        val feed: CursorFeedPageDto,
+        val tags: List<TagCountDto>,
+    )
+
     private fun applyPublicReadCacheHeaders(
         response: HttpServletResponse,
         policy: PublicReadCachePolicy,
@@ -299,6 +304,26 @@ class ApiV1PostController(
 
     private fun buildTagsEtagSeed(tags: List<TagCountDto>): String = tags.joinToString(separator = "|") { "${it.tag}:${it.count}" }
 
+    private fun buildBootstrapEtagSeed(
+        pageSize: Int,
+        sort: PostSearchSortType1,
+        tag: String,
+        feed: CursorFeedPageDto,
+        tags: List<TagCountDto>,
+    ): String {
+        val feedSeed =
+            buildCursorFeedEtagSeed(
+                source = if (tag.isBlank()) "bootstrap-feed-cursor" else "bootstrap-explore-cursor",
+                pageSize = pageSize,
+                sort = sort,
+                cursor = null,
+                tag = tag,
+                data = feed,
+            )
+        val tagSeed = buildTagsEtagSeed(tags)
+        return "$feedSeed|tags=$tagSeed"
+    }
+
     /**
      * makePostDtoPage 처리 로직을 수행하고 예외 경로를 함께 다룹니다.
      * 컨트롤러 계층에서 요청 파라미터를 검증하고 서비스 결과를 API 응답 형식으로 변환합니다.
@@ -527,6 +552,64 @@ class ApiV1PostController(
             response = response,
             cachePolicy = TAGS_CACHE_POLICY,
             surrogateKeys = setOf(PostCacheTags.TAGS),
+            etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
+            body = data,
+        )
+    }
+
+    @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
+    fun getBootstrap(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @RequestParam(defaultValue = "") tag: String,
+        @RequestParam(defaultValue = "24") pageSize: Int,
+        @RequestParam(defaultValue = "CREATED_AT") sort: PostSearchSortType1,
+    ): ResponseEntity<PublicPostsBootstrapDto> {
+        val startedAtNanos = System.nanoTime()
+        val normalizedTag = normalizeExploreTag(tag)
+        val validPageSize = pageSize.coerceIn(1, 30)
+        val validSort = normalizeCursorSort(sort)
+        val feed =
+            if (normalizedTag.isBlank()) {
+                postPublicReadQueryUseCase.getPublicFeedByCursor(cursor = null, pageSize = validPageSize, sort = validSort)
+            } else {
+                postPublicReadQueryUseCase.getPublicExploreByCursor(
+                    cursor = null,
+                    pageSize = validPageSize,
+                    tag = normalizedTag,
+                    sort = validSort,
+                )
+            }
+        val tags = postPublicReadQueryUseCase.getPublicTagCounts()
+        val data = PublicPostsBootstrapDto(feed = feed, tags = tags)
+        val etagSeed =
+            buildBootstrapEtagSeed(
+                pageSize = validPageSize,
+                sort = validSort,
+                tag = normalizedTag,
+                feed = feed,
+                tags = tags,
+            )
+
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            cachePolicy = BOOTSTRAP_CACHE_POLICY,
+            surrogateKeys =
+                buildSet {
+                    add(PostCacheTags.LIST)
+                    add(PostCacheTags.FEED_CURSOR)
+                    add(PostCacheTags.TAGS)
+                    if (normalizedTag.isBlank()) {
+                        add(PostCacheTags.FEED)
+                    } else {
+                        add(PostCacheTags.EXPLORE)
+                        add(PostCacheTags.EXPLORE_CURSOR)
+                        add(PostCacheTags.byTag(normalizedTag))
+                    }
+                },
             etagSeed = etagSeed,
             startedAtNanos = startedAtNanos,
             body = data,
@@ -987,6 +1070,13 @@ class ApiV1PostController(
                 maxAgeSeconds = 60,
                 sharedMaxAgeSeconds = 300,
                 staleWhileRevalidateSeconds = 300,
+            )
+        private val BOOTSTRAP_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "bootstrap-max20-smax60-swr60",
+                maxAgeSeconds = 20,
+                sharedMaxAgeSeconds = 60,
+                staleWhileRevalidateSeconds = 60,
             )
         private val DETAIL_CACHE_POLICY =
             PublicReadCachePolicy(

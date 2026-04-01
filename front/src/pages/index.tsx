@@ -1,11 +1,7 @@
 import Feed from "src/routes/Feed"
 import { CONFIG } from "../../site.config"
 import { NextPageWithLayout } from "../types"
-import {
-  getExplorePostsCursorPage,
-  getFeedPostsCursorPage,
-  getTagCounts,
-} from "../apis/backend/posts"
+import { getPostsBootstrap } from "../apis/backend/posts"
 import MetaConfig from "src/components/MetaConfig"
 import { createQueryClient } from "src/libs/react-query"
 import { queryKey } from "src/constants/queryKey"
@@ -17,57 +13,60 @@ import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
 import type { TPost } from "src/types"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 
+const CRAWLER_USER_AGENT_REGEX =
+  /bot|crawler|spider|crawling|googlebot|bingbot|yandexbot|duckduckbot|applebot|baiduspider|facebookexternalhit|twitterbot|slurp|ia_archiver/i
+
+const isCrawlerRequest = (userAgent: string | undefined) =>
+  typeof userAgent === "string" && CRAWLER_USER_AGENT_REGEX.test(userAgent)
+
 export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
   const queryClient = createQueryClient()
   const postsQueryTagRaw = typeof query.tag === "string" ? query.tag : ""
   const currentTag = postsQueryTagRaw.trim()
+  const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined
+  const crawlerRequest = isCrawlerRequest(userAgent)
 
-  const postsPromise = (currentTag
-    ? getExplorePostsCursorPage({
-        tag: currentTag,
-        pageSize: FEED_EXPLORE_PAGE_SIZE,
-      })
-    : getFeedPostsCursorPage({
-        pageSize: FEED_EXPLORE_PAGE_SIZE,
-      }))
-    .then((cursorPage) => {
-      const hasNext = cursorPage.hasNext ?? false
-      const resolvedTotalCount = hasNext ? null : cursorPage.posts.length
+  const bootstrapPromise = getPostsBootstrap({
+    tag: currentTag,
+    pageSize: FEED_EXPLORE_PAGE_SIZE,
+  })
+    .then((bootstrap) => {
+      const hasNext = bootstrap.hasNext
+      const resolvedTotalCount = hasNext ? null : bootstrap.posts.length
 
       return {
-        posts: cursorPage.posts,
+        posts: bootstrap.posts,
+        tagCounts: bootstrap.tagCounts,
         totalCount: resolvedTotalCount,
-        initialPageTotalCount: resolvedTotalCount ?? cursorPage.posts.length,
+        initialPageTotalCount: resolvedTotalCount ?? bootstrap.posts.length,
         hasNext,
-        nextCursor: cursorPage.nextCursor ?? null,
+        nextCursor: bootstrap.nextCursor ?? null,
         postsLoaded: true,
+        tagsLoaded: true,
       }
     })
     .catch(() => ({
       posts: [] as TPost[],
+      tagCounts: {} as Record<string, number>,
       totalCount: null as number | null,
       initialPageTotalCount: 0,
       hasNext: false,
       nextCursor: null as string | null,
       postsLoaded: false,
-    }))
-  const tagsPromise = getTagCounts()
-    .then((tagCounts) => ({
-      tagCounts,
-      tagsLoaded: true,
-    }))
-    .catch(() => ({
-      tagCounts: {} as Record<string, number>,
       tagsLoaded: false,
     }))
-  const [initialAdminProfile, authMember, postsResult, tagsResult] = await Promise.all([
-    fetchServerAdminProfile(req),
+
+  const adminProfilePromise = crawlerRequest
+    ? fetchServerAdminProfile(req, { timeoutMs: 1_500 })
+    : Promise.resolve<AdminProfile | null>(null)
+
+  const [initialAdminProfile, authMember, bootstrapResult] = await Promise.all([
+    adminProfilePromise,
     hydrateServerAuthSession(queryClient, req),
-    postsPromise,
-    tagsPromise,
+    bootstrapPromise,
   ])
-  const { posts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded } = postsResult
-  const { tagCounts, tagsLoaded } = tagsResult
+  const { posts, tagCounts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded, tagsLoaded } =
+    bootstrapResult
 
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   if (tagsLoaded) {
@@ -108,7 +107,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.
   res.setHeader(
     "Cache-Control",
-    authMember === null && initialAdminProfile && postsLoaded
+    authMember === null && postsLoaded
       ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )

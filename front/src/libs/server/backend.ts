@@ -38,11 +38,14 @@ export const resolveServerApiBaseUrl = (req: IncomingMessage): string => {
   const internal = process.env.BACKEND_INTERNAL_URL
   if (internal) return internal.replace(/\/+$/, "")
 
-  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
-  if (publicUrl) return publicUrl.replace(/\/+$/, "")
-
   if (process.env.NODE_ENV === "production") {
-    throw new Error("BACKEND_INTERNAL_URL or NEXT_PUBLIC_BACKEND_URL is required in production.")
+    // 운영 SSR은 내부 API 경로를 강제한다.
+    throw new Error("BACKEND_INTERNAL_URL is required for server-side API calls in production.")
+  }
+
+  const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+  if (publicUrl) {
+    return publicUrl.replace(/\/+$/, "")
   }
 
   return "http://localhost:8080"

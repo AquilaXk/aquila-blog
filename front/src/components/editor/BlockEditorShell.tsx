@@ -139,6 +139,10 @@ type SlashKeyboardEventLike = {
   shiftKey?: boolean
   isComposing?: boolean
   preventDefault: () => void
+  stopPropagation?: () => void
+  nativeEvent?: {
+    stopImmediatePropagation?: () => void
+  }
 }
 
 type ToolbarAction = {
@@ -697,6 +701,7 @@ const BlockEditorShell = ({
   const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
   const selectedBlockNodeIndexRef = useRef<number | null>(null)
   const keyboardBlockSelectionStickyRef = useRef(false)
+  const consumedEditorKeyRef = useRef<{ key: string; token: symbol } | null>(null)
   const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
     visible: false,
     blockIndex: 0,
@@ -1497,6 +1502,16 @@ const BlockEditorShell = ({
     [replaceEditorDoc]
   )
 
+  const markEditorKeyAsConsumed = useCallback((key: string) => {
+    const token = Symbol(key)
+    consumedEditorKeyRef.current = { key, token }
+    queueMicrotask(() => {
+      if (consumedEditorKeyRef.current?.token === token) {
+        consumedEditorKeyRef.current = null
+      }
+    })
+  }, [])
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -1557,6 +1572,13 @@ const BlockEditorShell = ({
       handleKeyDown: (_, event) => {
         const currentEditor = editorRef.current
         if (!currentEditor) return false
+        const consumedKey = consumedEditorKeyRef.current
+        if (consumedKey && consumedKey.key === event.key) {
+          consumedEditorKeyRef.current = null
+          event.preventDefault()
+          event.stopPropagation()
+          return true
+        }
         if (event.defaultPrevented) return false
         const normalizedKey = event.key.toLowerCase()
         const hasPrimaryModifier = isPrimaryModifierPressed(event)
@@ -3269,18 +3291,30 @@ const BlockEditorShell = ({
     })),
   ]
 
+  const stopSlashKeyboardEvent = (event: SlashKeyboardEventLike) => {
+    event.preventDefault()
+    event.stopPropagation?.()
+
+    if ("nativeEvent" in event && event.nativeEvent) {
+      event.nativeEvent.stopImmediatePropagation?.()
+      return
+    }
+
+    ;(event as KeyboardEvent).stopImmediatePropagation?.()
+  }
+
   const handleSlashMenuKeyboard = useCallback((event: SlashKeyboardEventLike) => {
     if (event.isComposing) return
 
     if (!flatSlashEntries.length && event.key === "Escape") {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       closeSlashMenu(true)
       return
     }
 
     if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey)) {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex((prev) => {
         if (!flatSlashEntries.length) return 0
@@ -3290,7 +3324,7 @@ const BlockEditorShell = ({
     }
 
     if (event.key === "ArrowUp" || (event.key === "Tab" && event.shiftKey)) {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex((prev) => {
         if (!flatSlashEntries.length) return 0
@@ -3300,14 +3334,14 @@ const BlockEditorShell = ({
     }
 
     if (event.key === "Home") {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex(0)
       return
     }
 
     if (event.key === "End") {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       setSelectedSlashIndex(Math.max(flatSlashEntries.length - 1, 0))
       return
@@ -3316,13 +3350,14 @@ const BlockEditorShell = ({
     if (event.key === "Enter") {
       const selectedEntry = flatSlashEntries[selectedSlashIndex]
       if (!selectedEntry || selectedEntry.item.disabled) return
-      event.preventDefault()
+      markEditorKeyAsConsumed("Enter")
+      stopSlashKeyboardEvent(event)
       void executeSlashCatalogAction(selectedEntry.item)
       return
     }
 
     if (event.key === "Backspace" && !slashQuery && slashMenuState && editor) {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       editor.chain().focus().deleteRange({ from: slashMenuState.from, to: slashMenuState.to }).run()
       closeSlashMenu()
@@ -3330,11 +3365,11 @@ const BlockEditorShell = ({
     }
 
     if (event.key === "Escape") {
-      event.preventDefault()
+      stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       closeSlashMenu(true)
     }
-  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, selectedSlashIndex, slashMenuState, slashQuery])
+  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, markEditorKeyAsConsumed, selectedSlashIndex, slashMenuState, slashQuery])
 
   const handleSlashActionPointerMove = useCallback((flatIndex: number) => {
     setSlashInteractionMode((prev) => (prev === "pointer" ? prev : "pointer"))

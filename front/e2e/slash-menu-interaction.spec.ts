@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 
+const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
+
 test.describe("block editor slash menu interaction", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -10,7 +12,7 @@ test.describe("block editor slash menu interaction", () => {
   test("slash query는 caret 근처에서 필터링되고 Tab/Shift+Tab으로 이동한 뒤 Enter로 삽입된다", async ({
     page,
   }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -41,7 +43,7 @@ test.describe("block editor slash menu interaction", () => {
   })
 
   test("slash로 제목 블록을 넣은 직후 입력은 아래 빈 문단이 아니라 제목 블록에 이어진다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -55,10 +57,29 @@ test.describe("block editor slash menu interaction", () => {
     await expect(page.getByTestId("qa-markdown-output")).toContainText("# A제목")
   })
 
+  test("slash로 목록 블록을 넣은 직후 입력은 다다음 줄이 아니라 첫 항목에 이어진다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/목록")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("A")
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("- A항목")
+    await expect
+      .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
+      .not.toContain("\n\nA")
+    await expect
+      .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
+      .not.toContain("- 항목\n\n")
+  })
+
   test("빈 문서 첫 slash menu는 문맥 보너스로 제목 블록을 먼저 추천하고 한글 query도 검색된다", async ({
     page,
   }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -76,7 +97,7 @@ test.describe("block editor slash menu interaction", () => {
   })
 
   test("빈 slash 상태에서 Backspace를 누르면 slash token이 제거되고 메뉴가 닫힌다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -91,7 +112,7 @@ test.describe("block editor slash menu interaction", () => {
   })
 
   test("최근 사용 블록은 다음 slash menu에서 상단 섹션으로 다시 노출된다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -108,7 +129,7 @@ test.describe("block editor slash menu interaction", () => {
   })
 
   test("키보드 선택 이후 실제 hover가 발생하면 active 항목이 pointer 기준으로 바뀐다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -122,7 +143,7 @@ test.describe("block editor slash menu interaction", () => {
   })
 
   test("파일 블록은 업로드 결과 기반 첨부 카드로 삽입된다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const attachmentInput = page.getByTestId("editor-attachment-file-input")
     await attachmentInput.setInputFiles({
@@ -137,7 +158,7 @@ test.describe("block editor slash menu interaction", () => {
 
   test("task item 은 drag reorder 로 순서를 바꿀 수 있다", async ({ page }) => {
     const seed = encodeURIComponent("- [ ] 첫째\\n- [ ] 둘째\\n- [ ] 셋째")
-    await page.goto(`/_qa/block-editor-slash?seed=${seed}`)
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
 
     const taskItems = page.locator("li[data-task-item='true']")
     await expect(taskItems).toHaveCount(3)

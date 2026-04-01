@@ -102,6 +102,7 @@ class ApiRuntimeBoundaryFilter(
             listOf(
                 Regex("^/post/api/v1/posts/feed$"),
                 Regex("^/post/api/v1/posts/feed/cursor$"),
+                Regex("^/post/api/v1/posts/bootstrap$"),
                 Regex("^/post/api/v1/posts/explore$"),
                 Regex("^/post/api/v1/posts/explore/cursor$"),
                 Regex("^/post/api/v1/posts/search$"),

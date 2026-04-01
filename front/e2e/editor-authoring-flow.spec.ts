@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 
+const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
+
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -11,7 +13,7 @@ test.describe("block editor authoring flow", () => {
     page,
   }) => {
     test.slow()
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -75,7 +77,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("블록 핸들 + 메뉴 삽입은 hover 블록 기준을 유지한다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -107,7 +109,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("텍스트 블록에서 Tab은 부분 선택이 아니라 블록 선택으로 승격된다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -131,7 +133,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("블록 드래그 시 source/destination 피드백이 동시에 보인다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
@@ -164,7 +166,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("table mode에서는 block rail이 숨고 table handle/menu가 유지된다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
 
@@ -185,7 +187,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("table QA actions로 열/행 추가와 삭제가 round-trip 된다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstCell = page.locator("table th, table td").first()
@@ -206,7 +208,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("table row resize handle은 drag 후 row height를 유지한다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstHeaderCell = page.locator("table th").first()
@@ -227,7 +229,7 @@ test.describe("block editor authoring flow", () => {
   })
 
   test("table column resize handle은 drag 후 column width 메타를 유지한다", async ({ page }) => {
-    await page.goto("/_qa/block-editor-slash")
+    await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstHeaderCell = page.locator("table th").first()

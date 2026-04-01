@@ -3,6 +3,12 @@ import { useRouter } from "next/router"
 import type { GetServerSideProps, NextPage } from "next"
 import { useEffect, useRef, useState } from "react"
 import type { BlockEditorQaActions } from "src/components/editor/BlockEditorShell"
+import type { AuthMember } from "src/hooks/useAuthSession"
+import { queryKey } from "src/constants/queryKey"
+import { createQueryClient } from "src/libs/react-query"
+import type { AdminPageProps } from "src/libs/server/adminPage"
+import { dehydrate } from "@tanstack/react-query"
+import { EditorStudioPage } from "src/routes/Admin/EditorStudioPage"
 
 const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEditorShell"), {
   ssr: false,
@@ -23,6 +29,18 @@ const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEd
 
 type QaBlockEditorSlashPageProps = {
   enabled: boolean
+  surface: "writer" | "engine"
+} & AdminPageProps
+
+const QA_MOCK_MEMBER: AuthMember = {
+  id: 0,
+  username: "qa-engine",
+  nickname: "qa-engine",
+  isAdmin: true,
+  profileImageUrl: "",
+  profileImageDirectUrl: "",
+  profileRole: "",
+  profileBio: "",
 }
 
 export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps> = async (context) => {
@@ -38,9 +56,18 @@ export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps>
     return { notFound: true }
   }
 
+  const rawSurface = typeof context.query.surface === "string" ? context.query.surface.trim().toLowerCase() : ""
+  const surface: QaBlockEditorSlashPageProps["surface"] = rawSurface === "engine" ? "engine" : "writer"
+  const queryClient = createQueryClient()
+  queryClient.setQueryData(queryKey.authMe(), QA_MOCK_MEMBER)
+  queryClient.setQueryData(queryKey.authMeProbe(), true)
+
   return {
     props: {
       enabled: true,
+      surface,
+      initialMember: QA_MOCK_MEMBER,
+      dehydratedState: dehydrate(queryClient),
     },
   }
 }
@@ -48,7 +75,7 @@ export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps>
 const QA_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 
-const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
+const QaEngineSurface = () => {
   const router = useRouter()
   const [markdown, setMarkdown] = useState("")
   const qaActionsRef = useRef<BlockEditorQaActions | null>(null)
@@ -186,6 +213,14 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = () => {
       </section>
     </main>
   )
+}
+
+const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = (props) => {
+  if (props.surface === "writer") {
+    return <EditorStudioPage {...props} />
+  }
+
+  return <QaEngineSurface />
 }
 
 export default QaBlockEditorSlashPage

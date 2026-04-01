@@ -102,6 +102,13 @@ class PostRepositoryAdapter(
             query.sortAscending,
         )
 
+    override fun findPublicByAuthorExceptPost(query: PostRepositoryPort.RelatedAuthorQuery): List<Post> =
+        postRepository.findPublicByAuthorExceptPost(
+            query.authorId,
+            query.excludePostId,
+            query.limit,
+        )
+
     override fun findPublicDetailById(id: Long): Post? = postRepository.findPublicDetailById(id)
 
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? = postRepository.findPublicDetailContentById(id)

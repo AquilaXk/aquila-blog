@@ -18,6 +18,11 @@ import { replaceShallowRoutePreservingScroll } from "src/libs/router"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
 import { type ExplorePostsPage } from "src/apis/backend/posts"
+import {
+  normalizeKeywordQuery,
+  normalizeOptionalTagQuery,
+  normalizeTagQuery,
+} from "src/libs/query/normalize"
 import type { TPost } from "src/types"
 import {
   FEED_TAG_RAIL_DESKTOP_MIN_PX,
@@ -89,7 +94,7 @@ type IdleCallbackDeadlineLike = {
 }
 
 const getFeedExplorerRestoreKey = (tag: string, pageSize: number, order: "asc" | "desc") =>
-  `${FEED_EXPLORER_RESTORE_KEY_PREFIX}:tag=${encodeURIComponent(tag)}:size=${pageSize}:order=${order}`
+  `${FEED_EXPLORER_RESTORE_KEY_PREFIX}:tag=${encodeURIComponent(normalizeTagQuery(tag))}:size=${pageSize}:order=${order}`
 
 const getFeedExplorerSnapshotKey = (restoreKey: string) =>
   `${restoreKey}${FEED_EXPLORER_SNAPSHOT_SUFFIX}`
@@ -295,8 +300,8 @@ const toFeedExplorerInfiniteQueryKey = ({
   pageSize: number
   order: "asc" | "desc"
 }) => {
-  const normalizedKw = kw.trim()
-  const normalizedTag = tag.trim()
+  const normalizedKw = normalizeKeywordQuery(kw)
+  const normalizedTag = normalizeTagQuery(tag)
   const searchMode = normalizedKw.length > 0 && !normalizedTag
   const feedMode = normalizedKw.length === 0 && !normalizedTag
 
@@ -330,8 +335,8 @@ const parseFeedExplorerRestoreState = (raw: string | null): FeedExplorerRestoreS
     const parsed = JSON.parse(raw) as Partial<FeedExplorerRestoreState>
     if (!parsed || typeof parsed !== "object") return null
 
-    const q = typeof parsed.q === "string" ? parsed.q : ""
-    const tag = typeof parsed.tag === "string" ? parsed.tag : ""
+    const q = typeof parsed.q === "string" ? normalizeKeywordQuery(parsed.q) : ""
+    const tag = typeof parsed.tag === "string" ? normalizeTagQuery(parsed.tag) : ""
     const scrollY =
       typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)
         ? Math.max(0, Math.trunc(parsed.scrollY))
@@ -359,7 +364,7 @@ const parseFeedExplorerRestoreState = (raw: string | null): FeedExplorerRestoreS
 }
 
 const getSearchDebounceMs = (value: string) => {
-  const trimmedLength = value.trim().length
+  const trimmedLength = normalizeKeywordQuery(value).length
   if (trimmedLength === 0) return 0
   if (trimmedLength <= 2) return 120
   if (trimmedLength <= 5) return 180
@@ -403,8 +408,9 @@ const FeedExplorer = () => {
     loadedPagesCount: 1,
   })
 
-  const currentTag =
+  const currentTag = normalizeOptionalTagQuery(
     typeof router.query.tag === "string" ? router.query.tag : undefined
+  )
   const restoreStorageKey = useMemo(
     () => getFeedExplorerRestoreKey(currentTag || "", FEED_EXPLORE_PAGE_SIZE, FEED_EXPLORER_ORDER),
     [currentTag]
@@ -414,7 +420,7 @@ const FeedExplorer = () => {
     [restoreStorageKey]
   )
   const debouncedQ = useDebouncedValue(q, isComposing)
-  const normalizedQuery = debouncedQ.trim()
+  const normalizedQuery = normalizeKeywordQuery(debouncedQ)
   const {
     pinnedPosts,
     regularPosts,
@@ -472,7 +478,7 @@ const FeedExplorer = () => {
       resolveRestorePageCap(),
       Math.max(1, restored.loadedPages)
     )
-    if (restored.q.trim().length > 0) {
+    if (restored.q.length > 0) {
       setQ(restored.q)
     }
 
@@ -494,7 +500,7 @@ const FeedExplorer = () => {
 
     const activeTag = currentTag || ""
     if (restored.tag !== activeTag) return
-    if (restored.q.trim() !== normalizedQuery) return
+    if (restored.q !== normalizedQuery) return
 
     const restoreQueryKey = toFeedExplorerInfiniteQueryKey({
       kw: normalizedQuery,
@@ -526,7 +532,7 @@ const FeedExplorer = () => {
 
     const activeTag = currentTag || ""
     if (restored.tag !== activeTag) return
-    if (restored.q.trim() !== normalizedQuery) return
+    if (restored.q !== normalizedQuery) return
 
     const restoreQueryKey = toFeedExplorerInfiniteQueryKey({
       kw: normalizedQuery,
@@ -549,15 +555,17 @@ const FeedExplorer = () => {
     if (typeof window === "undefined") return
 
     const snapshot = restoreSnapshotRef.current
+    const normalizedSnapshotTag = normalizeTagQuery(snapshot.tag)
+    const normalizedSnapshotQuery = normalizeKeywordQuery(snapshot.q)
     const restoreKey = getFeedExplorerRestoreKey(
-      snapshot.tag,
+      normalizedSnapshotTag,
       FEED_EXPLORE_PAGE_SIZE,
       FEED_EXPLORER_ORDER
     )
     const snapshotKey = getFeedExplorerSnapshotKey(restoreKey)
     const state: FeedExplorerRestoreState = {
-      q: snapshot.q,
-      tag: snapshot.tag,
+      q: normalizedSnapshotQuery,
+      tag: normalizedSnapshotTag,
       scrollY: Math.max(0, Math.trunc(window.scrollY || 0)),
       loadedPages: Math.max(1, snapshot.loadedPagesCount),
       savedAt: Date.now(),
@@ -567,8 +575,8 @@ const FeedExplorer = () => {
       window.sessionStorage.setItem(restoreKey, JSON.stringify(state))
 
       const feedQueryKey = toFeedExplorerInfiniteQueryKey({
-        kw: snapshot.q,
-        tag: snapshot.tag,
+        kw: normalizedSnapshotQuery,
+        tag: normalizedSnapshotTag,
         pageSize: FEED_EXPLORE_PAGE_SIZE,
         order: FEED_EXPLORER_ORDER,
       })

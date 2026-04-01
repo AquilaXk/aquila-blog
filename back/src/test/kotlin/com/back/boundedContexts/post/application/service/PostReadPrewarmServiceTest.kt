@@ -120,6 +120,12 @@ class PostReadPrewarmServiceTest {
             )
         }
 
+        override fun getPublicRelatedByAuthor(
+            authorId: Long,
+            excludePostId: Long?,
+            limit: Int,
+        ): List<FeedPostDto> = emptyList()
+
         override fun getPublicTagCounts(): List<TagCountDto> {
             if (failTagCounts) throw IllegalStateException("tag fail")
             return emptyList()

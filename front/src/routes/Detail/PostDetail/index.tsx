@@ -9,12 +9,12 @@ import styled from "@emotion/styled"
 import usePostQuery from "src/hooks/usePostQuery"
 import useAuthSession from "src/hooks/useAuthSession"
 import { ApiError, apiFetch } from "src/apis/backend/client"
-import { getExplorePostsPage, getFeedPostsPage } from "src/apis/backend/posts"
+import { getExplorePostsPage, getRelatedPostsByAuthor } from "src/apis/backend/posts"
 import { queryKey } from "src/constants/queryKey"
 import { pushRoute, replaceRoute, toLoginPath } from "src/libs/router"
 import { formatDate } from "src/libs/utils"
 import { toCanonicalPostPath } from "src/libs/utils/postPath"
-import { PostDetail as PostDetailType, TPost, TPostComment } from "src/types"
+import { PostDetail as PostDetailType, TPostComment } from "src/types"
 import DeferredCommentBox from "./DeferredCommentBox"
 import AppIcon from "src/components/icons/AppIcon"
 import { extractLeadingSummaryBlock, normalizeCardSummary } from "src/libs/postSummary"
@@ -46,8 +46,6 @@ const RELATED_SKELETON_COUNT = 3
 
 const TOC_SELECTOR = ".aq-markdown h2, .aq-markdown h3, .aq-markdown h4"
 const RELATED_POSTS_LIMIT = 4
-const RELATED_AUTHOR_FETCH_PAGE_SIZE = 30
-const RELATED_AUTHOR_FETCH_MAX_PAGES = 3
 const RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1366
 const LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX = 1201
 const DETAIL_RAIL_GAP_FROM_HEADER_PX = 20
@@ -137,6 +135,75 @@ const isSameToc = (left: TocItem[], right: TocItem[]) =>
     return target && item.id === target.id && item.text === target.text && item.level === target.level
   })
 
+const createRafScheduler = (callback: () => void) => {
+  let rafId: number | null = null
+
+  const schedule = () => {
+    if (rafId !== null) return
+    rafId = window.requestAnimationFrame(() => {
+      rafId = null
+      callback()
+    })
+  }
+
+  const cancel = () => {
+    if (rafId === null) return
+    window.cancelAnimationFrame(rafId)
+    rafId = null
+  }
+
+  return { schedule, cancel }
+}
+
+const createObserverRegistry = () => {
+  const cleanups: Array<() => void> = []
+
+  const add = (cleanup: () => void) => {
+    cleanups.push(cleanup)
+  }
+
+  const addWindowEvent = (
+    type: string,
+    handler: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean
+  ) => {
+    window.addEventListener(type, handler, options)
+    add(() => window.removeEventListener(type, handler, options))
+  }
+
+  const addIntersectionObserver = (
+    targets: HTMLElement[],
+    callback: IntersectionObserverCallback,
+    options?: IntersectionObserverInit
+  ) => {
+    if (!targets.length || typeof IntersectionObserver === "undefined") return
+    const observer = new IntersectionObserver(callback, options)
+    targets.forEach((target) => observer.observe(target))
+    add(() => observer.disconnect())
+  }
+
+  const addResizeObserver = (targets: HTMLElement[], callback: ResizeObserverCallback) => {
+    if (!targets.length || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(callback)
+    targets.forEach((target) => observer.observe(target))
+    add(() => observer.disconnect())
+  }
+
+  const cleanup = () => {
+    for (const clear of cleanups.splice(0, cleanups.length)) {
+      clear()
+    }
+  }
+
+  return {
+    add,
+    addWindowEvent,
+    addIntersectionObserver,
+    addResizeObserver,
+    cleanup,
+  }
+}
+
 const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   const { post: data } = usePostQuery()
   const router = useRouter()
@@ -168,6 +235,12 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     hitCount: data?.hitCount ?? 0,
     actorHasLiked: data?.actorHasLiked ?? false,
   }))
+  const visibleTocItemsRef = useRef<TocItem[]>([])
+  const showFloatingLikeRef = useRef(false)
+  const showStickyTocRef = useRef(false)
+  const commentsRailActiveRef = useRef(false)
+  const leftHybridRailActiveRef = useRef(false)
+  const rightHybridRailActiveRef = useRef(false)
 
   const loginHref = useMemo(() => {
     const next = router.asPath || toCanonicalPostPath(postId)
@@ -235,46 +308,17 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   })
 
   const relatedByAuthorQuery = useQuery({
-    queryKey: queryKey.postsExplore({
-      kw: `author:${authorId || "none"}`,
-      tag: undefined,
-      order: "desc",
-      page: 1,
-      pageSize: RELATED_AUTHOR_FETCH_PAGE_SIZE,
+    queryKey: queryKey.postsRelatedByAuthor({
+      authorId: authorId || "none",
+      excludePostId: data?.id ? String(data.id) : undefined,
+      limit: RELATED_POSTS_LIMIT,
     }),
-    queryFn: async () => {
-      const currentPostId = String(data?.id || "")
-      const authorIdValue = String(authorId || "")
-      const dedupe = new Set<string>()
-      const collected: TPost[] = []
-
-      for (let page = 1; page <= RELATED_AUTHOR_FETCH_MAX_PAGES; page += 1) {
-        const pageResult = await getFeedPostsPage({
-          order: "desc",
-          page,
-          pageSize: RELATED_AUTHOR_FETCH_PAGE_SIZE,
-        })
-
-        for (const post of pageResult.posts) {
-          const postAuthorId = String(post.author?.[0]?.id || "")
-          if (!postAuthorId || postAuthorId !== authorIdValue) continue
-          const postId = String(post.id || "")
-          if (!postId || postId === currentPostId || dedupe.has(postId)) continue
-
-          dedupe.add(postId)
-          collected.push(post)
-
-          if (collected.length >= RELATED_POSTS_LIMIT) {
-            return collected
-          }
-        }
-
-        const reachedLastPage = pageResult.pageNumber * pageResult.pageSize >= pageResult.totalCount
-        if (reachedLastPage) break
-      }
-
-      return collected
-    },
+    queryFn: () =>
+      getRelatedPostsByAuthor({
+        authorId,
+        excludePostId: data?.id ? String(data.id) : undefined,
+        limit: RELATED_POSTS_LIMIT,
+      }),
     enabled: Boolean(authorId && data?.id),
     staleTime: 300_000,
     retry: 1,
@@ -287,12 +331,33 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       .slice(0, RELATED_POSTS_LIMIT)
   }, [data?.id, relatedByTagQuery.data?.posts])
 
-  const relatedByAuthorPosts = useMemo(
-    () => (relatedByAuthorQuery.data || []).slice(0, RELATED_POSTS_LIMIT),
-    [relatedByAuthorQuery.data]
-  )
+  const relatedByAuthorPosts = useMemo(() => relatedByAuthorQuery.data || [], [relatedByAuthorQuery.data])
   const showRelatedTagSkeleton = Boolean(data?.type[0] === "Post" && relatedTag && relatedByTagQuery.isPending)
   const showRelatedAuthorSkeleton = Boolean(data?.type[0] === "Post" && authorId && relatedByAuthorQuery.isPending)
+
+  useEffect(() => {
+    visibleTocItemsRef.current = visibleTocItems
+  }, [visibleTocItems])
+
+  useEffect(() => {
+    showFloatingLikeRef.current = showFloatingLike
+  }, [showFloatingLike])
+
+  useEffect(() => {
+    showStickyTocRef.current = showStickyToc
+  }, [showStickyToc])
+
+  useEffect(() => {
+    commentsRailActiveRef.current = commentsRailActive
+  }, [commentsRailActive])
+
+  useEffect(() => {
+    leftHybridRailActiveRef.current = leftHybridRailActive
+  }, [leftHybridRailActive])
+
+  useEffect(() => {
+    rightHybridRailActiveRef.current = rightHybridRailActive
+  }, [rightHybridRailActive])
 
   useEffect(() => {
     if (!data) return
@@ -347,121 +412,11 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
   }, [data?.id, renderedContent])
 
   useEffect(() => {
-    if (!tocItems.length || !visibleTocItems.length) return
-
-    const headingNodes = visibleTocItems
-      .map((item) => document.getElementById(item.id))
-      .filter((node): node is HTMLElement => Boolean(node))
-    if (!headingNodes.length) return
-
-    const ratioMap = new Map<string, number>()
-    const visibleIdSet = new Set(visibleTocItems.map((item) => item.id))
-    let rafId: number | null = null
-
-    const resolveActiveByRatio = () => {
-      const anchorTop = resolveRailTopOffset() + 12
-      const candidates = visibleTocItems.map((item) => {
-        const node = document.getElementById(item.id)
-        const top = node ? node.getBoundingClientRect().top : Number.POSITIVE_INFINITY
-        const ratio = ratioMap.get(item.id) ?? 0
-        return { id: item.id, ratio, top }
-      })
-
-      const intersecting = candidates
-        .filter((candidate) => candidate.ratio > 0.04 && Number.isFinite(candidate.top))
-        .sort((a, b) => {
-          if (b.ratio !== a.ratio) return b.ratio - a.ratio
-          return Math.abs(a.top - anchorTop) - Math.abs(b.top - anchorTop)
-        })
-
-      if (intersecting.length > 0) {
-        return intersecting[0].id
-      }
-
-      const passed = candidates
-        .filter((candidate) => Number.isFinite(candidate.top) && candidate.top <= anchorTop)
-        .sort((a, b) => a.top - b.top)
-      if (passed.length > 0) {
-        return passed[passed.length - 1].id
-      }
-
-      return visibleTocItems[0]?.id || ""
-    }
-
-    const scheduleActiveSync = () => {
-      if (rafId !== null) return
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null
-        const nextId = resolveActiveByRatio()
-        if (!visibleIdSet.has(nextId)) return
-        setActiveTocId((prev) => (prev === nextId ? prev : nextId))
-      })
-    }
-
-    const thresholds = [0, 0.08, 0.2, 0.36, 0.5, 0.65, 0.8, 1]
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).id
-          if (!id || !visibleIdSet.has(id)) continue
-          ratioMap.set(id, entry.isIntersecting ? entry.intersectionRatio : 0)
-        }
-        scheduleActiveSync()
-      },
-      {
-        root: null,
-        rootMargin: `-${resolveRailTopOffset() + 12}px 0px -52% 0px`,
-        threshold: thresholds,
-      }
-    )
-
-    headingNodes.forEach((node) => observer.observe(node))
-    scheduleActiveSync()
-
-    const handleResize = () => {
-      scheduleActiveSync()
-    }
-    window.addEventListener("resize", handleResize)
-
-    return () => {
-      observer.disconnect()
-      window.removeEventListener("resize", handleResize)
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId)
-      }
-      ratioMap.clear()
-    }
-  }, [tocItems, visibleTocItems])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const commentsNode = commentsSectionRef.current
-    if (!commentsNode) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries
-        if (!entry) return
-        setCommentsRailActive(entry.isIntersecting && entry.intersectionRatio > 0.22)
-      },
-      {
-        root: null,
-        rootMargin: "-24% 0px -48% 0px",
-        threshold: [0, 0.15, 0.22, 0.4, 0.65],
-      }
-    )
-
-    observer.observe(commentsNode)
-    return () => observer.disconnect()
-  }, [data?.id])
-
-  useEffect(() => {
     if (typeof window === "undefined") return
     const article = articleRef.current
     if (!article) return
-
-    let rafId: number | null = null
-    let ticking = false
+    const leftRailInnerNode = leftRailInnerRef.current
+    const rightRailInnerNode = rightRailInnerRef.current
 
     const clearInlineRailStyle = (inner: HTMLElement | null) => {
       if (!inner) return
@@ -532,19 +487,19 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
 
     const syncHybridRails = () => {
       const viewportWidth = window.innerWidth
-      const leftEnabled = showFloatingLike && viewportWidth >= LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX
-      const rightEnabled = showStickyToc && viewportWidth >= RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX
-      const leftNeedsHybridFallback =
-        leftEnabled && hasStickyBlockingAncestor(leftRailRef.current)
-      const rightNeedsHybridFallback =
-        rightEnabled && hasStickyBlockingAncestor(rightRailRef.current)
+      const leftEnabled = showFloatingLikeRef.current && viewportWidth >= LEFT_RAIL_HYBRID_MIN_VIEWPORT_PX
+      const rightEnabled = showStickyTocRef.current && viewportWidth >= RIGHT_RAIL_HYBRID_MIN_VIEWPORT_PX
+      const leftNeedsHybridFallback = leftEnabled && hasStickyBlockingAncestor(leftRailRef.current)
+      const rightNeedsHybridFallback = rightEnabled && hasStickyBlockingAncestor(rightRailRef.current)
 
-      setLeftHybridRailActive((prev) =>
-        prev === leftNeedsHybridFallback ? prev : leftNeedsHybridFallback
-      )
-      setRightHybridRailActive((prev) =>
-        prev === rightNeedsHybridFallback ? prev : rightNeedsHybridFallback
-      )
+      if (leftHybridRailActiveRef.current !== leftNeedsHybridFallback) {
+        leftHybridRailActiveRef.current = leftNeedsHybridFallback
+        setLeftHybridRailActive(leftNeedsHybridFallback)
+      }
+      if (rightHybridRailActiveRef.current !== rightNeedsHybridFallback) {
+        rightHybridRailActiveRef.current = rightNeedsHybridFallback
+        setRightHybridRailActive(rightNeedsHybridFallback)
+      }
 
       applyHybridRail({
         rail: leftRailRef.current,
@@ -559,52 +514,120 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
       })
     }
 
-    const scheduleSync = () => {
-      if (ticking) return
-      ticking = true
-      rafId = window.requestAnimationFrame(() => {
-        ticking = false
-        syncHybridRails()
+    const ratioMap = new Map<string, number>()
+
+    const resolveActiveByRatio = () => {
+      const items = visibleTocItemsRef.current
+      if (!items.length) return ""
+
+      const anchorTop = resolveRailTopOffset() + 12
+      const candidates = items.map((item) => {
+        const node = document.getElementById(item.id)
+        const top = node ? node.getBoundingClientRect().top : Number.POSITIVE_INFINITY
+        const ratio = ratioMap.get(item.id) ?? 0
+        return { id: item.id, ratio, top }
       })
+
+      const intersecting = candidates
+        .filter((candidate) => candidate.ratio > 0.04 && Number.isFinite(candidate.top))
+        .sort((a, b) => {
+          if (b.ratio !== a.ratio) return b.ratio - a.ratio
+          return Math.abs(a.top - anchorTop) - Math.abs(b.top - anchorTop)
+        })
+
+      if (intersecting.length > 0) return intersecting[0].id
+
+      const passed = candidates
+        .filter((candidate) => Number.isFinite(candidate.top) && candidate.top <= anchorTop)
+        .sort((a, b) => a.top - b.top)
+      if (passed.length > 0) return passed[passed.length - 1].id
+
+      return items[0]?.id || ""
     }
 
-    scheduleSync()
-    window.addEventListener("scroll", scheduleSync, { passive: true })
-    window.addEventListener("resize", scheduleSync, { passive: true })
-    window.addEventListener("orientationchange", scheduleSync)
+    const scheduler = createRafScheduler(() => {
+      const nextActiveId = resolveActiveByRatio()
+      setActiveTocId((prev) => (prev === nextActiveId ? prev : nextActiveId))
+      syncHybridRails()
+    })
+    const registry = createObserverRegistry()
+
+    const visibleIdSet = new Set(visibleTocItemsRef.current.map((item) => item.id))
+    const headingNodes = visibleTocItemsRef.current
+      .map((item) => document.getElementById(item.id))
+      .filter((node): node is HTMLElement => Boolean(node))
+
+    registry.addIntersectionObserver(
+      headingNodes,
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).id
+          if (!id || !visibleIdSet.has(id)) continue
+          ratioMap.set(id, entry.isIntersecting ? entry.intersectionRatio : 0)
+        }
+        scheduler.schedule()
+      },
+      {
+        root: null,
+        rootMargin: `-${resolveRailTopOffset() + 12}px 0px -52% 0px`,
+        threshold: [0, 0.08, 0.2, 0.36, 0.5, 0.65, 0.8, 1],
+      }
+    )
+
+    const commentsNode = commentsSectionRef.current
+    if (commentsNode) {
+      registry.addIntersectionObserver(
+        [commentsNode],
+        (entries) => {
+          const [entry] = entries
+          if (!entry) return
+          const nextCommentsActive = entry.isIntersecting && entry.intersectionRatio > 0.22
+          if (commentsRailActiveRef.current !== nextCommentsActive) {
+            commentsRailActiveRef.current = nextCommentsActive
+            setCommentsRailActive(nextCommentsActive)
+          }
+          scheduler.schedule()
+        },
+        {
+          root: null,
+          rootMargin: "-24% 0px -48% 0px",
+          threshold: [0, 0.15, 0.22, 0.4, 0.65],
+        }
+      )
+    }
+
+    registry.addWindowEvent("scroll", scheduler.schedule, { passive: true })
+    registry.addWindowEvent("resize", scheduler.schedule, { passive: true })
+    registry.addWindowEvent("orientationchange", scheduler.schedule)
+
+    const resizeTargets = [article, leftRailInnerNode, rightRailInnerNode].filter(
+      (target): target is HTMLElement => Boolean(target)
+    )
+    registry.addResizeObserver(resizeTargets, () => scheduler.schedule())
 
     const fontSet = document.fonts
     if (fontSet) {
-      void fontSet.ready.then(() => scheduleSync()).catch(() => {})
+      void fontSet.ready.then(() => scheduler.schedule()).catch(() => {})
     }
 
-    const leftRailInnerNode = leftRailInnerRef.current
-    const rightRailInnerNode = rightRailInnerRef.current
-    let resizeObserver: ResizeObserver | null = null
-
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => {
-        scheduleSync()
-      })
-      resizeObserver.observe(article)
-      if (leftRailInnerNode) resizeObserver.observe(leftRailInnerNode)
-      if (rightRailInnerNode) resizeObserver.observe(rightRailInnerNode)
-    }
+    scheduler.schedule()
 
     return () => {
-      window.removeEventListener("scroll", scheduleSync)
-      window.removeEventListener("resize", scheduleSync)
-      window.removeEventListener("orientationchange", scheduleSync)
-      resizeObserver?.disconnect()
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId)
-      }
+      registry.cleanup()
+      scheduler.cancel()
+      ratioMap.clear()
       clearInlineRailStyle(leftRailInnerNode)
       clearInlineRailStyle(rightRailInnerNode)
-      setLeftHybridRailActive(false)
-      setRightHybridRailActive(false)
+      if (leftHybridRailActiveRef.current) {
+        leftHybridRailActiveRef.current = false
+        setLeftHybridRailActive(false)
+      }
+      if (rightHybridRailActiveRef.current) {
+        rightHybridRailActiveRef.current = false
+        setRightHybridRailActive(false)
+      }
     }
-  }, [showFloatingLike, showStickyToc, tocItems.length])
+  }, [data?.id, visibleTocItems])
 
   useEffect(() => {
     if (!detailId) return

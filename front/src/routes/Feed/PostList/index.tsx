@@ -1,4 +1,4 @@
-import React, { RefObject, memo } from "react"
+import React, { RefObject, memo, useEffect, useRef, useState } from "react"
 import styled from "@emotion/styled"
 import Link from "next/link"
 import PostCard from "src/routes/Feed/PostList/PostCard"
@@ -26,6 +26,8 @@ type EmptyPostStateProps = {
 const INITIAL_SKELETON_KEYS = Array.from({ length: 6 }, (_, index) => `skeleton-initial-${index}`)
 const NEXT_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-next-${index}`)
 const FILTER_SKELETON_KEYS = Array.from({ length: 4 }, (_, index) => `skeleton-filter-${index}`)
+const DEFERRED_MOUNT_INITIAL_COUNT = 8
+const DEFERRED_MOUNT_ROOT_MARGIN = "680px 0px"
 
 const EmptyPostStateInner: React.FC<EmptyPostStateProps> = ({ hasFilter, onClearFilters }) => {
   const { me, authStatus } = useAuthSession()
@@ -97,6 +99,77 @@ const FilterLoadingStateInner: React.FC = () => (
 const FilterLoadingState = memo(FilterLoadingStateInner)
 FilterLoadingState.displayName = "FilterLoadingState"
 
+type DeferredPostCardProps = {
+  post: TPost
+  index: number
+}
+
+const DeferredPostCardInner: React.FC<DeferredPostCardProps> = ({ post, index }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [isMounted, setIsMounted] = useState(index < DEFERRED_MOUNT_INITIAL_COUNT)
+
+  useEffect(() => {
+    if (index < DEFERRED_MOUNT_INITIAL_COUNT) {
+      setIsMounted(true)
+    }
+  }, [index])
+
+  useEffect(() => {
+    if (isMounted) return
+    const targetNode = containerRef.current
+    if (!targetNode || typeof IntersectionObserver === "undefined") {
+      setIsMounted(true)
+      return
+    }
+
+    let disposed = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        if (disposed) return
+        setIsMounted(true)
+        observer.disconnect()
+      },
+      {
+        root: null,
+        rootMargin: DEFERRED_MOUNT_ROOT_MARGIN,
+        threshold: 0.01,
+      }
+    )
+
+    observer.observe(targetNode)
+    return () => {
+      disposed = true
+      observer.disconnect()
+    }
+  }, [isMounted, post.id])
+
+  return (
+    <div ref={containerRef} className="deferredPostCardWrap">
+      {isMounted ? (
+        <PostCard data={post} layout="regular" />
+      ) : (
+        <article className="deferredPostCardPlaceholder" aria-hidden="true" />
+      )}
+    </div>
+  )
+}
+
+const areDeferredPostCardPropsEqual = (prev: DeferredPostCardProps, next: DeferredPostCardProps) => {
+  if (prev.index !== next.index) return false
+  if (prev.post.id !== next.post.id) return false
+  if (prev.post.modifiedTime !== next.post.modifiedTime) return false
+  if (prev.post.likesCount !== next.post.likesCount) return false
+  if (prev.post.commentsCount !== next.post.commentsCount) return false
+  if (prev.post.title !== next.post.title) return false
+  if (prev.post.summary !== next.post.summary) return false
+  if (prev.post.thumbnail !== next.post.thumbnail) return false
+  return true
+}
+
+const DeferredPostCard = memo(DeferredPostCardInner, areDeferredPostCardPropsEqual)
+DeferredPostCard.displayName = "DeferredPostCard"
+
 const PostList: React.FC<Props> = ({
   posts,
   hasFilter = false,
@@ -123,8 +196,8 @@ const PostList: React.FC<Props> = ({
           </div>
         ))}
       {showEmptyState && <EmptyPostState hasFilter={hasFilter} onClearFilters={onClearFilters} />}
-      {posts.map((post) => (
-        <PostCard key={post.id} data={post} layout="regular" />
+      {posts.map((post, index) => (
+        <DeferredPostCard key={post.id} post={post} index={index} />
       ))}
       {(hasNextPage || isFetchingNextPage) && (
         <section className="loadMoreArea">
@@ -436,6 +509,26 @@ const StyledWrapper = styled.div`
     }
   }
 
+  .deferredPostCardWrap {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .deferredPostCardPlaceholder {
+    width: 100%;
+    min-height: 26rem;
+    border-radius: 4px;
+    border: ${({ theme }) => `${theme.variables.ui.card.borderWidth}px solid ${theme.colors.gray4}`};
+    background:
+      linear-gradient(
+        180deg,
+        ${({ theme }) => theme.colors.gray2} 0%,
+        ${({ theme }) => theme.colors.gray2} 45%,
+        ${({ theme }) => theme.colors.gray1} 45%,
+        ${({ theme }) => theme.colors.gray1} 100%
+      );
+  }
+
   @media (max-width: 640px) {
     .skeletonCard {
       min-height: 24rem;
@@ -445,6 +538,11 @@ const StyledWrapper = styled.div`
         margin: 0.86rem 0.9rem 0.86rem;
         min-height: 9.6rem;
       }
+    }
+
+    .deferredPostCardPlaceholder {
+      min-height: 24rem;
+      border-radius: 4px;
     }
   }
 

@@ -2,10 +2,12 @@ package com.back.global.security.config.oauth2
 
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
+import com.back.boundedContexts.member.subContexts.session.application.service.MemberSessionService
 import com.back.global.exception.application.AppException
 import com.back.global.security.config.oauth2.application.OAuth2State
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
+import com.back.global.web.application.ClientIpResolver
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.Authentication
@@ -21,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional
 @Component
 class CustomOAuth2LoginSuccessHandler(
     private val actorApplicationService: ActorApplicationService,
+    private val memberSessionService: MemberSessionService,
     private val authCookieService: AuthCookieService,
+    private val clientIpResolver: ClientIpResolver,
 ) : AuthenticationSuccessHandler {
     /**
      * onAuthenticationSuccess 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.
@@ -41,9 +45,30 @@ class CustomOAuth2LoginSuccessHandler(
         if (actor.apiKey.isBlank() || actor.apiKey == actor.username) {
             actor.modifyApiKey(MemberPolicy.genApiKey())
         }
-        val accessToken = actorApplicationService.genAccessToken(actor)
+        val session =
+            memberSessionService.createSession(
+                member = actor,
+                rememberLoginEnabled = true,
+                ipSecurityEnabled = false,
+                ipSecurityFingerprint = null,
+                createdIp = clientIpResolver.resolve(request),
+                userAgent = request.getHeader("User-Agent"),
+            )
+        val accessToken =
+            actorApplicationService.genAccessToken(
+                member = actor,
+                sessionKey = session.sessionKey,
+                rememberLoginEnabled = session.rememberLoginEnabled,
+                ipSecurityEnabled = session.ipSecurityEnabled,
+                ipSecurityFingerprint = session.ipSecurityFingerprint,
+            )
 
-        authCookieService.issueAuthCookies(actor.apiKey, accessToken)
+        authCookieService.issueAuthCookies(
+            apiKey = actor.apiKey,
+            accessToken = accessToken,
+            sessionKey = session.sessionKey,
+            rememberLoginEnabled = session.rememberLoginEnabled,
+        )
 
         val stateParam =
             request.getParameter("state")

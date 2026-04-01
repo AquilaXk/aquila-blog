@@ -5,11 +5,13 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
   ChangeEvent,
+  useDeferredValue,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
@@ -1235,6 +1237,8 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [commentContent, setCommentContent] = useState("")
   const [postTitle, setPostTitle] = useState("")
   const [postContent, setPostContent] = useState("")
+  const deferredPostContent = useDeferredValue(postContent)
+  const [, startPostContentTransition] = useTransition()
   const [postSummary, setPostSummary] = useState("")
   const [postThumbnailUrl, setPostThumbnailUrl] = useState("")
   const [postThumbnailFocusX, setPostThumbnailFocusX] = useState(DEFAULT_THUMBNAIL_FOCUS_X)
@@ -1309,6 +1313,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
   const handleBlockEditorChange = useCallback((nextMarkdown: string, meta?: BlockEditorChangeMeta) => {
     let nextGuardState = consumeGuardOnExpectedUpdate(blockEditorLoadGuardStateRef.current, nextMarkdown)
+    postContentLiveRef.current = nextMarkdown
 
     if (meta?.editorFocused) {
       nextGuardState = {
@@ -1317,7 +1322,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         ignoredInitialEmpty: true,
       }
       blockEditorLoadGuardStateRef.current = nextGuardState
-      setPostContent(nextMarkdown)
+      startPostContentTransition(() => {
+        setPostContent(nextMarkdown)
+      })
       return
     }
 
@@ -1332,7 +1339,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
 
     blockEditorLoadGuardStateRef.current = nextGuardState
     setPostContent(nextMarkdown)
-  }, [])
+  }, [startPostContentTransition])
 
   const [listPage, setListPage] = useState("1")
   const [listPageSize, setListPageSize] = useState("30")
@@ -1661,14 +1668,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const resolvedPreviewSummary = useMemo(() => {
     const manual = postSummary.trim()
     if (manual) return manual
-    return makePreviewSummary(postContent)
-  }, [postContent, postSummary])
+    return makePreviewSummary(deferredPostContent)
+  }, [deferredPostContent, postSummary])
 
   const resolvedPreviewThumbnail = useMemo(() => {
     const manual = stripThumbnailFocusFromUrl(normalizeSafeImageUrl(postThumbnailUrl))
     if (manual) return manual
-    return stripThumbnailFocusFromUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(postContent)))
-  }, [postContent, postThumbnailUrl])
+    return stripThumbnailFocusFromUrl(normalizeSafeImageUrl(extractFirstMarkdownImage(deferredPostContent)))
+  }, [deferredPostContent, postThumbnailUrl])
   const effectiveThumbnailUrl = useMemo(() => {
     const normalizedThumbnail = resolvedPreviewThumbnail.trim()
     if (!normalizedThumbnail) return ""
@@ -1818,7 +1825,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       focusY: postThumbnailFocusY,
       zoom: postThumbnailZoom,
     },
-    enabled: Boolean(safePreviewThumbnail && !isPreviewThumbnailError),
+    enabled: Boolean(safePreviewThumbnail && !isPreviewThumbnailError && (isPublishModalOpen || isComposeAssistOpen)),
     clampZoom: clampThumbnailZoom,
     normalizeTransform: normalizePreviewThumbTransform,
     computeAnchoredZoomTransform: computeAnchoredThumbnailTransform,
@@ -1831,7 +1838,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [safePreviewThumbnail])
 
   useEffect(() => {
-    if (!safePreviewThumbnail || isPreviewThumbnailError) {
+    if (!safePreviewThumbnail || isPreviewThumbnailError || (!isPublishModalOpen && !isComposeAssistOpen)) {
       previewThumbSourceSeqRef.current += 1
       setPreviewThumbSourceSize(DEFAULT_THUMBNAIL_SOURCE_SIZE)
       return
@@ -1850,7 +1857,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         setPreviewThumbSourceSize(DEFAULT_THUMBNAIL_SOURCE_SIZE)
         commitPreviewThumbTransform(previewThumbTransformRef.current)
       })
-  }, [commitPreviewThumbTransform, isPreviewThumbnailError, previewThumbTransformRef, safePreviewThumbnail])
+  }, [
+    commitPreviewThumbTransform,
+    isComposeAssistOpen,
+    isPreviewThumbnailError,
+    isPublishModalOpen,
+    previewThumbTransformRef,
+    safePreviewThumbnail,
+  ])
 
   useEffect(() => {
     if (!safePreviewThumbnail || isPreviewThumbnailError) return
@@ -3427,9 +3441,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     listPage !== "1" ||
     listPageSize !== "30" ||
     (listScope === "active" && listSort !== "CREATED_AT")
-  const contentLength = postContent.trim().length
-  const lineCount = postContent ? postContent.split("\n").length : 0
-  const imageCount = (postContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
+  const contentLength = deferredPostContent.trim().length
+  const lineCount = deferredPostContent ? deferredPostContent.split("\n").length : 0
+  const imageCount = (deferredPostContent.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length
   const tagSummaryText = postTags.length > 0 ? `${postTags.length}개 선택` : "미선택"
   const composePageTitle = editorMode === "edit" ? "원고 편집" : "새 글"
   const composeSurfaceSubtitle = hasSelectedManagedPost
@@ -3460,7 +3474,10 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   ]
   const composeCallToActionLabel =
     editorMode === "create" ? "발행 준비" : isTempDraftMode ? "새 글 작성" : "수정 사항 확인"
-  const composeSummaryPreview = postSummary.trim() || makePreviewSummary(postContent)
+  const composeSummaryPreview = useMemo(
+    () => postSummary.trim() || makePreviewSummary(deferredPostContent),
+    [deferredPostContent, postSummary]
+  )
   const profilePreviewSrc = profileImgInputUrl.trim()
   const profileImageStatus = profilePreviewSrc ? "설정됨" : "기본 이미지 사용 중"
   const profileRoleStatus = profileRoleInput.trim() || "미설정"

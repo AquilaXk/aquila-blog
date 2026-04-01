@@ -249,6 +249,26 @@ class PostPublicReadQueryService(
         }
 
     @Transactional(readOnly = true)
+    override fun getPublicRelatedByAuthor(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<FeedPostDto> =
+        runReadQuery(
+            "related-author",
+            "authorId=$authorId excludePostId=${excludePostId ?: "_"} limit=$limit",
+        ) {
+            postReadBulkheadService.withExplorePermit {
+                postUseCase
+                    .findPublicByAuthorExceptPost(
+                        authorId = authorId,
+                        excludePostId = excludePostId,
+                        limit = limit.coerceIn(1, 12),
+                    ).map(FeedPostDto::from)
+            }
+        }
+
+    @Transactional(readOnly = true)
     @Cacheable(cacheNames = [PostQueryCacheNames.TAGS], key = "'public'", sync = true)
     override fun getPublicTagCounts(): List<TagCountDto> =
         runReadQuery("tags", "public=true") {

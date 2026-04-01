@@ -3,6 +3,7 @@ package com.back.global.security.config
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
+import com.back.boundedContexts.member.subContexts.session.application.service.MemberSessionService
 import com.back.global.app.AppConfig
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
@@ -30,6 +31,7 @@ class CustomAuthenticationFilterTest {
     @DisplayName("보호 API에서 인증 처리 중 예기치 못한 예외가 발생하면 500 대신 401-1로 응답한다")
     fun `protected api unexpected auth error returns 401`() {
         val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionService = mock(MemberSessionService::class.java)
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
@@ -45,12 +47,14 @@ class CustomAuthenticationFilterTest {
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
         given(rq.getCookieValue("apiKey", "")).willReturn("broken-api-key")
         given(rq.getCookieValue("accessToken", "")).willReturn("")
+        given(rq.getCookieValue("sessionKey", "")).willReturn("")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.10")
         given(actorApplicationService.findByApiKey("broken-api-key")).willThrow(RuntimeException("db down"))
 
         val filter =
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
+                memberSessionService = memberSessionService,
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
@@ -74,6 +78,7 @@ class CustomAuthenticationFilterTest {
     @DisplayName("공개 API에서 인증 처리 중 예기치 못한 예외가 발생해도 익명으로 요청 처리를 계속한다")
     fun `public api unexpected auth error proceeds as anonymous`() {
         val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionService = mock(MemberSessionService::class.java)
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
@@ -88,12 +93,14 @@ class CustomAuthenticationFilterTest {
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
         given(rq.getCookieValue("apiKey", "")).willReturn("broken-api-key")
         given(rq.getCookieValue("accessToken", "")).willReturn("")
+        given(rq.getCookieValue("sessionKey", "")).willReturn("")
         given(clientIpResolver.resolve(request)).willReturn("203.0.113.11")
         given(actorApplicationService.findByApiKey("broken-api-key")).willThrow(RuntimeException("db down"))
 
         val filter =
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
+                memberSessionService = memberSessionService,
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
@@ -134,6 +141,7 @@ class CustomAuthenticationFilterTest {
         )
 
         val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionService = mock(MemberSessionService::class.java)
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
@@ -148,6 +156,7 @@ class CustomAuthenticationFilterTest {
 
         given(publicApiRequestMatcher.matches(request)).willReturn(false)
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $legacyToken")
+        given(rq.getCookieValue("sessionKey", "")).willReturn("")
         given(actorApplicationService.payload(legacyToken))
             .willReturn(
                 AccessTokenPayload(
@@ -167,6 +176,7 @@ class CustomAuthenticationFilterTest {
         val filter =
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
+                memberSessionService = memberSessionService,
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
@@ -220,6 +230,7 @@ class CustomAuthenticationFilterTest {
         )
 
         val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionService = mock(MemberSessionService::class.java)
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
@@ -237,6 +248,7 @@ class CustomAuthenticationFilterTest {
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
         given(rq.getCookieValue("apiKey", "")).willReturn(apiKey)
         given(rq.getCookieValue("accessToken", "")).willReturn(staleAccessToken)
+        given(rq.getCookieValue("sessionKey", "")).willReturn("")
         given(actorApplicationService.payload(staleAccessToken))
             .willReturn(
                 AccessTokenPayload(
@@ -256,6 +268,7 @@ class CustomAuthenticationFilterTest {
         val filter =
             CustomAuthenticationFilter(
                 actorApplicationService = actorApplicationService,
+                memberSessionService = memberSessionService,
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,

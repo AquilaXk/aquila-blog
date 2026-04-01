@@ -1,3 +1,5 @@
+import { normalizeKeywordQuery, normalizeTagQuery } from "src/libs/query/normalize"
+
 export const queryKey = {
   scheme: () => ["scheme"] as const,
   authMe: () => ["auth", "me"] as const,
@@ -11,8 +13,8 @@ export const queryKey = {
     pageSize: number
     order?: "asc" | "desc"
   }) => {
-    const normalizedKw = params.kw.trim()
-    const normalizedTag = typeof params.tag === "string" ? params.tag.trim() : ""
+    const normalizedKw = normalizeKeywordQuery(params.kw)
+    const normalizedTag = normalizeTagQuery(params.tag)
     const normalizedOrder = params.order === "asc" ? "asc" : "desc"
     return [
       "posts",
@@ -32,8 +34,8 @@ export const queryKey = {
     pageSize: number
     order?: "asc" | "desc"
   }) => {
-    const normalizedKw = params.kw.trim()
-    const normalizedTag = typeof params.tag === "string" ? params.tag.trim() : ""
+    const normalizedKw = normalizeKeywordQuery(params.kw)
+    const normalizedTag = normalizeTagQuery(params.tag)
     const normalizedOrder = params.order === "asc" ? "asc" : "desc"
     return [
       "posts",
@@ -64,7 +66,7 @@ export const queryKey = {
     pageSize: number
     order?: "asc" | "desc"
   }) => {
-    const normalizedKw = params.kw.trim()
+    const normalizedKw = normalizeKeywordQuery(params.kw)
     const normalizedOrder = params.order === "asc" ? "asc" : "desc"
     return [
       "posts",
@@ -81,4 +83,19 @@ export const queryKey = {
   tags: () => ["tags"] as const,
   categories: () => ["categories"] as const,
   post: (postId: string) => ["post", postId] as const,
+  postsRelatedByAuthor: (params: {
+    authorId: string
+    excludePostId?: string
+    limit: number
+  }) =>
+    [
+      "posts",
+      "related",
+      "author",
+      {
+        authorId: params.authorId.trim(),
+        excludePostId: params.excludePostId?.trim() || "",
+        limit: Math.max(1, Math.trunc(params.limit)),
+      },
+    ] as const,
 } as const

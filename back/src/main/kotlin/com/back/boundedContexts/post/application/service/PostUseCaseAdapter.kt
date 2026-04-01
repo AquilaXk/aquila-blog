@@ -181,6 +181,12 @@ class PostUseCaseAdapter(
         sort: PostSearchSortType1,
     ): List<Post> = postApplicationService.findPublicByTagCursor(tag, cursorCreatedAt, cursorId, limit, sort)
 
+    override fun findPublicByAuthorExceptPost(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<Post> = postApplicationService.findPublicByAuthorExceptPost(authorId, excludePostId, limit)
+
     override fun getPublicTagCounts(): List<TagCountDto> = postApplicationService.getPublicTagCounts()
 
     override fun findTemp(author: Member): Post? = postApplicationService.findTemp(author)

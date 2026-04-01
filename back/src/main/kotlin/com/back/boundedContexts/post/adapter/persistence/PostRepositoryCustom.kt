@@ -50,6 +50,12 @@ interface PostRepositoryCustom {
         sortAscending: Boolean,
     ): List<Post>
 
+    fun findPublicByAuthorExceptPost(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<Post>
+
     fun findPublicDetailById(id: Long): Post?
 
     fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto?

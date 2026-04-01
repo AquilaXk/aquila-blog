@@ -178,11 +178,43 @@ jobs:
 
       - name: Run CLS perf e2e
         working-directory: front
+        env:
+          PLAYWRIGHT_JSON_REPORT_PATH: test-results/perf/playwright-perf.json
+          PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH: test-results/perf/runtime-guard-metrics.ndjson
         run: yarn test:e2e:perf
+
+      - name: Summarize perf e2e report
+        if: always()
+        working-directory: front
+        run: |
+          node scripts/summarize-playwright-json.mjs \
+            --input test-results/perf/playwright-perf.json \
+            --output test-results/perf/perf-summary.md \
+            --append-step-summary
+
+      - name: Compare runtime guard metrics
+        if: always()
+        working-directory: front
+        run: |
+          node scripts/compare-runtime-guard-metrics.mjs \
+            --metrics test-results/perf/runtime-guard-metrics.ndjson \
+            --baseline ../deploy/homeserver/monitoring/grafana/dashboards/blog-runtime-guard-baseline.json \
+            --output test-results/perf/runtime-guard-summary.md \
+            --json-output test-results/perf/runtime-guard-summary.json \
+            --append-step-summary
 
       - name: Run accessibility e2e
         working-directory: front
         run: yarn test:e2e:a11y
+
+      - name: Upload perf e2e report
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: front-perf-e2e-report
+          path: front/test-results/perf
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload frontend reports on failure
         if: failure()

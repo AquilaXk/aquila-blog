@@ -1321,6 +1321,55 @@
         }
       }
     },
+    "/post/api/v1/posts/related/author" : {
+      "get" : {
+        "tags" : [ "api-v-1-post-controller" ],
+        "operationId" : "getRelatedByAuthor",
+        "parameters" : [ {
+          "name" : "authorId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "exclusiveMinimum" : 0
+          }
+        }, {
+          "name" : "excludePostId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 4,
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/FeedPostDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/post/api/v1/posts/mine" : {
       "get" : {
         "tags" : [ "api-v-1-post-controller" ],

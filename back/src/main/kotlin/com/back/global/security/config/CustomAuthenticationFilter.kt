@@ -3,6 +3,8 @@ package com.back.global.security.config
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
+import com.back.boundedContexts.member.subContexts.session.application.service.MemberSessionService
+import com.back.boundedContexts.member.subContexts.session.model.MemberSession
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
@@ -33,6 +35,7 @@ import java.util.Locale
 @Component
 class CustomAuthenticationFilter(
     private val actorApplicationService: ActorApplicationService,
+    private val memberSessionService: MemberSessionService,
     private val authIpSecurityService: AuthIpSecurityService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
@@ -114,7 +117,10 @@ class CustomAuthenticationFilter(
         request: HttpServletRequest,
         response: HttpServletResponse,
     ) {
-        val (apiKey, accessToken) = extractTokens()
+        val tokens = extractTokens()
+        val apiKey = tokens.apiKey
+        val accessToken = tokens.accessToken
+        val sessionKey = tokens.sessionKey
         val clientIp = clientIpResolver.resolve(request)
 
         if (apiKey.isBlank() && accessToken.isBlank()) return
@@ -126,16 +132,23 @@ class CustomAuthenticationFilter(
             if (shouldPreferApiKeyAuthorityOnWrite(request, apiKey)) {
                 val apiKeyMember = actorApplicationService.findByApiKey(apiKey)
                 if (apiKeyMember != null) {
-                    if (apiKeyMember.ipSecurityEnabled) {
-                        val matched = authIpSecurityService.matches(apiKeyMember.ipSecurityFingerprint, clientIp)
+                    val sessionResolution = resolveMemberSession(apiKeyMember.id, sessionKey, payload.sessionKey)
+                    ensureSessionIsUsable(sessionResolution)
+                    val memberSession = sessionResolution.session
+                    val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: apiKeyMember.rememberLoginEnabled
+                    val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: apiKeyMember.ipSecurityEnabled
+                    val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: apiKeyMember.ipSecurityFingerprint
+
+                    if (ipSecurityEnabled) {
+                        val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
                         if (!matched) {
                             runCatching {
                                 authSecurityEventService.recordIpSecurityMismatchBlocked(
                                     memberId = apiKeyMember.id,
                                     loginIdentifier = apiKeyMember.username,
-                                    rememberLoginEnabled = apiKeyMember.rememberLoginEnabled,
-                                    ipSecurityEnabled = apiKeyMember.ipSecurityEnabled,
-                                    expectedIpFingerprint = apiKeyMember.ipSecurityFingerprint,
+                                    rememberLoginEnabled = rememberLoginEnabled,
+                                    ipSecurityEnabled = ipSecurityEnabled,
+                                    expectedIpFingerprint = ipSecurityFingerprint,
                                     requestPath = request.requestURI,
                                     reason = "apikey-ip-mismatch",
                                 )
@@ -147,28 +160,43 @@ class CustomAuthenticationFilter(
                         }
                     }
 
-                    val rotatedAccessToken = actorApplicationService.genAccessToken(apiKeyMember)
+                    val rotatedAccessToken =
+                        actorApplicationService.genAccessToken(
+                            member = apiKeyMember,
+                            sessionKey = memberSession?.sessionKey,
+                            rememberLoginEnabled = rememberLoginEnabled,
+                            ipSecurityEnabled = ipSecurityEnabled,
+                            ipSecurityFingerprint = ipSecurityFingerprint,
+                        )
                     authCookieService.issueAccessToken(
                         accessToken = rotatedAccessToken,
-                        rememberLoginEnabled = apiKeyMember.rememberLoginEnabled,
+                        rememberLoginEnabled = rememberLoginEnabled,
+                        sessionKey = memberSession?.sessionKey,
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
+                    memberSession?.let(memberSessionService::touchAuthenticated)
                     authenticate(apiKeyMember)
                     return
                 }
             }
 
+            val sessionResolution = resolveMemberSession(payload.id, sessionKey, payload.sessionKey)
+            ensureSessionIsUsable(sessionResolution)
+            val memberSession = sessionResolution.session
+            val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: payload.rememberLoginEnabled
+            val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: payload.ipSecurityEnabled
+            val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: payload.ipSecurityFingerprint
             val tokenLoginIdentifier = resolveTokenLoginIdentifier(payload)
-            if (payload.ipSecurityEnabled) {
-                val matched = authIpSecurityService.matches(payload.ipSecurityFingerprint, clientIp)
+            if (ipSecurityEnabled) {
+                val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
                 if (!matched) {
                     runCatching {
                         authSecurityEventService.recordIpSecurityMismatchBlocked(
                             memberId = payload.id,
                             loginIdentifier = tokenLoginIdentifier,
-                            rememberLoginEnabled = payload.rememberLoginEnabled,
-                            ipSecurityEnabled = payload.ipSecurityEnabled,
-                            expectedIpFingerprint = payload.ipSecurityFingerprint,
+                            rememberLoginEnabled = rememberLoginEnabled,
+                            ipSecurityEnabled = ipSecurityEnabled,
+                            expectedIpFingerprint = ipSecurityFingerprint,
                             requestPath = request.requestURI,
                             reason = "token-payload-ip-mismatch",
                         )
@@ -183,17 +211,27 @@ class CustomAuthenticationFilter(
             // 과거 토큰(payload.email 누락)과 현재 이메일 기반 관리자 판정의 드리프트를 즉시 복구한다.
             if (payload.email.isNullOrBlank()) {
                 actorApplicationService.findById(payload.id)?.let { persistedMember ->
-                    val rotatedAccessToken = actorApplicationService.genAccessToken(persistedMember)
+                    val rotatedAccessToken =
+                        actorApplicationService.genAccessToken(
+                            member = persistedMember,
+                            sessionKey = memberSession?.sessionKey,
+                            rememberLoginEnabled = rememberLoginEnabled,
+                            ipSecurityEnabled = ipSecurityEnabled,
+                            ipSecurityFingerprint = ipSecurityFingerprint,
+                        )
                     authCookieService.issueAccessToken(
                         accessToken = rotatedAccessToken,
-                        rememberLoginEnabled = persistedMember.rememberLoginEnabled,
+                        rememberLoginEnabled = rememberLoginEnabled,
+                        sessionKey = memberSession?.sessionKey,
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
+                    memberSession?.let(memberSessionService::touchAuthenticated)
                     authenticate(persistedMember)
                     return
                 }
             }
 
+            memberSession?.let(memberSessionService::touchAuthenticated)
             val payloadMember =
                 Member(
                     id = payload.id,
@@ -210,16 +248,23 @@ class CustomAuthenticationFilter(
             actorApplicationService.findByApiKey(apiKey)
                 ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
-        if (member.ipSecurityEnabled) {
-            val matched = authIpSecurityService.matches(member.ipSecurityFingerprint, clientIp)
+        val sessionResolution = resolveMemberSession(member.id, sessionKey, null)
+        ensureSessionIsUsable(sessionResolution)
+        val memberSession = sessionResolution.session
+        val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: member.rememberLoginEnabled
+        val ipSecurityEnabled = memberSession?.ipSecurityEnabled ?: member.ipSecurityEnabled
+        val ipSecurityFingerprint = memberSession?.ipSecurityFingerprint ?: member.ipSecurityFingerprint
+
+        if (ipSecurityEnabled) {
+            val matched = authIpSecurityService.matches(ipSecurityFingerprint, clientIp)
             if (!matched) {
                 runCatching {
                     authSecurityEventService.recordIpSecurityMismatchBlocked(
                         memberId = member.id,
                         loginIdentifier = member.username,
-                        rememberLoginEnabled = member.rememberLoginEnabled,
-                        ipSecurityEnabled = member.ipSecurityEnabled,
-                        expectedIpFingerprint = member.ipSecurityFingerprint,
+                        rememberLoginEnabled = rememberLoginEnabled,
+                        ipSecurityEnabled = ipSecurityEnabled,
+                        expectedIpFingerprint = ipSecurityFingerprint,
                         requestPath = request.requestURI,
                         reason = "apikey-ip-mismatch",
                     )
@@ -231,12 +276,21 @@ class CustomAuthenticationFilter(
             }
         }
 
-        val newAccessToken = actorApplicationService.genAccessToken(member)
+        val newAccessToken =
+            actorApplicationService.genAccessToken(
+                member = member,
+                sessionKey = memberSession?.sessionKey,
+                rememberLoginEnabled = rememberLoginEnabled,
+                ipSecurityEnabled = ipSecurityEnabled,
+                ipSecurityFingerprint = ipSecurityFingerprint,
+            )
         authCookieService.issueAccessToken(
             accessToken = newAccessToken,
-            rememberLoginEnabled = member.rememberLoginEnabled,
+            rememberLoginEnabled = rememberLoginEnabled,
+            sessionKey = memberSession?.sessionKey,
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
+        memberSession?.let(memberSessionService::touchAuthenticated)
 
         authenticate(member)
     }
@@ -245,8 +299,9 @@ class CustomAuthenticationFilter(
      * 입력/환경 데이터를 파싱·정규화해 내부 처리에 안전한 값으로 변환합니다.
      * 설정 계층에서 등록된 정책이 전체 애플리케이션 동작에 일관되게 적용되도록 구성합니다.
      */
-    private fun extractTokens(): Pair<String, String> {
+    private fun extractTokens(): ExtractedTokens {
         val headerAuthorization = rq.getHeader(HttpHeaders.AUTHORIZATION, "")
+        val sessionKey = rq.getCookieValue("sessionKey", "")
 
         return if (headerAuthorization.isNotBlank()) {
             if (!headerAuthorization.startsWith("Bearer ")) {
@@ -257,18 +312,22 @@ class CustomAuthenticationFilter(
             when (bits.size) {
                 2 -> {
                     if (bits[1].isBlank()) throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
-                    "" to bits[1]
+                    ExtractedTokens("", bits[1], sessionKey)
                 }
                 3 -> {
                     if (bits[1].isBlank() || bits[2].isBlank()) {
                         throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
                     }
-                    bits[1] to bits[2]
+                    ExtractedTokens(bits[1], bits[2], sessionKey)
                 }
                 else -> throw AppException("401-2", "${HttpHeaders.AUTHORIZATION} 헤더가 Bearer 형식이 아닙니다.")
             }
         } else {
-            rq.getCookieValue("apiKey", "") to rq.getCookieValue("accessToken", "")
+            ExtractedTokens(
+                apiKey = rq.getCookieValue("apiKey", ""),
+                accessToken = rq.getCookieValue("accessToken", ""),
+                sessionKey = sessionKey,
+            )
         }
     }
 
@@ -314,6 +373,46 @@ class CustomAuthenticationFilter(
         private const val MAX_PATH_LENGTH = 512
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
         private val MUTATING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
+    }
+
+    private data class ExtractedTokens(
+        val apiKey: String,
+        val accessToken: String,
+        val sessionKey: String,
+    )
+
+    private data class SessionResolution(
+        val sessionKeyProvided: Boolean,
+        val session: MemberSession?,
+    )
+
+    private fun resolveMemberSession(
+        memberId: Long,
+        cookieSessionKey: String,
+        tokenSessionKey: String?,
+    ): SessionResolution {
+        val effectiveSessionKey =
+            when {
+                cookieSessionKey.isNotBlank() -> cookieSessionKey
+                !tokenSessionKey.isNullOrBlank() -> tokenSessionKey
+                else -> ""
+            }.trim()
+
+        if (effectiveSessionKey.isBlank()) {
+            return SessionResolution(sessionKeyProvided = false, session = null)
+        }
+
+        return SessionResolution(
+            sessionKeyProvided = true,
+            session = memberSessionService.findActiveSession(memberId, effectiveSessionKey),
+        )
+    }
+
+    private fun ensureSessionIsUsable(sessionResolution: SessionResolution) {
+        if (sessionResolution.sessionKeyProvided && sessionResolution.session == null) {
+            authCookieService.expireAuthCookies()
+            throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
+        }
     }
 
     private fun resolveTokenLoginIdentifier(payload: AccessTokenPayload): String? {

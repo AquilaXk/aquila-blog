@@ -1,4 +1,5 @@
 import { NextRouter } from "next/router"
+import { normalizeShallowRouteValue } from "src/libs/query/normalize"
 
 type CancelledErrorLike = {
   cancelled?: unknown
@@ -154,16 +155,23 @@ const normalizeShallowRouteQuery = (query: ShallowRouteQuery): string => {
       if (typeof value === "undefined") return
 
       if (Array.isArray(value)) {
-        value
-          .slice()
-          .sort((a, b) => a.localeCompare(b))
-          .forEach((item) => {
+        const normalizedValues = Array.from(
+          new Set(
+            value
+              .map((item) => normalizeShallowRouteValue(key, item))
+              .filter((item) => item.length > 0)
+          )
+        ).sort((a, b) => a.localeCompare(b))
+
+        normalizedValues.forEach((item) => {
           params.append(key, item)
-          })
+        })
         return
       }
 
-      params.set(key, value)
+      const normalizedValue = normalizeShallowRouteValue(key, value)
+      if (!normalizedValue) return
+      params.set(key, normalizedValue)
     })
 
   return params.toString()

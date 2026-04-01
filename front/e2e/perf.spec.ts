@@ -1,15 +1,65 @@
+import { appendFileSync, mkdirSync, rmSync } from "node:fs"
+import path from "node:path"
 import { expect, test, type Page, type Route } from "@playwright/test"
 
 const clsBudget = Number(process.env.CLS_BUDGET || 0.1)
 const homeClsBudget = Number(process.env.CLS_BUDGET_HOME || 0.12)
 const clsAssertionEpsilon = Number(process.env.CLS_ASSERTION_EPSILON || 0.005)
 const jitterBudgetPx = Number(process.env.JITTER_BUDGET_PX || 2)
+const editorTypingP95BudgetMs = Number(process.env.PERF_EDITOR_TYPING_P95_BUDGET_MS || 36)
+const feedScrollMaxFrameGapBudgetMs = Number(process.env.PERF_FEED_SCROLL_MAX_FRAME_GAP_BUDGET_MS || 120)
+const feedScrollLongFrameRatioBudget = Number(process.env.PERF_FEED_SCROLL_LONG_FRAME_RATIO_BUDGET || 0.15)
+const detailEntryBudgetMs = Number(process.env.PERF_DETAIL_ENTRY_BUDGET_MS || 1800)
 const playwrightBaseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
+const runtimeGuardMetricsPath = path.resolve(
+  process.cwd(),
+  process.env.PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH || "test-results/perf/runtime-guard-metrics.ndjson"
+)
 const isSsrAuthBackendDisconnectedForPerf =
   (process.env.BACKEND_INTERNAL_URL || "").trim().replace(/\/+$/, "") === "http://127.0.0.1:1"
 const allowAdminDashboardLoginFallback =
   process.env.PERF_ALLOW_ADMIN_LOGIN_FALLBACK === "true" || isSsrAuthBackendDisconnectedForPerf
 const refreshCheckRoutes = ["/", "/about", "/admin", "/admin/dashboard", "/admin/profile", "/admin/posts", "/admin/tools"]
+const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
+
+type RuntimeGuardMetricName =
+  | "editor.typing.p95_ms"
+  | "feed.scroll.max_frame_gap_ms"
+  | "feed.scroll.long_frame_ratio"
+  | "detail.entry.ms"
+
+const roundMetric = (value: number, precision = 3) => Number(value.toFixed(precision))
+
+const recordRuntimeGuardMetric = (
+  metric: RuntimeGuardMetricName,
+  value: number,
+  budget: number,
+  meta: {
+    unit: "ms" | "ratio"
+    route: string
+    section: "editor" | "feed" | "detail"
+    sampleCount?: number
+    extra?: Record<string, number>
+  }
+) => {
+  mkdirSync(path.dirname(runtimeGuardMetricsPath), { recursive: true })
+  appendFileSync(
+    runtimeGuardMetricsPath,
+    `${JSON.stringify({
+      recordedAt: new Date().toISOString(),
+      metric,
+      value: roundMetric(value),
+      budget,
+      ...meta,
+      extra: meta.extra ? Object.fromEntries(Object.entries(meta.extra).map(([key, raw]) => [key, roundMetric(raw)])) : undefined,
+    })}\n`,
+    "utf8"
+  )
+}
+
+test.beforeAll(() => {
+  rmSync(runtimeGuardMetricsPath, { force: true })
+})
 
 const mockTagCounts = [
   { tag: "perf", count: 10 },
@@ -259,6 +309,22 @@ const mockDetailRailEndpoint = async (page: Page, postId: number) => {
         msg: "ok",
         data: { liked: true, likesCount: 3 },
       }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/related/author**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: postId + 1,
+          title: "같은 작성자 연관 글 1",
+          summary: "작성자 단일 조회 API 회귀 방지용",
+          thumbnail: null,
+          createdTime: "2026-03-18",
+        },
+      ]),
     })
   })
 }
@@ -622,6 +688,270 @@ test("주요 페이지는 새로고침 후 수평 꿈틀과 CLS 예산을 통과
     expect(jitterPx).toBeLessThanOrEqual(jitterBudgetPx)
     expect(cls).toBeLessThanOrEqual(clsBudget + clsAssertionEpsilon)
   }
+})
+
+test("에디터 타이핑 p95는 런타임 가드 예산을 통과한다", async ({ page }) => {
+  await page.goto(QA_ENGINE_ROUTE)
+  await page.waitForLoadState("domcontentloaded")
+
+  const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+  await expect(editor).toBeVisible()
+  await editor.click()
+
+  const typingStats = await editor.evaluate(async (node) => {
+    const host = node as HTMLElement
+    const payload = "성능가드 타이핑 기준 블록 입력 "
+    const text = payload.repeat(6)
+    const samples: number[] = []
+    const waitNextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+    const setCaretToEnd = () => {
+      const range = document.createRange()
+      range.selectNodeContents(host)
+      range.collapse(false)
+      const selection = window.getSelection()
+      if (!selection) return
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
+    for (const character of text) {
+      const start = performance.now()
+      setCaretToEnd()
+
+      const insertedWithExecCommand =
+        typeof document.execCommand === "function" && document.execCommand("insertText", false, character)
+
+      if (!insertedWithExecCommand) {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          range.deleteContents()
+          range.insertNode(document.createTextNode(character))
+          range.collapse(false)
+        } else {
+          host.append(document.createTextNode(character))
+        }
+        host.dispatchEvent(
+          new InputEvent("input", {
+            bubbles: true,
+            cancelable: false,
+            inputType: "insertText",
+            data: character,
+          })
+        )
+      }
+
+      await waitNextFrame()
+      samples.push(performance.now() - start)
+    }
+
+    const toPercentile = (values: number[], percentilePoint: number) => {
+      if (!values.length) return 0
+      const sorted = [...values].sort((a, b) => a - b)
+      const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
+      return sorted[index]
+    }
+    const meanMs = samples.reduce((sum, sample) => sum + sample, 0) / Math.max(samples.length, 1)
+    const p95Ms = toPercentile(samples, 0.95)
+    const maxMs = samples.length ? Math.max(...samples) : 0
+    return {
+      sampleCount: samples.length,
+      meanMs,
+      p95Ms,
+      maxMs,
+    }
+  })
+
+  console.log(
+    `[runtime-guard] editor-typing p95=${typingStats.p95Ms.toFixed(2)}ms mean=${typingStats.meanMs.toFixed(2)}ms max=${typingStats.maxMs.toFixed(2)}ms samples=${typingStats.sampleCount} budget=${editorTypingP95BudgetMs}ms`
+  )
+  recordRuntimeGuardMetric("editor.typing.p95_ms", typingStats.p95Ms, editorTypingP95BudgetMs, {
+    unit: "ms",
+    route: QA_ENGINE_ROUTE,
+    section: "editor",
+    sampleCount: typingStats.sampleCount,
+    extra: {
+      meanMs: typingStats.meanMs,
+      maxMs: typingStats.maxMs,
+    },
+  })
+
+  expect(typingStats.sampleCount).toBeGreaterThanOrEqual(60)
+  expect(typingStats.p95Ms).toBeLessThanOrEqual(editorTypingP95BudgetMs)
+})
+
+test("피드 스크롤 프레임 예산은 런타임 가드를 통과한다", async ({ page }) => {
+  const pageMap: Record<number, number[]> = {
+    1: Array.from({ length: 16 }, (_, index) => 3100 + index),
+    2: Array.from({ length: 16 }, (_, index) => 3200 + index),
+    3: Array.from({ length: 16 }, (_, index) => 3300 + index),
+    4: Array.from({ length: 16 }, (_, index) => 3400 + index),
+  }
+
+  await mockFeedEndpoints(page, {
+    feedHandler: async (route) => {
+      const url = new URL(route.request().url())
+      const isCursorEndpoint = url.pathname.endsWith("/cursor")
+      const cursorParam = url.searchParams.get("cursor")
+      const pageNumber = isCursorEndpoint
+        ? cursorParam
+          ? Number(cursorParam.replace("cursor-", "")) || 1
+          : 1
+        : Number(url.searchParams.get("page") || "1")
+      const pageSize = Number(url.searchParams.get("pageSize") || "24")
+      const ids = pageMap[pageNumber] ?? []
+      const hasNext = pageNumber < 4
+      const nextCursor = hasNext ? `cursor-${pageNumber + 1}` : null
+
+      if (isCursorEndpoint) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            content: ids.map(buildMockExploreItem),
+            pageSize,
+            hasNext,
+            nextCursor,
+          }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          content: ids.map(buildMockExploreItem),
+          pageable: {
+            pageNumber: Math.max(pageNumber - 1, 0),
+            pageSize,
+            totalElements: 64,
+            totalPages: 4,
+          },
+        }),
+      })
+    },
+  })
+
+  await page.goto("/")
+  await waitForPageReady(page)
+
+  const frameStats = await page.evaluate(async () => {
+    const frameGaps: number[] = []
+    let active = true
+    let rafId = 0
+    let previous = performance.now()
+
+    const collect = (now: number) => {
+      frameGaps.push(now - previous)
+      previous = now
+      if (active) rafId = requestAnimationFrame(collect)
+    }
+    rafId = requestAnimationFrame(collect)
+
+    for (let step = 0; step < 18; step += 1) {
+      const maxScrollable = Math.max(document.body.scrollHeight - window.innerHeight, 0)
+      const progress = (step + 1) / 18
+      window.scrollTo({ top: Math.round(maxScrollable * progress), behavior: "auto" })
+      await new Promise((resolve) => setTimeout(resolve, 70))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 320))
+
+    active = false
+    cancelAnimationFrame(rafId)
+
+    const toPercentile = (values: number[], percentilePoint: number) => {
+      if (!values.length) return 0
+      const sorted = [...values].sort((a, b) => a - b)
+      const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentilePoint) - 1))
+      return sorted[index]
+    }
+
+    const usableFrames = frameGaps.filter((gap) => Number.isFinite(gap) && gap > 0)
+    const maxFrameGapMs = usableFrames.length ? Math.max(...usableFrames) : 0
+    const p95FrameGapMs = toPercentile(usableFrames, 0.95)
+    const longFrameThresholdMs = 50
+    const longFrameCount = usableFrames.filter((gap) => gap > longFrameThresholdMs).length
+    const longFrameRatio = usableFrames.length ? longFrameCount / usableFrames.length : 0
+
+    return {
+      sampleCount: usableFrames.length,
+      maxFrameGapMs,
+      p95FrameGapMs,
+      longFrameRatio,
+      longFrameThresholdMs,
+    }
+  })
+
+  console.log(
+    `[runtime-guard] feed-scroll maxFrameGap=${frameStats.maxFrameGapMs.toFixed(2)}ms p95FrameGap=${frameStats.p95FrameGapMs.toFixed(2)}ms longFrameRatio=${frameStats.longFrameRatio.toFixed(4)} budget(max=${feedScrollMaxFrameGapBudgetMs}ms, ratio=${feedScrollLongFrameRatioBudget})`
+  )
+  recordRuntimeGuardMetric("feed.scroll.max_frame_gap_ms", frameStats.maxFrameGapMs, feedScrollMaxFrameGapBudgetMs, {
+    unit: "ms",
+    route: "/",
+    section: "feed",
+    sampleCount: frameStats.sampleCount,
+    extra: {
+      p95FrameGapMs: frameStats.p95FrameGapMs,
+      longFrameRatio: frameStats.longFrameRatio,
+    },
+  })
+  recordRuntimeGuardMetric("feed.scroll.long_frame_ratio", frameStats.longFrameRatio, feedScrollLongFrameRatioBudget, {
+    unit: "ratio",
+    route: "/",
+    section: "feed",
+    sampleCount: frameStats.sampleCount,
+    extra: {
+      maxFrameGapMs: frameStats.maxFrameGapMs,
+      p95FrameGapMs: frameStats.p95FrameGapMs,
+    },
+  })
+
+  expect(frameStats.sampleCount).toBeGreaterThanOrEqual(40)
+  expect(frameStats.maxFrameGapMs).toBeLessThanOrEqual(feedScrollMaxFrameGapBudgetMs)
+  expect(frameStats.longFrameRatio).toBeLessThanOrEqual(feedScrollLongFrameRatioBudget)
+})
+
+test("상세 진입 시간은 런타임 가드 예산을 통과한다", async ({ page }) => {
+  const postId = 1001
+
+  await mockFeedEndpoints(page)
+  await mockDetailRailEndpoint(page, postId)
+
+  await page.goto("/")
+  await waitForPageReady(page)
+
+  const firstCardLink = page.locator(`a[href="/posts/${postId}"]`).first()
+  await expect(firstCardLink).toBeVisible()
+
+  await page.evaluate(() => {
+    performance.clearMarks("rum:detail-entry:start")
+    performance.mark("rum:detail-entry:start")
+  })
+
+  await Promise.all([page.waitForURL(`**/posts/${postId}`), firstCardLink.click()])
+  await expect(page.getByRole("heading", { name: "상세 레일 스티키 회귀 점검" })).toBeVisible()
+  await page.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => {})
+
+  const detailEntryMs = await page.evaluate(() => {
+    const mark = performance.getEntriesByName("rum:detail-entry:start").at(-1)
+    if (!mark) return null
+    return performance.now() - mark.startTime
+  })
+
+  if (detailEntryMs === null) {
+    throw new Error("상세 진입 측정 마크를 찾지 못했습니다.")
+  }
+
+  console.log(`[runtime-guard] detail-entry duration=${detailEntryMs.toFixed(2)}ms budget=${detailEntryBudgetMs}ms`)
+  recordRuntimeGuardMetric("detail.entry.ms", detailEntryMs, detailEntryBudgetMs, {
+    unit: "ms",
+    route: `/posts/${postId}`,
+    section: "detail",
+  })
+
+  expect(detailEntryMs).toBeLessThanOrEqual(detailEntryBudgetMs)
 })
 
 test("메인 레이아웃은 velog형 width tier(1728/1376/1024/100%)를 유지한다", async ({ page }) => {

@@ -7,6 +7,7 @@ import {
 } from "src/apis/backend/posts"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
 import { queryKey } from "src/constants/queryKey"
+import { normalizeKeywordQuery, normalizeOptionalTagQuery } from "src/libs/query/normalize"
 import { TPost } from "src/types"
 import { useMemo } from "react"
 
@@ -29,8 +30,8 @@ const useExplorePostsQuery = ({
   order = "desc",
   enabled = true,
 }: Params) => {
-  const normalizedKw = kw.trim()
-  const normalizedTag = typeof tag === "string" ? tag.trim() || undefined : undefined
+  const normalizedKw = normalizeKeywordQuery(kw)
+  const normalizedTag = normalizeOptionalTagQuery(tag)
   const searchMode = normalizedKw.length > 0 && !normalizedTag
   const feedMode = normalizedKw.length === 0 && !normalizedTag
 

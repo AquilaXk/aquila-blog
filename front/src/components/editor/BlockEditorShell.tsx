@@ -283,6 +283,7 @@ const LIST_ITEM_SELECTOR =
   "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
 const LIST_CONTAINER_SELECTOR =
   "ul[data-type='taskList'], ul[data-task-list='true'], ul[data-type='bulletList'], ol[data-type='orderedList'], ul, ol"
+const MARKDOWN_COMMIT_DEBOUNCE_MS = 80
 
 const getSlashSearchTerms = (item: BlockInsertCatalogItem) =>
   Array.from(
@@ -756,6 +757,9 @@ const BlockEditorShell = ({
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const pendingAttachmentInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
+  const pendingCommitEditorRef = useRef<TiptapEditor | null>(null)
+  const pendingCommitFocusedRef = useRef(false)
+  const markdownCommitTimerRef = useRef<number | null>(null)
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
@@ -838,6 +842,7 @@ const BlockEditorShell = ({
     width: 0,
   })
   const [selectionTick, setSelectionTick] = useState(0)
+  const selectionUiSignatureRef = useRef("")
 
   const cancelHoveredBlockClear = useCallback(() => {
     if (hoveredBlockClearTimerRef.current !== null && typeof window !== "undefined") {
@@ -872,6 +877,48 @@ const BlockEditorShell = ({
       bubbleHideTimerRef.current = null
     }, 220)
   }, [cancelBubbleHide])
+
+  const cancelPendingMarkdownCommit = useCallback(() => {
+    if (markdownCommitTimerRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(markdownCommitTimerRef.current)
+      markdownCommitTimerRef.current = null
+    }
+  }, [])
+
+  const flushPendingMarkdownCommit = useCallback(() => {
+    const pendingEditor = pendingCommitEditorRef.current
+    if (!pendingEditor) return
+
+    const markdown = serializeEditorDocToMarkdown(pendingEditor.getJSON() as BlockEditorDoc)
+    const normalized = normalizeMarkdown(markdown)
+    pendingCommitEditorRef.current = null
+
+    if (normalized === lastCommittedMarkdownRef.current) {
+      return
+    }
+
+    lastCommittedMarkdownRef.current = normalized
+    onChange(markdown, { editorFocused: pendingCommitFocusedRef.current })
+  }, [onChange])
+
+  const scheduleMarkdownCommit = useCallback(
+    (nextEditor: TiptapEditor) => {
+      pendingCommitEditorRef.current = nextEditor
+      pendingCommitFocusedRef.current = nextEditor.isFocused
+
+      if (typeof window === "undefined") {
+        flushPendingMarkdownCommit()
+        return
+      }
+
+      if (markdownCommitTimerRef.current !== null) return
+      markdownCommitTimerRef.current = window.setTimeout(() => {
+        markdownCommitTimerRef.current = null
+        flushPendingMarkdownCommit()
+      }, MARKDOWN_COMMIT_DEBOUNCE_MS)
+    },
+    [flushPendingMarkdownCommit]
+  )
   const initialDocRef = useRef(
     downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
   )
@@ -1723,7 +1770,15 @@ const BlockEditorShell = ({
       createdEditor.setEditable(!disabled)
     },
     onDestroy: () => {
+      const destroyedEditor = editorRef.current
+      if (destroyedEditor) {
+        pendingCommitEditorRef.current = destroyedEditor
+        pendingCommitFocusedRef.current = destroyedEditor.isFocused
+      }
+      cancelPendingMarkdownCommit()
+      flushPendingMarkdownCommit()
       editorRef.current = null
+      pendingCommitEditorRef.current = null
     },
     editorProps: {
       attributes: {
@@ -1960,15 +2015,7 @@ const BlockEditorShell = ({
       },
     },
     onUpdate: ({ editor: nextEditor }) => {
-      const markdown = serializeEditorDocToMarkdown(nextEditor.getJSON() as BlockEditorDoc)
-      const normalized = normalizeMarkdown(markdown)
-
-      if (normalized === lastCommittedMarkdownRef.current) {
-        return
-      }
-
-      lastCommittedMarkdownRef.current = normalized
-      onChange(markdown, { editorFocused: nextEditor.isFocused })
+      scheduleMarkdownCommit(nextEditor)
     },
   })
 
@@ -2003,6 +2050,11 @@ const BlockEditorShell = ({
       const isTopLevelBlockNodeSelection = Boolean(
         selection.$from.depth === 0 && selection.node?.isBlock
       )
+      const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}`
+      if (nextSignature === selectionUiSignatureRef.current) {
+        return
+      }
+      selectionUiSignatureRef.current = nextSignature
       setSelectionTick((prev) => prev + 1)
       setSelectedBlockIndex(nextBlockIndex)
       if (isTopLevelBlockNodeSelection) {
@@ -2017,6 +2069,7 @@ const BlockEditorShell = ({
     }
 
     const notifyBlur = () => {
+      selectionUiSignatureRef.current = ""
       setSelectionTick((prev) => prev + 1)
       const finalizeBlur = () => {
         if (disposed || editor.isFocused) return
@@ -2035,15 +2088,14 @@ const BlockEditorShell = ({
 
     notifySelection()
     editor.on("selectionUpdate", notifySelection)
-    editor.on("transaction", notifySelection)
     editor.on("focus", notifySelection)
     editor.on("blur", notifyBlur)
     return () => {
       disposed = true
       editor.off("selectionUpdate", notifySelection)
-      editor.off("transaction", notifySelection)
       editor.off("focus", notifySelection)
       editor.off("blur", notifyBlur)
+      selectionUiSignatureRef.current = ""
     }
   }, [editor])
 
@@ -2156,6 +2208,7 @@ const BlockEditorShell = ({
   useEffect(() => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
+    let rafId: number | null = null
 
     const syncBubble = () => {
       const activeEditor = editorRef.current
@@ -2187,7 +2240,7 @@ const BlockEditorShell = ({
 
       if (isTableActive) {
         cancelBubbleHide()
-        setBubbleState((prev) => ({ ...prev, visible: false }))
+        setBubbleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
         const anchorDom = activeEditor.view.domAtPos(selection.from).node
         const anchorElement =
           anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
@@ -2202,21 +2255,45 @@ const BlockEditorShell = ({
 
       const startCoords = activeEditor.view.coordsAtPos(selection.from)
       const endCoords = activeEditor.view.coordsAtPos(isImageNodeSelected ? selection.from : selection.to)
-      setBubbleState({
+      const nextBubbleState: FloatingBubbleState = {
         visible: true,
         mode: isImageNodeSelected ? "image" : "text",
         anchor: "center",
         left: Math.round((startCoords.left + endCoords.right) / 2),
         top: Math.round(Math.min(startCoords.top, endCoords.top)),
+      }
+      setBubbleState((prev) =>
+        prev.visible === nextBubbleState.visible &&
+        prev.mode === nextBubbleState.mode &&
+        prev.anchor === nextBubbleState.anchor &&
+        prev.left === nextBubbleState.left &&
+        prev.top === nextBubbleState.top
+          ? prev
+          : nextBubbleState
+      )
+    }
+
+    const scheduleSyncBubble = () => {
+      if (typeof window === "undefined") {
+        syncBubble()
+        return
+      }
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        syncBubble()
       })
     }
 
-    syncBubble()
-    currentEditor.on("selectionUpdate", syncBubble)
-    currentEditor.on("transaction", syncBubble)
+    scheduleSyncBubble()
+    currentEditor.on("selectionUpdate", scheduleSyncBubble)
+    currentEditor.on("focus", scheduleSyncBubble)
     return () => {
-      currentEditor.off("selectionUpdate", syncBubble)
-      currentEditor.off("transaction", syncBubble)
+      currentEditor.off("selectionUpdate", scheduleSyncBubble)
+      currentEditor.off("focus", scheduleSyncBubble)
+      if (rafId !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(rafId)
+      }
       cancelBubbleHide()
     }
   }, [cancelBubbleHide, editor, scheduleBubbleHide, syncTableQuickRailFromElement, tableMenuState])
@@ -2235,10 +2312,35 @@ const BlockEditorShell = ({
       return
     }
 
+    cancelPendingMarkdownCommit()
+    pendingCommitEditorRef.current = null
+
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
     editor.commands.setContent(nextDoc, { emitUpdate: false })
     lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
-  }, [editor, enableMermaidBlocks, value])
+  }, [cancelPendingMarkdownCommit, editor, enableMermaidBlocks, value])
+
+  useEffect(
+    () => () => {
+      cancelPendingMarkdownCommit()
+      flushPendingMarkdownCommit()
+    },
+    [cancelPendingMarkdownCommit, flushPendingMarkdownCommit]
+  )
+
+  useEffect(() => {
+    if (!editor) return
+
+    const flushOnBlur = () => {
+      cancelPendingMarkdownCommit()
+      flushPendingMarkdownCommit()
+    }
+
+    editor.on("blur", flushOnBlur)
+    return () => {
+      editor.off("blur", flushOnBlur)
+    }
+  }, [cancelPendingMarkdownCommit, editor, flushPendingMarkdownCommit])
 
   const focusEditor = useCallback(() => {
     editor?.chain().focus().run()
@@ -3491,6 +3593,7 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
+    let rafId: number | null = null
 
     const syncSlashMenu = () => {
       if (isSlashImeComposing || editor.view.composing) {
@@ -3501,15 +3604,30 @@ const BlockEditorShell = ({
       applyResolvedSlashMenuState(resolveSlashMenuState())
     }
 
-    syncSlashMenu()
-    editor.on("selectionUpdate", syncSlashMenu)
-    editor.on("transaction", syncSlashMenu)
-    editor.on("focus", syncSlashMenu)
+    const scheduleSyncSlashMenu = () => {
+      if (typeof window === "undefined") {
+        syncSlashMenu()
+        return
+      }
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        syncSlashMenu()
+      })
+    }
+
+    scheduleSyncSlashMenu()
+    editor.on("selectionUpdate", scheduleSyncSlashMenu)
+    editor.on("transaction", scheduleSyncSlashMenu)
+    editor.on("focus", scheduleSyncSlashMenu)
 
     return () => {
-      editor.off("selectionUpdate", syncSlashMenu)
-      editor.off("transaction", syncSlashMenu)
-      editor.off("focus", syncSlashMenu)
+      editor.off("selectionUpdate", scheduleSyncSlashMenu)
+      editor.off("transaction", scheduleSyncSlashMenu)
+      editor.off("focus", scheduleSyncSlashMenu)
+      if (rafId !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(rafId)
+      }
     }
   }, [applyResolvedSlashMenuState, editor, isSlashImeComposing, resolveSlashMenuState, syncSlashMenuWhileComposing])
 

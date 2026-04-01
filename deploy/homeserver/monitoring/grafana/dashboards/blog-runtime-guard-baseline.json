@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "sourceDashboard": {
+    "uid": "blog-feed-performance",
+    "title": "Blog Feed Performance"
+  },
+  "metrics": [
+    {
+      "metric": "editor.typing.p95_ms",
+      "label": "에디터 타이핑 p95",
+      "section": "editor",
+      "panel": "Runtime Guard / Editor Typing",
+      "unit": "ms",
+      "direction": "lte",
+      "warn": 28,
+      "fail": 36
+    },
+    {
+      "metric": "feed.scroll.max_frame_gap_ms",
+      "label": "피드 스크롤 최대 프레임 간격",
+      "section": "feed",
+      "panel": "Runtime Guard / Feed Scroll",
+      "unit": "ms",
+      "direction": "lte",
+      "warn": 90,
+      "fail": 120
+    },
+    {
+      "metric": "feed.scroll.long_frame_ratio",
+      "label": "피드 스크롤 Long Frame 비율",
+      "section": "feed",
+      "panel": "Runtime Guard / Feed Scroll",
+      "unit": "ratio",
+      "direction": "lte",
+      "warn": 0.1,
+      "fail": 0.15
+    },
+    {
+      "metric": "detail.entry.ms",
+      "label": "상세 진입 완료 시간",
+      "section": "detail",
+      "panel": "Runtime Guard / Detail Entry",
+      "unit": "ms",
+      "direction": "lte",
+      "warn": 1300,
+      "fail": 1800
+    }
+  ]
+}

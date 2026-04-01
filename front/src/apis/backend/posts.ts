@@ -3,6 +3,7 @@ import { PostDetail, TPost } from "src/types"
 import { normalizeCategoryValue } from "src/libs/utils"
 import { clearFeedExplorerRestoreCache } from "src/routes/Feed/feedRestoreCache"
 import { queryKey } from "src/constants/queryKey"
+import { normalizeKeywordQuery, normalizeTagQuery } from "src/libs/query/normalize"
 import { ApiError, apiFetch, evictBrowserRevalidateCacheEntries } from "./client"
 import { asOpenApiPath } from "./openapiContract"
 
@@ -318,6 +319,7 @@ const POSTS_FEED_API_PATH = asOpenApiPath("/post/api/v1/posts/feed")
 const POSTS_FEED_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/feed/cursor")
 const POSTS_EXPLORE_CURSOR_API_PATH = asOpenApiPath("/post/api/v1/posts/explore/cursor")
 const POSTS_TAGS_API_PATH = asOpenApiPath("/post/api/v1/posts/tags")
+const POSTS_RELATED_AUTHOR_API_PATH = "/post/api/v1/posts/related/author"
 const POSTS_BOOTSTRAP_API_PATH = "/post/api/v1/posts/bootstrap"
 const POSTS_ENDPOINT_TRACE_KEY = "posts:runtime-endpoints:v1"
 const POSTS_ENDPOINT_TRACE_MAX = 60
@@ -326,7 +328,7 @@ let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
 let isPublicCursorDisabledCache: boolean | null = null
 const PUBLIC_POST_READ_CACHE_PATH_REGEX =
-  /^\/post\/api\/v1\/posts\/(?:feed|explore|search|tags)(?:\/|$)|^\/post\/api\/v1\/posts\/[0-9]+(?:\/|$)/i
+  /^\/post\/api\/v1\/posts\/(?:feed|explore|search|tags|related\/author)(?:\/|$)|^\/post\/api\/v1\/posts\/[0-9]+(?:\/|$)/i
 
 type GetPostsOptions = {
   throwOnError?: boolean
@@ -457,9 +459,11 @@ const buildExplorePath = ({
   page = 1,
   pageSize = PAGE_SIZE,
 }: ExplorePostsParams) => {
+  const normalizedKw = normalizeKeywordQuery(kw)
+  const normalizedTag = normalizeTagQuery(tag)
   const params = new URLSearchParams()
-  params.set("kw", kw.trim())
-  params.set("tag", tag.trim())
+  params.set("kw", normalizedKw)
+  params.set("tag", normalizedTag)
   params.set("sort", toSortParam(order))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
@@ -472,8 +476,9 @@ const buildSearchPath = ({
   page = 1,
   pageSize = PAGE_SIZE,
 }: ExplorePostsParams) => {
+  const normalizedKw = normalizeKeywordQuery(kw)
   const params = new URLSearchParams()
-  params.set("kw", kw.trim())
+  params.set("kw", normalizedKw)
   params.set("sort", toSortParam(order))
   params.set("page", String(toValidPage(page)))
   params.set("pageSize", String(toValidPageSize(pageSize)))
@@ -521,8 +526,9 @@ const buildExploreCursorPath = ({
   pageSize?: number
   cursor?: string
 }) => {
+  const normalizedTag = normalizeTagQuery(tag)
   const params = new URLSearchParams()
-  params.set("tag", tag.trim())
+  params.set("tag", normalizedTag)
   params.set("sort", toSortParam(order))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   if (cursor && cursor.trim()) {
@@ -540,11 +546,30 @@ const buildBootstrapPath = ({
   order?: "asc" | "desc"
   pageSize?: number
 }) => {
+  const normalizedTag = normalizeTagQuery(tag)
   const params = new URLSearchParams()
-  params.set("tag", tag.trim())
+  params.set("tag", normalizedTag)
   params.set("sort", toSortParam(order))
   params.set("pageSize", String(toValidPageSize(pageSize)))
   return `${POSTS_BOOTSTRAP_API_PATH}?${params.toString()}`
+}
+
+const buildRelatedByAuthorPath = ({
+  authorId,
+  excludePostId,
+  limit,
+}: {
+  authorId: number
+  excludePostId?: number
+  limit: number
+}) => {
+  const params = new URLSearchParams()
+  params.set("authorId", String(authorId))
+  params.set("limit", String(limit))
+  if (typeof excludePostId === "number" && Number.isFinite(excludePostId) && excludePostId > 0) {
+    params.set("excludePostId", String(Math.trunc(excludePostId)))
+  }
+  return `${POSTS_RELATED_AUTHOR_API_PATH}?${params.toString()}`
 }
 
 export const getPostsBootstrap = async ({
@@ -580,7 +605,7 @@ export const getPostsBootstrap = async ({
     nextCursor: typeof feed.nextCursor === "string" ? feed.nextCursor : null,
     pageSize: Number.isFinite(feed.pageSize) ? Math.max(1, Math.trunc(feed.pageSize)) : toValidPageSize(pageSize),
     tagCounts: response.tags.reduce<Record<string, number>>((acc, row) => {
-      const normalizedTag = typeof row.tag === "string" ? row.tag.trim() : ""
+      const normalizedTag = normalizeTagQuery(row.tag)
       if (!normalizedTag) return acc
       acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
       return acc
@@ -916,11 +941,49 @@ export const getSearchPostsPage = async ({
 export const getTagCounts = async (): Promise<Record<string, number>> => {
   const rows = await apiFetch<ApiTagCountDto[]>(POSTS_TAGS_API_PATH)
   return rows.reduce<Record<string, number>>((acc, row) => {
-    const normalizedTag = typeof row.tag === "string" ? row.tag.trim() : ""
+    const normalizedTag = normalizeTagQuery(row.tag)
     if (!normalizedTag) return acc
     acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
     return acc
   }, {})
+}
+
+export const getRelatedPostsByAuthor = async ({
+  authorId,
+  excludePostId,
+  limit = 4,
+  signal,
+}: {
+  authorId: string | number
+  excludePostId?: string | number
+  limit?: number
+  signal?: AbortSignal
+}): Promise<TPost[]> => {
+  const authorIdNumber = Number(authorId)
+  if (!Number.isInteger(authorIdNumber) || authorIdNumber <= 0) return []
+
+  const excludePostIdNumber = Number(excludePostId)
+  const safeExcludePostId =
+    Number.isInteger(excludePostIdNumber) && excludePostIdNumber > 0 ? excludePostIdNumber : undefined
+  const safeLimit = Number.isFinite(limit) ? Math.min(12, Math.max(1, Math.trunc(limit))) : 4
+
+  const rows = await apiFetch<ApiPostDto[]>(
+    (() => {
+      const endpoint = buildRelatedByAuthorPath({
+        authorId: authorIdNumber,
+        excludePostId: safeExcludePostId,
+        limit: safeLimit,
+      })
+      recordRuntimeEndpoint(endpoint, "page")
+      return endpoint
+    })(),
+    { signal }
+  )
+
+  return rows
+    .map(mapPostDto)
+    .filter((post) => (safeExcludePostId ? Number(post.id) !== safeExcludePostId : true))
+    .slice(0, safeLimit)
 }
 
 export const getPosts = async (

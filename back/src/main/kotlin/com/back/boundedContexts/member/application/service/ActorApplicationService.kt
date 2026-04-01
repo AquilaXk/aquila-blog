@@ -41,6 +41,21 @@ class ActorApplicationService(
 
     fun genAccessToken(member: Member): String = authTokenService.genAccessToken(member)
 
+    fun genAccessToken(
+        member: Member,
+        sessionKey: String?,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+    ): String =
+        authTokenService.genAccessToken(
+            member = member,
+            sessionKey = sessionKey,
+            rememberLoginEnabled = rememberLoginEnabled,
+            ipSecurityEnabled = ipSecurityEnabled,
+            ipSecurityFingerprint = ipSecurityFingerprint,
+        )
+
     fun payload(accessToken: String) = authTokenService.payload(accessToken)
 
     @Transactional(readOnly = true)

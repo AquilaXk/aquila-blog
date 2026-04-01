@@ -176,6 +176,12 @@ interface PostUseCase {
         sort: PostSearchSortType1,
     ): List<Post>
 
+    fun findPublicByAuthorExceptPost(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<Post>
+
     fun getPublicTagCounts(): List<TagCountDto>
 
     fun findTemp(author: Member): Post?

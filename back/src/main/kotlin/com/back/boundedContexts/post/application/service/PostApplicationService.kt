@@ -1052,6 +1052,26 @@ class PostApplicationService(
             )
         }
 
+    fun findPublicByAuthorExceptPost(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<Post> {
+        val safeAuthorId = authorId.coerceAtLeast(0L)
+        if (safeAuthorId <= 0L) return emptyList()
+        val safeExcludePostId = excludePostId?.takeIf { it > 0L }
+        val safeLimit = limit.coerceIn(1, 12)
+        return findAndHydratePublicCursorPosts {
+            postRepository.findPublicByAuthorExceptPost(
+                PostRepositoryPort.RelatedAuthorQuery(
+                    authorId = safeAuthorId,
+                    excludePostId = safeExcludePostId,
+                    limit = safeLimit,
+                ),
+            )
+        }
+    }
+
     /**
      * 조회 조건을 적용해 필요한 데이터를 안전하게 반환합니다.
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.

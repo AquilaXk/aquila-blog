@@ -13,10 +13,12 @@ import com.querydsl.core.types.dsl.NumberExpression
 import com.querydsl.jpa.JPAExpressions
 import com.querydsl.jpa.impl.JPAQuery
 import com.querydsl.jpa.impl.JPAQueryFactory
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.data.support.PageableExecutionUtils
+import java.sql.SQLException
 import java.time.Instant
 
 /**
@@ -34,6 +36,7 @@ class PostRepositoryImpl(
 
     companion object {
         private const val META_TAGS_INDEX_ATTR_NAME = "metaTagsIndex"
+        private val logger = LoggerFactory.getLogger(PostRepositoryImpl::class.java)
     }
 
     override fun findQPagedByKw(
@@ -72,6 +75,32 @@ class PostRepositoryImpl(
         limit: Int,
         sortAscending: Boolean,
     ): List<Post> = findPublicPostsByCursor(cursorCreatedAt, cursorId, limit, sortAscending, tag = tag)
+
+    override fun findPublicByAuthorExceptPost(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<Post> {
+        if (authorId <= 0L || limit <= 0) return emptyList()
+        val safeLimit = limit.coerceIn(1, 20)
+        val builder =
+            BooleanBuilder()
+                .and(post.published.isTrue)
+                .and(post.listed.isTrue)
+                .and(post.author.id.eq(authorId))
+
+        excludePostId?.takeIf { it > 0L }?.let { builder.and(post.id.ne(it)) }
+
+        return queryFactory
+            .selectDistinct(post)
+            .from(post)
+            .leftJoin(post.author)
+            .fetchJoin()
+            .where(builder)
+            .orderBy(post.createdAt.desc(), post.id.desc())
+            .limit(safeLimit.toLong())
+            .fetch()
+    }
 
     override fun findPublicDetailById(id: Long): Post? =
         queryFactory
@@ -136,10 +165,12 @@ class PostRepositoryImpl(
         pageable: Pageable,
         publicOnly: Boolean = false,
         tag: String? = null,
+        usePostTagIndexTable: Boolean = true,
     ): Page<Post> {
         val builder = BooleanBuilder()
-        val tagLikeToken = buildTagLikeToken(tag)
-        if (tag != null && tag.isNotBlank() && tagLikeToken == null) {
+        val safeTagToken = buildSafeTagToken(tag)
+        val tagLikeToken = safeTagToken?.let { "%|$it|%" }
+        if (tag != null && tag.isNotBlank() && safeTagToken == null) {
             return PageImpl(emptyList(), pageable, 0)
         }
 
@@ -149,17 +180,40 @@ class PostRepositoryImpl(
         }
         author?.let { builder.and(post.author.eq(it)) }
         if (kw.isNotBlank()) builder.and(buildKwPredicate(kw))
-        if (tagLikeToken != null) builder.and(buildTagIndexPredicate(tagLikeToken))
-
-        val postIds = fetchPagedPostIds(builder, pageable, kw)
-        val posts = fetchPostsByIds(postIds)
-        if (shouldSkipCountQuery(publicOnly)) {
-            return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
+        if (safeTagToken != null && tagLikeToken != null) {
+            builder.and(
+                buildTagFilterPredicate(
+                    normalizedTag = safeTagToken,
+                    tagLikeToken = tagLikeToken,
+                    usePostTagIndexTable = usePostTagIndexTable,
+                ),
+            )
         }
 
-        // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
-        val countQuery = createCountQuery(builder)
-        return PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
+        return try {
+            val postIds = fetchPagedPostIds(builder, pageable, kw)
+            val posts = fetchPostsByIds(postIds)
+            if (shouldSkipCountQuery(publicOnly)) {
+                return PageImpl(posts, pageable, estimateTotalElements(pageable, posts.size))
+            }
+
+            // count는 join/fetchJoin 없이 별도 쿼리로 계산해 페이지네이션 비용을 낮춘다.
+            val countQuery = createCountQuery(builder)
+            PageableExecutionUtils.getPage(posts, pageable) { countQuery.fetchOne() ?: 0L }
+        } catch (exception: RuntimeException) {
+            if (safeTagToken != null && usePostTagIndexTable && shouldFallbackToLegacyTagPath(exception)) {
+                logger.warn("post_tag_index path failed in findPosts; fallback to metaTagsIndex", exception)
+                return findPosts(
+                    author = author,
+                    kw = kw,
+                    pageable = pageable,
+                    publicOnly = publicOnly,
+                    tag = tag,
+                    usePostTagIndexTable = false,
+                )
+            }
+            throw exception
+        }
     }
 
     private fun findPublicPostsByCursor(
@@ -168,6 +222,7 @@ class PostRepositoryImpl(
         limit: Int,
         sortAscending: Boolean,
         tag: String?,
+        usePostTagIndexTable: Boolean = true,
     ): List<Post> {
         val safeLimit = limit.coerceIn(1, 100)
         val builder =
@@ -175,34 +230,56 @@ class PostRepositoryImpl(
                 .and(post.published.isTrue)
                 .and(post.listed.isTrue)
 
-        val tagLikeToken = buildTagLikeToken(tag)
-        if (tag != null && tag.isNotBlank() && tagLikeToken == null) {
+        val safeTagToken = buildSafeTagToken(tag)
+        val tagLikeToken = safeTagToken?.let { "%|$it|%" }
+        if (tag != null && tag.isNotBlank() && safeTagToken == null) {
             return emptyList()
         }
-        if (tagLikeToken != null) {
-            builder.and(buildTagIndexPredicate(tagLikeToken))
+        if (safeTagToken != null && tagLikeToken != null) {
+            builder.and(
+                buildTagFilterPredicate(
+                    normalizedTag = safeTagToken,
+                    tagLikeToken = tagLikeToken,
+                    usePostTagIndexTable = usePostTagIndexTable,
+                ),
+            )
         }
         buildCursorPredicate(cursorCreatedAt, cursorId, sortAscending)?.let(builder::and)
 
-        val idQuery =
-            queryFactory
-                .select(post.id)
-                .from(post)
-                .where(builder)
+        return try {
+            val idQuery =
+                queryFactory
+                    .select(post.id)
+                    .from(post)
+                    .where(builder)
 
-        if (sortAscending) {
-            idQuery.orderBy(post.createdAt.asc(), post.id.asc())
-        } else {
-            idQuery.orderBy(post.createdAt.desc(), post.id.desc())
+            if (sortAscending) {
+                idQuery.orderBy(post.createdAt.asc(), post.id.asc())
+            } else {
+                idQuery.orderBy(post.createdAt.desc(), post.id.desc())
+            }
+
+            val ids =
+                idQuery
+                    .limit(safeLimit.toLong())
+                    .fetch()
+                    .filterNotNull()
+
+            fetchPostsByIds(ids)
+        } catch (exception: RuntimeException) {
+            if (safeTagToken != null && usePostTagIndexTable && shouldFallbackToLegacyTagPath(exception)) {
+                logger.warn("post_tag_index path failed in cursor feed; fallback to metaTagsIndex", exception)
+                return findPublicPostsByCursor(
+                    cursorCreatedAt = cursorCreatedAt,
+                    cursorId = cursorId,
+                    limit = limit,
+                    sortAscending = sortAscending,
+                    tag = tag,
+                    usePostTagIndexTable = false,
+                )
+            }
+            throw exception
         }
-
-        val ids =
-            idQuery
-                .limit(safeLimit.toLong())
-                .fetch()
-                .filterNotNull()
-
-        return fetchPostsByIds(ids)
     }
 
     private fun buildKwPredicate(kw: String): BooleanExpression {
@@ -248,6 +325,19 @@ class PostRepositoryImpl(
                 ),
         )
 
+    private fun buildPostTagIndexPredicate(normalizedTag: String): BooleanExpression =
+        Expressions.booleanTemplate(
+            "exists (select 1 from post_tag_index pti where pti.post_id = {0} and lower(pti.tag) = {1})",
+            post.id,
+            Expressions.constant(normalizedTag),
+        )
+
+    private fun buildTagFilterPredicate(
+        normalizedTag: String,
+        tagLikeToken: String,
+        usePostTagIndexTable: Boolean,
+    ): BooleanExpression = if (usePostTagIndexTable) buildPostTagIndexPredicate(normalizedTag) else buildTagIndexPredicate(tagLikeToken)
+
     private fun buildCursorPredicate(
         cursorCreatedAt: Instant?,
         cursorId: Long?,
@@ -267,7 +357,7 @@ class PostRepositoryImpl(
 
     private fun normalizeTagToken(tag: String): String = tag.trim().lowercase()
 
-    private fun buildTagLikeToken(tag: String?): String? {
+    private fun buildSafeTagToken(tag: String?): String? {
         val raw = tag?.trim().orEmpty()
         if (raw.isBlank()) return null
 
@@ -278,7 +368,35 @@ class PostRepositoryImpl(
                 .replace("_", "")
                 .replace("\\", "")
         if (safeTagToken.isBlank()) return null
+        return safeTagToken
+    }
+
+    private fun buildTagLikeToken(tag: String?): String? {
+        val safeTagToken = buildSafeTagToken(tag) ?: return null
         return "%|$safeTagToken|%"
+    }
+
+    private fun shouldFallbackToLegacyTagPath(exception: RuntimeException): Boolean {
+        val chain = generateSequence(exception as Throwable?) { it?.cause }.toList()
+        val sqlException = chain.filterIsInstance<SQLException>().firstOrNull()
+        val sqlState = sqlException?.sqlState?.uppercase()
+        val unsupportedPostTagIndexState =
+            sqlState in
+                setOf(
+                    "42P01", // postgres: undefined table
+                    "42703", // postgres: undefined column
+                    "42S02", // h2/mysql: table not found
+                    "42S22", // h2/mysql: column not found
+                    "42102", // h2: table or view not found
+                    "42122", // h2: column not found
+                )
+        if (unsupportedPostTagIndexState) return true
+
+        val mentionsPostTagIndex =
+            chain.any { throwable ->
+                throwable.message?.contains("post_tag_index", ignoreCase = true) == true
+            }
+        return mentionsPostTagIndex && (sqlState == null || sqlState.startsWith("42"))
     }
 
     /**

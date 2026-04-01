@@ -24,15 +24,20 @@ class AuthCookieService(
     fun issueAuthCookies(
         apiKey: String,
         accessToken: String,
+        sessionKey: String? = null,
         rememberLoginEnabled: Boolean = true,
     ) {
         issueCookie("apiKey", apiKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
         issueCookie("accessToken", accessToken, accessTokenCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        if (!sessionKey.isNullOrBlank()) {
+            issueCookie("sessionKey", sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        }
     }
 
     fun issueAccessToken(
         accessToken: String,
         rememberLoginEnabled: Boolean = true,
+        sessionKey: String? = null,
     ) {
         issueCookie(
             "accessToken",
@@ -40,11 +45,15 @@ class AuthCookieService(
             accessTokenCookieMaxAgeSeconds,
             sessionOnly = !rememberLoginEnabled,
         )
+        if (!sessionKey.isNullOrBlank()) {
+            issueCookie("sessionKey", sessionKey, apiKeyCookieMaxAgeSeconds, sessionOnly = !rememberLoginEnabled)
+        }
     }
 
     fun expireAuthCookies() {
         expireCookie("apiKey")
         expireCookie("accessToken")
+        expireCookie("sessionKey")
     }
 
     private fun issueCookie(

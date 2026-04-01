@@ -44,5 +44,11 @@ interface PostPublicReadQueryUseCase {
 
     fun getPublicPostDetail(id: Long): PostWithContentDto
 
+    fun getPublicRelatedByAuthor(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+    ): List<FeedPostDto>
+
     fun getPublicTagCounts(): List<TagCountDto>
 }

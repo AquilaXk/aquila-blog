@@ -9,6 +9,7 @@ import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
+import com.back.boundedContexts.member.subContexts.session.application.service.MemberSessionService
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
@@ -46,6 +47,7 @@ class ApiV1AuthController(
     private val authCookieService: AuthCookieService,
     private val clientIpResolver: ClientIpResolver,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
+    private val memberSessionService: MemberSessionService,
 ) {
     companion object {
         private const val MAX_EMAIL_LENGTH = 320
@@ -123,13 +125,31 @@ class ApiV1AuthController(
         if (member.apiKey.isBlank() || member.apiKey == member.username) {
             member.modifyApiKey(MemberPolicy.genApiKey())
         }
-        val accessToken = authTokenIssueUseCase.genAccessToken(member)
+        val session =
+            memberSessionService.createSession(
+                member = member,
+                rememberLoginEnabled = reqBody.rememberMe,
+                ipSecurityEnabled = reqBody.ipSecurity,
+                ipSecurityFingerprint = ipSecurityFingerprint,
+                createdIp = clientIp,
+                userAgent = request.getHeader("User-Agent"),
+            )
 
+        val sessionBoundAccessToken =
+            authTokenIssueUseCase.genAccessToken(
+                member = member,
+                sessionKey = session.sessionKey,
+                rememberLoginEnabled = session.rememberLoginEnabled,
+                ipSecurityEnabled = session.ipSecurityEnabled,
+                ipSecurityFingerprint = session.ipSecurityFingerprint,
+            )
         authCookieService.issueAuthCookies(
             apiKey = member.apiKey,
-            accessToken = accessToken,
-            rememberLoginEnabled = member.rememberLoginEnabled,
+            accessToken = sessionBoundAccessToken,
+            sessionKey = session.sessionKey,
+            rememberLoginEnabled = session.rememberLoginEnabled,
         )
+
         runCatching {
             authSecurityEventService.recordLoginPolicyApplied(
                 member = member,
@@ -148,7 +168,16 @@ class ApiV1AuthController(
     }
 
     @DeleteMapping("/logout")
-    fun logout(): RsData<Void> {
+    fun logout(request: HttpServletRequest): RsData<Void> {
+        val sessionKeyCookie =
+            request.cookies
+                ?.firstOrNull { it.name == "sessionKey" }
+                ?.value
+                ?.trim()
+                .orEmpty()
+        if (sessionKeyCookie.isNotBlank()) {
+            memberSessionService.revokeSession(sessionKeyCookie)
+        }
         authCookieService.expireAuthCookies()
         return RsData("200-1", "로그아웃 되었습니다.")
     }

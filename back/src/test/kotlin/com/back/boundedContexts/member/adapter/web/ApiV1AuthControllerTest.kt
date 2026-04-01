@@ -3,6 +3,7 @@ package com.back.boundedContexts.member.adapter.web
 import com.back.boundedContexts.member.application.service.AuthTokenService
 import com.back.boundedContexts.member.application.service.LoginAttemptService
 import com.back.boundedContexts.member.application.service.MemberApplicationService
+import com.back.boundedContexts.member.subContexts.session.adapter.persistence.MemberSessionRepository
 import com.back.support.SeededSpringBootTestSupport
 import jakarta.servlet.http.Cookie
 import org.assertj.core.api.Assertions.assertThat
@@ -41,6 +42,9 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
 
     @Autowired
     private lateinit var loginAttemptService: LoginAttemptService
+
+    @Autowired
+    private lateinit var memberSessionRepository: MemberSessionRepository
 
     @AfterEach
     fun clearLoginAttemptState() {
@@ -101,6 +105,13 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
             assertThat(accessTokenCookie!!.value).isNotBlank()
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
+
+            val sessionKeyCookie =
+                result.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
+            assertThat(sessionKeyCookie).isNotNull
+            val activeSession = memberSessionRepository.findBySessionKeyAndRevokedAtIsNull(sessionKeyCookie!!.value)
+            assertThat(activeSession).isNotNull
+            assertThat(activeSession!!.member.id).isEqualTo(member.id)
         }
 
         @Test
@@ -162,6 +173,8 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                 result.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
             val issuedAccessTokenCookie =
                 result.response.cookies.firstOrNull { it.name == "accessToken" && it.value.isNotBlank() }
+            val issuedSessionKeyCookie =
+                result.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
 
             assertThat(apiKeyCookie).isNotNull
             assertThat(issuedApiKeyCookie).isNotNull
@@ -169,6 +182,8 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
 
             assertThat(issuedAccessTokenCookie).isNotNull
             assertThat(issuedAccessTokenCookie!!.maxAge).isEqualTo(-1)
+            assertThat(issuedSessionKeyCookie).isNotNull
+            assertThat(issuedSessionKeyCookie!!.maxAge).isEqualTo(-1)
         }
 
         @Test
@@ -366,10 +381,36 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
     inner class Logout {
         @Test
         fun `로그아웃 요청이 성공하면 인증 쿠키를 만료시킨다`() {
+            val member =
+                memberFacade.join(
+                    username = "logout-session-user",
+                    password = "Abcd1234!",
+                    nickname = "로그아웃세션",
+                    profileImgUrl = null,
+                    email = "logout-session-user@example.com",
+                )
+            val loginResponse =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+            val sessionKeyCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "sessionKey" && it.value.isNotBlank() }
+            assertThat(sessionKeyCookie).isNotNull
             val resultActions =
                 mvc
-                    .delete("/member/api/v1/auth/logout")
-                    .andExpect {
+                    .delete("/member/api/v1/auth/logout") {
+                        cookie(sessionKeyCookie!!)
+                    }.andExpect {
                         status { isOk() }
                         match(handler().handlerType(ApiV1AuthController::class.java))
                         match(handler().methodName("logout"))
@@ -392,6 +433,10 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
             assertThat(accessTokenCookie.maxAge).isEqualTo(0)
             assertThat(accessTokenCookie.path).isEqualTo("/")
             assertThat(accessTokenCookie.isHttpOnly).isTrue
+
+            val revokedSession = memberSessionRepository.findBySessionKey(sessionKeyCookie!!.value)
+            assertThat(revokedSession).isNotNull
+            assertThat(revokedSession!!.revokedAt).isNotNull
         }
     }
 

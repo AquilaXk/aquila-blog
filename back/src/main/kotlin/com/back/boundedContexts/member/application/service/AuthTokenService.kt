@@ -26,16 +26,32 @@ class AuthTokenService(
     }
 
     override fun genAccessToken(member: Member): String =
+        genAccessToken(
+            member = member,
+            sessionKey = null,
+            rememberLoginEnabled = member.rememberLoginEnabled,
+            ipSecurityEnabled = member.ipSecurityEnabled,
+            ipSecurityFingerprint = member.ipSecurityFingerprint,
+        )
+
+    override fun genAccessToken(
+        member: Member,
+        sessionKey: String?,
+        rememberLoginEnabled: Boolean,
+        ipSecurityEnabled: Boolean,
+        ipSecurityFingerprint: String?,
+    ): String =
         Jwts
             .builder()
             .claims(
                 mapOf(
                     "id" to member.id,
+                    "sessionKey" to sessionKey,
                     "email" to member.email,
                     "name" to member.name,
-                    "rememberLoginEnabled" to member.rememberLoginEnabled,
-                    "ipSecurityEnabled" to member.ipSecurityEnabled,
-                    "ipSecurityFingerprint" to member.ipSecurityFingerprint,
+                    "rememberLoginEnabled" to rememberLoginEnabled,
+                    "ipSecurityEnabled" to ipSecurityEnabled,
+                    "ipSecurityFingerprint" to ipSecurityFingerprint,
                 ),
             ).issuedAt(Date())
             .expiration(Date(System.currentTimeMillis() + accessTokenExpirationSeconds * 1000L))
@@ -60,6 +76,7 @@ class AuthTokenService(
 
         return AccessTokenPayload(
             id = (payload["id"] as? Number)?.toLong() ?: return null,
+            sessionKey = payload["sessionKey"] as? String,
             username = payload["username"] as? String,
             email = payload["email"] as? String,
             name = payload["name"] as? String ?: return null,

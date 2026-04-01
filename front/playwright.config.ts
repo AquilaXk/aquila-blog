@@ -8,6 +8,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const useWebServer = process.env.PLAYWRIGHT_USE_WEBSERVER !== "false"
 const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
 const useLiveFailFast = process.env.PLAYWRIGHT_LIVE_FAIL_FAST === "true"
+const playwrightJsonReportPath = process.env.PLAYWRIGHT_JSON_REPORT_PATH?.trim() || ""
 const inheritedEnv = { ...process.env }
 const resolvedBackendInternalUrl = inheritedEnv.BACKEND_INTERNAL_URL || "http://127.0.0.1:1"
 const shouldEnableAdminGuardQaBypassByDefault =
@@ -37,6 +38,14 @@ const liveMultiBrowserProjects = [
   },
 ]
 
+const playwrightReporters: NonNullable<ReturnType<typeof defineConfig>["reporter"]> = process.env.CI
+  ? [["github"], ["html", { open: "never" }]]
+  : [["list"]]
+
+if (playwrightJsonReportPath) {
+  playwrightReporters.push(["json", { outputFile: playwrightJsonReportPath }])
+}
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -46,7 +55,7 @@ export default defineConfig({
   fullyParallel: true,
   workers: process.env.CI ? 2 : undefined,
   retries: useLiveFailFast ? 0 : process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+  reporter: playwrightReporters,
   use: {
     baseURL,
     trace: "on-first-retry",

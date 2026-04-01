@@ -52,6 +52,12 @@ interface PostRepositoryPort {
         val sortAscending: Boolean,
     )
 
+    data class RelatedAuthorQuery(
+        val authorId: Long,
+        val excludePostId: Long?,
+        val limit: Int,
+    )
+
     data class PagedResult<T>(
         val content: List<T>,
         val totalElements: Long,
@@ -105,6 +111,8 @@ interface PostRepositoryPort {
     fun findPublicByCursor(query: CursorQuery): List<Post>
 
     fun findPublicByTagCursor(query: TaggedCursorQuery): List<Post>
+
+    fun findPublicByAuthorExceptPost(query: RelatedAuthorQuery): List<Post>
 
     fun findPublicDetailById(id: Long): Post?
 

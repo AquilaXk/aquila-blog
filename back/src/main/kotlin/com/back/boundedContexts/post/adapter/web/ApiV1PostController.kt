@@ -304,6 +304,29 @@ class ApiV1PostController(
 
     private fun buildTagsEtagSeed(tags: List<TagCountDto>): String = tags.joinToString(separator = "|") { "${it.tag}:${it.count}" }
 
+    private fun buildRelatedAuthorEtagSeed(
+        authorId: Long,
+        excludePostId: Long?,
+        limit: Int,
+        posts: List<FeedPostDto>,
+    ): String {
+        val itemsToken =
+            posts.joinToString(separator = "|") {
+                "${it.id}:${toEpochMillis(it.modifiedAt)}:${it.likesCount}:${it.commentsCount}:${it.hitCount}"
+            }
+        return buildString {
+            append("related-author")
+            append("|authorId=")
+            append(authorId)
+            append("|excludePostId=")
+            append(excludePostId ?: 0L)
+            append("|limit=")
+            append(limit)
+            append("|items=")
+            append(itemsToken)
+        }
+    }
+
     private fun buildBootstrapEtagSeed(
         pageSize: Int,
         sort: PostSearchSortType1,
@@ -470,6 +493,36 @@ class ApiV1PostController(
                     PostCacheTags.EXPLORE_CURSOR,
                     PostCacheTags.byTag(normalizedTag),
                 ),
+            etagSeed = etagSeed,
+            startedAtNanos = startedAtNanos,
+            body = data,
+        )
+    }
+
+    @GetMapping("/related/author")
+    @Transactional(readOnly = true)
+    fun getRelatedByAuthor(
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @RequestParam @Positive authorId: Long,
+        @RequestParam(required = false) excludePostId: Long?,
+        @RequestParam(defaultValue = "4") @Min(1) limit: Int,
+    ): ResponseEntity<List<FeedPostDto>> {
+        val startedAtNanos = System.nanoTime()
+        val safeLimit = limit.coerceIn(1, MAX_RELATED_AUTHOR_LIMIT)
+        val safeExcludePostId = excludePostId?.takeIf { it > 0L }
+        val data =
+            postPublicReadQueryUseCase.getPublicRelatedByAuthor(
+                authorId = authorId,
+                excludePostId = safeExcludePostId,
+                limit = safeLimit,
+            )
+        val etagSeed = buildRelatedAuthorEtagSeed(authorId, safeExcludePostId, safeLimit, data)
+        return respondPublicWithEtag(
+            request = request,
+            response = response,
+            cachePolicy = RELATED_AUTHOR_CACHE_POLICY,
+            surrogateKeys = setOf(PostCacheTags.LIST, PostCacheTags.DETAIL),
             etagSeed = etagSeed,
             startedAtNanos = startedAtNanos,
             body = data,
@@ -1085,10 +1138,18 @@ class ApiV1PostController(
                 sharedMaxAgeSeconds = 60,
                 staleWhileRevalidateSeconds = 60,
             )
+        private val RELATED_AUTHOR_CACHE_POLICY =
+            PublicReadCachePolicy(
+                name = "related-author-max15-smax45-swr45",
+                maxAgeSeconds = 15,
+                sharedMaxAgeSeconds = 45,
+                staleWhileRevalidateSeconds = 45,
+            )
 
         private const val MAX_PUBLIC_PAGE = 200
         private const val MAX_EXPLORE_KW_LENGTH = 80
         private const val MAX_EXPLORE_TAG_LENGTH = 40
+        private const val MAX_RELATED_AUTHOR_LIMIT = 12
         private const val MAX_CACHE_TAG_LENGTH = 64
         private const val SEARCH_SHORT_TTL_KEYWORD_LENGTH = 16
         private const val SEARCH_NO_STORE_KEYWORD_LENGTH = 28

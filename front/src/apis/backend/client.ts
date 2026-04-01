@@ -11,18 +11,21 @@ const GET_RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 const STALE_IF_ERROR_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 
 type GetCacheMode = "revalidate" | "no-store"
+type ApiRequestCredentials = "include" | "omit"
 
 type GetRequestPolicy = {
   cacheMode: GetCacheMode
   retryCount: number
   staleIfError: boolean
   timeoutMs?: number
+  credentials: ApiRequestCredentials
 }
 
 const DEFAULT_GET_REQUEST_POLICY: GetRequestPolicy = {
   cacheMode: "no-store",
   retryCount: 0,
   staleIfError: false,
+  credentials: "include",
 }
 
 const GET_REQUEST_POLICY_REGISTRY: Array<{
@@ -62,12 +65,13 @@ const GET_REQUEST_POLICY_REGISTRY: Array<{
     policy: { cacheMode: "no-store", retryCount: 0, staleIfError: false, timeoutMs: 8_000 },
   },
   {
-    matcher: /^\/post\/api\/v1\/posts\/(feed|explore|search|tags)(\/|$)/i,
+    matcher: /^\/post\/api\/v1\/posts\/(feed|explore|search|tags|bootstrap)(\/|$)/i,
     policy: {
       cacheMode: "revalidate",
       retryCount: DEFAULT_GET_TRANSIENT_RETRY_COUNT,
       staleIfError: true,
       timeoutMs: 8_000,
+      credentials: "omit",
     },
   },
   {
@@ -99,6 +103,7 @@ const resolveGetRequestPolicy = (path: string): GetRequestPolicy => {
     retryCount: matched.policy.retryCount ?? DEFAULT_GET_REQUEST_POLICY.retryCount,
     staleIfError: matched.policy.staleIfError ?? DEFAULT_GET_REQUEST_POLICY.staleIfError,
     timeoutMs: matched.policy.timeoutMs,
+    credentials: matched.policy.credentials ?? DEFAULT_GET_REQUEST_POLICY.credentials,
   }
 }
 
@@ -341,6 +346,9 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
   const method = (requestInit.method || "GET").toUpperCase()
   const isReadMethod = method === "GET" || method === "HEAD"
   const getRequestPolicy = isReadMethod ? resolveGetRequestPolicy(safePath) : null
+  const requestCredentials: RequestCredentials =
+    requestInit.credentials ??
+    (isReadMethod ? (getRequestPolicy?.credentials ?? DEFAULT_GET_REQUEST_POLICY.credentials) : "include")
   const canUseRevalidateCache =
     !isServer &&
     method === "GET" &&
@@ -348,10 +356,12 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
     getRequestPolicy?.cacheMode !== "no-store" &&
     requestInit.cache !== "no-store"
   const canUseInFlightDedupe =
-    canUseRevalidateCache &&
+    !isServer &&
+    isReadMethod &&
+    !hasBody &&
     !requestInit.signal &&
     init.timeoutMs === undefined
-  const inFlightKey = canUseInFlightDedupe ? `${method}:${url}` : null
+  const inFlightKey = canUseInFlightDedupe ? `${method}:${requestCredentials}:${url}` : null
   const revalidateCacheEntry = canUseRevalidateCache ? getRevalidateCacheEntry(url) : null
 
   if (hasBody && !isFormLikeBody && !headers.has("Content-Type")) {
@@ -382,8 +392,8 @@ export const apiFetch = async <T>(path: string, init: ApiFetchOptions = {}): Pro
 
       try {
         response = await fetch(url, {
-          credentials: "include",
           ...requestInit,
+          credentials: requestCredentials,
           headers,
           signal,
         })

@@ -132,6 +132,88 @@ test.describe("block editor authoring flow", () => {
       .toBe("")
   })
 
+  test("빈 문단/텍스트 문단 클릭 시 파란 블록 선택 surface가 유지된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("첫 줄")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째 줄")
+    await page.keyboard.press("Enter")
+
+    const blocks = editor.locator(":scope > p")
+    await expect(blocks).toHaveCount(3)
+
+    const textBlock = blocks.nth(0)
+    const emptyBlock = blocks.nth(2)
+    const selectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
+
+    await textBlock.click()
+    await expect(selectionOverlay).toBeVisible()
+    await expect
+      .poll(async () => {
+        const textRect = await textBlock.boundingBox()
+        const overlayRect = await selectionOverlay.boundingBox()
+        if (!textRect || !overlayRect) return Number.POSITIVE_INFINITY
+        return Math.abs((overlayRect.y + 4) - textRect.y)
+      })
+      .toBeLessThanOrEqual(10)
+    const firstOverlayRect = await selectionOverlay.boundingBox()
+    if (!firstOverlayRect) {
+      throw new Error("첫 번째 선택 overlay 위치를 계산할 수 없습니다.")
+    }
+
+    await emptyBlock.click()
+    await expect(selectionOverlay).toBeVisible()
+    await expect
+      .poll(async () => {
+        const emptyRect = await emptyBlock.boundingBox()
+        const overlayRect = await selectionOverlay.boundingBox()
+        if (!emptyRect || !overlayRect) return Number.POSITIVE_INFINITY
+        return Math.abs((overlayRect.y + 4) - emptyRect.y)
+      })
+      .toBeLessThanOrEqual(10)
+    const secondOverlayRect = await selectionOverlay.boundingBox()
+    if (!secondOverlayRect) {
+      throw new Error("두 번째 선택 overlay 위치를 계산할 수 없습니다.")
+    }
+    expect(secondOverlayRect.y).toBeGreaterThan(firstOverlayRect.y + 20)
+  })
+
+  test("블록 이동 핸들 1회 클릭은 블록 선택을 고정하고 Backspace로 삭제된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("첫 줄")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째 줄")
+
+    const firstParagraph = editor.locator("p", { hasText: "첫 줄" }).first()
+    await firstParagraph.hover()
+
+    const dragHandle = page.getByTestId("block-drag-handle")
+    await expect(dragHandle).toBeVisible()
+    await dragHandle.click()
+
+    await expect(page.getByTestId("keyboard-block-selection-overlay")).toBeVisible()
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const selection = window.getSelection()
+          return selection ? selection.toString() : ""
+        })
+      )
+      .toBe("")
+
+    await page.keyboard.press("Backspace")
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).not.toContainText("첫 줄")
+    await expect(markdownOutput).toContainText("둘째 줄")
+  })
+
   test("블록 드래그 시 source/destination 피드백이 동시에 보인다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 

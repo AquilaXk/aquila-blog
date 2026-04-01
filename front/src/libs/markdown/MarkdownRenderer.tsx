@@ -327,7 +327,7 @@ const MarkdownRendererComponent: FC<Props> = ({
 
   let tableRenderIndex = 0
 
-  const renderMarkdown = (markdown: string, key: string, inCallout = false) => (
+  const renderMarkdown = (markdown: string, key: string, inCallout = false, inlineOnly = false) => (
     // 코드블록이 없는 세그먼트에는 무거운 syntax-highlight 플러그인을 생략한다.
     <ReactMarkdown
       key={key}
@@ -335,6 +335,7 @@ const MarkdownRendererComponent: FC<Props> = ({
       rehypePlugins={[rehypeKatex]}
       components={{
         p({ children }) {
+          if (inlineOnly) return <>{children}</>
           if (!inCallout) return <p>{children}</p>
           return <p className="aq-markdown-text">{children}</p>
         },

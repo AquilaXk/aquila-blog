@@ -17,7 +17,12 @@ import {
   useRef,
   useState,
 } from "react"
-import type { ChangeEvent, DragEvent as ReactDragEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react"
+import type {
+  ChangeEvent,
+  DragEvent as ReactDragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactNode,
+} from "react"
 import {
   BookmarkBlock,
   CalloutBlock,
@@ -82,7 +87,11 @@ import {
   looksLikeStructuredMarkdownDocument,
   normalizeStructuredMarkdownClipboard,
 } from "src/libs/markdown/htmlToMarkdown"
-import { INLINE_TEXT_COLOR_OPTIONS, normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
+import {
+  INLINE_COLOR_TOKEN_REGEX,
+  INLINE_TEXT_COLOR_OPTIONS,
+  normalizeInlineColorToken,
+} from "src/libs/markdown/inlineColor"
 import { inferCardKindFromUrl, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
 
 type Props = {
@@ -201,6 +210,8 @@ type BlockSelectionOverlayState = {
   width: number
   height: number
 }
+
+type CalloutMarkdownFieldElement = HTMLInputElement | HTMLTextAreaElement
 
 type PendingBlockDragState = {
   sourceIndex: number
@@ -763,7 +774,8 @@ const BlockEditorShell = ({
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
-  const [selectedBlockIndex, setSelectedBlockIndex] = useState(0)
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
+  const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
   const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
   const selectedBlockNodeIndexRef = useRef<number | null>(null)
   const keyboardBlockSelectionStickyRef = useRef(false)
@@ -938,17 +950,35 @@ const BlockEditorShell = ({
   )
 
   useEffect(() => {
-    syncSelectedBlockNodeSurface(selectedBlockNodeIndex)
-  }, [selectedBlockNodeIndex, selectionTick, syncSelectedBlockNodeSurface])
+    const selectedSurfaceIndex =
+      selectedBlockNodeIndex !== null
+        ? selectedBlockNodeIndex
+        : clickedBlockIndex !== null
+          ? clickedBlockIndex
+          : selectedBlockIndex
+    syncSelectedBlockNodeSurface(selectedSurfaceIndex)
+  }, [
+    clickedBlockIndex,
+    selectedBlockIndex,
+    selectedBlockNodeIndex,
+    selectionTick,
+    syncSelectedBlockNodeSurface,
+  ])
 
   useEffect(() => {
-    if (selectedBlockNodeIndex === null || !keyboardBlockSelectionStickyRef.current) {
+    const surfaceIndex =
+      selectedBlockNodeIndex !== null
+        ? selectedBlockNodeIndex
+        : clickedBlockIndex !== null
+          ? clickedBlockIndex
+          : selectedBlockIndex
+    if (surfaceIndex === null) {
       setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
       return
     }
 
     const syncOverlay = () => {
-      const blockElement = getTopLevelBlockElementByIndex(selectedBlockNodeIndex)
+      const blockElement = getTopLevelBlockElementByIndex(surfaceIndex)
       if (!blockElement) {
         setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
         return
@@ -971,7 +1001,7 @@ const BlockEditorShell = ({
       window.removeEventListener("resize", syncOverlay)
       window.removeEventListener("scroll", syncOverlay, true)
     }
-  }, [getTopLevelBlockElementByIndex, selectedBlockNodeIndex, selectionTick])
+  }, [clickedBlockIndex, getTopLevelBlockElementByIndex, selectedBlockIndex, selectedBlockNodeIndex, selectionTick])
 
   const resolveDropIndicatorByClientY = useCallback(
     (clientY: number) => {
@@ -1064,12 +1094,6 @@ const BlockEditorShell = ({
     [resolveDropIndicatorByClientY]
   )
 
-  const selectTopLevelBlock = useCallback((blockIndex: number) => {
-    const currentEditor = editorRef.current
-    if (!currentEditor) return
-    selectTopLevelBlockNode(currentEditor, blockIndex)
-  }, [])
-
   const clearNativeTextSelection = useCallback(() => {
     if (typeof window === "undefined") return
     window.requestAnimationFrame(() => {
@@ -1086,6 +1110,7 @@ const BlockEditorShell = ({
       if (!currentEditor) return false
       keyboardBlockSelectionStickyRef.current = true
       selectTopLevelBlockNode(currentEditor, blockIndex)
+      setClickedBlockIndex(null)
       setSelectedBlockIndex(blockIndex)
       setSelectedBlockNodeIndex(blockIndex)
       syncSelectedBlockNodeSurface(blockIndex)
@@ -1968,6 +1993,8 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
+    let disposed = false
+
     const notifySelection = () => {
       const selection = editor.state.selection as typeof editor.state.selection & {
         node?: { isBlock?: boolean }
@@ -1979,24 +2006,66 @@ const BlockEditorShell = ({
       setSelectionTick((prev) => prev + 1)
       setSelectedBlockIndex(nextBlockIndex)
       if (isTopLevelBlockNodeSelection) {
+        setClickedBlockIndex(null)
         keyboardBlockSelectionStickyRef.current = false
         setSelectedBlockNodeIndex(nextBlockIndex)
-        syncSelectedBlockNodeSurface(nextBlockIndex)
         return
       }
       if (!keyboardBlockSelectionStickyRef.current) {
         setSelectedBlockNodeIndex(null)
-        syncSelectedBlockNodeSurface(null)
       }
     }
+
+    const notifyBlur = () => {
+      setSelectionTick((prev) => prev + 1)
+      const finalizeBlur = () => {
+        if (disposed || editor.isFocused) return
+        setClickedBlockIndex(null)
+        setSelectedBlockIndex(null)
+        if (!keyboardBlockSelectionStickyRef.current) {
+          setSelectedBlockNodeIndex(null)
+        }
+      }
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(finalizeBlur)
+        return
+      }
+      finalizeBlur()
+    }
+
     notifySelection()
     editor.on("selectionUpdate", notifySelection)
     editor.on("transaction", notifySelection)
+    editor.on("focus", notifySelection)
+    editor.on("blur", notifyBlur)
     return () => {
+      disposed = true
       editor.off("selectionUpdate", notifySelection)
       editor.off("transaction", notifySelection)
+      editor.off("focus", notifySelection)
+      editor.off("blur", notifyBlur)
     }
-  }, [editor, syncSelectedBlockNodeSurface])
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
+
+    const handleEditorMouseDownCapture = (event: MouseEvent) => {
+      const targetBlockIndex =
+        findTopLevelBlockIndexFromTarget(event.target) ??
+        findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
+      if (isTableSelectionActive(editor) || targetBlockIndex === null) return
+      setClickedBlockIndex(targetBlockIndex)
+      setSelectedBlockIndex(targetBlockIndex)
+      setSelectionTick((prev) => prev + 1)
+    }
+
+    const editorDom = editor.view.dom
+    editorDom.addEventListener("mousedown", handleEditorMouseDownCapture, true)
+    return () => {
+      editorDom.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
+    }
+  }, [editor, findTopLevelBlockIndexByClientPosition, findTopLevelBlockIndexFromTarget])
 
   useEffect(() => {
     if (!editor || typeof document === "undefined" || typeof window === "undefined") return
@@ -2441,6 +2510,131 @@ const BlockEditorShell = ({
     editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run()
   }, [editor])
 
+  const getFocusedCalloutMarkdownField = useCallback((): CalloutMarkdownFieldElement | null => {
+    if (typeof document === "undefined") return null
+    const active = document.activeElement
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+      if (active.dataset.calloutMarkdownField === "true") {
+        return active
+      }
+    }
+    return null
+  }, [])
+
+  const updateCalloutFieldValue = useCallback((field: CalloutMarkdownFieldElement, nextValue: string) => {
+    const prototype = Object.getPrototypeOf(field)
+    const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
+    if (valueSetter) {
+      valueSetter.call(field, nextValue)
+    } else {
+      field.value = nextValue
+    }
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  }, [])
+
+  const applyCalloutMarkdownWrap = useCallback(
+    ({
+      prefix,
+      suffix = prefix,
+      fallbackText = "",
+    }: {
+      prefix: string
+      suffix?: string
+      fallbackText?: string
+    }) => {
+      const field = getFocusedCalloutMarkdownField()
+      if (!field || field.disabled || field.readOnly) return false
+
+      const value = field.value || ""
+      const selectionStart = field.selectionStart ?? value.length
+      const selectionEnd = field.selectionEnd ?? selectionStart
+      const selectedText = value.slice(selectionStart, selectionEnd)
+      const wrappedText = `${prefix}${selectedText || fallbackText}${suffix}`
+      const nextValue = `${value.slice(0, selectionStart)}${wrappedText}${value.slice(selectionEnd)}`
+
+      updateCalloutFieldValue(field, nextValue)
+      field.focus()
+
+      const cursorAnchor = selectionStart + prefix.length
+      if (selectedText.length === 0 && fallbackText.length > 0) {
+        field.setSelectionRange(cursorAnchor, cursorAnchor + fallbackText.length)
+      } else if (selectedText.length === 0) {
+        field.setSelectionRange(cursorAnchor, cursorAnchor)
+      } else {
+        field.setSelectionRange(cursorAnchor, cursorAnchor + selectedText.length)
+      }
+
+      return true
+    },
+    [getFocusedCalloutMarkdownField, updateCalloutFieldValue]
+  )
+
+  const applyCalloutInlineColor = useCallback(
+    (color?: string | null) => {
+      const field = getFocusedCalloutMarkdownField()
+      if (!field || field.disabled || field.readOnly) return false
+
+      const value = field.value || ""
+      const selectionStart = field.selectionStart ?? value.length
+      const selectionEnd = field.selectionEnd ?? selectionStart
+
+      if (!color) {
+        const stripToken = (_match: string, _rawColor: string, content: string) => content
+        if (selectionStart !== selectionEnd) {
+          const selectedText = value.slice(selectionStart, selectionEnd)
+          const normalized = selectedText.replace(INLINE_COLOR_TOKEN_REGEX, stripToken)
+          const nextValue = `${value.slice(0, selectionStart)}${normalized}${value.slice(selectionEnd)}`
+          updateCalloutFieldValue(field, nextValue)
+          field.focus()
+          field.setSelectionRange(selectionStart, selectionStart + normalized.length)
+          return true
+        }
+
+        INLINE_COLOR_TOKEN_REGEX.lastIndex = 0
+        let match: RegExpExecArray | null = null
+        while ((match = INLINE_COLOR_TOKEN_REGEX.exec(value)) !== null) {
+          const matchStart = match.index
+          const matchEnd = matchStart + match[0].length
+          if (selectionStart < matchStart || selectionStart > matchEnd) continue
+
+          const normalized = match[2] || ""
+          const nextValue = `${value.slice(0, matchStart)}${normalized}${value.slice(matchEnd)}`
+          updateCalloutFieldValue(field, nextValue)
+          field.focus()
+          field.setSelectionRange(matchStart, matchStart + normalized.length)
+          return true
+        }
+        return true
+      }
+
+      const normalizedColor = normalizeInlineColorToken(color)
+      if (!normalizedColor) return false
+      const colorToken =
+        INLINE_TEXT_COLOR_OPTIONS.find((option) => option.value === normalizedColor)?.token || normalizedColor
+      const selectedText = value.slice(selectionStart, selectionEnd).replace(INLINE_COLOR_TOKEN_REGEX, (_m, _c, content) => content)
+      const renderText = selectedText || "텍스트"
+      const wrappedText = `{{color:${colorToken}|${renderText}}}`
+      const nextValue = `${value.slice(0, selectionStart)}${wrappedText}${value.slice(selectionEnd)}`
+
+      updateCalloutFieldValue(field, nextValue)
+      field.focus()
+      const textStart = selectionStart + `{{color:${colorToken}|`.length
+      field.setSelectionRange(textStart, textStart + renderText.length)
+      return true
+    },
+    [getFocusedCalloutMarkdownField, updateCalloutFieldValue]
+  )
+
+  const runBoldAction = useCallback(() => {
+    if (applyCalloutMarkdownWrap({ prefix: "**" })) return
+    editor?.chain().focus().toggleBold().run()
+  }, [applyCalloutMarkdownWrap, editor])
+
+  const runItalicAction = useCallback(() => {
+    if (applyCalloutMarkdownWrap({ prefix: "*", suffix: "*" })) return
+    editor?.chain().focus().toggleItalic().run()
+  }, [applyCalloutMarkdownWrap, editor])
+
   const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
   const isInlineCodeActive = editor?.isActive("code") ?? false
   const isTableMode = isTableSelectionActive(editor)
@@ -2456,6 +2650,10 @@ const BlockEditorShell = ({
 
   const applyInlineColor = useCallback(
     (color?: string | null) => {
+      if (applyCalloutInlineColor(color)) {
+        setIsInlineColorMenuOpen(false)
+        return
+      }
       if (!editor) return
 
       const chain = editor.chain().focus()
@@ -2466,7 +2664,7 @@ const BlockEditorShell = ({
       }
       setIsInlineColorMenuOpen(false)
     },
-    [editor]
+    [applyCalloutInlineColor, editor]
   )
 
   const updateActiveTableCellAttrs = useCallback(
@@ -3339,8 +3537,8 @@ const BlockEditorShell = ({
     { id: "heading-2", label: "H2", ariaLabel: "제목 2", run: () => editor?.chain().focus().toggleHeading({ level: 2 }).run(), active: editor?.isActive("heading", { level: 2 }) ?? false },
     { id: "heading-3", label: "H3", ariaLabel: "제목 3", run: () => editor?.chain().focus().toggleHeading({ level: 3 }).run(), active: editor?.isActive("heading", { level: 3 }) ?? false },
     { id: "heading-4", label: "H4", ariaLabel: "제목 4", run: () => editor?.chain().focus().toggleHeading({ level: 4 }).run(), active: editor?.isActive("heading", { level: 4 }) ?? false },
-    { id: "bold", label: "B", ariaLabel: "굵게", run: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold") ?? false },
-    { id: "italic", label: <AppIcon name="italic" aria-hidden="true" />, ariaLabel: "기울임", run: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic") ?? false },
+    { id: "bold", label: "B", ariaLabel: "굵게", run: runBoldAction, active: editor?.isActive("bold") ?? false },
+    { id: "italic", label: <AppIcon name="italic" aria-hidden="true" />, ariaLabel: "기울임", run: runItalicAction, active: editor?.isActive("italic") ?? false },
     { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
@@ -3959,6 +4157,14 @@ const BlockEditorShell = ({
 
   const handleViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      const targetBlockIndex =
+        findTopLevelBlockIndexFromTarget(event.target) ??
+        findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
+      if (!isTableMode && targetBlockIndex !== null) {
+        setClickedBlockIndex(targetBlockIndex)
+        setSelectedBlockIndex(targetBlockIndex)
+        setSelectionTick((prev) => prev + 1)
+      }
       if (selectedBlockNodeIndex !== null) {
         keyboardBlockSelectionStickyRef.current = false
         setSelectedBlockNodeIndex(null)
@@ -3971,7 +4177,17 @@ const BlockEditorShell = ({
       event.stopPropagation()
       startTableRowResize(cell, event.clientY)
     },
-    [getTableCellFromTarget, isCoarsePointer, isRowResizeHandleTarget, selectedBlockNodeIndex, startTableRowResize, syncSelectedBlockNodeSurface]
+    [
+      findTopLevelBlockIndexFromTarget,
+      findTopLevelBlockIndexByClientPosition,
+      getTableCellFromTarget,
+      isCoarsePointer,
+      isRowResizeHandleTarget,
+      isTableMode,
+      selectedBlockNodeIndex,
+      startTableRowResize,
+      syncSelectedBlockNodeSurface,
+    ]
   )
 
   const handleViewportDragStart = useCallback(
@@ -4752,11 +4968,15 @@ const BlockEditorShell = ({
               title="블록 이동"
               data-variant="drag"
               data-testid={blockHandleState.visible ? "block-drag-handle" : undefined}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
                 clearPendingBlockDrag()
-                selectTopLevelBlock(blockHandleState.blockIndex)
+                promoteTopLevelBlockSelection(blockHandleState.blockIndex)
               }}
               onPointerDown={(event) => {
                 if (event.button !== 0) return
@@ -4781,7 +5001,7 @@ const BlockEditorShell = ({
                   previewHtml,
                   previewLabel,
                 }
-                selectTopLevelBlock(sourceIndex)
+                promoteTopLevelBlockSelection(sourceIndex)
                 clearPendingBlockDrag()
                 pendingBlockDragRef.current = pendingState
 

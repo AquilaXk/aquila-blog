@@ -7,6 +7,7 @@ import com.back.global.app.AppConfig
 import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.web.application.AuthCookieService
+import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
 import jakarta.servlet.http.HttpServlet
 import jakarta.servlet.http.HttpServletRequest
@@ -32,6 +33,7 @@ class CustomAuthenticationFilterTest {
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq = mock(Rq::class.java)
@@ -43,6 +45,7 @@ class CustomAuthenticationFilterTest {
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
         given(rq.getCookieValue("apiKey", "")).willReturn("broken-api-key")
         given(rq.getCookieValue("accessToken", "")).willReturn("")
+        given(clientIpResolver.resolve(request)).willReturn("203.0.113.10")
         given(actorApplicationService.findByApiKey("broken-api-key")).willThrow(RuntimeException("db down"))
 
         val filter =
@@ -51,6 +54,7 @@ class CustomAuthenticationFilterTest {
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
@@ -73,6 +77,7 @@ class CustomAuthenticationFilterTest {
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq = mock(Rq::class.java)
@@ -83,6 +88,7 @@ class CustomAuthenticationFilterTest {
         given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("")
         given(rq.getCookieValue("apiKey", "")).willReturn("broken-api-key")
         given(rq.getCookieValue("accessToken", "")).willReturn("")
+        given(clientIpResolver.resolve(request)).willReturn("203.0.113.11")
         given(actorApplicationService.findByApiKey("broken-api-key")).willThrow(RuntimeException("db down"))
 
         val filter =
@@ -91,6 +97,7 @@ class CustomAuthenticationFilterTest {
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
@@ -130,6 +137,7 @@ class CustomAuthenticationFilterTest {
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq = mock(Rq::class.java)
@@ -154,6 +162,7 @@ class CustomAuthenticationFilterTest {
             )
         given(actorApplicationService.findById(54L)).willReturn(persistedAdmin)
         given(actorApplicationService.genAccessToken(persistedAdmin)).willReturn("rotated-access-token")
+        given(clientIpResolver.resolve(request)).willReturn("203.0.113.12")
 
         val filter =
             CustomAuthenticationFilter(
@@ -161,6 +170,7 @@ class CustomAuthenticationFilterTest {
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
@@ -213,6 +223,7 @@ class CustomAuthenticationFilterTest {
         val authIpSecurityService = mock(AuthIpSecurityService::class.java)
         val authSecurityEventService = mock(AuthSecurityEventService::class.java)
         val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
         val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
         val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
         val rq = mock(Rq::class.java)
@@ -240,6 +251,7 @@ class CustomAuthenticationFilterTest {
             )
         given(actorApplicationService.findByApiKey(apiKey)).willReturn(persistedAdmin)
         given(actorApplicationService.genAccessToken(persistedAdmin)).willReturn("rotated-access-token")
+        given(clientIpResolver.resolve(request)).willReturn("203.0.113.13")
 
         val filter =
             CustomAuthenticationFilter(
@@ -247,6 +259,7 @@ class CustomAuthenticationFilterTest {
                 authIpSecurityService = authIpSecurityService,
                 authSecurityEventService = authSecurityEventService,
                 authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
                 objectMapper = objectMapper,
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,

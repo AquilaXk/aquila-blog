@@ -1,5 +1,6 @@
 package com.back.global.security.application
 
+import com.back.global.web.application.IpAddressNormalizer
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets.UTF_8
@@ -41,9 +42,5 @@ class AuthIpSecurityService(
 
     private fun resolveSecret(): String = configuredHashSecret.ifBlank { jwtSecretKey }
 
-    private fun normalizeIp(clientIp: String): String? {
-        val normalized = clientIp.trim()
-        if (normalized.isBlank()) return null
-        return normalized
-    }
+    private fun normalizeIp(clientIp: String): String? = IpAddressNormalizer.normalize(clientIp)
 }

@@ -8974,6 +8974,14 @@ const EditorStudioTopBar = styled.div`
   min-height: 48px;
 
   @media (max-width: 1200px) {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  @media (max-width: 760px) {
     align-items: stretch;
     flex-direction: column;
     gap: 0.7rem;
@@ -9007,6 +9015,10 @@ const EditorExitAction = styled.button`
     outline: none;
     box-shadow: 0 0 0 3px ${({ theme }) => theme.colors.blue4};
   }
+
+  @media (max-width: 1200px) {
+    justify-content: flex-start;
+  }
 `
 
 const EditorStudioTopBarActions = styled.div`
@@ -9017,7 +9029,15 @@ const EditorStudioTopBarActions = styled.div`
   justify-content: flex-end;
 
   @media (max-width: 1200px) {
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
+
+  @media (max-width: 760px) {
     width: 100%;
+    margin-left: 0;
     justify-content: flex-end;
     flex-wrap: wrap;
   }

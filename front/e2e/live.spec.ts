@@ -378,7 +378,10 @@ const loginThroughUi = async (
       })
       .catch(() => null)
 
-    await page.getByRole("button", { name: "로그인", exact: true }).click()
+    const loginButton = page.getByRole("button", { name: "로그인", exact: true })
+    await expect(loginButton).toBeVisible()
+    await expect(loginButton).toBeEnabled()
+    await loginButton.click()
 
     const outcome = await waitForUiLoginOutcome(page, () => observedLoginResponse, liveLoginTimeoutMs)
     await loginResponsePromise
@@ -438,6 +441,15 @@ const loginThroughUi = async (
     }
 
     lastFailure = `timeout url=${page.url()}`
+    try {
+      await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
+      if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
+      lastFailure = `timeout->api-login-no-admin url=${page.url()}`
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+      lastFailure = `timeout->api-fallback-failed ${fallbackMessage}`
+    }
+
     if (attempt < liveLoginAttempts) {
       await sleep(liveRetryBaseDelayMs * attempt)
       continue

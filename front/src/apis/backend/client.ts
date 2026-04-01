@@ -307,8 +307,16 @@ export const getApiBaseUrl = () => {
   const serverUrl = process.env.BACKEND_INTERNAL_URL
   const publicUrl = process.env.NEXT_PUBLIC_BACKEND_URL
 
-  if (isServer && serverUrl) return stripTrailingSlash(serverUrl)
-  if (publicUrl) return stripTrailingSlash(publicUrl)
+  if (isServer) {
+    if (serverUrl) return stripTrailingSlash(serverUrl)
+    if (process.env.NODE_ENV === "production") {
+      // 운영 SSR은 내부 API 경로를 강제해 외부 edge/tunnel 우회를 차단한다.
+      throw new Error("BACKEND_INTERNAL_URL is required for server runtime in production.")
+    }
+    if (publicUrl) return stripTrailingSlash(publicUrl)
+  } else if (publicUrl) {
+    return stripTrailingSlash(publicUrl)
+  }
 
   if (typeof window !== "undefined") {
     const { hostname } = window.location

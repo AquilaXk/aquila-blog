@@ -4,8 +4,8 @@ import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
-import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { Table } from "@tiptap/extension-table"
+import { Fragment } from "@tiptap/pm/model"
 import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
@@ -138,6 +138,7 @@ type SlashKeyboardEventLike = {
   key: string
   shiftKey?: boolean
   isComposing?: boolean
+  timeStamp?: number
   preventDefault: () => void
   stopPropagation?: () => void
   nativeEvent?: {
@@ -545,6 +546,24 @@ const getTopLevelBlockIndexFromSelection = (editor: TiptapEditor) => {
   return Math.max(0, selection.$from.index(0))
 }
 
+const getActiveSlashRangeFromEditor = (editor: TiptapEditor): { from: number; to: number } | null => {
+  const selection = editor.state.selection
+  if (!selection.empty) return null
+
+  const parent = selection.$from.parent
+  if (parent.type.name !== "paragraph") return null
+
+  const textBeforeCursor = parent.textContent.slice(0, selection.$from.parentOffset)
+  const match = /(^|[\s\u00A0])\/([^\n]*)$/.exec(textBeforeCursor)
+  if (!match) return null
+
+  const slashOffset = (match.index ?? 0) + match[1].length
+  return {
+    from: selection.$from.start() + slashOffset,
+    to: selection.from,
+  }
+}
+
 const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
   const { doc } = editor.state
   if (doc.childCount === 0) return 1
@@ -554,6 +573,53 @@ const getTopLevelBlockPosition = (editor: TiptapEditor, blockIndex: number) => {
     position += doc.child(index).nodeSize
   }
   return position
+}
+
+const getFirstEditableTextPositionInNode = (node: any, startPos: number): number | null => {
+  if (!node) return null
+  if (node.isTextblock) {
+    return startPos + 1
+  }
+
+  if (!node.childCount) {
+    return null
+  }
+
+  let childPos = startPos + 1
+  for (let index = 0; index < node.childCount; index += 1) {
+    const child = node.child(index)
+    const nested = getFirstEditableTextPositionInNode(child, childPos)
+    if (nested !== null) {
+      return nested
+    }
+    childPos += child.nodeSize
+  }
+
+  return null
+}
+
+const getEditableTextPositionForTopLevelBlock = (editor: TiptapEditor, blockIndex: number) => {
+  const { doc } = editor.state
+  if (doc.childCount === 0) return null
+  const clampedIndex = Math.max(0, Math.min(blockIndex, doc.childCount - 1))
+  const topLevelBlock = doc.child(clampedIndex)
+  if (
+    ![
+      "paragraph",
+      "heading",
+      "blockquote",
+      "bulletList",
+      "orderedList",
+      "taskList",
+      "calloutBlock",
+      "toggleBlock",
+    ].includes(topLevelBlock.type.name)
+  ) {
+    return null
+  }
+
+  const blockPosition = getTopLevelBlockPosition(editor, clampedIndex)
+  return getFirstEditableTextPositionInNode(topLevelBlock, blockPosition)
 }
 
 const selectTopLevelBlockNode = (editor: TiptapEditor, blockIndex: number) => {
@@ -701,7 +767,6 @@ const BlockEditorShell = ({
   const [selectedBlockNodeIndex, setSelectedBlockNodeIndex] = useState<number | null>(null)
   const selectedBlockNodeIndexRef = useRef<number | null>(null)
   const keyboardBlockSelectionStickyRef = useRef(false)
-  const consumedEditorKeyRef = useRef<{ key: string; token: symbol } | null>(null)
   const [blockHandleState, setBlockHandleState] = useState<TopLevelBlockHandleState>({
     visible: false,
     blockIndex: 0,
@@ -832,87 +897,6 @@ const BlockEditorShell = ({
       return true
     },
     [isSelectionInEmptyParagraph]
-  )
-
-  const getFirstTextSelectionPosWithinNode = useCallback((node: ProseMirrorNode, startPos: number) => {
-    let current = node
-    let pos = startPos + 1
-
-    while (current && current.childCount > 0) {
-      const firstChild = current.firstChild
-      if (!firstChild) break
-      if (firstChild.isText) {
-        return pos
-      }
-      current = firstChild
-      pos += 1
-    }
-
-    return Math.max(1, startPos + 1)
-  }, [])
-
-  const getTopLevelChildStartPos = useCallback((doc: ProseMirrorNode, childIndex: number) => {
-    let pos = 0
-    for (let index = 0; index < childIndex; index += 1) {
-      pos += doc.child(index)?.nodeSize ?? 0
-    }
-    return pos
-  }, [])
-
-  const replaceCurrentParagraphWithBlocks = useCallback(
-    (blocks: BlockEditorDoc[]) => {
-      const currentEditor = editorRef.current
-      if (!currentEditor || !blocks.length) return false
-
-      const { selection, schema } = currentEditor.state
-      const paragraph = selection.$from.parent
-      if (paragraph.type.name !== "paragraph") return false
-
-      const from = selection.$from.before(selection.$from.depth)
-      const to = selection.$from.after(selection.$from.depth)
-      const nextNodes = blocks.map((block) => schema.nodeFromJSON(block))
-      let transaction = currentEditor.state.tr.replaceWith(from, to, Fragment.fromArray(nextNodes))
-
-      const firstNode = nextNodes[0]
-      if (firstNode) {
-        const selectionPos = Math.min(
-          transaction.doc.content.size,
-          getFirstTextSelectionPosWithinNode(firstNode, from)
-        )
-        transaction = transaction.setSelection(TextSelection.create(transaction.doc, selectionPos))
-      }
-
-      currentEditor.view.dispatch(transaction.scrollIntoView())
-      currentEditor.view.focus()
-
-      const latestState = currentEditor.state
-      const latestDoc = latestState.doc
-      const lastChild = latestDoc.lastChild
-      const previousIndex = latestDoc.childCount - 2
-      const previousChild = previousIndex >= 0 ? latestDoc.child(previousIndex) : null
-      const shouldTrimTrailingParagraph =
-        Boolean(lastChild) &&
-        lastChild?.type.name === "paragraph" &&
-        lastChild.textContent.length === 0 &&
-        Boolean(previousChild) &&
-        ["heading", "bulletList", "orderedList", "taskList", "blockquote"].includes(previousChild?.type.name || "")
-
-      if (shouldTrimTrailingParagraph && previousChild) {
-        const lastStart = getTopLevelChildStartPos(latestDoc, latestDoc.childCount - 1)
-        const previousStart = getTopLevelChildStartPos(latestDoc, previousIndex)
-        let trimTransaction = latestState.tr.delete(lastStart, lastStart + lastChild.nodeSize)
-        const selectionPos = Math.min(
-          trimTransaction.doc.content.size,
-          getFirstTextSelectionPosWithinNode(previousChild, previousStart)
-        )
-        trimTransaction = trimTransaction.setSelection(TextSelection.create(trimTransaction.doc, selectionPos))
-        currentEditor.view.dispatch(trimTransaction.scrollIntoView())
-        currentEditor.view.focus()
-      }
-
-      return true
-    },
-    [getFirstTextSelectionPosWithinNode, getTopLevelChildStartPos]
   )
 
   const getContentRoot = useCallback(() => {
@@ -1465,8 +1449,8 @@ const BlockEditorShell = ({
   const focusTopLevelBlock = useCallback((blockIndex: number) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
-    const position = getTopLevelBlockPosition(currentEditor, blockIndex)
-    currentEditor.commands.focus(position)
+    const textPosition = getEditableTextPositionForTopLevelBlock(currentEditor, blockIndex)
+    currentEditor.commands.focus(textPosition ?? getTopLevelBlockPosition(currentEditor, blockIndex))
   }, [])
 
   const replaceEditorDoc = useCallback(
@@ -1502,17 +1486,91 @@ const BlockEditorShell = ({
     [replaceEditorDoc]
   )
 
-  const markEditorKeyAsConsumed = useCallback((key: string) => {
-    const token = Symbol(key)
-    consumedEditorKeyRef.current = { key, token }
-    queueMicrotask(() => {
-      if (consumedEditorKeyRef.current?.token === token) {
-        consumedEditorKeyRef.current = null
+  const replaceCurrentParagraphWithBlocks = useCallback((blocks: BlockEditorDoc[], focusBlockIndex = 0) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor || blocks.length === 0) return false
+
+    const { selection, schema } = currentEditor.state
+    const paragraph = selection.$from.parent
+    if (paragraph.type.name !== "paragraph") return false
+
+    const from = selection.$from.before(selection.$from.depth)
+    const to = selection.$from.after(selection.$from.depth)
+    const nextNodes = blocks.map((block) => schema.nodeFromJSON(block))
+    const normalizedFocusBlockIndex = Math.max(0, Math.min(focusBlockIndex, nextNodes.length - 1))
+    const focusNode = nextNodes[normalizedFocusBlockIndex]
+    const focusNodeStartPos = from + nextNodes
+      .slice(0, normalizedFocusBlockIndex)
+      .reduce((sum, node) => sum + node.nodeSize, 0)
+
+    let transaction = currentEditor.state.tr.replaceWith(from, to, Fragment.fromArray(nextNodes))
+
+    if (focusNode) {
+      const selectionPos =
+        getFirstEditableTextPositionInNode(focusNode, focusNodeStartPos) ??
+        Math.max(1, focusNodeStartPos + 1)
+      transaction = transaction.setSelection(TextSelection.create(transaction.doc, selectionPos))
+    }
+
+    currentEditor.view.dispatch(transaction.scrollIntoView())
+    currentEditor.view.focus()
+    syncSerializedDoc(currentEditor.getJSON() as BlockEditorDoc)
+    return true
+  }, [syncSerializedDoc])
+
+  const transformCurrentParagraphViaSlash = useCallback((itemId: string) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
+
+    const { selection } = currentEditor.state
+    if (selection.$from.parent.type.name !== "paragraph") return false
+
+    const replacementBlock = (() => {
+      switch (itemId) {
+        case "heading-1":
+          return createHeadingNode(1, "")
+        case "heading-2":
+          return createHeadingNode(2, "")
+        case "heading-3":
+          return createHeadingNode(3, "")
+        case "heading-4":
+          return createHeadingNode(4, "")
+        case "bullet-list":
+          return createBulletListNode([""])
+        case "ordered-list":
+          return createOrderedListNode([""])
+        case "checklist":
+          return createTaskListNode([{ checked: false, text: "" }])
+        case "quote":
+          return createBlockquoteNode("")
+        default:
+          return null
       }
-    })
-  }, [])
+    })()
+
+    if (!replacementBlock) {
+      return false
+    }
+
+    const replacementBlockType = replacementBlock.type ?? ""
+
+    if (["bulletList", "orderedList", "taskList"].includes(replacementBlockType)) {
+      const currentBlockIndex = getTopLevelBlockIndexFromSelection(currentEditor)
+      const nextSibling =
+        currentBlockIndex >= 0 && currentBlockIndex < currentEditor.state.doc.childCount - 1
+          ? currentEditor.state.doc.child(currentBlockIndex + 1)
+          : null
+
+      if (nextSibling?.type.name === replacementBlockType) {
+        return replaceCurrentParagraphWithBlocks([replacementBlock, createParagraphNode()], 0)
+      }
+    }
+
+    return replaceCurrentParagraphWithBlocks([replacementBlock], 0)
+  }, [replaceCurrentParagraphWithBlocks])
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         link: false,
@@ -1572,13 +1630,6 @@ const BlockEditorShell = ({
       handleKeyDown: (_, event) => {
         const currentEditor = editorRef.current
         if (!currentEditor) return false
-        const consumedKey = consumedEditorKeyRef.current
-        if (consumedKey && consumedKey.key === event.key) {
-          consumedEditorKeyRef.current = null
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
         if (event.defaultPrevented) return false
         const normalizedKey = event.key.toLowerCase()
         const hasPrimaryModifier = isPrimaryModifierPressed(event)
@@ -2130,29 +2181,6 @@ const BlockEditorShell = ({
   const insertChecklistBlock = useCallback(() => {
     insertBlocksAtCursorExact([createTaskListNode([{ checked: false, text: "할 일" }])], true)
   }, [insertBlocksAtCursorExact])
-
-  const getSlashParagraphReplacementBlocks = useCallback((itemId: string): BlockEditorDoc[] | null => {
-    switch (itemId) {
-      case "heading-1":
-        return [createHeadingNode(1, "제목")]
-      case "heading-2":
-        return [createHeadingNode(2, "제목")]
-      case "heading-3":
-        return [createHeadingNode(3, "제목")]
-      case "heading-4":
-        return [createHeadingNode(4, "제목")]
-      case "bullet-list":
-        return [createBulletListNode(["항목"])]
-      case "ordered-list":
-        return [createOrderedListNode(["항목"])]
-      case "checklist":
-        return [createTaskListNode([{ checked: false, text: "할 일" }])]
-      case "quote":
-        return [createBlockquoteNode("인용문")]
-      default:
-        return null
-    }
-  }, [])
 
   const insertBookmarkBlock = useCallback(() => {
     insertBlocksAtCursor(
@@ -3049,14 +3077,15 @@ const BlockEditorShell = ({
     async (item: BlockInsertCatalogItem) => {
       if (!editor || item.disabled) return
 
-      const activeSlashRange = slashMenuState
-      let handledByParagraphReplacement = false
+      const activeSlashRange = getActiveSlashRangeFromEditor(editor) ?? slashMenuState
+      let handledByWholeParagraphReplacement = false
       if (activeSlashRange) {
         const { selection } = editor.state
         const paragraph = selection.$from.parent
-        const paragraphStart = selection.$from.start()
-        const slashStartOffset = Math.max(0, activeSlashRange.from - paragraphStart)
-        const slashEndOffset = Math.max(0, activeSlashRange.to - paragraphStart)
+        const paragraphContentStart = selection.$from.start()
+        const paragraphContentEnd = selection.$from.end()
+        const slashStartOffset = Math.max(0, activeSlashRange.from - paragraphContentStart)
+        const slashEndOffset = Math.max(0, activeSlashRange.to - paragraphContentStart)
         const textBeforeSlash = paragraph.textContent.slice(0, slashStartOffset)
         const textAfterSlash = paragraph.textContent.slice(slashEndOffset)
         const shouldReplaceWholeParagraph =
@@ -3065,20 +3094,17 @@ const BlockEditorShell = ({
           textAfterSlash.trim().length === 0
 
         if (shouldReplaceWholeParagraph) {
-          const replacementBlocks = getSlashParagraphReplacementBlocks(item.id)
-          if (replacementBlocks) {
-            handledByParagraphReplacement = replaceCurrentParagraphWithBlocks(replacementBlocks)
-          }
+          handledByWholeParagraphReplacement = transformCurrentParagraphViaSlash(item.id)
         }
 
-        if (!handledByParagraphReplacement) {
+        if (!handledByWholeParagraphReplacement) {
           if (shouldReplaceWholeParagraph) {
             editor
               .chain()
               .focus()
               .deleteRange({
-                from: selection.$from.before(selection.$from.depth),
-                to: selection.$from.after(selection.$from.depth),
+                from: paragraphContentStart,
+                to: paragraphContentEnd,
               })
               .run()
           } else {
@@ -3097,12 +3123,12 @@ const BlockEditorShell = ({
         return next
       })
 
-      if (!handledByParagraphReplacement) {
-        await item.insertAtCursor()
+      if (!handledByWholeParagraphReplacement) {
         closeSlashMenu()
+        await item.insertAtCursor()
       }
     },
-    [closeSlashMenu, editor, getSlashParagraphReplacementBlocks, replaceCurrentParagraphWithBlocks, slashMenuState]
+    [closeSlashMenu, editor, slashMenuState, transformCurrentParagraphViaSlash]
   )
 
   const resolveSlashMenuState = useCallback(() => {
@@ -3119,14 +3145,14 @@ const BlockEditorShell = ({
       return null
     }
 
-    const textBeforeCursor = parent.textContent.slice(0, selection.$from.parentOffset)
-    const match = /(^|[\s\u00A0])\/([^\n]*)$/.exec(textBeforeCursor)
-
-    if (!match) {
+    const activeSlashRange = getActiveSlashRangeFromEditor(editor)
+    if (!activeSlashRange) {
       return null
     }
-
-    const slashOffset = (match.index ?? 0) + match[1].length
+    const paragraphContentStart = selection.$from.start()
+    const slashStartOffset = Math.max(0, activeSlashRange.from - paragraphContentStart)
+    const slashEndOffset = Math.max(0, activeSlashRange.to - paragraphContentStart)
+    const query = parent.textContent.slice(slashStartOffset + 1, slashEndOffset)
     const coords = editor.view.coordsAtPos(selection.from)
     const viewportPadding = SLASH_MENU_EDGE_PADDING_PX
     const estimatedMenuWidth = Math.min(SLASH_MENU_ESTIMATED_WIDTH_PX, window.innerWidth - viewportPadding * 2)
@@ -3147,12 +3173,12 @@ const BlockEditorShell = ({
     const nextTop = Math.min(rawTop, Math.max(viewportPadding, window.innerHeight - estimatedMenuHeight - viewportPadding))
 
     return {
-      query: match[2] ?? "",
+      query,
       menuState: {
         left: Math.round(nextLeft),
         top: Math.round(Math.max(viewportPadding, nextTop)),
-        from: selection.$from.start() + slashOffset,
-        to: selection.from,
+        from: activeSlashRange.from,
+        to: activeSlashRange.to,
         placement: placeAbove ? "top" : "bottom",
       } satisfies Exclude<SlashMenuState, null>,
     }
@@ -3350,9 +3376,10 @@ const BlockEditorShell = ({
     if (event.key === "Enter") {
       const selectedEntry = flatSlashEntries[selectedSlashIndex]
       if (!selectedEntry || selectedEntry.item.disabled) return
-      markEditorKeyAsConsumed("Enter")
       stopSlashKeyboardEvent(event)
-      void executeSlashCatalogAction(selectedEntry.item)
+      queueMicrotask(() => {
+        void executeSlashCatalogAction(selectedEntry.item)
+      })
       return
     }
 
@@ -3369,7 +3396,7 @@ const BlockEditorShell = ({
       setSlashInteractionMode("keyboard")
       closeSlashMenu(true)
     }
-  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, markEditorKeyAsConsumed, selectedSlashIndex, slashMenuState, slashQuery])
+  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, selectedSlashIndex, slashMenuState, slashQuery])
 
   const handleSlashActionPointerMove = useCallback((flatIndex: number) => {
     setSlashInteractionMode((prev) => (prev === "pointer" ? prev : "pointer"))
@@ -3461,6 +3488,19 @@ const BlockEditorShell = ({
   const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
 
   const closeTableMenu = useCallback(() => setTableMenuState(null), [])
+
+  const runTableMenuEditorAction = useCallback(
+    (action: (activeEditor: TiptapEditor) => void) => {
+      if (!editor) {
+        closeTableMenu()
+        return
+      }
+
+      action(editor)
+      closeTableMenu()
+    },
+    [closeTableMenu, editor]
+  )
 
   const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect) => {
     const menuWidth = 308
@@ -4212,7 +4252,9 @@ const BlockEditorShell = ({
                             void executeSlashCatalogAction(action)
                           }}
                         >
-                          <SlashActionIcon aria-hidden="true">{getSlashActionGlyph(action)}</SlashActionIcon>
+                          <SlashActionIcon aria-hidden="true" data-role="slash-action-icon">
+                            {getSlashActionGlyph(action)}
+                          </SlashActionIcon>
                           <SlashActionMain>
                             <SlashActionTitleRow>
                               <strong>{action.label}</strong>
@@ -4406,10 +4448,24 @@ const BlockEditorShell = ({
                   <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("row"); closeTableMenu() }}>
                     행 선택
                   </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addRowBefore().run(); closeTableMenu() }}>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addRowBefore().run()
+                      })
+                    }
+                  >
                     위에 삽입
                   </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addRowAfter().run(); closeTableMenu() }}>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addRowAfter().run()
+                      })
+                    }
+                  >
                     아래에 삽입
                   </FloatingBlockActionButton>
                 </>
@@ -4418,10 +4474,24 @@ const BlockEditorShell = ({
                   <FloatingBlockActionButton type="button" onClick={() => { selectCurrentTableAxis("column"); closeTableMenu() }}>
                     열 선택
                   </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addColumnBefore().run(); closeTableMenu() }}>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addColumnBefore().run()
+                      })
+                    }
+                  >
                     왼쪽에 삽입
                   </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().addColumnAfter().run(); closeTableMenu() }}>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().addColumnAfter().run()
+                      })
+                    }
+                  >
                     오른쪽에 삽입
                   </FloatingBlockActionButton>
                 </>
@@ -4432,14 +4502,32 @@ const BlockEditorShell = ({
                   </FloatingBlockActionButton>
                   <FloatingBlockActionButton
                     type="button"
-                    onClick={() => { editor.chain().focus().toggleHeaderRow().run(); closeTableMenu() }}
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().toggleHeaderRow().run()
+                      })
+                    }
                   >
                     제목 행
                   </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().mergeCells().run(); closeTableMenu() }}>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().mergeCells().run()
+                      })
+                    }
+                  >
                     셀 병합
                   </FloatingBlockActionButton>
-                  <FloatingBlockActionButton type="button" onClick={() => { editor.chain().focus().splitCell().run(); closeTableMenu() }}>
+                  <FloatingBlockActionButton
+                    type="button"
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().splitCell().run()
+                      })
+                    }
+                  >
                     셀 분리
                   </FloatingBlockActionButton>
                 </>
@@ -4510,15 +4598,39 @@ const BlockEditorShell = ({
             <FloatingBlockMenuDivider />
             <FloatingBlockActionList>
               {tableMenuState.kind === "row" ? (
-                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => { editor.chain().focus().deleteRow().run(); closeTableMenu() }}>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-variant="danger"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().deleteRow().run()
+                    })
+                  }
+                >
                   행 삭제
                 </FloatingBlockActionButton>
               ) : tableMenuState.kind === "column" ? (
-                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => { editor.chain().focus().deleteColumn().run(); closeTableMenu() }}>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-variant="danger"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().deleteColumn().run()
+                    })
+                  }
+                >
                   열 삭제
                 </FloatingBlockActionButton>
               ) : (
-                <FloatingBlockActionButton type="button" data-variant="danger" onClick={() => { editor.chain().focus().deleteTable().run(); closeTableMenu() }}>
+                <FloatingBlockActionButton
+                  type="button"
+                  data-variant="danger"
+                  onClick={() =>
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().deleteTable().run()
+                    })
+                  }
+                >
                   표 삭제
                 </FloatingBlockActionButton>
               )}
@@ -5365,7 +5477,7 @@ const SlashActionButton = styled.button`
       theme.scheme === "dark" ? "rgba(255, 255, 255, 0.07)" : "rgba(15, 23, 42, 0.06)"};
   }
 
-  &[data-active="true"] ${SlashActionIcon} {
+  &[data-active="true"] [data-role="slash-action-icon"] {
     color: ${({ theme }) => theme.colors.gray12};
   }
 

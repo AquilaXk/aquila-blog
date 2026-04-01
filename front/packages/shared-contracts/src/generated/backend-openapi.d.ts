@@ -679,6 +679,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/post/api/v1/posts/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getBootstrap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/post/api/v1/images/**": {
         parameters: {
             query?: never;
@@ -1697,6 +1713,10 @@ export interface components {
             pageSize?: number;
             hasNext?: boolean;
             nextCursor?: string;
+        };
+        PublicPostsBootstrapDto: {
+            feed?: components["schemas"]["CursorFeedPageDto"];
+            tags?: components["schemas"]["TagCountDto"][];
         };
         AdmDeletedPostDto: {
             /** Format: int64 */
@@ -2922,6 +2942,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["CursorFeedPageDto"];
+                };
+            };
+        };
+    };
+    getBootstrap: {
+        parameters: {
+            query?: {
+                tag?: string;
+                pageSize?: number;
+                sort?: "CREATED_AT" | "CREATED_AT_ASC" | "MODIFIED_AT" | "MODIFIED_AT_ASC";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PublicPostsBootstrapDto"];
                 };
             };
         };

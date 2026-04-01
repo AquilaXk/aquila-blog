@@ -127,6 +127,10 @@ http://{$API_DOMAIN} {
       header_down -Referrer-Policy
       header_down -Permissions-Policy
       flush_interval -1
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 10s
+      }
     }
   }
 
@@ -134,48 +138,6 @@ http://{$API_DOMAIN} {
   # Public access via API domain is explicitly denied.
   @denyPrometheus path /actuator/prometheus
   respond @denyPrometheus 403
-
-  @publicFeed {
-    path /post/api/v1/posts/feed
-    method GET HEAD OPTIONS
-  }
-  @publicExplore {
-    path /post/api/v1/posts/explore
-    method GET HEAD OPTIONS
-  }
-  handle @publicFeed {
-    header {
-      Cache-Control "public, max-age=60, stale-while-revalidate=300"
-    }
-
-    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
-      header_up Host {host}
-      header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
-      header_down -Strict-Transport-Security
-      header_down -X-Content-Type-Options
-      header_down -X-Frame-Options
-      header_down -Referrer-Policy
-      header_down -Permissions-Policy
-    }
-  }
-
-  handle @publicExplore {
-    header {
-      Cache-Control "public, max-age=30, stale-while-revalidate=120"
-    }
-
-    reverse_proxy {$READ_API_UPSTREAM:back_blue}:8080 {
-      header_up Host {host}
-      header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
-      header_down -Strict-Transport-Security
-      header_down -X-Content-Type-Options
-      header_down -X-Frame-Options
-      header_down -Referrer-Policy
-      header_down -Permissions-Policy
-    }
-  }
 
   # read 런타임 분리: 공개 read API를 별도 upstream으로 점진 분리할 수 있다.
   @publicReadFallback {
@@ -192,6 +154,10 @@ http://{$API_DOMAIN} {
       header_down -X-Frame-Options
       header_down -Referrer-Policy
       header_down -Permissions-Policy
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 12s
+      }
     }
   }
 
@@ -209,6 +175,10 @@ http://{$API_DOMAIN} {
       header_down -X-Frame-Options
       header_down -Referrer-Policy
       header_down -Permissions-Policy
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 12s
+      }
     }
   }
 
@@ -228,6 +198,10 @@ http://{$API_DOMAIN} {
       header_down -X-Frame-Options
       header_down -Referrer-Policy
       header_down -Permissions-Policy
+      transport http {
+        dial_timeout 3s
+        response_header_timeout 12s
+      }
     }
   }
 }

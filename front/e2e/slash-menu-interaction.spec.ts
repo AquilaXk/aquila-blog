@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
+const QA_WRITER_ROUTE = "/_qa/block-editor-slash?surface=writer"
 
 test.describe("block editor slash menu interaction", () => {
   test.beforeEach(async ({ page }) => {
@@ -39,7 +40,7 @@ test.describe("block editor slash menu interaction", () => {
 
     await page.keyboard.press("Enter")
     await expect(slashMenu).toBeHidden()
-    await expect(page.getByTestId("qa-markdown-output")).toContainText("# 제목")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText("#")
   })
 
   test("slash로 제목 블록을 넣은 직후 입력은 아래 빈 문단이 아니라 제목 블록에 이어진다", async ({ page }) => {
@@ -54,7 +55,23 @@ test.describe("block editor slash menu interaction", () => {
     await expect
       .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
       .not.toContain("\n\nA")
-    await expect(page.getByTestId("qa-markdown-output")).toContainText("# A제목")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText("# A")
+  })
+
+  test("slash로 제목 블록을 넣은 뒤 Enter는 바로 다음 문단으로 한 번만 내려간다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/heading")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("제목")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("본문")
+
+    await expect
+      .poll(async () => ((await page.getByTestId("qa-markdown-output").textContent()) || "").replace(/\r/g, ""))
+      .toContain("# 제목\n\n본문")
   })
 
   test("slash로 목록 블록을 넣은 직후 입력은 다다음 줄이 아니라 첫 항목에 이어진다", async ({ page }) => {
@@ -67,13 +84,103 @@ test.describe("block editor slash menu interaction", () => {
     await page.keyboard.type("A")
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
-    await expect(markdownOutput).toContainText("- A항목")
+    await expect(markdownOutput).toContainText("- A")
     await expect
       .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
       .not.toContain("\n\nA")
     await expect
       .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
-      .not.toContain("- 항목\n\n")
+      .not.toContain("- \n\n")
+  })
+
+  test("slash로 목록 블록을 넣은 뒤 Enter는 다음 항목 한 줄만 만든다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/목록")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("첫째")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째")
+
+    await expect
+      .poll(async () => ((await page.getByTestId("qa-markdown-output").textContent()) || "").replace(/\r/g, ""))
+      .toContain("- 첫째\n- 둘째")
+  })
+
+  test("slash로 목록 블록을 넣을 때 바로 아래 기존 목록으로 점프하지 않고 새 첫 항목에 이어진다", async ({ page }) => {
+    const seed = encodeURIComponent("앞문단\\n\\n준비중\\n\\n- 기존 항목")
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    const targetParagraph = page
+      .locator("[data-testid='block-editor-prosemirror'] p")
+      .filter({ hasText: /^준비중$/ })
+      .first()
+
+    await targetParagraph.click({ clickCount: 3 })
+    await page.keyboard.type("/목록")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("A")
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("- A")
+    await expect(markdownOutput).toContainText("- 기존 항목")
+    await expect
+      .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
+      .not.toContain("A기존 항목")
+    await expect
+      .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
+      .toContain("- A\n\n- 기존 항목")
+  })
+
+  test("writer surface에서도 slash 목록 삽입 후 Enter가 다다음 줄로 건너뛰지 않는다", async ({ page }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/목록")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("첫째")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("둘째")
+
+    const listItems = page.locator(".aq-block-editor__content ul li")
+    await expect(listItems).toHaveCount(2)
+    await expect(listItems.nth(0)).toContainText("첫째")
+    await expect(listItems.nth(1)).toContainText("둘째")
+  })
+
+  test("writer surface에서 slash 목록 변환 시 아래 기존 목록으로 caret 점프가 발생하지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("앞문단")
+    await page.keyboard.press("Enter")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("준비중")
+    await page.keyboard.press("Enter")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("/목록")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("기존 항목")
+
+    const targetParagraph = page
+      .locator(".aq-block-editor__content p")
+      .filter({ hasText: /^준비중$/ })
+      .first()
+    await targetParagraph.click({ clickCount: 3 })
+    await page.keyboard.type("/목록")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("A")
+
+    const lists = page.locator(".aq-block-editor__content ul")
+    await expect(lists).toHaveCount(2)
+    await expect(lists.nth(0).locator("li").first()).toContainText("A")
+    await expect(lists.nth(1).locator("li").first()).toContainText("기존 항목")
   })
 
   test("빈 문서 첫 slash menu는 문맥 보너스로 제목 블록을 먼저 추천하고 한글 query도 검색된다", async ({
@@ -119,6 +226,7 @@ test.describe("block editor slash menu interaction", () => {
     await page.keyboard.type("/code")
     await expect(page.getByTestId("slash-menu")).toBeVisible()
     await page.keyboard.press("Enter")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText("```")
 
     await page.keyboard.type("/")
     const slashMenu = page.getByTestId("slash-menu")

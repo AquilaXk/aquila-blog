@@ -109,6 +109,23 @@ test.describe("block editor slash menu interaction", () => {
       .toContain("- 첫째\n- 둘째")
   })
 
+  test("slash로 코드 블록을 넣은 직후 입력은 다다음 줄이 아니라 코드 블록 본문에 이어진다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/코드")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("qaSlashCodeLine")
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("```")
+    await expect(markdownOutput).toContainText("qaSlashCodeLine")
+    await expect
+      .poll(async () => ((await markdownOutput.textContent()) || "").replace(/\r/g, ""))
+      .not.toContain("\n\nqaSlashCodeLine")
+  })
+
   test("slash로 목록 블록을 넣을 때 바로 아래 기존 목록으로 점프하지 않고 새 첫 항목에 이어진다", async ({ page }) => {
     const seed = encodeURIComponent("앞문단\\n\\n준비중\\n\\n- 기존 항목")
     await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)

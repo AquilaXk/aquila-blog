@@ -65,7 +65,6 @@ const CALLOUT_KIND_OPTIONS: Array<{ value: CalloutKind; label: string; emoji: st
 const DEFAULT_IMAGE_WIDTH = 720
 const RESIZE_MIN_WIDTH = 240
 const TEXTAREA_DEBOUNCE_MS = 180
-const MERMAID_PREVIEW_ROOT_MARGIN = "240px 0px"
 type CodeLanguageOption = {
   value: string
   label: string
@@ -373,7 +372,6 @@ const renderMermaidHighlightedSource = (source: string) =>
 const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftSource, setDraftSource] = useState(String(node.attrs?.source || MERMAID_TEMPLATE))
   const [viewMode, setViewMode] = useState<MermaidEditorViewMode>("split")
-  const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const codeHighlightRef = useRef<HTMLPreElement>(null)
   const previewRootRef = useRef<HTMLDivElement>(null)
@@ -388,32 +386,14 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const showCodePane = viewMode !== "preview"
   const showPreviewPane = viewMode !== "code"
 
-  useEffect(() => {
-    if (!showPreviewPane) return
-    const target = previewRootRef.current
-    if (!target || typeof window === "undefined") return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setIsPreviewVisible(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: MERMAID_PREVIEW_ROOT_MARGIN }
-    )
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [showPreviewPane])
-
   const normalizedSource = useMemo(() => extractNormalizedMermaidSource(draftSource).trim(), [draftSource])
   const highlightedSource = useMemo(() => renderMermaidHighlightedSource(draftSource), [draftSource])
 
   useMermaidEffect(
     previewRootRef,
     `editor-mermaid:${normalizedSource}`,
-    showPreviewPane && isPreviewVisible && normalizedSource.length > 0,
-    { observeMutations: false, allowDesktopWideLane: false }
+    showPreviewPane && normalizedSource.length > 0,
+    { observeMutations: false, allowDesktopWideLane: false, lazyViewport: false }
   )
 
   return (
@@ -484,18 +464,12 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
             <MermaidPaneLabel>Mermaid 결과</MermaidPaneLabel>
             <MermaidPreviewCard>
               {normalizedSource ? (
-                isPreviewVisible ? (
-                  <pre
-                    className="aq-mermaid"
-                    data-aq-mermaid="true"
-                    data-mermaid-rendered="pending"
-                    data-mermaid-source={normalizedSource}
-                  />
-                ) : (
-                  <MermaidPreviewPlaceholder>
-                    블록이 화면에 들어오면 다이어그램 미리보기를 렌더합니다.
-                  </MermaidPreviewPlaceholder>
-                )
+                <pre
+                  className="aq-mermaid"
+                  data-aq-mermaid="true"
+                  data-mermaid-rendered="pending"
+                  data-mermaid-source={normalizedSource}
+                />
               ) : (
                 <MermaidPreviewPlaceholder>
                   Mermaid 코드를 입력하면 여기서 다이어그램 결과를 바로 확인할 수 있습니다.

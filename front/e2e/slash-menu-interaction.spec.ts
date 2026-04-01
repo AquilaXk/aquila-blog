@@ -40,6 +40,21 @@ test.describe("block editor slash menu interaction", () => {
     await expect(page.getByTestId("qa-markdown-output")).toContainText("# 제목")
   })
 
+  test("slash로 제목 블록을 넣은 직후 입력은 아래 빈 문단이 아니라 제목 블록에 이어진다", async ({ page }) => {
+    await page.goto("/_qa/block-editor-slash")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/heading")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("A")
+
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .not.toContain("\n\nA")
+    await expect(page.getByTestId("qa-markdown-output")).toContainText("# A제목")
+  })
+
   test("빈 문서 첫 slash menu는 문맥 보너스로 제목 블록을 먼저 추천하고 한글 query도 검색된다", async ({
     page,
   }) => {

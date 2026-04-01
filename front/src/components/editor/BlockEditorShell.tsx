@@ -4,8 +4,9 @@ import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { Table } from "@tiptap/extension-table"
-import { NodeSelection } from "@tiptap/pm/state"
+import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
@@ -826,6 +827,87 @@ const BlockEditorShell = ({
       return true
     },
     [isSelectionInEmptyParagraph]
+  )
+
+  const getFirstTextSelectionPosWithinNode = useCallback((node: ProseMirrorNode, startPos: number) => {
+    let current = node
+    let pos = startPos + 1
+
+    while (current && current.childCount > 0) {
+      const firstChild = current.firstChild
+      if (!firstChild) break
+      if (firstChild.isText) {
+        return pos
+      }
+      current = firstChild
+      pos += 1
+    }
+
+    return Math.max(1, startPos + 1)
+  }, [])
+
+  const getTopLevelChildStartPos = useCallback((doc: ProseMirrorNode, childIndex: number) => {
+    let pos = 0
+    for (let index = 0; index < childIndex; index += 1) {
+      pos += doc.child(index)?.nodeSize ?? 0
+    }
+    return pos
+  }, [])
+
+  const replaceCurrentParagraphWithBlocks = useCallback(
+    (blocks: BlockEditorDoc[]) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor || !blocks.length) return false
+
+      const { selection, schema } = currentEditor.state
+      const paragraph = selection.$from.parent
+      if (paragraph.type.name !== "paragraph") return false
+
+      const from = selection.$from.before(selection.$from.depth)
+      const to = selection.$from.after(selection.$from.depth)
+      const nextNodes = blocks.map((block) => schema.nodeFromJSON(block))
+      let transaction = currentEditor.state.tr.replaceWith(from, to, Fragment.fromArray(nextNodes))
+
+      const firstNode = nextNodes[0]
+      if (firstNode) {
+        const selectionPos = Math.min(
+          transaction.doc.content.size,
+          getFirstTextSelectionPosWithinNode(firstNode, from)
+        )
+        transaction = transaction.setSelection(TextSelection.create(transaction.doc, selectionPos))
+      }
+
+      currentEditor.view.dispatch(transaction.scrollIntoView())
+      currentEditor.view.focus()
+
+      const latestState = currentEditor.state
+      const latestDoc = latestState.doc
+      const lastChild = latestDoc.lastChild
+      const previousIndex = latestDoc.childCount - 2
+      const previousChild = previousIndex >= 0 ? latestDoc.child(previousIndex) : null
+      const shouldTrimTrailingParagraph =
+        Boolean(lastChild) &&
+        lastChild?.type.name === "paragraph" &&
+        lastChild.textContent.length === 0 &&
+        Boolean(previousChild) &&
+        ["heading", "bulletList", "orderedList", "taskList", "blockquote"].includes(previousChild?.type.name || "")
+
+      if (shouldTrimTrailingParagraph && previousChild) {
+        const lastStart = getTopLevelChildStartPos(latestDoc, latestDoc.childCount - 1)
+        const previousStart = getTopLevelChildStartPos(latestDoc, previousIndex)
+        let trimTransaction = latestState.tr.delete(lastStart, lastStart + lastChild.nodeSize)
+        const selectionPos = Math.min(
+          trimTransaction.doc.content.size,
+          getFirstTextSelectionPosWithinNode(previousChild, previousStart)
+        )
+        trimTransaction = trimTransaction.setSelection(TextSelection.create(trimTransaction.doc, selectionPos))
+        currentEditor.view.dispatch(trimTransaction.scrollIntoView())
+        currentEditor.view.focus()
+      }
+
+      return true
+    },
+    [getFirstTextSelectionPosWithinNode, getTopLevelChildStartPos]
   )
 
   const getContentRoot = useCallback(() => {
@@ -1978,6 +2060,21 @@ const BlockEditorShell = ({
     [closeSlashMenu, editor, insertDocContent, withTrailingParagraph]
   )
 
+  const insertBlocksAtCursorExact = useCallback(
+    (blocks: BlockEditorDoc[], replaceCurrentEmptyParagraph = false) => {
+      if (!editor) return
+      insertDocContent(
+        {
+          type: "doc",
+          content: blocks,
+        },
+        replaceCurrentEmptyParagraph
+      )
+      closeSlashMenu()
+    },
+    [closeSlashMenu, editor, insertDocContent]
+  )
+
   const insertMermaidBlock = useCallback(() => {
     if (!enableMermaidBlocks) return
     insertBlocksAtCursor([createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")], true)
@@ -2009,8 +2106,31 @@ const BlockEditorShell = ({
   }, [insertBlocksAtCursor])
 
   const insertChecklistBlock = useCallback(() => {
-    insertBlocksAtCursor([createTaskListNode([{ checked: false, text: "할 일" }])], true)
-  }, [insertBlocksAtCursor])
+    insertBlocksAtCursorExact([createTaskListNode([{ checked: false, text: "할 일" }])], true)
+  }, [insertBlocksAtCursorExact])
+
+  const getSlashParagraphReplacementBlocks = useCallback((itemId: string): BlockEditorDoc[] | null => {
+    switch (itemId) {
+      case "heading-1":
+        return [createHeadingNode(1, "제목")]
+      case "heading-2":
+        return [createHeadingNode(2, "제목")]
+      case "heading-3":
+        return [createHeadingNode(3, "제목")]
+      case "heading-4":
+        return [createHeadingNode(4, "제목")]
+      case "bullet-list":
+        return [createBulletListNode(["항목"])]
+      case "ordered-list":
+        return [createOrderedListNode(["항목"])]
+      case "checklist":
+        return [createTaskListNode([{ checked: false, text: "할 일" }])]
+      case "quote":
+        return [createBlockquoteNode("인용문")]
+      default:
+        return null
+    }
+  }, [])
 
   const insertBookmarkBlock = useCallback(() => {
     insertBlocksAtCursor(
@@ -2522,7 +2642,7 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h1", "heading", "title", "제목"],
         slashHint: "#",
-        insertAtCursor: () => insertBlocksAtCursor([createHeadingNode(1, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(1, "제목")], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(1, "제목")])),
       },
@@ -2533,7 +2653,7 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h2", "heading", "section", "소제목"],
         slashHint: "##",
-        insertAtCursor: () => insertBlocksAtCursor([createHeadingNode(2, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(2, "제목")], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(2, "제목")])),
       },
@@ -2544,7 +2664,7 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h3", "heading", "subsection", "소제목"],
         slashHint: "###",
-        insertAtCursor: () => insertBlocksAtCursor([createHeadingNode(3, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(3, "제목")], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(3, "제목")])),
       },
@@ -2555,7 +2675,7 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h4", "heading", "caption", "제목"],
         slashHint: "####",
-        insertAtCursor: () => insertBlocksAtCursor([createHeadingNode(4, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(4, "제목")], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(4, "제목")])),
       },
@@ -2567,7 +2687,7 @@ const BlockEditorShell = ({
         keywords: ["list", "bullet", "목록", "불릿"],
         slashHint: "-",
         recommended: true,
-        insertAtCursor: () => insertBlocksAtCursor([createBulletListNode(["항목"])], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createBulletListNode(["항목"])], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBulletListNode(["항목"])])),
       },
@@ -2579,7 +2699,7 @@ const BlockEditorShell = ({
         keywords: ["ordered", "numbered", "list", "번호"],
         slashHint: "1.",
         toolbarMore: true,
-        insertAtCursor: () => insertBlocksAtCursor([createOrderedListNode(["항목"])], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createOrderedListNode(["항목"])], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createOrderedListNode(["항목"])])),
       },
@@ -2604,7 +2724,7 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["quote", "blockquote", "인용"],
         slashHint: ">",
-        insertAtCursor: () => insertBlocksAtCursor([createBlockquoteNode("인용문")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createBlockquoteNode("인용문")], true),
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBlockquoteNode("인용문")])),
       },
@@ -2781,6 +2901,7 @@ const BlockEditorShell = ({
     enableMermaidBlocks,
     focusEditor,
     insertBlocksAtCursor,
+    insertBlocksAtCursorExact,
     insertBlocksAtIndex,
     insertBookmarkBlock,
     insertCalloutBlock,
@@ -2907,8 +3028,43 @@ const BlockEditorShell = ({
       if (!editor || item.disabled) return
 
       const activeSlashRange = slashMenuState
+      let handledByParagraphReplacement = false
       if (activeSlashRange) {
-        editor.chain().focus().deleteRange({ from: activeSlashRange.from, to: activeSlashRange.to }).run()
+        const { selection } = editor.state
+        const paragraph = selection.$from.parent
+        const paragraphStart = selection.$from.start()
+        const slashStartOffset = Math.max(0, activeSlashRange.from - paragraphStart)
+        const slashEndOffset = Math.max(0, activeSlashRange.to - paragraphStart)
+        const textBeforeSlash = paragraph.textContent.slice(0, slashStartOffset)
+        const textAfterSlash = paragraph.textContent.slice(slashEndOffset)
+        const shouldReplaceWholeParagraph =
+          paragraph.type.name === "paragraph" &&
+          textBeforeSlash.trim().length === 0 &&
+          textAfterSlash.trim().length === 0
+
+        if (shouldReplaceWholeParagraph) {
+          const replacementBlocks = getSlashParagraphReplacementBlocks(item.id)
+          if (replacementBlocks) {
+            handledByParagraphReplacement = replaceCurrentParagraphWithBlocks(replacementBlocks)
+          }
+        }
+
+        if (!handledByParagraphReplacement) {
+          if (shouldReplaceWholeParagraph) {
+            editor
+              .chain()
+              .focus()
+              .deleteRange({
+                from: selection.$from.before(selection.$from.depth),
+                to: selection.$from.after(selection.$from.depth),
+              })
+              .run()
+          } else {
+            editor.chain().focus().deleteRange({ from: activeSlashRange.from, to: activeSlashRange.to }).run()
+          }
+        } else {
+          closeSlashMenu()
+        }
       }
 
       setRecentSlashItemIds((prev) => {
@@ -2919,10 +3075,12 @@ const BlockEditorShell = ({
         return next
       })
 
-      await item.insertAtCursor()
-      closeSlashMenu()
+      if (!handledByParagraphReplacement) {
+        await item.insertAtCursor()
+        closeSlashMenu()
+      }
     },
-    [closeSlashMenu, editor, slashMenuState]
+    [closeSlashMenu, editor, getSlashParagraphReplacementBlocks, replaceCurrentParagraphWithBlocks, slashMenuState]
   )
 
   const resolveSlashMenuState = useCallback(() => {

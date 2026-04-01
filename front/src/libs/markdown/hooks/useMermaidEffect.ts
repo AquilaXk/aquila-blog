@@ -267,10 +267,8 @@ const useMermaidEffect = (
     const retryTimers = new Set<number>()
     const loggedErrorSignatures = new Set<string>()
     let scheduledRunFrame: number | null = null
-    let runRetryCount = 0
     const maxRetryCount = 6
     const retryBaseDelayMs = 150
-    const maxRunRetryCount = 3
     const preset = resolveMermaidPreset(effectiveScheme)
     let mermaidPromise: Promise<any> | null = null
 
@@ -1006,6 +1004,19 @@ const useMermaidEffect = (
       })
     }
 
+    const scheduleRun = () => {
+      if (disposed) return
+      if (running) {
+        rerunRequested = true
+        return
+      }
+      if (scheduledRunFrame !== null) return
+      scheduledRunFrame = window.requestAnimationFrame(() => {
+        scheduledRunFrame = null
+        void run()
+      })
+    }
+
     const run = async () => {
       if (disposed) return
       if (running) {
@@ -1016,37 +1027,18 @@ const useMermaidEffect = (
       running = true
 
       try {
-        do {
-          rerunRequested = false
-          try {
-            await renderMermaidBlocks()
-            runRetryCount = 0
-          } catch (error) {
-            if (shouldLogMermaidWarnings) {
-              console.warn(error)
-            }
-            if (!disposed && runRetryCount < maxRunRetryCount) {
-              runRetryCount += 1
-              const delay = 220 * runRetryCount
-              const timerId = window.setTimeout(() => {
-                retryTimers.delete(timerId)
-                scheduleRun()
-              }, delay)
-              retryTimers.add(timerId)
-            }
-          }
-        } while (!disposed && rerunRequested)
+        await renderMermaidBlocks()
+      } catch (error) {
+        if (shouldLogMermaidWarnings) {
+          console.warn(error)
+        }
       } finally {
         running = false
+        if (rerunRequested && !disposed) {
+          rerunRequested = false
+          scheduleRun()
+        }
       }
-    }
-
-    const scheduleRun = () => {
-      if (disposed || scheduledRunFrame !== null) return
-      scheduledRunFrame = window.requestAnimationFrame(() => {
-        scheduledRunFrame = null
-        void run()
-      })
     }
 
     scheduleRun()
@@ -1055,7 +1047,6 @@ const useMermaidEffect = (
     mutationObserver =
       observeMutations && typeof MutationObserver !== "undefined"
         ? new MutationObserver((mutations) => {
-            if (running) return
             if (!shouldScheduleFromMutations(mutations)) return
             scheduleRun()
           })

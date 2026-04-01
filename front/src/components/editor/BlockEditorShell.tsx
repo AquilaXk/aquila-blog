@@ -2799,6 +2799,11 @@ const BlockEditorShell = ({
     editor?.chain().focus().toggleItalic().run()
   }, [applyCalloutMarkdownWrap, editor])
 
+  const runInlineCodeAction = useCallback(() => {
+    if (applyCalloutMarkdownWrap({ prefix: "`", suffix: "`" })) return
+    editor?.chain().focus().toggleCode().run()
+  }, [applyCalloutMarkdownWrap, editor])
+
   const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
   const isInlineCodeActive = editor?.isActive("code") ?? false
   const isTableMode = isTableSelectionActive(editor)
@@ -3722,7 +3727,7 @@ const BlockEditorShell = ({
     { id: "bullet-list", label: <AppIcon name="list" aria-hidden="true" />, ariaLabel: "목록", run: () => editor?.chain().focus().toggleBulletList().run(), active: editor?.isActive("bulletList") ?? false },
     { id: "quote", label: <span aria-hidden="true">❞</span>, ariaLabel: "인용문", run: () => editor?.chain().focus().toggleBlockquote().run(), active: editor?.isActive("blockquote") ?? false },
     { id: "link", label: <AppIcon name="link" aria-hidden="true" />, ariaLabel: "링크", run: openLinkPrompt, active: editor?.isActive("link") ?? false },
-    { id: "inline-code", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "인라인 코드", run: () => editor?.chain().focus().toggleCode().run(), active: editor?.isActive("code") ?? false },
+    { id: "inline-code", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "인라인 코드", run: runInlineCodeAction, active: editor?.isActive("code") ?? false },
     { id: "inline-formula", label: <span aria-hidden="true">ƒx</span>, ariaLabel: "인라인 수식", run: insertInlineFormula, active: editor?.isActive("inlineFormula") ?? false },
     { id: "image", label: <AppIcon name="camera" aria-hidden="true" />, ariaLabel: "이미지 추가", run: () => imageFileInputRef.current?.click(), active: false },
     { id: "code-block", label: <span aria-hidden="true">&lt;/&gt;</span>, ariaLabel: "코드 블록", run: insertCodeBlock, active: editor?.isActive("codeBlock") ?? false },
@@ -4597,6 +4602,9 @@ const BlockEditorShell = ({
                 key={action.id}
                 type="button"
                 data-active={action.active}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
                 onClick={() => action.run()}
                 disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
@@ -4803,7 +4811,7 @@ const BlockEditorShell = ({
                 <ToolbarButton type="button" data-active={editor.isActive("link")} onClick={openLinkPrompt}>
                   링크
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>
+                <ToolbarButton type="button" data-active={editor.isActive("code")} onClick={runInlineCodeAction}>
                   인라인 코드
                 </ToolbarButton>
                 <ToolbarButton type="button" data-active={editor.isActive("inlineFormula")} onClick={insertInlineFormula}>

@@ -1,12 +1,25 @@
 {
-  "version": 1,
+  "version": 2,
   "sourceDashboard": {
     "uid": "blog-feed-performance",
     "title": "Blog Feed Performance"
   },
   "metrics": [
     {
-      "metric": "editor.typing.p95_ms",
+      "metric": "home_first_contentful_paint_ms",
+      "label": "홈 첫 콘텐츠 페인트(FCP)",
+      "section": "feed",
+      "panel": "Runtime Guard / Home FCP",
+      "unit": "ms",
+      "direction": "lte",
+      "warn": 1500,
+      "fail": 1800
+    },
+    {
+      "metric": "editor_input_latency",
+      "aliases": [
+        "editor.typing.p95_ms"
+      ],
       "label": "에디터 타이핑 p95",
       "section": "editor",
       "panel": "Runtime Guard / Editor Typing",
@@ -16,7 +29,30 @@
       "fail": 36
     },
     {
-      "metric": "feed.scroll.max_frame_gap_ms",
+      "metric": "editor_render_commit_p95_ms",
+      "label": "에디터 렌더 commit p95",
+      "section": "editor",
+      "panel": "Runtime Guard / Editor Commit",
+      "unit": "ms",
+      "direction": "lte",
+      "warn": 22,
+      "fail": 28
+    },
+    {
+      "metric": "editor_input_longtask_ratio",
+      "label": "에디터 입력 Long Task 비율",
+      "section": "editor",
+      "panel": "Runtime Guard / Editor Long Task",
+      "unit": "ratio",
+      "direction": "lte",
+      "warn": 0.07,
+      "fail": 0.1
+    },
+    {
+      "metric": "feed_scroll_blocking.max_frame_gap_ms",
+      "aliases": [
+        "feed.scroll.max_frame_gap_ms"
+      ],
       "label": "피드 스크롤 최대 프레임 간격",
       "section": "feed",
       "panel": "Runtime Guard / Feed Scroll",
@@ -26,7 +62,10 @@
       "fail": 120
     },
     {
-      "metric": "feed.scroll.long_frame_ratio",
+      "metric": "feed_scroll_blocking.long_frame_ratio",
+      "aliases": [
+        "feed.scroll.long_frame_ratio"
+      ],
       "label": "피드 스크롤 Long Frame 비율",
       "section": "feed",
       "panel": "Runtime Guard / Feed Scroll",
@@ -36,7 +75,10 @@
       "fail": 0.15
     },
     {
-      "metric": "detail.entry.ms",
+      "metric": "detail_enter_cost",
+      "aliases": [
+        "detail.entry.ms"
+      ],
       "label": "상세 진입 완료 시간",
       "section": "detail",
       "panel": "Runtime Guard / Detail Entry",

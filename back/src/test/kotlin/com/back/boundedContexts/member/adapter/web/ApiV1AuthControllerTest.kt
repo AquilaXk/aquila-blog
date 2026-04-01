@@ -172,6 +172,66 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `동일 계정 재로그인 후에도 기존 apiKey 세션은 계속 유효하다`() {
+            val member =
+                memberFacade.join(
+                    username = "multi-session-user",
+                    password = "Abcd1234!",
+                    nickname = "다중세션",
+                    profileImgUrl = null,
+                    email = "multi-session-user@example.com",
+                )
+
+            val firstLogin =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+
+            val firstApiKeyCookie =
+                firstLogin.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            assertThat(firstApiKeyCookie).isNotNull
+
+            val secondLogin =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+
+            val secondApiKeyCookie =
+                secondLogin.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            assertThat(secondApiKeyCookie).isNotNull
+            assertThat(secondApiKeyCookie!!.value).isEqualTo(firstApiKeyCookie!!.value)
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    cookie(Cookie("apiKey", firstApiKeyCookie.value))
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.id") { value(member.id) }
+                    jsonPath("$.nickname") { value(member.nickname) }
+                }
+        }
+
+        @Test
         fun `로그인 요청에서 비밀번호가 틀리면 401을 반환한다`() {
             memberFacade.join(
                 username = "wrong-password-user",
@@ -506,6 +566,51 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
                 }.andExpect {
                     cookie { maxAge("apiKey", 0) }
                     cookie { maxAge("accessToken", 0) }
+                }
+        }
+
+        @Test
+        fun `아이피 보안이 켜져도 프록시 remoteAddr 변경만 발생하고 원본 클라이언트 IP가 같으면 세션을 유지한다`() {
+            val member =
+                memberFacade.join(
+                    username = "ip-security-proxy-user",
+                    password = "Abcd1234!",
+                    nickname = "아이피보안프록시",
+                    profileImgUrl = null,
+                    email = "ip-security-proxy-user@example.com",
+                )
+
+            val loginResponse =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        header("CF-Connecting-IP", "198.51.100.34")
+                        with(remoteAddr("172.18.0.5"))
+                        content =
+                            """
+                            {
+                                "email": "${member.email}",
+                                "password": "Abcd1234!",
+                                "ipSecurity": true
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+
+            val apiKeyCookie =
+                loginResponse.response.cookies.firstOrNull { it.name == "apiKey" && it.value.isNotBlank() }
+            assertThat(apiKeyCookie).isNotNull
+
+            mvc
+                .get("/member/api/v1/auth/me") {
+                    cookie(apiKeyCookie!!)
+                    header("CF-Connecting-IP", "198.51.100.34")
+                    with(remoteAddr("172.18.0.9"))
+                }.andExpect {
+                    status { isOk() }
+                    jsonPath("$.id") { value(member.id) }
+                    jsonPath("$.nickname") { value(member.nickname) }
                 }
         }
     }

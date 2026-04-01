@@ -724,6 +724,8 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
         </CalloutEditorHeader>
         <CalloutEditorBody>
           <CalloutBodyTextarea
+            data-callout-markdown-field="true"
+            data-callout-markdown-role="body"
             ref={bodyRef}
             value={draftBody}
             placeholder="본문"
@@ -2386,7 +2388,7 @@ const CalloutEditorWrapper = styled(NodeViewWrapper)`
 `
 
 const CalloutEditorCard = styled.div`
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--ad-border);
   border-left: 8px solid var(--ad-accent);
   border-radius: 0.95rem;

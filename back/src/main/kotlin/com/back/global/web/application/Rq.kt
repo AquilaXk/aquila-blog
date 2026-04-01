@@ -24,6 +24,7 @@ class Rq(
     private val req: HttpServletRequest,
     private val resp: HttpServletResponse,
     private val actorApplicationService: ActorApplicationService,
+    private val clientIpResolver: ClientIpResolver,
 ) {
     private val logger = LoggerFactory.getLogger(Rq::class.java)
 
@@ -46,7 +47,7 @@ class Rq(
         get() = actorOrNull ?: throw AppException("401-1", "로그인 후 이용해주세요.")
 
     val clientIp: String
-        get() = req.remoteAddr.orEmpty()
+        get() = clientIpResolver.resolve(req)
 
     val userAgent: String
         get() = req.getHeader("User-Agent").orEmpty()

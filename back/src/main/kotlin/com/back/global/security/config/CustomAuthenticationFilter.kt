@@ -10,6 +10,7 @@ import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.security.domain.toGrantedAuthorities
 import com.back.global.web.application.AuthCookieService
+import com.back.global.web.application.ClientIpResolver
 import com.back.global.web.application.Rq
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -35,6 +36,7 @@ class CustomAuthenticationFilter(
     private val authIpSecurityService: AuthIpSecurityService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
+    private val clientIpResolver: ClientIpResolver,
     private val objectMapper: ObjectMapper,
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val apiCorsPolicy: ApiCorsPolicy,
@@ -113,7 +115,7 @@ class CustomAuthenticationFilter(
         response: HttpServletResponse,
     ) {
         val (apiKey, accessToken) = extractTokens()
-        val clientIp = request.remoteAddr.orEmpty()
+        val clientIp = clientIpResolver.resolve(request)
 
         if (apiKey.isBlank() && accessToken.isBlank()) return
 

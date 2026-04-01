@@ -15,6 +15,7 @@ import com.back.global.security.application.AuthIpSecurityService
 import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.web.application.AuthCookieService
+import com.back.global.web.application.ClientIpResolver
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -43,6 +44,7 @@ class ApiV1AuthController(
     private val authIpSecurityService: AuthIpSecurityService,
     private val authSecurityEventService: AuthSecurityEventService,
     private val authCookieService: AuthCookieService,
+    private val clientIpResolver: ClientIpResolver,
     private val loginAttemptPolicyUseCase: LoginAttemptPolicyUseCase,
 ) {
     companion object {
@@ -116,8 +118,11 @@ class ApiV1AuthController(
             ipSecurityFingerprint = ipSecurityFingerprint,
         )
 
-        // 로그인 성공 시 장기 인증 식별자(apiKey)를 회전해 탈취된 기존 키 재사용 위험을 줄인다.
-        member.modifyApiKey(MemberPolicy.genApiKey())
+        // 다중 세션 유지를 위해 로그인마다 apiKey를 회전하지 않는다.
+        // 단, 레거시/비정상 키는 1회 보정해 인증 불일치를 방지한다.
+        if (member.apiKey.isBlank() || member.apiKey == member.username) {
+            member.modifyApiKey(MemberPolicy.genApiKey())
+        }
         val accessToken = authTokenIssueUseCase.genAccessToken(member)
 
         authCookieService.issueAuthCookies(
@@ -163,9 +168,9 @@ class ApiV1AuthController(
         }.isSuccess
 
     private fun extractClientIp(request: HttpServletRequest): String {
-        // 애플리케이션 레이어에서 임의의 X-Forwarded-* 헤더를 직접 신뢰하지 않는다.
-        // reverse proxy가 이미 정규화한 remoteAddr를 기준으로 식별한다.
-        return request.remoteAddr.orEmpty()
+        // 신뢰 프록시 구간(Cloudflared/Caddy)에서는 전달 헤더로 원본 클라이언트 IP를 복원한다.
+        // 프록시 외부에서 직접 들어온 요청은 remoteAddr를 사용해 header spoofing을 차단한다.
+        return clientIpResolver.resolve(request)
     }
 
     private fun resolveLoginEmail(reqBody: MemberLoginRequest): String {

@@ -36,8 +36,11 @@ class CustomOAuth2LoginSuccessHandler(
         val securityUser = authentication.principal as SecurityUser
         val actor = actorApplicationService.memberOf(securityUser)
 
-        // OAuth 로그인도 비밀번호 로그인과 동일하게 장기 인증 식별자(apiKey)를 회전한다.
-        actor.modifyApiKey(MemberPolicy.genApiKey())
+        // 다중 세션 유지를 위해 OAuth 로그인도 apiKey를 매번 회전하지 않는다.
+        // 단, 레거시/비정상 키는 1회 보정한다.
+        if (actor.apiKey.isBlank() || actor.apiKey == actor.username) {
+            actor.modifyApiKey(MemberPolicy.genApiKey())
+        }
         val accessToken = actorApplicationService.genAccessToken(actor)
 
         authCookieService.issueAuthCookies(actor.apiKey, accessToken)

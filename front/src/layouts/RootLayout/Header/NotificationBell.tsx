@@ -29,9 +29,18 @@ type Props = {
 }
 
 type NotificationTransportMode = "auto" | "polling-only" | "sse"
+type SnapshotLoadStatus = "success" | "snapshot-fallback" | "blocked" | "error"
+type NavigatorConnectionLike = {
+  saveData?: boolean
+  effectiveType?: string
+}
 
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 30_000
+const POLLING_MIN_INTERVAL_MS = 8_000
+const POLLING_MAX_BACKOFF_MULTIPLIER = 4
+const POLLING_SAVE_DATA_MULTIPLIER = 1.5
+const POLLING_SLOW_NETWORK_MULTIPLIER = 1.6
 const POLLING_JITTER_RATIO = 0.2
 const HIDDEN_GRACE_CLOSE_MS = 45_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
@@ -56,6 +65,11 @@ const getNextPollingDelayMs = (baseMs: number) => {
   const minDelay = Math.max(1_000, baseMs - jitter)
   const maxDelay = baseMs + jitter
   return Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay
+}
+
+const getNavigatorConnection = (): NavigatorConnectionLike | undefined => {
+  if (typeof navigator === "undefined") return undefined
+  return (navigator as Navigator & { connection?: NavigatorConnectionLike }).connection
 }
 
 const isLoopbackHost = (hostname: string) =>
@@ -185,6 +199,24 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     typeof document === "undefined" ? true : document.visibilityState !== "hidden"
   )
   const isDocumentVisibleRef = useRef(isDocumentVisible)
+  const pollingFailureStreakRef = useRef(0)
+
+  const resolvePollingBaseIntervalMs = useCallback((failureStreak: number) => {
+    let baseMs = POLLING_INTERVAL_MS
+    const connection = getNavigatorConnection()
+    if (connection?.saveData) {
+      baseMs = Math.round(baseMs * POLLING_SAVE_DATA_MULTIPLIER)
+    } else if (connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
+      baseMs = Math.round(baseMs * POLLING_SLOW_NETWORK_MULTIPLIER)
+    }
+
+    if (failureStreak > 0) {
+      const multiplier = Math.min(POLLING_MAX_BACKOFF_MULTIPLIER, 2 ** failureStreak)
+      baseMs = Math.round(baseMs * multiplier)
+    }
+
+    return Math.max(POLLING_MIN_INTERVAL_MS, baseMs)
+  }, [])
 
   const pushNotification = useCallback((incoming: TMemberNotification) => {
     setItems((prev) => {
@@ -219,8 +251,8 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     [clearHiddenCloseTimer]
   )
 
-  const loadSnapshot = useCallback(async () => {
-    if (!enabled) return
+  const loadSnapshot = useCallback(async (): Promise<SnapshotLoadStatus> => {
+    if (!enabled) return "error"
 
     try {
       const snapshot = await getNotificationSnapshot()
@@ -234,6 +266,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         items: snapshot.items,
         unreadCount: snapshot.unreadCount,
       })
+      return "success"
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setItems([])
@@ -244,7 +277,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         setOpen(false)
         clearStoredSnapshot()
         setLastNotificationEventId(null)
-        return
+        return "blocked"
       }
 
       const stored = loadStoredSnapshot()
@@ -255,11 +288,12 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         setIsReady(true)
         setIsSnapshotFallback(true)
         setNotificationAccessState("ready")
-        return
+        return "snapshot-fallback"
       }
       setIsReady(false)
       setIsSnapshotFallback(false)
       setNotificationAccessState("pending")
+      return "error"
     }
   }, [enabled, setLastNotificationEventId])
 
@@ -320,6 +354,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setIsSnapshotFallback(false)
       setNotificationAccessState("pending")
       reconnectAttemptRef.current = 0
+      pollingFailureStreakRef.current = 0
       recoveryStateRef.current = createNotificationStreamRecoveryState()
       setLastNotificationEventId(null)
       clearStoredSnapshot()
@@ -329,6 +364,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
     const stored = loadStoredSnapshot()
     if (stored) {
+      pollingFailureStreakRef.current = 0
       setItems(stored.items)
       setUnreadCount(stored.unreadCount)
       setLastNotificationEventId(toLatestNotificationEventId(stored.items))
@@ -590,12 +626,26 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
     const run = async () => {
       if (disposed) return
-      await loadSnapshot()
+      const snapshotStatus = await loadSnapshot()
       if (disposed) return
 
+      if (snapshotStatus === "success") {
+        pollingFailureStreakRef.current = 0
+      } else if (snapshotStatus === "blocked") {
+        pollingFailureStreakRef.current = 0
+        setIsRealtimeActive(false)
+        return
+      } else {
+        pollingFailureStreakRef.current = Math.min(
+          pollingFailureStreakRef.current + 1,
+          STREAM_MAX_RECONNECT_ATTEMPTS
+        )
+      }
+
+      const pollingBaseIntervalMs = resolvePollingBaseIntervalMs(pollingFailureStreakRef.current)
       timer = window.setTimeout(() => {
         void run()
-      }, getNextPollingDelayMs(POLLING_INTERVAL_MS))
+      }, getNextPollingDelayMs(pollingBaseIntervalMs))
     }
 
     void run()
@@ -606,14 +656,36 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         window.clearTimeout(timer)
       }
     }
-  }, [enabled, isDocumentVisible, isRealtimeActive, loadSnapshot, notificationAccessState, streamMode])
+  }, [
+    enabled,
+    isDocumentVisible,
+    isRealtimeActive,
+    loadSnapshot,
+    notificationAccessState,
+    resolvePollingBaseIntervalMs,
+    streamMode,
+  ])
+
+  useEffect(() => {
+    if (!enabled || !isRealtimeActive || streamMode !== "poll" || notificationAccessState !== "ready") return
+
+    const handleOnline = () => {
+      pollingFailureStreakRef.current = 0
+      void loadSnapshot()
+    }
+
+    window.addEventListener("online", handleOnline)
+    return () => {
+      window.removeEventListener("online", handleOnline)
+    }
+  }, [enabled, isRealtimeActive, loadSnapshot, notificationAccessState, streamMode])
 
   useEffect(() => {
     if (!enabled) return
     if (!isRealtimeActive) return
     if (!isDocumentVisible) return
     if (preferPolling) return
-      if (streamMode !== "poll") return
+    if (streamMode !== "poll") return
     if (
       !canProbeNotificationStreamRecovery({
         state: recoveryStateRef.current,
@@ -629,6 +701,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     }
 
     const timer = window.setTimeout(() => {
+      pollingFailureStreakRef.current = 0
       reconnectAttemptRef.current = 0
       recoveryStateRef.current = resetNotificationStreamFailures(recoveryStateRef.current)
       setStreamMode("sse")

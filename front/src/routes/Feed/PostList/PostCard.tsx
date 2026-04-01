@@ -230,6 +230,11 @@ const StyledWrapper = styled(Link)`
   --post-card-shadow-hover: ${FEED_CARD_SHADOW_HOVER};
   --post-card-translate-y: ${FEED_CARD_HOVER_TRANSLATE_PX}px;
 
+  &[data-layout="regular"] {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 420px;
+  }
+
   &:focus-visible {
     outline: 0;
   }

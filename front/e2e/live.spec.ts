@@ -440,7 +440,6 @@ const loginThroughUi = async (
       throw new Error(`UI login did not establish session. ${lastFailure}`)
     }
 
-    lastFailure = `timeout url=${page.url()}`
     try {
       await loginWithRetry(page, apiBaseUrl, loginEmail, legacyLoginId, password)
       if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return

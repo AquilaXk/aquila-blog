@@ -39,48 +39,6 @@ const selectWordInEditable = async (page: Page, editable: Locator, word: string)
   await page.waitForTimeout(80)
 }
 
-const dragSelectWordInEditable = async (page: Page, editable: Locator, word: string) => {
-  const rect = await editable.evaluate((element, targetWord) => {
-    const root = element as HTMLElement
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let textNode: Text | null = null
-    let foundIndex = -1
-
-    while (walker.nextNode()) {
-      const current = walker.currentNode as Text
-      const index = current.data.indexOf(targetWord)
-      if (index >= 0) {
-        textNode = current
-        foundIndex = index
-        break
-      }
-    }
-
-    if (!textNode || foundIndex < 0) return null
-
-    const range = document.createRange()
-    range.setStart(textNode, foundIndex)
-    range.setEnd(textNode, foundIndex + targetWord.length)
-    const firstRect = range.getClientRects()[0] ?? range.getBoundingClientRect()
-    if (!firstRect || firstRect.width <= 0 || firstRect.height <= 0) return null
-
-    return {
-      startX: firstRect.left + 2,
-      endX: Math.max(firstRect.left + 4, firstRect.right - 2),
-      centerY: firstRect.top + firstRect.height / 2,
-    }
-  }, word)
-
-  expect(rect).not.toBeNull()
-  if (!rect) return
-
-  await page.mouse.move(rect.startX, rect.centerY)
-  await page.mouse.down()
-  await page.mouse.move(rect.endX, rect.centerY, { steps: 6 })
-  await page.mouse.up()
-  await page.waitForTimeout(120)
-}
-
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -526,6 +484,29 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await page.getByTestId("table-row-menu").getByRole("button", { name: "아래에 삽입" }).click()
     await expect(page.locator("table tr")).toHaveCount(3)
+  })
+
+  test("table 셀 텍스트도 드래그 선택 후 인라인 버블 포맷(굵게/색상)을 적용할 수 있다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await page.keyboard.type("셀굵게 셀색상")
+
+    await selectWordInEditable(page, firstTableCell, "셀굵게")
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+    await expect(textBubbleToolbar).toBeVisible()
+    await textBubbleToolbar.getByRole("button", { name: "굵게", exact: true }).click()
+
+    await selectWordInEditable(page, firstTableCell, "셀색상")
+    await expect(textBubbleToolbar).toBeVisible()
+    await textBubbleToolbar.locator("summary[aria-label='글자색']").click()
+    await textBubbleToolbar.getByRole("button", { name: "하늘", exact: true }).click()
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("**셀굵게**")
+    await expect(markdownOutput).toContainText("{{color:#60a5fa\\|셀색상}}")
   })
 
   test("table QA actions로 열/행 추가와 삭제가 round-trip 된다", async ({ page }) => {

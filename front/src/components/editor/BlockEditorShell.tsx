@@ -2535,11 +2535,15 @@ const BlockEditorShell = ({
 
       const isImageNodeSelected = activeEditor.isActive("resizableImage")
       const isTableActive = isTableSelectionActive(activeEditor)
+      const isTableStructuralSelection =
+        selection instanceof CellSelection ||
+        (selection instanceof NodeSelection && selection.node.type.name === "table")
       const canShowTextToolbar =
         !selection.empty &&
         !isImageNodeSelected &&
         !activeEditor.isActive("codeBlock") &&
-        !activeEditor.isActive("rawMarkdownBlock")
+        !activeEditor.isActive("rawMarkdownBlock") &&
+        !isTableStructuralSelection
 
       if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
         if (bubbleToolbarHoveredRef.current) return
@@ -2550,7 +2554,7 @@ const BlockEditorShell = ({
         return
       }
 
-      if (isTableActive) {
+      if (isTableActive && !canShowTextToolbar) {
         cancelBubbleHide()
         setBubbleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
         const anchorDom = activeEditor.view.domAtPos(selection.from).node
@@ -4483,10 +4487,6 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     const elements = getTopLevelBlockElements()
-    const dropTargetIndex =
-      draggedBlockState && dropIndicatorState.insertionIndex < elements.length
-        ? dropIndicatorState.insertionIndex
-        : null
 
     elements.forEach((element, index) => {
       if (index === hoveredBlockIndex && !draggedBlockState) {

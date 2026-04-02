@@ -816,8 +816,10 @@ const useMermaidEffect = (
             maxDisplayWidth = Math.min(maxDisplayWidth, Math.max(containerWidth, 860))
           }
 
+          // 모바일에서는 높이 클램프를 걸지 않고 자연 세로 확장을 허용해
+          // 다이어그램이 과도하게 축소되어 "안 보이는" 현상을 방지한다.
           const maxReadableHeight = isMobileViewport
-            ? Math.min(520, Math.floor(window.innerHeight * 0.68))
+            ? Number.POSITIVE_INFINITY
             : Math.min(760, Math.floor(window.innerHeight * 0.74))
           const usesDesktopWideLane = maxDisplayWidth > containerWidth + 24
 
@@ -828,7 +830,7 @@ const useMermaidEffect = (
           if (intrinsicHeight * scale > maxReadableHeight) {
             scale = Math.min(scale, maxReadableHeight / intrinsicHeight)
           }
-          if (complexityLevel === "high") {
+          if (complexityLevel === "high" && !isMobileViewport) {
             scale = Math.min(scale, MERMAID_COMPLEX_SCALE_CAP)
           }
 
@@ -838,7 +840,7 @@ const useMermaidEffect = (
           const roundedWidth = Math.max(1, Math.round(targetWidth))
           const roundedHeight = Math.max(1, Math.round(targetHeight))
           const stageWidth = usesDesktopWideLane ? maxDisplayWidth : containerWidth
-          const isHeightClamped = intrinsicHeight > maxReadableHeight + MERMAID_EXPAND_THRESHOLD_PX
+          const isHeightClamped = !isMobileViewport && intrinsicHeight > maxReadableHeight + MERMAID_EXPAND_THRESHOLD_PX
           const needsExpandAction =
             intrinsicWidth > maxDisplayWidth + MERMAID_EXPAND_THRESHOLD_PX ||
             isHeightClamped ||

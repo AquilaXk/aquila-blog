@@ -118,6 +118,11 @@ const mockDetailEndpoint = async (page: Page) => {
           "| 증상 | iPhone 15 Pro에서 가로 스크롤 없이 본문에 맞춰 표시되어야 한다 |",
           "| 원인 | 레이아웃 폭 계산/스크롤 컨테이너 처리 불일치 |",
           "",
+          "| 단계 | 핵심 요소 | 설명 |",
+          "| --- | --- | --- |",
+          "| 연결 | WebSocket | 실시간 양방향 채널을 유지한다 |",
+          "| 인증 | STOMP CONNECT | 토큰 검증 시점을 분리한다 |",
+          "",
           "```kotlin",
           "fun ensureMobileLayout(width: Int) = if (width <= 393) \"safe\" else \"ok\"",
           "```",
@@ -158,12 +163,33 @@ const captureLayoutSnapshot = async (page: Page) =>
       (el as HTMLElement).getBoundingClientRect()
     )
     const firstCodeBlock = document.querySelector("pre")
-    const firstTable = document.querySelector("table")
+    const tables = Array.from(document.querySelectorAll("table"))
+    const firstTable = tables[0] ?? null
+    const secondTable = tables[1] ?? null
+    const firstTableHead = firstTable?.querySelector("thead") as HTMLElement | null
+    const firstTableCell = firstTable?.querySelector("tbody td, tbody th") as HTMLElement | null
+    const secondTableHead = secondTable?.querySelector("thead") as HTMLElement | null
+    const secondTableCell = secondTable?.querySelector("tbody td, tbody th") as HTMLElement | null
+    const tableScrolls = Array.from(document.querySelectorAll<HTMLElement>(".aq-table-scroll"))
+    const firstTableScroll = tableScrolls[0] ?? null
+    const secondTableScroll = tableScrolls[1] ?? null
     const firstCodeShell = document.querySelector(".aq-code-shell")
     const codeRect = firstCodeBlock ? (firstCodeBlock as HTMLElement).getBoundingClientRect() : null
     const tableRect = firstTable ? (firstTable as HTMLElement).getBoundingClientRect() : null
+    const secondTableRect = secondTable ? (secondTable as HTMLElement).getBoundingClientRect() : null
+    const firstTableScrollRect = firstTableScroll ? firstTableScroll.getBoundingClientRect() : null
+    const secondTableScrollRect = secondTableScroll ? secondTableScroll.getBoundingClientRect() : null
     const codeStyle = firstCodeBlock ? window.getComputedStyle(firstCodeBlock as HTMLElement) : null
     const codeShellStyle = firstCodeShell ? window.getComputedStyle(firstCodeShell as HTMLElement) : null
+    const firstTableScrollStyle = firstTableScroll ? window.getComputedStyle(firstTableScroll) : null
+    const secondTableScrollStyle = secondTableScroll ? window.getComputedStyle(secondTableScroll) : null
+    const codeShellElement = firstCodeShell as HTMLElement | null
+    const codeShellScrollLeftBefore = codeShellElement?.scrollLeft ?? null
+    if (codeShellElement) {
+      const maxScrollX = Math.max(0, codeShellElement.scrollWidth - codeShellElement.clientWidth)
+      codeShellElement.scrollLeft = Math.min(maxScrollX, 180)
+    }
+    const codeShellScrollLeftAfter = codeShellElement?.scrollLeft ?? null
 
     return {
       viewportWidth,
@@ -179,8 +205,29 @@ const captureLayoutSnapshot = async (page: Page) =>
       codeShellClientWidth: firstCodeShell ? (firstCodeShell as HTMLElement).clientWidth : null,
       codeShellScrollWidth: firstCodeShell ? (firstCodeShell as HTMLElement).scrollWidth : null,
       codeShellOverflowX: codeShellStyle?.overflowX ?? null,
+      codeShellTouchAction: codeShellStyle?.touchAction ?? null,
+      codeShellOverscrollBehaviorX: codeShellStyle?.overscrollBehaviorX ?? null,
+      codeShellScrollLeftBefore,
+      codeShellScrollLeftAfter,
       tableRight: tableRect?.right ?? null,
-      firstTableCellLabel: document.querySelector("tbody td")?.getAttribute("data-label") ?? null,
+      secondTableRight: secondTableRect?.right ?? null,
+      firstTableScrollRight: firstTableScrollRect?.right ?? null,
+      secondTableScrollRight: secondTableScrollRect?.right ?? null,
+      firstTableScrollClientWidth: firstTableScroll?.clientWidth ?? null,
+      firstTableScrollWidth: firstTableScroll?.scrollWidth ?? null,
+      secondTableScrollClientWidth: secondTableScroll?.clientWidth ?? null,
+      secondTableScrollWidth: secondTableScroll?.scrollWidth ?? null,
+      firstTableScrollOverflowX: firstTableScrollStyle?.overflowX ?? null,
+      secondTableScrollOverflowX: secondTableScrollStyle?.overflowX ?? null,
+      firstTableCellLabel: firstTableCell?.getAttribute("data-label") ?? null,
+      firstTableHeadDisplay: firstTableHead ? window.getComputedStyle(firstTableHead).display : null,
+      firstTableCellBeforeContent: firstTableCell
+        ? window.getComputedStyle(firstTableCell, "::before").content
+        : null,
+      secondTableHeadDisplay: secondTableHead ? window.getComputedStyle(secondTableHead).display : null,
+      secondTableCellBeforeContent: secondTableCell
+        ? window.getComputedStyle(secondTableCell, "::before").content
+        : null,
     }
   })
 
@@ -216,7 +263,9 @@ test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 �
 
   await page.goto("/posts/990")
   await expect(page.getByText("모바일 테이블/코드블록 회귀 테스트")).toBeVisible()
-  await expect(page.locator("table")).toBeVisible()
+  const tables = page.locator("table")
+  await expect(tables).toHaveCount(2)
+  await expect(tables.first()).toBeVisible()
   await expect(page.locator("pre")).toBeVisible()
 
   const firstSnapshot = await captureLayoutSnapshot(page)
@@ -225,12 +274,26 @@ test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 �
   expect(firstSnapshot.codeShellClientWidth ?? 0).toBeLessThanOrEqual(firstSnapshot.viewportWidth + 0.5)
   expect((firstSnapshot.codeShellScrollWidth ?? 0) >= (firstSnapshot.codeShellClientWidth ?? 0)).toBeTruthy()
   expect(["auto", "scroll"]).toContain(firstSnapshot.codeShellOverflowX)
+  expect(firstSnapshot.codeShellTouchAction).toBe("pan-x")
+  expect(firstSnapshot.codeShellOverscrollBehaviorX).toBe("contain")
+  expect((firstSnapshot.codeShellScrollLeftAfter ?? 0) >= (firstSnapshot.codeShellScrollLeftBefore ?? 0)).toBeTruthy()
   expect(["auto", "scroll", "hidden", "clip"]).toContain(firstSnapshot.codeOverflowX)
-  expect(firstSnapshot.tableRight ?? 0).toBeLessThanOrEqual(firstSnapshot.viewportWidth + 0.5)
+  expect(firstSnapshot.firstTableScrollRight ?? 0).toBeLessThanOrEqual(firstSnapshot.viewportWidth + 0.5)
+  expect(firstSnapshot.secondTableScrollRight ?? 0).toBeLessThanOrEqual(firstSnapshot.viewportWidth + 0.5)
+  expect((firstSnapshot.firstTableScrollWidth ?? 0) >= (firstSnapshot.firstTableScrollClientWidth ?? 0)).toBeTruthy()
+  expect((firstSnapshot.secondTableScrollWidth ?? 0) >= (firstSnapshot.secondTableScrollClientWidth ?? 0)).toBeTruthy()
+  expect(["auto", "scroll"]).toContain(firstSnapshot.firstTableScrollOverflowX)
+  expect(["auto", "scroll"]).toContain(firstSnapshot.secondTableScrollOverflowX)
+  expect((firstSnapshot.tableRight ?? 0) >= (firstSnapshot.firstTableScrollRight ?? 0)).toBeTruthy()
+  expect((firstSnapshot.secondTableRight ?? 0) >= (firstSnapshot.secondTableScrollRight ?? 0)).toBeTruthy()
   expect(firstSnapshot.firstTableCellLabel).toBe("항목")
+  expect(firstSnapshot.firstTableHeadDisplay).not.toBe("none")
+  expect(["none", "normal"]).toContain(firstSnapshot.firstTableCellBeforeContent)
+  expect(firstSnapshot.secondTableHeadDisplay).not.toBe("none")
+  expect(["none", "normal"]).toContain(firstSnapshot.secondTableCellBeforeContent)
 
   await page.reload()
-  await expect(page.locator("table")).toBeVisible()
+  await expect(page.locator("table").first()).toBeVisible()
   await expect(page.locator("pre")).toBeVisible()
 
   const secondSnapshot = await captureLayoutSnapshot(page)
@@ -239,7 +302,21 @@ test("iPhone 15 Pro 상세 본문(table/code block)은 가로 클리핑 없이 �
   expect(secondSnapshot.codeShellClientWidth ?? 0).toBeLessThanOrEqual(secondSnapshot.viewportWidth + 0.5)
   expect((secondSnapshot.codeShellScrollWidth ?? 0) >= (secondSnapshot.codeShellClientWidth ?? 0)).toBeTruthy()
   expect(["auto", "scroll"]).toContain(secondSnapshot.codeShellOverflowX)
+  expect(secondSnapshot.codeShellTouchAction).toBe("pan-x")
+  expect(secondSnapshot.codeShellOverscrollBehaviorX).toBe("contain")
+  expect((secondSnapshot.codeShellScrollLeftAfter ?? 0) >= (secondSnapshot.codeShellScrollLeftBefore ?? 0)).toBeTruthy()
   expect(["auto", "scroll", "hidden", "clip"]).toContain(secondSnapshot.codeOverflowX)
-  expect(secondSnapshot.tableRight ?? 0).toBeLessThanOrEqual(secondSnapshot.viewportWidth + 0.5)
+  expect(secondSnapshot.firstTableScrollRight ?? 0).toBeLessThanOrEqual(secondSnapshot.viewportWidth + 0.5)
+  expect(secondSnapshot.secondTableScrollRight ?? 0).toBeLessThanOrEqual(secondSnapshot.viewportWidth + 0.5)
+  expect((secondSnapshot.firstTableScrollWidth ?? 0) >= (secondSnapshot.firstTableScrollClientWidth ?? 0)).toBeTruthy()
+  expect((secondSnapshot.secondTableScrollWidth ?? 0) >= (secondSnapshot.secondTableScrollClientWidth ?? 0)).toBeTruthy()
+  expect(["auto", "scroll"]).toContain(secondSnapshot.firstTableScrollOverflowX)
+  expect(["auto", "scroll"]).toContain(secondSnapshot.secondTableScrollOverflowX)
+  expect((secondSnapshot.tableRight ?? 0) >= (secondSnapshot.firstTableScrollRight ?? 0)).toBeTruthy()
+  expect((secondSnapshot.secondTableRight ?? 0) >= (secondSnapshot.secondTableScrollRight ?? 0)).toBeTruthy()
   expect(secondSnapshot.firstTableCellLabel).toBe("항목")
+  expect(secondSnapshot.firstTableHeadDisplay).not.toBe("none")
+  expect(["none", "normal"]).toContain(secondSnapshot.firstTableCellBeforeContent)
+  expect(secondSnapshot.secondTableHeadDisplay).not.toBe("none")
+  expect(["none", "normal"]).toContain(secondSnapshot.secondTableCellBeforeContent)
 })

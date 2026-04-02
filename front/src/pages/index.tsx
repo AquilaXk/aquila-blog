@@ -9,9 +9,14 @@ import { GetServerSideProps } from "next"
 import { dehydrate } from "@tanstack/react-query"
 import { AdminProfile } from "src/hooks/useAdminProfile"
 import { hydrateServerAuthSession } from "src/libs/server/authSession"
-import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
+import {
+  buildStaticAdminProfileSnapshot,
+  fetchServerAdminProfile,
+  hasServerAuthCookie,
+} from "src/libs/server/adminProfile"
 import type { TPost } from "src/types"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
+import { appendServerTiming, timed } from "src/libs/server/serverTiming"
 
 const CRAWLER_USER_AGENT_REGEX =
   /bot|crawler|spider|crawling|googlebot|bingbot|yandexbot|duckduckbot|applebot|baiduspider|facebookexternalhit|twitterbot|slurp|ia_archiver/i
@@ -20,53 +25,100 @@ const isCrawlerRequest = (userAgent: string | undefined) =>
   typeof userAgent === "string" && CRAWLER_USER_AGENT_REGEX.test(userAgent)
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
+  const ssrStartedAt = performance.now()
   const queryClient = createQueryClient()
   const postsQueryTagRaw = typeof query.tag === "string" ? query.tag : ""
   const currentTag = postsQueryTagRaw.trim()
   const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined
   const crawlerRequest = isCrawlerRequest(userAgent)
+  const hasAuthCookie = hasServerAuthCookie(req)
 
-  const bootstrapPromise = getPostsBootstrap({
-    tag: currentTag,
-    pageSize: FEED_EXPLORE_PAGE_SIZE,
-  })
-    .then((bootstrap) => {
-      const hasNext = bootstrap.hasNext
-      const resolvedTotalCount = hasNext ? null : bootstrap.posts.length
-
-      return {
-        posts: bootstrap.posts,
-        tagCounts: bootstrap.tagCounts,
-        totalCount: resolvedTotalCount,
-        initialPageTotalCount: resolvedTotalCount ?? bootstrap.posts.length,
-        hasNext,
-        nextCursor: bootstrap.nextCursor ?? null,
-        postsLoaded: true,
-        tagsLoaded: true,
-      }
+  const bootstrapPromise = timed(() =>
+    getPostsBootstrap({
+      tag: currentTag,
+      pageSize: FEED_EXPLORE_PAGE_SIZE,
     })
-    .catch(() => ({
-      posts: [] as TPost[],
-      tagCounts: {} as Record<string, number>,
-      totalCount: null as number | null,
-      initialPageTotalCount: 0,
-      hasNext: false,
-      nextCursor: null as string | null,
-      postsLoaded: false,
-      tagsLoaded: false,
-    }))
+  )
 
-  const adminProfilePromise = fetchServerAdminProfile(req, {
-    timeoutMs: crawlerRequest ? 1_500 : 900,
-  })
+  const adminProfilePromise = timed(() =>
+    fetchServerAdminProfile(req, {
+      timeoutMs: hasAuthCookie ? 1_800 : crawlerRequest ? 1_500 : 900,
+    })
+  )
 
-  const [initialAdminProfile, authMember, bootstrapResult] = await Promise.all([
+  const authMemberPromise = timed(() => hydrateServerAuthSession(queryClient, req))
+
+  const [adminProfileResult, authMemberResult, bootstrapResult] = await Promise.all([
     adminProfilePromise,
-    hydrateServerAuthSession(queryClient, req),
+    authMemberPromise,
     bootstrapPromise,
   ])
+
+  const initialAdminProfile =
+    adminProfileResult.ok && adminProfileResult.value
+      ? adminProfileResult.value
+      : hasAuthCookie
+        ? null
+        : buildStaticAdminProfileSnapshot()
+  const authMember = authMemberResult.ok ? authMemberResult.value : undefined
+  const bootstrapSnapshot =
+    bootstrapResult.ok
+      ? (() => {
+          const hasNext = bootstrapResult.value.hasNext
+          const resolvedTotalCount = hasNext ? null : bootstrapResult.value.posts.length
+
+          return {
+            posts: bootstrapResult.value.posts,
+            tagCounts: bootstrapResult.value.tagCounts,
+            totalCount: resolvedTotalCount,
+            initialPageTotalCount: resolvedTotalCount ?? bootstrapResult.value.posts.length,
+            hasNext,
+            nextCursor: bootstrapResult.value.nextCursor ?? null,
+            postsLoaded: true,
+            tagsLoaded: true,
+          }
+        })()
+      : {
+          posts: [] as TPost[],
+          tagCounts: {} as Record<string, number>,
+          totalCount: null as number | null,
+          initialPageTotalCount: 0,
+          hasNext: false,
+          nextCursor: null as string | null,
+          postsLoaded: false,
+          tagsLoaded: false,
+        }
+
+  appendServerTiming(res, [
+    {
+      name: "home-bootstrap",
+      durationMs: bootstrapResult.durationMs,
+      description: bootstrapResult.ok ? "ok" : "fallback",
+    },
+    {
+      name: "home-admin-profile",
+      durationMs: adminProfileResult.durationMs,
+      description:
+        initialAdminProfile !== null
+          ? adminProfileResult.ok && adminProfileResult.value
+            ? "ok"
+            : "static-fallback"
+          : "auth-session",
+    },
+    {
+      name: "home-auth-session",
+      durationMs: authMemberResult.durationMs,
+      description: authMember === undefined ? "unknown" : authMember === null ? "anonymous" : "member",
+    },
+    {
+      name: "home-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: bootstrapSnapshot.postsLoaded ? "ready" : "bootstrap-fallback",
+    },
+  ])
+
   const { posts, tagCounts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded, tagsLoaded } =
-    bootstrapResult
+    bootstrapSnapshot
 
   queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
   if (tagsLoaded) {
@@ -104,10 +156,10 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     )
   }
 
-  // 데이터 소스 중 하나라도 실패하면 fallback HTML이 CDN에 고정되지 않도록 no-store 처리한다.
+  // 홈 캐시는 feed bootstrap 성공 여부만으로 결정하고, 비인증 admin profile 실패가 공개 캐시를 깨지 않게 한다.
   res.setHeader(
     "Cache-Control",
-    authMember === null && postsLoaded && initialAdminProfile !== null
+    authMember === null && postsLoaded
       ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )

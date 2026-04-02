@@ -16,7 +16,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, req, res 
 }
 
 type DetailPageProps = {
-  initialComments: TPostComment[]
+  initialComments: TPostComment[] | null
 }
 
 const CanonicalPostPage: NextPageWithLayout<DetailPageProps> = ({ initialComments }) => {

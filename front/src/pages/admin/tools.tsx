@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
 import { IncomingMessage } from "http"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -159,7 +159,7 @@ const EMPTY_INITIAL_SNAPSHOT: AdminToolsInitialSnapshot = {
   cleanupCheckedAt: null,
   authSecurityEvents: [],
   authSecurityCheckedAt: null,
-  seedPostId: "1",
+  seedPostId: "",
 }
 
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
@@ -183,33 +183,13 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
   const baseProps = await baseResult.props
 
   const fetchedAt = new Date().toISOString()
-  const [
-    systemHealthResult,
-    mailResult,
-    taskQueueResult,
-    cleanupResult,
-    authEventsResult,
-    publicPostsResult,
-    adminPostsResult,
-  ] = await Promise.allSettled([
+  const [systemHealthResult, mailResult] = await Promise.allSettled([
     readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health"),
     readJsonIfOk<SignupMailDiagnostics>(req, "/system/api/v1/adm/mail/signup"),
-    readJsonIfOk<TaskQueueDiagnostics>(req, "/system/api/v1/adm/tasks"),
-    readJsonIfOk<UploadedFileCleanupDiagnostics>(req, "/system/api/v1/adm/storage/cleanup"),
-    readJsonIfOk<AuthSecurityEvent[]>(req, "/system/api/v1/adm/auth/security-events?limit=30"),
-    readJsonIfOk<PageDto<{ id: number }>>(req, "/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT"),
-    readJsonIfOk<PageDto<{ id: number }>>(req, "/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
   ])
 
   const systemHealth = systemHealthResult.status === "fulfilled" ? systemHealthResult.value : null
   const mailDiagnostics = mailResult.status === "fulfilled" ? mailResult.value : null
-  const taskQueueDiagnostics = taskQueueResult.status === "fulfilled" ? taskQueueResult.value : null
-  const cleanupDiagnostics = cleanupResult.status === "fulfilled" ? cleanupResult.value : null
-  const authSecurityEvents = authEventsResult.status === "fulfilled" ? authEventsResult.value || [] : []
-  const publicPostId =
-    publicPostsResult.status === "fulfilled" ? publicPostsResult.value?.content?.[0]?.id : undefined
-  const adminPostId =
-    adminPostsResult.status === "fulfilled" ? adminPostsResult.value?.content?.[0]?.id : undefined
 
   return {
     props: {
@@ -218,13 +198,13 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
         systemHealth,
         systemHealthFetchedAt: systemHealth ? fetchedAt : null,
         mailDiagnostics,
-        taskQueueDiagnostics,
-        taskQueueCheckedAt: taskQueueDiagnostics ? fetchedAt : null,
-        cleanupDiagnostics,
-        cleanupCheckedAt: cleanupDiagnostics ? fetchedAt : null,
-        authSecurityEvents,
-        authSecurityCheckedAt: authSecurityEvents.length ? fetchedAt : null,
-        seedPostId: String(publicPostId ?? adminPostId ?? 1),
+        taskQueueDiagnostics: null,
+        taskQueueCheckedAt: null,
+        cleanupDiagnostics: null,
+        cleanupCheckedAt: null,
+        authSecurityEvents: [],
+        authSecurityCheckedAt: null,
+        seedPostId: "",
       },
     },
   }
@@ -305,6 +285,7 @@ const ACTION_META: Record<
   taskQueueStatus: { label: "작업 큐 진단", domain: "diagnostics", tone: "infra" },
   cleanupStatus: { label: "파일 정리 진단", domain: "diagnostics", tone: "infra" },
   authSecurityEvents: { label: "인증 보안 기록 조회", domain: "diagnostics", tone: "infra" },
+  seedPostId: { label: "실데이터 테스트 대상 글 준비", domain: "mutation", tone: "read" },
 }
 
 const formatInstant = (value: string | null | undefined) => {
@@ -481,7 +462,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       staleTime: HEALTH_CACHE_MS,
     })
 
-  const pushExecution = (key: string, status: "success" | "error", payload: JsonValue, startedAt: string) => {
+  const pushExecution = useCallback((key: string, status: "success" | "error", payload: JsonValue, startedAt: string) => {
     const meta = ACTION_META[key] || { label: key, domain: "execution" as const, tone: "read" as const }
     const entry: ExecutionEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -501,9 +482,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       return next
     })
     setSelectedExecutionId(entry.id)
-  }
+  }, [])
 
-  const executeAction = async <T extends JsonValue>(
+  const executeAction = useCallback(async <T extends JsonValue>(
     key: string,
     fn: () => Promise<T>,
     options?: {
@@ -527,7 +508,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     } finally {
       setLoadingKey("")
     }
-  }
+  }, [pushExecution])
 
   const parsePositiveInt = (value: string, label: string) => {
     const parsed = Number(value)
@@ -545,7 +526,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     return content
   }
 
-  const fetchSignupMailDiagnostics = async (checkConnection = false) => {
+  const fetchSignupMailDiagnostics = useCallback(async (checkConnection = false) => {
     const actionKey = checkConnection ? "mailConnectivity" : "mailStatus"
     await executeAction(
       actionKey,
@@ -561,7 +542,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         },
       }
     )
-  }
+  }, [executeAction])
 
   const sendSignupTestMail = async () => {
     const email = testEmail.trim()
@@ -588,7 +569,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     )
   }
 
-  const fetchTaskQueueDiagnostics = async () => {
+  const fetchTaskQueueDiagnostics = useCallback(async () => {
     await executeAction("taskQueueStatus", () => apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks"), {
       onSuccess: (diagnostics) => {
         setTaskQueueDiagnosticsError("")
@@ -599,9 +580,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         setTaskQueueDiagnosticsError(message)
       },
     })
-  }
+  }, [executeAction])
 
-  const fetchCleanupDiagnostics = async () => {
+  const fetchCleanupDiagnostics = useCallback(async () => {
     await executeAction("cleanupStatus", () => apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup"), {
       onSuccess: (diagnostics) => {
         setCleanupDiagnosticsError("")
@@ -612,9 +593,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         setCleanupDiagnosticsError(message)
       },
     })
-  }
+  }, [executeAction])
 
-  const fetchAuthSecurityEvents = async () => {
+  const fetchAuthSecurityEvents = useCallback(async () => {
     await executeAction("authSecurityEvents", () => apiFetch<AuthSecurityEvent[]>("/system/api/v1/adm/auth/security-events?limit=30"), {
       onSuccess: (events) => {
         setAuthSecurityEventsError("")
@@ -625,65 +606,67 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
         setAuthSecurityEventsError(message)
       },
     })
-  }
+  }, [executeAction])
 
   useEffect(() => {
-    void (async () => {
-      const shouldFetchMail = !initialSnapshot.mailDiagnostics
-      const shouldFetchTaskQueue = !initialSnapshot.taskQueueDiagnostics
-      const shouldFetchCleanup = !initialSnapshot.cleanupDiagnostics
-      const shouldFetchAuthEvents = initialSnapshot.authSecurityEvents.length === 0
-      const shouldFetchPostSeed = !initialSnapshot.seedPostId || initialSnapshot.seedPostId === "1"
+    if (!sessionMember?.isAdmin) return
 
-      if (
-        !shouldFetchMail &&
-        !shouldFetchTaskQueue &&
-        !shouldFetchCleanup &&
-        !shouldFetchAuthEvents &&
-        !shouldFetchPostSeed
-      ) {
-        return
-      }
+    if (activeDiagnosticTab === "mail" && !mailDiagnostics && loadingKey !== "mailStatus" && loadingKey !== "mailConnectivity") {
+      void fetchSignupMailDiagnostics(false)
+      return
+    }
 
-      const [mailResult, taskResult, cleanupResult, authEventsResult, publicPostsResult, adminPostsResult] =
-        await Promise.allSettled([
-          shouldFetchMail ? apiFetch<SignupMailDiagnostics>("/system/api/v1/adm/mail/signup") : Promise.resolve(null),
-          shouldFetchTaskQueue ? apiFetch<TaskQueueDiagnostics>("/system/api/v1/adm/tasks") : Promise.resolve(null),
-          shouldFetchCleanup
-            ? apiFetch<UploadedFileCleanupDiagnostics>("/system/api/v1/adm/storage/cleanup")
-            : Promise.resolve(null),
-          shouldFetchAuthEvents
-            ? apiFetch<AuthSecurityEvent[]>("/system/api/v1/adm/auth/security-events?limit=30")
-            : Promise.resolve(null),
-          shouldFetchPostSeed
-            ? apiFetch<PageDto<{ id: number }>>("/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT")
-            : Promise.resolve(null),
-          shouldFetchPostSeed
-            ? apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT")
-            : Promise.resolve(null),
+    if (activeDiagnosticTab === "queue" && !taskQueueDiagnostics && loadingKey !== "taskQueueStatus") {
+      void fetchTaskQueueDiagnostics()
+      return
+    }
+
+    if (activeDiagnosticTab === "cleanup" && !cleanupDiagnostics && loadingKey !== "cleanupStatus") {
+      void fetchCleanupDiagnostics()
+      return
+    }
+
+    if (activeDiagnosticTab === "auth" && authSecurityEvents.length === 0 && loadingKey !== "authSecurityEvents") {
+      void fetchAuthSecurityEvents()
+    }
+  }, [
+    activeDiagnosticTab,
+    authSecurityEvents.length,
+    cleanupDiagnostics,
+    fetchAuthSecurityEvents,
+    fetchCleanupDiagnostics,
+    fetchSignupMailDiagnostics,
+    fetchTaskQueueDiagnostics,
+    loadingKey,
+    mailDiagnostics,
+    sessionMember?.isAdmin,
+    taskQueueDiagnostics,
+  ])
+
+  useEffect(() => {
+    if (!sessionMember?.isAdmin || postId.trim() || activeSection !== "mutation" || loadingKey === "seedPostId") return
+
+    void executeAction(
+      "seedPostId",
+      async () => {
+        const [publicPostsResult, adminPostsResult] = await Promise.allSettled([
+          apiFetch<PageDto<{ id: number }>>("/post/api/v1/posts?page=1&pageSize=1&sort=CREATED_AT"),
+          apiFetch<PageDto<{ id: number }>>("/post/api/v1/adm/posts?page=1&pageSize=1&sort=CREATED_AT"),
         ])
+        const firstPublicPostId =
+          publicPostsResult.status === "fulfilled" ? publicPostsResult.value?.content?.[0]?.id : undefined
+        const firstAdminPostId =
+          adminPostsResult.status === "fulfilled" ? adminPostsResult.value?.content?.[0]?.id : undefined
 
-      if (mailResult.status === "fulfilled" && mailResult.value) setMailDiagnostics(mailResult.value)
-      if (taskResult.status === "fulfilled" && taskResult.value) {
-        setTaskQueueDiagnostics(taskResult.value)
-        setTaskQueueCheckedAt(new Date().toISOString())
+        return { id: firstPublicPostId ?? firstAdminPostId ?? null }
+      },
+      {
+        onSuccess: (result) => {
+          if (result?.id != null) setPostId(String(result.id))
+        },
       }
-      if (cleanupResult.status === "fulfilled" && cleanupResult.value) {
-        setCleanupDiagnostics(cleanupResult.value)
-        setCleanupCheckedAt(new Date().toISOString())
-      }
-      if (authEventsResult.status === "fulfilled" && authEventsResult.value) {
-        setAuthSecurityEvents(authEventsResult.value)
-        setAuthSecurityCheckedAt(new Date().toISOString())
-      }
-      const firstPublicPostId =
-        publicPostsResult.status === "fulfilled" ? publicPostsResult.value?.content?.[0]?.id : undefined
-      const firstAdminPostId =
-        adminPostsResult.status === "fulfilled" ? adminPostsResult.value?.content?.[0]?.id : undefined
-      const seedPostId = firstPublicPostId ?? firstAdminPostId
-      if (seedPostId != null) setPostId(String(seedPostId))
-    })()
-  }, [initialSnapshot])
+    )
+  }, [activeSection, executeAction, loadingKey, postId, sessionMember?.isAdmin])
 
   useEffect(() => {
     if (!sectionJumpTarget || typeof window === "undefined") return
@@ -770,26 +753,42 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const authFreshness = getFreshnessMeta(authSecurityCheckedAt)
   const systemHealthSummary = getSystemHealthSummary(systemHealthQuery.data ?? null)
   const systemHealthFetchedAt = systemHealthQuery.dataUpdatedAt ? formatInstant(new Date(systemHealthQuery.dataUpdatedAt).toISOString()) : "-"
+  const isMailLoading = loadingKey === "mailStatus" || loadingKey === "mailConnectivity"
+  const isQueueLoading = loadingKey === "taskQueueStatus"
+  const isCleanupLoading = loadingKey === "cleanupStatus"
+  const isAuthLoading = loadingKey === "authSecurityEvents"
+  const hasMailDiagnostics = Boolean(mailDiagnostics)
+  const hasTaskQueueDiagnostics = Boolean(taskQueueDiagnostics)
+  const hasCleanupDiagnostics = Boolean(cleanupDiagnostics)
+  const hasAuthDiagnostics = Boolean(authSecurityCheckedAt) || Boolean(authSecurityEvents.length)
   const monitoringItems = useMemo(
     () => buildMonitoringItems(systemHealthStatus, MONITORING_ENV),
     [systemHealthStatus]
   )
   const mailStatusLabel =
-    mailDiagnostics?.status === "READY"
+    !hasMailDiagnostics
+      ? isMailLoading
+        ? "갱신 중"
+        : "열기"
+      : mailDiagnostics?.status === "READY"
       ? "정상"
       : mailDiagnostics?.status === "CONNECTION_FAILED"
         ? "오류"
         : mailDiagnostics?.status === "MISCONFIGURED"
           ? "확인 필요"
-          : "미확인"
+          : "열기"
   const mailStatusMessage =
-    mailDiagnostics?.status === "READY"
+    !hasMailDiagnostics
+      ? isMailLoading
+        ? "메일 진단을 불러오는 중"
+        : "메일 진단 열기"
+      : mailDiagnostics?.status === "READY"
       ? "준비 완료"
       : mailDiagnostics?.status === "CONNECTION_FAILED"
         ? "연결 실패"
         : mailDiagnostics?.status === "MISCONFIGURED"
           ? "설정 누락"
-          : "미확인"
+          : "메일 진단 열기"
   const signupMailTaskQueue = mailDiagnostics?.taskQueue ?? null
   const signupMailQueueStatusLabel =
     signupMailTaskQueue?.staleProcessingCount && signupMailTaskQueue.staleProcessingCount > 0
@@ -810,31 +809,51 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           ? `대기 ${signupMailTaskQueue.backlogCount}건`
           : "이상 없음"
   const queueStatusLabel =
-    taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
+    !hasTaskQueueDiagnostics
+      ? isQueueLoading
+        ? "갱신 중"
+        : "열기"
+      : taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
       ? "오류"
       : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
         ? "확인 필요"
         : taskQueueDiagnostics
           ? "정상"
-          : "미확인"
+          : "열기"
   const queueHealthMessage =
-    taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
+    !hasTaskQueueDiagnostics
+      ? isQueueLoading
+        ? "작업 큐 진단을 불러오는 중"
+        : "작업 큐 진단 열기"
+      : taskQueueDiagnostics?.staleProcessingCount && taskQueueDiagnostics.staleProcessingCount > 0
       ? `stale processing ${taskQueueDiagnostics.staleProcessingCount}건 감지`
       : taskQueueDiagnostics?.failedCount && taskQueueDiagnostics.failedCount > 0
         ? `최근 실패 ${taskQueueDiagnostics.failedCount}건`
         : "이상 없음"
-  const cleanupStatusLabel = cleanupDiagnostics?.blockedBySafetyThreshold ? "확인 필요" : cleanupDiagnostics ? "정상" : "미확인"
-  const cleanupHealthMessage = cleanupDiagnostics?.blockedBySafetyThreshold
-    ? "보류됨"
-    : "이상 없음"
+  const cleanupStatusLabel = !hasCleanupDiagnostics ? (isCleanupLoading ? "갱신 중" : "열기") : cleanupDiagnostics?.blockedBySafetyThreshold ? "확인 필요" : "정상"
+  const cleanupHealthMessage = !hasCleanupDiagnostics
+    ? isCleanupLoading
+      ? "파일 정리 진단을 불러오는 중"
+      : "파일 정리 진단 열기"
+    : cleanupDiagnostics?.blockedBySafetyThreshold
+      ? "보류됨"
+      : "이상 없음"
   const authSecurityStatusLabel =
-    authSecurityEvents.length > 0
+    !hasAuthDiagnostics
+      ? isAuthLoading
+        ? "갱신 중"
+        : "열기"
+      : authSecurityEvents.length > 0
       ? authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
         ? "확인 필요"
         : "최근 기록"
       : "정상"
   const authSecurityHealthMessage =
-    authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
+    !hasAuthDiagnostics
+      ? isAuthLoading
+        ? "인증 보안 기록을 불러오는 중"
+        : "인증 보안 기록 열기"
+      : authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
       ? "차단 기록 있음"
       : authSecurityEvents.length > 0
         ? "최근 기록 있음"
@@ -844,34 +863,43 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     const values = [
       systemHealthQuery.dataUpdatedAt ? new Date(systemHealthQuery.dataUpdatedAt).toISOString() : null,
       mailDiagnostics?.checkedAt ?? null,
-      taskQueueDiagnostics ? new Date().toISOString() : null,
-      cleanupDiagnostics ? new Date().toISOString() : null,
-      authSecurityEvents[0]?.createdAt ?? null,
     ]
       .filter((value): value is string => Boolean(value))
       .sort()
 
     return values.length ? formatInstant(values[values.length - 1]) : "-"
-  }, [systemHealthQuery.dataUpdatedAt, mailDiagnostics?.checkedAt, taskQueueDiagnostics, cleanupDiagnostics, authSecurityEvents])
+  }, [systemHealthQuery.dataUpdatedAt, mailDiagnostics?.checkedAt])
 
   const overviewStatusLabel =
     systemHealthStatus !== "UP" || mailDiagnostics?.status === "CONNECTION_FAILED"
       ? "오류"
-      : mailDiagnostics?.status === "MISCONFIGURED" ||
-          (taskQueueDiagnostics?.staleProcessingCount ?? 0) > 0 ||
-          (taskQueueDiagnostics?.failedCount ?? 0) > 0 ||
-          Boolean(cleanupDiagnostics?.blockedBySafetyThreshold) ||
-          authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED"
+      : mailDiagnostics?.status === "MISCONFIGURED"
         ? "확인 필요"
         : "정상"
 
-  const statusCards = [
-    {
-      label: "서버 상태",
-      status: systemHealthStatus === "UP" ? "정상" : "오류",
-      detail: systemHealthSummary[0] || `최근 확인 ${systemHealthFetchedAt}`,
-      section: "overview" as SectionKey,
-    },
+  const sectionNavFreshnessMap: Partial<Record<SectionKey, "fresh" | "aging" | "stale">> = {
+    overview: combineFreshnessTones(systemHealthFreshness.tone, hasMailDiagnostics ? mailFreshness.tone : null),
+    diagnostics: combineFreshnessTones(
+      hasMailDiagnostics ? mailFreshness.tone : null,
+      hasTaskQueueDiagnostics ? taskQueueFreshness.tone : null,
+      hasCleanupDiagnostics ? cleanupFreshness.tone : null,
+      hasAuthDiagnostics ? authFreshness.tone : null
+    ),
+    observability: systemHealthFreshness.tone,
+    results: executions[0] ? getFreshnessMeta(executions[0].completedAt).tone : "stale",
+  }
+
+  const attentionItems = [
+    systemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
+    mailDiagnostics?.status === "MISCONFIGURED" ? "메일 설정 누락을 정리해야 합니다." : null,
+    mailDiagnostics?.status === "CONNECTION_FAILED" ? "SMTP 연결 실패 원인을 확인해야 합니다." : null,
+    (signupMailTaskQueue?.failedCount ?? 0) > 0 ? "회원가입 메일 큐에 실패 작업이 있습니다." : null,
+    (signupMailTaskQueue?.backlogCount ?? 0) > 0 ? "회원가입 메일 큐에 대기 작업이 남아 있습니다." : null,
+  ]
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 3)
+
+  const quickLinks = [
     {
       label: "메일",
       status: mailStatusLabel,
@@ -901,65 +929,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
       tab: "auth" as DiagnosticTab,
     },
   ]
-
-  const freshnessOverviewItems = [
-    {
-      label: "메일",
-      detail: mailDiagnostics?.checkedAt ? formatInstant(mailDiagnostics.checkedAt) : "미확인",
-      freshness: mailFreshness,
-      tab: "mail" as DiagnosticTab,
-    },
-    {
-      label: "작업 큐",
-      detail: taskQueueDiagnostics ? "최근 점검 완료" : "미확인",
-      freshness: taskQueueFreshness,
-      tab: "queue" as DiagnosticTab,
-    },
-    {
-      label: "파일 정리",
-      detail: cleanupDiagnostics ? "정리 상태 확인" : "미확인",
-      freshness: cleanupFreshness,
-      tab: "cleanup" as DiagnosticTab,
-    },
-    {
-      label: "인증 보안",
-      detail: authSecurityEvents.length > 0 ? formatInstant(authSecurityEvents[0]?.createdAt) : "미확인",
-      freshness: authFreshness,
-      tab: "auth" as DiagnosticTab,
-    },
-  ]
-
-  const sectionNavFreshnessMap: Partial<Record<SectionKey, "fresh" | "aging" | "stale">> = {
-    overview: combineFreshnessTones(
-      systemHealthFreshness.tone,
-      mailFreshness.tone,
-      taskQueueFreshness.tone,
-      cleanupFreshness.tone,
-      authFreshness.tone
-    ),
-    diagnostics: combineFreshnessTones(
-      mailFreshness.tone,
-      taskQueueFreshness.tone,
-      cleanupFreshness.tone,
-      authFreshness.tone
-    ),
-    observability: systemHealthFreshness.tone,
-    results: executions[0] ? getFreshnessMeta(executions[0].completedAt).tone : "stale",
-  }
-
-  const attentionItems = [
-    systemHealthStatus !== "UP" ? "서비스 상태를 먼저 확인하세요." : null,
-    mailDiagnostics?.status === "MISCONFIGURED" ? "메일 설정 누락을 정리해야 합니다." : null,
-    mailDiagnostics?.status === "CONNECTION_FAILED" ? "SMTP 연결 실패 원인을 확인해야 합니다." : null,
-    (signupMailTaskQueue?.failedCount ?? 0) > 0 ? "회원가입 메일 큐에 실패 작업이 있습니다." : null,
-    (signupMailTaskQueue?.backlogCount ?? 0) > 0 ? "회원가입 메일 큐에 대기 작업이 남아 있습니다." : null,
-    (taskQueueDiagnostics?.staleProcessingCount ?? 0) > 0 ? "작업 큐에 stale processing이 남아 있습니다." : null,
-    (taskQueueDiagnostics?.failedCount ?? 0) > 0 ? "최근 실패한 작업이 있어 재처리 여부를 검토해야 합니다." : null,
-    cleanupDiagnostics?.blockedBySafetyThreshold ? "파일 정리 purge가 safety threshold 때문에 보류되어 있습니다." : null,
-    authSecurityEvents[0]?.eventType === "IP_SECURITY_MISMATCH_BLOCKED" ? "최근 IP 보안 차단 이벤트를 검토하세요." : null,
-  ]
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 3)
 
   const focusSection = (section: SectionKey, tab?: DiagnosticTab) => {
     if (tab) setActiveDiagnosticTab(tab)
@@ -1022,7 +991,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           </Link>
 
           <StatusCardGrid>
-            {statusCards.slice(1).map((card) => (
+            {quickLinks.map((card) => (
               <StatusCardButton key={card.label} type="button" onClick={() => focusSection(card.section, card.tab)}>
                 <small>{card.label}</small>
                 <strong>{card.status}</strong>
@@ -1032,37 +1001,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           </StatusCardGrid>
         </OverviewContent>
 
-        <FreshnessOverview>
-          <SectionTitleBlock>
-            <h2>진단 갱신 상태</h2>
-          </SectionTitleBlock>
-          <FreshnessOverviewGrid>
-            {freshnessOverviewItems.map((item) => (
-              <FreshnessOverviewButton
-                key={item.label}
-                type="button"
-                onClick={() => focusSection("diagnostics", item.tab)}
-              >
-                <small>{item.label}</small>
-                <strong>{item.detail}</strong>
-                <FreshnessBadge data-tone={item.freshness.tone}>{item.freshness.label}</FreshnessBadge>
-              </FreshnessOverviewButton>
-            ))}
-          </FreshnessOverviewGrid>
-        </FreshnessOverview>
-
-        <AttentionRow>
-          <SectionTitleBlock>
-            <h2>주의 필요</h2>
-          </SectionTitleBlock>
-          <AttentionList>
-            {attentionItems.length ? (
-              attentionItems.map((item) => <AttentionItem key={item}>{item}</AttentionItem>)
-            ) : (
-              <CalmMessage>즉시 대응 항목 없음</CalmMessage>
-            )}
-          </AttentionList>
-        </AttentionRow>
+        {attentionItems.length ? (
+          <InlineNotice data-tone="warning">{attentionItems[0]}</InlineNotice>
+        ) : null}
       </OpsOverview>
 
       <WorkspaceShell>
@@ -1128,7 +1069,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     <strong>메일 진단</strong>
                     <HeaderSubline>
                       <span>{mailStatusMessage}</span>
-                      <FreshnessBadge data-tone={mailFreshness.tone}>{mailFreshness.label}</FreshnessBadge>
+                      {hasMailDiagnostics ? <FreshnessBadge data-tone={mailFreshness.tone}>{mailFreshness.label}</FreshnessBadge> : null}
                     </HeaderSubline>
                   </div>
                   <ActionRow>
@@ -1141,95 +1082,105 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   </ActionRow>
                 </DiagnosticHeader>
 
-                <MetricGrid>
-                  <MetricCard>
-                    <small>상태</small>
-                    <strong>{mailDiagnostics?.status || "미확인"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>SMTP 호스트</small>
-                    <strong>{mailDiagnostics?.host || "미설정"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>발신 주소</small>
-                    <strong>{mailDiagnostics?.mailFrom || "미설정"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>최근 확인</small>
-                    <strong>{mailDiagnostics?.checkedAt ? formatInstant(mailDiagnostics.checkedAt) : "-"}</strong>
-                  </MetricCard>
-                </MetricGrid>
-
                 {!!mailDiagnostics?.missing.length && <InlineNotice data-tone="warning">누락된 설정: {mailDiagnostics.missing.join(", ")}</InlineNotice>}
                 {!!mailDiagnostics?.connectionError && <InlineNotice data-tone="danger">{mailDiagnostics.connectionError}</InlineNotice>}
                 {!!mailDiagnosticsError && <InlineNotice data-tone="danger">{mailDiagnosticsError}</InlineNotice>}
 
-                {signupMailTaskQueue ? (
+                {hasMailDiagnostics ? (
                   <>
+                    <MetricGrid>
+                      <MetricCard>
+                        <small>상태</small>
+                        <strong>{mailDiagnostics?.status || "-"}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>SMTP 호스트</small>
+                        <strong>{mailDiagnostics?.host || "미설정"}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>발신 주소</small>
+                        <strong>{mailDiagnostics?.mailFrom || "미설정"}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>최근 확인</small>
+                        <strong>{mailDiagnostics?.checkedAt ? formatInstant(mailDiagnostics.checkedAt) : "-"}</strong>
+                      </MetricCard>
+                    </MetricGrid>
+
                     <SubSectionHeading>
                       <strong>회원가입 메일 큐</strong>
                       <small>{signupMailQueueStatusLabel}</small>
                     </SubSectionHeading>
-                    <MetricGrid>
-                      <MetricCard>
-                        <small>ready</small>
-                        <strong>{signupMailTaskQueue.readyPendingCount}</strong>
-                      </MetricCard>
-                      <MetricCard>
-                        <small>processing</small>
-                        <strong>{signupMailTaskQueue.processingCount}</strong>
-                      </MetricCard>
-                      <MetricCard>
-                        <small>backlog</small>
-                        <strong>{signupMailTaskQueue.backlogCount ?? 0}</strong>
-                      </MetricCard>
-                      <MetricCard>
-                        <small>failed</small>
-                        <strong>{signupMailTaskQueue.failedCount}</strong>
-                      </MetricCard>
-                    </MetricGrid>
-                    <SubtleMetaGrid>
-                      <SubtleMetaItem>
-                        <span>상태</span>
-                        <strong>{signupMailQueueStatusMessage}</strong>
-                      </SubtleMetaItem>
-                      <SubtleMetaItem>
-                        <span>가장 오래 대기</span>
-                        <strong>{formatAge(signupMailTaskQueue.oldestReadyPendingAgeSeconds)}</strong>
-                      </SubtleMetaItem>
-                      <SubtleMetaItem>
-                        <span>마지막 실패</span>
-                        <strong>{signupMailTaskQueue.latestFailureAt ? formatInstant(signupMailTaskQueue.latestFailureAt) : "-"}</strong>
-                      </SubtleMetaItem>
-                      <SubtleMetaItem>
-                        <span>재시도 정책</span>
-                        <strong>{signupMailTaskQueue.retryPolicy.maxRetries}회</strong>
-                      </SubtleMetaItem>
-                    </SubtleMetaGrid>
-                    {!!signupMailTaskQueue.latestFailureMessage && (
-                      <InlineNotice data-tone="danger">{signupMailTaskQueue.latestFailureMessage}</InlineNotice>
+                    {signupMailTaskQueue ? (
+                      <>
+                        <MetricGrid>
+                          <MetricCard>
+                            <small>ready</small>
+                            <strong>{signupMailTaskQueue.readyPendingCount}</strong>
+                          </MetricCard>
+                          <MetricCard>
+                            <small>processing</small>
+                            <strong>{signupMailTaskQueue.processingCount}</strong>
+                          </MetricCard>
+                          <MetricCard>
+                            <small>backlog</small>
+                            <strong>{signupMailTaskQueue.backlogCount ?? 0}</strong>
+                          </MetricCard>
+                          <MetricCard>
+                            <small>failed</small>
+                            <strong>{signupMailTaskQueue.failedCount}</strong>
+                          </MetricCard>
+                        </MetricGrid>
+                        <SubtleMetaGrid>
+                          <SubtleMetaItem>
+                            <span>상태</span>
+                            <strong>{signupMailQueueStatusMessage}</strong>
+                          </SubtleMetaItem>
+                          <SubtleMetaItem>
+                            <span>가장 오래 대기</span>
+                            <strong>{formatAge(signupMailTaskQueue.oldestReadyPendingAgeSeconds)}</strong>
+                          </SubtleMetaItem>
+                          <SubtleMetaItem>
+                            <span>마지막 실패</span>
+                            <strong>{signupMailTaskQueue.latestFailureAt ? formatInstant(signupMailTaskQueue.latestFailureAt) : "-"}</strong>
+                          </SubtleMetaItem>
+                          <SubtleMetaItem>
+                            <span>재시도 정책</span>
+                            <strong>{signupMailTaskQueue.retryPolicy.maxRetries}회</strong>
+                          </SubtleMetaItem>
+                        </SubtleMetaGrid>
+                        {!!signupMailTaskQueue.latestFailureMessage && (
+                          <InlineNotice data-tone="danger">{signupMailTaskQueue.latestFailureMessage}</InlineNotice>
+                        )}
+                      </>
+                    ) : (
+                      <CalmMessage>큐 상태는 메일 진단 결과와 함께 채워집니다.</CalmMessage>
                     )}
                   </>
-                ) : null}
+                ) : (
+                  <CalmMessage>{isMailLoading ? "메일 진단을 불러오는 중입니다." : "메일 진단 결과가 아직 없습니다. 다시 확인으로 최신 상태를 가져오세요."}</CalmMessage>
+                )}
 
-                <SubtleMetaGrid>
-                  <SubtleMetaItem>
-                    <span>메일 어댑터</span>
-                    <strong>{mailDiagnostics?.adapter || "-"}</strong>
-                  </SubtleMetaItem>
-                  <SubtleMetaItem>
-                    <span>검증 경로</span>
-                    <strong>{mailDiagnostics?.verifyPath || "/signup/verify"}</strong>
-                  </SubtleMetaItem>
-                  <SubtleMetaItem>
-                    <span>SMTP 인증</span>
-                    <strong>{mailDiagnostics?.smtpAuth ? "사용" : "미사용"}</strong>
-                  </SubtleMetaItem>
-                  <SubtleMetaItem>
-                    <span>STARTTLS</span>
-                    <strong>{mailDiagnostics?.startTlsEnabled ? "사용" : "미사용"}</strong>
-                  </SubtleMetaItem>
-                </SubtleMetaGrid>
+                {hasMailDiagnostics ? (
+                  <SubtleMetaGrid>
+                    <SubtleMetaItem>
+                      <span>메일 어댑터</span>
+                      <strong>{mailDiagnostics?.adapter || "-"}</strong>
+                    </SubtleMetaItem>
+                    <SubtleMetaItem>
+                      <span>검증 경로</span>
+                      <strong>{mailDiagnostics?.verifyPath || "/signup/verify"}</strong>
+                    </SubtleMetaItem>
+                    <SubtleMetaItem>
+                      <span>SMTP 인증</span>
+                      <strong>{mailDiagnostics?.smtpAuth ? "사용" : "미사용"}</strong>
+                    </SubtleMetaItem>
+                    <SubtleMetaItem>
+                      <span>STARTTLS</span>
+                      <strong>{mailDiagnostics?.startTlsEnabled ? "사용" : "미사용"}</strong>
+                    </SubtleMetaItem>
+                  </SubtleMetaGrid>
+                ) : null}
               </DiagnosticPanel>
             ) : null}
 
@@ -1240,7 +1191,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     <strong>작업 큐 진단</strong>
                     <HeaderSubline>
                       <span>{queueHealthMessage}</span>
-                      <FreshnessBadge data-tone={taskQueueFreshness.tone}>{taskQueueFreshness.label}</FreshnessBadge>
+                      {hasTaskQueueDiagnostics ? <FreshnessBadge data-tone={taskQueueFreshness.tone}>{taskQueueFreshness.label}</FreshnessBadge> : null}
                     </HeaderSubline>
                   </div>
                   <ActionRow>
@@ -1250,28 +1201,29 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   </ActionRow>
                 </DiagnosticHeader>
 
-                <MetricGrid>
-                  <MetricCard>
-                    <small>ready</small>
-                    <strong>{taskQueueDiagnostics?.readyPendingCount ?? "-"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>processing</small>
-                    <strong>{taskQueueDiagnostics?.processingCount ?? "-"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>최근 실패</small>
-                    <strong>{taskQueueDiagnostics?.failedCount ?? "-"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>stale</small>
-                    <strong>{taskQueueDiagnostics?.staleProcessingCount ?? "-"}</strong>
-                  </MetricCard>
-                </MetricGrid>
-
                 {!!taskQueueDiagnosticsError && <InlineNotice data-tone="danger">{taskQueueDiagnosticsError}</InlineNotice>}
 
                 {taskQueueDiagnostics ? (
+                  <>
+                    <MetricGrid>
+                      <MetricCard>
+                        <small>ready</small>
+                        <strong>{taskQueueDiagnostics.readyPendingCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>processing</small>
+                        <strong>{taskQueueDiagnostics.processingCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>최근 실패</small>
+                        <strong>{taskQueueDiagnostics.failedCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>stale</small>
+                        <strong>{taskQueueDiagnostics.staleProcessingCount}</strong>
+                      </MetricCard>
+                    </MetricGrid>
+
                   <SubtleMetaGrid>
                     <SubtleMetaItem>
                       <span>가장 오래 대기 중</span>
@@ -1290,7 +1242,10 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                       <strong>{taskQueueDiagnostics.completedCount}</strong>
                     </SubtleMetaItem>
                   </SubtleMetaGrid>
-                ) : null}
+                  </>
+                ) : (
+                  <CalmMessage>{isQueueLoading ? "작업 큐 진단을 불러오는 중입니다." : "작업 큐 진단을 열면 최신 상태를 가져옵니다."}</CalmMessage>
+                )}
 
                 {!!taskQueueDiagnostics?.taskTypes.length && (
                   <DetailsPanel>
@@ -1350,7 +1305,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     <strong>파일 정리 진단</strong>
                     <HeaderSubline>
                       <span>{cleanupHealthMessage}</span>
-                      <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge>
+                      {hasCleanupDiagnostics ? <FreshnessBadge data-tone={cleanupFreshness.tone}>{cleanupFreshness.label}</FreshnessBadge> : null}
                     </HeaderSubline>
                   </div>
                   <ActionRow>
@@ -1360,38 +1315,44 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                   </ActionRow>
                 </DiagnosticHeader>
 
-                <MetricGrid>
-                  <MetricCard>
-                    <small>TEMP</small>
-                    <strong>{cleanupDiagnostics?.tempCount ?? "-"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>PENDING_DELETE</small>
-                    <strong>{cleanupDiagnostics?.pendingDeleteCount ?? "-"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>purge 후보</small>
-                    <strong>{cleanupDiagnostics?.eligibleForPurgeCount ?? "-"}</strong>
-                  </MetricCard>
-                  <MetricCard>
-                    <small>threshold</small>
-                    <strong>{cleanupDiagnostics?.cleanupSafetyThreshold ?? "-"}</strong>
-                  </MetricCard>
-                </MetricGrid>
-
                 {!!cleanupDiagnosticsError && <InlineNotice data-tone="danger">{cleanupDiagnosticsError}</InlineNotice>}
-                {!!cleanupDiagnostics?.sampleEligibleObjectKeys.length && (
-                  <DetailsPanel>
-                    <DetailsSummary>
-                      <span>샘플 object key</span>
-                      <small>{cleanupDiagnostics.sampleEligibleObjectKeys.length}개</small>
-                    </DetailsSummary>
-                    <CompactCodeList>
-                      {cleanupDiagnostics.sampleEligibleObjectKeys.map((key) => (
-                        <code key={key}>{key}</code>
-                      ))}
-                    </CompactCodeList>
-                  </DetailsPanel>
+                {cleanupDiagnostics ? (
+                  <>
+                    <MetricGrid>
+                      <MetricCard>
+                        <small>TEMP</small>
+                        <strong>{cleanupDiagnostics.tempCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>PENDING_DELETE</small>
+                        <strong>{cleanupDiagnostics.pendingDeleteCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>purge 후보</small>
+                        <strong>{cleanupDiagnostics.eligibleForPurgeCount}</strong>
+                      </MetricCard>
+                      <MetricCard>
+                        <small>threshold</small>
+                        <strong>{cleanupDiagnostics.cleanupSafetyThreshold}</strong>
+                      </MetricCard>
+                    </MetricGrid>
+
+                    {!!cleanupDiagnostics.sampleEligibleObjectKeys.length && (
+                      <DetailsPanel>
+                        <DetailsSummary>
+                          <span>샘플 object key</span>
+                          <small>{cleanupDiagnostics.sampleEligibleObjectKeys.length}개</small>
+                        </DetailsSummary>
+                        <CompactCodeList>
+                          {cleanupDiagnostics.sampleEligibleObjectKeys.map((key) => (
+                            <code key={key}>{key}</code>
+                          ))}
+                        </CompactCodeList>
+                      </DetailsPanel>
+                    )}
+                  </>
+                ) : (
+                  <CalmMessage>{isCleanupLoading ? "파일 정리 진단을 불러오는 중입니다." : "파일 정리 진단을 열면 최신 상태를 가져옵니다."}</CalmMessage>
                 )}
               </DiagnosticPanel>
             ) : null}
@@ -1403,7 +1364,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                     <strong>인증 보안 기록</strong>
                     <HeaderSubline>
                       <span>{authSecurityHealthMessage}</span>
-                      <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge>
+                      {hasAuthDiagnostics ? <FreshnessBadge data-tone={authFreshness.tone}>{authFreshness.label}</FreshnessBadge> : null}
                     </HeaderSubline>
                   </div>
                   <ActionRow>
@@ -1415,7 +1376,9 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
 
                 {!!authSecurityEventsError && <InlineNotice data-tone="danger">{authSecurityEventsError}</InlineNotice>}
 
-                {authSecurityEvents.length > 0 ? (
+                {!hasAuthDiagnostics ? (
+                  <CalmMessage>{isAuthLoading ? "인증 보안 기록을 불러오는 중입니다." : "인증 보안 기록을 열면 최근 이벤트를 확인합니다."}</CalmMessage>
+                ) : authSecurityEvents.length > 0 ? (
                   <CompactList>
                     {authSecurityEvents.map((event) => (
                       <CompactListItem key={event.id}>
@@ -1432,7 +1395,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
                       </CompactListItem>
                     ))}
                   </CompactList>
-                ) : (
+                ) : authSecurityEventsError ? null : (
                   <CalmMessage>최근 인증 보안 기록이 없습니다.</CalmMessage>
                 )}
               </DiagnosticPanel>
@@ -2009,13 +1972,6 @@ const StatusCardButton = styled.button`
   }
 `
 
-const AttentionRow = styled.div`
-  display: grid;
-  gap: 0.72rem;
-  padding-top: 0.2rem;
-  border-top: 1px solid ${({ theme }) => theme.colors.gray5};
-`
-
 const SectionTitleBlock = styled.div`
   min-width: 0;
 
@@ -2032,26 +1988,6 @@ const SectionTitleBlock = styled.div`
     font-size: 0.84rem;
     line-height: 1.55;
   }
-`
-
-const AttentionList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-`
-
-const AttentionItem = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 36px;
-  padding: 0 0.8rem;
-  border-radius: 999px;
-  background: ${({ theme }) => theme.colors.indigo3};
-  border: 1px solid ${({ theme }) => theme.colors.indigo8};
-  color: ${({ theme }) => theme.colors.indigo11};
-  font-size: 0.8rem;
-  font-weight: 700;
 `
 
 const CalmMessage = styled.p`
@@ -2344,55 +2280,6 @@ const FreshnessBadge = styled.span`
     border-color: ${({ theme }) => theme.colors.gray6};
     background: ${({ theme }) => theme.colors.gray2};
     color: ${({ theme }) => theme.colors.gray10};
-  }
-`
-
-const FreshnessOverview = styled.div`
-  display: grid;
-  gap: 0.72rem;
-  margin-top: 1rem;
-`
-
-const FreshnessOverviewGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.7rem;
-
-  @media (max-width: 1080px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`
-
-const FreshnessOverviewButton = styled.button`
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.9rem 0.95rem;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.colors.gray6};
-  background: ${({ theme }) => theme.colors.gray2};
-  text-align: left;
-  cursor: pointer;
-
-  small {
-    color: ${({ theme }) => theme.colors.gray10};
-    font-size: 0.74rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-  }
-
-  strong {
-    color: ${({ theme }) => theme.colors.gray12};
-    font-size: 0.92rem;
-    font-weight: 780;
-    letter-spacing: -0.02em;
-  }
-
-  ${FreshnessBadge} {
-    justify-self: flex-start;
   }
 `
 

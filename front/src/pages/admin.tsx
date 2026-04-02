@@ -1,113 +1,20 @@
-import { useQuery } from "@tanstack/react-query"
 import { GetServerSideProps, NextPage } from "next"
-import { IncomingMessage } from "http"
-import { useMemo } from "react"
-import { apiFetch } from "src/apis/backend/client"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
-import { serverApiFetch } from "src/libs/server/backend"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
-type AdminHubSystemHealthPayload = {
-  status?: string
-}
-
-type AdminHubTaskQueuePayload = {
-  failedCount?: number
-  staleProcessingCount?: number
-}
-
-type AdminHubInitialSnapshot = {
-  systemHealth: AdminHubSystemHealthPayload | null
-  taskQueue: AdminHubTaskQueuePayload | null
-  fetchedAt: string | null
-}
-
-type AdminHubPageProps = AdminPageProps & {
-  initialSnapshot: AdminHubInitialSnapshot
-}
-
-const EMPTY_INITIAL_SNAPSHOT: AdminHubInitialSnapshot = {
-  systemHealth: null,
-  taskQueue: null,
-  fetchedAt: null,
-}
-
-async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
-  try {
-    const response = await serverApiFetch(req, path)
-    if (!response.ok) return null
-    const contentLength = response.headers.get("content-length")
-    if (contentLength === "0") return null
-    return (await response.json()) as T
-  } catch {
-    return null
-  }
-}
-
-export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req }) => {
+export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
   const baseResult = await getAdminPageProps(req)
   if ("redirect" in baseResult) return baseResult
-  if (!("props" in baseResult)) return baseResult
-  const baseProps = await baseResult.props
-  const fetchedAt = new Date().toISOString()
-  const [systemHealthResult, taskQueueResult] = await Promise.allSettled([
-    readJsonIfOk<AdminHubSystemHealthPayload>(req, "/system/api/v1/adm/health"),
-    readJsonIfOk<AdminHubTaskQueuePayload>(req, "/system/api/v1/adm/tasks"),
-  ])
-
-  const systemHealth = systemHealthResult.status === "fulfilled" ? systemHealthResult.value : null
-  const taskQueue = taskQueueResult.status === "fulfilled" ? taskQueueResult.value : null
-
-  return {
-    props: {
-      ...baseProps,
-      initialSnapshot: {
-        systemHealth,
-        taskQueue,
-        fetchedAt: systemHealth || taskQueue ? fetchedAt : null,
-      },
-    },
-  }
+  return baseResult
 }
 
-const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialSnapshot = EMPTY_INITIAL_SNAPSHOT }) => {
+const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
-  const systemHealthQuery = useQuery({
-    queryKey: ["admin", "hub", "system-health"],
-    queryFn: (): Promise<AdminHubSystemHealthPayload> => apiFetch<AdminHubSystemHealthPayload>("/system/api/v1/adm/health"),
-    enabled: Boolean(sessionMember?.isAdmin),
-    initialData: initialSnapshot.systemHealth ?? undefined,
-    initialDataUpdatedAt: initialSnapshot.systemHealth && initialSnapshot.fetchedAt
-      ? new Date(initialSnapshot.fetchedAt).getTime()
-      : undefined,
-    staleTime: 30_000,
-    gcTime: 120_000,
-    retry: 1,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  })
-  const taskQueueQuery = useQuery({
-    queryKey: ["admin", "hub", "task-queue"],
-    queryFn: (): Promise<AdminHubTaskQueuePayload> => apiFetch<AdminHubTaskQueuePayload>("/system/api/v1/adm/tasks"),
-    enabled: Boolean(sessionMember?.isAdmin),
-    initialData: initialSnapshot.taskQueue ?? undefined,
-    initialDataUpdatedAt:
-      initialSnapshot.taskQueue && initialSnapshot.fetchedAt ? new Date(initialSnapshot.fetchedAt).getTime() : undefined,
-    staleTime: 30_000,
-    gcTime: 120_000,
-    retry: 1,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  })
-
-  const profileSrc = useMemo(
-    () => sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || "",
-    [sessionMember?.profileImageDirectUrl, sessionMember?.profileImageUrl]
-  )
+  const profileSrc = sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || ""
 
   const profileUpdatedText = sessionMember?.modifiedAt
     ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
@@ -171,30 +78,6 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialSnaps
   ]
 
   const nextActionCandidates: Array<AdminHubNextAction | null> = [
-    systemHealthQuery.data?.status && systemHealthQuery.data.status !== "UP"
-      ? {
-          href: "/admin/dashboard",
-          title: "서비스 상태 확인",
-          detail: `현재 상태가 ${systemHealthQuery.data.status}입니다. 운영 대시보드에서 모니터링 패널을 먼저 확인하세요.`,
-          tone: "warn" as const,
-        }
-      : null,
-    (taskQueueQuery.data?.staleProcessingCount ?? 0) > 0
-      ? {
-          href: "/admin/tools",
-          title: "작업 큐 stale 처리 점검",
-          detail: `stale processing ${taskQueueQuery.data?.staleProcessingCount || 0}건이 남아 있습니다. 재처리 여부를 확인하세요.`,
-          tone: "warn" as const,
-        }
-      : null,
-    (taskQueueQuery.data?.failedCount ?? 0) > 0
-      ? {
-          href: "/admin/tools",
-          title: "최근 실패 작업 확인",
-          detail: `실패한 작업 ${taskQueueQuery.data?.failedCount || 0}건이 있습니다. 최근 실행 결과부터 확인하세요.`,
-          tone: "warn" as const,
-        }
-      : null,
     profileCompletion < 80
       ? {
           href: "/admin/profile",
@@ -225,14 +108,18 @@ const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialSnaps
       detail: "허브 점검이 끝났다면 바로 임시글부터 작성 흐름을 이어갈 수 있습니다.",
       tone: "neutral" as const,
     },
-    systemHealthQuery.isSuccess && taskQueueQuery.isSuccess
-      ? {
-          href: "/admin/dashboard",
-          title: "운영 대시보드 확인",
-          detail: "오늘 핵심 패널과 외부 모니터링 링크를 한 화면에서 점검할 수 있습니다.",
-          tone: "neutral" as const,
-        }
-      : null,
+    {
+      href: "/admin/dashboard",
+      title: "운영 대시보드 확인",
+      detail: "모니터링 패널과 외부 지표는 전용 대시보드에서 한 번에 점검하세요.",
+      tone: "neutral" as const,
+    },
+    {
+      href: "/admin/tools",
+      title: "운영 진단 열기",
+      detail: "작업 큐, 메일, 파일 정리, 인증 보안 점검은 운영 진단에서 이어집니다.",
+      tone: "neutral" as const,
+    },
   ]
 
   const nextActions = nextActionCandidates.filter((item): item is AdminHubNextAction => Boolean(item)).slice(0, 3)

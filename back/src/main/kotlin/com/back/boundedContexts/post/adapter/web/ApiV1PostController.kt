@@ -9,6 +9,7 @@ import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.boundedContexts.post.model.Post
 import com.back.global.exception.application.AppException
@@ -58,11 +59,6 @@ class ApiV1PostController(
     private data class SearchIntent(
         val keyword: String,
         val tag: String,
-    )
-
-    data class PublicPostsBootstrapDto(
-        val feed: CursorFeedPageDto,
-        val tags: List<TagCountDto>,
     )
 
     private fun applyPublicReadCacheHeaders(
@@ -624,26 +620,14 @@ class ApiV1PostController(
         val normalizedTag = normalizeExploreTag(tag)
         val validPageSize = pageSize.coerceIn(1, 30)
         val validSort = normalizeCursorSort(sort)
-        val feed =
-            if (normalizedTag.isBlank()) {
-                postPublicReadQueryUseCase.getPublicFeedByCursor(cursor = null, pageSize = validPageSize, sort = validSort)
-            } else {
-                postPublicReadQueryUseCase.getPublicExploreByCursor(
-                    cursor = null,
-                    pageSize = validPageSize,
-                    tag = normalizedTag,
-                    sort = validSort,
-                )
-            }
-        val tags = postPublicReadQueryUseCase.getPublicTagCounts()
-        val data = PublicPostsBootstrapDto(feed = feed, tags = tags)
+        val data = postPublicReadQueryUseCase.getPublicBootstrap(normalizedTag, validPageSize, validSort)
         val etagSeed =
             buildBootstrapEtagSeed(
                 pageSize = validPageSize,
                 sort = validSort,
                 tag = normalizedTag,
-                feed = feed,
-                tags = tags,
+                feed = data.feed,
+                tags = data.tags,
             )
 
         return respondPublicWithEtag(

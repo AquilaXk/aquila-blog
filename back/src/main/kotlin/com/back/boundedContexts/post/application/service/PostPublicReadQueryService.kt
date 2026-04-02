@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
+import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.exception.application.AppException
 import com.back.standard.dto.page.PageDto
@@ -275,6 +276,54 @@ class PostPublicReadQueryService(
             postReadBulkheadService.withTagsPermit {
                 postUseCase.getPublicTagCounts()
             }
+        }
+
+    @Transactional(readOnly = true)
+    @Cacheable(
+        cacheNames = [PostQueryCacheNames.BOOTSTRAP],
+        key =
+            "T(com.back.boundedContexts.post.application.service.PostPublicReadQueryService)" +
+                ".buildBootstrapCacheKey(#pageSize, #sort, #tag)",
+        sync = true,
+    )
+    override fun getPublicBootstrap(
+        tag: String,
+        pageSize: Int,
+        sort: PostSearchSortType1,
+    ): PublicPostsBootstrapDto =
+        runReadQuery(
+            "bootstrap",
+            "pageSize=$pageSize sort=${sort.name} tag=${tag.take(80)}",
+        ) {
+            val normalizedTag = tag.trim()
+            val safeSort = requireCursorSort(sort)
+            val safePageSize = pageSize.coerceIn(1, MAX_CURSOR_PAGE_SIZE)
+            val feed =
+                postReadBulkheadService.withFeedPermit {
+                    val rows =
+                        if (normalizedTag.isBlank()) {
+                            postUseCase.findPublicByCursor(
+                                cursorCreatedAt = null,
+                                cursorId = null,
+                                limit = safePageSize + 1,
+                                sort = safeSort,
+                            )
+                        } else {
+                            postUseCase.findPublicByTagCursor(
+                                tag = normalizedTag,
+                                cursorCreatedAt = null,
+                                cursorId = null,
+                                limit = safePageSize + 1,
+                                sort = safeSort,
+                            )
+                        }
+                    toCursorFeedPageDto(rows, safePageSize)
+                }
+            val tags =
+                postReadBulkheadService.withTagsPermit {
+                    postUseCase.getPublicTagCounts()
+                }
+            PublicPostsBootstrapDto(feed = feed, tags = tags)
         }
 
     private fun <T> runReadQuery(
@@ -705,6 +754,13 @@ class PostPublicReadQueryService(
 
         @JvmStatic
         fun isFirstCursorRequest(cursor: String?): Boolean = cursor.isNullOrBlank()
+
+        @JvmStatic
+        fun buildBootstrapCacheKey(
+            pageSize: Int,
+            sort: PostSearchSortType1,
+            tag: String,
+        ): String = "size=$pageSize:sort=${sort.name}:tag=${toCacheKeyToken(tag)}"
 
         private fun sha256Hex(value: String): String =
             MessageDigest

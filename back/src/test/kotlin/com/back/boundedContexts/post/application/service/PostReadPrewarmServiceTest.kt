@@ -4,6 +4,7 @@ import com.back.boundedContexts.post.application.port.input.PostPublicReadQueryU
 import com.back.boundedContexts.post.dto.CursorFeedPageDto
 import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
+import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
@@ -129,6 +130,18 @@ class PostReadPrewarmServiceTest {
         override fun getPublicTagCounts(): List<TagCountDto> {
             if (failTagCounts) throw IllegalStateException("tag fail")
             return emptyList()
+        }
+
+        override fun getPublicBootstrap(
+            tag: String,
+            pageSize: Int,
+            sort: PostSearchSortType1,
+        ): PublicPostsBootstrapDto {
+            if (failFeedByCursor && failTagCounts) throw IllegalStateException("bootstrap fail")
+            return PublicPostsBootstrapDto(
+                feed = CursorFeedPageDto(content = emptyList(), pageSize = pageSize, hasNext = false),
+                tags = emptyList(),
+            )
         }
     }
 }

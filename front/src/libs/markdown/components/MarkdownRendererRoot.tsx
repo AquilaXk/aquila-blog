@@ -428,9 +428,12 @@ const MarkdownRendererRoot = styled.div`
   .aq-code-shell {
     width: 100%;
     max-width: 100%;
+    min-width: 0;
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
   }
@@ -446,6 +449,17 @@ const MarkdownRendererRoot = styled.div`
     background: ${({ theme }) =>
       theme.scheme === "dark" ? "#2b2d3a" : "#f2f4f8"};
     color: ${({ theme }) => (theme.scheme === "dark" ? "#a9b7c6" : "#2f3747")};
+  }
+
+  .aq-code pre,
+  .aq-code code,
+  .aq-pretty-pre code,
+  .aq-pretty-pre code > [data-line],
+  figure[data-rehype-pretty-code-figure] pre code,
+  figure[data-rehype-pretty-code-figure] [data-line] {
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .aq-code code,
@@ -796,8 +810,8 @@ const MarkdownRendererRoot = styled.div`
 
     .aq-code code,
     pre code {
-      font-size: 0.9rem;
-      line-height: 1.56;
+      font-size: 0.86rem;
+      line-height: 1.54;
     }
 
     .aq-table-scroll {
@@ -841,14 +855,14 @@ const MarkdownRendererRoot = styled.div`
     }
 
     .aq-code-block .aq-code {
-      padding-left: 0.88rem;
-      padding-right: 0.88rem;
-      padding-bottom: 3.55rem;
+      padding-left: 0.74rem;
+      padding-right: 0.74rem;
+      padding-bottom: 3.2rem;
     }
 
     .aq-code-copy-bottom {
-      right: 0.66rem;
-      bottom: 0.66rem;
+      right: 0.48rem;
+      bottom: 0.48rem;
     }
 
     .aq-code-copy {
@@ -878,77 +892,6 @@ const MarkdownRendererRoot = styled.div`
       margin-left: 0;
       margin-right: 0;
       overflow-x: auto;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .aq-table-shell {
-      margin: 0.9rem 0;
-    }
-
-    .aq-table-scroll {
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      overflow: visible;
-    }
-
-    table.aq-table-responsive,
-    .aq-table.aq-table-responsive {
-      display: block;
-      border: 0;
-      margin: 0;
-      background: transparent;
-    }
-
-    table.aq-table-responsive > thead,
-    .aq-table.aq-table-responsive > thead {
-      display: none !important;
-    }
-
-    table.aq-table-responsive > tbody,
-    .aq-table.aq-table-responsive > tbody {
-      display: grid;
-      gap: 0.62rem;
-      width: 100%;
-    }
-
-    table.aq-table-responsive > tbody > tr,
-    .aq-table.aq-table-responsive > tbody > tr {
-      display: block;
-      border: 1px solid ${({ theme }) => theme.colors.gray6};
-      border-radius: 10px;
-      overflow: hidden;
-      background: ${({ theme }) => theme.colors.gray2};
-    }
-
-    table.aq-table-responsive > tbody > tr > :is(td, th),
-    .aq-table.aq-table-responsive > tbody > tr > :is(td, th) {
-      display: grid;
-      grid-template-columns: minmax(5.2rem, 35%) minmax(0, 1fr);
-      gap: 0.56rem;
-      align-items: start;
-      border-right: 0;
-      border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
-      padding: 0.62rem 0.68rem;
-      font-size: 0.92rem;
-      line-height: 1.6;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-
-    table.aq-table-responsive > tbody > tr > :is(td, th):last-child,
-    .aq-table.aq-table-responsive > tbody > tr > :is(td, th):last-child {
-      border-bottom: 0;
-    }
-
-    table.aq-table-responsive > tbody > tr > :is(td, th)::before,
-    .aq-table.aq-table-responsive > tbody > tr > :is(td, th)::before {
-      content: attr(data-label);
-      color: ${({ theme }) => theme.colors.gray10};
-      font-size: 0.74rem;
-      font-weight: 700;
-      line-height: 1.45;
     }
   }
 
@@ -1064,53 +1007,63 @@ const MarkdownRendererRoot = styled.div`
   }
 
   @media (max-width: 480px) {
-    .aq-table-shell,
-    .aq-table-scroll {
+    .aq-table-shell {
+      margin: 0.9rem 0;
       width: 100%;
       max-width: 100%;
       min-width: 0;
     }
 
     .aq-table-scroll {
-      overflow-x: hidden;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
     }
 
     table.aq-table-responsive,
     .aq-table.aq-table-responsive {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-      table-layout: fixed;
+      display: table;
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+      table-layout: auto;
     }
 
-    table.aq-table-responsive colgroup,
-    .aq-table.aq-table-responsive colgroup,
-    table.aq-table-responsive col,
-    .aq-table.aq-table-responsive col {
-      display: none;
+    table.aq-table-responsive > thead,
+    .aq-table.aq-table-responsive > thead {
+      display: table-header-group;
     }
 
     table.aq-table-responsive > tbody,
-    .aq-table.aq-table-responsive > tbody,
+    .aq-table.aq-table-responsive > tbody {
+      display: table-row-group;
+      width: auto;
+      min-width: max-content;
+      max-width: none;
+    }
+
     table.aq-table-responsive > tbody > tr,
     .aq-table.aq-table-responsive > tbody > tr {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
+      display: table-row;
+      width: auto;
+      min-width: max-content;
+      max-width: none;
     }
 
     table.aq-table-responsive > tbody > tr > :is(td, th),
     .aq-table.aq-table-responsive > tbody > tr > :is(td, th) {
       box-sizing: border-box;
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
+      width: auto;
+      min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
+      max-width: none;
     }
 
     table.aq-table-responsive > tbody > tr > :is(td, th) > *,
     .aq-table.aq-table-responsive > tbody > tr > :is(td, th) > * {
       min-width: 0;
-      max-width: 100%;
+      max-width: none;
     }
   }
 

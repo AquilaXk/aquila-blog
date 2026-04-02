@@ -1,7 +1,42 @@
 import { expect, test } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
 const UNDO_SHORTCUT = process.platform === "darwin" ? "Meta+z" : "Control+z"
+
+const selectWordInEditable = async (page: Page, editable: Locator, word: string) => {
+  const selected = await editable.evaluate((element, targetWord) => {
+    const root = element as HTMLElement
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let textNode: Text | null = null
+    let foundIndex = -1
+
+    while (walker.nextNode()) {
+      const current = walker.currentNode as Text
+      const index = current.data.indexOf(targetWord)
+      if (index >= 0) {
+        textNode = current
+        foundIndex = index
+        break
+      }
+    }
+
+    if (!textNode || foundIndex < 0) return false
+    const range = document.createRange()
+    range.setStart(textNode, foundIndex)
+    range.setEnd(textNode, foundIndex + targetWord.length)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    ;(textNode.parentElement || root).dispatchEvent(
+      new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window })
+    )
+    return true
+  }, word)
+
+  expect(selected).toBe(true)
+  await page.waitForTimeout(80)
+}
 
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
@@ -59,14 +94,11 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "QA 끝으로 이동" }).click()
 
     await page.getByRole("button", { name: "QA 콜아웃" }).click()
-    const calloutBodyField = page.locator("[data-callout-markdown-role='body']").first()
-    await expect(calloutBodyField).toBeVisible()
-    await calloutBodyField.fill("콜아웃 코드값")
-    await calloutBodyField.evaluate((element) => {
-      const textarea = element as HTMLTextAreaElement
-      textarea.focus()
-      textarea.setSelectionRange(0, textarea.value.length)
-    })
+    const calloutBodyContent = page.locator("[data-callout-body-content='true']").first()
+    await expect(calloutBodyContent).toBeVisible()
+    await calloutBodyContent.click()
+    await page.keyboard.type("콜아웃 코드값")
+    await selectWordInEditable(page, calloutBodyContent, "콜아웃 코드값")
     await page.getByRole("button", { name: "인라인 코드", exact: true }).first().click()
 
     await page.getByRole("button", { name: "QA 수식" }).click()
@@ -120,7 +152,7 @@ test.describe("block editor authoring flow", () => {
     expect(secondLineIndex).toBeGreaterThan(quoteIndex)
   })
 
-  test("콜아웃 본문은 selected 전환 직후에도 Enter 없이 높이가 유지된다", async ({ page }) => {
+  test("콜아웃 본문은 단일 리치 편집 surface로 동작하고 split preview를 노출하지 않는다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
@@ -129,45 +161,69 @@ test.describe("block editor authoring flow", () => {
 
     await page.getByRole("button", { name: "QA 콜아웃" }).click()
 
-    const calloutBodyField = page.locator("[data-callout-markdown-role='body']").first()
-    await expect(calloutBodyField).toBeVisible()
-    await calloutBodyField.fill(
-      [
-        "부하 테스트는 동시 사용자 수보다 처리량, 지연, 에러율, 자원 사용량을 함께 봐야 의미가 있습니다.",
-        "테스트는 Smoke -> Load -> Stress -> Spike/Soak 순서로 점진적으로 진행해야 원인을 읽기 쉽습니다.",
-        "성능 튜닝은 감이 아니라 동일 조건에서 반복 가능한 전후 비교로 검증해야 합니다.",
-      ].join("\n")
-    )
+    const calloutBodyContent = page.locator("[data-callout-body-content='true']").first()
+    await expect(calloutBodyContent).toBeVisible()
+    await expect(page.locator("[data-callout-markdown-role='body']")).toHaveCount(0)
+    await expect(page.locator("[data-callout-markdown-preview='true']")).toHaveCount(0)
+
+    await calloutBodyContent.click()
+    await page.keyboard.type("콜아웃 첫 줄")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("콜아웃 둘째 줄")
 
     const leadParagraph = editor.locator("p", { hasText: "앞 문단" }).first()
     await leadParagraph.click()
-    await calloutBodyField.click()
+    await calloutBodyContent.click()
+    await page.keyboard.type(" 입력 유지")
 
-    await expect
-      .poll(() =>
-        calloutBodyField.evaluate((element) => {
-          const textarea = element as HTMLTextAreaElement
-          return textarea.scrollHeight - textarea.clientHeight
-        })
-      )
-      .toBeLessThanOrEqual(6)
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("> 콜아웃 첫 줄")
+    await expect(markdownOutput).toContainText("입력 유지")
+    await expect(markdownOutput).toContainText("콜아웃 둘째 줄")
   })
 
-  test("콜아웃 본문 inline markdown는 수정 화면에서 즉시 미리보기로 렌더된다", async ({ page }) => {
+  test("콜아웃 본문에서 선택 버블 포맷이 직접 적용되고 markdown로 직렬화된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
     await editor.click()
     await page.getByRole("button", { name: "QA 콜아웃" }).click()
 
-    const calloutBodyField = page.locator("[data-callout-markdown-role='body']").first()
-    await expect(calloutBodyField).toBeVisible()
-    await calloutBodyField.fill("**굵게** 와 `코드`")
+    const calloutBodyContent = page.locator("[data-callout-body-content='true']").first()
+    await expect(calloutBodyContent).toBeVisible()
+    await calloutBodyContent.click()
+    await page.keyboard.type("굵게 코드")
 
-    const preview = page.locator("[data-callout-markdown-preview='true']").first()
-    await expect(preview).toBeVisible()
-    await expect(preview.locator("strong")).toHaveText("굵게")
-    await expect(preview.locator("code")).toContainText("코드")
+    await selectWordInEditable(page, calloutBodyContent, "굵게")
+    await page.getByRole("button", { name: "굵게" }).first().click()
+
+    await selectWordInEditable(page, calloutBodyContent, "코드")
+    await page.getByRole("button", { name: "인라인 코드", exact: true }).first().click()
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("> **굵게** `코드`")
+  })
+
+  test("텍스트 선택 상태에서 포맷 도구로 글자 크기/강조/색상을 바로 적용할 수 있다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await editor.click()
+    await page.keyboard.type("버블 포맷 테스트")
+
+    await selectWordInEditable(page, editor, "포맷")
+    await page.getByRole("button", { name: "굵게" }).first().click()
+    await expect(markdownOutput).toContainText("**포맷**")
+
+    await selectWordInEditable(page, editor, "버블")
+    await page.getByRole("button", { name: "제목 2" }).first().click()
+    await expect(markdownOutput).toContainText("## ")
+
+    await selectWordInEditable(page, editor, "테스트")
+    await page.locator("[aria-label='글자색']").first().click()
+    await page.getByRole("button", { name: "하늘" }).first().click()
+    await expect(markdownOutput).toContainText("{{color:#60a5fa|테스트}}")
   })
 
   test("코드 블록은 작성 surface에서도 Prism 하이라이트 토큰을 렌더한다", async ({ page }) => {

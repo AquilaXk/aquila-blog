@@ -20,7 +20,6 @@ import {
 import type {
   ChangeEvent,
   DragEvent as ReactDragEvent,
-  FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode,
@@ -90,7 +89,6 @@ import {
   normalizeStructuredMarkdownClipboard,
 } from "src/libs/markdown/htmlToMarkdown"
 import {
-  INLINE_COLOR_TOKEN_REGEX,
   INLINE_TEXT_COLOR_OPTIONS,
   normalizeInlineColorToken,
 } from "src/libs/markdown/inlineColor"
@@ -166,6 +164,14 @@ type ToolbarAction = {
   disabled?: boolean
 }
 
+type InlineTextStyleOption = {
+  id: "paragraph" | "heading-1" | "heading-2" | "heading-3" | "heading-4"
+  label: string
+  shortLabel: string
+  isActive: (activeEditor: TiptapEditor) => boolean
+  run: (activeEditor: TiptapEditor) => void
+}
+
 type FloatingBubbleState = {
   visible: boolean
   mode: "text" | "image"
@@ -212,8 +218,6 @@ type BlockSelectionOverlayState = {
   width: number
   height: number
 }
-
-type CalloutMarkdownFieldElement = HTMLInputElement | HTMLTextAreaElement
 
 type PendingBlockDragState = {
   sourceIndex: number
@@ -300,6 +304,54 @@ const LIST_CONTAINER_SELECTOR =
 const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
 const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
+
+const INLINE_TEXT_STYLE_OPTIONS: InlineTextStyleOption[] = [
+  {
+    id: "paragraph",
+    label: "본문",
+    shortLabel: "T",
+    isActive: (activeEditor) => activeEditor.isActive("paragraph"),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().setParagraph().run()
+    },
+  },
+  {
+    id: "heading-1",
+    label: "제목 1",
+    shortLabel: "H1",
+    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 1 }),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().setHeading({ level: 1 }).run()
+    },
+  },
+  {
+    id: "heading-2",
+    label: "제목 2",
+    shortLabel: "H2",
+    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 2 }),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().setHeading({ level: 2 }).run()
+    },
+  },
+  {
+    id: "heading-3",
+    label: "제목 3",
+    shortLabel: "H3",
+    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 3 }),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().setHeading({ level: 3 }).run()
+    },
+  },
+  {
+    id: "heading-4",
+    label: "제목 4",
+    shortLabel: "H4",
+    isActive: (activeEditor) => activeEditor.isActive("heading", { level: 4 }),
+    run: (activeEditor) => {
+      activeEditor.chain().focus().setHeading({ level: 4 }).run()
+    },
+  },
+]
 
 const getSlashSearchTerms = (item: BlockInsertCatalogItem) =>
   Array.from(
@@ -811,6 +863,8 @@ const BlockEditorShell = ({
   const imageFileInputRef = useRef<HTMLInputElement>(null)
   const attachmentFileInputRef = useRef<HTMLInputElement>(null)
   const inlineColorMenuRef = useRef<HTMLDetailsElement>(null)
+  const bubbleTextStyleMenuRef = useRef<HTMLDetailsElement>(null)
+  const bubbleInlineColorMenuRef = useRef<HTMLDetailsElement>(null)
   const slashMenuRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const blockHandleRailRef = useRef<HTMLDivElement>(null)
@@ -831,7 +885,6 @@ const BlockEditorShell = ({
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
   const bubbleToolbarHoveredRef = useRef(false)
-  const lastFocusedCalloutMarkdownFieldRef = useRef<CalloutMarkdownFieldElement | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState("")
@@ -842,6 +895,8 @@ const BlockEditorShell = ({
   const [slashInteractionMode, setSlashInteractionMode] = useState<"keyboard" | "pointer">("keyboard")
   const [isToolbarMoreOpen, setIsToolbarMoreOpen] = useState(false)
   const [isInlineColorMenuOpen, setIsInlineColorMenuOpen] = useState(false)
+  const [isBubbleTextStyleMenuOpen, setIsBubbleTextStyleMenuOpen] = useState(false)
+  const [isBubbleInlineColorMenuOpen, setIsBubbleInlineColorMenuOpen] = useState(false)
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
@@ -1773,7 +1828,7 @@ const BlockEditorShell = ({
             createCalloutNode({
               kind: "tip",
               title: "핵심 포인트",
-              body: "콜아웃 본문을 입력하세요.",
+              body: "",
             }),
           ],
           focusBlockIndex: 0,
@@ -2397,7 +2452,59 @@ const BlockEditorShell = ({
         return
       }
 
-      const selection = activeEditor.state.selection
+      let selection = activeEditor.state.selection
+      if (selection.empty && typeof window !== "undefined") {
+        const domSelection = window.getSelection()
+        const range =
+          domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
+        const commonAncestor =
+          range?.commonAncestorContainer instanceof Element
+            ? range.commonAncestorContainer
+            : range?.commonAncestorContainer?.parentElement ?? null
+
+        if (range && domSelection && !domSelection.isCollapsed && commonAncestor && activeEditor.view.dom.contains(commonAncestor)) {
+          const syncPmSelectionFromRange = (from: number, to: number) => {
+            if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return false
+            const nextSelection = TextSelection.create(
+              activeEditor.state.doc,
+              Math.min(from, to),
+              Math.max(from, to)
+            )
+            if (!nextSelection.eq(activeEditor.state.selection)) {
+              activeEditor.view.dispatch(activeEditor.state.tr.setSelection(nextSelection))
+              selection = activeEditor.state.selection
+            }
+            return true
+          }
+
+          let synced = false
+          try {
+            const from = activeEditor.view.posAtDOM(range.startContainer, range.startOffset)
+            const to = activeEditor.view.posAtDOM(range.endContainer, range.endOffset)
+            synced = syncPmSelectionFromRange(from, to)
+          } catch {
+            synced = false
+          }
+
+          if (!synced) {
+            const rangeRects = Array.from(range.getClientRects())
+            const startRect = rangeRects[0] ?? range.getBoundingClientRect()
+            const endRect = rangeRects[rangeRects.length - 1] ?? startRect
+            const startCoords = activeEditor.view.posAtCoords({
+              left: startRect.left + 1,
+              top: startRect.top + startRect.height / 2,
+            })
+            const endCoords = activeEditor.view.posAtCoords({
+              left: Math.max(endRect.left + 1, endRect.right - 1),
+              top: endRect.top + endRect.height / 2,
+            })
+            if (startCoords?.pos && endCoords?.pos) {
+              syncPmSelectionFromRange(startCoords.pos, endCoords.pos)
+            }
+          }
+        }
+      }
+
       const isImageNodeSelected = activeEditor.isActive("resizableImage")
       const isTableActive = isTableSelectionActive(activeEditor)
       const canShowTextToolbar =
@@ -2462,12 +2569,25 @@ const BlockEditorShell = ({
       })
     }
 
+    const handleDocumentSelectionChange = () => {
+      const activeEditor = editorRef.current
+      if (!activeEditor) return
+      const selection = window.getSelection()
+      const anchorNode = selection?.anchorNode ?? null
+      const anchorElement =
+        anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement ?? null
+      if (anchorElement && !activeEditor.view.dom.contains(anchorElement)) return
+      scheduleSyncBubble()
+    }
+
     scheduleSyncBubble()
     currentEditor.on("selectionUpdate", scheduleSyncBubble)
     currentEditor.on("focus", scheduleSyncBubble)
+    document.addEventListener("selectionchange", handleDocumentSelectionChange)
     return () => {
       currentEditor.off("selectionUpdate", scheduleSyncBubble)
       currentEditor.off("focus", scheduleSyncBubble)
+      document.removeEventListener("selectionchange", handleDocumentSelectionChange)
       if (rafId !== null && typeof window !== "undefined") {
         window.cancelAnimationFrame(rafId)
       }
@@ -2585,7 +2705,7 @@ const BlockEditorShell = ({
         createCalloutNode({
           kind: "tip",
           title: "핵심 포인트",
-          body: "콜아웃 본문을 입력하세요.",
+          body: "",
         }),
       ],
       true
@@ -2789,167 +2909,34 @@ const BlockEditorShell = ({
     editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run()
   }, [editor])
 
-  const resolveCalloutMarkdownFieldElement = useCallback(
-    (target: EventTarget | null): CalloutMarkdownFieldElement | null => {
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-        if (target.dataset.calloutMarkdownField === "true") {
-          return target
-        }
-      }
-      return null
-    },
-    []
-  )
-
-  const handleViewportFocusCapture = useCallback(
-    (event: ReactFocusEvent<HTMLDivElement>) => {
-      const field = resolveCalloutMarkdownFieldElement(event.target)
-      if (field) {
-        lastFocusedCalloutMarkdownFieldRef.current = field
-      }
-    },
-    [resolveCalloutMarkdownFieldElement]
-  )
-
   const handleToolbarButtonMouseDown = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
   }, [])
 
-  const getFocusedCalloutMarkdownField = useCallback((): CalloutMarkdownFieldElement | null => {
-    if (typeof document === "undefined") return null
-    const activeField = resolveCalloutMarkdownFieldElement(document.activeElement)
-    if (activeField) {
-      lastFocusedCalloutMarkdownFieldRef.current = activeField
-      return activeField
-    }
-    const fallbackField = lastFocusedCalloutMarkdownFieldRef.current
-    if (!fallbackField || !fallbackField.isConnected) return null
-    if (!viewportRef.current?.contains(fallbackField)) return null
-    return fallbackField
-  }, [resolveCalloutMarkdownFieldElement])
-
-  const updateCalloutFieldValue = useCallback((field: CalloutMarkdownFieldElement, nextValue: string) => {
-    const prototype = Object.getPrototypeOf(field)
-    const valueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
-    if (valueSetter) {
-      valueSetter.call(field, nextValue)
-    } else {
-      field.value = nextValue
-    }
-    field.dispatchEvent(new Event("input", { bubbles: true }))
-  }, [])
-
-  const applyCalloutMarkdownWrap = useCallback(
-    ({
-      prefix,
-      suffix = prefix,
-      fallbackText = "",
-    }: {
-      prefix: string
-      suffix?: string
-      fallbackText?: string
-    }) => {
-      const field = getFocusedCalloutMarkdownField()
-      if (!field || field.disabled || field.readOnly) return false
-
-      const value = field.value || ""
-      const selectionStart = field.selectionStart ?? value.length
-      const selectionEnd = field.selectionEnd ?? selectionStart
-      const selectedText = value.slice(selectionStart, selectionEnd)
-      const wrappedText = `${prefix}${selectedText || fallbackText}${suffix}`
-      const nextValue = `${value.slice(0, selectionStart)}${wrappedText}${value.slice(selectionEnd)}`
-
-      updateCalloutFieldValue(field, nextValue)
-      field.focus()
-
-      const cursorAnchor = selectionStart + prefix.length
-      if (selectedText.length === 0 && fallbackText.length > 0) {
-        field.setSelectionRange(cursorAnchor, cursorAnchor + fallbackText.length)
-      } else if (selectedText.length === 0) {
-        field.setSelectionRange(cursorAnchor, cursorAnchor)
-      } else {
-        field.setSelectionRange(cursorAnchor, cursorAnchor + selectedText.length)
-      }
-
-      return true
-    },
-    [getFocusedCalloutMarkdownField, updateCalloutFieldValue]
-  )
-
-  const applyCalloutInlineColor = useCallback(
-    (color?: string | null) => {
-      const field = getFocusedCalloutMarkdownField()
-      if (!field || field.disabled || field.readOnly) return false
-
-      const value = field.value || ""
-      const selectionStart = field.selectionStart ?? value.length
-      const selectionEnd = field.selectionEnd ?? selectionStart
-
-      if (!color) {
-        const stripToken = (_match: string, _rawColor: string, content: string) => content
-        if (selectionStart !== selectionEnd) {
-          const selectedText = value.slice(selectionStart, selectionEnd)
-          const normalized = selectedText.replace(INLINE_COLOR_TOKEN_REGEX, stripToken)
-          const nextValue = `${value.slice(0, selectionStart)}${normalized}${value.slice(selectionEnd)}`
-          updateCalloutFieldValue(field, nextValue)
-          field.focus()
-          field.setSelectionRange(selectionStart, selectionStart + normalized.length)
-          return true
-        }
-
-        INLINE_COLOR_TOKEN_REGEX.lastIndex = 0
-        let match: RegExpExecArray | null = null
-        while ((match = INLINE_COLOR_TOKEN_REGEX.exec(value)) !== null) {
-          const matchStart = match.index
-          const matchEnd = matchStart + match[0].length
-          if (selectionStart < matchStart || selectionStart > matchEnd) continue
-
-          const normalized = match[2] || ""
-          const nextValue = `${value.slice(0, matchStart)}${normalized}${value.slice(matchEnd)}`
-          updateCalloutFieldValue(field, nextValue)
-          field.focus()
-          field.setSelectionRange(matchStart, matchStart + normalized.length)
-          return true
-        }
-        return true
-      }
-
-      const normalizedColor = normalizeInlineColorToken(color)
-      if (!normalizedColor) return false
-      const colorToken =
-        INLINE_TEXT_COLOR_OPTIONS.find((option) => option.value === normalizedColor)?.token || normalizedColor
-      const selectedText = value.slice(selectionStart, selectionEnd).replace(INLINE_COLOR_TOKEN_REGEX, (_m, _c, content) => content)
-      const renderText = selectedText || "텍스트"
-      const wrappedText = `{{color:${colorToken}|${renderText}}}`
-      const nextValue = `${value.slice(0, selectionStart)}${wrappedText}${value.slice(selectionEnd)}`
-
-      updateCalloutFieldValue(field, nextValue)
-      field.focus()
-      const textStart = selectionStart + `{{color:${colorToken}|`.length
-      field.setSelectionRange(textStart, textStart + renderText.length)
-      return true
-    },
-    [getFocusedCalloutMarkdownField, updateCalloutFieldValue]
-  )
-
   const runBoldAction = useCallback(() => {
-    if (applyCalloutMarkdownWrap({ prefix: "**" })) return
     editor?.chain().focus().toggleBold().run()
-  }, [applyCalloutMarkdownWrap, editor])
+  }, [editor])
 
   const runItalicAction = useCallback(() => {
-    if (applyCalloutMarkdownWrap({ prefix: "*", suffix: "*" })) return
     editor?.chain().focus().toggleItalic().run()
-  }, [applyCalloutMarkdownWrap, editor])
+  }, [editor])
 
   const runInlineCodeAction = useCallback(() => {
-    if (applyCalloutMarkdownWrap({ prefix: "`", suffix: "`" })) return
     editor?.chain().focus().toggleCode().run()
-  }, [applyCalloutMarkdownWrap, editor])
+  }, [editor])
+
+  const runStrikeAction = useCallback(() => {
+    editor?.chain().focus().toggleStrike().run()
+  }, [editor])
 
   const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
   const isInlineCodeActive = editor?.isActive("code") ?? false
   const isTableMode = isTableSelectionActive(editor)
+  const activeInlineTextStyleOption = useMemo(() => {
+    if (!editor) return INLINE_TEXT_STYLE_OPTIONS[0]
+    void selectionTick
+    return INLINE_TEXT_STYLE_OPTIONS.find((option) => option.isActive(editor)) || INLINE_TEXT_STYLE_OPTIONS[0]
+  }, [editor, selectionTick])
 
   useEffect(() => {
     const currentEditor = editorRef.current
@@ -2962,10 +2949,6 @@ const BlockEditorShell = ({
 
   const applyInlineColor = useCallback(
     (color?: string | null) => {
-      if (applyCalloutInlineColor(color)) {
-        setIsInlineColorMenuOpen(false)
-        return
-      }
       if (!editor) return
 
       const chain = editor.chain().focus()
@@ -2975,8 +2958,20 @@ const BlockEditorShell = ({
         chain.setMark("inlineColor", { color }).run()
       }
       setIsInlineColorMenuOpen(false)
+      setIsBubbleInlineColorMenuOpen(false)
     },
-    [applyCalloutInlineColor, editor]
+    [editor]
+  )
+
+  const applyInlineTextStyle = useCallback(
+    (styleId: InlineTextStyleOption["id"]) => {
+      if (!editor) return
+      const option = INLINE_TEXT_STYLE_OPTIONS.find((entry) => entry.id === styleId)
+      if (!option) return
+      option.run(editor)
+      setIsBubbleTextStyleMenuOpen(false)
+    },
+    [editor]
   )
 
   const updateActiveTableCellAttrs = useCallback(
@@ -3103,7 +3098,7 @@ const BlockEditorShell = ({
             createCalloutNode({
               kind: "tip",
               title: "핵심 포인트",
-              body: "콜아웃 본문을 입력하세요.",
+              body: "",
             }),
           ])
         )
@@ -3222,7 +3217,7 @@ const BlockEditorShell = ({
       createCalloutNode({
         kind: "tip",
         title: "핵심 포인트",
-        body: "콜아웃 본문을 입력하세요.",
+        body: "",
       })
 
     const createToggleTemplate = () =>
@@ -4139,6 +4134,45 @@ const BlockEditorShell = ({
     }
   }, [isInlineColorMenuOpen])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!isBubbleTextStyleMenuOpen && !isBubbleInlineColorMenuOpen) return
+
+    const closeMenu = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== "Escape") return
+        setIsBubbleTextStyleMenuOpen(false)
+        setIsBubbleInlineColorMenuOpen(false)
+        return
+      }
+
+      const target = event.target
+      if (
+        (bubbleTextStyleMenuRef.current && target instanceof Node && bubbleTextStyleMenuRef.current.contains(target)) ||
+        (bubbleInlineColorMenuRef.current && target instanceof Node && bubbleInlineColorMenuRef.current.contains(target))
+      ) {
+        return
+      }
+
+      setIsBubbleTextStyleMenuOpen(false)
+      setIsBubbleInlineColorMenuOpen(false)
+    }
+
+    window.addEventListener("pointerdown", closeMenu)
+    window.addEventListener("keydown", closeMenu)
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu)
+      window.removeEventListener("keydown", closeMenu)
+    }
+  }, [isBubbleInlineColorMenuOpen, isBubbleTextStyleMenuOpen])
+
+  useEffect(() => {
+    if (bubbleState.visible && bubbleState.mode === "text") return
+    setIsBubbleTextStyleMenuOpen(false)
+    setIsBubbleInlineColorMenuOpen(false)
+  }, [bubbleState.mode, bubbleState.visible])
+
   const closeBlockMenus = useCallback(() => setBlockMenuState(null), [])
 
   const closeTableMenu = useCallback(() => setTableMenuState(null), [])
@@ -4992,7 +5026,6 @@ const BlockEditorShell = ({
         data-testid="block-editor-viewport"
         ref={viewportRef}
         tabIndex={-1}
-        onFocusCapture={handleViewportFocusCapture}
         onCompositionStart={() => {
           setIsSlashImeComposing(true)
         }}
@@ -5033,23 +5066,141 @@ const BlockEditorShell = ({
             }}
           >
             {bubbleState.mode === "text" ? (
-              <BubbleToolbar>
-                <ToolbarButton type="button" data-active={editor.isActive("bold")} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().toggleBold().run()}>
-                  굵게
-                </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("italic")} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().toggleItalic().run()}>
-                  기울임
-                </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("link")} onMouseDown={handleToolbarButtonMouseDown} onClick={openLinkPrompt}>
-                  링크
-                </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("code")} onMouseDown={handleToolbarButtonMouseDown} onClick={runInlineCodeAction}>
-                  인라인 코드
-                </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("inlineFormula")} onMouseDown={handleToolbarButtonMouseDown} onClick={insertInlineFormula}>
-                  인라인 수식
-                </ToolbarButton>
-              </BubbleToolbar>
+              <TextBubbleToolbar data-testid="editor-text-bubble-toolbar">
+                <TextBubbleDisclosure ref={bubbleTextStyleMenuRef} open={isBubbleTextStyleMenuOpen}>
+                  <summary
+                    aria-label="글자 크기"
+                    title="글자 크기"
+                    data-active={activeInlineTextStyleOption.id !== "paragraph"}
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={(event: ReactMouseEvent<HTMLElement>) => {
+                      event.preventDefault()
+                      setIsBubbleTextStyleMenuOpen((prev) => !prev)
+                      setIsBubbleInlineColorMenuOpen(false)
+                    }}
+                  >
+                    <TextBubbleTextStyleTrigger>{activeInlineTextStyleOption.shortLabel}</TextBubbleTextStyleTrigger>
+                  </summary>
+                  {isBubbleTextStyleMenuOpen ? (
+                    <div className="body">
+                      {INLINE_TEXT_STYLE_OPTIONS.map((option) => (
+                        <TextBubbleMenuButton
+                          key={option.id}
+                          type="button"
+                          data-active={activeInlineTextStyleOption.id === option.id}
+                          onClick={() => applyInlineTextStyle(option.id)}
+                        >
+                          <span>{option.shortLabel}</span>
+                          <strong>{option.label}</strong>
+                        </TextBubbleMenuButton>
+                      ))}
+                    </div>
+                  ) : null}
+                </TextBubbleDisclosure>
+
+                <TextBubbleDisclosure ref={bubbleInlineColorMenuRef} open={isBubbleInlineColorMenuOpen}>
+                  <summary
+                    aria-label="글자색"
+                    title="글자색"
+                    data-active={Boolean(activeInlineColor)}
+                    onMouseDown={handleToolbarButtonMouseDown}
+                    onClick={(event: ReactMouseEvent<HTMLElement>) => {
+                      event.preventDefault()
+                      setIsBubbleInlineColorMenuOpen((prev) => !prev)
+                      setIsBubbleTextStyleMenuOpen(false)
+                    }}
+                  >
+                    <TextBubbleColorTrigger>
+                      <span>A</span>
+                      <i style={activeInlineColor ? { background: activeInlineColor } : undefined} aria-hidden="true" />
+                    </TextBubbleColorTrigger>
+                  </summary>
+                  {isBubbleInlineColorMenuOpen ? (
+                    <div className="body">
+                      <TextBubbleMenuButton type="button" data-active={!activeInlineColor} onClick={() => applyInlineColor(null)}>
+                        <TextBubbleColorSwatch data-empty="true" aria-hidden="true" />
+                        <strong>기본색</strong>
+                      </TextBubbleMenuButton>
+                      {INLINE_TEXT_COLOR_OPTIONS.map((option) => (
+                        <TextBubbleMenuButton
+                          key={option.value}
+                          type="button"
+                          data-active={activeInlineColor === option.value}
+                          disabled={disabled || isInlineCodeActive}
+                          onClick={() => applyInlineColor(option.value)}
+                        >
+                          <TextBubbleColorSwatch style={{ background: option.value }} aria-hidden="true" />
+                          <strong>{option.label}</strong>
+                        </TextBubbleMenuButton>
+                      ))}
+                    </div>
+                  ) : null}
+                </TextBubbleDisclosure>
+
+                <TextBubbleDivider aria-hidden="true" />
+
+                <TextBubbleIconButton
+                  type="button"
+                  data-active={editor.isActive("bold")}
+                  aria-label="굵게"
+                  title="굵게"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={runBoldAction}
+                >
+                  <span>B</span>
+                </TextBubbleIconButton>
+                <TextBubbleIconButton
+                  type="button"
+                  data-active={editor.isActive("italic")}
+                  aria-label="기울임"
+                  title="기울임"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={runItalicAction}
+                >
+                  <AppIcon name="italic" aria-hidden="true" />
+                </TextBubbleIconButton>
+                <TextBubbleIconButton
+                  type="button"
+                  data-active={editor.isActive("strike")}
+                  aria-label="취소선"
+                  title="취소선"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={runStrikeAction}
+                >
+                  <span style={{ textDecoration: "line-through" }}>S</span>
+                </TextBubbleIconButton>
+                <TextBubbleIconButton
+                  type="button"
+                  data-active={editor.isActive("link")}
+                  aria-label="링크"
+                  title="링크"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={openLinkPrompt}
+                >
+                  <AppIcon name="link" aria-hidden="true" />
+                </TextBubbleIconButton>
+                <TextBubbleDivider aria-hidden="true" />
+                <TextBubbleIconButton
+                  type="button"
+                  data-active={editor.isActive("code")}
+                  aria-label="인라인 코드"
+                  title="인라인 코드"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={runInlineCodeAction}
+                >
+                  <span>&lt;/&gt;</span>
+                </TextBubbleIconButton>
+                <TextBubbleIconButton
+                  type="button"
+                  data-active={editor.isActive("inlineFormula")}
+                  aria-label="인라인 수식"
+                  title="인라인 수식"
+                  onMouseDown={handleToolbarButtonMouseDown}
+                  onClick={insertInlineFormula}
+                >
+                  <span>√x</span>
+                </TextBubbleIconButton>
+              </TextBubbleToolbar>
             ) : bubbleState.mode === "image" ? (
               <BubbleToolbar>
                 <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "left"} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "left" }).run()}>
@@ -5612,7 +5763,14 @@ const BlockEditorShell = ({
             </>
           </FloatingBlockMenu>
         ) : null}
-        <EditorContent editor={editor} data-testid="block-editor-content" />
+        <EditorContent
+          editor={editor}
+          data-testid="block-editor-content"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          data-gramm="false"
+        />
       </EditorViewport>
 
       {preview ? (
@@ -6597,6 +6755,213 @@ const BubbleToolbar = styled.div`
 
   &[data-layout="table"] {
     max-width: min(92vw, 40rem);
+  }
+`
+
+const TextBubbleToolbar = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.38rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  border-radius: 0.95rem;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(28, 28, 28, 0.98)" : "rgba(255, 255, 255, 0.98)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 16px 30px rgba(0, 0, 0, 0.26)" : "0 16px 30px rgba(15, 23, 42, 0.16)"};
+  backdrop-filter: blur(10px);
+`
+
+const TextBubbleIconButton = styled.button`
+  min-width: 2.05rem;
+  height: 2.05rem;
+  padding: 0 0.46rem;
+  border-radius: 0.62rem;
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  font-size: 0.95rem;
+  font-weight: 730;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 140ms ease, color 140ms ease;
+
+  svg {
+    width: 1.02rem;
+    height: 1.02rem;
+  }
+
+  &[data-active="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.09)"};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.1)" : "rgba(15, 23, 42, 0.06)"};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+`
+
+const TextBubbleDivider = styled.span`
+  width: 1px;
+  height: 1.35rem;
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "rgba(15, 23, 42, 0.16)"};
+`
+
+const TextBubbleDisclosure = styled.details`
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+
+  summary {
+    list-style: none;
+    min-width: 2.05rem;
+    height: 2.05rem;
+    padding: 0 0.46rem;
+    border-radius: 0.62rem;
+    border: 0;
+    background: transparent;
+    color: ${({ theme }) => theme.colors.gray11};
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  summary[data-active="true"] {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.16)" : "rgba(15, 23, 42, 0.09)"};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  summary:hover {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.1)" : "rgba(15, 23, 42, 0.06)"};
+    color: ${({ theme }) => theme.colors.gray12};
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .body {
+    position: absolute;
+    top: calc(100% + 0.42rem);
+    left: 0;
+    z-index: 72;
+    display: grid;
+    gap: 0.35rem;
+    min-width: 9rem;
+    padding: 0.5rem;
+    border-radius: 0.8rem;
+    border: 1px solid ${({ theme }) => theme.colors.gray6};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(28, 28, 28, 0.98)" : "rgba(255, 255, 255, 0.99)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 16px 30px rgba(0, 0, 0, 0.26)" : "0 16px 30px rgba(15, 23, 42, 0.16)"};
+  }
+`
+
+const TextBubbleTextStyleTrigger = styled.span`
+  font-size: 0.9rem;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+`
+
+const TextBubbleColorTrigger = styled.span`
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+
+  span {
+    font-size: 0.92rem;
+    font-weight: 760;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+
+  i {
+    width: 0.92rem;
+    height: 0.15rem;
+    border-radius: 999px;
+    background: ${({ theme }) => theme.colors.gray8};
+  }
+`
+
+const TextBubbleColorSwatch = styled.span`
+  display: inline-flex;
+  width: 0.82rem;
+  height: 0.82rem;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) => theme.colors.gray3};
+
+  &[data-empty="true"] {
+    position: relative;
+    background: transparent;
+  }
+
+  &[data-empty="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 0.35rem -0.08rem auto -0.08rem;
+    height: 1.4px;
+    background: ${({ theme }) => theme.colors.gray10};
+    transform: rotate(-34deg);
+    transform-origin: center;
+  }
+`
+
+const TextBubbleMenuButton = styled.button`
+  min-height: 1.92rem;
+  border-radius: 0.62rem;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(18, 21, 26, 0.52)" : "rgba(255, 255, 255, 0.98)"};
+  color: var(--color-gray12);
+  padding: 0 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.46rem;
+  text-align: left;
+  font-size: 0.76rem;
+
+  span {
+    color: ${({ theme }) => theme.colors.gray10};
+    font-weight: 700;
+  }
+
+  strong {
+    font-weight: 700;
+  }
+
+  &[data-active="true"] {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(59, 130, 246, 0.34)" : "rgba(37, 99, 235, 0.25)"};
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.12)" : "rgba(37, 99, 235, 0.09)"};
+  }
+
+  &:hover {
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.3)" : "rgba(15, 23, 42, 0.22)"};
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 `
 

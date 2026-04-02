@@ -34,8 +34,12 @@ export type MermaidBlockAttrs = {
 export type CalloutBlockAttrs = {
   kind: CalloutKind
   title: string
-  body: string
   label?: string | null
+}
+
+export type CalloutBlockInput = CalloutBlockAttrs & {
+  body?: string
+  content?: JSONContent[]
 }
 
 export type ToggleBlockAttrs = {
@@ -724,10 +728,26 @@ export const createMermaidNode = (source: string): JSONContent => ({
   },
 })
 
-export const createCalloutNode = (attrs: CalloutBlockAttrs): JSONContent => ({
-  type: "calloutBlock",
-  attrs,
-})
+const createCalloutBodyContent = (body: string): JSONContent[] => {
+  const normalized = body.replace(/\r\n?/g, "\n").trim()
+  if (!normalized) return [createParagraphNode("")]
+
+  const parsed = parseMarkdownToEditorDoc(normalized)
+  const blocks = Array.isArray(parsed.content) ? parsed.content.filter(Boolean) : []
+  return blocks.length > 0 ? blocks : [createParagraphNode("")]
+}
+
+export const createCalloutNode = (input: CalloutBlockInput): JSONContent => {
+  const { body = "", content, ...attrs } = input
+  const normalizedContent =
+    Array.isArray(content) && content.length > 0 ? content : createCalloutBodyContent(body)
+
+  return {
+    type: "calloutBlock",
+    attrs,
+    content: normalizedContent,
+  }
+}
 
 export const createToggleNode = (attrs: ToggleBlockAttrs): JSONContent => ({
   type: "toggleBlock",
@@ -1546,13 +1566,19 @@ const serializeTable = (node: JSONContent) => {
   return metadataComment ? `${metadataComment}\n${markdownTable}` : markdownTable
 }
 
-const serializeCalloutBlock = (attrs: Partial<CalloutBlockAttrs>) => {
+const serializeCalloutBlock = (node: JSONContent) => {
+  const attrs = (node.attrs || {}) as Partial<CalloutBlockAttrs & { body?: string }>
   const kind = attrs.label?.trim() || (attrs.kind ? CALL_OUT_KIND_LABELS[attrs.kind] : "TIP")
   const title = String(attrs.title || "").trim()
   const header = title ? `> [!${kind}] ${title}` : `> [!${kind}]`
-  const bodyLines = String(attrs.body || "").replace(/\r\n?/g, "\n").split("\n")
-  const normalizedBodyLines =
-    bodyLines.length === 1 && bodyLines[0].trim().length === 0 ? [] : bodyLines
+  const serializedBody = (() => {
+    const bodyContent = Array.isArray(node.content) ? node.content : []
+    if (bodyContent.length > 0) {
+      return bodyContent.map((child) => serializeNode(child)).filter(Boolean).join("\n\n").trim()
+    }
+    return String(attrs.body || "").replace(/\r\n?/g, "\n").trim()
+  })()
+  const normalizedBodyLines = serializedBody ? serializedBody.split("\n") : []
 
   return [header, ...normalizedBodyLines.map((line) => (line ? `> ${line}` : ">"))].join("\n")
 }
@@ -1651,7 +1677,7 @@ export const serializeNode = (node: JSONContent): string => {
     case "mermaidBlock":
       return serializeMermaidBlock(node.attrs as MermaidBlockAttrs)
     case "calloutBlock":
-      return serializeCalloutBlock(node.attrs as CalloutBlockAttrs)
+      return serializeCalloutBlock(node)
     case "toggleBlock":
       return serializeToggleBlock(node.attrs as ToggleBlockAttrs)
     case "bookmarkBlock":

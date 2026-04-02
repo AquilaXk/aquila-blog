@@ -9,10 +9,6 @@ import TableRow from "@tiptap/extension-table-row"
 import TaskItem from "@tiptap/extension-task-item"
 import TaskList from "@tiptap/extension-task-list"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
-import rehypeKatex from "rehype-katex"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import remarkMath from "remark-math"
 import AppIcon from "src/components/icons/AppIcon"
 import {
   PointerEvent as ReactPointerEvent,
@@ -25,8 +21,6 @@ import {
   useState,
 } from "react"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
-import useInlineColorEffect from "src/libs/markdown/hooks/useInlineColorEffect"
-import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 import type { CalloutKind } from "src/libs/markdown/rendering"
 import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/libs/markdown/rendering"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
@@ -777,49 +771,18 @@ const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   )
 }
 
-const CALLOUT_LIST_MARKER_PATTERN = /^(\s*)[-*+]\s+/gm
-const CALLOUT_BULLET_PATTERN = /^(\s*)•\s+/gm
-const toCalloutDisplayBody = (value: string) => value.replace(CALLOUT_LIST_MARKER_PATTERN, "$1• ")
-const toCalloutStoredBody = (value: string) => value.replace(CALLOUT_BULLET_PATTERN, "$1- ")
-const CALLOUT_PREVIEW_TRIGGER_PATTERN =
-  /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\)|\{\{color:[^|]+\|[^}]+\}\}|\$[^$\n]+\$|^\s*[-*+]\s+)/m
-
-const shouldShowCalloutBodyPreview = (value: string) => CALLOUT_PREVIEW_TRIGGER_PATTERN.test(toCalloutStoredBody(value))
-
-const CalloutBodyMarkdownPreview = ({ body }: { body: string }) => {
-  const previewRef = useRef<HTMLDivElement>(null)
-  const markdown = toCalloutStoredBody(body)
-
-  useInlineColorEffect(previewRef, markdown)
-
-  if (!markdown.trim() || !shouldShowCalloutBodyPreview(body)) return null
-
-  return (
-    <CalloutBodyPreviewRoot ref={previewRef} data-callout-markdown-preview="true" aria-label="콜아웃 본문 미리보기">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {markdown}
-      </ReactMarkdown>
-    </CalloutBodyPreviewRoot>
-  )
-}
-
 const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
-  const [draftBody, setDraftBody] = useState(() => toCalloutDisplayBody(String(node.attrs?.body || "")))
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const pickerId = useId()
   const [isKindMenuOpen, setIsKindMenuOpen] = useState(false)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(bodyRef, draftBody, selected)
-
   useEffect(() => {
     setDraftKind((node.attrs?.kind as CalloutKind) || "tip")
     setDraftTitle(String(node.attrs?.title || ""))
-    setDraftBody(toCalloutDisplayBody(String(node.attrs?.body || "")))
-  }, [node.attrs?.kind, node.attrs?.title, node.attrs?.body])
+  }, [node.attrs?.kind, node.attrs?.title])
 
   useEffect(() => {
     if (!isKindMenuOpen) return
@@ -843,12 +806,10 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     }
   }, [isKindMenuOpen])
 
-  const commit = (next: Partial<{ kind: CalloutKind; title: string; body: string }>) => {
-    const nextBody = next.body ?? draftBody
+  const commit = (next: Partial<{ kind: CalloutKind; title: string }>) => {
     const nextAttrs = {
       kind: next.kind ?? draftKind,
       title: next.title ?? draftTitle,
-      body: toCalloutStoredBody(nextBody),
     }
     scheduleCommit(nextAttrs)
   }
@@ -913,22 +874,9 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
           />
         </CalloutEditorHeader>
         <CalloutEditorBody>
-          <CalloutBodyTextarea
-            data-callout-markdown-field="true"
-            data-callout-markdown-role="body"
-            ref={bodyRef}
-            value={draftBody}
-            placeholder="본문"
-            spellCheck={false}
-            rows={3}
-            onBlur={flushCommit}
-            onChange={(event) => {
-              const nextBody = toCalloutDisplayBody(event.target.value)
-              setDraftBody(nextBody)
-              commit({ body: nextBody })
-            }}
-          />
-          <CalloutBodyMarkdownPreview body={draftBody} />
+          <CalloutBodyContent data-callout-body-content="true" onBlur={flushCommit}>
+            <NodeViewContent className="aq-callout-body-content__content" />
+          </CalloutBodyContent>
         </CalloutEditorBody>
       </CalloutEditorCard>
     </CalloutEditorWrapper>
@@ -1731,7 +1679,7 @@ export const MermaidBlock = Node.create({
 export const CalloutBlock = Node.create({
   name: "calloutBlock",
   group: "block",
-  atom: true,
+  content: "block+",
   selectable: true,
   draggable: true,
   isolating: true,
@@ -1747,9 +1695,6 @@ export const CalloutBlock = Node.create({
       title: {
         default: "",
       },
-      body: {
-        default: "",
-      },
     }
   },
 
@@ -1758,7 +1703,7 @@ export const CalloutBlock = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes(HTMLAttributes, { "data-callout-block": "true" })]
+    return ["div", mergeAttributes(HTMLAttributes, { "data-callout-block": "true" }), 0]
   },
 
   addNodeView() {
@@ -2843,68 +2788,47 @@ const CalloutEditorBody = styled.div`
   padding: 1rem 1.15rem 1.05rem;
 `
 
-const CalloutBodyTextarea = styled(CompactBlockTextarea)`
+const CalloutBodyContent = styled.div`
   min-height: 5rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
   color: var(--ad-text);
-  font-family: inherit;
-  font-size: 0.95rem;
-  line-height: 1.65;
-  padding: 0;
+  cursor: text;
 
-  &::placeholder {
-    color: var(--color-gray10);
-  }
-`
-
-const CalloutBodyPreviewRoot = styled.div`
-  margin-top: 0.82rem;
-  padding-top: 0.82rem;
-  border-top: 1px solid color-mix(in srgb, var(--ad-border, rgba(255, 255, 255, 0.14)) 78%, transparent);
-  color: var(--ad-text);
-  ${({ theme }) => markdownContentTypography("&", theme)}
-
-  p,
-  li,
-  blockquote,
-  a {
+  .aq-callout-body-content__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.62rem;
+    min-height: 5rem;
+    outline: none;
     color: inherit;
   }
 
-  p,
-  li {
+  .aq-callout-body-content__content > * {
+    margin: 0;
+  }
+
+  .aq-callout-body-content__content p {
     font-size: 0.95rem;
     line-height: 1.65;
+    color: inherit;
   }
 
-  p {
-    margin: 0.44rem 0;
+  .aq-callout-body-content__content p:empty::before {
+    content: "본문";
+    color: var(--color-gray10);
   }
 
-  p:first-of-type,
-  ul:first-of-type,
-  ol:first-of-type {
-    margin-top: 0;
-  }
-
-  p:last-child,
-  ul:last-child,
-  ol:last-child {
-    margin-bottom: 0;
-  }
-
-  ul,
-  ol {
-    margin: 0.55rem 0;
+  .aq-callout-body-content__content ul,
+  .aq-callout-body-content__content ol {
+    margin: 0;
     padding-left: 1.1rem;
   }
 
-  .katex-display {
-    margin: 0.7rem 0;
-    overflow-x: auto;
-    overflow-y: hidden;
+  .aq-callout-body-content__content li,
+  .aq-callout-body-content__content a,
+  .aq-callout-body-content__content strong,
+  .aq-callout-body-content__content em,
+  .aq-callout-body-content__content code {
+    color: inherit;
   }
 `
 

@@ -122,7 +122,7 @@ test.describe("block editor serialization", () => {
     expect(callout).toBeTruthy()
     expect(callout?.attrs?.kind).toBe("warning")
     expect(callout?.attrs?.title).toBe("사전 점검")
-    expect(callout?.attrs?.body).toContain("DB 연결 문자열을 먼저 확인하세요.")
+    expect(Array.isArray(callout?.content)).toBe(true)
 
     const serialized = serializeEditorDocToMarkdown(doc)
     expect(serialized).toContain("> [!WARNING] 사전 점검")
@@ -142,7 +142,9 @@ test.describe("block editor serialization", () => {
     expect(callout).toBeTruthy()
     expect(callout?.attrs?.kind).toBe("info")
     expect(callout?.attrs?.title).toBe("")
-    expect(callout?.attrs?.body).toContain("요약: 운영 중에는 SSE 연결 수와 브로커 큐 길이를 함께 모니터링해야 합니다.")
+    const serialized = serializeEditorDocToMarkdown(doc)
+    expect(serialized).toContain("> [!INFO]")
+    expect(serialized).toContain("> 요약: 운영 중에는 SSE 연결 수와 브로커 큐 길이를 함께 모니터링해야 합니다.")
   })
 
   test("직접 생성한 블록 노드도 markdown serializer 와 같은 canonical 결과를 만든다", () => {

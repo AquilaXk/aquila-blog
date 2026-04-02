@@ -311,6 +311,10 @@ const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
 
 const PAGE_SIZE = 30
 const POSTS_CACHE_TTL_MS = 90_000
+const POSTS_BOOTSTRAP_SSR_CACHE_TTL_MS = 60_000
+const POST_DETAIL_SSR_CACHE_TTL_MS = 120_000
+const POSTS_BOOTSTRAP_SSR_CACHE_MAX_ENTRIES = 6
+const POST_DETAIL_SSR_CACHE_MAX_ENTRIES = 24
 const isServerRuntime = typeof window === "undefined"
 const PUBLIC_CURSOR_DISABLED_SESSION_KEY = "posts:public-cursor-disabled:v1"
 const POSTS_EXPLORE_API_PATH = asOpenApiPath("/post/api/v1/posts/explore")
@@ -326,6 +330,10 @@ const POSTS_ENDPOINT_TRACE_MAX = 60
 let postsCache: TPost[] | null = null
 let postsCacheAt = 0
 let pendingPostsPromise: Promise<TPost[]> | null = null
+let postsBootstrapSsrCache = new Map<string, { value: PostsBootstrapResult; cachedAt: number }>()
+let pendingPostsBootstrapPromises = new Map<string, Promise<PostsBootstrapResult>>()
+let postDetailSsrCache = new Map<string, { value: PostDetail; cachedAt: number }>()
+let pendingPostDetailPromises = new Map<string, Promise<PostDetail | null>>()
 let isPublicCursorDisabledCache: boolean | null = null
 const PUBLIC_POST_READ_CACHE_PATH_REGEX =
   /^\/post\/api\/v1\/posts\/(?:feed|explore|search|tags|related\/author)(?:\/|$)|^\/post\/api\/v1\/posts\/[0-9]+(?:\/|$)/i
@@ -341,6 +349,10 @@ export const invalidatePublicPostReadCaches = async (
   postsCache = null
   postsCacheAt = 0
   pendingPostsPromise = null
+  postsBootstrapSsrCache = new Map()
+  pendingPostsBootstrapPromises = new Map()
+  postDetailSsrCache = new Map()
+  pendingPostDetailPromises = new Map()
 
   if (typeof window !== "undefined") {
     clearFeedExplorerRestoreCache()
@@ -378,6 +390,41 @@ export type ExplorePostsParams = {
   page?: number
   pageSize?: number
   signal?: AbortSignal
+}
+
+type PostsBootstrapResult = {
+  posts: TPost[]
+  hasNext: boolean
+  nextCursor: string | null
+  pageSize: number
+  tagCounts: Record<string, number>
+}
+
+const getFreshServerSnapshot = <T>(
+  cache: Map<string, { value: T; cachedAt: number }>,
+  key: string,
+  ttlMs: number
+): T | null => {
+  if (!isServerRuntime) return null
+  const cached = cache.get(key)
+  if (!cached) return null
+  if (Date.now() - cached.cachedAt > ttlMs) {
+    cache.delete(key)
+    return null
+  }
+  return cached.value
+}
+
+const setServerSnapshot = <T>(
+  cache: Map<string, { value: T; cachedAt: number }>,
+  key: string,
+  value: T,
+  maxEntries: number
+) => {
+  cache.set(key, { value, cachedAt: Date.now() })
+  if (cache.size <= maxEntries) return
+  const oldestKey = cache.keys().next().value
+  if (oldestKey) cache.delete(oldestKey)
 }
 
 export type ExplorePostsPage = {
@@ -582,35 +629,63 @@ export const getPostsBootstrap = async ({
   order?: "asc" | "desc"
   pageSize?: number
   signal?: AbortSignal
-}): Promise<{
-  posts: TPost[]
-  hasNext: boolean
-  nextCursor: string | null
-  pageSize: number
-  tagCounts: Record<string, number>
-}> => {
-  const response = await apiFetch<PostsBootstrapDto>(
-    (() => {
-      const endpoint = buildBootstrapPath({ tag, order, pageSize })
-      recordRuntimeEndpoint(endpoint, "cursor")
-      return endpoint
-    })(),
-    { signal }
-  )
+}): Promise<PostsBootstrapResult> => {
+  const endpoint = buildBootstrapPath({ tag, order, pageSize })
+  recordRuntimeEndpoint(endpoint, "cursor")
+  const canUseServerSnapshot = isServerRuntime && !signal
+  const cachedSnapshot =
+    canUseServerSnapshot
+      ? getFreshServerSnapshot(postsBootstrapSsrCache, endpoint, POSTS_BOOTSTRAP_SSR_CACHE_TTL_MS)
+      : null
+  if (cachedSnapshot) return cachedSnapshot
 
-  const feed = response.feed
-  return {
-    posts: feed.content.map(mapPostDto),
-    hasNext: feed.hasNext === true,
-    nextCursor: typeof feed.nextCursor === "string" ? feed.nextCursor : null,
-    pageSize: Number.isFinite(feed.pageSize) ? Math.max(1, Math.trunc(feed.pageSize)) : toValidPageSize(pageSize),
-    tagCounts: response.tags.reduce<Record<string, number>>((acc, row) => {
-      const normalizedTag = normalizeTagQuery(row.tag)
-      if (!normalizedTag) return acc
-      acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
-      return acc
-    }, {}),
+  if (canUseServerSnapshot) {
+    const pendingSnapshot = pendingPostsBootstrapPromises.get(endpoint)
+    if (pendingSnapshot) return pendingSnapshot
   }
+
+  const loadBootstrap = async (): Promise<PostsBootstrapResult> => {
+    const response = await apiFetch<PostsBootstrapDto>(endpoint, { signal })
+    const feed = response.feed
+    return {
+      posts: feed.content.map(mapPostDto),
+      hasNext: feed.hasNext === true,
+      nextCursor: typeof feed.nextCursor === "string" ? feed.nextCursor : null,
+      pageSize: Number.isFinite(feed.pageSize) ? Math.max(1, Math.trunc(feed.pageSize)) : toValidPageSize(pageSize),
+      tagCounts: response.tags.reduce<Record<string, number>>((acc, row) => {
+        const normalizedTag = normalizeTagQuery(row.tag)
+        if (!normalizedTag) return acc
+        acc[normalizedTag] = Number.isFinite(row.count) ? row.count : 0
+        return acc
+      }, {}),
+    }
+  }
+
+  if (!canUseServerSnapshot) {
+    return loadBootstrap()
+  }
+
+  const snapshotPromise = (async () => {
+    try {
+      const nextSnapshot = await loadBootstrap()
+      setServerSnapshot(
+        postsBootstrapSsrCache,
+        endpoint,
+        nextSnapshot,
+        POSTS_BOOTSTRAP_SSR_CACHE_MAX_ENTRIES
+      )
+      return nextSnapshot
+    } catch (error) {
+      const staleSnapshot = postsBootstrapSsrCache.get(endpoint)?.value
+      if (staleSnapshot) return staleSnapshot
+      throw error
+    } finally {
+      pendingPostsBootstrapPromises.delete(endpoint)
+    }
+  })()
+
+  pendingPostsBootstrapPromises.set(endpoint, snapshotPromise)
+  return snapshotPromise
 }
 
 export const getFeedPosts = async ({
@@ -1064,14 +1139,52 @@ export const getPostDetailBySlug = async (slug: string): Promise<PostDetail | nu
 export const getPostDetailById = async (id: string): Promise<PostDetail | null> => {
   const postId = Number(id)
   if (!Number.isInteger(postId) || postId <= 0) return null
+  const endpoint = `/post/api/v1/posts/${postId}`
+  const canUseServerSnapshot = isServerRuntime
+  const cachedSnapshot =
+    canUseServerSnapshot
+      ? getFreshServerSnapshot(postDetailSsrCache, endpoint, POST_DETAIL_SSR_CACHE_TTL_MS)
+      : null
+  if (cachedSnapshot) return cachedSnapshot
 
-  try {
-    const post = await apiFetch<ApiPostWithContentDto>(`/post/api/v1/posts/${postId}`)
-    return mapPostDetail(post)
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) {
-      return null
-    }
-    throw error
+  if (canUseServerSnapshot) {
+    const pendingSnapshot = pendingPostDetailPromises.get(endpoint)
+    if (pendingSnapshot) return pendingSnapshot
   }
+
+  const loadPostDetail = async () => {
+    const post = await apiFetch<ApiPostWithContentDto>(endpoint)
+    return mapPostDetail(post)
+  }
+
+  if (!canUseServerSnapshot) {
+    try {
+      return await loadPostDetail()
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  const snapshotPromise = (async () => {
+    try {
+      const nextDetail = await loadPostDetail()
+      setServerSnapshot(postDetailSsrCache, endpoint, nextDetail, POST_DETAIL_SSR_CACHE_MAX_ENTRIES)
+      return nextDetail
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        return null
+      }
+      const staleSnapshot = postDetailSsrCache.get(endpoint)?.value
+      if (staleSnapshot) return staleSnapshot
+      throw error
+    } finally {
+      pendingPostDetailPromises.delete(endpoint)
+    }
+  })()
+
+  pendingPostDetailPromises.set(endpoint, snapshotPromise)
+  return snapshotPromise
 }

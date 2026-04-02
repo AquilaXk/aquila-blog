@@ -1,12 +1,29 @@
 import { GetServerSideProps, NextPage } from "next"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
-export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
-  const baseResult = await getAdminPageProps(req)
-  if ("redirect" in baseResult) return baseResult
-  return baseResult
+export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req, res }) => {
+  const ssrStartedAt = performance.now()
+  const baseResult = await timed(() => getAdminPageProps(req))
+  if (!baseResult.ok) throw baseResult.error
+  if ("redirect" in baseResult.value) return baseResult.value
+
+  appendSsrDebugTiming(req, res, [
+    {
+      name: "admin-auth-session",
+      durationMs: baseResult.durationMs,
+      description: "ok",
+    },
+    {
+      name: "admin-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: "ready",
+    },
+  ])
+
+  return baseResult.value
 }
 
 const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {

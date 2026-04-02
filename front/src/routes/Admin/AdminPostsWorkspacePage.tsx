@@ -11,6 +11,7 @@ import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import { serverApiFetch } from "src/libs/server/backend"
+import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { isServerTempDraftPost } from "./editorTempDraft"
 
 type PostListScope = "active" | "deleted"
@@ -233,20 +234,25 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
 }
 
 export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorkspacePageProps> = async (context) => {
-  const baseResult = await getAdminPageProps(context.req)
-  if ("redirect" in baseResult) return baseResult
-  if (!("props" in baseResult)) return baseResult
-  const baseProps = await baseResult.props
+  const ssrStartedAt = performance.now()
+  const baseResult = await timed(() => getAdminPageProps(context.req))
+  if (!baseResult.ok) throw baseResult.error
+  if ("redirect" in baseResult.value) return baseResult.value
+  if (!("props" in baseResult.value)) return baseResult.value
+  const baseProps = await baseResult.value.props
   const fetchedAt = new Date().toISOString()
-  const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
-    context.req,
-    buildListEndpoint("active", {
-      page: DEFAULT_PAGE,
-      pageSize: DEFAULT_PAGE_SIZE,
-      kw: "",
-      sort: DEFAULT_SORT,
-    })
+  const listSourceResult = await timed(() =>
+    readJsonIfOk<PageDto<AdminPostListItem>>(
+      context.req,
+      buildListEndpoint("active", {
+        page: DEFAULT_PAGE,
+        pageSize: DEFAULT_PAGE_SIZE,
+        kw: "",
+        sort: DEFAULT_SORT,
+      })
+    )
   )
+  const listSource = listSourceResult.ok ? listSourceResult.value : null
   const recentPosts = [...(listSource?.content || [])]
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
     .slice(0, 5)
@@ -258,6 +264,24 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
           loadedAt: fetchedAt,
         }
       : null
+
+  appendSsrDebugTiming(context.req, context.res, [
+    {
+      name: "admin-posts-auth",
+      durationMs: baseResult.durationMs,
+      description: "ok",
+    },
+    {
+      name: "admin-posts-list",
+      durationMs: listSourceResult.durationMs,
+      description: listState ? "ok" : "empty",
+    },
+    {
+      name: "admin-posts-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: "ready",
+    },
+  ])
 
   return {
     props: {

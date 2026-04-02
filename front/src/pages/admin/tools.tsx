@@ -9,6 +9,7 @@ import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import { serverApiFetch } from "src/libs/server/backend"
+import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
 type JsonValue = unknown
@@ -176,20 +177,45 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
   }
 }
 
-export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async ({ req }) => {
-  const baseResult = await getAdminPageProps(req)
-  if ("redirect" in baseResult) return baseResult
-  if (!("props" in baseResult)) return baseResult
-  const baseProps = await baseResult.props
+export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async ({ req, res }) => {
+  const ssrStartedAt = performance.now()
+  const baseResult = await timed(() => getAdminPageProps(req))
+  if (!baseResult.ok) throw baseResult.error
+  if ("redirect" in baseResult.value) return baseResult.value
+  if (!("props" in baseResult.value)) return baseResult.value
+  const baseProps = await baseResult.value.props
 
   const fetchedAt = new Date().toISOString()
-  const [systemHealthResult, mailResult] = await Promise.allSettled([
-    readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health"),
-    readJsonIfOk<SignupMailDiagnostics>(req, "/system/api/v1/adm/mail/signup"),
+  const [systemHealthResult, mailResult] = await Promise.all([
+    timed(() => readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")),
+    timed(() => readJsonIfOk<SignupMailDiagnostics>(req, "/system/api/v1/adm/mail/signup")),
   ])
 
-  const systemHealth = systemHealthResult.status === "fulfilled" ? systemHealthResult.value : null
-  const mailDiagnostics = mailResult.status === "fulfilled" ? mailResult.value : null
+  const systemHealth = systemHealthResult.ok ? systemHealthResult.value : null
+  const mailDiagnostics = mailResult.ok ? mailResult.value : null
+
+  appendSsrDebugTiming(req, res, [
+    {
+      name: "admin-tools-auth",
+      durationMs: baseResult.durationMs,
+      description: "ok",
+    },
+    {
+      name: "admin-tools-health",
+      durationMs: systemHealthResult.durationMs,
+      description: systemHealth ? "ok" : "empty",
+    },
+    {
+      name: "admin-tools-mail",
+      durationMs: mailResult.durationMs,
+      description: mailDiagnostics ? "ok" : "empty",
+    },
+    {
+      name: "admin-tools-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: "ready",
+    },
+  ])
 
   return {
     props: {

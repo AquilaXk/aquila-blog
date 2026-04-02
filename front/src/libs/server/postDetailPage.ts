@@ -6,7 +6,7 @@ import { queryKey } from "src/constants/queryKey"
 import { createQueryClient } from "src/libs/react-query"
 import { hydrateServerAuthSession } from "./authSession"
 import { TPostComment } from "src/types"
-import { appendServerTiming, timed } from "./serverTiming"
+import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "./serverTiming"
 
 type DetailPageProps = {
   dehydratedState: unknown
@@ -24,6 +24,7 @@ export const buildCanonicalPostDetailPage = async (
   postId: string
 ): Promise<GetServerSidePropsResult<DetailPageProps>> => {
   const ssrStartedAt = performance.now()
+  const debugSsr = isSsrDebugEnabled(req)
   const queryClient = createQueryClient()
   const authMemberPromise = timed(() => hydrateServerAuthSession(queryClient, req))
 
@@ -55,11 +56,11 @@ export const buildCanonicalPostDetailPage = async (
 
   res.setHeader(
     "Cache-Control",
-    authMember !== null || shouldClientRecover
-      ? "private, no-store"
-      : "public, s-maxage=120, stale-while-revalidate=600"
+    !debugSsr && authMember === null && !shouldClientRecover
+      ? "public, s-maxage=120, stale-while-revalidate=600"
+      : "private, no-store"
   )
-  appendServerTiming(res, [
+  const timingMetrics = [
     {
       name: "post-detail",
       durationMs: postDetailResult.durationMs,
@@ -75,7 +76,8 @@ export const buildCanonicalPostDetailPage = async (
       durationMs: performance.now() - ssrStartedAt,
       description: shouldClientRecover ? "deferred-comments" : "ready",
     },
-  ])
+  ]
+  appendSsrDebugTiming(req, res, timingMetrics)
 
   return {
     props: {

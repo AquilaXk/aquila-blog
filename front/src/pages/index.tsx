@@ -16,7 +16,7 @@ import {
 } from "src/libs/server/adminProfile"
 import type { TPost } from "src/types"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
-import { appendServerTiming, timed } from "src/libs/server/serverTiming"
+import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "src/libs/server/serverTiming"
 
 const CRAWLER_USER_AGENT_REGEX =
   /bot|crawler|spider|crawling|googlebot|bingbot|yandexbot|duckduckbot|applebot|baiduspider|facebookexternalhit|twitterbot|slurp|ia_archiver/i
@@ -26,6 +26,7 @@ const isCrawlerRequest = (userAgent: string | undefined) =>
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
   const ssrStartedAt = performance.now()
+  const debugSsr = isSsrDebugEnabled(req)
   const queryClient = createQueryClient()
   const postsQueryTagRaw = typeof query.tag === "string" ? query.tag : ""
   const currentTag = postsQueryTagRaw.trim()
@@ -89,7 +90,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
           tagsLoaded: false,
         }
 
-  appendServerTiming(res, [
+  const timingMetrics = [
     {
       name: "home-bootstrap",
       durationMs: bootstrapResult.durationMs,
@@ -115,7 +116,8 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       durationMs: performance.now() - ssrStartedAt,
       description: bootstrapSnapshot.postsLoaded ? "ready" : "bootstrap-fallback",
     },
-  ])
+  ]
+  appendSsrDebugTiming(req, res, timingMetrics)
 
   const { posts, tagCounts, totalCount, initialPageTotalCount, hasNext, nextCursor, postsLoaded, tagsLoaded } =
     bootstrapSnapshot
@@ -159,7 +161,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
   // 홈 캐시는 feed bootstrap 성공 여부만으로 결정하고, 비인증 admin profile 실패가 공개 캐시를 깨지 않게 한다.
   res.setHeader(
     "Cache-Control",
-    authMember === null && postsLoaded
+    !debugSsr && authMember === null && postsLoaded
       ? "public, s-maxage=60, stale-while-revalidate=300"
       : "private, no-store"
   )

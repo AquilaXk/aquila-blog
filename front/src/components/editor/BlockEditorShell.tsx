@@ -106,6 +106,13 @@ type Props = {
   onQaActionsReady?: (actions: BlockEditorQaActions | null) => void
 }
 
+type RuntimeGuardWindow = Window & {
+  __AQ_RUNTIME_GUARD_ENABLED__?: boolean
+  __AQ_RUNTIME_GUARD__?: {
+    editorCommitSamples?: number[]
+  }
+}
+
 export type BlockEditorChangeMeta = {
   editorFocused: boolean
 }
@@ -304,6 +311,21 @@ const LIST_CONTAINER_SELECTOR =
 const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
 const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
+const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
+
+const recordEditorCommitDurationForRuntimeGuard = (durationMs: number) => {
+  if (typeof window === "undefined" || !Number.isFinite(durationMs) || durationMs <= 0) return
+
+  const runtimeWindow = window as RuntimeGuardWindow
+  if (!runtimeWindow.__AQ_RUNTIME_GUARD_ENABLED__) return
+
+  const store = (runtimeWindow.__AQ_RUNTIME_GUARD__ ??= {})
+  const nextSamples = [...(store.editorCommitSamples ?? []), durationMs]
+  if (nextSamples.length > EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT) {
+    nextSamples.splice(0, nextSamples.length - EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT)
+  }
+  store.editorCommitSamples = nextSamples
+}
 
 const INLINE_TEXT_STYLE_OPTIONS: InlineTextStyleOption[] = [
   {
@@ -2240,6 +2262,12 @@ const BlockEditorShell = ({
       },
     },
     onUpdate: ({ editor: nextEditor }) => {
+      if (typeof window !== "undefined") {
+        const commitStartedAt = performance.now()
+        window.requestAnimationFrame(() => {
+          recordEditorCommitDurationForRuntimeGuard(performance.now() - commitStartedAt)
+        })
+      }
       scheduleMarkdownCommit(nextEditor)
     },
   })

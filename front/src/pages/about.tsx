@@ -12,19 +12,36 @@ import {
   fetchServerAdminProfile,
   hasServerAuthCookie,
 } from "src/libs/server/adminProfile"
+import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "src/libs/server/serverTiming"
 import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
+  const ssrStartedAt = performance.now()
   const hasAuthCookie = hasServerAuthCookie(req)
-  const initialAdminProfile =
-    (await fetchServerAdminProfile(req, {
+  const debugSsr = isSsrDebugEnabled(req)
+  const adminProfileResult = await timed(() =>
+    fetchServerAdminProfile(req, {
       timeoutMs: hasAuthCookie ? 1_800 : 900,
-    })) ?? buildStaticAdminProfileSnapshot()
+    })
+  )
+  const initialAdminProfile = adminProfileResult.ok ? adminProfileResult.value ?? buildStaticAdminProfileSnapshot() : buildStaticAdminProfileSnapshot()
 
   res.setHeader(
     "Cache-Control",
-    hasAuthCookie ? "private, no-store" : "public, s-maxage=60, stale-while-revalidate=300"
+    !debugSsr && !hasAuthCookie ? "public, s-maxage=60, stale-while-revalidate=300" : "private, no-store"
   )
+  appendSsrDebugTiming(req, res, [
+    {
+      name: "about-admin-profile",
+      durationMs: adminProfileResult.durationMs,
+      description: adminProfileResult.ok ? "ok" : "static-fallback",
+    },
+    {
+      name: "about-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: hasAuthCookie ? "member" : "public",
+    },
+  ])
 
   return {
     props: {

@@ -9,6 +9,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import { serverApiFetch } from "src/libs/server/backend"
+import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import {
   DASHBOARD_PANEL_CARDS,
   buildGrafanaPanelEmbedUrl,
@@ -46,12 +47,33 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
   }
 }
 
-export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = async ({ req }) => {
-  const baseResult = await getAdminPageProps(req)
-  if ("redirect" in baseResult) return baseResult
-  if (!("props" in baseResult)) return baseResult
-  const baseProps = await baseResult.props
-  const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+export const getServerSideProps: GetServerSideProps<AdminDashboardPageProps> = async ({ req, res }) => {
+  const ssrStartedAt = performance.now()
+  const baseResult = await timed(() => getAdminPageProps(req))
+  if (!baseResult.ok) throw baseResult.error
+  if ("redirect" in baseResult.value) return baseResult.value
+  if (!("props" in baseResult.value)) return baseResult.value
+  const baseProps = await baseResult.value.props
+  const systemHealthResult = await timed(() => readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health"))
+  const systemHealth = systemHealthResult.ok ? systemHealthResult.value : null
+
+  appendSsrDebugTiming(req, res, [
+    {
+      name: "admin-dashboard-auth",
+      durationMs: baseResult.durationMs,
+      description: "ok",
+    },
+    {
+      name: "admin-dashboard-health",
+      durationMs: systemHealthResult.durationMs,
+      description: systemHealth ? "ok" : "empty",
+    },
+    {
+      name: "admin-dashboard-ssr-total",
+      durationMs: performance.now() - ssrStartedAt,
+      description: "ready",
+    },
+  ])
 
   return {
     props: {

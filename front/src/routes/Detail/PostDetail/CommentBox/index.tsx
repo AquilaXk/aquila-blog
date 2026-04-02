@@ -65,14 +65,18 @@ const flattenReplies = (nodes: CommentNode[]): CommentNode[] => {
 const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   const router = useRouter()
   const postId = useMemo(() => Number(data.id), [data.id])
-  const hasInitialComments = initialComments !== null
+  const normalizedInitialComments = useMemo(
+    () => (Array.isArray(initialComments) ? initialComments : initialComments === null ? null : []),
+    [initialComments]
+  )
+  const hasInitialComments = normalizedInitialComments !== null
   const nextPath = useMemo(() => {
     return normalizeNextPath(router.asPath, toCanonicalPostPath(data.id))
   }, [data.id, router.asPath])
 
   const { me, authStatus, authUnavailable } = useAuthSession()
-  const [comments, setComments] = useState<TPostComment[]>(initialComments ?? [])
-  const [commentsLoading, setCommentsLoading] = useState(initialComments === null)
+  const [comments, setComments] = useState<TPostComment[]>(normalizedInitialComments ?? [])
+  const [commentsLoading, setCommentsLoading] = useState(normalizedInitialComments === null)
   const [commentInput, setCommentInput] = useState("")
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingCommentInput, setEditingCommentInput] = useState("")
@@ -105,7 +109,7 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
     try {
       setCommentsLoading(true)
       const rows = await apiFetch<TPostComment[]>(`/post/api/v1/posts/${postId}/comments`)
-      setComments(rows)
+      setComments(Array.isArray(rows) ? rows : [])
     } catch {
       setComments([])
     } finally {
@@ -114,10 +118,10 @@ const CommentBox: React.FC<Props> = ({ data, initialComments = null }) => {
   }, [postId])
 
   useEffect(() => {
-    if (!initialComments) return
-    setComments(initialComments)
+    if (!normalizedInitialComments) return
+    setComments(normalizedInitialComments)
     setCommentsLoading(false)
-  }, [initialComments])
+  }, [normalizedInitialComments])
 
   useEffect(() => {
     if (hasInitialComments) return

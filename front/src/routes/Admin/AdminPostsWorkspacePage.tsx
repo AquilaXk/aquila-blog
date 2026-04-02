@@ -238,25 +238,16 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
   if (!("props" in baseResult)) return baseResult
   const baseProps = await baseResult.props
   const fetchedAt = new Date().toISOString()
-  const [recentResult, listResult] = await Promise.allSettled([
-    readJsonIfOk<PageDto<AdminPostListItem>>(
-      context.req,
-      buildListEndpoint("active", { page: "1", pageSize: "8", kw: "", sort: DEFAULT_SORT })
-    ),
-    readJsonIfOk<PageDto<AdminPostListItem>>(
-      context.req,
-      buildListEndpoint("active", {
-        page: DEFAULT_PAGE,
-        pageSize: DEFAULT_PAGE_SIZE,
-        kw: "",
-        sort: DEFAULT_SORT,
-      })
-    ),
-  ])
-
-  const recentSource = recentResult.status === "fulfilled" ? recentResult.value : null
-  const listSource = listResult.status === "fulfilled" ? listResult.value : null
-  const recentPosts = [...(recentSource?.content || [])]
+  const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
+    context.req,
+    buildListEndpoint("active", {
+      page: DEFAULT_PAGE,
+      pageSize: DEFAULT_PAGE_SIZE,
+      kw: "",
+      sort: DEFAULT_SORT,
+    })
+  )
+  const recentPosts = [...(listSource?.content || [])]
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
     .slice(0, 5)
   const listState =
@@ -273,7 +264,7 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
       ...baseProps,
       initialSnapshot: {
         recentPosts,
-        recentFetchedAt: recentSource ? fetchedAt : null,
+        recentFetchedAt: listSource ? fetchedAt : null,
         listState,
       },
     },

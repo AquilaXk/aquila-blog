@@ -36,7 +36,6 @@ const MobileProfileCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
             src={imageSrc}
             width={expanded ? 90 : 56}
             height={expanded ? 90 : 56}
-            priority
             css={{
               position: "relative",
               borderRadius: "50%",

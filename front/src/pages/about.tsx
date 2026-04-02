@@ -1,37 +1,33 @@
 import styled from "@emotion/styled"
 import { GetServerSideProps } from "next"
-import { dehydrate } from "@tanstack/react-query"
 import { CONFIG } from "site.config"
 import AppIcon from "src/components/icons/AppIcon"
 import MetaConfig from "src/components/MetaConfig"
 import ProfileImage from "src/components/ProfileImage"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
 import { parseLegacyAboutDetails } from "src/libs/profileWorkspace"
-import { createQueryClient } from "src/libs/react-query"
-import { queryKey } from "src/constants/queryKey"
-import { hydrateServerAuthSession } from "src/libs/server/authSession"
 import { NextPageWithLayout } from "../types"
-import { fetchServerAdminProfile } from "src/libs/server/adminProfile"
+import {
+  buildStaticAdminProfileSnapshot,
+  fetchServerAdminProfile,
+  hasServerAuthCookie,
+} from "src/libs/server/adminProfile"
 import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
-  const queryClient = createQueryClient()
-  const [initialAdminProfile, authMember] = await Promise.all([
-    fetchServerAdminProfile(req),
-    hydrateServerAuthSession(queryClient, req),
-  ])
-  queryClient.setQueryData(queryKey.adminProfile(), initialAdminProfile)
+  const hasAuthCookie = hasServerAuthCookie(req)
+  const initialAdminProfile =
+    (await fetchServerAdminProfile(req, {
+      timeoutMs: hasAuthCookie ? 1_800 : 900,
+    })) ?? buildStaticAdminProfileSnapshot()
 
   res.setHeader(
     "Cache-Control",
-    authMember === null && initialAdminProfile
-      ? "public, s-maxage=60, stale-while-revalidate=300"
-      : "private, no-store"
+    hasAuthCookie ? "private, no-store" : "public, s-maxage=60, stale-while-revalidate=300"
   )
 
   return {
     props: {
-      dehydratedState: dehydrate(queryClient),
       initialAdminProfile,
     },
   }
@@ -87,7 +83,6 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
                   width={108}
                   height={108}
                   alt={`${displayName} profile`}
-                  priority
                   fillContainer
                 />
               </div>

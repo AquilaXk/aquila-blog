@@ -137,7 +137,7 @@ const AdminHubSurface = ({
       <ProfileCompact>
         <ProfileFrame>
           {profileSrc ? (
-            <ProfileImage src={profileSrc} alt={displayName} fillContainer priority />
+            <ProfileImage src={profileSrc} alt={displayName} fillContainer />
           ) : (
             <ProfileFallback>{displayNameInitial}</ProfileFallback>
           )}

@@ -60,6 +60,7 @@ custom:
   cache:
     ttl-overrides:
       # 공개 읽기 API는 쓰기 시 즉시 무효화하므로 운영 기본 TTL을 높여 DB 압력을 낮춘다.
+      post-bootstrap-v1: ${CUSTOM__CACHE__POST_BOOTSTRAP_TTL_SECONDS:60}
       post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:60}
       post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:60}
       post-explore-v4: ${CUSTOM__CACHE__POST_EXPLORE_TTL_SECONDS:120}

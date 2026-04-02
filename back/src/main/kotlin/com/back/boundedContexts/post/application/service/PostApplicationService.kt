@@ -94,7 +94,7 @@ class PostApplicationService(
     private var publicTagCountsCache: TagCountsCache? = null
 
     private val tagCacheTtlMillis: Long = tagsLocalCacheTtlSeconds.coerceAtLeast(5) * 1_000
-    private val hotPageSizes = listOf(30, 24)
+    private val hotPageSizes = listOf(30, 24, 16)
     private val hotSorts = listOf(PostSearchSortType1.CREATED_AT)
     private val maxTagCacheEvict = 12
 
@@ -1361,6 +1361,7 @@ class PostApplicationService(
         val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
         val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
         val exploreCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)
+        val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
         val searchCache = cacheManager.getCache(PostQueryCacheNames.SEARCH)
         val searchNegativeCache = cacheManager.getCache(PostQueryCacheNames.SEARCH_NEGATIVE)
         val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
@@ -1378,6 +1379,14 @@ class PostApplicationService(
                         recordCacheEvict(PostQueryCacheNames.FEED_CURSOR_FIRST, "key", evictReason)
                         exploreCursorFirstCache?.evict("size=$pageSize:sort=$sortName:tag=_")
                         recordCacheEvict(PostQueryCacheNames.EXPLORE_CURSOR_FIRST, "key", evictReason)
+                        bootstrapCache?.evict(
+                            PostPublicReadQueryService.buildBootstrapCacheKey(
+                                pageSize = pageSize,
+                                sort = sort,
+                                tag = "",
+                            ),
+                        )
+                        recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
                     }
                     if (evictSearchFirstPage) {
                         searchCache?.evict("page=1:size=$pageSize:sort=$sortName:kw=_")
@@ -1413,6 +1422,29 @@ class PostApplicationService(
                     }
                 }
             }
+
+            buildList(beforeTags.size + afterTags.size) {
+                addAll(beforeTags)
+                addAll(afterTags)
+            }.asSequence()
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .distinct()
+                .take(maxTagCacheEvict)
+                .forEach { rawTag ->
+                    hotPageSizes.forEach { pageSize ->
+                        hotSorts.forEach { sort ->
+                            bootstrapCache?.evict(
+                                PostPublicReadQueryService.buildBootstrapCacheKey(
+                                    pageSize = pageSize,
+                                    sort = sort,
+                                    tag = rawTag,
+                                ),
+                            )
+                            recordCacheEvict(PostQueryCacheNames.BOOTSTRAP, "key", evictReason)
+                        }
+                    }
+                }
         }
 
         if (evictTagsPublic) {

@@ -10,6 +10,7 @@ object PostQueryCacheNames {
     const val EXPLORE = "post-explore-v4"
     const val FEED_CURSOR_FIRST = "post-feed-cursor-first-v1"
     const val EXPLORE_CURSOR_FIRST = "post-explore-cursor-first-v1"
+    const val BOOTSTRAP = "post-bootstrap-v1"
     const val SEARCH = "post-search-v1"
     const val SEARCH_NEGATIVE = "post-search-negative-v1"
     const val TAGS = "post-tags-v4"

@@ -20,6 +20,7 @@ class PostReadPrewarmService(
 ) {
     private val logger = LoggerFactory.getLogger(PostReadPrewarmService::class.java)
     private val safePageSize = pageSize.coerceIn(10, 30)
+    private val bootstrapWarmPageSizes = listOf(HOME_BOOTSTRAP_PAGE_SIZE, safePageSize).distinct().sorted()
     private val safeMaxTagWarmups = maxTagWarmups.coerceIn(0, 10)
 
     /**
@@ -82,6 +83,15 @@ class PostReadPrewarmService(
         runStep("tags") {
             postPublicReadQueryUseCase.getPublicTagCounts()
         }
+        bootstrapWarmPageSizes.forEach { pageSizeToWarm ->
+            runStep("bootstrap-home:$pageSizeToWarm") {
+                postPublicReadQueryUseCase.getPublicBootstrap(
+                    tag = "",
+                    pageSize = pageSizeToWarm,
+                    sort = PostSearchSortType1.CREATED_AT,
+                )
+            }
+        }
         if (warmDetail) {
             runStep("detail") {
                 postPublicReadQueryUseCase.getPublicPostDetail(postId)
@@ -110,5 +120,9 @@ class PostReadPrewarmService(
             attemptedSteps - failureReasons.size,
             failureReasons.size,
         )
+    }
+
+    companion object {
+        private const val HOME_BOOTSTRAP_PAGE_SIZE = 16
     }
 }

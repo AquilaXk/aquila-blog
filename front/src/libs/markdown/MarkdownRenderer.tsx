@@ -34,6 +34,7 @@ import usePrismEffect from "src/libs/markdown/hooks/usePrismEffect"
 import PrettyCodeBlock from "src/libs/markdown/components/PrettyCodeBlock"
 import MarkdownRendererRoot from "src/libs/markdown/components/MarkdownRendererRoot"
 import FormulaRender from "src/libs/markdown/FormulaRender"
+import { renderImmediateCodeToHtml } from "src/libs/markdown/prismRuntime"
 import { formatReadableFileSize, inferLinkProvider, resolveEmbedPreviewUrl } from "src/libs/unfurl/extractMeta"
 
 export { markdownGuide } from "src/libs/markdown/rendering"
@@ -426,14 +427,22 @@ const MarkdownRendererComponent: FC<Props> = ({
           }
 
           const mergedClassName = ["aq-code", "aq-pretty-pre", className].filter(Boolean).join(" ")
+          const highlightedCode = renderImmediateCodeToHtml({
+            source: rawCode,
+            language,
+          })
 
           return (
             <PrettyCodeBlock
-              language={language}
+              language={highlightedCode.language}
               rawCode={rawCode}
               preElement={
                 <pre className={mergedClassName} {...props}>
-                  {children}
+                  <code
+                    className={`language-${highlightedCode.language}`}
+                    data-language={highlightedCode.language}
+                    dangerouslySetInnerHTML={{ __html: highlightedCode.html }}
+                  />
                 </pre>
               }
             />

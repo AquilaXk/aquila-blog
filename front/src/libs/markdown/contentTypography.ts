@@ -100,10 +100,14 @@ export const markdownContentTypography = (selector: string, theme: ThemeLike) =>
   ${selector} p > code,
   ${selector} blockquote > code,
   ${selector} .aq-inline-code {
-    border-radius: 6px;
-    padding: 0.16rem 0.38rem;
-    background: ${theme.colors.gray4};
-    font-size: 0.9em;
+    border-radius: 0.42rem;
+    padding: 0.14em 0.4em 0.16em;
+    background: rgba(255, 255, 255, 0.075);
+    color: #ff6b6b;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    letter-spacing: -0.01em;
+    font-size: 0.92em;
+    line-height: inherit;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
   }

@@ -3873,54 +3873,53 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     resetThumbnailZoomInModal,
     safePreviewThumbnail,
   ])
-  const previewMetaEditorPanel = useMemo(() => (
-    <PreviewEditorSection>
-      <PreviewEditorSectionHeader>
-        <strong>썸네일 이미지</strong>
-      </PreviewEditorSectionHeader>
-      <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
-      <Input
-        id="post-thumbnail-url-modal"
-        placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
-        value={postThumbnailUrl}
-        onChange={(e) => handleThumbnailUrlModalChange(e.target.value)}
-      />
-      <MetaActionRow>
-        <Button
-          type="button"
-          title={POST_IMAGE_UPLOAD_RULE_LABEL}
-          disabled={isThumbnailUploadDisabled}
-          onClick={openThumbnailFileInput}
-        >
-          {loadingKey === "uploadThumbnail" ? (
-            "업로드 중..."
-          ) : (
-            <>
-              썸네일 파일
-              <br />
-              업로드
-            </>
-          )}
-        </Button>
-        <Button type="button" onClick={applyFirstBodyImageToThumbnail}>
-          <>
-            본문 첫 이미지
-            <br />
-            가져오기
-          </>
-        </Button>
-        <Button type="button" onClick={resetThumbnailToAutoMode}>
-          <>
-            자동 모드로
-            <br />
-            되돌리기
-          </>
-        </Button>
-      </MetaActionRow>
-      {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
-    </PreviewEditorSection>
-  ), [
+  const previewMetaEditorPanel = useMemo(() => {
+    const hasManualThumbnail = postThumbnailUrl.trim().length > 0
+    const hasFirstBodyImage = deferredContentDerived.firstImage.trim().length > 0
+    const sourceTone = hasManualThumbnail ? "manual" : hasFirstBodyImage ? "auto" : "empty"
+    const sourceLabel = hasManualThumbnail
+      ? "수동 썸네일 URL 사용 중"
+      : hasFirstBodyImage
+        ? "본문 첫 이미지를 자동으로 사용 중"
+        : "현재 썸네일이 없습니다"
+
+    return (
+      <PreviewEditorSection>
+        <PreviewEditorSectionHeader>
+          <strong>썸네일 이미지</strong>
+          <ThumbnailSourceStatus data-tone={sourceTone}>{sourceLabel}</ThumbnailSourceStatus>
+        </PreviewEditorSectionHeader>
+        <FieldLabel htmlFor="post-thumbnail-url-modal">썸네일 URL</FieldLabel>
+        <Input
+          id="post-thumbnail-url-modal"
+          placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
+          value={postThumbnailUrl}
+          onChange={(e) => handleThumbnailUrlModalChange(e.target.value)}
+        />
+        <MetaPrimaryActionRow>
+          <PrimaryButton
+            type="button"
+            title={POST_IMAGE_UPLOAD_RULE_LABEL}
+            disabled={isThumbnailUploadDisabled}
+            onClick={openThumbnailFileInput}
+          >
+            {loadingKey === "uploadThumbnail" ? "업로드 중..." : "썸네일 파일 업로드"}
+          </PrimaryButton>
+        </MetaPrimaryActionRow>
+        <MetaSecondaryActionRow>
+          <Button type="button" disabled={!hasFirstBodyImage} onClick={applyFirstBodyImageToThumbnail}>
+            본문 첫 이미지 사용
+          </Button>
+          <Button type="button" data-variant="text" onClick={resetThumbnailToAutoMode}>
+            자동 모드로 되돌리기
+          </Button>
+        </MetaSecondaryActionRow>
+        {thumbnailImageFileName ? <FieldHelp>선택 파일: {thumbnailImageFileName}</FieldHelp> : null}
+      </PreviewEditorSection>
+    )
+  }, [
     applyFirstBodyImageToThumbnail,
+    deferredContentDerived.firstImage,
     handleThumbnailUrlModalChange,
     isThumbnailUploadDisabled,
     loadingKey,
@@ -6784,6 +6783,9 @@ const UtilityGrid = styled.div`
 `
 
 const Input = styled.input`
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 8px;
   padding: 0.72rem 0.8rem;
@@ -7641,6 +7643,7 @@ const CompactPublishEditorToggle = styled.button`
 const PreviewEditorSection = styled.div`
   display: grid;
   gap: 0.58rem;
+  min-width: 0;
   border: 1px solid ${({ theme }) => theme.colors.gray6};
   border-radius: 12px;
   background: ${({ theme }) => theme.colors.gray2};
@@ -7837,15 +7840,58 @@ const ZoomControlMeta = styled.div`
   flex-wrap: wrap;
 `
 
-const MetaActionRow = styled.div`
-  display: flex;
-  gap: 0.55rem;
-  flex-wrap: wrap;
+const ThumbnailSourceStatus = styled.span`
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 24px;
+  border-radius: 999px;
+  border: 1px solid ${({ theme }) => theme.colors.gray6};
+  padding: 0 0.54rem;
+  color: ${({ theme }) => theme.colors.gray10};
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+
+  &[data-tone="manual"] {
+    border-color: ${({ theme }) => theme.colors.blue7};
+    background: ${({ theme }) => theme.colors.blue3};
+    color: ${({ theme }) => theme.colors.blue11};
+  }
+
+  &[data-tone="auto"] {
+    border-color: ${({ theme }) => theme.colors.green7};
+    background: ${({ theme }) => theme.colors.green3};
+    color: ${({ theme }) => theme.colors.green11};
+  }
+`
+
+const MetaPrimaryActionRow = styled.div`
+  display: grid;
 
   > button {
+    width: 100%;
+    justify-content: center;
     text-align: center;
     white-space: normal;
     line-height: 1.32;
+  }
+`
+
+const MetaSecondaryActionRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+
+  > button:first-of-type {
+    flex: 1 1 11rem;
+  }
+
+  > button[data-variant="text"] {
+    flex: 0 0 auto;
+    text-align: left;
   }
 `
 
@@ -7967,9 +8013,14 @@ const ComposeSidebarSummaryText = styled.p`
 `
 
 const FieldHelp = styled.span`
+  display: block;
+  width: 100%;
+  min-width: 0;
   color: ${({ theme }) => theme.colors.gray11};
   font-size: 0.74rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 
   @media (max-width: 720px) {
     display: none;
@@ -9178,9 +9229,17 @@ const EditorStudioRoot = styled.main`
   padding: 1.4rem 1.6rem 2rem;
   display: grid;
   gap: 1.2rem;
+  overflow-x: clip;
 
   @media (max-width: 1024px) {
     padding: 1rem 1rem 1.4rem;
+  }
+
+  @media (max-width: 768px) {
+    padding-top: 0.92rem;
+    padding-bottom: 1.2rem;
+    padding-left: max(0.82rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.82rem, env(safe-area-inset-right, 0px));
   }
 `
 
@@ -9413,6 +9472,7 @@ const EditorHeaderMetaPill = styled.span<{ $compact?: boolean }>`
 `
 
 const EditorStudioCanvas = styled.section`
+  --compose-pane-readable-width: var(--article-readable-width, 48rem);
   width: 100%;
   max-width: var(--article-readable-width, 48rem);
   min-width: 0;
@@ -9420,6 +9480,7 @@ const EditorStudioCanvas = styled.section`
   min-height: clamp(28rem, 70vh, 56rem);
   display: grid;
   gap: 0.72rem;
+  overflow-x: clip;
 `
 
 const EditorStudioResultPanel = styled.section`

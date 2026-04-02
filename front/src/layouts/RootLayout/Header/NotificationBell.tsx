@@ -1,7 +1,7 @@
 import styled from "@emotion/styled"
 import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ApiError } from "src/apis/backend/client"
+import { ApiError, ApiTimeoutError } from "src/apis/backend/client"
 import {
   buildNotificationStreamUrl,
   getNotificationSnapshot,
@@ -48,6 +48,7 @@ const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
 const NOTIFICATION_EVENT_ID_REGEX = /^notification-\d+$/
 const AVATAR_PRELOAD_LIMIT = 8
 const AVATAR_PRELOAD_CACHE_MAX = 128
+const SNAPSHOT_FAILURE_LOG_THRESHOLD = 2
 
 type EventSourceLifecycleState = "idle" | "connecting" | "open"
 
@@ -228,9 +229,48 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
   )
   const isDocumentVisibleRef = useRef(isDocumentVisible)
   const pollingFailureStreakRef = useRef(0)
+  const lastSnapshotErrorRef = useRef<unknown>(null)
+  const lastLoggedSnapshotFailureStreakRef = useRef(0)
   const itemsRef = useRef<TMemberNotification[]>([])
   const unreadCountRef = useRef(0)
   const preloadedAvatarSrcRef = useRef<Set<string>>(new Set())
+
+  const describeSnapshotError = useCallback((error: unknown) => {
+    if (error instanceof ApiTimeoutError) {
+      return `timeout(${error.timeoutMs}ms)`
+    }
+    if (error instanceof ApiError) {
+      return `api-${error.status}`
+    }
+    if (error instanceof DOMException) {
+      return error.name
+    }
+    if (error instanceof Error) {
+      return error.name
+    }
+    return "unknown"
+  }, [])
+
+  const resetSnapshotFailureObservation = useCallback(() => {
+    lastSnapshotErrorRef.current = null
+    lastLoggedSnapshotFailureStreakRef.current = 0
+  }, [])
+
+  const reportSnapshotFailureIfNeeded = useCallback(
+    (nextFailureStreak: number) => {
+      if (nextFailureStreak < SNAPSHOT_FAILURE_LOG_THRESHOLD) return
+      if (lastLoggedSnapshotFailureStreakRef.current >= nextFailureStreak) return
+
+      lastLoggedSnapshotFailureStreakRef.current = nextFailureStreak
+      console.warn("[notifications] snapshot polling is recovering from repeated failures", {
+        streak: nextFailureStreak,
+        reason: describeSnapshotError(lastSnapshotErrorRef.current),
+        mode: streamMode,
+        fallback: lastSnapshotErrorRef.current ? "none-or-session" : "cache",
+      })
+    },
+    [describeSnapshotError, streamMode]
+  )
 
   const resolvePollingBaseIntervalMs = useCallback((failureStreak: number) => {
     let baseMs = POLLING_INTERVAL_MS
@@ -355,6 +395,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
     try {
       const snapshot = await getNotificationSnapshot()
+      resetSnapshotFailureObservation()
       applySnapshotState({
         nextItems: snapshot.items,
         nextUnreadCount: snapshot.unreadCount,
@@ -362,6 +403,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       })
       return "success"
     } catch (error) {
+      lastSnapshotErrorRef.current = error
       if (error instanceof ApiError && error.status === 401) {
         itemsRef.current = []
         unreadCountRef.current = 0
@@ -373,6 +415,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
         setOpen(false)
         clearStoredSnapshot()
         setLastNotificationEventId(null)
+        resetSnapshotFailureObservation()
         return "blocked"
       }
 
@@ -390,7 +433,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
       setNotificationAccessState("pending")
       return "error"
     }
-  }, [applySnapshotState, enabled, setLastNotificationEventId])
+  }, [applySnapshotState, enabled, resetSnapshotFailureObservation, setLastNotificationEventId])
 
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -741,15 +784,19 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
       if (snapshotStatus === "success") {
         pollingFailureStreakRef.current = 0
+        lastLoggedSnapshotFailureStreakRef.current = 0
       } else if (snapshotStatus === "blocked") {
         pollingFailureStreakRef.current = 0
+        lastLoggedSnapshotFailureStreakRef.current = 0
         setIsRealtimeActive(false)
         return
       } else {
-        pollingFailureStreakRef.current = Math.min(
+        const nextFailureStreak = Math.min(
           pollingFailureStreakRef.current + 1,
           STREAM_MAX_RECONNECT_ATTEMPTS
         )
+        pollingFailureStreakRef.current = nextFailureStreak
+        reportSnapshotFailureIfNeeded(nextFailureStreak)
       }
 
       const pollingBaseIntervalMs = resolvePollingBaseIntervalMs(pollingFailureStreakRef.current)
@@ -772,6 +819,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     isRealtimeActive,
     loadSnapshot,
     notificationAccessState,
+    reportSnapshotFailureIfNeeded,
     resolvePollingBaseIntervalMs,
     streamMode,
   ])

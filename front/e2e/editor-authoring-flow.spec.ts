@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 const QA_ENGINE_ROUTE = "/_qa/block-editor-slash?surface=engine"
+const UNDO_SHORTCUT = process.platform === "darwin" ? "Meta+z" : "Control+z"
 
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
@@ -119,6 +120,91 @@ test.describe("block editor authoring flow", () => {
     expect(secondLineIndex).toBeGreaterThan(quoteIndex)
   })
 
+  test("콜아웃 본문은 selected 전환 직후에도 Enter 없이 높이가 유지된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("앞 문단")
+
+    await page.getByRole("button", { name: "QA 콜아웃" }).click()
+
+    const calloutBodyField = page.locator("[data-callout-markdown-role='body']").first()
+    await expect(calloutBodyField).toBeVisible()
+    await calloutBodyField.fill(
+      [
+        "부하 테스트는 동시 사용자 수보다 처리량, 지연, 에러율, 자원 사용량을 함께 봐야 의미가 있습니다.",
+        "테스트는 Smoke -> Load -> Stress -> Spike/Soak 순서로 점진적으로 진행해야 원인을 읽기 쉽습니다.",
+        "성능 튜닝은 감이 아니라 동일 조건에서 반복 가능한 전후 비교로 검증해야 합니다.",
+      ].join("\n")
+    )
+
+    const leadParagraph = editor.locator("p", { hasText: "앞 문단" }).first()
+    await leadParagraph.click()
+    await calloutBodyField.click()
+
+    await expect
+      .poll(() =>
+        calloutBodyField.evaluate((element) => {
+          const textarea = element as HTMLTextAreaElement
+          return textarea.scrollHeight - textarea.clientHeight
+        })
+      )
+      .toBeLessThanOrEqual(6)
+  })
+
+  test("콜아웃 본문 inline markdown는 수정 화면에서 즉시 미리보기로 렌더된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "QA 콜아웃" }).click()
+
+    const calloutBodyField = page.locator("[data-callout-markdown-role='body']").first()
+    await expect(calloutBodyField).toBeVisible()
+    await calloutBodyField.fill("**굵게** 와 `코드`")
+
+    const preview = page.locator("[data-callout-markdown-preview='true']").first()
+    await expect(preview).toBeVisible()
+    await expect(preview.locator("strong")).toHaveText("굵게")
+    await expect(preview.locator("code")).toContainText("코드")
+  })
+
+  test("코드 블록은 작성 surface에서도 Prism 하이라이트 토큰을 렌더한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/코드")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type("const count = 1")
+    await page.keyboard.press("Enter")
+    await page.keyboard.type('return "ok"')
+
+    const codeBlock = page.locator(".aq-code-shell").first()
+    await expect(codeBlock).toBeVisible()
+    await expect(codeBlock.locator(".aq-code-highlight-layer .token.keyword").first()).toBeVisible()
+    await expect(codeBlock.locator(".aq-code-highlight-layer .token.string").first()).toBeVisible()
+
+    const colors = await codeBlock.evaluate((element) => {
+      const root = element as HTMLElement
+      const base = root.querySelector<HTMLElement>(".aq-code-highlight-layer")
+      const keyword = root.querySelector<HTMLElement>(".aq-code-highlight-layer .token.keyword")
+      const stringToken = root.querySelector<HTMLElement>(".aq-code-highlight-layer .token.string")
+      return {
+        base: base ? window.getComputedStyle(base).color : "",
+        keyword: keyword ? window.getComputedStyle(keyword).color : "",
+        string: stringToken ? window.getComputedStyle(stringToken).color : "",
+      }
+    })
+
+    expect(colors.base).toBeTruthy()
+    expect(colors.keyword).toBeTruthy()
+    expect(colors.string).toBeTruthy()
+    expect(colors.keyword).not.toBe(colors.base)
+    expect(colors.string).not.toBe(colors.base)
+  })
+
   test("텍스트 블록에서 Tab은 부분 선택이 아니라 블록 선택으로 승격된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -143,7 +229,24 @@ test.describe("block editor authoring flow", () => {
       .toBe("")
   })
 
-  test("빈 문단/텍스트 문단 클릭 시 파란 블록 선택 surface가 유지된다", async ({ page }) => {
+  test("초기 hydrate 직후 Cmd/Ctrl+Z는 외부 value 동기화를 되돌리지 않는다", async ({ page }) => {
+    const seed = encodeURIComponent("# 제목\\n\\n첫 문단\\n\\n둘째 문단")
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${seed}`)
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("# 제목")
+    await expect(markdownOutput).toContainText("첫 문단")
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.press(UNDO_SHORTCUT)
+
+    await expect(markdownOutput).toContainText("# 제목")
+    await expect(markdownOutput).toContainText("첫 문단")
+    await expect(markdownOutput).not.toContainText("(empty)")
+  })
+
+  test("블록 내부 클릭/텍스트 더블클릭은 편집만 유지하고 좌측 외곽 더블클릭에서만 블록 선택된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
@@ -161,35 +264,29 @@ test.describe("block editor authoring flow", () => {
     const selectionOverlay = page.getByTestId("keyboard-block-selection-overlay")
 
     await textBlock.click()
+    await expect(selectionOverlay).toHaveCount(0)
+    await textBlock.dblclick()
+    await expect(selectionOverlay).toHaveCount(0)
+
+    const textBlockRect = await textBlock.boundingBox()
+    if (!textBlockRect) {
+      throw new Error("텍스트 블록 좌표를 계산할 수 없습니다.")
+    }
+    await textBlock.dblclick({ position: { x: 4, y: Math.max(4, textBlockRect.height / 2) } })
     await expect(selectionOverlay).toBeVisible()
     await expect
       .poll(async () => {
-        const textRect = await textBlock.boundingBox()
+        const textRect = textBlockRect
         const overlayRect = await selectionOverlay.boundingBox()
         if (!textRect || !overlayRect) return Number.POSITIVE_INFINITY
         return Math.abs((overlayRect.y + 4) - textRect.y)
       })
       .toBeLessThanOrEqual(10)
-    const firstOverlayRect = await selectionOverlay.boundingBox()
-    if (!firstOverlayRect) {
-      throw new Error("첫 번째 선택 overlay 위치를 계산할 수 없습니다.")
-    }
 
     await emptyBlock.click()
-    await expect(selectionOverlay).toBeVisible()
-    await expect
-      .poll(async () => {
-        const emptyRect = await emptyBlock.boundingBox()
-        const overlayRect = await selectionOverlay.boundingBox()
-        if (!emptyRect || !overlayRect) return Number.POSITIVE_INFINITY
-        return Math.abs((overlayRect.y + 4) - emptyRect.y)
-      })
-      .toBeLessThanOrEqual(10)
-    const secondOverlayRect = await selectionOverlay.boundingBox()
-    if (!secondOverlayRect) {
-      throw new Error("두 번째 선택 overlay 위치를 계산할 수 없습니다.")
-    }
-    expect(secondOverlayRect.y).toBeGreaterThan(firstOverlayRect.y + 20)
+    await expect(selectionOverlay).toHaveCount(0)
+    await emptyBlock.dblclick()
+    await expect(selectionOverlay).toHaveCount(0)
   })
 
   test("블록 이동 핸들 1회 클릭은 블록 선택을 고정하고 Backspace로 삭제된다", async ({ page }) => {

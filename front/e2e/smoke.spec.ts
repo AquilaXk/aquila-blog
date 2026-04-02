@@ -409,6 +409,80 @@ test("상세 페이지는 클라이언트 복구 요청으로 렌더되고 조�
   await expect(page.getByText(/조회 8/)).toBeVisible()
 })
 
+test("상세 코드블럭은 Prism fallback 토큰 하이라이팅을 유지한다", async ({ page }) => {
+  await page.route("**/post/api/v1/posts/104", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 104,
+        createdAt: "2026-03-16T00:00:00Z",
+        modifiedAt: "2026-03-16T00:00:00Z",
+        authorId: 1,
+        authorName: "관리자",
+        authorUsername: "aquila",
+        authorProfileImageDirectUrl: "/avatar.png",
+        title: "코드 하이라이트 회귀 방지",
+        content: [
+          "```javascript",
+          "const count = 1",
+          "function run() {",
+          "  return \"ok\"",
+          "}",
+          "```",
+        ].join("\n"),
+        tags: ["테스트태그"],
+        category: [],
+        published: true,
+        listed: true,
+        likesCount: 0,
+        commentsCount: 0,
+        hitCount: 0,
+        actorHasLiked: false,
+        actorCanModify: false,
+        actorCanDelete: false,
+      }),
+    })
+  })
+
+  await page.route("**/post/api/v1/posts/104/hit", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        resultCode: "200-1",
+        msg: "ok",
+        data: { hitCount: 1 },
+      }),
+    })
+  })
+
+  await page.goto("/posts/104")
+
+  const codeRoot = page.locator(".aq-code-block pre code").first()
+  await expect(codeRoot).toBeVisible()
+  await expect(page.locator(".aq-code-block pre code .token.keyword").first()).toBeVisible()
+  await expect(page.locator(".aq-code-block pre code .token.string").first()).toBeVisible()
+
+  const colors = await page.evaluate(() => {
+    const code = document.querySelector<HTMLElement>(".aq-code-block pre code")
+    const keyword = document.querySelector<HTMLElement>(".aq-code-block pre code .token.keyword")
+    const stringToken = document.querySelector<HTMLElement>(".aq-code-block pre code .token.string")
+
+    return {
+      code: code ? window.getComputedStyle(code).color : "",
+      keyword: keyword ? window.getComputedStyle(keyword).color : "",
+      string: stringToken ? window.getComputedStyle(stringToken).color : "",
+    }
+  })
+
+  expect(colors.code).toBeTruthy()
+  expect(colors.keyword).toBeTruthy()
+  expect(colors.string).toBeTruthy()
+  expect(colors.keyword).not.toBe(colors.code)
+  expect(colors.string).not.toBe(colors.code)
+})
+
 test("모바일 상세는 compact 액션과 접이식 목차를 노출한다", async ({ page }) => {
   await page.setViewportSize({ width: 393, height: 852 })
   await page.addInitScript(() => {

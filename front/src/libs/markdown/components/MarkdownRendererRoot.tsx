@@ -508,8 +508,8 @@ const MarkdownRendererRoot = styled.div`
     padding: 0.04em 0.2em;
   }
 
-  .aq-pretty-pre code,
-  .aq-pretty-pre code span {
+  figure[data-rehype-pretty-code-figure] code,
+  figure[data-rehype-pretty-code-figure] code span {
     color: ${({ theme }) => (theme.scheme === "dark" ? "var(--shiki-dark)" : "var(--shiki-light)")};
     background-color: transparent !important;
   }

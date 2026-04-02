@@ -20,7 +20,9 @@ import {
 import type {
   ChangeEvent,
   DragEvent as ReactDragEvent,
+  FocusEvent as ReactFocusEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   ReactNode,
 } from "react"
 import {
@@ -275,6 +277,18 @@ type DropIndicatorState = {
   highlightHeight: number
 }
 
+type BlockSelectionPointerEventLike = {
+  button: number
+  detail: number
+  clientX: number
+  clientY: number
+  target: EventTarget | null
+  metaKey?: boolean
+  ctrlKey?: boolean
+  altKey?: boolean
+  shiftKey?: boolean
+}
+
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
 
 const compactSlashSearchText = (value: string) => normalizeSlashSearchText(value).replace(/\s+/g, "")
@@ -497,6 +511,9 @@ type TableRowResizeState = {
 
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse), (max-width: 1024px)"
 const BLOCK_HANDLE_POSITION_EPSILON_PX = 0.4
+const BLOCK_OUTER_SELECT_LEFT_GUTTER_PX = 76
+const BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX = 6
+const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"
@@ -712,6 +729,16 @@ const isStableBlockHandleState = (
   isWithinBlockHandleEpsilon(prev.bottom, next.bottom) &&
   isWithinBlockHandleEpsilon(prev.width, next.width)
 
+const isStableBlockSelectionOverlayState = (
+  prev: BlockSelectionOverlayState,
+  next: BlockSelectionOverlayState
+) =>
+  prev.visible === next.visible &&
+  isWithinBlockHandleEpsilon(prev.left, next.left) &&
+  isWithinBlockHandleEpsilon(prev.top, next.top) &&
+  isWithinBlockHandleEpsilon(prev.width, next.width) &&
+  isWithinBlockHandleEpsilon(prev.height, next.height)
+
 const shouldCenterBlockHandleForNode = (node?: BlockEditorDoc | null) =>
   Boolean(
     node &&
@@ -789,6 +816,7 @@ const BlockEditorShell = ({
   const blockHandleRailRef = useRef<HTMLDivElement>(null)
   const pendingBlockDragRef = useRef<PendingBlockDragState | null>(null)
   const pendingBlockDragCleanupRef = useRef<(() => void) | null>(null)
+  const skipNextPointerDownSelectionClearRef = useRef(false)
   const pendingImageInsertIndexRef = useRef<number | null>(null)
   const pendingAttachmentInsertIndexRef = useRef<number | null>(null)
   const lastCommittedMarkdownRef = useRef(normalizeMarkdown(value))
@@ -803,6 +831,7 @@ const BlockEditorShell = ({
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
   const bubbleToolbarHoveredRef = useRef(false)
+  const lastFocusedCalloutMarkdownFieldRef = useRef<CalloutMarkdownFieldElement | null>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState("")
@@ -1096,53 +1125,14 @@ const BlockEditorShell = ({
         ? selectedBlockNodeIndex
         : clickedBlockIndex !== null
           ? clickedBlockIndex
-          : selectedBlockIndex
+          : null
     syncSelectedBlockNodeSurface(selectedSurfaceIndex)
   }, [
     clickedBlockIndex,
-    selectedBlockIndex,
     selectedBlockNodeIndex,
     selectionTick,
     syncSelectedBlockNodeSurface,
   ])
-
-  useEffect(() => {
-    const surfaceIndex =
-      selectedBlockNodeIndex !== null
-        ? selectedBlockNodeIndex
-        : clickedBlockIndex !== null
-          ? clickedBlockIndex
-          : selectedBlockIndex
-    if (surfaceIndex === null) {
-      setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-      return
-    }
-
-    const syncOverlay = () => {
-      const blockElement = getTopLevelBlockElementByIndex(surfaceIndex)
-      if (!blockElement) {
-        setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-        return
-      }
-      const rect = blockElement.getBoundingClientRect()
-      setBlockSelectionOverlayState({
-        visible: true,
-        left: Math.round(rect.left - 6),
-        top: Math.round(rect.top - 4),
-        width: Math.round(rect.width + 12),
-        height: Math.round(rect.height + 8),
-      })
-    }
-
-    syncOverlay()
-    if (typeof window === "undefined") return
-    window.addEventListener("resize", syncOverlay)
-    window.addEventListener("scroll", syncOverlay, true)
-    return () => {
-      window.removeEventListener("resize", syncOverlay)
-      window.removeEventListener("scroll", syncOverlay, true)
-    }
-  }, [clickedBlockIndex, getTopLevelBlockElementByIndex, selectedBlockIndex, selectedBlockNodeIndex, selectionTick])
 
   const resolveDropIndicatorByClientY = useCallback(
     (clientY: number) => {
@@ -1291,9 +1281,17 @@ const BlockEditorShell = ({
   const findTopLevelBlockIndexFromTarget = useCallback(
     (target: EventTarget | null) => {
       const root = getContentRoot()
-      if (!root || !(target instanceof Element)) return null
+      if (!root) return null
 
-      let element: Element | null = target
+      const normalizedTarget =
+        target instanceof Element
+          ? target
+          : target instanceof Node
+            ? target.parentElement
+            : null
+      if (!(normalizedTarget instanceof Element)) return null
+
+      let element: Element | null = normalizedTarget
       while (element && element.parentElement !== root) {
         element = element.parentElement
       }
@@ -1339,6 +1337,45 @@ const BlockEditorShell = ({
       return bestIndex
     },
     [getTopLevelBlockElements]
+  )
+
+  const isOuterBlockSelectionGesture = useCallback(
+    (event: BlockSelectionPointerEventLike, targetBlockIndex: number | null) => {
+      if (targetBlockIndex === null) return false
+      if (event.button !== 0) return false
+      if (event.detail < 2) return false
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false
+
+      const targetElement =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null
+      if (
+        targetElement?.closest("[data-block-handle-rail='true'] button") ||
+        targetElement?.closest("[data-block-menu-root='true']") ||
+        targetElement?.closest("[data-table-menu-root='true']") ||
+        targetElement?.closest("[data-table-axis-rail='true']") ||
+        targetElement?.closest("[data-table-corner-handle='true']")
+      ) {
+        return false
+      }
+
+      const blockElement = getTopLevelBlockElementByIndex(targetBlockIndex)
+      if (!blockElement) return false
+      const rect = blockElement.getBoundingClientRect()
+      const withinVerticalRange =
+        event.clientY >= rect.top - BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX &&
+        event.clientY <= rect.bottom + BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX
+      if (!withinVerticalRange) return false
+
+      return (
+        event.clientX >= rect.left - BLOCK_OUTER_SELECT_LEFT_GUTTER_PX &&
+        event.clientX <= rect.left + BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX
+      )
+    },
+    [getTopLevelBlockElementByIndex]
   )
 
   const findNestedListItemDragContextFromTarget = useCallback(
@@ -1620,6 +1657,14 @@ const BlockEditorShell = ({
     if (!currentEditor) return
     const textPosition = getEditableTextPositionForTopLevelBlock(currentEditor, blockIndex)
     currentEditor.commands.focus(textPosition ?? getTopLevelBlockPosition(currentEditor, blockIndex))
+  }, [])
+
+  const replaceEditorDocFromExternalValue = useCallback((nextDoc: BlockEditorDoc) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return
+
+    currentEditor.chain().setMeta("addToHistory", false).setContent(nextDoc, { emitUpdate: false }).run()
+    lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
   }, [])
 
   const replaceEditorDoc = useCallback(
@@ -2155,9 +2200,19 @@ const BlockEditorShell = ({
       setSelectionTick((prev) => prev + 1)
       setSelectedBlockIndex(nextBlockIndex)
       if (isTopLevelBlockNodeSelection) {
-        setClickedBlockIndex(null)
-        keyboardBlockSelectionStickyRef.current = false
-        setSelectedBlockNodeIndex(nextBlockIndex)
+        if (keyboardBlockSelectionStickyRef.current) {
+          setClickedBlockIndex(null)
+          setSelectedBlockNodeIndex(nextBlockIndex)
+          return
+        }
+
+        // Ignore incidental node selection from content clicks/drags.
+        const editablePos = getEditableTextPositionForTopLevelBlock(editor, nextBlockIndex)
+        if (editablePos !== null) {
+          const nextTextSelection = TextSelection.create(editor.state.doc, editablePos)
+          editor.view.dispatch(editor.state.tr.setSelection(nextTextSelection))
+        }
+        setSelectedBlockNodeIndex(null)
         return
       }
       if (!keyboardBlockSelectionStickyRef.current) {
@@ -2203,10 +2258,28 @@ const BlockEditorShell = ({
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
-      if (isTableSelectionActive(editor) || targetBlockIndex === null) return
-      setClickedBlockIndex(targetBlockIndex)
-      setSelectedBlockIndex(targetBlockIndex)
-      setSelectionTick((prev) => prev + 1)
+      if (isTableSelectionActive(editor)) return
+      if (!isOuterBlockSelectionGesture(event, targetBlockIndex)) {
+        const shouldReleaseStickyBlockSelection =
+          event.button === 0 &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          keyboardBlockSelectionStickyRef.current &&
+          selectedBlockNodeIndexRef.current !== null
+        if (shouldReleaseStickyBlockSelection) {
+          keyboardBlockSelectionStickyRef.current = false
+          setSelectedBlockNodeIndex(null)
+          syncSelectedBlockNodeSurface(null)
+        }
+        return
+      }
+      if (targetBlockIndex === null) return
+      event.preventDefault()
+      event.stopPropagation()
+      skipNextPointerDownSelectionClearRef.current = true
+      promoteTopLevelBlockSelection(targetBlockIndex)
     }
 
     const editorDom = editor.view.dom
@@ -2214,7 +2287,14 @@ const BlockEditorShell = ({
     return () => {
       editorDom.removeEventListener("mousedown", handleEditorMouseDownCapture, true)
     }
-  }, [editor, findTopLevelBlockIndexByClientPosition, findTopLevelBlockIndexFromTarget])
+  }, [
+    editor,
+    findTopLevelBlockIndexByClientPosition,
+    findTopLevelBlockIndexFromTarget,
+    isOuterBlockSelectionGesture,
+    promoteTopLevelBlockSelection,
+    syncSelectedBlockNodeSurface,
+  ])
 
   useEffect(() => {
     if (!editor || typeof document === "undefined" || typeof window === "undefined") return
@@ -2414,9 +2494,8 @@ const BlockEditorShell = ({
     pendingCommitEditorRef.current = null
 
     const nextDoc = downgradeDisabledFeatureNodes(parseMarkdownToEditorDoc(value), enableMermaidBlocks)
-    editor.commands.setContent(nextDoc, { emitUpdate: false })
-    lastCommittedMarkdownRef.current = normalizeMarkdown(serializeEditorDocToMarkdown(nextDoc))
-  }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, editor, enableMermaidBlocks, value])
+    replaceEditorDocFromExternalValue(nextDoc)
+  }, [cancelPendingMarkdownCommit, clearPendingMarkdownCommitMaxWait, editor, enableMermaidBlocks, replaceEditorDocFromExternalValue, value])
 
   useEffect(
     () => () => {
@@ -2710,16 +2789,44 @@ const BlockEditorShell = ({
     editor.chain().focus().extendMarkRange("link").setLink({ href: href.trim() }).run()
   }, [editor])
 
+  const resolveCalloutMarkdownFieldElement = useCallback(
+    (target: EventTarget | null): CalloutMarkdownFieldElement | null => {
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        if (target.dataset.calloutMarkdownField === "true") {
+          return target
+        }
+      }
+      return null
+    },
+    []
+  )
+
+  const handleViewportFocusCapture = useCallback(
+    (event: ReactFocusEvent<HTMLDivElement>) => {
+      const field = resolveCalloutMarkdownFieldElement(event.target)
+      if (field) {
+        lastFocusedCalloutMarkdownFieldRef.current = field
+      }
+    },
+    [resolveCalloutMarkdownFieldElement]
+  )
+
+  const handleToolbarButtonMouseDown = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+  }, [])
+
   const getFocusedCalloutMarkdownField = useCallback((): CalloutMarkdownFieldElement | null => {
     if (typeof document === "undefined") return null
-    const active = document.activeElement
-    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-      if (active.dataset.calloutMarkdownField === "true") {
-        return active
-      }
+    const activeField = resolveCalloutMarkdownFieldElement(document.activeElement)
+    if (activeField) {
+      lastFocusedCalloutMarkdownFieldRef.current = activeField
+      return activeField
     }
-    return null
-  }, [])
+    const fallbackField = lastFocusedCalloutMarkdownFieldRef.current
+    if (!fallbackField || !fallbackField.isConnected) return null
+    if (!viewportRef.current?.contains(fallbackField)) return null
+    return fallbackField
+  }, [resolveCalloutMarkdownFieldElement])
 
   const updateCalloutFieldValue = useCallback((field: CalloutMarkdownFieldElement, nextValue: string) => {
     const prototype = Object.getPrototypeOf(field)
@@ -3460,10 +3567,8 @@ const BlockEditorShell = ({
 
   const normalizedSlashQuery = normalizeSlashSearchText(slashQuery)
 
-  const slashMenuContext = useMemo<SlashMenuContext>(() => {
-    void selectionTick
-
-    if (!editor) {
+  const getSlashMenuContextFromEditor = useCallback((activeEditor: TiptapEditor | null | undefined): SlashMenuContext => {
+    if (!activeEditor) {
       return {
         currentBlockType: null,
         previousBlockType: null,
@@ -3471,26 +3576,27 @@ const BlockEditorShell = ({
       }
     }
 
-    const blocks = (((editor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[])
-    const currentBlockIndex = Math.max(0, Math.min(getTopLevelBlockIndexFromSelection(editor), blocks.length - 1))
+    const blocks = (((activeEditor.getJSON() as BlockEditorDoc).content ?? []) as BlockEditorDoc[])
+    const currentBlockIndex = Math.max(0, Math.min(getTopLevelBlockIndexFromSelection(activeEditor), blocks.length - 1))
 
     return {
       currentBlockType: blocks[currentBlockIndex]?.type ?? null,
       previousBlockType: currentBlockIndex > 0 ? blocks[currentBlockIndex - 1]?.type ?? null : null,
       atDocumentStart: currentBlockIndex === 0,
     }
-  }, [editor, selectionTick])
+  }, [])
 
-  const rankedSlashItems = useMemo(() => {
+  const getRankedSlashItems = useCallback((query: string, context: SlashMenuContext) => {
+    const normalizedQuery = normalizeSlashSearchText(query)
     return blockInsertCatalog
       .map((item, index) => ({
         item,
         index,
         score: getSlashMenuMatchScore(
           item,
-          normalizedSlashQuery,
+          normalizedQuery,
           recentSlashItemIds.indexOf(item.id),
-          slashMenuContext
+          context
         ),
       }))
       .filter((entry) => Number.isFinite(entry.score))
@@ -3499,7 +3605,16 @@ const BlockEditorShell = ({
         return left.index - right.index
       })
       .map((entry) => entry.item)
-  }, [blockInsertCatalog, normalizedSlashQuery, recentSlashItemIds, slashMenuContext])
+  }, [blockInsertCatalog, recentSlashItemIds])
+
+  const slashMenuContext = useMemo<SlashMenuContext>(() => {
+    void selectionTick
+    return getSlashMenuContextFromEditor(editor)
+  }, [editor, getSlashMenuContextFromEditor, selectionTick])
+
+  const rankedSlashItems = useMemo(() => {
+    return getRankedSlashItems(normalizedSlashQuery, slashMenuContext)
+  }, [getRankedSlashItems, normalizedSlashQuery, slashMenuContext])
 
   const slashSections = useMemo(() => {
     const seenItemIds = new Set<string>()
@@ -3826,8 +3941,63 @@ const BlockEditorShell = ({
     ;(event as KeyboardEvent).stopImmediatePropagation?.()
   }
 
+  const resolveSlashExecutionTarget = useCallback(() => {
+    const activeEditor = editorRef.current ?? editor
+    if (!activeEditor) return null
+
+    const resolvedSlashState = resolveSlashMenuState()
+    const activeSlashRange = resolvedSlashState?.menuState ?? getActiveSlashRangeFromEditor(activeEditor)
+    if (!activeSlashRange) return null
+
+    const query = resolvedSlashState?.query ?? ""
+    const context = getSlashMenuContextFromEditor(activeEditor)
+    const rankedItems = getRankedSlashItems(query, context)
+    if (!rankedItems.length) return null
+
+    const preferredItemId = flatSlashEntries[selectedSlashIndex]?.item.id
+    const selectedItem =
+      (preferredItemId ? rankedItems.find((item) => item.id === preferredItemId) : null) ??
+      rankedItems[0] ??
+      null
+    if (!selectedItem || selectedItem.disabled) return null
+
+    return {
+      item: selectedItem,
+      range: activeSlashRange,
+      query,
+    }
+  }, [
+    editor,
+    flatSlashEntries,
+    getRankedSlashItems,
+    getSlashMenuContextFromEditor,
+    resolveSlashMenuState,
+    selectedSlashIndex,
+  ])
+
   const handleSlashMenuKeyboard = useCallback((event: SlashKeyboardEventLike) => {
     if (event.isComposing) return
+
+    const liveSlashTarget = resolveSlashExecutionTarget()
+
+    if (event.key === "Enter") {
+      if (!liveSlashTarget) return
+      stopSlashKeyboardEvent(event)
+      queueMicrotask(() => {
+        void executeSlashCatalogAction(liveSlashTarget.item)
+      })
+      return
+    }
+
+    if (event.key === "Backspace" && !liveSlashTarget?.query.trim().length && liveSlashTarget && editor) {
+      stopSlashKeyboardEvent(event)
+      setSlashInteractionMode("keyboard")
+      editor.chain().focus().deleteRange({ from: liveSlashTarget.range.from, to: liveSlashTarget.range.to }).run()
+      closeSlashMenu()
+      return
+    }
+
+    if (!isSlashMenuOpen) return
 
     if (!flatSlashEntries.length && event.key === "Escape") {
       stopSlashKeyboardEvent(event)
@@ -3870,30 +4040,12 @@ const BlockEditorShell = ({
       return
     }
 
-    if (event.key === "Enter") {
-      const selectedEntry = flatSlashEntries[selectedSlashIndex]
-      if (!selectedEntry || selectedEntry.item.disabled) return
-      stopSlashKeyboardEvent(event)
-      queueMicrotask(() => {
-        void executeSlashCatalogAction(selectedEntry.item)
-      })
-      return
-    }
-
-    if (event.key === "Backspace" && !slashQuery && slashMenuState && editor) {
-      stopSlashKeyboardEvent(event)
-      setSlashInteractionMode("keyboard")
-      editor.chain().focus().deleteRange({ from: slashMenuState.from, to: slashMenuState.to }).run()
-      closeSlashMenu()
-      return
-    }
-
     if (event.key === "Escape") {
       stopSlashKeyboardEvent(event)
       setSlashInteractionMode("keyboard")
       closeSlashMenu(true)
     }
-  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, selectedSlashIndex, slashMenuState, slashQuery])
+  }, [closeSlashMenu, editor, executeSlashCatalogAction, flatSlashEntries, isSlashMenuOpen, resolveSlashExecutionTarget])
 
   const handleSlashActionPointerMove = useCallback((flatIndex: number) => {
     setSlashInteractionMode((prev) => (prev === "pointer" ? prev : "pointer"))
@@ -3925,14 +4077,19 @@ const BlockEditorShell = ({
   }, [isSlashMenuOpen, selectedSlashIndex])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isSlashMenuOpen) return
+    if (typeof window === "undefined") return
 
     const closeMenu = (event: PointerEvent | KeyboardEvent) => {
       if (event instanceof KeyboardEvent) {
         if (!["ArrowDown", "ArrowUp", "Tab", "Home", "End", "Enter", "Escape", "Backspace"].includes(event.key)) return
+        const activeEditor = editorRef.current ?? editor
+        const hasActiveSlashRange = Boolean(activeEditor && getActiveSlashRangeFromEditor(activeEditor))
+        if (!isSlashMenuOpen && !hasActiveSlashRange) return
         handleSlashMenuKeyboard(event)
         return
       }
+
+      if (!isSlashMenuOpen) return
 
       const target = event.target
       if (slashMenuRef.current && target instanceof Node && slashMenuRef.current.contains(target)) {
@@ -3949,7 +4106,7 @@ const BlockEditorShell = ({
       window.removeEventListener("pointerdown", closeMenu)
       window.removeEventListener("keydown", closeMenu, true)
     }
-  }, [closeSlashMenu, flatSlashEntries, handleSlashMenuKeyboard, isSlashMenuOpen])
+  }, [closeSlashMenu, editor, handleSlashMenuKeyboard, isSlashMenuOpen])
 
   useEffect(() => {
     if (typeof window === "undefined" || !isInlineColorMenuOpen) return
@@ -4165,13 +4322,46 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (!editor) return
+    const overlayIndex =
+      selectedBlockNodeIndex !== null
+        ? selectedBlockNodeIndex
+        : clickedBlockIndex !== null
+          ? clickedBlockIndex
+          : null
+    if (overlayIndex === null) {
+      setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+    } else {
+      const overlayElement = getTopLevelBlockElementByIndex(overlayIndex)
+      if (!overlayElement) {
+        setBlockSelectionOverlayState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
+      } else {
+        const rect = overlayElement.getBoundingClientRect()
+        const nextOverlayState: BlockSelectionOverlayState = {
+          visible: true,
+          left: rect.left - 6,
+          top: rect.top - 4,
+          width: rect.width + 12,
+          height: rect.height + 8,
+        }
+        setBlockSelectionOverlayState((prev) =>
+          isStableBlockSelectionOverlayState(prev, nextOverlayState) ? prev : nextOverlayState
+        )
+      }
+    }
+
     const hideBlockHandle = () =>
       setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
     if (isTableMode || tableQuickRailState.visible) {
       hideBlockHandle()
       return
     }
-    const blockIndex = isCoarsePointer ? selectedBlockIndex : hoveredBlockIndex
+    const stickySelectionActive =
+      !isCoarsePointer && selectedBlockNodeIndex !== null && keyboardBlockSelectionStickyRef.current
+    const blockIndex = isCoarsePointer
+      ? selectedBlockIndex
+      : stickySelectionActive
+        ? selectedBlockNodeIndex
+        : hoveredBlockIndex
     if (blockIndex === null) {
       hideBlockHandle()
       return
@@ -4179,7 +4369,7 @@ const BlockEditorShell = ({
     const blockElement = getTopLevelBlockElementByIndex(blockIndex)
     const canShowHandle = isTopLevelBlockHandleEligible(blockIndex)
     const shouldShow = Boolean(
-      blockElement && canShowHandle && (isCoarsePointer || hoveredBlockIndex !== null)
+      blockElement && canShowHandle && (isCoarsePointer || stickySelectionActive || hoveredBlockIndex !== null)
     )
 
     if (!shouldShow || !blockElement) {
@@ -4208,12 +4398,14 @@ const BlockEditorShell = ({
     setBlockHandleState((prev) => (isStableBlockHandleState(prev, nextState) ? prev : nextState))
   }, [
     editor,
+    clickedBlockIndex,
     getTopLevelBlockElementByIndex,
     hoveredBlockIndex,
     isTableMode,
     isCoarsePointer,
     isTopLevelBlockHandleEligible,
     selectedBlockIndex,
+    selectedBlockNodeIndex,
     selectionTick,
     tableQuickRailState.visible,
   ])
@@ -4292,7 +4484,7 @@ const BlockEditorShell = ({
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY) ??
           findTopLevelBlockIndexFromTarget(event.target)
       )
-      if (selectedBlockNodeIndex !== null) {
+      if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
         keyboardBlockSelectionStickyRef.current = false
         setSelectedBlockNodeIndex(null)
         syncSelectedBlockNodeSurface(null)
@@ -4374,14 +4566,21 @@ const BlockEditorShell = ({
 
   const handleViewportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (skipNextPointerDownSelectionClearRef.current) {
+        skipNextPointerDownSelectionClearRef.current = false
+        return
+      }
       const targetBlockIndex =
         findTopLevelBlockIndexFromTarget(event.target) ??
         findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY)
-      if (!isTableMode && targetBlockIndex !== null) {
-        setClickedBlockIndex(targetBlockIndex)
-        setSelectedBlockIndex(targetBlockIndex)
-        setSelectionTick((prev) => prev + 1)
+      if (!isTableMode && isOuterBlockSelectionGesture(event, targetBlockIndex)) {
+        if (targetBlockIndex === null) return
+        event.preventDefault()
+        event.stopPropagation()
+        promoteTopLevelBlockSelection(targetBlockIndex)
+        return
       }
+      setClickedBlockIndex(null)
       if (selectedBlockNodeIndex !== null) {
         keyboardBlockSelectionStickyRef.current = false
         setSelectedBlockNodeIndex(null)
@@ -4398,9 +4597,11 @@ const BlockEditorShell = ({
       findTopLevelBlockIndexFromTarget,
       findTopLevelBlockIndexByClientPosition,
       getTableCellFromTarget,
+      isOuterBlockSelectionGesture,
       isCoarsePointer,
       isRowResizeHandleTarget,
       isTableMode,
+      promoteTopLevelBlockSelection,
       selectedBlockNodeIndex,
       startTableRowResize,
       syncSelectedBlockNodeSurface,
@@ -4554,6 +4755,7 @@ const BlockEditorShell = ({
                 type="button"
                 data-active={action.active}
                 data-tone="heading"
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => action.run()}
                 disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
@@ -4570,9 +4772,7 @@ const BlockEditorShell = ({
                 key={action.id}
                 type="button"
                 data-active={action.active}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => action.run()}
                 disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
@@ -4586,7 +4786,7 @@ const BlockEditorShell = ({
                 aria-label="글자색"
                 title="글자색"
                 data-active={Boolean(activeInlineColor)}
-                onClick={(event) => {
+                onClick={(event: ReactMouseEvent<HTMLElement>) => {
                   event.preventDefault()
                   setIsInlineColorMenuOpen((prev) => !prev)
                   setIsToolbarMoreOpen(false)
@@ -4634,9 +4834,7 @@ const BlockEditorShell = ({
                 key={action.id}
                 type="button"
                 data-active={action.active}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => action.run()}
                 disabled={disabled || action.disabled}
                 aria-label={action.ariaLabel}
@@ -4651,7 +4849,7 @@ const BlockEditorShell = ({
             <summary
               aria-label="추가 도구"
               title="추가 도구"
-              onClick={(event) => {
+              onClick={(event: ReactMouseEvent<HTMLElement>) => {
                 event.preventDefault()
                 setIsToolbarMoreOpen((prev) => !prev)
                 setIsInlineColorMenuOpen(false)
@@ -4666,6 +4864,7 @@ const BlockEditorShell = ({
                     key={action.id}
                     type="button"
                     data-active={action.active}
+                    onMouseDown={handleToolbarButtonMouseDown}
                     onClick={() => action.run()}
                     disabled={disabled || action.disabled}
                     aria-label={action.ariaLabel}
@@ -4793,6 +4992,7 @@ const BlockEditorShell = ({
         data-testid="block-editor-viewport"
         ref={viewportRef}
         tabIndex={-1}
+        onFocusCapture={handleViewportFocusCapture}
         onCompositionStart={() => {
           setIsSlashImeComposing(true)
         }}
@@ -4834,34 +5034,34 @@ const BlockEditorShell = ({
           >
             {bubbleState.mode === "text" ? (
               <BubbleToolbar>
-                <ToolbarButton type="button" data-active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+                <ToolbarButton type="button" data-active={editor.isActive("bold")} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().toggleBold().run()}>
                   굵게
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+                <ToolbarButton type="button" data-active={editor.isActive("italic")} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().toggleItalic().run()}>
                   기울임
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("link")} onClick={openLinkPrompt}>
+                <ToolbarButton type="button" data-active={editor.isActive("link")} onMouseDown={handleToolbarButtonMouseDown} onClick={openLinkPrompt}>
                   링크
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("code")} onClick={runInlineCodeAction}>
+                <ToolbarButton type="button" data-active={editor.isActive("code")} onMouseDown={handleToolbarButtonMouseDown} onClick={runInlineCodeAction}>
                   인라인 코드
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.isActive("inlineFormula")} onClick={insertInlineFormula}>
+                <ToolbarButton type="button" data-active={editor.isActive("inlineFormula")} onMouseDown={handleToolbarButtonMouseDown} onClick={insertInlineFormula}>
                   인라인 수식
                 </ToolbarButton>
               </BubbleToolbar>
             ) : bubbleState.mode === "image" ? (
               <BubbleToolbar>
-                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "left"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "left" }).run()}>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "left"} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "left" }).run()}>
                   좌측
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "center"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "center" }).run()}>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "center"} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "center" }).run()}>
                   가운데
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "wide"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "wide" }).run()}>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "wide"} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "wide" }).run()}>
                   와이드
                 </ToolbarButton>
-                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "full"} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "full" }).run()}>
+                <ToolbarButton type="button" data-active={editor.getAttributes("resizableImage").align === "full"} onMouseDown={handleToolbarButtonMouseDown} onClick={() => editor.chain().focus().updateAttributes("resizableImage", { align: "full" }).run()}>
                   전체 폭
                 </ToolbarButton>
               </BubbleToolbar>
@@ -4882,7 +5082,7 @@ const BlockEditorShell = ({
                 type="button"
                 title="표 선택"
                 aria-label="표 선택"
-                onClick={(event) => {
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
                   selectActiveTableBlock()
@@ -4905,7 +5105,7 @@ const BlockEditorShell = ({
                 type="button"
                 title="열 선택"
                 aria-label="열 선택"
-                onClick={(event) => {
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
                   selectCurrentTableAxis("column")
@@ -4928,7 +5128,7 @@ const BlockEditorShell = ({
                 type="button"
                 title="행 선택"
                 aria-label="행 선택"
-                onClick={(event) => {
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
                   selectCurrentTableAxis("row")
@@ -5053,6 +5253,7 @@ const BlockEditorShell = ({
               <ToolbarButton
                 type="button"
                 data-active={activeTableCellAttrs.textAlign === "left"}
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => updateActiveTableCellAttrs({ textAlign: "left" })}
               >
                 좌측
@@ -5060,6 +5261,7 @@ const BlockEditorShell = ({
               <ToolbarButton
                 type="button"
                 data-active={activeTableCellAttrs.textAlign === "center"}
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => updateActiveTableCellAttrs({ textAlign: "center" })}
               >
                 가운데
@@ -5067,6 +5269,7 @@ const BlockEditorShell = ({
               <ToolbarButton
                 type="button"
                 data-active={activeTableCellAttrs.textAlign === "right"}
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => updateActiveTableCellAttrs({ textAlign: "right" })}
               >
                 우측
@@ -5077,12 +5280,14 @@ const BlockEditorShell = ({
               <ToolbarButton
                 type="button"
                 data-active={activeTableCellAttrs.backgroundColor === "#f8fafc"}
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => updateActiveTableCellAttrs({ backgroundColor: "#f8fafc" })}
               >
                 기본
               </ToolbarButton>
               <ToolbarButton
                 type="button"
+                onMouseDown={handleToolbarButtonMouseDown}
                 onClick={() => updateActiveTableCellAttrs({ backgroundColor: null })}
               >
                 배경 해제
@@ -5172,7 +5377,7 @@ const BlockEditorShell = ({
               type="button"
               aria-label="블록 추가"
               title="블록 추가"
-              onClick={(event) => {
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation()
                 openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
               }}
@@ -5192,7 +5397,7 @@ const BlockEditorShell = ({
                 event.preventDefault()
                 event.stopPropagation()
               }}
-              onClick={(event) => {
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.preventDefault()
                 event.stopPropagation()
                 clearPendingBlockDrag()
@@ -5331,23 +5536,24 @@ const BlockEditorShell = ({
           >
             <ToolbarButton
               type="button"
-              onClick={(event) => {
+              onMouseDown={handleToolbarButtonMouseDown}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                 event.stopPropagation()
                 openBlockMenu(blockHandleState.blockIndex, event.currentTarget.getBoundingClientRect())
               }}
             >
               +
             </ToolbarButton>
-            <ToolbarButton type="button" onClick={() => moveBlockByStep(blockHandleState.blockIndex, -1)}>
+            <ToolbarButton type="button" onMouseDown={handleToolbarButtonMouseDown} onClick={() => moveBlockByStep(blockHandleState.blockIndex, -1)}>
               위로
             </ToolbarButton>
-            <ToolbarButton type="button" onClick={() => moveBlockByStep(blockHandleState.blockIndex, 1)}>
+            <ToolbarButton type="button" onMouseDown={handleToolbarButtonMouseDown} onClick={() => moveBlockByStep(blockHandleState.blockIndex, 1)}>
               아래로
             </ToolbarButton>
-            <ToolbarButton type="button" onClick={() => duplicateBlock(blockHandleState.blockIndex)}>
+            <ToolbarButton type="button" onMouseDown={handleToolbarButtonMouseDown} onClick={() => duplicateBlock(blockHandleState.blockIndex)}>
               복제
             </ToolbarButton>
-            <ToolbarButton type="button" data-variant="subtle-danger" onClick={() => deleteBlock(blockHandleState.blockIndex)}>
+            <ToolbarButton type="button" data-variant="subtle-danger" onMouseDown={handleToolbarButtonMouseDown} onClick={() => deleteBlock(blockHandleState.blockIndex)}>
               삭제
             </ToolbarButton>
           </MobileBlockActionBar>
@@ -5412,7 +5618,7 @@ const BlockEditorShell = ({
       {preview ? (
         <AuxDisclosure open={isPreviewOpen}>
           <summary
-            onClick={(event) => {
+            onClick={(event: ReactMouseEvent<HTMLElement>) => {
               event.preventDefault()
               setIsPreviewOpen((prev) => !prev)
             }}
@@ -6080,6 +6286,20 @@ const EditorViewport = styled.div`
   .aq-block-editor__content .aq-code-editor-content,
   .aq-block-editor__content .aq-code-editor-content > div {
     text-align: left;
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .aq-block-editor__content .aq-code-shell {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
   }
 
   .aq-block-editor__content > *[data-block-hovered="true"] {
@@ -6258,6 +6478,8 @@ const EditorViewport = styled.div`
         ? "0 18px 38px rgba(2, 6, 23, 0.28)"
         : "0 18px 38px rgba(15, 23, 42, 0.08)"};
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
     transition:
       border-color 140ms ease,
       box-shadow 140ms ease,
@@ -6335,6 +6557,29 @@ const EditorViewport = styled.div`
 
   .aq-block-editor__content.resize-cursor {
     cursor: col-resize;
+  }
+
+  @media (max-width: 768px) {
+    .aq-block-editor__content table {
+      width: 100%;
+      min-width: 100%;
+      max-width: 100%;
+      table-layout: fixed;
+    }
+
+    .aq-block-editor__content th,
+    .aq-block-editor__content td {
+      font-size: 0.95rem;
+      line-height: 1.58;
+      padding: 0.66rem 0.72rem;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .aq-block-editor__content .tableWrapper {
+      margin: 0.9rem 0;
+    }
   }
 `
 

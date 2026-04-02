@@ -52,7 +52,7 @@ test.describe("block editor slash menu contract", () => {
     expect(source).toContain('if (event.key === "Home")')
     expect(source).toContain('if (event.key === "End")')
     expect(source).toContain('if (event.key === "Enter")')
-    expect(source).toContain('if (event.key === "Backspace" && !slashQuery && slashMenuState && editor)')
+    expect(source).toContain('if (event.key === "Backspace" && !liveSlashTarget?.query.trim().length && liveSlashTarget && editor)')
     expect(source).toContain('window.addEventListener("scroll", syncSlashMenuPlacement, true)')
     expect(source).toContain('data-testid="slash-menu"')
     expect(source).toContain('data-input-mode={slashInteractionMode}')
@@ -61,7 +61,10 @@ test.describe("block editor slash menu contract", () => {
     expect(source).toContain('onMouseDown={(event) => event.preventDefault()}')
     expect(source).toContain('data-input-mode={slashInteractionMode}')
     expect(source).toContain('onPointerMove={() => handleSlashActionPointerMove(flatIndex)}')
-    expect(source).toContain("<SlashActionIcon aria-hidden=\"true\">{getSlashActionGlyph(action)}</SlashActionIcon>")
+    expect(source).toContain(
+      "<SlashActionIcon aria-hidden=\"true\" data-role=\"slash-action-icon\">"
+    )
+    expect(source).toContain("{getSlashActionGlyph(action)}")
     expect(source).not.toContain("<SlashActionSectionTag>")
     expect(source).not.toContain("<SlashMenuFooter>")
     expect(source).toContain('{slashQuery.trim().length ? slashQuery : "검색어를 입력하세요"}')

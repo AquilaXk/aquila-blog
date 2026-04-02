@@ -9,19 +9,31 @@ import TableRow from "@tiptap/extension-table-row"
 import TaskItem from "@tiptap/extension-task-item"
 import TaskList from "@tiptap/extension-task-list"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
+import rehypeKatex from "rehype-katex"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
 import AppIcon from "src/components/icons/AppIcon"
 import {
   PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
 import useMermaidEffect from "src/libs/markdown/hooks/useMermaidEffect"
+import useInlineColorEffect from "src/libs/markdown/hooks/useInlineColorEffect"
+import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 import type { CalloutKind } from "src/libs/markdown/rendering"
 import { clampImageWidthPx, normalizeImageAlign, toLanguageLabel } from "src/libs/markdown/rendering"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
+import {
+  highlightCodeToHtml,
+  renderImmediateCodeToHtml,
+} from "src/libs/markdown/prismRuntime"
 import FormulaRender from "src/libs/markdown/FormulaRender"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
@@ -146,13 +158,93 @@ const MERMAID_TEMPLATE = ["flowchart TD", "  A[사용자 요청] --> B{검증}",
   "\n"
 )
 
-const useAutosizeTextarea = (ref: { current: HTMLTextAreaElement | null }, value: string) => {
-  useEffect(() => {
+const useAutosizeTextarea = (
+  ref: { current: HTMLTextAreaElement | null },
+  value: string,
+  layoutVersion?: string | number | boolean
+) => {
+  const rafIdRef = useRef<number | null>(null)
+  const secondRafIdRef = useRef<number | null>(null)
+
+  const cancelQueuedSync = useCallback(() => {
+    if (typeof window === "undefined") return
+    if (rafIdRef.current !== null) {
+      window.cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+    if (secondRafIdRef.current !== null) {
+      window.cancelAnimationFrame(secondRafIdRef.current)
+      secondRafIdRef.current = null
+    }
+  }, [])
+
+  const syncHeight = useCallback(() => {
     const element = ref.current
     if (!element) return
-    element.style.height = "0px"
-    element.style.height = `${Math.max(element.scrollHeight, 88)}px`
-  }, [ref, value])
+    const computedStyle = window.getComputedStyle(element)
+    const rows = Number(element.getAttribute("rows") || 0)
+    const lineHeight = Number.parseFloat(computedStyle.lineHeight || "0")
+    const paddingBlock =
+      Number.parseFloat(computedStyle.paddingTop || "0") + Number.parseFloat(computedStyle.paddingBottom || "0")
+    const minHeightFromRows = rows > 0 && Number.isFinite(lineHeight) ? rows * lineHeight + paddingBlock : 0
+    element.style.height = "auto"
+    element.style.height = `${Math.ceil(Math.max(element.scrollHeight + 6, minHeightFromRows + 6, 88))}px`
+  }, [ref])
+
+  const queueSyncHeight = useCallback(() => {
+    syncHeight()
+
+    if (typeof window === "undefined") return
+    cancelQueuedSync()
+    rafIdRef.current = window.requestAnimationFrame(() => {
+      syncHeight()
+      secondRafIdRef.current = window.requestAnimationFrame(() => {
+        syncHeight()
+      })
+    })
+  }, [cancelQueuedSync, syncHeight])
+
+  useLayoutEffect(() => {
+    queueSyncHeight()
+    return cancelQueuedSync
+  }, [cancelQueuedSync, queueSyncHeight, value, layoutVersion])
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element || typeof window === "undefined") return
+
+    const handleResize = () => queueSyncHeight()
+    const handleFocus = () => queueSyncHeight()
+    window.addEventListener("resize", handleResize)
+    element.addEventListener("focus", handleFocus)
+    element.addEventListener("click", handleFocus)
+
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        queueSyncHeight()
+      })
+      if (element.parentElement) observer.observe(element.parentElement)
+      observer.observe(element)
+    }
+
+    const fontSet = document.fonts
+    let disposed = false
+    if (fontSet?.ready) {
+      void fontSet.ready.then(() => {
+        if (!disposed) queueSyncHeight()
+      })
+    }
+
+    return () => {
+      disposed = true
+      window.removeEventListener("resize", handleResize)
+      element.removeEventListener("focus", handleFocus)
+      element.removeEventListener("click", handleFocus)
+      observer?.disconnect()
+      cancelQueuedSync()
+    }
+  }, [cancelQueuedSync, queueSyncHeight, ref, value, layoutVersion])
 }
 
 const useDebouncedAttributeCommit = (
@@ -377,7 +469,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const previewRootRef = useRef<HTMLDivElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(textareaRef, draftSource)
+  useAutosizeTextarea(textareaRef, draftSource, selected)
 
   useEffect(() => {
     setDraftSource(String(node.attrs?.source || MERMAID_TEMPLATE))
@@ -487,13 +579,83 @@ const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const menuId = useId()
   const menuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const shellRef = useRef<HTMLDivElement>(null)
   const [draftLanguage, setDraftLanguage] = useState(normalizeCodeLanguage(String(node.attrs?.language || "")))
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false)
   const [languageSearch, setLanguageSearch] = useState("")
+  const initialCodeSource = node.textContent || ""
+  const [liveCodeSource, setLiveCodeSource] = useState(initialCodeSource)
+  const [highlightedCodeHtml, setHighlightedCodeHtml] = useState(() =>
+    renderImmediateCodeToHtml({
+      source: initialCodeSource,
+      language: normalizeCodeLanguage(String(node.attrs?.language || "")),
+    }).html
+  )
 
   useEffect(() => {
     setDraftLanguage(normalizeCodeLanguage(String(node.attrs?.language || "")))
   }, [node.attrs?.language])
+
+  useEffect(() => {
+    setLiveCodeSource(node.textContent || "")
+  }, [node.textContent])
+
+  useEffect(() => {
+    const shell = shellRef.current
+    if (!shell) return
+
+    const resolveEditorContent = () => shell.querySelector<HTMLElement>(".aq-code-editor-content")
+    const contentRoot = resolveEditorContent()
+    if (!contentRoot) return
+
+    let frameId: number | null = null
+
+    const syncLiveCodeSource = () => {
+      const nextValue = resolveEditorContent()?.textContent || ""
+      setLiveCodeSource((current) => (current === nextValue ? current : nextValue))
+    }
+
+    syncLiveCodeSource()
+
+    const observer = new MutationObserver(() => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId)
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        syncLiveCodeSource()
+      })
+    })
+
+    observer.observe(contentRoot, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+
+    return () => {
+      observer.disconnect()
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [selected])
+
+  useEffect(() => {
+    let disposed = false
+    const nextSource = liveCodeSource
+    setHighlightedCodeHtml(renderImmediateCodeToHtml({ source: nextSource, language: draftLanguage }).html)
+
+    void highlightCodeToHtml({
+      source: nextSource,
+      language: draftLanguage,
+    }).then((result) => {
+      if (disposed) return
+      setHighlightedCodeHtml(result.html)
+    })
+
+    return () => {
+      disposed = true
+    }
+  }, [draftLanguage, liveCodeSource])
 
   useEffect(() => {
     if (!isLanguageMenuOpen) return
@@ -602,7 +764,14 @@ const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
         </CodeLanguagePicker>
       </CodeBlockEditorHeader>
       <CodeBlockEditorSurface>
-        <NodeViewContent className="aq-code-editor-content" />
+        <div ref={shellRef} className="aq-code-shell">
+          <pre
+            className="aq-code-highlight-layer"
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: highlightedCodeHtml }}
+          />
+          <NodeViewContent className="aq-code-editor-content" />
+        </div>
       </CodeBlockEditorSurface>
     </CodeBlockEditorWrapper>
   )
@@ -612,6 +781,27 @@ const CALLOUT_LIST_MARKER_PATTERN = /^(\s*)[-*+]\s+/gm
 const CALLOUT_BULLET_PATTERN = /^(\s*)•\s+/gm
 const toCalloutDisplayBody = (value: string) => value.replace(CALLOUT_LIST_MARKER_PATTERN, "$1• ")
 const toCalloutStoredBody = (value: string) => value.replace(CALLOUT_BULLET_PATTERN, "$1- ")
+const CALLOUT_PREVIEW_TRIGGER_PATTERN =
+  /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\)|\{\{color:[^|]+\|[^}]+\}\}|\$[^$\n]+\$|^\s*[-*+]\s+)/m
+
+const shouldShowCalloutBodyPreview = (value: string) => CALLOUT_PREVIEW_TRIGGER_PATTERN.test(toCalloutStoredBody(value))
+
+const CalloutBodyMarkdownPreview = ({ body }: { body: string }) => {
+  const previewRef = useRef<HTMLDivElement>(null)
+  const markdown = toCalloutStoredBody(body)
+
+  useInlineColorEffect(previewRef, markdown)
+
+  if (!markdown.trim() || !shouldShowCalloutBodyPreview(body)) return null
+
+  return (
+    <CalloutBodyPreviewRoot ref={previewRef} data-callout-markdown-preview="true" aria-label="콜아웃 본문 미리보기">
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+        {markdown}
+      </ReactMarkdown>
+    </CalloutBodyPreviewRoot>
+  )
+}
 
 const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
@@ -623,7 +813,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [isKindMenuOpen, setIsKindMenuOpen] = useState(false)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(bodyRef, draftBody)
+  useAutosizeTextarea(bodyRef, draftBody, selected)
 
   useEffect(() => {
     setDraftKind((node.attrs?.kind as CalloutKind) || "tip")
@@ -738,6 +928,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
               commit({ body: nextBody })
             }}
           />
+          <CalloutBodyMarkdownPreview body={draftBody} />
         </CalloutEditorBody>
       </CalloutEditorCard>
     </CalloutEditorWrapper>
@@ -751,7 +942,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(bodyRef, draftBody)
+  useAutosizeTextarea(bodyRef, draftBody, `${selected}-${isPreviewOpen}`)
 
   useEffect(() => {
     setDraftTitle(String(node.attrs?.title || "제목"))
@@ -842,7 +1033,7 @@ const LinkCardEditorView = ({
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(bodyRef, draftBody)
+  useAutosizeTextarea(bodyRef, draftBody, selected)
 
   useEffect(() => {
     setDraftUrl(String(node.attrs?.url || ""))
@@ -1028,7 +1219,7 @@ const FileBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(bodyRef, draftDescription)
+  useAutosizeTextarea(bodyRef, draftDescription, selected)
 
   useEffect(() => {
     setDraftUrl(String(node.attrs?.url || ""))
@@ -1110,7 +1301,7 @@ const FormulaBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const formulaRef = useRef<HTMLTextAreaElement>(null)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
 
-  useAutosizeTextarea(formulaRef, draftFormula)
+  useAutosizeTextarea(formulaRef, draftFormula, selected)
 
   useEffect(() => {
     setDraftFormula(String(node.attrs?.formula || ""))
@@ -2299,11 +2490,29 @@ const CodeBlockEditorSurface = styled.div`
   overflow: hidden;
   border-radius: 0 0 var(--aq-code-block-radius) var(--aq-code-block-radius);
 
+  .aq-code-shell {
+    position: relative;
+    display: grid;
+    align-items: start;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+  }
+
+  .aq-code-highlight-layer,
   .aq-code-editor-content {
-    overflow: auto;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+    grid-area: 1 / 1;
+    margin: 0;
+    overflow: visible;
     padding: 1.05rem 1.18rem 1.6rem;
-    background: transparent;
-    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#a9b7c6")};
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
       "Courier New", monospace;
     font-size: 0.88rem;
@@ -2311,11 +2520,127 @@ const CodeBlockEditorSurface = styled.div`
     white-space: pre;
   }
 
+  .aq-code-highlight-layer {
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    background: transparent;
+    color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray11 : "#a9b7c6")};
+
+    .line {
+      display: block;
+      min-height: calc(0.88rem * 1.65);
+    }
+
+    .token.comment,
+    .token.prolog,
+    .token.doctype,
+    .token.cdata {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#808b99" : "#6a7280")};
+      font-style: italic;
+    }
+
+    .token.punctuation {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#a9b7c6" : "#495367")};
+    }
+
+    .token.property,
+    .token.tag,
+    .token.constant,
+    .token.symbol,
+    .token.deleted {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#b45309")};
+    }
+
+    .token.boolean,
+    .token.number {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#6897bb" : "#1d4ed8")};
+    }
+
+    .token.selector,
+    .token.attr-name,
+    .token.string,
+    .token.char,
+    .token.builtin,
+    .token.inserted {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#6aab73" : "#047857")};
+    }
+
+    .token.operator,
+    .token.entity,
+    .token.url,
+    .token.variable {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#9876aa" : "#7c3aed")};
+    }
+
+    .token.atrule,
+    .token.attr-value,
+    .token.keyword,
+    .token.annotation,
+    .token.decorator {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#cc7832" : "#1d4ed8")};
+      font-weight: 600;
+    }
+
+    .token.function,
+    .token.class-name {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#ffc66d" : "#be185d")};
+    }
+
+    .token.regex,
+    .token.important {
+      color: ${({ theme }) => (theme.scheme === "dark" ? "#bbb529" : "#92400e")};
+    }
+  }
+
+  .aq-code-editor-content {
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    color: transparent !important;
+    caret-color: ${({ theme }) => (theme.scheme === "light" ? theme.colors.gray12 : "#f8fafc")};
+    text-shadow: none;
+    -webkit-text-fill-color: transparent !important;
+  }
+
   .aq-code-editor-content > div {
     display: block;
     min-height: 5rem;
     outline: none;
     white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .aq-code-editor-content,
+  .aq-code-editor-content * {
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+  }
+
+  .aq-code-editor-content::selection,
+  .aq-code-editor-content *::selection {
+    background: rgba(59, 130, 246, 0.28);
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+  }
+
+  .aq-code-editor-content::-moz-selection,
+  .aq-code-editor-content *::-moz-selection {
+    background: rgba(59, 130, 246, 0.28);
+    color: transparent !important;
+  }
+
+  @media (max-width: 768px) {
+    .aq-code-highlight-layer,
+    .aq-code-editor-content {
+      font-size: 0.86rem;
+      line-height: 1.54;
+      padding: 0.86rem 0.74rem 1.1rem;
+    }
   }
 `
 
@@ -2531,6 +2856,55 @@ const CalloutBodyTextarea = styled(CompactBlockTextarea)`
 
   &::placeholder {
     color: var(--color-gray10);
+  }
+`
+
+const CalloutBodyPreviewRoot = styled.div`
+  margin-top: 0.82rem;
+  padding-top: 0.82rem;
+  border-top: 1px solid color-mix(in srgb, var(--ad-border, rgba(255, 255, 255, 0.14)) 78%, transparent);
+  color: var(--ad-text);
+  ${({ theme }) => markdownContentTypography("&", theme)}
+
+  p,
+  li,
+  blockquote,
+  a {
+    color: inherit;
+  }
+
+  p,
+  li {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  p {
+    margin: 0.44rem 0;
+  }
+
+  p:first-of-type,
+  ul:first-of-type,
+  ol:first-of-type {
+    margin-top: 0;
+  }
+
+  p:last-child,
+  ul:last-child,
+  ol:last-child {
+    margin-bottom: 0;
+  }
+
+  ul,
+  ol {
+    margin: 0.55rem 0;
+    padding-left: 1.1rem;
+  }
+
+  .katex-display {
+    margin: 0.7rem 0;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 `
 

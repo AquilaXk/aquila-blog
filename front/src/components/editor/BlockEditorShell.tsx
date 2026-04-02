@@ -1714,6 +1714,34 @@ const BlockEditorShell = ({
     currentEditor.commands.focus(textPosition ?? getTopLevelBlockPosition(currentEditor, blockIndex))
   }, [])
 
+  const focusNearestInsertedCalloutBody = useCallback((fallbackIndex?: number | null) => {
+    if (typeof window === "undefined") return
+
+    const syncFocus = () => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return
+
+      const { doc } = currentEditor.state
+      if (doc.childCount === 0) return
+
+      const selectionIndex = getTopLevelBlockIndexFromSelection(currentEditor)
+      const candidateIndices = Array.from(
+        new Set(
+          [selectionIndex - 1, selectionIndex, fallbackIndex, typeof fallbackIndex === "number" ? fallbackIndex + 1 : null]
+            .filter((value): value is number => typeof value === "number" && value >= 0 && value < doc.childCount)
+        )
+      )
+      const calloutIndex = candidateIndices.find((index) => doc.child(index)?.type.name === "calloutBlock")
+      if (typeof calloutIndex !== "number") return
+
+      focusTopLevelBlock(calloutIndex)
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(syncFocus)
+    })
+  }, [focusTopLevelBlock])
+
   const replaceEditorDocFromExternalValue = useCallback((nextDoc: BlockEditorDoc) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
@@ -1827,7 +1855,7 @@ const BlockEditorShell = ({
           blocks: [
             createCalloutNode({
               kind: "tip",
-              title: "핵심 포인트",
+              title: "",
               body: "",
             }),
           ],
@@ -2438,12 +2466,12 @@ const BlockEditorShell = ({
   }, [commitTableRowHeight, stopTableRowResize])
 
   useEffect(() => {
-    const currentEditor = editorRef.current
+    const currentEditor = editorRef.current ?? editor
     if (!currentEditor) return
     let rafId: number | null = null
 
     const syncBubble = () => {
-      const activeEditor = editorRef.current
+      const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) {
         scheduleBubbleHide()
         setTableQuickRailState((prev) =>
@@ -2570,7 +2598,7 @@ const BlockEditorShell = ({
     }
 
     const handleDocumentSelectionChange = () => {
-      const activeEditor = editorRef.current
+      const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
       const selection = window.getSelection()
       const anchorNode = selection?.anchorNode ?? null
@@ -2700,17 +2728,26 @@ const BlockEditorShell = ({
   }, [enableMermaidBlocks, insertBlocksAtCursor])
 
   const insertCalloutBlock = useCallback(() => {
-    insertBlocksAtCursor(
-      [
-        createCalloutNode({
-          kind: "tip",
-          title: "핵심 포인트",
-          body: "",
-        }),
-      ],
-      true
+    const currentEditor = editorRef.current ?? editor
+    if (!currentEditor) return
+
+    const selectionIndexBeforeInsert = getTopLevelBlockIndexFromSelection(currentEditor)
+    insertDocContent(
+      {
+        type: "doc",
+        content: withTrailingParagraph([
+          createCalloutNode({
+            kind: "tip",
+            title: "",
+            body: "",
+          }),
+        ]),
+      },
+      isSelectionInEmptyParagraph()
     )
-  }, [insertBlocksAtCursor])
+    closeSlashMenu()
+    focusNearestInsertedCalloutBody(selectionIndexBeforeInsert)
+  }, [closeSlashMenu, editor, focusNearestInsertedCalloutBody, insertDocContent, isSelectionInEmptyParagraph, withTrailingParagraph])
 
   const insertToggleBlock = useCallback(() => {
     insertBlocksAtCursor(
@@ -3097,7 +3134,7 @@ const BlockEditorShell = ({
           withTrailingParagraph([
             createCalloutNode({
               kind: "tip",
-              title: "핵심 포인트",
+              title: "",
               body: "",
             }),
           ])
@@ -3216,7 +3253,7 @@ const BlockEditorShell = ({
     const createCalloutTemplate = () =>
       createCalloutNode({
         kind: "tip",
-        title: "핵심 포인트",
+        title: "",
         body: "",
       })
 
@@ -5645,7 +5682,7 @@ const BlockEditorShell = ({
             />
           </DraggedBlockGhost>
         ) : null}
-        {blockSelectionOverlayState.visible ? (
+        {blockSelectionOverlayState.visible && !draggedBlockState && !draggedNestedListItemState ? (
           <BlockSelectionOverlay
             aria-hidden="true"
             data-testid="keyboard-block-selection-overlay"

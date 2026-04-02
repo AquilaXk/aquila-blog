@@ -12,11 +12,16 @@ const SUMMARY_BLOCK_START_REGEX = /^\s*>\s*(?:\*\*|__)?\s*(?:["'“”]\s*)?(?:�
 const SUMMARY_HTML_BLOCKQUOTE_REGEX = /^\s*<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>\s*/i
 const HTML_TAG_REGEX = /<[^>]+>/g
 const HTML_NBSP_REGEX = /&nbsp;|&#160;/gi
+const ESCAPED_QUOTES_REGEX = /\\+([“”"'`])/g
+const ESCAPED_CONTROL_REGEX = /\\r\\n|\\n|\\r|\\t/g
 
 export const CARD_SUMMARY_PREVIEW_LIMIT = 150
 export const DEFAULT_CARD_SUMMARY_FALLBACK = "핵심 내용을 정리 중입니다."
 
 const decodeSummaryEntities = (value: string) => value.replace(HTML_COLON_REGEX, ":")
+
+const decodeSummaryEscapes = (value: string) =>
+  value.replace(ESCAPED_QUOTES_REGEX, "$1").replace(ESCAPED_CONTROL_REGEX, " ")
 
 const stripSummaryLeadIn = (value: string) => {
   let normalized = value.trim()
@@ -48,7 +53,7 @@ export const normalizeCardSummary = (
   if (typeof value !== "string") return fallback
 
   const normalized = stripSummaryLeadIn(
-    decodeSummaryEntities(value)
+    decodeSummaryEscapes(decodeSummaryEntities(value))
       .replace(WHITESPACE_REGEX, " ")
       .trim()
   )

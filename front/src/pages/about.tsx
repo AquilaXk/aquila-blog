@@ -11,6 +11,7 @@ import {
   buildStaticAdminProfileSnapshot,
   fetchServerAdminProfile,
   hasServerAuthCookie,
+  resolvePublicAdminProfileSnapshot,
 } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "src/libs/server/serverTiming"
 import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
@@ -19,11 +20,18 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
   const hasAuthCookie = hasServerAuthCookie(req)
   const debugSsr = isSsrDebugEnabled(req)
-  const adminProfileResult = await timed(() =>
-    fetchServerAdminProfile(req, {
-      timeoutMs: hasAuthCookie ? 1_800 : 900,
-    })
-  )
+  const publicProfileSnapshot = !hasAuthCookie ? resolvePublicAdminProfileSnapshot(req) : null
+  const adminProfileResult = publicProfileSnapshot
+    ? {
+        ok: true as const,
+        value: publicProfileSnapshot.profile,
+        durationMs: 0,
+      }
+    : await timed(() =>
+        fetchServerAdminProfile(req, {
+          timeoutMs: hasAuthCookie ? 1_800 : 900,
+        })
+      )
   const initialAdminProfile = adminProfileResult.ok ? adminProfileResult.value ?? buildStaticAdminProfileSnapshot() : buildStaticAdminProfileSnapshot()
 
   res.setHeader(
@@ -34,7 +42,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
     {
       name: "about-admin-profile",
       durationMs: adminProfileResult.durationMs,
-      description: adminProfileResult.ok ? "ok" : "static-fallback",
+      description: publicProfileSnapshot ? publicProfileSnapshot.source : adminProfileResult.ok ? "ok" : "static-fallback",
     },
     {
       name: "about-ssr-total",

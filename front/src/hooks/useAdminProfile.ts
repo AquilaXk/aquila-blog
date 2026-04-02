@@ -1,8 +1,12 @@
+import { setCookie } from "cookies-next"
 import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "src/apis/backend/client"
 import type { ProfileCardLinkItem } from "src/constants/profileCardLinks"
 import { queryKey } from "src/constants/queryKey"
 import type { AboutSectionBlock } from "src/libs/profileWorkspace"
+
+const ADMIN_PROFILE_SNAPSHOT_COOKIE = "admin_profile_snapshot_v1"
+const ADMIN_PROFILE_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
 
 export type AdminProfile = {
   username: string
@@ -68,6 +72,15 @@ export const setAdminProfileCache = (queryClient: QueryClient, profile: AdminPro
   queryClient.setQueryData(queryKey.adminProfile(), profile)
 }
 
+const persistAdminProfileSnapshotCookie = (profile: AdminProfile) => {
+  setCookie(ADMIN_PROFILE_SNAPSHOT_COOKIE, JSON.stringify(toAdminProfile(profile)), {
+    path: "/",
+    sameSite: "lax",
+    maxAge: ADMIN_PROFILE_SNAPSHOT_MAX_AGE_SECONDS,
+    secure: typeof window !== "undefined" && window.location.protocol === "https:",
+  })
+}
+
 export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
   const isBrowser = typeof window !== "undefined"
   const queryClient = useQueryClient()
@@ -80,7 +93,9 @@ export const useAdminProfile = (initialProfile: AdminProfile | null = null) => {
     queryKey: cacheKey,
     queryFn: async () => {
       try {
-        return await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
+        const nextProfile = await apiFetch<AdminProfile>("/member/api/v1/members/adminProfile")
+        persistAdminProfileSnapshotCookie(nextProfile)
+        return nextProfile
       } catch {
         // 일시적인 네트워크 실패 시 기존 문구가 흔들리지 않도록 마지막 성공 캐시를 우선 유지한다.
         const cached = queryClient.getQueryData<AdminProfile | null>(cacheKey)

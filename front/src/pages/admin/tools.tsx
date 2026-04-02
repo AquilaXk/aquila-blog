@@ -4,6 +4,7 @@ import { GetServerSideProps, NextPage } from "next"
 import { IncomingMessage } from "http"
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { setCookie } from "cookies-next"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
@@ -163,6 +164,166 @@ const EMPTY_INITIAL_SNAPSHOT: AdminToolsInitialSnapshot = {
   seedPostId: "",
 }
 
+const ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE = "admin_tools_mail_snapshot_v1"
+const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
+const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
+
+const readCookieValue = (req: IncomingMessage, key: string) => {
+  const rawCookie = req.headers.cookie || ""
+  if (!rawCookie) return null
+
+  const pairs = rawCookie.split(";")
+  for (const pair of pairs) {
+    const [cookieKey, ...valueParts] = pair.trim().split("=")
+    if (cookieKey !== key) continue
+    const value = valueParts.join("=")
+    return value ? decodeURIComponent(value) : null
+  }
+
+  return null
+}
+
+const buildMailSnapshot = (diagnostics: SignupMailDiagnostics): SignupMailDiagnostics => ({
+  status: diagnostics.status,
+  adapter: diagnostics.adapter,
+  host: diagnostics.host,
+  port: diagnostics.port,
+  mailFrom: diagnostics.mailFrom,
+  usernameConfigured: diagnostics.usernameConfigured,
+  passwordConfigured: diagnostics.passwordConfigured,
+  smtpAuth: diagnostics.smtpAuth,
+  startTlsEnabled: diagnostics.startTlsEnabled,
+  missing: diagnostics.missing,
+  canConnect: diagnostics.canConnect,
+  checkedAt: diagnostics.checkedAt,
+  verifyPath: diagnostics.verifyPath,
+  connectionError: diagnostics.connectionError ?? null,
+  taskQueue: diagnostics.taskQueue
+    ? {
+        taskType: diagnostics.taskQueue.taskType,
+        pendingCount: diagnostics.taskQueue.pendingCount,
+        readyPendingCount: diagnostics.taskQueue.readyPendingCount,
+        delayedPendingCount: diagnostics.taskQueue.delayedPendingCount,
+        processingCount: diagnostics.taskQueue.processingCount,
+        backlogCount: diagnostics.taskQueue.backlogCount,
+        queueLagSeconds: diagnostics.taskQueue.queueLagSeconds,
+        failedCount: diagnostics.taskQueue.failedCount,
+        staleProcessingCount: diagnostics.taskQueue.staleProcessingCount,
+        label: diagnostics.taskQueue.label,
+        oldestReadyPendingAt: diagnostics.taskQueue.oldestReadyPendingAt,
+        oldestReadyPendingAgeSeconds: diagnostics.taskQueue.oldestReadyPendingAgeSeconds,
+        latestFailureAt: diagnostics.taskQueue.latestFailureAt,
+        latestFailureMessage: diagnostics.taskQueue.latestFailureMessage,
+        retryPolicy: diagnostics.taskQueue.retryPolicy,
+      }
+    : null,
+})
+
+const readMailSnapshotFromCookie = (req: IncomingMessage): SignupMailDiagnostics | null => {
+  const raw = readCookieValue(req, ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<SignupMailDiagnostics>
+    if (!parsed || typeof parsed !== "object" || typeof parsed.status !== "string" || typeof parsed.checkedAt !== "string") {
+      return null
+    }
+
+    const checkedAtMs = new Date(parsed.checkedAt).getTime()
+    if (!Number.isFinite(checkedAtMs)) return null
+    if (Date.now() - checkedAtMs > ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS) return null
+
+    return {
+      status: parsed.status,
+      adapter: typeof parsed.adapter === "string" ? parsed.adapter : "UNAVAILABLE",
+      host: typeof parsed.host === "string" ? parsed.host : null,
+      port: typeof parsed.port === "number" ? parsed.port : null,
+      mailFrom: typeof parsed.mailFrom === "string" ? parsed.mailFrom : null,
+      usernameConfigured: Boolean(parsed.usernameConfigured),
+      passwordConfigured: Boolean(parsed.passwordConfigured),
+      smtpAuth: Boolean(parsed.smtpAuth),
+      startTlsEnabled: Boolean(parsed.startTlsEnabled),
+      missing: Array.isArray(parsed.missing) ? parsed.missing.filter((item): item is string => typeof item === "string") : [],
+      canConnect: typeof parsed.canConnect === "boolean" ? parsed.canConnect : null,
+      checkedAt: parsed.checkedAt,
+      verifyPath: typeof parsed.verifyPath === "string" ? parsed.verifyPath : "/signup/verify",
+      connectionError: typeof parsed.connectionError === "string" ? parsed.connectionError : null,
+      taskQueue:
+        parsed.taskQueue && typeof parsed.taskQueue === "object"
+          ? {
+              taskType: typeof parsed.taskQueue.taskType === "string" ? parsed.taskQueue.taskType : "UNKNOWN",
+              pendingCount: typeof parsed.taskQueue.pendingCount === "number" ? parsed.taskQueue.pendingCount : 0,
+              readyPendingCount:
+                typeof parsed.taskQueue.readyPendingCount === "number" ? parsed.taskQueue.readyPendingCount : 0,
+              delayedPendingCount:
+                typeof parsed.taskQueue.delayedPendingCount === "number" ? parsed.taskQueue.delayedPendingCount : 0,
+              processingCount: typeof parsed.taskQueue.processingCount === "number" ? parsed.taskQueue.processingCount : 0,
+              backlogCount: typeof parsed.taskQueue.backlogCount === "number" ? parsed.taskQueue.backlogCount : 0,
+              queueLagSeconds:
+                typeof parsed.taskQueue.queueLagSeconds === "number" ? parsed.taskQueue.queueLagSeconds : null,
+              failedCount: typeof parsed.taskQueue.failedCount === "number" ? parsed.taskQueue.failedCount : 0,
+              staleProcessingCount:
+                typeof parsed.taskQueue.staleProcessingCount === "number" ? parsed.taskQueue.staleProcessingCount : 0,
+              label: typeof parsed.taskQueue.label === "string" ? parsed.taskQueue.label : "회원가입 메일 큐",
+              oldestReadyPendingAt:
+                typeof parsed.taskQueue.oldestReadyPendingAt === "string" ? parsed.taskQueue.oldestReadyPendingAt : null,
+              oldestReadyPendingAgeSeconds:
+                typeof parsed.taskQueue.oldestReadyPendingAgeSeconds === "number"
+                  ? parsed.taskQueue.oldestReadyPendingAgeSeconds
+                  : null,
+              latestFailureAt:
+                typeof parsed.taskQueue.latestFailureAt === "string" ? parsed.taskQueue.latestFailureAt : null,
+              latestFailureMessage:
+                typeof parsed.taskQueue.latestFailureMessage === "string" ? parsed.taskQueue.latestFailureMessage : null,
+              retryPolicy:
+                parsed.taskQueue.retryPolicy && typeof parsed.taskQueue.retryPolicy === "object"
+                  ? {
+                      label:
+                        typeof parsed.taskQueue.retryPolicy.label === "string"
+                          ? parsed.taskQueue.retryPolicy.label
+                          : "기본 정책",
+                      maxRetries:
+                        typeof parsed.taskQueue.retryPolicy.maxRetries === "number"
+                          ? parsed.taskQueue.retryPolicy.maxRetries
+                          : 0,
+                      baseDelaySeconds:
+                        typeof parsed.taskQueue.retryPolicy.baseDelaySeconds === "number"
+                          ? parsed.taskQueue.retryPolicy.baseDelaySeconds
+                          : 0,
+                      backoffMultiplier:
+                        typeof parsed.taskQueue.retryPolicy.backoffMultiplier === "number"
+                          ? parsed.taskQueue.retryPolicy.backoffMultiplier
+                          : 1,
+                      maxDelaySeconds:
+                        typeof parsed.taskQueue.retryPolicy.maxDelaySeconds === "number"
+                          ? parsed.taskQueue.retryPolicy.maxDelaySeconds
+                          : 0,
+                    }
+                  : {
+                      label: "기본 정책",
+                      maxRetries: 0,
+                      baseDelaySeconds: 0,
+                      backoffMultiplier: 1,
+                      maxDelaySeconds: 0,
+                    },
+            }
+          : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+const persistMailSnapshotCookie = (diagnostics: SignupMailDiagnostics) => {
+  const snapshot = buildMailSnapshot(diagnostics)
+  setCookie(ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE, JSON.stringify(snapshot), {
+    path: "/admin/tools",
+    sameSite: "lax",
+    maxAge: ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS,
+    secure: typeof window !== "undefined" && window.location.protocol === "https:",
+  })
+}
+
 async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | null> {
   try {
     const response = await serverApiFetch(req, path)
@@ -186,13 +347,13 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
   const baseProps = await baseResult.value.props
 
   const fetchedAt = new Date().toISOString()
-  const [systemHealthResult, mailResult] = await Promise.all([
+  const [systemHealthResult, mailSnapshot] = await Promise.all([
     timed(() => readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")),
-    timed(() => readJsonIfOk<SignupMailDiagnostics>(req, "/system/api/v1/adm/mail/signup")),
+    Promise.resolve(readMailSnapshotFromCookie(req)),
   ])
 
   const systemHealth = systemHealthResult.ok ? systemHealthResult.value : null
-  const mailDiagnostics = mailResult.ok ? mailResult.value : null
+  const mailDiagnostics = mailSnapshot
 
   appendSsrDebugTiming(req, res, [
     {
@@ -207,8 +368,8 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
     },
     {
       name: "admin-tools-mail",
-      durationMs: mailResult.durationMs,
-      description: mailDiagnostics ? "ok" : "empty",
+      durationMs: 0,
+      description: mailDiagnostics ? "snapshot" : "empty",
     },
     {
       name: "admin-tools-ssr-total",
@@ -562,6 +723,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
           setMailDiagnosticsError("")
           setMailTestNotice((prev) => ({ ...prev, text: "" }))
           setMailDiagnostics(diagnostics)
+          persistMailSnapshotCookie(diagnostics)
         },
         onError: (message) => {
           setMailDiagnosticsError(message)
@@ -637,11 +799,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   useEffect(() => {
     if (!sessionMember?.isAdmin) return
 
-    if (activeDiagnosticTab === "mail" && !mailDiagnostics && loadingKey !== "mailStatus" && loadingKey !== "mailConnectivity") {
-      void fetchSignupMailDiagnostics(false)
-      return
-    }
-
     if (activeDiagnosticTab === "queue" && !taskQueueDiagnostics && loadingKey !== "taskQueueStatus") {
       void fetchTaskQueueDiagnostics()
       return
@@ -661,7 +818,6 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
     cleanupDiagnostics,
     fetchAuthSecurityEvents,
     fetchCleanupDiagnostics,
-    fetchSignupMailDiagnostics,
     fetchTaskQueueDiagnostics,
     loadingKey,
     mailDiagnostics,

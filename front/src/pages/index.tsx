@@ -13,6 +13,7 @@ import {
   buildStaticAdminProfileSnapshot,
   fetchServerAdminProfile,
   hasServerAuthCookie,
+  resolvePublicAdminProfileSnapshot,
 } from "src/libs/server/adminProfile"
 import type { TPost } from "src/types"
 import { FEED_EXPLORE_PAGE_SIZE } from "src/constants/feed"
@@ -41,11 +42,18 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
     })
   )
 
-  const adminProfilePromise = timed(() =>
-    fetchServerAdminProfile(req, {
-      timeoutMs: hasAuthCookie ? 1_800 : crawlerRequest ? 1_500 : 900,
-    })
-  )
+  const publicProfileSnapshot = !hasAuthCookie && !crawlerRequest ? resolvePublicAdminProfileSnapshot(req) : null
+  const adminProfilePromise = publicProfileSnapshot
+    ? Promise.resolve({
+        ok: true as const,
+        value: publicProfileSnapshot.profile,
+        durationMs: 0,
+      })
+    : timed(() =>
+        fetchServerAdminProfile(req, {
+          timeoutMs: hasAuthCookie ? 1_800 : crawlerRequest ? 1_500 : 900,
+        })
+      )
 
   const authMemberPromise = timed(() => hydrateServerAuthSession(queryClient, req))
 
@@ -101,7 +109,9 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res, query }
       durationMs: adminProfileResult.durationMs,
       description:
         initialAdminProfile !== null
-          ? adminProfileResult.ok && adminProfileResult.value
+          ? publicProfileSnapshot
+            ? publicProfileSnapshot.source
+            : adminProfileResult.ok && adminProfileResult.value
             ? "ok"
             : "static-fallback"
           : "auth-session",

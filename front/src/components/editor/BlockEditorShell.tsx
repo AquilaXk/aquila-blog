@@ -2262,13 +2262,11 @@ const BlockEditorShell = ({
       },
     },
     onUpdate: ({ editor: nextEditor }) => {
-      if (typeof window !== "undefined") {
-        const commitStartedAt = performance.now()
-        window.requestAnimationFrame(() => {
-          recordEditorCommitDurationForRuntimeGuard(performance.now() - commitStartedAt)
-        })
-      }
+      const commitStartedAt = typeof window !== "undefined" ? performance.now() : 0
       scheduleMarkdownCommit(nextEditor)
+      if (typeof window !== "undefined") {
+        recordEditorCommitDurationForRuntimeGuard(performance.now() - commitStartedAt)
+      }
     },
   })
 

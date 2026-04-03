@@ -1359,6 +1359,7 @@ class PostApplicationService(
         }
         val feedCache = cacheManager.getCache(PostQueryCacheNames.FEED)
         val exploreCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE)
+        val adminPostsFirstPageCache = cacheManager.getCache(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE)
         val feedCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.FEED_CURSOR_FIRST)
         val exploreCursorFirstCache = cacheManager.getCache(PostQueryCacheNames.EXPLORE_CURSOR_FIRST)
         val bootstrapCache = cacheManager.getCache(PostQueryCacheNames.BOOTSTRAP)
@@ -1367,6 +1368,8 @@ class PostApplicationService(
         val tagsCache = cacheManager.getCache(PostQueryCacheNames.TAGS)
 
         if (evictHotReadPages || evictSearchFirstPage) {
+            adminPostsFirstPageCache?.evict("page=1:size=20:sort=${PostSearchSortType1.CREATED_AT.name}")
+            recordCacheEvict(PostQueryCacheNames.ADMIN_POSTS_FIRST_PAGE, "key", evictReason)
             hotPageSizes.forEach { pageSize ->
                 hotSorts.forEach { sort ->
                     val sortName = sort.name

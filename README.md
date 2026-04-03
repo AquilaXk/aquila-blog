@@ -12,7 +12,7 @@
 Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오래 버틸 수 있는 콘텐츠 플랫폼을 직접 설계하고 운영해 보기 위해 만든 프로젝트입니다.
 
 - 프런트는 `Next.js 14 + SSR`, 백엔드는 `Spring Boot 4 + Kotlin`으로 구성했습니다.
-- 인프라는 `Vercel + Home Server` 하이브리드 구조로 나눴고, 홈서버에는 `Caddy + Cloudflare Tunnel + PostgreSQL + Redis + MinIO + Prometheus + Grafana`를 올렸습니다.
+- 인프라는 `Vercel + Home Server` 하이브리드 구조로 나눴고, 홈서버에는 `Caddy + Cloudflare Tunnel + PostgreSQL + Redis + MinIO + Prometheus + Grafana + Loki + Promtail`를 올렸습니다.
 - 기능보다 운영을 우선해 `Blue/Green 배포`, `runtime-split`, `OpenAPI 계약 검증`, `E2E/성능 회귀 테스트`, `트러블슈팅 문서화`를 핵심 자산으로 관리합니다.
 
 ## 왜 이 프로젝트가 차별점이 있는가
@@ -57,7 +57,7 @@ Aquila Blog는 개인 블로그 수준을 넘어, 실제 운영 환경에서 오
 - Blue/Green 배포 + rollback
 - runtime-split(`read`, `admin`, `worker`) 운영
 - `doctor.sh`, `recover.sh`, `steady_state_guard.sh`
-- Grafana + Prometheus 모니터링 스택
+- Grafana + Prometheus + Loki 모니터링 스택
 - OpenAPI 계약 드리프트 체크
 - Playwright smoke / perf / a11y / live 테스트
 
@@ -140,7 +140,7 @@ README에서는 전체 스키마를 모두 그리기보다, 서비스 구조를 
 | Content Rendering | react-markdown, Mermaid, rehype-pretty-code, Shiki |
 | Backend | Spring Boot 4, Kotlin, Spring Security, JPA, QueryDSL, Flyway |
 | Data | PostgreSQL, Redis, MinIO |
-| Infra | Vercel, Home Server, Caddy, Cloudflare Tunnel, PostgreSQL, Redis, MinIO, Prometheus, Grafana, GHCR |
+| Infra | Vercel, Home Server, Caddy, Cloudflare Tunnel, PostgreSQL, Redis, MinIO, Prometheus, Grafana, Loki, Promtail, GHCR |
 | Quality | ktlint, ArchUnit, Playwright, Storybook, k6, OpenAPI contract check |
 
 ## 아키텍처 포인트
@@ -248,15 +248,16 @@ yarn storybook:gate
 yarn contracts:check
 ```
 
-## 대표 트러블슈팅
+## 대표 트러블슈팅 (Backend)
 
-README에서 모두 나열하지 않고, 면접/리뷰 관점에서 읽기 좋은 문서만 추렸습니다.
+트러블슈팅은 백엔드 운영 이슈 중심으로 구성했습니다.
 
-- [백엔드 테스트 OOM + ArchitectureGuard 회귀 동시 복구](docs/troubleshooting/18-backend-test-oom-and-architecture-guard-regression.md)
-- [Blue/Green + Caddy upstream 드리프트 복구](docs/troubleshooting/07-bluegreen-caddy-drift.md)
-- [라이브 502 반복 + AI 태그 추천 500 + 계약 드리프트 동시 복구](docs/troubleshooting/19-live-origin-502-ai-tag-contract-drift.md)
-- [runtime-split 배포창 연쇄 회귀 복구](docs/troubleshooting/20-runtime-split-auth-and-e2e-regression-retrospective.md)
-- [관리자 글 작업실 UX 압축](docs/troubleshooting/22-admin-manage-list-ux-compaction.md)
+- [[정본] 백엔드 트러블슈팅 종합 회고(2026-03): 정합성·배포 게이트·작업큐·보안 계약을 운영 규칙으로 고정한 과정](docs/troubleshooting/45-backend-signup-mail-grafana-authproxy-contract-drift.md)
+- [runtime-split 배포 검증 오탐 + 회원가입 메일 큐 PENDING 정체: 백엔드 관점 원인 분리와 운영 복구 기준](docs/troubleshooting/43-signup-mail-queue-pending-and-runtime-split-deploy-gate.md)
+- [Blue/Green 전환 후 SSE 프로브 401 오탐으로 롤백되던 배포 게이트 복구](docs/troubleshooting/31-bluegreen-deploy-sse-probe-unauthorized-gate.md)
+- [배포 성공인데 Flyway 미적용 + 전환창 OOM/SIGTERM 혼재: 원인 분리와 재발 방지](docs/troubleshooting/29-deploy-success-but-flyway-migration-missing-from-runtime-image.md)
+- [백엔드 테스트 연쇄 실패: OOM(SelectorManager 누적) + ArchitectureGuard 의존 회귀 동시 복구](docs/troubleshooting/19-backend-test-oom-and-architecture-guard-regression.md)
+- [Blue/Green 배포 회귀 연쇄: Caddy cutover shell expansion과 stale workflow_run 중복 배포 차단](docs/troubleshooting/30-bluegreen-cutover-shell-expansion-and-stale-deploy-runs.md)
 - 전체 인덱스: [docs/troubleshooting/00-INDEX.md](docs/troubleshooting/00-INDEX.md)
 
 ## 관련 문서

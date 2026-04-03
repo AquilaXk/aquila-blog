@@ -87,4 +87,28 @@ module.exports = {
 
     return rules
   },
+  webpack(config) {
+    const existingIgnoreWarnings = Array.isArray(config.ignoreWarnings) ? config.ignoreWarnings : []
+    config.ignoreWarnings = [
+      ...existingIgnoreWarnings,
+      (warning) => {
+        const message = typeof warning?.message === "string" ? warning.message : ""
+        if (!message.includes("Critical dependency: the request of a dependency is an expression")) {
+          return false
+        }
+
+        const moduleResource =
+          typeof warning?.module?.resource === "string" ? warning.module.resource : ""
+        const moduleIdentifier =
+          typeof warning?.module?.identifier === "function"
+            ? String(warning.module.identifier())
+            : ""
+        const target = `${moduleResource} ${moduleIdentifier}`
+
+        return target.includes("src/libs/markdown/prismRuntime.ts")
+      },
+    ]
+
+    return config
+  },
 }

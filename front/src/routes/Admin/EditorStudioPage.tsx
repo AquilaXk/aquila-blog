@@ -4,6 +4,7 @@ import { GetServerSideProps, NextPage } from "next"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/router"
 import {
+  type ClipboardEvent as ReactClipboardEvent,
   ChangeEvent,
   Profiler,
   type ProfilerOnRenderCallback,
@@ -88,6 +89,23 @@ const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 
 const toEditorPostRoute = (id: string | number) => `/editor/${encodeURIComponent(String(id))}`
+
+const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {
+  if (!clipboardData) return null
+
+  const directFile = Array.from(clipboardData.files || []).find((file) => file.type.startsWith("image/"))
+  if (directFile) return directFile
+
+  const clipboardItem = Array.from(clipboardData.items || []).find(
+    (item) => item.kind === "file" && item.type.startsWith("image/")
+  )
+  if (!clipboardItem) return null
+
+  const pastedFile = clipboardItem.getAsFile()
+  if (!pastedFile || !pastedFile.type.startsWith("image/")) return null
+  return pastedFile
+}
+
 const normalizeEditorReturnRoute = (value: string) => {
   const normalized = value.trim()
   if (!normalized.startsWith("/") || normalized.startsWith("//")) return ""
@@ -3416,7 +3434,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     [setPublishStatus, uploadPostAttachmentFile]
   )
 
-  const handleUploadThumbnailImage = async (file: File) => {
+  const handleUploadThumbnailImage = useCallback(async (file: File) => {
     try {
       setLoadingKey("uploadThumbnail")
       setPublishStatus({
@@ -3448,7 +3466,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     } finally {
       setLoadingKey("")
     }
-  }
+  }, [setPublishStatus, uploadPostImageFile])
 
   const handleThumbnailImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -3457,6 +3475,22 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     setThumbnailImageFileName(file.name)
     void handleUploadThumbnailImage(file)
   }
+
+  const handleThumbnailPaste = useCallback(
+    (event: ReactClipboardEvent<HTMLElement>) => {
+      const imageFile = extractImageFileFromClipboard(event.clipboardData)
+      if (!imageFile) return
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (loadingKey === "uploadThumbnail") return
+
+      setThumbnailImageFileName(imageFile.name || "clipboard-image.png")
+      void handleUploadThumbnailImage(imageFile)
+    },
+    [handleUploadThumbnailImage, loadingKey]
+  )
 
   const openPublishModal = useCallback((actionType: PublishActionType) => {
     activateComposeSurface()
@@ -3884,7 +3918,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         : "현재 썸네일이 없습니다"
 
     return (
-      <PreviewEditorSection>
+      <PreviewEditorSection onPasteCapture={handleThumbnailPaste}>
         <PreviewEditorSectionHeader>
           <strong>썸네일 이미지</strong>
           <ThumbnailSourceStatus data-tone={sourceTone}>{sourceLabel}</ThumbnailSourceStatus>
@@ -3895,6 +3929,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
           placeholder="https://... (비우면 본문 첫 이미지 자동 사용)"
           value={postThumbnailUrl}
           onChange={(e) => handleThumbnailUrlModalChange(e.target.value)}
+          onPaste={handleThumbnailPaste}
         />
         <MetaPrimaryActionRow>
           <PrimaryButton
@@ -3924,6 +3959,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     isThumbnailUploadDisabled,
     loadingKey,
     openThumbnailFileInput,
+    handleThumbnailPaste,
     postThumbnailUrl,
     resetThumbnailToAutoMode,
     thumbnailImageFileName,

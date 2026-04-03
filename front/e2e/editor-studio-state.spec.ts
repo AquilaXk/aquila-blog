@@ -174,6 +174,17 @@ test.describe("editor studio state", () => {
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 
+  test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
+    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+
+    expect(editorStudioSource).toContain("const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {")
+    expect(editorStudioSource).toContain("const handleThumbnailPaste = useCallback(")
+    expect(editorStudioSource).toContain("<PreviewEditorSection onPasteCapture={handleThumbnailPaste}>")
+    expect(editorStudioSource).toContain("onPaste={handleThumbnailPaste}")
+    expect(editorStudioSource).toContain("setThumbnailImageFileName(imageFile.name || \"clipboard-image.png\")")
+    expect(editorStudioSource).toContain("void handleUploadThumbnailImage(imageFile)")
+  })
+
   test("QA route는 writer/engine surface 계약을 분리 유지한다", () => {
     const qaSource = readFileSync(path.resolve(__dirname, "../src/pages/_qa/block-editor-slash.tsx"), "utf8")
 

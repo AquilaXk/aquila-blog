@@ -14,6 +14,7 @@ const liveUiRedirectTimeoutMs = Number.parseInt(process.env.E2E_LIVE_UI_REDIRECT
 const adminLandingHeadingPattern = /관리자 (?:작업 공간|작업 진입점|운영 허브|허브)/
 const adminProfileHeadingPattern = /(?:프로필 워크스페이스|운영 프로필|관리자 프로필 관리|프로필 관리|프로필 설정)/
 const adminToolsHeadingPattern = /(?:운영 (?:센터|도구|진단|점검 도구)|서비스 상태)/
+const adminUrlPattern = /\/admin(\/|$|\?)/
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -52,7 +53,10 @@ const isInvalidLoginRequestBody = (status: number, body: string) =>
   /요청 본문이 올바르지 않습니다\./.test(body)
 
 const hasAuthCookie = async (page: Page) => {
-  const cookies = await page.context().cookies()
+  const currentUrl = page.url()
+  const cookies = /^https?:\/\//.test(currentUrl)
+    ? await page.context().cookies([new URL(currentUrl).origin])
+    : await page.context().cookies()
   return cookies.some((cookie) => cookie.name === "apiKey" || cookie.name === "accessToken")
 }
 
@@ -62,17 +66,29 @@ const isNavigationInterruptedError = (error: unknown) => {
 }
 
 const tryEnterAdminRoute = async (page: Page, timeoutMs: number) => {
-  try {
-    await page.goto("/admin")
-  } catch (error) {
-    if (!isNavigationInterruptedError(error)) throw error
+  const tries = 3
+  const perTryTimeout = Math.max(4_000, Math.floor(timeoutMs / tries))
+
+  for (let attempt = 1; attempt <= tries; attempt += 1) {
+    try {
+      await page.goto("/admin")
+    } catch (error) {
+      if (!isNavigationInterruptedError(error)) throw error
+    }
+
+    if (adminUrlPattern.test(page.url())) return true
+
+    try {
+      await page.waitForURL(adminUrlPattern, { timeout: perTryTimeout })
+      return true
+    } catch {
+      if (attempt < tries) {
+        await sleep(400 * attempt)
+      }
+    }
   }
-  try {
-    await page.waitForURL(/\/admin(\/|$)/, { timeout: timeoutMs })
-    return true
-  } catch {
-    return false
-  }
+
+  return false
 }
 
 const gotoLoginForAdmin = async (page: Page, timeoutMs: number) => {
@@ -125,7 +141,7 @@ const waitForUiLoginOutcome = async (
       return { kind: "response", response: observedLoginResponse }
     }
 
-    if (/\/admin(\/|$)/.test(page.url())) {
+    if (adminUrlPattern.test(page.url())) {
       return { kind: "admin-url" }
     }
 
@@ -146,7 +162,7 @@ const waitForUiLoginOutcome = async (
     return { kind: "response", response: observedLoginResponse }
   }
 
-  if (/\/admin(\/|$)/.test(page.url())) {
+  if (adminUrlPattern.test(page.url())) {
     return { kind: "admin-url" }
   }
 
@@ -409,7 +425,8 @@ const loginThroughUi = async (
         throw new Error(`UI login request failed. ${lastFailure}`)
       }
 
-      if (/\/admin(\/|$)/.test(page.url())) return
+      if (adminUrlPattern.test(page.url())) return
+      if (await tryEnterAdminRoute(page, liveUiRedirectTimeoutMs)) return
     }
 
     if (outcome.kind === "admin-url") return

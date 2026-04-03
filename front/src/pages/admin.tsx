@@ -1,7 +1,8 @@
 import { GetServerSideProps, NextPage } from "next"
+import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { useAdminProfile, type AdminProfile } from "src/hooks/useAdminProfile"
-import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import {
   fetchServerAdminProfile,
   hasServerAuthCookie,
@@ -14,47 +15,87 @@ type AdminHubPageProps = AdminPageProps & {
   initialProfileSnapshot: AdminProfile
 }
 
+type AdminHubBootstrapPayload = {
+  member: AuthMember
+  profile: AdminProfile
+}
+
 export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
   const hasAuthCookie = hasServerAuthCookie(req)
   const fallbackProfileSnapshot = resolvePublicAdminProfileSnapshot(req)
-  const baseResultPromise = timed(() => getAdminPageProps(req))
-  const adminProfileResultPromise = hasAuthCookie
-    ? timed(() =>
-        fetchServerAdminProfile(req, {
-          timeoutMs: 900,
+  const bootstrapResultPromise =
+    hasAuthCookie
+      ? timed(() =>
+          readAdminProtectedBootstrap<AdminHubBootstrapPayload>(req, "/member/api/v1/adm/members/bootstrap", "/admin")
+        )
+      : null
+
+  const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
+    return {
+      redirect: {
+        destination: bootstrapResult.value.destination,
+        permanent: false,
+      },
+    }
+  }
+
+  let baseProps: AdminPageProps
+  let authDurationMs = 0
+  let authDescription: string = "bootstrap"
+  let profileDurationMs = 0
+  let profileDescription: string = fallbackProfileSnapshot.source
+  let profileSnapshot: AdminProfile
+
+  if (bootstrapResult?.ok && bootstrapResult.value.ok) {
+    baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
+    profileSnapshot = bootstrapResult.value.value.profile
+    profileDurationMs = bootstrapResult.durationMs
+    profileDescription = "bootstrap"
+  } else {
+    const baseResultPromise = timed(() => getAdminPageProps(req))
+    const adminProfileResultPromise = hasAuthCookie
+      ? timed(() =>
+          fetchServerAdminProfile(req, {
+            timeoutMs: 900,
+          })
+        )
+      : Promise.resolve({
+          ok: true as const,
+          value: fallbackProfileSnapshot.profile,
+          durationMs: 0,
         })
-      )
-    : Promise.resolve({
-        ok: true as const,
-        value: fallbackProfileSnapshot.profile,
-        durationMs: 0,
-      })
-  const [baseResult, adminProfileResult] = await Promise.all([baseResultPromise, adminProfileResultPromise])
-  if (!baseResult.ok) throw baseResult.error
-  if ("redirect" in baseResult.value) return baseResult.value
-  if (!("props" in baseResult.value)) return baseResult.value
-  const baseProps = await baseResult.value.props
-  const profileSnapshot =
-    adminProfileResult.ok && adminProfileResult.value
-      ? adminProfileResult.value
-      : fallbackProfileSnapshot.profile
+    const [baseResult, adminProfileResult] = await Promise.all([baseResultPromise, adminProfileResultPromise])
+    if (!baseResult.ok) throw baseResult.error
+    if ("redirect" in baseResult.value) return baseResult.value
+    if (!("props" in baseResult.value)) return baseResult.value
+    baseProps = await baseResult.value.props
+    authDurationMs = baseResult.durationMs
+    authDescription = "fallback"
+    profileSnapshot =
+      adminProfileResult.ok && adminProfileResult.value
+        ? adminProfileResult.value
+        : fallbackProfileSnapshot.profile
+    profileDurationMs = adminProfileResult.durationMs
+    profileDescription =
+      adminProfileResult.ok && adminProfileResult.value
+        ? hasAuthCookie
+          ? "ok"
+          : fallbackProfileSnapshot.source
+        : fallbackProfileSnapshot.source
+  }
 
   appendSsrDebugTiming(req, res, [
     {
       name: "admin-auth-session",
-      durationMs: baseResult.durationMs,
-      description: "ok",
+      durationMs: authDurationMs,
+      description: authDescription,
     },
     {
       name: "admin-profile",
-      durationMs: adminProfileResult.durationMs,
-      description:
-        adminProfileResult.ok && adminProfileResult.value
-          ? hasAuthCookie
-            ? "ok"
-            : fallbackProfileSnapshot.source
-          : fallbackProfileSnapshot.source,
+      durationMs: profileDurationMs,
+      description: profileDescription,
     },
     {
       name: "admin-ssr-total",

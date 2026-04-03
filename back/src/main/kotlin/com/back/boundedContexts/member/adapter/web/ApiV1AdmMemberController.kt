@@ -10,12 +10,14 @@ import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_CONTACT
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_ICON_ALLOWED
 import com.back.boundedContexts.member.domain.shared.memberMixin.PROFILE_SERVICE_LINK_ICON_DEFAULT_VALUE
 import com.back.boundedContexts.member.domain.shared.memberMixin.normalizeProfileLinkHref
+import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberProfileWorkspaceResponseDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.post.application.port.output.PostImageStoragePort
 import com.back.boundedContexts.post.config.PostImageStorageProperties
 import com.back.global.app.AppConfig
 import com.back.global.exception.application.AppException
+import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileRetentionService
 import com.back.global.storage.domain.UploadedFilePurpose
 import com.back.standard.dto.member.type1.MemberSearchSortType1
@@ -28,6 +30,7 @@ import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.http.MediaType
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
@@ -61,6 +64,11 @@ class ApiV1AdmMemberController(
     companion object {
         private const val PROFILE_IMAGE_MAX_FILE_SIZE_BYTES = 2L * 1024 * 1024
     }
+
+    data class AdminHubBootstrapResponse(
+        val member: AuthSessionMemberDto,
+        val profile: MemberWithUsernameDto,
+    )
 
     private enum class LinkSection(
         val displayName: String,
@@ -183,6 +191,16 @@ class ApiV1AdmMemberController(
         @Positive
         id: Long,
     ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(id)
+
+    @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
+    fun bootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminHubBootstrapResponse =
+        AdminHubBootstrapResponse(
+            member = AuthSessionMemberDto(securityUser),
+            profile = currentMemberProfileQueryUseCase.getPublishedById(securityUser.id),
+        )
 
     @GetMapping("/{id}/profileWorkspace")
     @Transactional(readOnly = true)

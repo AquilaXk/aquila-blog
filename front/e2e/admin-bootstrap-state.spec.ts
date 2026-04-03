@@ -3,6 +3,15 @@ import path from "node:path"
 import { expect, test } from "@playwright/test"
 
 test.describe("admin bootstrap state contract", () => {
+  test("관리자 허브는 auth/session 선조회 대신 protected bootstrap으로 first paint 프로필을 구성한다", () => {
+    const adminSource = readFileSync(path.resolve(__dirname, "../src/pages/admin.tsx"), "utf8")
+
+    expect(adminSource).toContain('"/member/api/v1/adm/members/bootstrap"')
+    expect(adminSource).toContain("readAdminProtectedBootstrap<AdminHubBootstrapPayload>(req, \"/member/api/v1/adm/members/bootstrap\", \"/admin\")")
+    expect(adminSource).toContain("baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)")
+    expect(adminSource).toContain('profileDescription = "bootstrap"')
+  })
+
   test("관리자 글 작업공간은 auth/session 선조회 대신 protected bootstrap으로 first paint를 구성한다", () => {
     const adminPageSource = readFileSync(path.resolve(__dirname, "../src/libs/server/adminPage.ts"), "utf8")
     const postsSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/AdminPostsWorkspacePage.tsx"), "utf8")

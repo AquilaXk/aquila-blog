@@ -2241,6 +2241,24 @@
         }
       }
     },
+    "/member/api/v1/adm/members/bootstrap" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-member-controller" ],
+        "operationId" : "bootstrap_2",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminHubBootstrapResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/" : {
       "get" : {
         "tags" : [ "HomeController" ],
@@ -4430,6 +4448,17 @@
           },
           "pageable" : {
             "$ref" : "#/components/schemas/PageableDto"
+          }
+        }
+      },
+      "AdminHubBootstrapResponse" : {
+        "type" : "object",
+        "properties" : {
+          "member" : {
+            "$ref" : "#/components/schemas/AuthSessionMemberDto"
+          },
+          "profile" : {
+            "$ref" : "#/components/schemas/MemberWithUsernameDto"
           }
         }
       }

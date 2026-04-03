@@ -1052,6 +1052,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/adm/members/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bootstrap_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1871,6 +1887,10 @@ export interface components {
         PageDtoMemberWithUsernameDto: {
             content?: components["schemas"]["MemberWithUsernameDto"][];
             pageable?: components["schemas"]["PageableDto"];
+        };
+        AdminHubBootstrapResponse: {
+            member?: components["schemas"]["AuthSessionMemberDto"];
+            profile?: components["schemas"]["MemberWithUsernameDto"];
         };
     };
     responses: never;
@@ -3519,6 +3539,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["MemberProfileWorkspaceResponseDto"];
+                };
+            };
+        };
+    };
+    bootstrap_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminHubBootstrapResponse"];
                 };
             };
         };

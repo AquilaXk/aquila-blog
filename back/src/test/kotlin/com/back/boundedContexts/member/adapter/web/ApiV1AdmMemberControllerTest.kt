@@ -33,6 +33,25 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
     @Autowired
     private lateinit var memberFacade: MemberApplicationService
 
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `관리자는 허브 bootstrap에서 현재 세션과 공개 프로필 snapshot을 함께 조회할 수 있다`() {
+        val admin = memberFacade.findByEmail("admin@test.com")!!
+
+        mvc
+            .get("/member/api/v1/adm/members/bootstrap")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.member.id") { value(admin.id) }
+                jsonPath("$.member.isAdmin") { value(true) }
+                jsonPath("$.member.nickname") { value(admin.nickname) }
+                jsonPath("$.profile.username") { value(admin.name) }
+                jsonPath("$.profile.name") { value(admin.name) }
+                jsonPath("$.profile.nickname") { value(admin.nickname) }
+                jsonPath("$.profile.blogTitle") { value(admin.blogTitle) }
+            }
+    }
+
     @Nested
     inner class UpdateProfileCard {
         @Test

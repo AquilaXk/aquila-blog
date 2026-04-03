@@ -851,6 +851,28 @@ const isTableSelectionActive = (editor?: TiptapEditor | null) =>
         editor.isActive("tableHeader"))
   )
 
+const TABLE_CONTEXT_BLOCKED_INSERT_IDS = new Set([
+  "heading-1",
+  "heading-2",
+  "heading-3",
+  "heading-4",
+  "bullet-list",
+  "ordered-list",
+  "checklist",
+  "quote",
+  "code-block",
+  "table",
+  "callout",
+  "toggle",
+  "bookmark",
+  "embed",
+  "file",
+  "formula",
+  "divider",
+  "image",
+  "mermaid",
+])
+
 const downgradeDisabledFeatureNodes = (node: BlockEditorDoc, enableMermaidBlocks: boolean): BlockEditorDoc => {
   if (!enableMermaidBlocks && node.type === "mermaidBlock") {
     const source = String(node.attrs?.source || "").trim()
@@ -2752,14 +2774,20 @@ const BlockEditorShell = ({
     [closeSlashMenu, editor, insertDocContent]
   )
 
+  const canInsertTopLevelBlockAtSelection = useCallback(() => {
+    const activeEditor = editorRef.current ?? editor
+    return Boolean(activeEditor && !isTableSelectionActive(activeEditor))
+  }, [editor])
+
   const insertMermaidBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     if (!enableMermaidBlocks) return
     insertBlocksAtCursor([createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")], true)
-  }, [enableMermaidBlocks, insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, enableMermaidBlocks, insertBlocksAtCursor])
 
   const insertCalloutBlock = useCallback(() => {
     const currentEditor = editorRef.current ?? editor
-    if (!currentEditor) return
+    if (!currentEditor || isTableSelectionActive(currentEditor)) return
 
     const selectionIndexBeforeInsert = getTopLevelBlockIndexFromSelection(currentEditor)
     insertDocContent(
@@ -2780,6 +2808,7 @@ const BlockEditorShell = ({
   }, [closeSlashMenu, editor, focusNearestInsertedCalloutBody, insertDocContent, isSelectionInEmptyParagraph, withTrailingParagraph])
 
   const insertToggleBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor(
       [
         createToggleNode({
@@ -2789,13 +2818,15 @@ const BlockEditorShell = ({
       ],
       true
     )
-  }, [insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertChecklistBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursorExact([createTaskListNode([{ checked: false, text: "할 일" }])], true)
-  }, [insertBlocksAtCursorExact])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursorExact])
 
   const insertBookmarkBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor(
       [
         createBookmarkNode({
@@ -2806,9 +2837,10 @@ const BlockEditorShell = ({
       ],
       true
     )
-  }, [insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertEmbedBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor(
       [
         createEmbedNode({
@@ -2819,9 +2851,10 @@ const BlockEditorShell = ({
       ],
       true
     )
-  }, [insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertFileBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor(
       [
         createFileBlockNode({
@@ -2832,11 +2865,12 @@ const BlockEditorShell = ({
       ],
       true
     )
-  }, [insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertFormulaBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor([createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" })], true)
-  }, [insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertInlineFormula = useCallback(() => {
     if (!editor) return
@@ -2850,7 +2884,7 @@ const BlockEditorShell = ({
   }, [editor])
 
   const insertTableBlock = useCallback(() => {
-    if (editor && isTableSelectionActive(editor)) return
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor(
       [
         createTableNode([
@@ -2860,13 +2894,14 @@ const BlockEditorShell = ({
       ],
       true
     )
-  }, [editor, insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const canInsertTable = !isTableSelectionActive(editor)
 
   const insertCodeBlock = useCallback(() => {
+    if (!canInsertTopLevelBlockAtSelection()) return
     insertBlocksAtCursor([createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")], true)
-  }, [insertBlocksAtCursor])
+  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertBlocksAtIndex = useCallback(
     (insertionIndex: number, blocks: NonNullable<BlockEditorDoc["content"]>, focusIndex = insertionIndex) => {
@@ -3322,7 +3357,7 @@ const BlockEditorShell = ({
         formula: "\\int_0^1 x^2 \\, dx",
       })
 
-    return [
+    const catalog: BlockInsertCatalogItem[] = [
       {
         id: "paragraph",
         label: "텍스트",
@@ -3596,10 +3631,19 @@ const BlockEditorShell = ({
           ]
         : []),
     ]
+
+    if (!isTableMode) return catalog
+
+    return catalog.map((item) => {
+      if (!TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(item.id)) return item
+      if (item.disabled) return item
+      return { ...item, disabled: true }
+    })
   }, [
     canInsertTable,
     enableMermaidBlocks,
     focusEditor,
+    isTableMode,
     insertBlocksAtCursor,
     insertBlocksAtCursorExact,
     insertBlocksAtIndex,
@@ -3734,6 +3778,7 @@ const BlockEditorShell = ({
   const executeSlashCatalogAction = useCallback(
     async (item: BlockInsertCatalogItem) => {
       if (!editor || item.disabled) return
+      if (isTableSelectionActive(editor) && TABLE_CONTEXT_BLOCKED_INSERT_IDS.has(item.id)) return
 
       const activeSlashRange = getActiveSlashRangeFromEditor(editor) ?? slashMenuState
       let handledByWholeParagraphReplacement = false
@@ -3795,6 +3840,9 @@ const BlockEditorShell = ({
     const selection = editor.state.selection
 
     if (!selection.empty || !editor.isFocused) {
+      return null
+    }
+    if (isTableSelectionActive(editor)) {
       return null
     }
 

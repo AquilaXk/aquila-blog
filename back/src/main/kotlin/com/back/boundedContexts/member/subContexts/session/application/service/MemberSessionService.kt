@@ -5,6 +5,7 @@ import com.back.boundedContexts.member.domain.shared.MemberPolicy
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
 import com.back.boundedContexts.member.subContexts.session.application.port.output.MemberSessionStorePort
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -14,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class MemberSessionService(
     private val memberSessionStorePort: MemberSessionStorePort,
+    @param:Value("\${custom.auth.session.touchMinIntervalSeconds:60}")
+    private val touchMinIntervalSeconds: Long,
 ) : MemberSessionUseCase {
     @Transactional
     override fun createSession(
@@ -55,7 +58,7 @@ class MemberSessionService(
 
     @Transactional
     override fun touchAuthenticated(memberSession: MemberSession) {
-        memberSession.touchAuthenticated()
+        memberSession.touchAuthenticatedIfDue(touchMinIntervalSeconds)
     }
 
     @Transactional

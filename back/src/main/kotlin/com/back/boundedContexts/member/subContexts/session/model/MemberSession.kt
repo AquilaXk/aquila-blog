@@ -46,6 +46,24 @@ class MemberSession(
         lastAuthenticatedAt = now
     }
 
+    fun touchAuthenticatedIfDue(
+        minIntervalSeconds: Long,
+        now: Instant = Instant.now(),
+    ): Boolean {
+        if (minIntervalSeconds <= 0) {
+            touchAuthenticated(now)
+            return true
+        }
+
+        val lastTouchedAt = lastAuthenticatedAt
+        if (lastTouchedAt != null && now.isBefore(lastTouchedAt.plusSeconds(minIntervalSeconds))) {
+            return false
+        }
+
+        touchAuthenticated(now)
+        return true
+    }
+
     fun applyPolicy(
         rememberLoginEnabled: Boolean,
         ipSecurityEnabled: Boolean,

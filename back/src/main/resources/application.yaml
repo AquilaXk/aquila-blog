@@ -208,6 +208,8 @@ custom:
   auth:
     cookie:
       apiKeyMaxAgeSeconds: ${CUSTOM__AUTH__COOKIE__API_KEY_MAX_AGE_SECONDS:604800}
+    session:
+      touchMinIntervalSeconds: ${CUSTOM__AUTH__SESSION__TOUCH_MIN_INTERVAL_SECONDS:60}
     login:
       maxAttempts: ${CUSTOM__AUTH__LOGIN__MAX_ATTEMPTS:5}
       windowSeconds: ${CUSTOM__AUTH__LOGIN__WINDOW_SECONDS:300}

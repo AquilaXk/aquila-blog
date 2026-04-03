@@ -10,6 +10,7 @@ import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import { serverApiFetch } from "src/libs/server/backend"
+import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { buildMonitoringItems, getMonitoringEnv } from "src/routes/Admin/adminMonitoring"
 
@@ -137,6 +138,11 @@ type AdminToolsInitialSnapshot = {
   seedPostId: string
 }
 
+type AdminToolsHealthSsrSnapshot = {
+  systemHealth: SystemHealthPayload
+  fetchedAt: string
+}
+
 type AdminToolsPageProps = AdminPageProps & {
   initialSnapshot: AdminToolsInitialSnapshot
 }
@@ -167,6 +173,8 @@ const EMPTY_INITIAL_SNAPSHOT: AdminToolsInitialSnapshot = {
 const ADMIN_TOOLS_MAIL_SNAPSHOT_COOKIE = "admin_tools_mail_snapshot_v1"
 const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_AGE_SECONDS = 60 * 30
 const ADMIN_TOOLS_MAIL_SNAPSHOT_MAX_STALE_MS = 1000 * 60 * 60 * 6
+const ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY = "admin-tools:system-health"
+const ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS = 10_000
 
 const readCookieValue = (req: IncomingMessage, key: string) => {
   const rawCookie = req.headers.cookie || ""
@@ -346,13 +354,23 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
   if (!("props" in baseResult.value)) return baseResult.value
   const baseProps = await baseResult.value.props
 
-  const fetchedAt = new Date().toISOString()
   const [systemHealthResult, mailSnapshot] = await Promise.all([
-    timed(() => readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")),
+    timed(() =>
+      readServerSnapshot<AdminToolsHealthSsrSnapshot>(ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY, ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS, async () => {
+        const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+        if (!systemHealth) return null
+        return {
+          systemHealth,
+          fetchedAt: new Date().toISOString(),
+        }
+      })
+    ),
     Promise.resolve(readMailSnapshotFromCookie(req)),
   ])
 
-  const systemHealth = systemHealthResult.ok ? systemHealthResult.value : null
+  const healthSnapshot = systemHealthResult.ok ? systemHealthResult.value.value : null
+  const systemHealth = healthSnapshot?.systemHealth ?? null
+  const fetchedAt = healthSnapshot?.fetchedAt ?? null
   const mailDiagnostics = mailSnapshot
 
   appendSsrDebugTiming(req, res, [
@@ -364,7 +382,7 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
     {
       name: "admin-tools-health",
       durationMs: systemHealthResult.durationMs,
-      description: systemHealth ? "ok" : "empty",
+      description: systemHealth ? (systemHealthResult.ok ? systemHealthResult.value.source : "ok") : "empty",
     },
     {
       name: "admin-tools-mail",
@@ -383,7 +401,7 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
       ...baseProps,
       initialSnapshot: {
         systemHealth,
-        systemHealthFetchedAt: systemHealth ? fetchedAt : null,
+        systemHealthFetchedAt: fetchedAt,
         mailDiagnostics,
         taskQueueDiagnostics: null,
         taskQueueCheckedAt: null,

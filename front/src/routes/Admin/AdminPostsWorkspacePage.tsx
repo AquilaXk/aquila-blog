@@ -11,6 +11,7 @@ import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
 import { serverApiFetch } from "src/libs/server/backend"
+import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import { isServerTempDraftPost } from "./editorTempDraft"
 
@@ -108,6 +109,11 @@ type AdminPostsWorkspaceInitialSnapshot = {
   listState: ListState | null
 }
 
+type AdminPostsListSsrSnapshot = {
+  listSource: PageDto<AdminPostListItem>
+  fetchedAt: string
+}
+
 type AdminPostsWorkspacePageProps = AdminPageProps & {
   initialSnapshot: AdminPostsWorkspaceInitialSnapshot
 }
@@ -123,6 +129,8 @@ const EMPTY_INITIAL_SNAPSHOT: AdminPostsWorkspaceInitialSnapshot = {
   recentFetchedAt: null,
   listState: null,
 }
+const ADMIN_POSTS_SSR_LIST_CACHE_KEY = `admin-posts:list:${DEFAULT_SORT}:page=1:size=${DEFAULT_PAGE_SIZE}`
+const ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS = 5_000
 
 const toEditorRoute = (query?: Record<string, string>) => {
   if (query?.postId) {
@@ -240,19 +248,27 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
   if ("redirect" in baseResult.value) return baseResult.value
   if (!("props" in baseResult.value)) return baseResult.value
   const baseProps = await baseResult.value.props
-  const fetchedAt = new Date().toISOString()
   const listSourceResult = await timed(() =>
-    readJsonIfOk<PageDto<AdminPostListItem>>(
-      context.req,
-      buildListEndpoint("active", {
-        page: DEFAULT_PAGE,
-        pageSize: DEFAULT_PAGE_SIZE,
-        kw: "",
-        sort: DEFAULT_SORT,
-      })
-    )
+    readServerSnapshot<AdminPostsListSsrSnapshot>(ADMIN_POSTS_SSR_LIST_CACHE_KEY, ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS, async () => {
+      const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
+        context.req,
+        buildListEndpoint("active", {
+          page: DEFAULT_PAGE,
+          pageSize: DEFAULT_PAGE_SIZE,
+          kw: "",
+          sort: DEFAULT_SORT,
+        })
+      )
+      if (!listSource) return null
+      return {
+        listSource,
+        fetchedAt: new Date().toISOString(),
+      }
+    })
   )
-  const listSource = listSourceResult.ok ? listSourceResult.value : null
+  const listSnapshot = listSourceResult.ok ? listSourceResult.value.value : null
+  const listSource = listSnapshot?.listSource ?? null
+  const fetchedAt = listSnapshot?.fetchedAt ?? null
   const recentPosts = [...(listSource?.content || [])]
     .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
     .slice(0, 5)
@@ -261,7 +277,7 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
       ? {
           rows: listSource.content || [],
           total: listSource.pageable?.totalElements ?? listSource.content?.length ?? 0,
-          loadedAt: fetchedAt,
+          loadedAt: fetchedAt || new Date().toISOString(),
         }
       : null
 
@@ -274,7 +290,7 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
     {
       name: "admin-posts-list",
       durationMs: listSourceResult.durationMs,
-      description: listState ? "ok" : "empty",
+      description: listState ? (listSourceResult.ok ? listSourceResult.value.source : "ok") : "empty",
     },
     {
       name: "admin-posts-ssr-total",
@@ -288,7 +304,7 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
       ...baseProps,
       initialSnapshot: {
         recentPosts,
-        recentFetchedAt: listSource ? fetchedAt : null,
+        recentFetchedAt: fetchedAt,
         listState,
       },
     },

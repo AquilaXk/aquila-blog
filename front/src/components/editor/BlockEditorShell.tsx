@@ -842,14 +842,33 @@ const resolveDocPosSafe = (editor: TiptapEditor, pos: number) => {
   }
 }
 
-const isTableSelectionActive = (editor?: TiptapEditor | null) =>
-  Boolean(
-    editor &&
-      (editor.isActive("table") ||
-        editor.isActive("tableRow") ||
-        editor.isActive("tableCell") ||
-        editor.isActive("tableHeader"))
-  )
+const TABLE_CONTEXT_NODE_NAMES = new Set(["table", "tableRow", "tableCell", "tableHeader"])
+
+const hasTableContextInResolvedPos = (resolvedPos: { depth: number; node: (depth: number) => { type: { name: string } } }) => {
+  for (let depth = resolvedPos.depth; depth >= 0; depth -= 1) {
+    if (TABLE_CONTEXT_NODE_NAMES.has(resolvedPos.node(depth).type.name)) {
+      return true
+    }
+  }
+  return false
+}
+
+const isTableSelectionActive = (editor?: TiptapEditor | null) => {
+  if (!editor) return false
+  const { selection } = editor.state
+  if (selection instanceof CellSelection) return true
+  if (selection instanceof NodeSelection && selection.node.type.name === "table") return true
+  if (
+    editor.isActive("table") ||
+    editor.isActive("tableRow") ||
+    editor.isActive("tableCell") ||
+    editor.isActive("tableHeader")
+  ) {
+    return true
+  }
+
+  return hasTableContextInResolvedPos(selection.$from) || hasTableContextInResolvedPos(selection.$to)
+}
 
 const TABLE_CONTEXT_BLOCKED_INSERT_IDS = new Set([
   "heading-1",
@@ -872,6 +891,11 @@ const TABLE_CONTEXT_BLOCKED_INSERT_IDS = new Set([
   "image",
   "mermaid",
 ])
+
+const createDefaultTableRows = (): [string, string][] => [
+  ["", ""],
+  ["", ""],
+]
 
 const downgradeDisabledFeatureNodes = (node: BlockEditorDoc, enableMermaidBlocks: boolean): BlockEditorDoc => {
   if (!enableMermaidBlocks && node.type === "mermaidBlock") {
@@ -1957,17 +1981,12 @@ const BlockEditorShell = ({
         return { blocks: [createBlockquoteNode("")], focusBlockIndex: 0 }
       case "code-block":
         return {
-          blocks: [createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")],
+          blocks: [createCodeBlockNode(getPreferredCodeLanguage(), "")],
           focusBlockIndex: 0,
         }
       case "table":
         return {
-          blocks: [
-            createTableNode([
-              ["제목", "값"],
-              ["항목", "내용"],
-            ]),
-          ],
+          blocks: [createTableNode(createDefaultTableRows())],
           focusBlockIndex: 0,
         }
       case "callout":
@@ -1985,8 +2004,8 @@ const BlockEditorShell = ({
         return {
           blocks: [
             createToggleNode({
-              title: "더 보기",
-              body: "토글 내부 본문을 입력하세요.",
+              title: "",
+              body: "",
             }),
           ],
           focusBlockIndex: 0,
@@ -1995,9 +2014,9 @@ const BlockEditorShell = ({
         return {
           blocks: [
             createBookmarkNode({
-              url: "https://example.com",
-              title: "링크 제목",
-              description: "북마크 설명",
+              url: "",
+              title: "",
+              description: "",
             }),
           ],
           focusBlockIndex: 0,
@@ -2006,16 +2025,16 @@ const BlockEditorShell = ({
         return {
           blocks: [
             createEmbedNode({
-              url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-              title: "임베드 제목",
-              caption: "임베드 캡션",
+              url: "",
+              title: "",
+              caption: "",
             }),
           ],
           focusBlockIndex: 0,
         }
       case "formula":
         return {
-          blocks: [createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" })],
+          blocks: [createFormulaNode({ formula: "" })],
           focusBlockIndex: 0,
         }
       case "divider":
@@ -2026,7 +2045,7 @@ const BlockEditorShell = ({
       case "mermaid":
         if (!enableMermaidBlocks) return null
         return {
-          blocks: [createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")],
+          blocks: [createMermaidNode("")],
           focusBlockIndex: 0,
         }
       default:
@@ -2903,7 +2922,7 @@ const BlockEditorShell = ({
   const insertMermaidBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
     if (!enableMermaidBlocks) return
-    insertBlocksAtCursor([createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")], true)
+    insertBlocksAtCursor([createMermaidNode("")], true)
   }, [canInsertTopLevelBlockAtSelection, enableMermaidBlocks, insertBlocksAtCursor])
 
   const insertCalloutBlock = useCallback(() => {
@@ -2933,8 +2952,8 @@ const BlockEditorShell = ({
     insertBlocksAtCursor(
       [
         createToggleNode({
-          title: "더 보기",
-          body: "토글 내부 본문을 입력하세요.",
+          title: "",
+          body: "",
         }),
       ],
       true
@@ -2943,7 +2962,7 @@ const BlockEditorShell = ({
 
   const insertChecklistBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursorExact([createTaskListNode([{ checked: false, text: "할 일" }])], true)
+    insertBlocksAtCursorExact([createTaskListNode([{ checked: false, text: "" }])], true)
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursorExact])
 
   const insertBookmarkBlock = useCallback(() => {
@@ -2951,9 +2970,9 @@ const BlockEditorShell = ({
     insertBlocksAtCursor(
       [
         createBookmarkNode({
-          url: "https://example.com",
-          title: "링크 제목",
-          description: "북마크 설명",
+          url: "",
+          title: "",
+          description: "",
         }),
       ],
       true
@@ -2965,9 +2984,9 @@ const BlockEditorShell = ({
     insertBlocksAtCursor(
       [
         createEmbedNode({
-          url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-          title: "임베드 제목",
-          caption: "임베드 캡션",
+          url: "",
+          title: "",
+          caption: "",
         }),
       ],
       true
@@ -2979,9 +2998,9 @@ const BlockEditorShell = ({
     insertBlocksAtCursor(
       [
         createFileBlockNode({
-          url: "https://example.com/files/spec.pdf",
-          name: "spec.pdf",
-          description: "첨부 설명",
+          url: "",
+          name: "",
+          description: "",
         }),
       ],
       true
@@ -2990,7 +3009,7 @@ const BlockEditorShell = ({
 
   const insertFormulaBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursor([createFormulaNode({ formula: "\\int_0^1 x^2 \\, dx" })], true)
+    insertBlocksAtCursor([createFormulaNode({ formula: "" })], true)
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertInlineFormula = useCallback(() => {
@@ -3006,22 +3025,14 @@ const BlockEditorShell = ({
 
   const insertTableBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursor(
-      [
-        createTableNode([
-          ["제목", "값"],
-          ["항목", "내용"],
-        ]),
-      ],
-      true
-    )
+    insertBlocksAtCursor([createTableNode(createDefaultTableRows())], true)
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const canInsertTable = !isTableSelectionActive(editor)
 
   const insertCodeBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursor([createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")], true)
+    insertBlocksAtCursor([createCodeBlockNode(getPreferredCodeLanguage(), "")], true)
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const insertBlocksAtIndex = useCallback(
@@ -3333,7 +3344,7 @@ const BlockEditorShell = ({
           currentEditor.state.doc.childCount,
           withTrailingParagraph([
             createFormulaNode({
-              formula: "\\int_0^1 x^2 \\, dx",
+              formula: "",
             }),
           ])
         )
@@ -3430,11 +3441,7 @@ const BlockEditorShell = ({
   }
 
   const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>(() => {
-    const createTableTemplate = () =>
-      createTableNode([
-        ["제목", "값"],
-        ["항목", "내용"],
-      ])
+    const createTableTemplate = () => createTableNode(createDefaultTableRows())
 
     const createCalloutTemplate = () =>
       createCalloutNode({
@@ -3445,37 +3452,37 @@ const BlockEditorShell = ({
 
     const createToggleTemplate = () =>
       createToggleNode({
-        title: "더 보기",
-        body: "토글 내부 본문을 입력하세요.",
+        title: "",
+        body: "",
       })
 
     const createChecklistTemplate = () =>
-      createTaskListNode([{ checked: false, text: "할 일" }])
+      createTaskListNode([{ checked: false, text: "" }])
 
     const createBookmarkTemplate = () =>
       createBookmarkNode({
-        url: "https://example.com",
-        title: "링크 제목",
-        description: "북마크 설명",
+        url: "",
+        title: "",
+        description: "",
       })
 
     const createEmbedTemplate = () =>
       createEmbedNode({
-        url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        title: "임베드 제목",
-        caption: "임베드 캡션",
+        url: "",
+        title: "",
+        caption: "",
       })
 
     const createFileTemplate = () =>
       createFileBlockNode({
-        url: "https://example.com/files/spec.pdf",
-        name: "spec.pdf",
-        description: "첨부 설명",
+        url: "",
+        name: "",
+        description: "",
       })
 
     const createFormulaTemplate = () =>
       createFormulaNode({
-        formula: "\\int_0^1 x^2 \\, dx",
+        formula: "",
       })
 
     const catalog: BlockInsertCatalogItem[] = [
@@ -3498,9 +3505,9 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h1", "heading", "title", "제목"],
         slashHint: "#",
-        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(1, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(1, "")], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(1, "제목")])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(1, "")])),
       },
       {
         id: "heading-2",
@@ -3509,9 +3516,9 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h2", "heading", "section", "소제목"],
         slashHint: "##",
-        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(2, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(2, "")], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(2, "제목")])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(2, "")])),
       },
       {
         id: "heading-3",
@@ -3520,9 +3527,9 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h3", "heading", "subsection", "소제목"],
         slashHint: "###",
-        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(3, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(3, "")], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(3, "제목")])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(3, "")])),
       },
       {
         id: "heading-4",
@@ -3531,9 +3538,9 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["h4", "heading", "caption", "제목"],
         slashHint: "####",
-        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(4, "제목")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createHeadingNode(4, "")], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(4, "제목")])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createHeadingNode(4, "")])),
       },
       {
         id: "bullet-list",
@@ -3543,9 +3550,9 @@ const BlockEditorShell = ({
         keywords: ["list", "bullet", "목록", "불릿"],
         slashHint: "-",
         recommended: true,
-        insertAtCursor: () => insertBlocksAtCursorExact([createBulletListNode(["항목"])], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createBulletListNode([""])], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBulletListNode(["항목"])])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBulletListNode([""])])),
       },
       {
         id: "ordered-list",
@@ -3555,9 +3562,9 @@ const BlockEditorShell = ({
         keywords: ["ordered", "numbered", "list", "번호"],
         slashHint: "1.",
         toolbarMore: true,
-        insertAtCursor: () => insertBlocksAtCursorExact([createOrderedListNode(["항목"])], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createOrderedListNode([""])], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createOrderedListNode(["항목"])])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createOrderedListNode([""])])),
       },
       {
         id: "checklist",
@@ -3580,9 +3587,9 @@ const BlockEditorShell = ({
         section: "basic",
         keywords: ["quote", "blockquote", "인용"],
         slashHint: ">",
-        insertAtCursor: () => insertBlocksAtCursorExact([createBlockquoteNode("인용문")], true),
+        insertAtCursor: () => insertBlocksAtCursorExact([createBlockquoteNode("")], true),
         insertAtBlock: (blockIndex) =>
-          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBlockquoteNode("인용문")])),
+          insertBlocksAtIndex(blockIndex + 1, withTrailingParagraph([createBlockquoteNode("")])),
       },
       {
         id: "code-block",
@@ -3598,7 +3605,7 @@ const BlockEditorShell = ({
         insertAtBlock: (blockIndex) =>
           insertBlocksAtIndex(
             blockIndex + 1,
-            withTrailingParagraph([createCodeBlockNode(getPreferredCodeLanguage(), "코드를 입력하세요.")])
+            withTrailingParagraph([createCodeBlockNode(getPreferredCodeLanguage(), "")])
           ),
       },
       {
@@ -3746,7 +3753,7 @@ const BlockEditorShell = ({
               insertAtBlock: (blockIndex: number) =>
                 insertBlocksAtIndex(
                   blockIndex + 1,
-                  withTrailingParagraph([createMermaidNode("flowchart TD\n  A[시작] --> B[처리]")])
+                  withTrailingParagraph([createMermaidNode("")])
                 ),
             },
           ]

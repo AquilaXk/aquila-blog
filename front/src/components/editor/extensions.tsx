@@ -884,7 +884,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
 }
 
 const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
-  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || "제목"))
+  const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
   const [draftBody, setDraftBody] = useState(String(node.attrs?.body || ""))
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
@@ -893,7 +893,7 @@ const ToggleBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =>
   useAutosizeTextarea(bodyRef, draftBody, `${selected}-${isPreviewOpen}`)
 
   useEffect(() => {
-    setDraftTitle(String(node.attrs?.title || "제목"))
+    setDraftTitle(String(node.attrs?.title || ""))
     setDraftBody(String(node.attrs?.body || ""))
   }, [node.attrs?.title, node.attrs?.body])
 
@@ -1594,6 +1594,7 @@ const buildStyledTableCellAttributes = () => ({
 })
 
 export const EditorTableCell = TableCell.extend({
+  content: "paragraph+",
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -1603,6 +1604,7 @@ export const EditorTableCell = TableCell.extend({
 })
 
 export const EditorTableHeader = TableHeader.extend({
+  content: "paragraph+",
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -1722,7 +1724,7 @@ export const ToggleBlock = Node.create({
   addAttributes() {
     return {
       title: {
-        default: "더 보기",
+        default: "",
       },
       body: {
         default: "",

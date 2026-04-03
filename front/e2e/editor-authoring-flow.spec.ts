@@ -188,12 +188,52 @@ test.describe("block editor authoring flow", () => {
     const markdown = await markdownOutput.innerText()
 
     const firstLineIndex = markdown.indexOf("첫 줄")
-    const quoteIndex = markdown.indexOf("> 인용문")
+    const quoteLineMatch = markdown.match(/^>.*$/m)
+    const quoteIndex = quoteLineMatch ? markdown.indexOf(quoteLineMatch[0]) : -1
     const secondLineIndex = markdown.indexOf("둘째 줄")
 
     expect(firstLineIndex).toBeGreaterThanOrEqual(0)
     expect(quoteIndex).toBeGreaterThan(firstLineIndex)
     expect(secondLineIndex).toBeGreaterThan(quoteIndex)
+  })
+
+  test("테이블 셀 내부에서는 구조 블록 삽입이 차단되어 중첩 테이블이 생기지 않는다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블" }).click()
+
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+
+    const tableInsertButton = page.getByRole("button", { name: "테이블" }).first()
+    await expect(tableInsertButton).toBeDisabled()
+
+    await page.keyboard.type("/테이블")
+    await page.keyboard.press("Enter")
+
+    await expect(page.locator(".aq-block-editor__content table")).toHaveCount(1)
+    await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
+  })
+
+  test("새 블록 템플릿은 샘플 문구 없이 빈 입력 상태로 생성된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await editor.click()
+
+    await page.getByRole("button", { name: "체크리스트", exact: true }).click()
+    await page.getByRole("button", { name: "코드", exact: true }).click()
+    await page.getByRole("button", { name: "토글", exact: true }).click()
+    await page.getByRole("button", { name: "테이블", exact: true }).click()
+
+    await expect(markdownOutput).not.toContainText("| 제목 | 값 |")
+    await expect(markdownOutput).not.toContainText("| 항목 | 내용 |")
+    await expect(markdownOutput).not.toContainText("코드를 입력하세요")
+    await expect(markdownOutput).not.toContainText("- [ ] 할 일")
+    await expect(markdownOutput).not.toContainText(":::toggle 더 보기")
   })
 
   test("콜아웃 본문은 단일 리치 편집 surface로 동작하고 split preview를 노출하지 않는다", async ({ page }) => {

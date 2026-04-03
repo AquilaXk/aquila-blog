@@ -1,7 +1,7 @@
 import { IncomingMessage } from "http"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import { normalizeNextPath, toLoginPath } from "src/libs/router"
-import { serverApiFetch } from "./backend"
+import { fetchServerAdminSession } from "./authSession"
 
 type AdminGuardResult =
   | { ok: true; member: AuthMember }
@@ -22,10 +22,10 @@ const shouldBypassAdminGuardForQa = () => {
 
 export const guardAdminRequest = async (req: IncomingMessage): Promise<AdminGuardResult> => {
   const requestedPath = normalizeNextPath(req.url, "/admin")
-  let response: Response
+  let member: AuthMember | null | undefined
 
   try {
-    response = await serverApiFetch(req, "/member/api/v1/auth/me")
+    member = await fetchServerAdminSession(req)
   } catch {
     // Playwright/QA의 SSR backend 단절 모드(BACKEND_INTERNAL_URL=127.0.0.1:1)에서는
     // admin route snapshot 검증을 위해 가드 우회를 허용한다.
@@ -37,24 +37,19 @@ export const guardAdminRequest = async (req: IncomingMessage): Promise<AdminGuar
     return { ok: false, destination: toLoginPath(requestedPath, "/admin") }
   }
 
-  if (response.status === 401) {
-    if (shouldBypassAdminGuardForQa()) {
-      return { ok: true, member: QA_ADMIN_MEMBER }
-    }
-    return { ok: false, destination: toLoginPath(requestedPath, "/admin") }
-  }
-  if (response.status === 403) {
-    return { ok: false, destination: "/" }
-  }
-
-  if (!response.ok) {
+  if (member === null) {
     if (shouldBypassAdminGuardForQa()) {
       return { ok: true, member: QA_ADMIN_MEMBER }
     }
     return { ok: false, destination: toLoginPath(requestedPath, "/admin") }
   }
 
-  const member = (await response.json()) as AuthMember
+  if (!member) {
+    if (shouldBypassAdminGuardForQa()) {
+      return { ok: true, member: QA_ADMIN_MEMBER }
+    }
+    return { ok: false, destination: toLoginPath(requestedPath, "/admin") }
+  }
 
   if (!member?.isAdmin) {
     return { ok: false, destination: "/" }

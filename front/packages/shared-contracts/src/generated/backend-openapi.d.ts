@@ -939,6 +939,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/member/api/v1/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["session_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/member/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -1803,6 +1819,13 @@ export interface components {
             items?: components["schemas"]["MemberNotificationDto"][];
             /** Format: int32 */
             unreadCount?: number;
+        };
+        AuthSessionMemberDto: {
+            /** Format: int64 */
+            id?: number;
+            username?: string;
+            nickname?: string;
+            isAdmin?: boolean;
         };
         PageDtoMemberWithUsernameDto: {
             content?: components["schemas"]["MemberWithUsernameDto"][];
@@ -3304,6 +3327,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["MemberWithUsernameDto"];
+                };
+            };
+        };
+    };
+    session_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AuthSessionMemberDto"];
                 };
             };
         };

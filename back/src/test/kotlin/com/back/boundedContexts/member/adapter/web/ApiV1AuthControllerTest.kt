@@ -465,6 +465,24 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `세션 정보 조회는 apiKey 쿠키가 있으면 경량 회원 정보를 반환한다`() {
+            val member = memberFacade.findByLoginId("user1")!!
+
+            mvc
+                .get("/member/api/v1/auth/session") {
+                    cookie(Cookie("apiKey", member.apiKey))
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AuthController::class.java))
+                    match(handler().methodName("session"))
+                    jsonPath("$.id") { value(member.id) }
+                    jsonPath("$.isAdmin") { value(member.isAdmin) }
+                    jsonPath("$.username") { value(member.name) }
+                    jsonPath("$.nickname") { value(member.nickname) }
+                }
+        }
+
+        @Test
         fun `내 정보 조회는 apiKey 쿠키가 없으면 401을 반환한다`() {
             mvc
                 .get("/member/api/v1/auth/me")

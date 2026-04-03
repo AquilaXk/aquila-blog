@@ -187,6 +187,50 @@ class ApiV1AuthControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `로그인 직후 발급한 인증 쿠키로 세션 정보 조회가 즉시 가능하다`() {
+            memberFacade.join(
+                username = "session-snapshot-user",
+                password = "Abcd1234!",
+                nickname = "세션스냅샷",
+                profileImgUrl = null,
+                email = "session-snapshot-user@example.com",
+            )
+
+            val loginResult =
+                mvc
+                    .post("/member/api/v1/auth/login") {
+                        contentType = MediaType.APPLICATION_JSON
+                        content =
+                            """
+                            {
+                                "email": "session-snapshot-user@example.com",
+                                "password": "Abcd1234!"
+                            }
+                            """.trimIndent()
+                    }.andExpect {
+                        status { isOk() }
+                    }.andReturn()
+
+            val issuedCookies =
+                loginResult.response.cookies.filter {
+                    it.name in setOf("apiKey", "accessToken", "sessionKey") && it.value.isNotBlank()
+                }
+
+            assertThat(issuedCookies.map { it.name }).contains("apiKey", "accessToken", "sessionKey")
+
+            mvc
+                .get("/member/api/v1/auth/session") {
+                    issuedCookies.forEach { cookie(it) }
+                }.andExpect {
+                    status { isOk() }
+                    match(handler().handlerType(ApiV1AuthController::class.java))
+                    match(handler().methodName("session"))
+                    jsonPath("$.username") { value("세션스냅샷") }
+                    jsonPath("$.nickname") { value("세션스냅샷") }
+                }
+        }
+
+        @Test
         fun `동일 계정 재로그인 후에도 기존 apiKey 세션은 계속 유효하다`() {
             val member =
                 memberFacade.join(

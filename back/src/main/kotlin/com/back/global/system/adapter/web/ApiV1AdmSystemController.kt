@@ -11,6 +11,7 @@ import com.back.global.security.application.AuthSecurityEventService
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayResult
 import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskQueueDiagnostics
@@ -18,12 +19,9 @@ import com.back.global.task.application.TaskQueueDiagnosticsService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
-import org.springframework.beans.factory.ObjectProvider
-import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.GetMapping
@@ -33,8 +31,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
-import java.lang.management.ManagementFactory
-import java.time.Instant
 
 /**
  * ApiV1AdmSystemController는 글로벌 운영 API 요청을 처리하는 웹 어댑터입니다.
@@ -43,8 +39,6 @@ import java.time.Instant
 @RestController
 @RequestMapping("/system/api/v1/adm")
 class ApiV1AdmSystemController(
-    private val jdbcTemplate: JdbcTemplate,
-    private val stringRedisTemplateProvider: ObjectProvider<StringRedisTemplate>,
     private val authSecurityEventService: AuthSecurityEventService,
     private val signupMailDiagnosticsService: SignupMailDiagnosticsService,
     private val memberNotificationSseService: MemberNotificationSseService,
@@ -53,6 +47,7 @@ class ApiV1AdmSystemController(
     private val uploadedFileRetentionService: UploadedFileRetentionService,
     private val postKeywordSearchPipelineService: PostKeywordSearchPipelineService,
     private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
+    private val adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService,
 ) {
     data class HealthChecks(
         val db: String,
@@ -104,31 +99,14 @@ class ApiV1AdmSystemController(
      */
     @GetMapping("/health")
     @Transactional(readOnly = true)
-    fun health(): HealthResBody {
-        val db = checkDb()
-        val redis = checkRedis()
-        val signupMail = signupMailDiagnosticsService.diagnose(checkConnection = false).status
-        val status =
-            when {
-                db != "UP" -> "DOWN"
-                redis == "DOWN" -> "DEGRADED"
-                signupMail in setOf("MISCONFIGURED", "UNAVAILABLE", "CONNECTION_FAILED", "QUEUE_LOCKED") -> "DEGRADED"
-                else -> "UP"
-            }
-
-        return HealthResBody(
-            status = status,
-            serverTime = Instant.now().toString(),
-            uptimeMs = ManagementFactory.getRuntimeMXBean().uptime,
-            version = this::class.java.`package`?.implementationVersion ?: "dev",
-            checks =
-                HealthChecks(
-                    db = db,
-                    redis = redis,
-                    signupMail = signupMail,
-                ),
-        )
-    }
+    fun health(
+        @RequestParam(defaultValue = "false") fresh: Boolean,
+    ): HealthResBody =
+        if (fresh) {
+            adminSystemHealthSnapshotService.getFreshHealthSummary()
+        } else {
+            adminSystemHealthSnapshotService.getHealthSummary()
+        }
 
     @GetMapping("/mail/signup")
     @Transactional(readOnly = true)
@@ -240,28 +218,5 @@ class ApiV1AdmSystemController(
             "회원가입 테스트 메일을 전송했습니다.",
             mapOf("email" to reqBody.email.trim()),
         )
-    }
-
-    private fun checkDb(): String =
-        try {
-            val result = jdbcTemplate.queryForObject("SELECT 1", Int::class.java)
-            if (result == 1) "UP" else "DOWN"
-        } catch (_: Exception) {
-            "DOWN"
-        }
-
-    /**
-     * 정책 조건을 검증해 처리 가능 여부를 판정합니다.
-     * 어댑터 계층에서 외부 시스템 연동 오류를 캡슐화해 상위 계층 영향을 최소화합니다.
-     */
-    private fun checkRedis(): String {
-        val redisTemplate = stringRedisTemplateProvider.getIfAvailable() ?: return "DISABLED"
-
-        return try {
-            val pong = redisTemplate.execute { connection -> connection.ping() }
-            if (pong.equals("PONG", ignoreCase = true)) "UP" else "DOWN"
-        } catch (_: Exception) {
-            "DOWN"
-        }
     }
 }

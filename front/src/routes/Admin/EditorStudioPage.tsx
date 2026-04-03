@@ -1427,6 +1427,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   const [profileBioInput, setProfileBioInput] = useState(initialMember.profileBio || "")
   const [profileImageFileName, setProfileImageFileName] = useState("")
   const profileImageFileInputRef = useRef<HTMLInputElement>(null)
+  const isDedicatedEditorRoute = router.pathname.startsWith("/editor")
+  const isDedicatedNewEditorRoute = isDedicatedEditorRoute && router.pathname === EDITOR_NEW_ROUTE_PATH
+  const [isNewEditorBootstrapPending, setIsNewEditorBootstrapPending] = useState(isDedicatedNewEditorRoute)
   const [adminPostRows, setAdminPostRows] = useState<AdminPostListItem[]>([])
   const [adminPostTotal, setAdminPostTotal] = useState<number>(0)
   const [modifiedSortOrder, setModifiedSortOrder] = useState<"desc" | "asc">("desc")
@@ -2478,6 +2481,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       }
       const response = await tempPostRequestRef.current
       const tempPost = response.data
+      if (options?.redirectToEditor && tempPost.id) {
+        const query = new URLSearchParams()
+        if (options.source) query.set("source", options.source)
+        if (options.returnTo) query.set("returnTo", options.returnTo)
+        const destination = query.size > 0 ? `${toEditorPostRoute(tempPost.id)}?${query.toString()}` : toEditorPostRoute(tempPost.id)
+        await replaceRoute(router, destination)
+        return
+      }
       const rawSnapshot = resolveEditorMetaSnapshot(tempPost.content ?? "", tempPost.contentHtml)
       const shouldMaskTempTitle = isServerTempDraftPost(tempPost)
       const shouldMaskTempPlaceholder = isBlankServerTempDraft(tempPost, rawSnapshot)
@@ -2513,17 +2524,11 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         setMobileComposeStep("edit")
       }
       setResult(pretty(response as unknown as JsonValue))
-      if (options?.redirectToEditor && tempPost.id) {
-        const query = new URLSearchParams()
-        if (options.source) query.set("source", options.source)
-        if (options.returnTo) query.set("returnTo", options.returnTo)
-        const destination = query.size > 0 ? `${toEditorPostRoute(tempPost.id)}?${query.toString()}` : toEditorPostRoute(tempPost.id)
-        await replaceRoute(router, destination)
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setPublishStatus({ tone: "error", text: `새 글 불러오기 실패: ${message}` }, "page")
       setResult(pretty({ error: message }))
+      setIsNewEditorBootstrapPending(false)
     } finally {
       setLoadingKey("")
     }
@@ -2974,7 +2979,6 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     }
   }, [loadAdminPosts, refreshPublicPostReadViews, softDeleteUndoState])
 
-  const isDedicatedEditorRoute = router.pathname.startsWith("/editor")
   const activeEditorRoute = useMemo(() => {
     if (postId.trim()) return toEditorPostRoute(postId.trim())
     return EDITOR_NEW_ROUTE_PATH
@@ -3305,6 +3309,18 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     delete nextQuery.source
     void replaceShallowRoutePreservingScroll(router, { query: nextQuery })
   }, [restoreLocalDraft, router])
+
+  useEffect(() => {
+    if (!isDedicatedNewEditorRoute) {
+      autoCreatedTempDraftRef.current = false
+      setIsNewEditorBootstrapPending(false)
+      return
+    }
+
+    if (!postId.trim()) {
+      setIsNewEditorBootstrapPending(true)
+    }
+  }, [isDedicatedNewEditorRoute, postId])
 
   useEffect(() => {
     if (!router.isReady || !isDedicatedEditorRoute || !sessionMember?.isAdmin) return
@@ -4024,10 +4040,9 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ]
   )
   const shouldShowEditorLoadingState =
-    isDedicatedEditorRoute &&
-    router.pathname === EDITOR_NEW_ROUTE_PATH &&
+    isDedicatedNewEditorRoute &&
     !postId.trim() &&
-    loadingKey === "postTemp"
+    (isNewEditorBootstrapPending || loadingKey === "postTemp")
   const shouldShowResultPanel = Boolean(loadingKey || result)
   const handleExitDedicatedEditor = useCallback(() => {
     void pushRoute(router, dedicatedEditorReturnRoute)

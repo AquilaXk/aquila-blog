@@ -174,6 +174,17 @@ test.describe("editor studio state", () => {
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 
+  test("/editor/new는 temp draft bootstrap이 끝날 때까지 loading state를 먼저 유지한다", () => {
+    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+
+    expect(editorStudioSource).toContain("const isDedicatedNewEditorRoute = isDedicatedEditorRoute && router.pathname === EDITOR_NEW_ROUTE_PATH")
+    expect(editorStudioSource).toContain("const [isNewEditorBootstrapPending, setIsNewEditorBootstrapPending] = useState(isDedicatedNewEditorRoute)")
+    expect(editorStudioSource).toContain("if (options?.redirectToEditor && tempPost.id) {")
+    expect(editorStudioSource).toContain("await replaceRoute(router, destination)")
+    expect(editorStudioSource).toContain("setIsNewEditorBootstrapPending(true)")
+    expect(editorStudioSource).toContain("(isNewEditorBootstrapPending || loadingKey === \"postTemp\")")
+  })
+
   test("썸네일 편집 패널은 클립보드 이미지 붙여넣기 업로드 계약을 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
 

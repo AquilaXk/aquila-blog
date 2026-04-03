@@ -64,7 +64,6 @@ class MemberSessionService(
     @Cacheable(
         cacheNames = [MemberSessionCacheNames.ACTIVE],
         key = "'session:' + #sessionKey",
-        sync = true,
         unless = "#result == null",
     )
     @Transactional(readOnly = true)
@@ -76,7 +75,6 @@ class MemberSessionService(
     @Cacheable(
         cacheNames = [MemberSessionCacheNames.ACTIVE],
         key = "'member:' + #memberId + ':session:' + #sessionKey",
-        sync = true,
         unless = "#result == null",
     )
     @Transactional(readOnly = true)

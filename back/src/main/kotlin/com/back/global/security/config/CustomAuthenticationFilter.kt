@@ -17,6 +17,7 @@ import com.back.global.web.application.Rq
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -26,6 +27,7 @@ import org.springframework.security.core.userdetails.UserDetails
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import tools.jackson.databind.ObjectMapper
+import java.time.Instant
 import java.util.Locale
 
 /**
@@ -44,6 +46,8 @@ class CustomAuthenticationFilter(
     private val publicApiRequestMatcher: PublicApiRequestMatcher,
     private val apiCorsPolicy: ApiCorsPolicy,
     private val rq: Rq,
+    @param:Value("\${custom.auth.session.freshLookupGraceSeconds:15}")
+    private val freshLookupGraceSeconds: Long,
 ) : OncePerRequestFilter() {
     private val log = org.slf4j.LoggerFactory.getLogger(CustomAuthenticationFilter::class.java)
     private val filteredPrefixes = listOf("/member/api/", "/post/api/", "/system/api/", "/ws/", "/sse/")
@@ -132,7 +136,7 @@ class CustomAuthenticationFilter(
             if (shouldPreferApiKeyAuthorityOnWrite(request, apiKey)) {
                 val apiKeyMember = actorApplicationService.findByApiKey(apiKey)
                 if (apiKeyMember != null) {
-                    val sessionResolution = resolveMemberSession(apiKeyMember.id, sessionKey, payload.sessionKey)
+                    val sessionResolution = resolveMemberSession(apiKeyMember.id, sessionKey, payload.sessionKey, payload, request)
                     ensureSessionIsUsable(sessionResolution)
                     val memberSession = sessionResolution.session
                     val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: apiKeyMember.rememberLoginEnabled
@@ -180,7 +184,7 @@ class CustomAuthenticationFilter(
                 }
             }
 
-            val sessionResolution = resolveMemberSession(payload.id, sessionKey, payload.sessionKey)
+            val sessionResolution = resolveMemberSession(payload.id, sessionKey, payload.sessionKey, payload, request)
             ensureSessionIsUsable(sessionResolution)
             val memberSession = sessionResolution.session
             val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: payload.rememberLoginEnabled
@@ -248,7 +252,7 @@ class CustomAuthenticationFilter(
             actorApplicationService.findByApiKey(apiKey)
                 ?: throw AppException("401-3", "API 키가 유효하지 않습니다.")
 
-        val sessionResolution = resolveMemberSession(member.id, sessionKey, null)
+        val sessionResolution = resolveMemberSession(member.id, sessionKey, null, null, request)
         ensureSessionIsUsable(sessionResolution)
         val memberSession = sessionResolution.session
         val rememberLoginEnabled = memberSession?.rememberLoginEnabled ?: member.rememberLoginEnabled
@@ -373,6 +377,7 @@ class CustomAuthenticationFilter(
         private const val MAX_PATH_LENGTH = 512
         private val LOG_CONTROL_CHAR_REGEX = Regex("[\\x00-\\x1F\\x7F]")
         private val MUTATING_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
+        private val SAFE_METHODS = setOf("GET", "HEAD")
     }
 
     private data class ExtractedTokens(
@@ -384,12 +389,15 @@ class CustomAuthenticationFilter(
     private data class SessionResolution(
         val sessionKeyProvided: Boolean,
         val session: MemberSessionAuthSnapshot?,
+        val freshTokenFallback: Boolean = false,
     )
 
     private fun resolveMemberSession(
         memberId: Long,
         cookieSessionKey: String,
         tokenSessionKey: String?,
+        payload: AccessTokenPayload?,
+        request: HttpServletRequest,
     ): SessionResolution {
         val effectiveSessionKey =
             when {
@@ -402,17 +410,51 @@ class CustomAuthenticationFilter(
             return SessionResolution(sessionKeyProvided = false, session = null)
         }
 
-        return SessionResolution(
-            sessionKeyProvided = true,
-            session = memberSessionUseCase.findActiveSessionSnapshot(memberId, effectiveSessionKey),
+        val resolution =
+            SessionResolution(
+                sessionKeyProvided = true,
+                session = memberSessionUseCase.findActiveSessionSnapshot(memberId, effectiveSessionKey),
+            )
+
+        if (resolution.session != null || !resolution.sessionKeyProvided) return resolution
+        if (!canUseFreshTokenSessionFallback(request, payload, cookieSessionKey, effectiveSessionKey)) return resolution
+
+        log.info(
+            "auth_session_fresh_token_fallback path={} memberId={} graceSeconds={}",
+            sanitizeLogValue(request.requestURI, MAX_PATH_LENGTH),
+            memberId,
+            freshLookupGraceSeconds,
         )
+
+        return resolution.copy(freshTokenFallback = true)
     }
 
     private fun ensureSessionIsUsable(sessionResolution: SessionResolution) {
-        if (sessionResolution.sessionKeyProvided && sessionResolution.session == null) {
+        if (sessionResolution.sessionKeyProvided && sessionResolution.session == null && !sessionResolution.freshTokenFallback) {
             authCookieService.expireAuthCookies()
             throw AppException("401-8", "세션이 만료되었습니다. 다시 로그인해주세요.")
         }
+    }
+
+    private fun canUseFreshTokenSessionFallback(
+        request: HttpServletRequest,
+        payload: AccessTokenPayload?,
+        cookieSessionKey: String,
+        effectiveSessionKey: String,
+    ): Boolean {
+        if (payload == null) return false
+        if (freshLookupGraceSeconds <= 0) return false
+        val method =
+            request.method
+                ?.trim()
+                ?.uppercase(Locale.ROOT)
+                .orEmpty()
+        if (method !in SAFE_METHODS) return false
+        if (cookieSessionKey.isBlank() || effectiveSessionKey.isBlank()) return false
+        if (payload.sessionKey.isNullOrBlank() || payload.sessionKey != effectiveSessionKey) return false
+
+        val issuedAt = payload.issuedAt ?: return false
+        return !Instant.now().isAfter(issuedAt.plusSeconds(freshLookupGraceSeconds))
     }
 
     private fun resolveTokenLoginIdentifier(payload: AccessTokenPayload): String? {

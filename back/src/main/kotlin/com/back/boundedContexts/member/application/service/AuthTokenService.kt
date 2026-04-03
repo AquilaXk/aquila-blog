@@ -63,26 +63,27 @@ class AuthTokenService(
      * 서비스 계층에서 트랜잭션 경계와 후속 처리(캐시/이벤트/스토리지 동기화)를 함께 관리합니다.
      */
     fun payload(accessToken: String): AccessTokenPayload? {
-        val payload =
+        val claims =
             runCatching {
-                @Suppress("UNCHECKED_CAST")
                 Jwts
                     .parser()
                     .verifyWith(Keys.hmacShaKeyFor(jwtSecretKey.toByteArray()))
                     .build()
-                    .parse(accessToken)
-                    .payload as Map<String, Any>
+                    .parseSignedClaims(accessToken)
+                    .payload
             }.getOrNull() ?: return null
 
         return AccessTokenPayload(
-            id = (payload["id"] as? Number)?.toLong() ?: return null,
-            sessionKey = payload["sessionKey"] as? String,
-            username = payload["username"] as? String,
-            email = payload["email"] as? String,
-            name = payload["name"] as? String ?: return null,
-            rememberLoginEnabled = payload["rememberLoginEnabled"] as? Boolean ?: true,
-            ipSecurityEnabled = payload["ipSecurityEnabled"] as? Boolean ?: false,
-            ipSecurityFingerprint = payload["ipSecurityFingerprint"] as? String,
+            id = (claims["id"] as? Number)?.toLong() ?: return null,
+            sessionKey = claims["sessionKey"] as? String,
+            username = claims["username"] as? String,
+            email = claims["email"] as? String,
+            name = claims["name"] as? String ?: return null,
+            rememberLoginEnabled = claims["rememberLoginEnabled"] as? Boolean ?: true,
+            ipSecurityEnabled = claims["ipSecurityEnabled"] as? Boolean ?: false,
+            ipSecurityFingerprint = claims["ipSecurityFingerprint"] as? String,
+            issuedAt = claims.issuedAt?.toInstant(),
+            expiresAt = claims.expiration?.toInstant(),
         )
     }
 }

@@ -18,12 +18,15 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.springframework.http.HttpHeaders
 import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 import org.springframework.security.core.context.SecurityContextHolder
 import tools.jackson.databind.ObjectMapper
+import java.time.Instant
 
 @DisplayName("CustomAuthenticationFilter 테스트")
 class CustomAuthenticationFilterTest {
@@ -63,6 +66,7 @@ class CustomAuthenticationFilterTest {
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 rq = rq,
+                freshLookupGraceSeconds = 15,
             )
 
         val response = MockHttpServletResponse()
@@ -109,6 +113,7 @@ class CustomAuthenticationFilterTest {
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 rq = rq,
+                freshLookupGraceSeconds = 15,
             )
 
         val response = MockHttpServletResponse()
@@ -185,6 +190,7 @@ class CustomAuthenticationFilterTest {
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 rq = rq,
+                freshLookupGraceSeconds = 15,
             )
 
         val response = MockHttpServletResponse()
@@ -277,6 +283,7 @@ class CustomAuthenticationFilterTest {
                 publicApiRequestMatcher = publicApiRequestMatcher,
                 apiCorsPolicy = apiCorsPolicy,
                 rq = rq,
+                freshLookupGraceSeconds = 15,
             )
 
         val response = MockHttpServletResponse()
@@ -305,6 +312,145 @@ class CustomAuthenticationFilterTest {
         try {
             filter.doFilter(request, response, filterChain)
             assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
+    @DisplayName("로그인 직후 GET read 요청은 세션 snapshot miss여도 최근 accessToken이면 1회 fallback 인증을 허용한다")
+    fun `fresh token fallback allows safe read request`() {
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
+        val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
+        val rq = mock(Rq::class.java)
+        val objectMapper = ObjectMapper()
+        val request = MockHttpServletRequest("GET", "/member/api/v1/auth/session")
+        val accessToken = "fresh-access-token"
+        val sessionKey = "fresh-session-key"
+
+        given(publicApiRequestMatcher.matches(request)).willReturn(false)
+        given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $accessToken")
+        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
+        given(clientIpResolver.resolve(request)).willReturn("203.0.113.14")
+        given(actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = "admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    issuedAt = Instant.now(),
+                ),
+            )
+        given(memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+
+        val filter =
+            CustomAuthenticationFilter(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
+                authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
+                objectMapper = objectMapper,
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                rq = rq,
+                freshLookupGraceSeconds = 15,
+            )
+
+        val response = MockHttpServletResponse()
+        val filterChain =
+            MockFilterChain(
+                object : HttpServlet() {
+                    override fun service(
+                        req: HttpServletRequest,
+                        res: HttpServletResponse,
+                    ) {
+                        res.status = HttpServletResponse.SC_NO_CONTENT
+                    }
+                },
+            )
+
+        try {
+            filter.doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_NO_CONTENT)
+            verify(authCookieService, never()).expireAuthCookies()
+        } finally {
+            SecurityContextHolder.clearContext()
+        }
+    }
+
+    @Test
+    @DisplayName("로그인 직후라도 쓰기 요청은 세션 snapshot miss fallback을 허용하지 않는다")
+    fun `fresh token fallback does not allow mutating request`() {
+        val actorApplicationService = mock(ActorApplicationService::class.java)
+        val memberSessionUseCase = mock(MemberSessionUseCase::class.java)
+        val authIpSecurityService = mock(AuthIpSecurityService::class.java)
+        val authSecurityEventService = mock(AuthSecurityEventService::class.java)
+        val authCookieService = mock(AuthCookieService::class.java)
+        val clientIpResolver = mock(ClientIpResolver::class.java)
+        val publicApiRequestMatcher = mock(PublicApiRequestMatcher::class.java)
+        val apiCorsPolicy = mock(ApiCorsPolicy::class.java)
+        val rq = mock(Rq::class.java)
+        val objectMapper = ObjectMapper()
+        val request = MockHttpServletRequest("POST", "/member/api/v1/auth/me")
+        val accessToken = "fresh-access-token"
+        val sessionKey = "fresh-session-key"
+
+        given(publicApiRequestMatcher.matches(request)).willReturn(false)
+        given(rq.getHeader(HttpHeaders.AUTHORIZATION, "")).willReturn("Bearer $accessToken")
+        given(rq.getCookieValue("sessionKey", "")).willReturn(sessionKey)
+        given(clientIpResolver.resolve(request)).willReturn("203.0.113.15")
+        given(actorApplicationService.payload(accessToken))
+            .willReturn(
+                AccessTokenPayload(
+                    id = 54L,
+                    sessionKey = sessionKey,
+                    username = "internal-admin",
+                    email = "admin@test.com",
+                    name = "aquila",
+                    rememberLoginEnabled = true,
+                    ipSecurityEnabled = false,
+                    ipSecurityFingerprint = null,
+                    issuedAt = Instant.now(),
+                ),
+            )
+        given(memberSessionUseCase.findActiveSessionSnapshot(54L, sessionKey)).willReturn(null)
+
+        val filter =
+            CustomAuthenticationFilter(
+                actorApplicationService = actorApplicationService,
+                memberSessionUseCase = memberSessionUseCase,
+                authIpSecurityService = authIpSecurityService,
+                authSecurityEventService = authSecurityEventService,
+                authCookieService = authCookieService,
+                clientIpResolver = clientIpResolver,
+                objectMapper = objectMapper,
+                publicApiRequestMatcher = publicApiRequestMatcher,
+                apiCorsPolicy = apiCorsPolicy,
+                rq = rq,
+                freshLookupGraceSeconds = 15,
+            )
+
+        val response = MockHttpServletResponse()
+        val filterChain = MockFilterChain()
+
+        try {
+            filter.doFilter(request, response, filterChain)
+            assertThat(response.status).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED)
+            assertThat(response.contentAsString).contains("\"resultCode\":\"401-8\"")
+            verify(authCookieService).expireAuthCookies()
         } finally {
             SecurityContextHolder.clearContext()
         }

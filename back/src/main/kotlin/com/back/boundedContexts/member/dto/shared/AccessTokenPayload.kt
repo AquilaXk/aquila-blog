@@ -1,5 +1,7 @@
 package com.back.boundedContexts.member.dto.shared
 
+import java.time.Instant
+
 /**
  * `AccessTokenPayload` 데이터 클래스입니다.
  * - 역할: 요청/응답/이벤트/상태 전달용 불변 데이터 구조를 담당합니다.
@@ -14,4 +16,6 @@ data class AccessTokenPayload(
     val rememberLoginEnabled: Boolean = true,
     val ipSecurityEnabled: Boolean = false,
     val ipSecurityFingerprint: String? = null,
+    val issuedAt: Instant? = null,
+    val expiresAt: Instant? = null,
 )

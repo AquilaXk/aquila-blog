@@ -11,6 +11,7 @@ import com.back.global.security.config.CustomAuthenticationFilter
 import com.back.global.security.domain.SecurityUser
 import com.back.global.storage.application.UploadedFileCleanupDiagnostics
 import com.back.global.storage.application.UploadedFileRetentionService
+import com.back.global.system.application.AdminSystemHealthSnapshotService
 import com.back.global.task.application.TaskDlqReplayResult
 import com.back.global.task.application.TaskDlqReplayService
 import com.back.global.task.application.TaskExecutionSample
@@ -33,7 +34,6 @@ import org.springframework.context.annotation.FilterType
 import org.springframework.context.annotation.Import
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -67,7 +67,7 @@ class ApiV1AdmSystemControllerTest {
     private lateinit var mvc: MockMvc
 
     @MockitoBean
-    private lateinit var jdbcTemplate: JdbcTemplate
+    private lateinit var adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService
 
     @MockitoBean
     private lateinit var signupMailDiagnosticsService: SignupMailDiagnosticsService
@@ -99,8 +99,21 @@ class ApiV1AdmSystemControllerTest {
     @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 시스템 헬스 상태를 조회할 수 있다`() {
-        given(jdbcTemplate.queryForObject("SELECT 1", Int::class.java)).willReturn(1)
-        given(signupMailDiagnosticsService.diagnose(false)).willReturn(readySignupMailDiagnostics())
+        given(adminSystemHealthSnapshotService.getHealthSummary())
+            .willReturn(
+                ApiV1AdmSystemController.HealthResBody(
+                    status = "UP",
+                    serverTime = Instant.parse("2026-04-03T00:00:00Z").toString(),
+                    uptimeMs = 1234,
+                    version = "test",
+                    checks =
+                        ApiV1AdmSystemController.HealthChecks(
+                            db = "UP",
+                            redis = "DISABLED",
+                            signupMail = "READY",
+                        ),
+                ),
+            )
 
         mvc.get("/system/api/v1/adm/health").andExpect {
             status { isOk() }
@@ -121,6 +134,34 @@ class ApiV1AdmSystemControllerTest {
                 )
             }
         }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자는 fresh 플래그로 시스템 헬스를 즉시 재계산할 수 있다`() {
+        given(adminSystemHealthSnapshotService.getFreshHealthSummary())
+            .willReturn(
+                ApiV1AdmSystemController.HealthResBody(
+                    status = "UP",
+                    serverTime = Instant.parse("2026-04-03T00:00:01Z").toString(),
+                    uptimeMs = 2345,
+                    version = "test",
+                    checks =
+                        ApiV1AdmSystemController.HealthChecks(
+                            db = "UP",
+                            redis = "UP",
+                            signupMail = "READY",
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/system/api/v1/adm/health") {
+                param("fresh", "true")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.checks.redis") { value("UP") }
+            }
     }
 
     @Test

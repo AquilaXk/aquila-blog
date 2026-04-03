@@ -1170,6 +1170,15 @@
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
         "operationId" : "health",
+        "parameters" : [ {
+          "name" : "fresh",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",

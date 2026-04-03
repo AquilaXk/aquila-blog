@@ -9,6 +9,7 @@ import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
 import useAuthSession from "src/hooks/useAuthSession"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
@@ -348,6 +349,19 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
 
 export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
+  const systemHealthResultPromise =
+    hasServerAuthCookie(req)
+      ? timed(() =>
+          readServerSnapshot<AdminToolsHealthSsrSnapshot>(ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY, ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS, async () => {
+            const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+            if (!systemHealth) return null
+            return {
+              systemHealth,
+              fetchedAt: new Date().toISOString(),
+            }
+          })
+        )
+      : null
   const baseResult = await timed(() => getAdminPageProps(req))
   if (!baseResult.ok) throw baseResult.error
   if ("redirect" in baseResult.value) return baseResult.value
@@ -355,16 +369,18 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
   const baseProps = await baseResult.value.props
 
   const [systemHealthResult, mailSnapshot] = await Promise.all([
-    timed(() =>
-      readServerSnapshot<AdminToolsHealthSsrSnapshot>(ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY, ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS, async () => {
-        const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
-        if (!systemHealth) return null
-        return {
-          systemHealth,
-          fetchedAt: new Date().toISOString(),
-        }
-      })
-    ),
+    systemHealthResultPromise
+      ? systemHealthResultPromise
+      : timed(() =>
+          readServerSnapshot<AdminToolsHealthSsrSnapshot>(ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY, ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS, async () => {
+            const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+            if (!systemHealth) return null
+            return {
+              systemHealth,
+              fetchedAt: new Date().toISOString(),
+            }
+          })
+        ),
     Promise.resolve(readMailSnapshotFromCookie(req)),
   ])
 
@@ -663,7 +679,7 @@ const AdminToolsPage: NextPage<AdminToolsPageProps> = ({ initialMember, initialS
   const fetchSystemHealthCached = async () =>
     queryClient.fetchQuery<SystemHealthPayload>({
       queryKey: SYSTEM_HEALTH_QUERY_KEY,
-      queryFn: () => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health"),
+      queryFn: () => apiFetch<SystemHealthPayload>("/system/api/v1/adm/health?fresh=true"),
       staleTime: HEALTH_CACHE_MS,
     })
 

@@ -1,14 +1,23 @@
 import { GetServerSideProps, NextPage } from "next"
 import useAuthSession from "src/hooks/useAuthSession"
+import type { AdminProfile } from "src/hooks/useAdminProfile"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { resolvePublicAdminProfileSnapshot } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
-export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ req, res }) => {
+type AdminHubPageProps = AdminPageProps & {
+  initialProfileSnapshot: AdminProfile
+}
+
+export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
   const baseResult = await timed(() => getAdminPageProps(req))
   if (!baseResult.ok) throw baseResult.error
   if ("redirect" in baseResult.value) return baseResult.value
+  if (!("props" in baseResult.value)) return baseResult.value
+  const baseProps = await baseResult.value.props
+  const profileSnapshot = resolvePublicAdminProfileSnapshot(req).profile
 
   appendSsrDebugTiming(req, res, [
     {
@@ -23,30 +32,46 @@ export const getServerSideProps: GetServerSideProps<AdminPageProps> = async ({ r
     },
   ])
 
-  return baseResult.value
+  return {
+    props: {
+      ...baseProps,
+      initialProfileSnapshot: profileSnapshot,
+    },
+  }
 }
 
-const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
+const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfileSnapshot }) => {
   const { me, authStatus } = useAuthSession()
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
   const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
-  const profileSrc = sessionMember?.profileImageDirectUrl || sessionMember?.profileImageUrl || ""
+  const profileSnapshot = {
+    profileImageDirectUrl: sessionMember?.profileImageDirectUrl || initialProfileSnapshot.profileImageDirectUrl || "",
+    profileImageUrl: sessionMember?.profileImageUrl || initialProfileSnapshot.profileImageUrl || "",
+    profileRole: sessionMember?.profileRole || initialProfileSnapshot.profileRole || "",
+    profileBio: sessionMember?.profileBio || initialProfileSnapshot.profileBio || "",
+    homeIntroTitle: sessionMember?.homeIntroTitle || initialProfileSnapshot.homeIntroTitle || "",
+    homeIntroDescription: sessionMember?.homeIntroDescription || initialProfileSnapshot.homeIntroDescription || "",
+    serviceLinks: sessionMember?.serviceLinks || initialProfileSnapshot.serviceLinks || [],
+    contactLinks: sessionMember?.contactLinks || initialProfileSnapshot.contactLinks || [],
+    modifiedAt: sessionMember?.modifiedAt || initialProfileSnapshot.modifiedAt,
+  }
+  const profileSrc = profileSnapshot.profileImageDirectUrl || profileSnapshot.profileImageUrl || ""
 
-  const profileUpdatedText = sessionMember?.modifiedAt
-    ? sessionMember.modifiedAt.slice(0, 16).replace("T", " ")
+  const profileUpdatedText = profileSnapshot.modifiedAt
+    ? profileSnapshot.modifiedAt.slice(0, 16).replace("T", " ")
     : "확인 전"
   const profileChecklist = [
     Boolean(profileSrc),
-    Boolean(sessionMember?.profileRole?.trim()),
-    Boolean(sessionMember?.profileBio?.trim()),
-    Boolean(sessionMember?.homeIntroTitle?.trim()),
-    Boolean(sessionMember?.homeIntroDescription?.trim()),
+    Boolean(profileSnapshot.profileRole?.trim()),
+    Boolean(profileSnapshot.profileBio?.trim()),
+    Boolean(profileSnapshot.homeIntroTitle?.trim()),
+    Boolean(profileSnapshot.homeIntroDescription?.trim()),
   ]
   const profileCompletion = Math.round(
     (profileChecklist.filter(Boolean).length / Math.max(1, profileChecklist.length)) * 100
   )
-  const linkCount = (sessionMember?.serviceLinks?.length || 0) + (sessionMember?.contactLinks?.length || 0)
+  const linkCount = (profileSnapshot.serviceLinks?.length || 0) + (profileSnapshot.contactLinks?.length || 0)
   const summaryItems = [
     { label: "현재 계정", value: displayName, tone: "neutral" as const },
     {
@@ -56,9 +81,9 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
     },
     {
       label: "홈 소개",
-      value: sessionMember?.homeIntroTitle?.trim() && sessionMember?.homeIntroDescription?.trim() ? "준비됨" : "점검 필요",
+      value: profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim() ? "준비됨" : "점검 필요",
       tone:
-        sessionMember?.homeIntroTitle?.trim() && sessionMember?.homeIntroDescription?.trim()
+        profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim()
           ? ("good" as const)
           : ("warn" as const),
     },
@@ -103,7 +128,7 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
           tone: "warn" as const,
         }
       : null,
-    !(sessionMember?.homeIntroTitle?.trim() && sessionMember?.homeIntroDescription?.trim())
+    !(profileSnapshot.homeIntroTitle?.trim() && profileSnapshot.homeIntroDescription?.trim())
       ? {
           href: "/admin/profile",
           title: "홈 소개 문구 채우기",
@@ -148,8 +173,8 @@ const AdminHubPage: NextPage<AdminPageProps> = ({ initialMember }) => {
       displayName={displayName}
       displayNameInitial={displayNameInitial}
       profileSrc={profileSrc}
-      profileRole={sessionMember.profileRole}
-      profileBio={sessionMember.profileBio}
+      profileRole={profileSnapshot.profileRole}
+      profileBio={profileSnapshot.profileBio}
       summaryItems={summaryItems}
       nextActions={nextActions}
       primaryAction={primaryAction}

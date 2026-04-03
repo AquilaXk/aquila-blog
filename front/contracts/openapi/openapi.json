@@ -2043,6 +2043,24 @@
         }
       }
     },
+    "/member/api/v1/auth/session" : {
+      "get" : {
+        "tags" : [ "api-v-1-auth-controller" ],
+        "operationId" : "session_1",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuthSessionMemberDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/member/api/v1/auth/me" : {
       "get" : {
         "tags" : [ "api-v-1-auth-controller" ],
@@ -4309,6 +4327,24 @@
           "unreadCount" : {
             "type" : "integer",
             "format" : "int32"
+          }
+        }
+      },
+      "AuthSessionMemberDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "isAdmin" : {
+            "type" : "boolean"
           }
         }
       },

@@ -7,6 +7,7 @@ import com.back.boundedContexts.member.application.port.input.LoginAttemptPolicy
 import com.back.boundedContexts.member.application.port.input.MemberUseCase
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberPolicy
+import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.dto.MemberDto
 import com.back.boundedContexts.member.dto.MemberWithUsernameDto
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
@@ -187,6 +188,12 @@ class ApiV1AuthController(
     fun me(
         @AuthenticationPrincipal securityUser: SecurityUser,
     ): MemberWithUsernameDto = currentMemberProfileQueryUseCase.getById(securityUser.id)
+
+    @GetMapping("/session")
+    @Transactional(readOnly = true)
+    fun session(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AuthSessionMemberDto = AuthSessionMemberDto(securityUser)
 
     private fun isPasswordValid(
         member: Member,

@@ -30,6 +30,25 @@ export const fetchServerAuthSession = async (req: IncomingMessage): Promise<Auth
   }
 }
 
+export const fetchServerAdminSession = async (req: IncomingMessage): Promise<AuthMember | null | undefined> => {
+  if (!hasAuthCookie(req)) return null
+
+  try {
+    const response = await serverApiFetch(req, "/member/api/v1/auth/session")
+    if (response.status === 401) {
+      return null
+    }
+    if (!response.ok) return undefined
+    const data = (await response.json()) as AuthMember & { admin?: boolean }
+    return {
+      ...data,
+      isAdmin: data.isAdmin ?? data.admin ?? false,
+    }
+  } catch {
+    return undefined
+  }
+}
+
 export const hydrateServerAuthSession = async (queryClient: QueryClient, req: IncomingMessage) => {
   const authMember = await fetchServerAuthSession(req)
   const shouldProbeOnClient = authMember !== null

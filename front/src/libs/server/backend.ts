@@ -15,7 +15,11 @@ const resolveServerTimeoutMs = (path: string, init: ServerApiFetchInit): number 
   const normalizedPath = path.toLowerCase()
   const method = (init.method || "GET").toUpperCase()
 
-  if (normalizedPath.includes("/member/api/v1/auth/me") || normalizedPath.includes("/members/adminprofile")) {
+  if (
+    normalizedPath.includes("/member/api/v1/auth/me") ||
+    normalizedPath.includes("/member/api/v1/auth/session") ||
+    normalizedPath.includes("/members/adminprofile")
+  ) {
     return 5_000
   }
 

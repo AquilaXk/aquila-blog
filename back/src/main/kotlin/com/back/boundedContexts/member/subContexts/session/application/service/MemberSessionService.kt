@@ -94,6 +94,7 @@ class MemberSessionService(
     @Transactional
     override fun touchAuthenticated(snapshot: MemberSessionAuthSnapshot) {
         val now = Instant.now()
+        if (!isTouchDue(snapshot.lastAuthenticatedAt, now)) return
         val threshold = now.minusSeconds(touchMinIntervalSeconds.coerceAtLeast(0))
         val updated = memberSessionStorePort.touchAuthenticatedIfDue(snapshot.id, threshold, now)
         if (updated) {
@@ -117,5 +118,13 @@ class MemberSessionService(
             cache.evict("session:$sessionKey")
             cache.evict("member:$memberId:session:$sessionKey")
         }
+    }
+
+    private fun isTouchDue(
+        lastAuthenticatedAt: Instant?,
+        now: Instant,
+    ): Boolean {
+        if (touchMinIntervalSeconds <= 0) return true
+        return lastAuthenticatedAt == null || !now.isBefore(lastAuthenticatedAt.plusSeconds(touchMinIntervalSeconds))
     }
 }

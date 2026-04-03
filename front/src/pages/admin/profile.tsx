@@ -2002,10 +2002,15 @@ const CompactHeader = styled.section`
 const MobileSectionRail = styled.div`
   display: none;
 
-  @media (max-width: 760px) {
+  @media (max-width: 1180px) {
     display: flex;
-    overflow-x: auto;
+    flex-wrap: wrap;
     gap: 0.48rem;
+  }
+
+  @media (max-width: 760px) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
     padding-bottom: 0.15rem;
     scrollbar-width: none;
 

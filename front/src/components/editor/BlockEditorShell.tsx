@@ -5303,7 +5303,7 @@ const BlockEditorShell = ({
                   openTableMenu("table", event.currentTarget.getBoundingClientRect())
                 }}
               >
-                표
+                <TableHandleIcon kind="table" />
               </TableHandleButton>
             </TableCornerHandle>
             <TableAxisRail
@@ -5326,7 +5326,7 @@ const BlockEditorShell = ({
                   openTableMenu("column", event.currentTarget.getBoundingClientRect())
                 }}
               >
-                열
+                <TableHandleIcon kind="column" />
               </TableQuickRailButton>
             </TableAxisRail>
             <TableAxisRail
@@ -5349,7 +5349,7 @@ const BlockEditorShell = ({
                   openTableMenu("row", event.currentTarget.getBoundingClientRect())
                 }}
               >
-                행
+                <TableHandleIcon kind="row" />
               </TableQuickRailButton>
             </TableAxisRail>
           </>
@@ -7043,6 +7043,49 @@ const FloatingBubbleToolbar = styled.div`
   }
 `
 
+type TableHandleIconKind = "table" | "row" | "column"
+
+const TableHandleIcon = ({ kind }: { kind: TableHandleIconKind }) => {
+  if (kind === "table") {
+    return (
+      <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <rect x="2" y="2" width="5" height="5" rx="0.8" />
+        <rect x="9" y="2" width="5" height="5" rx="0.8" />
+        <rect x="2" y="9" width="5" height="5" rx="0.8" />
+        <rect x="9" y="9" width="5" height="5" rx="0.8" />
+      </TableHandleIconSvg>
+    )
+  }
+
+  if (kind === "column") {
+    return (
+      <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <line x1="3" y1="2.5" x2="3" y2="13.5" />
+        <line x1="8" y1="2.5" x2="8" y2="13.5" />
+        <line x1="13" y1="2.5" x2="13" y2="13.5" />
+      </TableHandleIconSvg>
+    )
+  }
+
+  return (
+    <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <line x1="2.5" y1="3" x2="13.5" y2="3" />
+      <line x1="2.5" y1="8" x2="13.5" y2="8" />
+      <line x1="2.5" y1="13" x2="13.5" y2="13" />
+    </TableHandleIconSvg>
+  )
+}
+
+const TableHandleIconSvg = styled.svg`
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+`
+
 const TableAxisRail = styled.div`
   position: fixed;
   z-index: 58;
@@ -7072,13 +7115,13 @@ const TableCornerHandle = styled.div`
 const TableQuickRailButton = styled.button`
   all: unset;
   box-sizing: border-box;
-  min-width: 2rem;
-  height: 1.72rem;
-  padding: 0 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.55rem;
+  border-radius: 0.65rem;
   border: 1px solid ${({ theme }) =>
     theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(71, 85, 105, 0.14)"};
   background: ${({ theme }) =>
@@ -7102,10 +7145,8 @@ const TableQuickRailButton = styled.button`
 `
 
 const TableHandleButton = styled(TableQuickRailButton)`
-  min-width: 2.4rem;
-  height: 1.9rem;
-  padding: 0 0.7rem;
-  font-size: 0.76rem;
+  width: 2.12rem;
+  height: 2.12rem;
   border-radius: 0.62rem;
 `
 

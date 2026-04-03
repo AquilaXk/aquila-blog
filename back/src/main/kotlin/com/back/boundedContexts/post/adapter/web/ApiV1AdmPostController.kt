@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
 import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
@@ -7,6 +8,7 @@ import com.back.boundedContexts.post.dto.AdmDeletedPostDto
 import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.global.rsData.RsData
+import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
@@ -19,6 +21,7 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
+import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -42,6 +45,11 @@ class ApiV1AdmPostController(
     private val postTagRecommendationUseCase: PostTagRecommendationUseCase,
     private val adminPostListSnapshotService: AdminPostListSnapshotUseCase,
 ) {
+    data class AdminPostsBootstrapResBody(
+        val member: AuthSessionMemberDto,
+        val firstPage: PageDto<PostDto>,
+    )
+
     data class AdmPostCountResBody(
         val all: Long,
         val secureTip: String,
@@ -54,6 +62,17 @@ class ApiV1AdmPostController(
         AdmPostCountResBody(
             postUseCase.count(),
             postUseCase.randomSecureTip(),
+        )
+
+    @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
+    @Operation(summary = "관리자 글 작업공간 bootstrap")
+    fun bootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminPostsBootstrapResBody =
+        AdminPostsBootstrapResBody(
+            member = AuthSessionMemberDto(securityUser),
+            firstPage = adminPostListSnapshotService.getFirstPageSnapshot(PostSearchSortType1.CREATED_AT),
         )
 
     @GetMapping

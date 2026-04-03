@@ -7,9 +7,10 @@ import { useRouter } from "next/router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
 import { apiFetch } from "src/apis/backend/client"
+import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
-import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
@@ -113,6 +114,11 @@ type AdminPostsWorkspaceInitialSnapshot = {
 type AdminPostsListSsrSnapshot = {
   listSource: PageDto<AdminPostListItem>
   fetchedAt: string
+}
+
+type AdminPostsBootstrapPayload = {
+  member: AuthMember
+  firstPage: PageDto<AdminPostListItem>
 }
 
 type AdminPostsWorkspacePageProps = AdminPageProps & {
@@ -244,58 +250,108 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
 
 export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorkspacePageProps> = async (context) => {
   const ssrStartedAt = performance.now()
-  const listSourceResultPromise =
+  const bootstrapResultPromise =
     hasServerAuthCookie(context.req)
       ? timed(() =>
-          readServerSnapshot<AdminPostsListSsrSnapshot>(
-            ADMIN_POSTS_SSR_LIST_CACHE_KEY,
-            ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS,
-            async () => {
-              const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
-                context.req,
-                buildListEndpoint("active", {
-                  page: DEFAULT_PAGE,
-                  pageSize: DEFAULT_PAGE_SIZE,
-                  kw: "",
-                  sort: DEFAULT_SORT,
-                })
-              )
-              if (!listSource) return null
-              return {
-                listSource,
-                fetchedAt: new Date().toISOString(),
-              }
-            }
+          readAdminProtectedBootstrap<AdminPostsBootstrapPayload>(
+            context.req,
+            "/post/api/v1/adm/posts/bootstrap",
+            "/admin/posts"
           )
         )
       : null
 
-  const baseResult = await timed(() => getAdminPageProps(context.req))
-  if (!baseResult.ok) throw baseResult.error
-  if ("redirect" in baseResult.value) return baseResult.value
-  if (!("props" in baseResult.value)) return baseResult.value
-  const baseProps = await baseResult.value.props
-  const listSourceResult =
-    listSourceResultPromise
-      ? await listSourceResultPromise
-      : await timed(() =>
-          readServerSnapshot<AdminPostsListSsrSnapshot>(ADMIN_POSTS_SSR_LIST_CACHE_KEY, ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS, async () => {
-            const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
-              context.req,
-              buildListEndpoint("active", {
-                page: DEFAULT_PAGE,
-                pageSize: DEFAULT_PAGE_SIZE,
-                kw: "",
-                sort: DEFAULT_SORT,
-              })
+  const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
+    return {
+      redirect: {
+        destination: bootstrapResult.value.destination,
+        permanent: false,
+      },
+    }
+  }
+
+  let baseProps: AdminPageProps
+  let authDurationMs = 0
+  let authDescription = "bootstrap"
+  let listSourceResult: { durationMs: number; ok: true; value: { value: AdminPostsListSsrSnapshot | null; source: string } }
+
+  if (bootstrapResult?.ok && bootstrapResult.value.ok) {
+    baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
+    listSourceResult = {
+      durationMs: bootstrapResult.durationMs,
+      ok: true,
+      value: {
+        value: {
+          listSource: bootstrapResult.value.value.firstPage,
+          fetchedAt: new Date().toISOString(),
+        },
+        source: "bootstrap",
+      },
+    }
+  } else {
+    const listSourceResultPromise =
+      hasServerAuthCookie(context.req)
+        ? timed(() =>
+            readServerSnapshot<AdminPostsListSsrSnapshot>(
+              ADMIN_POSTS_SSR_LIST_CACHE_KEY,
+              ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS,
+              async () => {
+                const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
+                  context.req,
+                  buildListEndpoint("active", {
+                    page: DEFAULT_PAGE,
+                    pageSize: DEFAULT_PAGE_SIZE,
+                    kw: "",
+                    sort: DEFAULT_SORT,
+                  })
+                )
+                if (!listSource) return null
+                return {
+                  listSource,
+                  fetchedAt: new Date().toISOString(),
+                }
+              }
             )
-            if (!listSource) return null
-            return {
-              listSource,
-              fetchedAt: new Date().toISOString(),
-            }
-          })
-        )
+          )
+        : null
+
+    const baseResult = await timed(() => getAdminPageProps(context.req))
+    if (!baseResult.ok) throw baseResult.error
+    if ("redirect" in baseResult.value) return baseResult.value
+    if (!("props" in baseResult.value)) return baseResult.value
+    baseProps = await baseResult.value.props
+    authDurationMs = baseResult.durationMs
+    authDescription = "fallback"
+    const fallbackListSourceResult =
+      listSourceResultPromise
+        ? await listSourceResultPromise
+        : await timed(() =>
+            readServerSnapshot<AdminPostsListSsrSnapshot>(
+              ADMIN_POSTS_SSR_LIST_CACHE_KEY,
+              ADMIN_POSTS_SSR_LIST_CACHE_TTL_MS,
+              async () => {
+                const listSource = await readJsonIfOk<PageDto<AdminPostListItem>>(
+                  context.req,
+                  buildListEndpoint("active", {
+                    page: DEFAULT_PAGE,
+                    pageSize: DEFAULT_PAGE_SIZE,
+                    kw: "",
+                    sort: DEFAULT_SORT,
+                  })
+                )
+                if (!listSource) return null
+                return {
+                  listSource,
+                  fetchedAt: new Date().toISOString(),
+                }
+              }
+            )
+          )
+    if (!fallbackListSourceResult.ok) throw fallbackListSourceResult.error
+    listSourceResult = fallbackListSourceResult
+  }
+
   const listSnapshot = listSourceResult.ok ? listSourceResult.value.value : null
   const listSource = listSnapshot?.listSource ?? null
   const fetchedAt = listSnapshot?.fetchedAt ?? null
@@ -314,8 +370,8 @@ export const getAdminPostsWorkspacePageProps: GetServerSideProps<AdminPostsWorks
   appendSsrDebugTiming(context.req, context.res, [
     {
       name: "admin-posts-auth",
-      durationMs: baseResult.durationMs,
-      description: "ok",
+      durationMs: authDurationMs,
+      description: authDescription,
     },
     {
       name: "admin-posts-list",

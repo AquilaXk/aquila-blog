@@ -10,6 +10,7 @@ import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostTagRecommendationResult
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.global.security.domain.SecurityUser
 import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
 import org.junit.jupiter.api.BeforeAll
@@ -28,7 +29,9 @@ import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.invoke
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.test.context.support.WithMockUser
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user
 import org.springframework.security.web.AuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.AccessDeniedHandler
@@ -93,6 +96,42 @@ class ApiV1AdmPostControllerTest {
             jsonPath("$.all") { value(12) }
             jsonPath("$.secureTip") { value("강력한 비밀번호는 길고 고유해야 합니다.") }
         }
+    }
+
+    @Test
+    fun `관리자는 관리자 글 작업공간 bootstrap을 조회할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+        val post = samplePost(id = 55, title = "첫 화면 캐시", content = "본문", published = true, listed = true)
+        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT))
+            .willReturn(
+                PageDto(
+                    content =
+                        listOf(
+                            PostDto(post).apply {
+                                tempDraft = false
+                            },
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/post/api/v1/adm/posts/bootstrap") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.member.id") { value(7) }
+                jsonPath("$.member.isAdmin") { value(true) }
+                jsonPath("$.member.nickname") { value("관리자") }
+                jsonPath("$.firstPage.content[0].id") { value(55) }
+                jsonPath("$.firstPage.content[0].title") { value("첫 화면 캐시") }
+            }
     }
 
     @Test

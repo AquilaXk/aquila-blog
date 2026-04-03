@@ -534,6 +534,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/api/v1/adm/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bootstrap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/api/v1/adm/auth/security-events": {
         parameters: {
             query?: never;
@@ -803,6 +819,23 @@ export interface paths {
         };
         /** 전체 글 개수 */
         get: operations["count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/post/api/v1/adm/posts/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 관리자 글 작업공간 bootstrap */
+        get: operations["bootstrap_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1670,6 +1703,17 @@ export interface components {
             version?: string;
             checks?: components["schemas"]["HealthChecks"];
         };
+        AdminSystemBootstrapResBody: {
+            member?: components["schemas"]["AuthSessionMemberDto"];
+            health?: components["schemas"]["HealthResBody"];
+        };
+        AuthSessionMemberDto: {
+            /** Format: int64 */
+            id?: number;
+            username?: string;
+            nickname?: string;
+            isAdmin?: boolean;
+        };
         AuthSecurityEventDto: {
             /** Format: int64 */
             id?: number;
@@ -1775,6 +1819,10 @@ export interface components {
             all?: number;
             secureTip?: string;
         };
+        AdminPostsBootstrapResBody: {
+            member?: components["schemas"]["AuthSessionMemberDto"];
+            firstPage?: components["schemas"]["PageDtoPostDto"];
+        };
         RsDataSignupEmailVerifyResult: {
             resultCode?: string;
             msg?: string;
@@ -1819,13 +1867,6 @@ export interface components {
             items?: components["schemas"]["MemberNotificationDto"][];
             /** Format: int32 */
             unreadCount?: number;
-        };
-        AuthSessionMemberDto: {
-            /** Format: int64 */
-            id?: number;
-            username?: string;
-            nickname?: string;
-            isAdmin?: boolean;
         };
         PageDtoMemberWithUsernameDto: {
             content?: components["schemas"]["MemberWithUsernameDto"][];
@@ -2775,6 +2816,26 @@ export interface operations {
             };
         };
     };
+    bootstrap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminSystemBootstrapResBody"];
+                };
+            };
+        };
+    };
     authSecurityEvents: {
         parameters: {
             query?: {
@@ -3163,6 +3224,26 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AdmPostCountResBody"];
+                };
+            };
+        };
+    };
+    bootstrap_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AdminPostsBootstrapResBody"];
                 };
             };
         };

@@ -1,8 +1,12 @@
 import { GetServerSideProps, NextPage } from "next"
 import useAuthSession from "src/hooks/useAuthSession"
-import type { AdminProfile } from "src/hooks/useAdminProfile"
+import { useAdminProfile, type AdminProfile } from "src/hooks/useAdminProfile"
 import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
-import { resolvePublicAdminProfileSnapshot } from "src/libs/server/adminProfile"
+import {
+  fetchServerAdminProfile,
+  hasServerAuthCookie,
+  resolvePublicAdminProfileSnapshot,
+} from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, timed } from "src/libs/server/serverTiming"
 import AdminHubSurface, { type AdminHubNextAction } from "src/routes/Admin/AdminHubSurface"
 
@@ -12,18 +16,45 @@ type AdminHubPageProps = AdminPageProps & {
 
 export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
-  const baseResult = await timed(() => getAdminPageProps(req))
+  const hasAuthCookie = hasServerAuthCookie(req)
+  const fallbackProfileSnapshot = resolvePublicAdminProfileSnapshot(req)
+  const baseResultPromise = timed(() => getAdminPageProps(req))
+  const adminProfileResultPromise = hasAuthCookie
+    ? timed(() =>
+        fetchServerAdminProfile(req, {
+          timeoutMs: 900,
+        })
+      )
+    : Promise.resolve({
+        ok: true as const,
+        value: fallbackProfileSnapshot.profile,
+        durationMs: 0,
+      })
+  const [baseResult, adminProfileResult] = await Promise.all([baseResultPromise, adminProfileResultPromise])
   if (!baseResult.ok) throw baseResult.error
   if ("redirect" in baseResult.value) return baseResult.value
   if (!("props" in baseResult.value)) return baseResult.value
   const baseProps = await baseResult.value.props
-  const profileSnapshot = resolvePublicAdminProfileSnapshot(req).profile
+  const profileSnapshot =
+    adminProfileResult.ok && adminProfileResult.value
+      ? adminProfileResult.value
+      : fallbackProfileSnapshot.profile
 
   appendSsrDebugTiming(req, res, [
     {
       name: "admin-auth-session",
       durationMs: baseResult.durationMs,
       description: "ok",
+    },
+    {
+      name: "admin-profile",
+      durationMs: adminProfileResult.durationMs,
+      description:
+        adminProfileResult.ok && adminProfileResult.value
+          ? hasAuthCookie
+            ? "ok"
+            : fallbackProfileSnapshot.source
+          : fallbackProfileSnapshot.source,
     },
     {
       name: "admin-ssr-total",
@@ -42,19 +73,25 @@ export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async (
 
 const AdminHubPage: NextPage<AdminHubPageProps> = ({ initialMember, initialProfileSnapshot }) => {
   const { me, authStatus } = useAuthSession()
+  const adminProfile = useAdminProfile(initialProfileSnapshot)
   const sessionMember = authStatus === "loading" || authStatus === "unavailable" ? initialMember : me || initialMember
-  const displayName = sessionMember?.nickname || sessionMember?.username || "관리자"
+  const displayName =
+    sessionMember?.nickname || sessionMember?.username || adminProfile?.nickname || adminProfile?.username || "관리자"
   const displayNameInitial = displayName.slice(0, 2).toUpperCase()
   const profileSnapshot = {
-    profileImageDirectUrl: sessionMember?.profileImageDirectUrl || initialProfileSnapshot.profileImageDirectUrl || "",
-    profileImageUrl: sessionMember?.profileImageUrl || initialProfileSnapshot.profileImageUrl || "",
-    profileRole: sessionMember?.profileRole || initialProfileSnapshot.profileRole || "",
-    profileBio: sessionMember?.profileBio || initialProfileSnapshot.profileBio || "",
-    homeIntroTitle: sessionMember?.homeIntroTitle || initialProfileSnapshot.homeIntroTitle || "",
-    homeIntroDescription: sessionMember?.homeIntroDescription || initialProfileSnapshot.homeIntroDescription || "",
-    serviceLinks: sessionMember?.serviceLinks || initialProfileSnapshot.serviceLinks || [],
-    contactLinks: sessionMember?.contactLinks || initialProfileSnapshot.contactLinks || [],
-    modifiedAt: sessionMember?.modifiedAt || initialProfileSnapshot.modifiedAt,
+    profileImageDirectUrl:
+      adminProfile?.profileImageDirectUrl || sessionMember?.profileImageDirectUrl || initialProfileSnapshot.profileImageDirectUrl || "",
+    profileImageUrl:
+      adminProfile?.profileImageUrl || sessionMember?.profileImageUrl || initialProfileSnapshot.profileImageUrl || "",
+    profileRole: adminProfile?.profileRole || sessionMember?.profileRole || initialProfileSnapshot.profileRole || "",
+    profileBio: adminProfile?.profileBio || sessionMember?.profileBio || initialProfileSnapshot.profileBio || "",
+    homeIntroTitle:
+      adminProfile?.homeIntroTitle || sessionMember?.homeIntroTitle || initialProfileSnapshot.homeIntroTitle || "",
+    homeIntroDescription:
+      adminProfile?.homeIntroDescription || sessionMember?.homeIntroDescription || initialProfileSnapshot.homeIntroDescription || "",
+    serviceLinks: adminProfile?.serviceLinks || sessionMember?.serviceLinks || initialProfileSnapshot.serviceLinks || [],
+    contactLinks: adminProfile?.contactLinks || sessionMember?.contactLinks || initialProfileSnapshot.contactLinks || [],
+    modifiedAt: adminProfile?.modifiedAt || sessionMember?.modifiedAt || initialProfileSnapshot.modifiedAt,
   }
   const profileSrc = profileSnapshot.profileImageDirectUrl || profileSnapshot.profileImageUrl || ""
 

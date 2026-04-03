@@ -217,6 +217,41 @@ test.describe("block editor authoring flow", () => {
     await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
   })
 
+  test("writer surface에서도 테이블 기본값은 비어 있고 셀 내부 구조 삽입이 차단된다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const tables = page.locator(".aq-block-editor__content table")
+    await expect(tables).toHaveCount(1)
+    await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
+    await expect(page.getByText("제목", { exact: true })).toHaveCount(0)
+    await expect(page.getByText("항목", { exact: true })).toHaveCount(0)
+
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await page.keyboard.type("/테이블")
+    await page.keyboard.press("Enter")
+
+    await expect(tables).toHaveCount(1)
+    await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
+
+    await editor.evaluate((element) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", "| 제목 | 값 |\n| --- | --- |\n| 항목 | 내용 |")
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    })
+
+    await expect(tables).toHaveCount(1)
+    await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
+  })
+
   test("새 블록 템플릿은 샘플 문구 없이 빈 입력 상태로 생성된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -633,6 +668,76 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
     await page.getByTestId("table-row-menu").getByRole("button", { name: "아래에 삽입" }).click()
     await expect(page.locator("table tr")).toHaveCount(3)
+  })
+
+  test("table rail hover 전환 중에도 axis menu 액션이 끊기지 않는다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", {
+      name: "열 선택",
+    })
+    await expect(columnRailButton).toBeVisible()
+    await columnRailButton.hover()
+    await columnRailButton.click()
+
+    const columnMenu = page.getByTestId("table-column-menu")
+    await expect(columnMenu).toBeVisible()
+    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
+  })
+
+  test("table menu는 좁은 뷰포트에서도 화면 내부에 배치된다", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+    await page.getByTestId("table-corner-handle").getByRole("button", { name: "표 선택" }).click()
+
+    const menu = page.getByTestId("table-table-menu")
+    await expect(menu).toBeVisible()
+    const inViewport = await menu.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const padding = 4
+      return (
+        rect.left >= padding &&
+        rect.top >= padding &&
+        rect.right <= window.innerWidth - padding &&
+        rect.bottom <= window.innerHeight - padding
+      )
+    })
+    expect(inViewport).toBe(true)
+  })
+
+  test("table corner menu에서 제목 행 토글과 표 삭제가 동작한다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const cornerHandleButton = page.getByTestId("table-corner-handle").getByRole("button", { name: "표 선택" })
+    await cornerHandleButton.click()
+    const tableMenu = page.getByTestId("table-table-menu")
+    await expect(tableMenu).toBeVisible()
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(2)
+
+    await tableMenu.getByRole("button", { name: "제목 행" }).click()
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(0)
+
+    await cornerHandleButton.click()
+    await expect(tableMenu).toBeVisible()
+    await tableMenu.getByRole("button", { name: "표 삭제" }).click()
+    await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
+    await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
   })
 
   test("table 셀 텍스트도 드래그 선택 후 인라인 버블 포맷(굵게/색상)을 적용할 수 있다", async ({ page }) => {

@@ -3,6 +3,7 @@ import { InputRule, Mark, Node, mergeAttributes } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
 import ListKeymap from "@tiptap/extension-list-keymap"
 import ListItem from "@tiptap/extension-list-item"
+import { Table } from "@tiptap/extension-table"
 import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
@@ -1610,6 +1611,12 @@ export const EditorTableHeader = TableHeader.extend({
       ...this.parent?.(),
       ...buildStyledTableCellAttributes(),
     }
+  },
+})
+
+export const EditorTable = Table.extend({
+  addExtensions() {
+    return [EditorTableRow, EditorTableHeader, EditorTableCell]
   },
 })
 

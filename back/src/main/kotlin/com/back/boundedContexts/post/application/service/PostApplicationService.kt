@@ -1455,10 +1455,13 @@ class PostApplicationService(
             recordCacheEvict(PostQueryCacheNames.TAGS, "key", evictReason)
         }
         if (evictDetail) {
+            val detailSnapshotCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
             val detailMetaCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_META)
             val detailContentCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_CONTENT)
             val detailNegativeCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE)
             if (postId == null) {
+                detailSnapshotCache?.clear()
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "clear", evictReason)
                 detailMetaCache?.clear()
                 recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "clear", evictReason)
                 detailContentCache?.clear()
@@ -1466,6 +1469,8 @@ class PostApplicationService(
                 detailNegativeCache?.clear()
                 recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_NEGATIVE, "clear", evictReason)
             } else {
+                detailSnapshotCache?.evict(postId)
+                recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "key", evictReason)
                 detailMetaCache?.evict(postId)
                 recordCacheEvict(PostQueryCacheNames.DETAIL_PUBLIC_META, "key", evictReason)
                 detailContentCache?.evict(postId)

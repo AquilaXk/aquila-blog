@@ -929,6 +929,8 @@ const BlockEditorShell = ({
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
   const bubbleToolbarHoveredRef = useRef(false)
+  const mouseTextSelectionInProgressRef = useRef(false)
+  const syncBubbleOnMouseUpRef = useRef(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isSlashMenuOpen, setIsSlashMenuOpen] = useState(false)
   const [slashQuery, setSlashQuery] = useState("")
@@ -1151,8 +1153,82 @@ const BlockEditorShell = ({
     const { selection } = currentEditor.state
     if (!selection.empty) return false
     const parent = selection.$from.parent
-    return parent.type.name === "paragraph" && parent.textContent.length === 0
+    return parent.type.name === "paragraph" && parent.content.size === 0
   }, [])
+
+  const getEmptyCalloutBodyParagraphRange = useCallback((targetEditor: TiptapEditor) => {
+    const { selection } = targetEditor.state
+    if (!selection.empty) return null
+
+    const { $from } = selection
+    const parent = $from.parent
+    let calloutDepth = -1
+    for (let depth = $from.depth; depth >= 0; depth -= 1) {
+      if ($from.node(depth).type.name === "calloutBlock") {
+        calloutDepth = depth
+        break
+      }
+    }
+    if (calloutDepth < 0) return null
+
+    if (parent.type.name === "paragraph" && parent.content.size === 0) {
+      return {
+        from: $from.before($from.depth),
+        to: $from.after($from.depth),
+      }
+    }
+
+    const calloutNode = $from.node(calloutDepth)
+    const calloutPos = calloutDepth > 0 ? $from.before(calloutDepth) : 0
+    let fallbackRange: { from: number; to: number } | null = null
+    calloutNode.descendants((node, pos) => {
+      if (fallbackRange) return false
+      if (node.type.name !== "paragraph" || node.content.size > 0) return true
+
+      const from = calloutPos + pos + 1
+      fallbackRange = { from, to: from + node.nodeSize }
+      return false
+    })
+
+    return fallbackRange
+  }, [])
+
+  const replaceEmptyCalloutBodyWithPlainText = useCallback((text: string) => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
+
+    const replaceRange = getEmptyCalloutBodyParagraphRange(currentEditor)
+    if (!replaceRange) return false
+
+    const normalizedText = text.replace(/\r\n?/g, "\n")
+    if (!normalizedText.trim()) return false
+
+    const nextParagraphNodes = normalizedText
+      .split("\n")
+      .map((line) => currentEditor.state.schema.nodeFromJSON(createParagraphNode(line)))
+
+    if (nextParagraphNodes.length === 0) return false
+
+    let tr = currentEditor.state.tr.replaceWith(
+      replaceRange.from,
+      replaceRange.to,
+      Fragment.fromArray(nextParagraphNodes)
+    )
+
+    const lastNodeIndex = nextParagraphNodes.length - 1
+    const lastNodeStart = replaceRange.from + nextParagraphNodes
+      .slice(0, lastNodeIndex)
+      .reduce((sum, node) => sum + node.nodeSize, 0)
+    const caretPos = Math.max(
+      1,
+      Math.min(lastNodeStart + nextParagraphNodes[lastNodeIndex].nodeSize - 1, tr.doc.content.size)
+    )
+    tr = tr.setSelection(TextSelection.create(tr.doc, caretPos))
+
+    currentEditor.view.dispatch(tr.scrollIntoView())
+    currentEditor.view.focus()
+    return true
+  }, [getEmptyCalloutBodyParagraphRange])
 
   const insertDocContent = useCallback(
     (doc: BlockEditorDoc, replaceCurrentEmptyParagraph = false) => {
@@ -2241,6 +2317,13 @@ const BlockEditorShell = ({
         const trimmedPlainText = plainText.trim()
         const normalizedPlainText = normalizeStructuredMarkdownClipboard(plainText)
         const normalizedHtmlMarkdown = html ? convertHtmlToMarkdown(html) : ""
+        const extractedPlainTextFromHtml = html ? extractPlainTextFromHtml(html) : ""
+        const calloutPasteText = plainText || extractedPlainTextFromHtml
+
+        if (calloutPasteText && replaceEmptyCalloutBodyWithPlainText(calloutPasteText)) {
+          event.preventDefault()
+          return true
+        }
 
         if (
           isSelectionInEmptyParagraph() &&
@@ -2272,7 +2355,7 @@ const BlockEditorShell = ({
         }
 
         if (html && !plainText.trim()) {
-          const extracted = extractPlainTextFromHtml(html)
+          const extracted = extractedPlainTextFromHtml
           if (extracted) {
             event.preventDefault()
             currentEditor.chain().focus().insertContent(extracted).run()
@@ -2593,6 +2676,16 @@ const BlockEditorShell = ({
         !activeEditor.isActive("rawMarkdownBlock") &&
         !isTableStructuralSelection
 
+      if (canShowTextToolbar && mouseTextSelectionInProgressRef.current) {
+        syncBubbleOnMouseUpRef.current = true
+        if (bubbleToolbarHoveredRef.current) return
+        setBubbleState((prev) => (prev.visible && prev.mode === "text" ? { ...prev, visible: false } : prev))
+        setTableQuickRailState((prev) =>
+          tableMenuState ? prev : { ...prev, visible: false }
+        )
+        return
+      }
+
       if (!isImageNodeSelected && !canShowTextToolbar && !isTableActive) {
         if (bubbleToolbarHoveredRef.current) return
         scheduleBubbleHide()
@@ -2660,17 +2753,45 @@ const BlockEditorShell = ({
       scheduleSyncBubble()
     }
 
+    const handleEditorPointerDownCapture = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse" || event.button !== 0) return
+      const activeEditor = editorRef.current ?? currentEditor
+      if (!activeEditor) return
+      if (!(event.target instanceof Node) || !activeEditor.view.dom.contains(event.target)) return
+      mouseTextSelectionInProgressRef.current = true
+      syncBubbleOnMouseUpRef.current = false
+      if (bubbleToolbarHoveredRef.current) return
+      setBubbleState((prev) => (prev.visible && prev.mode === "text" ? { ...prev, visible: false } : prev))
+    }
+
+    const handleWindowPointerUp = (event: PointerEvent) => {
+      if (!mouseTextSelectionInProgressRef.current) return
+      if (event.pointerType && event.pointerType !== "mouse") return
+      mouseTextSelectionInProgressRef.current = false
+      if (!syncBubbleOnMouseUpRef.current) return
+      syncBubbleOnMouseUpRef.current = false
+      scheduleSyncBubble()
+    }
+
     scheduleSyncBubble()
     currentEditor.on("selectionUpdate", scheduleSyncBubble)
     currentEditor.on("focus", scheduleSyncBubble)
     document.addEventListener("selectionchange", handleDocumentSelectionChange)
+    currentEditor.view.dom.addEventListener("pointerdown", handleEditorPointerDownCapture, true)
+    window.addEventListener("pointerup", handleWindowPointerUp, true)
+    window.addEventListener("pointercancel", handleWindowPointerUp, true)
     return () => {
       currentEditor.off("selectionUpdate", scheduleSyncBubble)
       currentEditor.off("focus", scheduleSyncBubble)
       document.removeEventListener("selectionchange", handleDocumentSelectionChange)
+      currentEditor.view.dom.removeEventListener("pointerdown", handleEditorPointerDownCapture, true)
+      window.removeEventListener("pointerup", handleWindowPointerUp, true)
+      window.removeEventListener("pointercancel", handleWindowPointerUp, true)
       if (rafId !== null && typeof window !== "undefined") {
         window.cancelAnimationFrame(rafId)
       }
+      mouseTextSelectionInProgressRef.current = false
+      syncBubbleOnMouseUpRef.current = false
       cancelBubbleHide()
     }
   }, [cancelBubbleHide, editor, scheduleBubbleHide, syncTableQuickRailFromElement, tableMenuState])
@@ -6717,14 +6838,21 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content table {
-    width: max(100%, max-content);
+    width: 100%;
     min-width: 100%;
-    max-width: none;
+    max-width: 100%;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
-    table-layout: auto;
+    table-layout: fixed;
     background: transparent;
+  }
+
+  .aq-block-editor__content .tableWrapper > table {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
   }
 
   .aq-block-editor__content .tableWrapper {

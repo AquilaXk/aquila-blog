@@ -7,6 +7,7 @@ import com.back.boundedContexts.post.dto.FeedPostDto
 import com.back.boundedContexts.post.dto.PostWithContentDto
 import com.back.boundedContexts.post.dto.PublicPostDetailContentCacheDto
 import com.back.boundedContexts.post.dto.PublicPostDetailMetaCacheDto
+import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.boundedContexts.post.dto.PublicPostsBootstrapDto
 import com.back.boundedContexts.post.dto.TagCountDto
 import com.back.global.exception.application.AppException
@@ -44,10 +45,12 @@ class PostPublicReadQueryService(
     private val meterRegistry: MeterRegistry? = null,
     @Value("\${custom.post.read.cursor-signing-secret:}") cursorSigningSecret: String,
     @Value("\${custom.post.read.detail-content-cache-max-chars:120000}") detailContentCacheMaxChars: Int,
+    @Value("\${custom.post.read.detail-snapshot-cache-max-chars:180000}") detailSnapshotCacheMaxChars: Int,
 ) : PostPublicReadQueryUseCase {
     private val logger = LoggerFactory.getLogger(PostPublicReadQueryService::class.java)
     private val cursorSecretBytes = resolveCursorSecret(cursorSigningSecret).toByteArray(StandardCharsets.UTF_8)
     private val detailContentCacheLimit = detailContentCacheMaxChars.coerceAtLeast(2_048)
+    private val detailSnapshotCacheLimit = detailSnapshotCacheMaxChars.coerceAtLeast(detailContentCacheLimit)
     private val detailCacheLockRegistry = ConcurrentHashMap<Long, Any>()
     private val cachePayloadMaxBytes = ConcurrentHashMap<String, AtomicLong>()
 
@@ -242,10 +245,37 @@ class PostPublicReadQueryService(
                 if (isDetailNegativeCached(id)) {
                     throw AppException("404-1", "존재하지 않는 글입니다.")
                 }
-                val meta = getCachedPublicPostDetailMeta(id)
-                val content = getOrLoadPublicPostDetailContent(id)
-                clearDetailNegativeCache(id)
-                meta.merge(content)
+                val cachedSnapshot = readCachedPublicPostDetailSnapshot(id)
+                if (cachedSnapshot != null) {
+                    clearDetailNegativeCache(id)
+                    return@withDetailPermit cachedSnapshot.toPostWithContentDto()
+                }
+
+                withDetailCacheLock(id) {
+                    val snapshotCache = cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                    val doubleChecked = snapshotCache?.get(id, PublicPostDetailSnapshotCacheDto::class.java)
+                    if (doubleChecked != null) {
+                        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "hit")
+                        clearDetailNegativeCache(id)
+                        return@withDetailCacheLock doubleChecked.toPostWithContentDto()
+                    }
+
+                    val meta = getCachedPublicPostDetailMeta(id)
+                    val content = getOrLoadPublicPostDetailContent(id)
+                    val merged = meta.merge(content)
+                    if (shouldCacheDetailSnapshot(merged)) {
+                        snapshotCache?.put(id, PublicPostDetailSnapshotCacheDto.from(merged))
+                        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "put")
+                        recordCachePayloadSize(
+                            PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT,
+                            estimateDetailSnapshotPayloadSize(merged),
+                        )
+                    } else {
+                        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "skip_large")
+                    }
+                    clearDetailNegativeCache(id)
+                    merged
+                }
             }
         }
 
@@ -539,6 +569,19 @@ class PostPublicReadQueryService(
         return totalLength <= detailContentCacheLimit
     }
 
+    private fun readCachedPublicPostDetailSnapshot(id: Long): PublicPostDetailSnapshotCacheDto? {
+        val cached =
+            cacheManager
+                .getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                ?.get(id, PublicPostDetailSnapshotCacheDto::class.java)
+        if (cached != null) {
+            recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "hit")
+            return cached
+        }
+        recordCacheResult(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT, "miss")
+        return null
+    }
+
     private fun getCachedPublicPostDetailMeta(id: Long): PublicPostDetailMetaCacheDto {
         val cached =
             cacheManager
@@ -621,6 +664,19 @@ class PostPublicReadQueryService(
             meta.authorProfileImageUrl.length +
             meta.authorProfileImageDirectUrl.length +
             128
+
+    private fun shouldCacheDetailSnapshot(detail: PostWithContentDto): Boolean =
+        estimateDetailSnapshotPayloadSize(detail) <= detailSnapshotCacheLimit
+
+    private fun estimateDetailSnapshotPayloadSize(detail: PostWithContentDto): Int =
+        detail.title.length +
+            detail.authorName.length +
+            detail.authorUsername.length +
+            detail.authorProfileImageUrl.length +
+            detail.authorProfileImageDirectUrl.length +
+            detail.content.length +
+            (detail.contentHtml?.length ?: 0) +
+            256
 
     private fun toFeedPostDtoPage(postPage: PagedResult<com.back.boundedContexts.post.domain.Post>): PageDto<FeedPostDto> =
         PageDto(postPage.map(FeedPostDto::from))

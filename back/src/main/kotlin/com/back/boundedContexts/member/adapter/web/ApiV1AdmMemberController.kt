@@ -70,6 +70,11 @@ class ApiV1AdmMemberController(
         val profile: MemberWithUsernameDto,
     )
 
+    data class AdminProfileBootstrapResponse(
+        val member: AuthSessionMemberDto,
+        val workspace: MemberProfileWorkspaceResponseDto,
+    )
+
     private enum class LinkSection(
         val displayName: String,
         val defaultIcon: String,
@@ -200,6 +205,16 @@ class ApiV1AdmMemberController(
         AdminHubBootstrapResponse(
             member = AuthSessionMemberDto(securityUser),
             profile = currentMemberProfileQueryUseCase.getPublishedById(securityUser.id),
+        )
+
+    @GetMapping("/profile/bootstrap")
+    @Transactional(readOnly = true)
+    fun profileBootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminProfileBootstrapResponse =
+        AdminProfileBootstrapResponse(
+            member = AuthSessionMemberDto(securityUser),
+            workspace = currentMemberProfileQueryUseCase.getWorkspaceById(securityUser.id),
         )
 
     @GetMapping("/{id}/profileWorkspace")

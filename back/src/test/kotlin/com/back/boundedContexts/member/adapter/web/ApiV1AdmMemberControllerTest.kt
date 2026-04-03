@@ -52,6 +52,25 @@ class ApiV1AdmMemberControllerTest : SeededSpringBootTestSupport() {
             }
     }
 
+    @Test
+    @WithUserDetails("admin@test.com")
+    fun `관리자는 프로필 작업공간 bootstrap에서 현재 세션과 draft 및 published workspace를 함께 조회할 수 있다`() {
+        val admin = memberFacade.findByEmail("admin@test.com")!!
+
+        mvc
+            .get("/member/api/v1/adm/members/profile/bootstrap")
+            .andExpect {
+                status { isOk() }
+                jsonPath("$.member.id") { value(admin.id) }
+                jsonPath("$.member.isAdmin") { value(true) }
+                jsonPath("$.member.nickname") { value(admin.nickname) }
+                jsonPath("$.workspace.draft.profileRole") { value(admin.profileRole) }
+                jsonPath("$.workspace.published.profileRole") { value(admin.profileRole) }
+                jsonPath("$.workspace.draft.blogTitle") { value(admin.blogTitle) }
+                jsonPath("$.workspace.published.blogTitle") { value(admin.blogTitle) }
+            }
+    }
+
     @Nested
     inner class UpdateProfileCard {
         @Test

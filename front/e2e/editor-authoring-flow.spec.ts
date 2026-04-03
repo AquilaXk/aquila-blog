@@ -39,6 +39,48 @@ const selectWordInEditable = async (page: Page, editable: Locator, word: string)
   await page.waitForTimeout(80)
 }
 
+const getWordDragPoints = async (
+  editable: Locator,
+  word: string
+): Promise<{ startX: number; startY: number; endX: number; endY: number }> => {
+  const points = await editable.evaluate((element, targetWord) => {
+    const root = element as HTMLElement
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let textNode: Text | null = null
+    let foundIndex = -1
+
+    while (walker.nextNode()) {
+      const current = walker.currentNode as Text
+      const index = current.data.indexOf(targetWord)
+      if (index >= 0) {
+        textNode = current
+        foundIndex = index
+        break
+      }
+    }
+
+    if (!textNode || foundIndex < 0) return null
+    const range = document.createRange()
+    range.setStart(textNode, foundIndex)
+    range.setEnd(textNode, foundIndex + targetWord.length)
+    const rect = range.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return null
+
+    return {
+      startX: Math.round(rect.left + 2),
+      startY: Math.round(rect.top + rect.height / 2),
+      endX: Math.round(rect.right - 2),
+      endY: Math.round(rect.top + rect.height / 2),
+    }
+  }, word)
+
+  if (!points) {
+    throw new Error(`could not resolve drag points for word: ${word}`)
+  }
+
+  return points
+}
+
 test.describe("block editor authoring flow", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -214,6 +256,35 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).toContainText("> 콜아웃 즉시 붙여넣기")
   })
 
+  test("빈 콜아웃 본문에서 html clipboard paste도 콜아웃 본문에 유지된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("앞 문단")
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "QA 콜아웃" }).click()
+
+    const calloutBodyContent = page.locator("[data-callout-body-content='true']").first()
+    await expect(calloutBodyContent).toBeVisible()
+    await calloutBodyContent.click()
+
+    await editor.evaluate((element) => {
+      const data = new DataTransfer()
+      data.setData("text/plain", "콜아웃 HTML 붙여넣기")
+      data.setData("text/html", "<p><strong>콜아웃 HTML 붙여넣기</strong></p>")
+      const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(event, "clipboardData", { value: data })
+      element.dispatchEvent(event)
+    })
+
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await expect(markdownOutput).toContainText("> [!TIP]")
+    await expect(markdownOutput).toContainText("> 콜아웃 HTML 붙여넣기")
+    const markdownRaw = (await markdownOutput.textContent()) || ""
+    expect(markdownRaw).not.toContain("\n\n콜아웃 HTML 붙여넣기\n")
+  })
+
   test("콜아웃 본문에서 선택 버블 포맷이 직접 적용되고 markdown로 직렬화된다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -278,6 +349,27 @@ test.describe("block editor authoring flow", () => {
 
     await selectWordInEditable(page, calloutBodyContent, "버블")
     await expect(page.getByTestId("editor-text-bubble-toolbar")).toBeVisible()
+  })
+
+  test("writer surface에서는 마우스 드래그 선택 중 버블을 숨기고 mouseup 이후에만 노출한다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("마우스 업에서만 버블 노출")
+
+    const points = await getWordDragPoints(editor, "버블")
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+
+    await page.mouse.move(points.startX, points.startY)
+    await page.mouse.down()
+    await page.mouse.move(points.endX, points.endY, { steps: 8 })
+    await expect(textBubbleToolbar).toHaveCount(0)
+
+    await page.mouse.up()
+    await expect(textBubbleToolbar).toBeVisible()
   })
 
   test("코드 블록은 작성 surface에서도 Prism 하이라이트 토큰을 렌더한다", async ({ page }) => {
@@ -479,6 +571,23 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("table-corner-handle")).toBeVisible()
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
+
+    const tableWidthShape = await page.evaluate(() => {
+      const wrapper = document.querySelector<HTMLElement>(
+        ".aq-block-editor__content .tableWrapper"
+      )
+      const table = wrapper?.querySelector<HTMLElement>("table")
+      if (!wrapper || !table) return null
+      return {
+        wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
+        tableWidth: Math.round(table.getBoundingClientRect().width),
+      }
+    })
+    expect(tableWidthShape).not.toBeNull()
+    if (!tableWidthShape) {
+      throw new Error("table wrapper/table width shape is missing")
+    }
+    expect(Math.abs(tableWidthShape.wrapperWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
 
     await page.getByTestId("table-row-rail").getByRole("button", { name: "행 선택" }).click()
     await expect(page.getByTestId("table-row-menu")).toBeVisible()

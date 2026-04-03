@@ -3,6 +3,8 @@ package com.back.boundedContexts.post.adapter.web
 import com.back.boundedContexts.member.application.service.ActorApplicationService
 import com.back.boundedContexts.post.application.service.PostApplicationService
 import com.back.boundedContexts.post.application.service.PostHitDedupService
+import com.back.boundedContexts.post.application.service.PostQueryCacheNames
+import com.back.boundedContexts.post.dto.PublicPostDetailSnapshotCacheDto
 import com.back.standard.dto.post.type1.PostSearchSortType1
 import com.back.standard.extensions.getOrThrow
 import com.back.support.SeededSpringBootTestSupport
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.cache.CacheManager
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
@@ -53,6 +56,9 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
 
     @Autowired
     private lateinit var entityManager: EntityManager
+
+    @Autowired
+    private lateinit var cacheManager: CacheManager
 
     @AfterEach
     fun clearHitDedupState() {
@@ -240,6 +246,25 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
                     status { isNotModified() }
                     header { string(HttpHeaders.ETAG, etag) }
                 }
+        }
+
+        @Test
+        fun `비로그인 상세 조회는 merged snapshot cache를 채운다`() {
+            val post = postFacade.findPagedByKw("", PostSearchSortType1.CREATED_AT, 1, 1).content.first()
+            cacheManager.getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)?.evict(post.id)
+
+            mvc.get("/post/api/v1/posts/${post.id}").andExpect {
+                status { isOk() }
+            }
+
+            val snapshot =
+                cacheManager
+                    .getCache(PostQueryCacheNames.DETAIL_PUBLIC_SNAPSHOT)
+                    ?.get(post.id, PublicPostDetailSnapshotCacheDto::class.java)
+
+            assertThat(snapshot).isNotNull
+            assertThat(snapshot?.id).isEqualTo(post.id)
+            assertThat(snapshot?.content).isNotBlank()
         }
 
         @Test

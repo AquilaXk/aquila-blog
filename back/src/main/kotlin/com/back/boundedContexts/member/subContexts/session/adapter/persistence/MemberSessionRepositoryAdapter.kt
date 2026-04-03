@@ -2,7 +2,9 @@ package com.back.boundedContexts.member.subContexts.session.adapter.persistence
 
 import com.back.boundedContexts.member.subContexts.session.application.port.output.MemberSessionStorePort
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import org.springframework.stereotype.Component
+import java.time.Instant
 
 @Component
 class MemberSessionRepositoryAdapter(
@@ -19,4 +21,19 @@ class MemberSessionRepositoryAdapter(
         memberId: Long,
         sessionKey: String,
     ): MemberSession? = memberSessionRepository.findByMemberIdAndSessionKeyAndRevokedAtIsNull(memberId, sessionKey)
+
+    override fun findActiveSnapshotBySessionKeyAndRevokedAtIsNull(sessionKey: String): MemberSessionAuthSnapshot? =
+        memberSessionRepository.findActiveSnapshotBySessionKeyAndRevokedAtIsNull(sessionKey)
+
+    override fun findActiveSnapshotByMemberIdAndSessionKeyAndRevokedAtIsNull(
+        memberId: Long,
+        sessionKey: String,
+    ): MemberSessionAuthSnapshot? =
+        memberSessionRepository.findActiveSnapshotByMemberIdAndSessionKeyAndRevokedAtIsNull(memberId, sessionKey)
+
+    override fun touchAuthenticatedIfDue(
+        sessionId: Long,
+        threshold: Instant,
+        now: Instant,
+    ): Boolean = memberSessionRepository.touchAuthenticatedIfDue(sessionId, threshold, now) > 0
 }

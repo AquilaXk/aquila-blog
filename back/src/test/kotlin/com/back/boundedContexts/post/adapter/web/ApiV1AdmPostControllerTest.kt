@@ -1,17 +1,21 @@
 package com.back.boundedContexts.post.adapter.web
 
 import com.back.boundedContexts.member.domain.shared.Member
+import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
 import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.domain.Post
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
+import com.back.boundedContexts.post.dto.PostDto
 import com.back.boundedContexts.post.dto.PostTagRecommendationResult
 import com.back.global.app.AppConfig
 import com.back.global.security.config.CustomAuthenticationFilter
+import com.back.standard.dto.page.PageDto
 import com.back.standard.dto.page.PagedResult
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
+import org.mockito.BDDMockito.never
 import org.mockito.BDDMockito.then
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
@@ -57,6 +61,9 @@ class ApiV1AdmPostControllerTest {
 
     @MockitoBean
     private lateinit var postTagRecommendationUseCase: PostTagRecommendationUseCase
+
+    @MockitoBean
+    private lateinit var adminPostListSnapshotService: AdminPostListSnapshotUseCase
 
     @MockitoBean(name = "jpaMappingContext")
     private lateinit var jpaMappingContext: JpaMetamodelMappingContext
@@ -126,6 +133,42 @@ class ApiV1AdmPostControllerTest {
                 jsonPath("$.pageable.pageNumber") { value(1) }
                 jsonPath("$.pageable.pageSize") { value(30) }
             }
+    }
+
+    @Test
+    @WithMockUser(roles = ["ADMIN"])
+    fun `관리자 첫 화면 기본 목록은 snapshot cache 서비스로 응답한다`() {
+        val post = samplePost(id = 55, title = "첫 화면 캐시", content = "본문", published = true, listed = true)
+        given(adminPostListSnapshotService.getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT))
+            .willReturn(
+                PageDto(
+                    content =
+                        listOf(
+                            PostDto(post).apply {
+                                tempDraft = false
+                            },
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/post/api/v1/adm/posts") {
+                param("page", "1")
+                param("pageSize", "20")
+                param("kw", "")
+                param("sort", "CREATED_AT")
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.content[0].id") { value(55) }
+                jsonPath("$.content[0].title") { value("첫 화면 캐시") }
+            }
+
+        then(adminPostListSnapshotService)
+            .should()
+            .getFirstPageSnapshot(com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT)
+        then(postUseCase)
+            .should(never())
+            .findPagedByKwForAdmin("", com.back.standard.dto.post.type1.PostSearchSortType1.CREATED_AT, 1, 20)
     }
 
     @Test

@@ -251,6 +251,8 @@ custom:
     ttl-seconds: 3600
     ttl-overrides:
       member-admin-profile-v2: 120
+      member-session-active-v1: ${CUSTOM__CACHE__MEMBER_SESSION_ACTIVE_TTL_SECONDS:15}
+      post-admin-posts-first-page-v1: ${CUSTOM__CACHE__POST_ADMIN_POSTS_FIRST_PAGE_TTL_SECONDS:8}
       post-bootstrap-v1: ${CUSTOM__CACHE__POST_BOOTSTRAP_TTL_SECONDS:8}
       post-feed-v4: ${CUSTOM__CACHE__POST_FEED_TTL_SECONDS:8}
       post-feed-cursor-first-v1: ${CUSTOM__CACHE__POST_FEED_CURSOR_FIRST_TTL_SECONDS:8}

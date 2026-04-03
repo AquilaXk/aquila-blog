@@ -1,5 +1,6 @@
 package com.back.boundedContexts.post.adapter.web
 
+import com.back.boundedContexts.post.application.port.input.AdminPostListSnapshotUseCase
 import com.back.boundedContexts.post.application.port.input.PostTagRecommendationUseCase
 import com.back.boundedContexts.post.application.port.input.PostUseCase
 import com.back.boundedContexts.post.dto.AdmDeletedPostDto
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController
 class ApiV1AdmPostController(
     private val postUseCase: PostUseCase,
     private val postTagRecommendationUseCase: PostTagRecommendationUseCase,
+    private val adminPostListSnapshotService: AdminPostListSnapshotUseCase,
 ) {
     data class AdmPostCountResBody(
         val all: Long,
@@ -65,6 +67,9 @@ class ApiV1AdmPostController(
     ): PageDto<PostDto> {
         val validPage = page.coerceAtLeast(1)
         val validPageSize = pageSize.coerceIn(1, 30)
+        if (kw.isBlank() && validPage == 1 && validPageSize == 20 && sort == PostSearchSortType1.CREATED_AT) {
+            return adminPostListSnapshotService.getFirstPageSnapshot(sort)
+        }
         val postPage = postUseCase.findPagedByKwForAdmin(kw, sort, validPage, validPageSize)
         return PageDto(
             postPage.map { post ->

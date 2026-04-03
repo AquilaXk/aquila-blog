@@ -4,7 +4,7 @@ import com.back.boundedContexts.member.application.service.ActorApplicationServi
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.boundedContexts.member.subContexts.session.application.port.input.MemberSessionUseCase
-import com.back.boundedContexts.member.subContexts.session.model.MemberSession
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 import com.back.global.exception.application.AppException
 import com.back.global.rsData.RsData
 import com.back.global.security.application.AuthIpSecurityService
@@ -174,7 +174,7 @@ class CustomAuthenticationFilter(
                         sessionKey = memberSession?.sessionKey,
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
-                    memberSession?.let(memberSessionUseCase::touchAuthenticated)
+                    memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
                     authenticate(apiKeyMember)
                     return
                 }
@@ -225,13 +225,13 @@ class CustomAuthenticationFilter(
                         sessionKey = memberSession?.sessionKey,
                     )
                     rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $rotatedAccessToken")
-                    memberSession?.let(memberSessionUseCase::touchAuthenticated)
+                    memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
                     authenticate(persistedMember)
                     return
                 }
             }
 
-            memberSession?.let(memberSessionUseCase::touchAuthenticated)
+            memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
             val payloadMember =
                 Member(
                     id = payload.id,
@@ -290,7 +290,7 @@ class CustomAuthenticationFilter(
             sessionKey = memberSession?.sessionKey,
         )
         rq.setHeader(HttpHeaders.AUTHORIZATION, "Bearer $newAccessToken")
-        memberSession?.let(memberSessionUseCase::touchAuthenticated)
+        memberSession?.let { memberSessionUseCase.touchAuthenticated(it) }
 
         authenticate(member)
     }
@@ -383,7 +383,7 @@ class CustomAuthenticationFilter(
 
     private data class SessionResolution(
         val sessionKeyProvided: Boolean,
-        val session: MemberSession?,
+        val session: MemberSessionAuthSnapshot?,
     )
 
     private fun resolveMemberSession(
@@ -404,7 +404,7 @@ class CustomAuthenticationFilter(
 
         return SessionResolution(
             sessionKeyProvided = true,
-            session = memberSessionUseCase.findActiveSession(memberId, effectiveSessionKey),
+            session = memberSessionUseCase.findActiveSessionSnapshot(memberId, effectiveSessionKey),
         )
     }
 

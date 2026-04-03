@@ -2,6 +2,7 @@ package com.back.boundedContexts.member.subContexts.session.application.port.inp
 
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.subContexts.session.model.MemberSession
+import com.back.boundedContexts.member.subContexts.session.model.MemberSessionAuthSnapshot
 
 interface MemberSessionUseCase {
     fun createSession(
@@ -20,7 +21,16 @@ interface MemberSessionUseCase {
         sessionKey: String,
     ): MemberSession?
 
+    fun findActiveSessionSnapshot(sessionKey: String): MemberSessionAuthSnapshot?
+
+    fun findActiveSessionSnapshot(
+        memberId: Long,
+        sessionKey: String,
+    ): MemberSessionAuthSnapshot?
+
     fun touchAuthenticated(memberSession: MemberSession)
+
+    fun touchAuthenticated(snapshot: MemberSessionAuthSnapshot)
 
     fun revokeSession(sessionKey: String)
 }

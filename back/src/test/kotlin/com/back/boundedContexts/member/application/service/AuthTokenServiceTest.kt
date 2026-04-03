@@ -1,7 +1,6 @@
 package com.back.boundedContexts.member.application.service
 
 import com.back.boundedContexts.member.domain.shared.Member
-import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.assertj.core.api.Assertions.assertThat
@@ -28,17 +27,16 @@ class AuthTokenServiceTest {
             )
 
         val accessToken = authTokenService.genAccessToken(member)
+        val payload = authTokenService.payload(accessToken)
 
         assertThat(accessToken).isNotBlank()
         assertThat(accessToken.split(".")).hasSize(3)
-        assertThat(authTokenService.payload(accessToken))
-            .isEqualTo(
-                AccessTokenPayload(
-                    id = member.id,
-                    email = member.email,
-                    name = member.name,
-                ),
-            )
+        assertThat(payload).isNotNull
+        assertThat(payload!!.id).isEqualTo(member.id)
+        assertThat(payload.email).isEqualTo(member.email)
+        assertThat(payload.name).isEqualTo(member.name)
+        assertThat(payload.issuedAt).isNotNull
+        assertThat(payload.expiresAt).isNotNull
     }
 
     @Test
@@ -71,13 +69,13 @@ class AuthTokenServiceTest {
                 .signWith(Keys.hmacShaKeyFor("test-secret-key-that-is-long-enough-123".toByteArray()))
                 .compact()
 
-        assertThat(authTokenService.payload(legacyToken))
-            .isEqualTo(
-                AccessTokenPayload(
-                    id = member.id,
-                    username = member.username,
-                    name = member.name,
-                ),
-            )
+        val payload = authTokenService.payload(legacyToken)
+
+        assertThat(payload).isNotNull
+        assertThat(payload!!.id).isEqualTo(member.id)
+        assertThat(payload.username).isEqualTo(member.username)
+        assertThat(payload.name).isEqualTo(member.name)
+        assertThat(payload.issuedAt).isNotNull
+        assertThat(payload.expiresAt).isNotNull
     }
 }

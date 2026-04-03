@@ -3,7 +3,6 @@ package com.back.boundedContexts.member.application.service
 import com.back.boundedContexts.member.application.port.output.MemberRepositoryPort
 import com.back.boundedContexts.member.domain.shared.Member
 import com.back.boundedContexts.member.domain.shared.MemberProxy
-import com.back.boundedContexts.member.dto.shared.AccessTokenPayload
 import com.back.global.security.domain.SecurityUser
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
@@ -55,16 +54,15 @@ class ActorApplicationServiceTest {
     @Test
     fun `회원으로 accessToken 을 발급하고 payload 를 다시 파싱할 수 있다`() {
         val accessToken = actorApplicationService.genAccessToken(user1)
+        val payload = actorApplicationService.payload(accessToken)
 
         assertThat(accessToken).isNotBlank
-        assertThat(actorApplicationService.payload(accessToken))
-            .isEqualTo(
-                AccessTokenPayload(
-                    id = user1.id,
-                    email = user1.email,
-                    name = user1.name,
-                ),
-            )
+        assertThat(payload).isNotNull
+        assertThat(payload!!.id).isEqualTo(user1.id)
+        assertThat(payload.email).isEqualTo(user1.email)
+        assertThat(payload.name).isEqualTo(user1.name)
+        assertThat(payload.issuedAt).isNotNull
+        assertThat(payload.expiresAt).isNotNull
     }
 
     @Test

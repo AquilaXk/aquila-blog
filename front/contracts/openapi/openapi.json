@@ -1204,6 +1204,24 @@
         }
       }
     },
+    "/system/api/v1/adm/bootstrap" : {
+      "get" : {
+        "tags" : [ "api-v-1-adm-system-controller" ],
+        "operationId" : "bootstrap",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminSystemBootstrapResBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/system/api/v1/adm/auth/security-events" : {
       "get" : {
         "tags" : [ "api-v-1-adm-system-controller" ],
@@ -1870,6 +1888,28 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/AdmPostCountResBody"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/post/api/v1/adm/posts/bootstrap" : {
+      "get" : {
+        "tags" : [ "ApiV1AdmPostController" ],
+        "summary" : "관리자 글 작업공간 bootstrap",
+        "operationId" : "bootstrap_1",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AdminPostsBootstrapResBody"
                 }
               }
             }
@@ -3950,6 +3990,35 @@
           }
         }
       },
+      "AdminSystemBootstrapResBody" : {
+        "type" : "object",
+        "properties" : {
+          "member" : {
+            "$ref" : "#/components/schemas/AuthSessionMemberDto"
+          },
+          "health" : {
+            "$ref" : "#/components/schemas/HealthResBody"
+          }
+        }
+      },
+      "AuthSessionMemberDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "isAdmin" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "AuthSecurityEventDto" : {
         "type" : "object",
         "properties" : {
@@ -4227,6 +4296,17 @@
           }
         }
       },
+      "AdminPostsBootstrapResBody" : {
+        "type" : "object",
+        "properties" : {
+          "member" : {
+            "$ref" : "#/components/schemas/AuthSessionMemberDto"
+          },
+          "firstPage" : {
+            "$ref" : "#/components/schemas/PageDtoPostDto"
+          }
+        }
+      },
       "RsDataSignupEmailVerifyResult" : {
         "type" : "object",
         "properties" : {
@@ -4336,24 +4416,6 @@
           "unreadCount" : {
             "type" : "integer",
             "format" : "int32"
-          }
-        }
-      },
-      "AuthSessionMemberDto" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "username" : {
-            "type" : "string"
-          },
-          "nickname" : {
-            "type" : "string"
-          },
-          "isAdmin" : {
-            "type" : "boolean"
           }
         }
       },

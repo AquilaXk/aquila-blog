@@ -97,6 +97,45 @@ class ApiV1AdmSystemControllerTest {
     private lateinit var jpaMappingContext: JpaMetamodelMappingContext
 
     @Test
+    fun `관리자는 시스템 bootstrap을 조회할 수 있다`() {
+        val securityUser =
+            SecurityUser(
+                id = 7L,
+                username = "admin@example.com",
+                password = "",
+                nickname = "관리자",
+                authorities = listOf(SimpleGrantedAuthority("ROLE_ADMIN")),
+            )
+        given(adminSystemHealthSnapshotService.getHealthSummary())
+            .willReturn(
+                ApiV1AdmSystemController.HealthResBody(
+                    status = "UP",
+                    serverTime = Instant.parse("2026-04-03T00:00:00Z").toString(),
+                    uptimeMs = 1234,
+                    version = "test",
+                    checks =
+                        ApiV1AdmSystemController.HealthChecks(
+                            db = "UP",
+                            redis = "DISABLED",
+                            signupMail = "READY",
+                        ),
+                ),
+            )
+
+        mvc
+            .get("/system/api/v1/adm/bootstrap") {
+                with(user(securityUser))
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.member.id") { value(7) }
+                jsonPath("$.member.isAdmin") { value(true) }
+                jsonPath("$.member.nickname") { value("관리자") }
+                jsonPath("$.health.status") { value("UP") }
+                jsonPath("$.health.checks.db") { value("UP") }
+            }
+    }
+
+    @Test
     @WithMockUser(roles = ["ADMIN"])
     fun `관리자는 시스템 헬스 상태를 조회할 수 있다`() {
         given(adminSystemHealthSnapshotService.getHealthSummary())

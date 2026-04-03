@@ -1,5 +1,6 @@
 package com.back.global.system.adapter.web
 
+import com.back.boundedContexts.member.dto.AuthSessionMemberDto
 import com.back.boundedContexts.member.subContexts.notification.application.service.MemberNotificationSseService
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnostics
 import com.back.boundedContexts.member.subContexts.signupVerification.application.service.SignupMailDiagnosticsService
@@ -49,6 +50,11 @@ class ApiV1AdmSystemController(
     private val postSearchEngineMirrorService: PostSearchEngineMirrorService,
     private val adminSystemHealthSnapshotService: AdminSystemHealthSnapshotService,
 ) {
+    data class AdminSystemBootstrapResBody(
+        val member: AuthSessionMemberDto,
+        val health: HealthResBody,
+    )
+
     data class HealthChecks(
         val db: String,
         val redis: String,
@@ -92,6 +98,16 @@ class ApiV1AdmSystemController(
         val searchEngineMirrorConsecutiveFailures: Int,
         val searchEngineMirrorFailureThreshold: Int,
     )
+
+    @GetMapping("/bootstrap")
+    @Transactional(readOnly = true)
+    fun bootstrap(
+        @AuthenticationPrincipal securityUser: SecurityUser,
+    ): AdminSystemBootstrapResBody =
+        AdminSystemBootstrapResBody(
+            member = AuthSessionMemberDto(securityUser),
+            health = adminSystemHealthSnapshotService.getHealthSummary(),
+        )
 
     /**
      * health 처리 흐름에서 예외 경로와 운영 안정성을 함께 고려합니다.

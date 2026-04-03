@@ -7,8 +7,9 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { setCookie } from "cookies-next"
 import { apiFetch } from "src/apis/backend/client"
 import { toFriendlyApiMessage } from "src/apis/backend/errorMessages"
+import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
-import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
 import { readServerSnapshot } from "src/libs/server/serverSnapshotCache"
@@ -142,6 +143,11 @@ type AdminToolsInitialSnapshot = {
 type AdminToolsHealthSsrSnapshot = {
   systemHealth: SystemHealthPayload
   fetchedAt: string
+}
+
+type AdminToolsBootstrapPayload = {
+  member: AuthMember
+  health: SystemHealthPayload
 }
 
 type AdminToolsPageProps = AdminPageProps & {
@@ -349,40 +355,93 @@ async function readJsonIfOk<T>(req: IncomingMessage, path: string): Promise<T | 
 
 export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
-  const systemHealthResultPromise =
+  const bootstrapResultPromise =
     hasServerAuthCookie(req)
       ? timed(() =>
-          readServerSnapshot<AdminToolsHealthSsrSnapshot>(ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY, ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS, async () => {
-            const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
-            if (!systemHealth) return null
-            return {
-              systemHealth,
-              fetchedAt: new Date().toISOString(),
-            }
-          })
+          readAdminProtectedBootstrap<AdminToolsBootstrapPayload>(req, "/system/api/v1/adm/bootstrap", "/admin/tools")
         )
       : null
-  const baseResult = await timed(() => getAdminPageProps(req))
-  if (!baseResult.ok) throw baseResult.error
-  if ("redirect" in baseResult.value) return baseResult.value
-  if (!("props" in baseResult.value)) return baseResult.value
-  const baseProps = await baseResult.value.props
 
-  const [systemHealthResult, mailSnapshot] = await Promise.all([
-    systemHealthResultPromise
-      ? systemHealthResultPromise
-      : timed(() =>
-          readServerSnapshot<AdminToolsHealthSsrSnapshot>(ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY, ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS, async () => {
-            const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
-            if (!systemHealth) return null
-            return {
-              systemHealth,
-              fetchedAt: new Date().toISOString(),
-            }
-          })
-        ),
-    Promise.resolve(readMailSnapshotFromCookie(req)),
-  ])
+  const bootstrapResult = bootstrapResultPromise ? await bootstrapResultPromise : null
+  if (bootstrapResult?.ok && !bootstrapResult.value.ok && bootstrapResult.value.destination) {
+    return {
+      redirect: {
+        destination: bootstrapResult.value.destination,
+        permanent: false,
+      },
+    }
+  }
+
+  let baseProps: AdminPageProps
+  let authDurationMs = 0
+  let authDescription = "bootstrap"
+  let systemHealthResult: {
+    durationMs: number
+    ok: true
+    value: { value: AdminToolsHealthSsrSnapshot | null; source: string }
+  }
+
+  if (bootstrapResult?.ok && bootstrapResult.value.ok) {
+    baseProps = buildAdminPagePropsFromMember(bootstrapResult.value.value.member)
+    systemHealthResult = {
+      durationMs: bootstrapResult.durationMs,
+      ok: true,
+      value: {
+        value: {
+          systemHealth: bootstrapResult.value.value.health,
+          fetchedAt: new Date().toISOString(),
+        },
+        source: "bootstrap",
+      },
+    }
+  } else {
+    const systemHealthResultPromise =
+      hasServerAuthCookie(req)
+        ? timed(() =>
+            readServerSnapshot<AdminToolsHealthSsrSnapshot>(
+              ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY,
+              ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS,
+              async () => {
+                const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+                if (!systemHealth) return null
+                return {
+                  systemHealth,
+                  fetchedAt: new Date().toISOString(),
+                }
+              }
+            )
+          )
+        : null
+    const baseResult = await timed(() => getAdminPageProps(req))
+    if (!baseResult.ok) throw baseResult.error
+    if ("redirect" in baseResult.value) return baseResult.value
+    if (!("props" in baseResult.value)) return baseResult.value
+    baseProps = await baseResult.value.props
+    authDurationMs = baseResult.durationMs
+    authDescription = "fallback"
+
+    const fallbackSystemHealthResult =
+      systemHealthResultPromise
+        ? await systemHealthResultPromise
+        : await timed(() =>
+            readServerSnapshot<AdminToolsHealthSsrSnapshot>(
+              ADMIN_TOOLS_HEALTH_SSR_CACHE_KEY,
+              ADMIN_TOOLS_HEALTH_SSR_CACHE_TTL_MS,
+              async () => {
+                const systemHealth = await readJsonIfOk<SystemHealthPayload>(req, "/system/api/v1/adm/health")
+                if (!systemHealth) return null
+                return {
+                  systemHealth,
+                  fetchedAt: new Date().toISOString(),
+                }
+              }
+            )
+          )
+    if (!fallbackSystemHealthResult.ok) throw fallbackSystemHealthResult.error
+    systemHealthResult = fallbackSystemHealthResult
+  }
+
+  const mailSnapshot = readMailSnapshotFromCookie(req)
 
   const healthSnapshot = systemHealthResult.ok ? systemHealthResult.value.value : null
   const systemHealth = healthSnapshot?.systemHealth ?? null
@@ -392,8 +451,8 @@ export const getServerSideProps: GetServerSideProps<AdminToolsPageProps> = async
   appendSsrDebugTiming(req, res, [
     {
       name: "admin-tools-auth",
-      durationMs: baseResult.durationMs,
-      description: "ok",
+      durationMs: authDurationMs,
+      description: authDescription,
     },
     {
       name: "admin-tools-health",

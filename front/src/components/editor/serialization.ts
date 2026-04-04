@@ -649,15 +649,39 @@ export const createBulletListNode = (items: string[]) => createListNode("bulletL
 
 export const createOrderedListNode = (items: string[], start = 1) => createListNode("orderedList", items, start)
 
+export const createEmptyTableRows = (rowCount = 2, columnCount = 2): string[][] =>
+  Array.from({ length: Math.max(1, rowCount) }, () =>
+    Array.from({ length: Math.max(1, columnCount) }, () => "")
+  )
+
 export const createTableNode = (
   rows: string[][],
   layout?: MarkdownTableLayout | null
 ): JSONContent => {
   const normalizedRows = normalizeTableRows(rows)
-  const columnWidths = layout?.columnWidths || []
-  const rowHeights = layout?.rowHeights || []
-  const columnAlignments = layout?.columnAlignments || []
-  const cellLayouts = layout?.cells || []
+  const rowCount = normalizedRows.length
+  const columnCount = normalizedRows.reduce((max, row) => Math.max(max, row.length), 0)
+  const headerRowEnabled = layout?.headerRow !== false
+  const headerColumnEnabled = layout?.headerColumn === true
+  const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) => {
+    const width = layout?.columnWidths?.[columnIndex]
+    return typeof width === "number" && Number.isFinite(width) && width > 0
+      ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, width)
+      : null
+  })
+  const rowHeights = Array.from({ length: rowCount }, (_, rowIndex) => {
+    const rowHeightPx = layout?.rowHeights?.[rowIndex]
+    return typeof rowHeightPx === "number" && Number.isFinite(rowHeightPx) && rowHeightPx > 0
+      ? Math.max(TABLE_MIN_ROW_HEIGHT_PX, rowHeightPx)
+      : null
+  })
+  const columnAlignments = Array.from({ length: columnCount }, (_, columnIndex) => {
+    const align = layout?.columnAlignments?.[columnIndex]
+    return align === "left" || align === "center" || align === "right" ? align : null
+  })
+  const cellLayouts = Array.from({ length: rowCount }, (_, rowIndex) =>
+    Array.from({ length: columnCount }, (_, columnIndex) => layout?.cells?.[rowIndex]?.[columnIndex] || null)
+  )
 
   const buildCellAttrs = (
     rowIndex: number,
@@ -708,7 +732,11 @@ export const createTableNode = (
         const cellLayout = cellLayouts[rowIndex]?.[columnIndex] || null
         if (cellLayout?.hidden) return []
 
-        const cellType = rowIndex === 0 ? "tableHeader" : "tableCell"
+        const defaultIsHeaderCell =
+          (headerRowEnabled && rowIndex === 0) || (headerColumnEnabled && columnIndex === 0)
+        const isHeaderCell =
+          typeof cellLayout?.header === "boolean" ? cellLayout.header : defaultIsHeaderCell
+        const cellType = isHeaderCell ? "tableHeader" : "tableCell"
         return [
           {
             type: cellType,
@@ -720,6 +748,12 @@ export const createTableNode = (
     })),
   }
 }
+
+export const createEmptyTableNode = (
+  rowCount = 2,
+  columnCount = 2,
+  layout?: MarkdownTableLayout | null
+): JSONContent => createTableNode(createEmptyTableRows(rowCount, columnCount), layout)
 
 export const createMermaidNode = (source: string): JSONContent => ({
   type: "mermaidBlock",
@@ -1477,6 +1511,15 @@ const serializeTable = (node: JSONContent) => {
 
   const { matrix, columnCount } = buildTableMatrix(rows)
   if (columnCount === 0 || matrix.length === 0) return ""
+  const headerRow =
+    matrix[0]?.some((entry) => Boolean(entry && !entry.hidden)) === true &&
+    matrix[0].every((entry) => !entry || entry.hidden || entry.node.type === "tableHeader")
+  const headerColumn =
+    matrix.length > 0 &&
+    matrix.every((row) => {
+      const firstVisibleEntry = row.find((entry) => entry && !entry.hidden) || null
+      return !firstVisibleEntry || firstVisibleEntry.node.type === "tableHeader"
+    })
 
   const cellLayouts: Array<Array<MarkdownTableCellLayout | null>> = matrix.map((row) =>
     row.map((entry) => {
@@ -1493,16 +1536,21 @@ const serializeTable = (node: JSONContent) => {
         typeof entry.node.attrs?.backgroundColor === "string"
           ? String(entry.node.attrs.backgroundColor)
           : null
+      const isHeaderCell = entry.node.type === "tableHeader"
+      const defaultIsHeaderCell =
+        (headerRow && entry.rowIndex === 0) || (headerColumn && entry.columnIndex === 0)
+      const header = isHeaderCell === defaultIsHeaderCell ? undefined : isHeaderCell
       const colspan = Math.max(1, Number.parseInt(String(entry.node.attrs?.colspan || 1), 10) || 1)
       const rowspan = Math.max(1, Number.parseInt(String(entry.node.attrs?.rowspan || 1), 10) || 1)
 
-      if (!align && !backgroundColor && colspan === 1 && rowspan === 1) {
+      if (!align && !backgroundColor && header === undefined && colspan === 1 && rowspan === 1) {
         return null
       }
 
       return {
         ...(align ? { align } : {}),
         ...(backgroundColor ? { backgroundColor } : {}),
+        ...(header !== undefined ? { header } : {}),
         ...(colspan > 1 ? { colspan } : {}),
         ...(rowspan > 1 ? { rowspan } : {}),
       }
@@ -1518,6 +1566,8 @@ const serializeTable = (node: JSONContent) => {
   })
 
   const layout: MarkdownTableLayout = {
+    headerRow,
+    headerColumn,
     columnWidths: Array.from({ length: columnCount }, (_, columnIndex) => {
       for (const row of matrix) {
         const entry = row[columnIndex]

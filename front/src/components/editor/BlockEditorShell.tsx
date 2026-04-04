@@ -65,11 +65,11 @@ import {
   createOrderedListNode,
   createParagraphNode,
   createTaskListNode,
-  createTableNode,
   createToggleNode,
   createBulletListNode,
   parseMarkdownToEditorDoc,
   serializeEditorDocToMarkdown,
+  createEmptyTableNode,
   type BlockEditorDoc,
   type FileBlockAttrs,
   type ImageBlockAttrs,
@@ -309,6 +309,51 @@ const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
 const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
 const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
+const MARKDOWN_TABLE_ROW_PATTERN = /^\s*\|(?:.*\|)+\s*$/
+const MARKDOWN_TABLE_SEPARATOR_CELL_PATTERN = /^:?-{3,}:?$/
+const MARKDOWN_LIST_PREFIX_PATTERN = /^\s*(?:[-+*]|\d+\.)\s+/
+const MARKDOWN_BLOCKQUOTE_PREFIX_PATTERN = /^\s*>\s?/
+
+const normalizeTableContextPasteLine = (line: string) => {
+  const trimmedLine = line.trim()
+  if (!trimmedLine) return ""
+
+  if (MARKDOWN_TABLE_ROW_PATTERN.test(trimmedLine)) {
+    const cells = trimmedLine
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((cell) => cell.trim())
+      .filter(Boolean)
+      .filter((cell) => !MARKDOWN_TABLE_SEPARATOR_CELL_PATTERN.test(cell))
+
+    return cells.join(" ").trim()
+  }
+
+  return trimmedLine
+    .replace(MARKDOWN_LIST_PREFIX_PATTERN, "")
+    .replace(MARKDOWN_BLOCKQUOTE_PREFIX_PATTERN, "")
+    .trim()
+}
+
+const normalizeTableContextPasteText = (...candidates: string[]) => {
+  for (const candidate of candidates) {
+    if (!candidate.trim()) continue
+
+    const normalized = candidate
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map(normalizeTableContextPasteLine)
+      .filter(Boolean)
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+
+    if (normalized) return normalized
+  }
+
+  return ""
+}
 
 const recordEditorCommitDurationForRuntimeGuard = (durationMs: number) => {
   if (typeof window === "undefined" || !Number.isFinite(durationMs) || durationMs <= 0) return
@@ -871,6 +916,54 @@ const isTableSelectionActive = (editor?: TiptapEditor | null) => {
   return hasTableContextInResolvedPos(selection.$from) || hasTableContextInResolvedPos(selection.$to)
 }
 
+const getActiveTableStructureState = (editor?: TiptapEditor | null) => {
+  if (!editor) {
+    return {
+      hasHeaderRow: false,
+      hasHeaderColumn: false,
+    }
+  }
+
+  const { selection } = editor.state
+  const tableNode =
+    selection instanceof NodeSelection && selection.node.type.name === "table"
+      ? selection.node
+      : (() => {
+          for (let depth = selection.$from.depth; depth >= 0; depth -= 1) {
+            const node = selection.$from.node(depth)
+            if (node.type.name === "table") return node
+          }
+          for (let depth = selection.$to.depth; depth >= 0; depth -= 1) {
+            const node = selection.$to.node(depth)
+            if (node.type.name === "table") return node
+          }
+          return null
+        })()
+
+  if (!tableNode || tableNode.type.name !== "table" || tableNode.childCount === 0) {
+    return {
+      hasHeaderRow: false,
+      hasHeaderColumn: false,
+    }
+  }
+
+  const rows = Array.from({ length: tableNode.childCount }, (_, rowIndex) => tableNode.child(rowIndex))
+  const firstRow = rows[0]
+  const hasHeaderRow =
+    firstRow?.childCount > 0 &&
+    Array.from({ length: firstRow.childCount }, (_, columnIndex) => firstRow.child(columnIndex)).every(
+      (cell) => cell.type.name === "tableHeader"
+    )
+  const hasHeaderColumn =
+    rows.length > 0 &&
+    rows.every((row) => row.childCount > 0 && row.child(0)?.type.name === "tableHeader")
+
+  return {
+    hasHeaderRow,
+    hasHeaderColumn,
+  }
+}
+
 const TABLE_CONTEXT_BLOCKED_INSERT_IDS = new Set([
   "heading-1",
   "heading-2",
@@ -892,11 +985,6 @@ const TABLE_CONTEXT_BLOCKED_INSERT_IDS = new Set([
   "image",
   "mermaid",
 ])
-
-const createDefaultTableRows = (): [string, string][] => [
-  ["", ""],
-  ["", ""],
-]
 
 const downgradeDisabledFeatureNodes = (node: BlockEditorDoc, enableMermaidBlocks: boolean): BlockEditorDoc => {
   if (!enableMermaidBlocks && node.type === "mermaidBlock") {
@@ -1284,6 +1372,7 @@ const BlockEditorShell = ({
     (doc: BlockEditorDoc, replaceCurrentEmptyParagraph = false) => {
       const currentEditor = editorRef.current
       if (!currentEditor) return false
+      if (isTableSelectionActive(currentEditor)) return false
       const nextContent = doc.content?.length ? doc.content : [{ type: "paragraph" }]
 
       if (replaceCurrentEmptyParagraph && isSelectionInEmptyParagraph()) {
@@ -2013,7 +2102,7 @@ const BlockEditorShell = ({
         }
       case "table":
         return {
-          blocks: [createTableNode(createDefaultTableRows())],
+          blocks: [createEmptyTableNode()],
           focusBlockIndex: 0,
         }
       case "callout":
@@ -2374,10 +2463,15 @@ const BlockEditorShell = ({
         }
 
         if (isTableContextPaste) {
-          const plainFallback = plainText || extractedPlainTextFromHtml
-          if (plainFallback.trim()) {
+          const normalizedTablePasteText = normalizeTableContextPasteText(
+            normalizedHtmlMarkdown,
+            normalizedPlainText,
+            extractedPlainTextFromHtml,
+            plainText
+          )
+          if (normalizedTablePasteText) {
             event.preventDefault()
-            currentEditor.chain().focus().insertContent(plainFallback).run()
+            currentEditor.chain().focus().insertContent(normalizedTablePasteText).run()
             return true
           }
         }
@@ -3087,7 +3181,7 @@ const BlockEditorShell = ({
 
   const insertTableBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursor([createTableNode(createDefaultTableRows())], true)
+    insertBlocksAtCursor([createEmptyTableNode()], true)
   }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
 
   const canInsertTable = canInsertTopLevelBlockAtSelection()
@@ -3228,6 +3322,10 @@ const BlockEditorShell = ({
   const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
   const isInlineCodeActive = editor?.isActive("code") ?? false
   const isTableMode = isTableSelectionActive(editor)
+  const activeTableStructureState = useMemo(() => {
+    void selectionTick
+    return getActiveTableStructureState(editor)
+  }, [editor, selectionTick])
   const activeInlineTextStyleOption = useMemo(() => {
     if (!editor) return INLINE_TEXT_STYLE_OPTIONS[0]
     void selectionTick
@@ -3503,7 +3601,7 @@ const BlockEditorShell = ({
   }
 
   const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>(() => {
-    const createTableTemplate = () => createTableNode(createDefaultTableRows())
+    const createTableTemplate = () => createEmptyTableNode()
 
     const createCalloutTemplate = () =>
       createCalloutNode({
@@ -4244,6 +4342,7 @@ const BlockEditorShell = ({
   const resolveSlashExecutionTarget = useCallback(() => {
     const activeEditor = editorRef.current ?? editor
     if (!activeEditor) return null
+    if (isTableSelectionActive(activeEditor)) return null
 
     const resolvedSlashState = resolveSlashMenuState()
     const activeSlashRange = resolvedSlashState?.menuState ?? getActiveSlashRangeFromEditor(activeEditor)
@@ -4525,9 +4624,23 @@ const BlockEditorShell = ({
             kind,
             left: nextLeft,
             top: nextTop,
-          }
+        }
     )
   }, [cancelTableQuickRailHide])
+
+  const openSelectionAwareTableMenu = useCallback(
+    (kind: TableMenuKind, anchorRect: DOMRect) => {
+      if (kind === "row") {
+        selectCurrentTableAxis("row")
+      } else if (kind === "column") {
+        selectCurrentTableAxis("column")
+      } else {
+        selectActiveTableBlock()
+      }
+      openTableMenu(kind, anchorRect)
+    },
+    [openTableMenu, selectActiveTableBlock, selectCurrentTableAxis]
+  )
 
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
     if (isTableMode) return
@@ -4703,7 +4816,7 @@ const BlockEditorShell = ({
 
     const hideBlockHandle = () =>
       setBlockHandleState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
-    if (isTableMode || tableQuickRailState.visible) {
+    if (isTableMode || tableQuickRailState.visible || tableMenuState) {
       hideBlockHandle()
       return
     }
@@ -4759,6 +4872,7 @@ const BlockEditorShell = ({
     selectedBlockIndex,
     selectedBlockNodeIndex,
     selectionTick,
+    tableMenuState,
     tableQuickRailState.visible,
   ])
 
@@ -5128,6 +5242,9 @@ const BlockEditorShell = ({
       window.removeEventListener("keydown", close)
     }
   }, [tableMenuState])
+
+  const shouldShowTableHandles =
+    !isCoarsePointer && (tableQuickRailState.visible || isTableMode || Boolean(tableMenuState))
 
   return (
     <Shell className={className}>
@@ -5570,7 +5687,7 @@ const BlockEditorShell = ({
             ) : null}
           </FloatingBubbleToolbar>
         ) : null}
-        {!isCoarsePointer && tableQuickRailState.visible ? (
+        {shouldShowTableHandles ? (
           <>
             <TableCornerHandle
               data-table-corner-handle="true"
@@ -5593,8 +5710,7 @@ const BlockEditorShell = ({
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  selectActiveTableBlock()
-                  openTableMenu("table", event.currentTarget.getBoundingClientRect())
+                  openSelectionAwareTableMenu("table", event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="table" />
@@ -5622,8 +5738,7 @@ const BlockEditorShell = ({
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  selectCurrentTableAxis("column")
-                  openTableMenu("column", event.currentTarget.getBoundingClientRect())
+                  openSelectionAwareTableMenu("column", event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="column" />
@@ -5651,8 +5766,7 @@ const BlockEditorShell = ({
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  selectCurrentTableAxis("row")
-                  openTableMenu("row", event.currentTarget.getBoundingClientRect())
+                  openSelectionAwareTableMenu("row", event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="row" />
@@ -5736,6 +5850,7 @@ const BlockEditorShell = ({
                   </FloatingBlockActionButton>
                   <FloatingBlockActionButton
                     type="button"
+                    data-active={activeTableStructureState.hasHeaderRow}
                     onClick={() =>
                       runTableMenuEditorAction((activeEditor) => {
                         activeEditor.chain().focus().toggleHeaderRow().run()
@@ -5743,6 +5858,17 @@ const BlockEditorShell = ({
                     }
                   >
                     제목 행
+                  </FloatingBlockActionButton>
+                  <FloatingBlockActionButton
+                    type="button"
+                    data-active={activeTableStructureState.hasHeaderColumn}
+                    onClick={() =>
+                      runTableMenuEditorAction((activeEditor) => {
+                        activeEditor.chain().focus().toggleHeaderColumn().run()
+                      })
+                    }
+                  >
+                    제목 열
                   </FloatingBlockActionButton>
                   <FloatingBlockActionButton
                     type="button"
@@ -6975,9 +7101,9 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content table {
-    width: 100%;
-    min-width: 100%;
-    max-width: 100%;
+    width: max-content;
+    min-width: 0;
+    max-width: none;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -6986,18 +7112,22 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content .tableWrapper > table {
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
+    width: max-content !important;
+    min-width: 0 !important;
+    max-width: none !important;
     table-layout: fixed !important;
   }
 
   .aq-block-editor__content .tableWrapper {
-    width: 100%;
+    display: inline-block;
+    position: relative;
+    isolation: isolate;
+    inline-size: fit-content;
+    width: fit-content;
     max-width: 100%;
+    max-inline-size: 100%;
     min-width: 0;
     box-sizing: border-box;
-    contain: inline-size;
     overflow-x: auto;
     overflow-y: hidden;
     margin: 1rem 0;
@@ -7012,7 +7142,9 @@ const EditorViewport = styled.div`
         ? "0 18px 38px rgba(2, 6, 23, 0.28)"
         : "0 18px 38px rgba(15, 23, 42, 0.08)"};
     -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
     overscroll-behavior-x: contain;
+    overscroll-behavior-y: contain;
     touch-action: pan-x;
     transition:
       border-color 140ms ease,
@@ -7045,7 +7177,7 @@ const EditorViewport = styled.div`
     text-align: left;
     vertical-align: top;
     position: relative;
-    min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
+    min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, calc(1ch + 1.84rem));
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
     white-space: normal;
     overflow-wrap: anywhere;
@@ -7095,9 +7227,9 @@ const EditorViewport = styled.div`
 
   @media (max-width: 768px) {
     .aq-block-editor__content table {
-      width: 100%;
-      min-width: 100%;
-      max-width: 100%;
+      width: max-content;
+      min-width: 0;
+      max-width: none;
       table-layout: fixed;
     }
 
@@ -7113,6 +7245,7 @@ const EditorViewport = styled.div`
 
     .aq-block-editor__content .tableWrapper {
       margin: 0.9rem 0;
+      max-inline-size: 100%;
     }
   }
 `
@@ -7405,6 +7538,7 @@ const TableAxisRail = styled.div`
   display: flex;
   align-items: center;
   gap: 0.28rem;
+  pointer-events: auto;
 
   &[data-axis="column"] {
     flex-direction: row;
@@ -7423,10 +7557,12 @@ const TableCornerHandle = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: auto;
 `
 
 const TableQuickRailButton = styled.button`
   all: unset;
+  position: relative;
   box-sizing: border-box;
   width: 2rem;
   height: 2rem;
@@ -7448,6 +7584,12 @@ const TableQuickRailButton = styled.button`
     background-color 120ms ease,
     border-color 120ms ease,
     color 120ms ease;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: -0.42rem;
+  }
 
   &:hover {
     background: ${({ theme }) =>
@@ -7800,6 +7942,13 @@ const FloatingBlockActionButton = styled.button`
   font-weight: 700;
   text-align: left;
   padding: 0 0.8rem;
+
+  &[data-active="true"] {
+    border-color: rgba(59, 130, 246, 0.48);
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(37, 99, 235, 0.18)" : "rgba(219, 234, 254, 0.96)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#dbeafe" : "#1d4ed8")};
+  }
 
   &[data-variant="danger"] {
     border-color: rgba(248, 113, 113, 0.16);

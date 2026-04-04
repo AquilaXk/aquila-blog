@@ -39,6 +39,36 @@ const selectWordInEditable = async (page: Page, editable: Locator, word: string)
   await page.waitForTimeout(80)
 }
 
+const setWordSelectionInEditable = async (editable: Locator, word: string) => {
+  const selected = await editable.evaluate((element, targetWord) => {
+    const root = element as HTMLElement
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let textNode: Text | null = null
+    let foundIndex = -1
+
+    while (walker.nextNode()) {
+      const current = walker.currentNode as Text
+      const index = current.data.indexOf(targetWord)
+      if (index >= 0) {
+        textNode = current
+        foundIndex = index
+        break
+      }
+    }
+
+    if (!textNode || foundIndex < 0) return false
+    const range = document.createRange()
+    range.setStart(textNode, foundIndex)
+    range.setEnd(textNode, foundIndex + targetWord.length)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    return true
+  }, word)
+
+  expect(selected).toBe(true)
+}
+
 const getWordDragPoints = async (
   editable: Locator,
   word: string
@@ -207,7 +237,9 @@ test.describe("block editor authoring flow", () => {
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
 
-    const tableInsertButton = page.getByRole("button", { name: "테이블" }).first()
+    const tableInsertButton = page
+      .locator("[aria-label='빠른 블록 삽입']")
+      .getByRole("button", { name: "테이블" })
     await expect(tableInsertButton).toBeDisabled()
 
     await page.keyboard.type("/테이블")
@@ -242,7 +274,10 @@ test.describe("block editor authoring flow", () => {
 
     await editor.evaluate((element) => {
       const data = new DataTransfer()
-      data.setData("text/plain", "| 제목 | 값 |\n| --- | --- |\n| 항목 | 내용 |")
+      data.setData(
+        "text/plain",
+        "| 내부셀A | 내부셀B |\n| --- | --- |\n| 내부셀C | 내부셀D |"
+      )
       const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true })
       Object.defineProperty(event, "clipboardData", { value: data })
       element.dispatchEvent(event)
@@ -250,6 +285,38 @@ test.describe("block editor authoring flow", () => {
 
     await expect(tables).toHaveCount(1)
     await expect(page.locator(".aq-block-editor__content table table")).toHaveCount(0)
+    await expect(page.locator(".aq-block-editor__content table")).toContainText("내부셀A")
+    await expect(page.locator(".aq-block-editor__content table")).not.toContainText("| 내부셀A | 내부셀B |")
+  })
+
+  test("테이블 생성 경로가 달라도 동일한 empty table shape를 만든다", async ({ page }) => {
+    const captureTableMarkdown = async () => {
+      const markdownOutput = page.getByTestId("qa-markdown-output")
+      await expect(markdownOutput).toContainText("| --- | --- |")
+      const rawMarkdown = (await markdownOutput.textContent()) || ""
+      return rawMarkdown
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter((line) => line.startsWith("<!-- aq-table") || line.startsWith("|"))
+        .join("\n")
+    }
+
+    await page.goto(QA_ENGINE_ROUTE)
+    await page.getByRole("button", { name: "테이블" }).click()
+    const toolbarTableMarkdown = await captureTableMarkdown()
+
+    await page.goto(QA_ENGINE_ROUTE)
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.keyboard.type("/테이블")
+    await page.keyboard.press("Enter")
+    await expect(page.locator(".aq-block-editor__content table")).toHaveCount(1)
+    const slashTableMarkdown = await captureTableMarkdown()
+
+    expect(toolbarTableMarkdown).toBe(slashTableMarkdown)
+    expect(toolbarTableMarkdown).toContain("|  |  |")
+    expect(toolbarTableMarkdown).toContain("| --- | --- |")
+    expect(toolbarTableMarkdown).not.toContain("| 제목 | 값 |")
   })
 
   test("새 블록 템플릿은 샘플 문구 없이 빈 입력 상태로 생성된다", async ({ page }) => {
@@ -440,7 +507,7 @@ test.describe("block editor authoring flow", () => {
 
     await page.mouse.move(points.startX, points.startY)
     await page.mouse.down()
-    await page.mouse.move(points.endX, points.endY, { steps: 8 })
+    await setWordSelectionInEditable(editor, "버블")
     await expect(textBubbleToolbar).toHaveCount(0)
 
     await page.mouse.up()
@@ -648,14 +715,19 @@ test.describe("block editor authoring flow", () => {
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
 
     const tableWidthShape = await page.evaluate(() => {
+      const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
       const wrapper = document.querySelector<HTMLElement>(
         ".aq-block-editor__content .tableWrapper"
       )
       const table = wrapper?.querySelector<HTMLElement>("table")
-      if (!wrapper || !table) return null
+      if (!contentRoot || !wrapper || !table) return null
       return {
+        contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
         wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
         tableWidth: Math.round(table.getBoundingClientRect().width),
+        firstCellWidth: Math.round(
+          (table.querySelector("th, td") as HTMLElement | null)?.getBoundingClientRect().width || 0
+        ),
       }
     })
     expect(tableWidthShape).not.toBeNull()
@@ -663,6 +735,9 @@ test.describe("block editor authoring flow", () => {
       throw new Error("table wrapper/table width shape is missing")
     }
     expect(Math.abs(tableWidthShape.wrapperWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(tableWidthShape.tableWidth).toBeLessThan(tableWidthShape.contentWidth - 120)
+    expect(tableWidthShape.firstCellWidth).toBeGreaterThanOrEqual(40)
+    expect(tableWidthShape.firstCellWidth).toBeLessThan(96)
 
     await page.getByTestId("table-row-rail").getByRole("button", { name: "행 선택" }).click()
     await expect(page.getByTestId("table-row-menu")).toBeVisible()
@@ -716,6 +791,59 @@ test.describe("block editor authoring flow", () => {
     expect(inViewport).toBe(true)
   })
 
+  test("모바일 뷰포트에서는 표만 wrapper 내부 가로 스크롤을 사용하고 페이지 전체 overflow는 생기지 않는다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+
+    for (let index = 0; index < 8; index += 1) {
+      await page.getByRole("button", { name: "QA 열 추가" }).click()
+    }
+    for (let index = 0; index < 4; index += 1) {
+      await page.getByRole("button", { name: "QA 열 리사이즈" }).click()
+    }
+
+    const metrics = await page.evaluate(() => {
+      const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
+      if (!wrapper) return null
+
+      const wrapperStyle = window.getComputedStyle(wrapper)
+      wrapper.scrollLeft = wrapper.scrollWidth
+
+      return {
+        viewportWidth: Math.round(window.innerWidth),
+        pageScrollWidth: Math.round(document.documentElement.scrollWidth),
+        wrapperClientWidth: Math.round(wrapper.clientWidth),
+        wrapperScrollWidth: Math.round(wrapper.scrollWidth),
+        wrapperScrollLeft: Math.round(wrapper.scrollLeft),
+        wrapperOverflowX: wrapperStyle.overflowX,
+        wrapperTouchAction: wrapperStyle.touchAction,
+        wrapperOverscrollBehaviorX:
+          (wrapperStyle as CSSStyleDeclaration & { overscrollBehaviorX?: string }).overscrollBehaviorX ||
+          "",
+      }
+    })
+
+    expect(metrics).not.toBeNull()
+    if (!metrics) {
+      throw new Error("mobile table wrapper metrics are missing")
+    }
+
+    expect(["auto", "scroll"]).toContain(metrics.wrapperOverflowX)
+    expect(metrics.wrapperTouchAction).toContain("pan-x")
+    expect(metrics.wrapperOverscrollBehaviorX || "auto").toBe("contain")
+    expect(metrics.wrapperScrollWidth).toBeGreaterThanOrEqual(metrics.wrapperClientWidth)
+    if (metrics.wrapperScrollWidth > metrics.wrapperClientWidth) {
+      expect(metrics.wrapperScrollLeft).toBeGreaterThan(0)
+    }
+    expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewportWidth + 2)
+  })
+
   test("table corner menu에서 제목 행 토글과 표 삭제가 동작한다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
@@ -729,6 +857,7 @@ test.describe("block editor authoring flow", () => {
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(2)
+    await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
 
     await tableMenu.getByRole("button", { name: "제목 행" }).click()
     await expect(page.locator("table tr").first().locator("th")).toHaveCount(0)
@@ -738,6 +867,47 @@ test.describe("block editor authoring flow", () => {
     await tableMenu.getByRole("button", { name: "표 삭제" }).click()
     await expect(page.locator(".aq-block-editor__content table")).toHaveCount(0)
     await expect(page.getByTestId("block-editor-prosemirror")).toBeVisible()
+  })
+
+  test("table 제목 행/열 토글 상태는 저장 후 재진입해도 유지된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const cornerHandleButton = page
+      .getByTestId("table-corner-handle")
+      .getByRole("button", { name: "표 선택" })
+
+    await cornerHandleButton.click()
+    const tableMenu = page.getByTestId("table-table-menu")
+    await expect(tableMenu).toBeVisible()
+    await tableMenu.getByRole("button", { name: "제목 행" }).click()
+
+    await cornerHandleButton.click()
+    await expect(tableMenu).toBeVisible()
+    await tableMenu.getByRole("button", { name: "제목 열" }).click()
+
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(1)
+    await expect(page.locator("table tr").nth(1).locator("th")).toHaveCount(1)
+
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain('"headerRow":false')
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain('"headerColumn":true')
+
+    const markdown = (await page.getByTestId("qa-markdown-output").textContent()) || ""
+
+    await page.goto(`${QA_ENGINE_ROUTE}&seed=${encodeURIComponent(markdown.replace(/\n/g, "\\n"))}`)
+    await expect
+      .poll(async () => (await page.getByTestId("qa-markdown-output").textContent()) || "")
+      .toContain('"headerColumn":true')
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(1)
+    await expect(page.locator("table tr").nth(1).locator("th")).toHaveCount(1)
   })
 
   test("table 셀 텍스트도 드래그 선택 후 인라인 버블 포맷(굵게/색상)을 적용할 수 있다", async ({ page }) => {
@@ -761,6 +931,26 @@ test.describe("block editor authoring flow", () => {
     const markdownOutput = page.getByTestId("qa-markdown-output")
     await expect(markdownOutput).toContainText("**셀굵게**")
     await expect(markdownOutput).toContainText("{{color:#60a5fa\\|셀색상}}")
+  })
+
+  test("table 셀 텍스트 selection bubble도 mouseup 이후에만 노출된다", async ({ page }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await page.keyboard.type("셀 버블 지연 노출")
+
+    const points = await getWordDragPoints(firstTableCell, "버블")
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+
+    await page.mouse.move(points.startX, points.startY)
+    await page.mouse.down()
+    await setWordSelectionInEditable(firstTableCell, "버블")
+    await expect(textBubbleToolbar).toHaveCount(0)
+
+    await page.mouse.up()
+    await expect(textBubbleToolbar).toBeVisible()
   })
 
   test("table QA actions로 열/행 추가와 삭제가 round-trip 된다", async ({ page }) => {

@@ -1,4 +1,4 @@
-export const TABLE_MIN_COLUMN_WIDTH_PX = 120
+export const TABLE_MIN_COLUMN_WIDTH_PX = 44
 export const TABLE_MIN_ROW_HEIGHT_PX = 44
 
 export type MarkdownTableCellAlignment = "left" | "center" | "right"
@@ -6,12 +6,15 @@ export type MarkdownTableCellAlignment = "left" | "center" | "right"
 export type MarkdownTableCellLayout = {
   align?: MarkdownTableCellAlignment | null
   backgroundColor?: string | null
+  header?: boolean
   colspan?: number | null
   rowspan?: number | null
   hidden?: boolean
 }
 
 export type MarkdownTableLayout = {
+  headerRow?: boolean
+  headerColumn?: boolean
   columnWidths?: Array<number | null>
   rowHeights?: Array<number | null>
   columnAlignments?: Array<MarkdownTableCellAlignment | null>
@@ -94,17 +97,26 @@ const normalizeTableCellLayout = (
   const candidate = value as MarkdownTableCellLayout
   const align = normalizeTableCellAlignment(candidate.align)
   const backgroundColor = normalizeBackgroundColor(candidate.backgroundColor)
+  const header =
+    typeof candidate.header === "boolean"
+      ? candidate.header
+      : String((candidate as { header?: unknown }).header || "").trim() === "true"
+        ? true
+        : String((candidate as { header?: unknown }).header || "").trim() === "false"
+          ? false
+          : undefined
   const colspan = normalizePositiveInteger(candidate.colspan)
   const rowspan = normalizePositiveInteger(candidate.rowspan)
   const hidden = candidate.hidden === true ? true : undefined
 
-  if (!align && !backgroundColor && !colspan && !rowspan && !hidden) {
+  if (!align && !backgroundColor && header === undefined && !colspan && !rowspan && !hidden) {
     return null
   }
 
   return {
     ...(align ? { align } : {}),
     ...(backgroundColor ? { backgroundColor } : {}),
+    ...(header !== undefined ? { header } : {}),
     ...(colspan && colspan > 1 ? { colspan } : {}),
     ...(rowspan && rowspan > 1 ? { rowspan } : {}),
     ...(hidden ? { hidden: true } : {}),
@@ -147,14 +159,20 @@ export const normalizeMarkdownTableLayout = (
 ): MarkdownTableLayout | null => {
   if (!layout) return null
 
+  const headerRow = typeof layout.headerRow === "boolean" ? layout.headerRow : undefined
+  const headerColumn = typeof layout.headerColumn === "boolean" ? layout.headerColumn : undefined
   const columnWidths = normalizeTableMetricList(layout.columnWidths, TABLE_MIN_COLUMN_WIDTH_PX)
   const rowHeights = normalizeTableMetricList(layout.rowHeights, TABLE_MIN_ROW_HEIGHT_PX)
   const columnAlignments = normalizeTableAlignmentList(layout.columnAlignments)
   const cells = normalizeTableCellMatrix(layout.cells)
 
-  if (!columnWidths && !rowHeights && !columnAlignments && !cells) return null
+  if (headerRow === undefined && headerColumn === undefined && !columnWidths && !rowHeights && !columnAlignments && !cells) {
+    return null
+  }
 
   return {
+    ...(headerRow !== undefined ? { headerRow } : {}),
+    ...(headerColumn !== undefined ? { headerColumn } : {}),
     ...(columnWidths ? { columnWidths } : {}),
     ...(rowHeights ? { rowHeights } : {}),
     ...(columnAlignments ? { columnAlignments } : {}),

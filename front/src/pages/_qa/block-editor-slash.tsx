@@ -1,5 +1,4 @@
 import dynamic from "next/dynamic"
-import { useRouter } from "next/router"
 import type { GetServerSideProps, NextPage } from "next"
 import { useEffect, useRef, useState } from "react"
 import type { BlockEditorQaActions } from "src/components/editor/BlockEditorShell"
@@ -30,6 +29,7 @@ const LazyBlockEditorShell = dynamic(() => import("src/components/editor/BlockEd
 type QaBlockEditorSlashPageProps = {
   enabled: boolean
   surface: "writer" | "engine"
+  seedMarkdown: string
 } & AdminPageProps
 
 const QA_MOCK_MEMBER: AuthMember = {
@@ -58,6 +58,10 @@ export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps>
 
   const rawSurface = typeof context.query.surface === "string" ? context.query.surface.trim().toLowerCase() : ""
   const surface: QaBlockEditorSlashPageProps["surface"] = rawSurface === "engine" ? "engine" : "writer"
+  const seedMarkdown =
+    typeof context.query.seed === "string"
+      ? context.query.seed.replace(/\\n/g, "\n")
+      : ""
   const queryClient = createQueryClient()
   queryClient.setQueryData(queryKey.authMe(), QA_MOCK_MEMBER)
   queryClient.setQueryData(queryKey.authMeProbe(), true)
@@ -66,6 +70,7 @@ export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps>
     props: {
       enabled: true,
       surface,
+      seedMarkdown,
       initialMember: QA_MOCK_MEMBER,
       dehydratedState: dehydrate(queryClient),
     },
@@ -75,17 +80,9 @@ export const getServerSideProps: GetServerSideProps<QaBlockEditorSlashPageProps>
 const QA_IMAGE_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlH0WkAAAAASUVORK5CYII="
 
-const QaEngineSurface = () => {
-  const router = useRouter()
-  const [markdown, setMarkdown] = useState("")
+const QaEngineSurface = ({ seedMarkdown }: Pick<QaBlockEditorSlashPageProps, "seedMarkdown">) => {
+  const [markdown, setMarkdown] = useState(() => seedMarkdown)
   const qaActionsRef = useRef<BlockEditorQaActions | null>(null)
-
-  useEffect(() => {
-    if (!router.isReady) return
-    const seed = typeof router.query.seed === "string" ? router.query.seed : ""
-    if (!seed) return
-    setMarkdown(seed.replace(/\\n/g, "\n"))
-  }, [router.isReady, router.query.seed])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -220,7 +217,7 @@ const QaBlockEditorSlashPage: NextPage<QaBlockEditorSlashPageProps> = (props) =>
     return <EditorStudioPage {...props} />
   }
 
-  return <QaEngineSurface />
+  return <QaEngineSurface seedMarkdown={props.seedMarkdown} />
 }
 
 export default QaBlockEditorSlashPage

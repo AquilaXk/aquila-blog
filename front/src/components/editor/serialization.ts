@@ -19,6 +19,9 @@ import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
 
 export type BlockEditorDoc = JSONContent
 
+export const DEFAULT_EMPTY_TABLE_ROW_COUNT = 3
+export const DEFAULT_EMPTY_TABLE_COLUMN_COUNT = 3
+
 export type ImageBlockAttrs = {
   src: string
   alt?: string
@@ -649,7 +652,10 @@ export const createBulletListNode = (items: string[]) => createListNode("bulletL
 
 export const createOrderedListNode = (items: string[], start = 1) => createListNode("orderedList", items, start)
 
-export const createEmptyTableRows = (rowCount = 2, columnCount = 2): string[][] =>
+export const createEmptyTableRows = (
+  rowCount = DEFAULT_EMPTY_TABLE_ROW_COUNT,
+  columnCount = DEFAULT_EMPTY_TABLE_COLUMN_COUNT
+): string[][] =>
   Array.from({ length: Math.max(1, rowCount) }, () =>
     Array.from({ length: Math.max(1, columnCount) }, () => "")
   )
@@ -750,8 +756,8 @@ export const createTableNode = (
 }
 
 export const createEmptyTableNode = (
-  rowCount = 2,
-  columnCount = 2,
+  rowCount = DEFAULT_EMPTY_TABLE_ROW_COUNT,
+  columnCount = DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
   layout?: MarkdownTableLayout | null
 ): JSONContent => createTableNode(createEmptyTableRows(rowCount, columnCount), layout)
 

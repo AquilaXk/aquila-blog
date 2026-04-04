@@ -38,12 +38,10 @@ const NavBar: React.FC = () => {
   const isAdmin = Boolean(isAuthenticated && me?.isAdmin)
   const authState = isAuthenticated ? "authenticated" : authStatus
 
-  const primaryLinks = useMemo(
-    () => [
-      { id: "about", name: "About", to: "/about" },
-      ...(isAdmin ? [{ id: "admin", name: "Admin", to: "/admin" }] : []),
-    ],
-    [isAdmin]
+  const primaryLinks = useMemo(() => [{ id: "about", name: "About", to: "/about" }], [])
+  const mobileLinks = useMemo(
+    () => [...primaryLinks, ...(isAdmin ? [{ id: "admin", name: "Admin", to: "/admin" }] : [])],
+    [primaryLinks, isAdmin]
   )
 
   const nextPath = useMemo(() => {
@@ -132,24 +130,31 @@ const NavBar: React.FC = () => {
             </Link>
           </li>
         ))}
+        <li className="adminLinkSlot" aria-hidden={!isAdmin}>
+          {isAdmin ? (
+            <Link href="/admin" data-ui="nav-control">
+              Admin
+            </Link>
+          ) : (
+            <span className="navGhost">Admin</span>
+          )}
+        </li>
       </ul>
 
       <div className="authArea" data-auth-state={authState}>
-        {showImmediateLoginAction && (
-          <button
-            type="button"
-            className="navPill"
-            data-ui="nav-control"
-            onMouseEnter={preloadAuthEntryModal}
-            onFocus={preloadAuthEntryModal}
-            onClick={openLoginModal}
-          >
-            Login
-          </button>
-        )}
-
-        {showUnavailableAuthAction && (
-          <>
+        <div className="authSlot authSlot--login">
+          {showImmediateLoginAction ? (
+            <button
+              type="button"
+              className="navPill"
+              data-ui="nav-control"
+              onMouseEnter={preloadAuthEntryModal}
+              onFocus={preloadAuthEntryModal}
+              onClick={openLoginModal}
+            >
+              Login
+            </button>
+          ) : showUnavailableAuthAction ? (
             <button
               type="button"
               className="navPill navPill--warning"
@@ -158,17 +163,26 @@ const NavBar: React.FC = () => {
             >
               Login
             </button>
-            <span className="authNotice">Auth check failed</span>
-          </>
-        )}
+          ) : (
+            <span className="navGhost navGhost--action">Login</span>
+          )}
+        </div>
 
-        {isAuthenticated && <NotificationBell enabled />}
+        <div className="authSlot authSlot--bell">
+          {isAuthenticated ? <NotificationBell enabled /> : <span className="iconGhost" aria-hidden />}
+        </div>
 
-        {isAuthenticated && (
-          <button type="button" onClick={handleLogout} className="logoutBtn" data-ui="nav-control">
-            Logout
-          </button>
-        )}
+        <div className="authSlot authSlot--logout">
+          {isAuthenticated ? (
+            <button type="button" onClick={handleLogout} className="logoutBtn" data-ui="nav-control">
+              Logout
+            </button>
+          ) : (
+            <span className="navGhost navGhost--action">Logout</span>
+          )}
+        </div>
+
+        {showUnavailableAuthAction && <span className="authNotice">Auth check failed</span>}
 
         <button
           ref={menuTriggerRef}
@@ -188,7 +202,7 @@ const NavBar: React.FC = () => {
             <>
               <MobileMenuBackdrop type="button" aria-label="모바일 메뉴 닫기" onClick={() => setMobileMenuOpen(false)} />
               <MobileMenuPortal ref={mobileMenuRef} role="menu" aria-label="모바일 네비게이션">
-                {primaryLinks.map((link) => (
+                {mobileLinks.map((link) => (
                   <Link key={link.id} href={link.to} role="menuitem" onClick={() => setMobileMenuOpen(false)}>
                     {link.name}
                   </Link>
@@ -282,6 +296,24 @@ const StyledWrapper = styled.div`
         text-decoration-thickness: 1px;
       }
     }
+
+    .adminLinkSlot {
+      min-width: 4.06rem;
+    }
+  }
+
+  .navGhost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: ${({ theme }) => theme.variables.navControl.height}px;
+    padding: 0 0.46rem;
+    border-radius: ${({ theme }) => theme.variables.navControl.radius}px;
+    color: transparent;
+    user-select: none;
+    pointer-events: none;
+    white-space: nowrap;
+    visibility: hidden;
   }
 
   .authArea {
@@ -299,6 +331,38 @@ const StyledWrapper = styled.div`
     > * {
       flex-shrink: 0;
     }
+  }
+
+  .authSlot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: ${({ theme }) => theme.variables.navControl.height}px;
+  }
+
+  .authSlot--login {
+    min-width: 4.55rem;
+  }
+
+  .authSlot--bell {
+    width: 2.25rem;
+  }
+
+  .authSlot--logout {
+    min-width: 4.95rem;
+  }
+
+  .navGhost--action {
+    min-width: 100%;
+    padding: 0;
+  }
+
+  .iconGhost {
+    display: inline-flex;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 999px;
+    visibility: hidden;
   }
 
   .navPill,
@@ -366,8 +430,8 @@ const StyledWrapper = styled.div`
 
   @media (max-width: 860px) {
     .primaryLinks,
-    .navPill,
-    .logoutBtn {
+    .authSlot,
+    .authNotice {
       display: none;
     }
 

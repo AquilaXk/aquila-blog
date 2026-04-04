@@ -18,7 +18,7 @@ import {
 } from "react"
 import { apiFetch, getApiBaseUrl } from "src/apis/backend/client"
 import { invalidatePublicPostReadCaches } from "src/apis/backend/posts"
-import useAuthSession from "src/hooks/useAuthSession"
+import useAuthSession, { type AuthMember } from "src/hooks/useAuthSession"
 import { setAdminProfileCache, toAdminProfile } from "src/hooks/useAdminProfile"
 import {
   compareCategoryValues,
@@ -48,7 +48,12 @@ import {
   replaceShallowRoutePreservingScroll,
   toLoginPath,
 } from "src/libs/router"
-import { AdminPageProps, getAdminPageProps } from "src/libs/server/adminPage"
+import {
+  AdminPageProps,
+  buildAdminPagePropsFromMember,
+  getAdminPageProps,
+  readAdminProtectedBootstrap,
+} from "src/libs/server/adminPage"
 import ProfileImage from "src/components/ProfileImage"
 import AppIcon from "src/components/icons/AppIcon"
 import {
@@ -422,6 +427,52 @@ const SHOW_LEGACY_CONTENT_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_CONTENT_S
 const SHOW_LEGACY_UTILITY_STUDIO = process.env.NEXT_PUBLIC_SHOW_LEGACY_UTILITY_STUDIO === "true"
 
 export const getEditorStudioPageProps: GetServerSideProps<AdminPageProps> = async ({ req }) => {
+  const bootstrapResult = await readAdminProtectedBootstrap<{
+    member: AuthMember
+    profile: Partial<AuthMember>
+  }>(req, "/member/api/v1/adm/members/bootstrap", EDITOR_NEW_ROUTE_PATH)
+
+  if (bootstrapResult.ok) {
+    const { member, profile } = bootstrapResult.value
+    const mergedMember: AuthMember = {
+      ...member,
+      profileImageDirectUrl:
+        profile.profileImageDirectUrl ||
+        profile.profileImageUrl ||
+        member.profileImageDirectUrl ||
+        member.profileImageUrl ||
+        "",
+      profileImageUrl:
+        profile.profileImageUrl ||
+        profile.profileImageDirectUrl ||
+        member.profileImageUrl ||
+        member.profileImageDirectUrl ||
+        "",
+      profileRole: profile.profileRole || member.profileRole || "",
+      profileBio: profile.profileBio || member.profileBio || "",
+      aboutRole: profile.aboutRole || member.aboutRole || "",
+      aboutBio: profile.aboutBio || member.aboutBio || "",
+      aboutDetails: profile.aboutDetails || member.aboutDetails || "",
+      blogTitle: profile.blogTitle || member.blogTitle || "",
+      homeIntroTitle: profile.homeIntroTitle || member.homeIntroTitle || "",
+      homeIntroDescription:
+        profile.homeIntroDescription || member.homeIntroDescription || "",
+    }
+
+    return {
+      props: buildAdminPagePropsFromMember(mergedMember),
+    }
+  }
+
+  if (bootstrapResult.destination) {
+    return {
+      redirect: {
+        destination: bootstrapResult.destination,
+        permanent: false,
+      },
+    }
+  }
+
   return await getAdminPageProps(req)
 }
 

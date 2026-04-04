@@ -5,7 +5,7 @@ import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Fragment } from "@tiptap/pm/model"
-import { NodeSelection, TextSelection } from "@tiptap/pm/state"
+import { NodeSelection, TextSelection, Transaction } from "@tiptap/pm/state"
 import { CellSelection, selectedRect } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
 import { EditorContent, useEditor } from "@tiptap/react"
@@ -55,6 +55,8 @@ import {
   createBookmarkNode,
   createCalloutNode,
   createCodeBlockNode,
+  DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
+  DEFAULT_EMPTY_TABLE_ROW_COUNT,
   createEmbedNode,
   createFileBlockNode,
   createFormulaNode,
@@ -75,6 +77,7 @@ import {
   type ImageBlockAttrs,
 } from "./serialization"
 import {
+  type MarkdownTableLayout,
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
 } from "src/libs/markdown/tableMetadata"
@@ -188,12 +191,19 @@ type TableQuickRailState = {
   visible: boolean
   left: number
   top: number
+  tableLeft: number
+  tableTop: number
   width: number
   height: number
   rowTop: number
   rowHeight: number
   columnLeft: number
   columnWidth: number
+  columnIndex: number
+  columnSegments: Array<{
+    left: number
+    width: number
+  }>
 }
 
 type TableMenuKind = "row" | "column" | "table"
@@ -625,17 +635,32 @@ type TableRowResizeState = {
   startHeight: number
 }
 
+type TableColumnRailResizeState = {
+  pointerId: number
+  columnIndex: number
+  lastClientX: number
+}
+
 const BLOCK_HANDLE_MEDIA_QUERY = "(pointer: coarse)"
+const DESKTOP_TABLE_RAIL_MEDIA_QUERY = "(max-width: 768px)"
+const DEFAULT_EDITOR_READABLE_WIDTH_PX = 48 * 16
 const BLOCK_HANDLE_POSITION_EPSILON_PX = 0.4
 const BLOCK_OUTER_SELECT_LEFT_GUTTER_PX = 76
 const BLOCK_OUTER_SELECT_LEFT_EDGE_INNER_PX = 6
 const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
+const TABLE_RAIL_EDGE_PADDING_PX = 12
+const TABLE_RAIL_BUTTON_SIZE_PX = 32
+const TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX = 12
+const TABLE_COLUMN_RAIL_TRACK_OFFSET_PX = 18
+const TABLE_COLUMN_RAIL_BUTTON_GAP_PX = 10
+const TABLE_SIDE_RAIL_OFFSET_PX = 46
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
 const TABLE_MENU_ESTIMATED_WIDTH_PX = 308
 const TABLE_MENU_ESTIMATED_HEIGHT_PX = 560
+const TABLE_WIDTH_BUDGET_META_KEY = "aq-table-width-budget-normalized"
 const SLASH_MENU_RECENT_IDS_STORAGE_KEY = "editor:block-slash-recent:v1"
 const SLASH_MENU_MAX_RECENT_ITEMS = 6
 const SLASH_MENU_EDGE_PADDING_PX = 16
@@ -654,6 +679,83 @@ const TABLE_CELL_COLOR_PRESETS = [
   { label: "라일락", value: "#ddd6fe" },
   { label: "회색", value: "#e2e8f0" },
 ] as const
+
+const clampViewportPosition = (
+  value: number,
+  edgePadding: number,
+  viewportSize: number,
+  itemSize: number
+) => {
+  const max = Math.max(edgePadding, viewportSize - itemSize - edgePadding)
+  return Math.min(Math.max(value, edgePadding), max)
+}
+
+const resolveDesktopTableRailLayout = (
+  state: TableQuickRailState,
+  trackWidth: number,
+  viewportWidth: number,
+  viewportHeight: number
+) => {
+  const trackLeft = clampViewportPosition(
+    Math.round(state.tableLeft),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    Math.max(0, Math.round(trackWidth))
+  )
+  const trackTop = clampViewportPosition(
+    Math.round(state.tableTop - TABLE_COLUMN_RAIL_TRACK_OFFSET_PX),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportHeight,
+    TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX
+  )
+  const railButtonTop = clampViewportPosition(
+    trackTop - TABLE_RAIL_BUTTON_SIZE_PX - TABLE_COLUMN_RAIL_BUTTON_GAP_PX,
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportHeight,
+    TABLE_RAIL_BUTTON_SIZE_PX
+  )
+  const cornerTop = clampViewportPosition(
+    railButtonTop,
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportHeight,
+    TABLE_RAIL_BUTTON_SIZE_PX
+  )
+  const cornerLeft = clampViewportPosition(
+    trackLeft + 8,
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_RAIL_BUTTON_SIZE_PX
+  )
+  const columnRailLeft = clampViewportPosition(
+    Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_RAIL_BUTTON_SIZE_PX / 2)),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_RAIL_BUTTON_SIZE_PX
+  )
+  const rowRailTop = clampViewportPosition(
+    Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_RAIL_BUTTON_SIZE_PX / 2)),
+    Math.max(trackTop + 42, TABLE_RAIL_EDGE_PADDING_PX),
+    viewportHeight,
+    TABLE_RAIL_BUTTON_SIZE_PX
+  )
+  const rowRailLeft = clampViewportPosition(
+    Math.round(trackLeft - TABLE_SIDE_RAIL_OFFSET_PX),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_RAIL_BUTTON_SIZE_PX
+  )
+
+  return {
+    trackLeft,
+    trackTop,
+    cornerLeft,
+    cornerTop,
+    columnRailLeft,
+    columnRailTop: railButtonTop,
+    rowRailLeft,
+    rowRailTop,
+  }
+}
 
 const blockHasVisibleContent = (node?: BlockEditorDoc | null): boolean => {
   if (!node) return false
@@ -888,6 +990,307 @@ const resolveDocPosSafe = (editor: TiptapEditor, pos: number) => {
   }
 }
 
+const getCurrentEditorReadableWidthPx = (editor?: TiptapEditor | null) => {
+  const contentElement =
+    (editor?.view.dom.closest(".aq-block-editor__content") as HTMLElement | null) ??
+    (typeof document !== "undefined"
+      ? document.querySelector<HTMLElement>(".aq-block-editor__content")
+      : null)
+
+  const contentRect = contentElement?.getBoundingClientRect() ?? null
+  const measuredWidth = contentRect ? Math.round(contentRect.width) : DEFAULT_EDITOR_READABLE_WIDTH_PX
+  const viewportBudget =
+    contentRect && typeof window !== "undefined"
+      ? Math.round(
+          window.innerWidth -
+            Math.max(TABLE_RAIL_EDGE_PADDING_PX, Math.round(contentRect.left)) -
+            TABLE_RAIL_EDGE_PADDING_PX
+        )
+      : DEFAULT_EDITOR_READABLE_WIDTH_PX
+
+  return Math.max(
+    TABLE_MIN_COLUMN_WIDTH_PX,
+    Math.min(
+      measuredWidth || DEFAULT_EDITOR_READABLE_WIDTH_PX,
+      viewportBudget || DEFAULT_EDITOR_READABLE_WIDTH_PX
+    )
+  )
+}
+
+const shouldClampTableWidthBudget = () => {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false
+  return !window.matchMedia(DESKTOP_TABLE_RAIL_MEDIA_QUERY).matches
+}
+
+type TableColumnCellRef = {
+  pos: number
+  node: {
+    attrs?: Record<string, unknown>
+  }
+}
+
+const collectSimpleTableColumnCells = (tableNode: { forEach: Function }, tablePos: number) => {
+  const columns: TableColumnCellRef[][] = []
+  let hasMergedCell = false
+
+  tableNode.forEach((rowNode: any, rowOffset: number) => {
+    if (rowNode.type?.name !== "tableRow") return
+    const rowPos = tablePos + 1 + rowOffset
+    let columnIndex = 0
+
+    rowNode.forEach((cellNode: any, cellOffset: number) => {
+      const colspan = Math.max(1, Number(cellNode.attrs?.colspan ?? 1) || 1)
+      const rowspan = Math.max(1, Number(cellNode.attrs?.rowspan ?? 1) || 1)
+      if (colspan !== 1 || rowspan !== 1) {
+        hasMergedCell = true
+        return
+      }
+
+      const cellPos = rowPos + 1 + cellOffset
+      columns[columnIndex] ||= []
+      columns[columnIndex].push({ pos: cellPos, node: cellNode })
+      columnIndex += 1
+    })
+  })
+
+  return hasMergedCell ? null : columns
+}
+
+const readColumnWidthFromCell = (cell: TableColumnCellRef) => {
+  const widthValue = Array.isArray(cell.node.attrs?.colwidth) ? cell.node.attrs?.colwidth[0] : null
+  return typeof widthValue === "number" && Number.isFinite(widthValue) && widthValue > 0
+    ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(widthValue))
+    : TABLE_MIN_COLUMN_WIDTH_PX
+}
+
+const hasExplicitColumnWidth = (column: TableColumnCellRef[]) =>
+  column.every((cell) => {
+    const widthValue = Array.isArray(cell.node.attrs?.colwidth) ? cell.node.attrs?.colwidth[0] : null
+    return typeof widthValue === "number" && Number.isFinite(widthValue) && widthValue > 0
+  })
+
+const readRenderedColumnWidths = (tableElement: HTMLElement | null) => {
+  if (!tableElement) return []
+
+  return Array.from(
+    tableElement.querySelectorAll<HTMLElement>("thead tr:first-of-type > th, thead tr:first-of-type > td, tbody tr:first-of-type > th, tbody tr:first-of-type > td, tr:first-of-type > th, tr:first-of-type > td")
+  ).map((cell) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(cell.getBoundingClientRect().width)))
+}
+
+const shrinkTableColumnWidthsToFit = (widths: number[], budget: number) => {
+  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+  let overflow = nextWidths.reduce((sum, width) => sum + width, 0) - budget
+
+  while (overflow > 0) {
+    const shrinkableColumns = nextWidths
+      .map((width, index) => ({ index, capacity: width - TABLE_MIN_COLUMN_WIDTH_PX, width }))
+      .filter((column) => column.capacity > 0)
+      .sort((left, right) => right.width - left.width)
+
+    if (shrinkableColumns.length === 0) break
+
+    let changed = false
+    const targetShare = Math.max(1, Math.ceil(overflow / shrinkableColumns.length))
+    for (const column of shrinkableColumns) {
+      if (overflow <= 0) break
+      const shrinkBy = Math.min(column.capacity, targetShare, overflow)
+      if (shrinkBy <= 0) continue
+      nextWidths[column.index] -= shrinkBy
+      overflow -= shrinkBy
+      changed = true
+    }
+
+    if (!changed) break
+  }
+
+  return nextWidths
+}
+
+const redistributeTableColumnWidthsForResize = (
+  widths: number[],
+  activeColumnIndex: number,
+  deltaPx: number,
+  budget: number
+) => {
+  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+  const activeIndex = Math.max(0, Math.min(activeColumnIndex, nextWidths.length - 1))
+  const roundedDelta = Math.round(deltaPx)
+  if (!nextWidths.length || roundedDelta === 0) {
+    return nextWidths
+  }
+
+  if (roundedDelta < 0) {
+    nextWidths[activeIndex] = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, nextWidths[activeIndex] + roundedDelta)
+    return nextWidths
+  }
+
+  const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length
+  const safeBudget = Math.max(minBudget, Math.round(budget))
+  const currentTotal = nextWidths.reduce((sum, width) => sum + width, 0)
+  let growBy = Math.min(roundedDelta, Math.max(0, safeBudget - currentTotal))
+  let remainingGrow = roundedDelta - growBy
+
+  if (remainingGrow > 0) {
+    const shrinkableColumns = nextWidths
+      .map((width, index) => ({
+        index,
+        width,
+        capacity: index === activeIndex ? 0 : width - TABLE_MIN_COLUMN_WIDTH_PX,
+      }))
+      .filter((column) => column.capacity > 0)
+      .sort((left, right) => right.width - left.width || right.index - left.index)
+
+    for (const column of shrinkableColumns) {
+      if (remainingGrow <= 0) break
+      const shrinkBy = Math.min(column.capacity, remainingGrow)
+      if (shrinkBy <= 0) continue
+      nextWidths[column.index] -= shrinkBy
+      growBy += shrinkBy
+      remainingGrow -= shrinkBy
+    }
+  }
+
+  if (growBy > 0) {
+    nextWidths[activeIndex] += growBy
+  }
+
+  return nextWidths
+}
+
+const applyTableColumnWidthsToTransaction = (
+  transaction: Transaction,
+  columns: TableColumnCellRef[][],
+  currentWidths: number[],
+  nextWidths: number[]
+) => {
+  let nextTransaction = transaction
+  let changed = false
+
+  columns.forEach((column, columnIndex) => {
+    const nextWidth = nextWidths[columnIndex]
+    const explicitWidthMissing = !hasExplicitColumnWidth(column)
+    if (currentWidths[columnIndex] === nextWidth && !explicitWidthMissing) return
+    column.forEach((cell) => {
+      nextTransaction = nextTransaction.setNodeMarkup(cell.pos, undefined, {
+        ...cell.node.attrs,
+        colwidth: [nextWidth],
+      })
+      changed = true
+    })
+  })
+
+  return { transaction: nextTransaction, changed }
+}
+
+const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
+  if (!shouldClampTableWidthBudget()) return false
+
+  const maxTableWidth = getCurrentEditorReadableWidthPx(editor) - 2
+  let transaction = editor.state.tr
+  let changed = false
+
+  editor.state.doc.descendants((node: any, pos: number) => {
+    if (node.type?.name !== "table") return true
+
+    const columns = collectSimpleTableColumnCells(node, pos)
+    if (!columns || columns.length === 0) return true
+
+    const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
+    const requiresExplicitWidths = columns.some((column) => !hasExplicitColumnWidth(column))
+    const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * currentWidths.length
+    const safeBudget = Math.max(minBudget, maxTableWidth)
+    const totalWidth = currentWidths.reduce((sum, width) => sum + width, 0)
+    if (totalWidth <= safeBudget && !requiresExplicitWidths) return true
+
+    const nextWidths =
+      totalWidth > safeBudget ? shrinkTableColumnWidthsToFit(currentWidths, safeBudget) : currentWidths
+    if (nextWidths.every((width, index) => width === currentWidths[index]) && !requiresExplicitWidths) {
+      return true
+    }
+
+    const applied = applyTableColumnWidthsToTransaction(transaction, columns, currentWidths, nextWidths)
+    transaction = applied.transaction
+    changed ||= applied.changed
+
+    return true
+  })
+
+  if (!changed || !transaction.docChanged) return false
+  transaction = transaction.setMeta(TABLE_WIDTH_BUDGET_META_KEY, true)
+  editor.view.dispatch(transaction)
+  return true
+}
+
+const getRenderedTableViewportBudgetPx = (tableElement: HTMLElement | null, fallbackBudget: number) => {
+  if (!tableElement || typeof window === "undefined") return fallbackBudget
+
+  const tableRect = tableElement.getBoundingClientRect()
+  return Math.max(
+    TABLE_MIN_COLUMN_WIDTH_PX,
+    Math.round(
+      window.innerWidth -
+        Math.max(TABLE_RAIL_EDGE_PADDING_PX, Math.round(tableRect.left)) -
+        TABLE_RAIL_EDGE_PADDING_PX
+    )
+  )
+}
+
+const normalizeRenderedTableWidthsToReadableBudget = (editor: TiptapEditor) => {
+  if (!shouldClampTableWidthBudget()) return false
+
+  const readableWidthBudget = getCurrentEditorReadableWidthPx(editor) - 2
+  const renderedTables = Array.from(
+    editor.view.dom.querySelectorAll<HTMLElement>(".tableWrapper > table")
+  )
+  let renderedTableIndex = 0
+  let transaction = editor.state.tr
+  let changed = false
+
+  editor.state.doc.descendants((node: any, pos: number) => {
+    if (node.type?.name !== "table") return true
+
+    const columns = collectSimpleTableColumnCells(node, pos)
+    const renderedTable = renderedTables[renderedTableIndex] ?? null
+    renderedTableIndex += 1
+    if (!columns || columns.length === 0) return true
+
+    const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
+    const requiresExplicitWidths = columns.some((column) => !hasExplicitColumnWidth(column))
+    const renderedColumnWidths = readRenderedColumnWidths(renderedTable)
+    const measuredWidths =
+      renderedColumnWidths.length === columns.length ? renderedColumnWidths : currentWidths
+    const measuredTotalWidth = measuredWidths.reduce((sum, width) => sum + width, 0)
+    const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * currentWidths.length
+    const viewportBudget = getRenderedTableViewportBudgetPx(renderedTable, readableWidthBudget)
+    const safeBudget = Math.max(minBudget, Math.min(readableWidthBudget, viewportBudget))
+    const renderedTableWidth = renderedTable
+      ? Math.round(renderedTable.getBoundingClientRect().width)
+      : measuredTotalWidth
+    const borderOverhead = Math.max(0, renderedTableWidth - measuredTotalWidth)
+    const contentBudget = Math.max(minBudget, safeBudget - borderOverhead)
+    if (renderedTableWidth <= safeBudget && !requiresExplicitWidths) return true
+
+    const nextWidths =
+      measuredTotalWidth > contentBudget
+        ? shrinkTableColumnWidthsToFit(measuredWidths, contentBudget)
+        : measuredWidths
+    if (nextWidths.every((width, index) => width === currentWidths[index]) && !requiresExplicitWidths) {
+      return true
+    }
+
+    const applied = applyTableColumnWidthsToTransaction(transaction, columns, currentWidths, nextWidths)
+    transaction = applied.transaction
+    changed ||= applied.changed
+
+    return true
+  })
+
+  if (!changed || !transaction.docChanged) return false
+  transaction = transaction.setMeta(TABLE_WIDTH_BUDGET_META_KEY, true)
+  editor.view.dispatch(transaction)
+  return true
+}
+
 const TABLE_CONTEXT_NODE_NAMES = new Set(["table", "tableRow", "tableCell", "tableHeader"])
 
 const hasTableContextInResolvedPos = (resolvedPos: { depth: number; node: (depth: number) => { type: { name: string } } }) => {
@@ -1037,8 +1440,10 @@ const BlockEditorShell = ({
   const markdownCommitIdleModeRef = useRef<"idle" | "timeout" | null>(null)
   const markdownCommitTimerRef = useRef<number | null>(null)
   const markdownCommitMaxWaitTimerRef = useRef<number | null>(null)
+  const tableViewportBudgetNormalizeFrameRef = useRef<number | null>(null)
   const editorRef = useRef<TiptapEditor | null>(null)
   const tableRowResizeRef = useRef<TableRowResizeState | null>(null)
+  const tableColumnRailResizeRef = useRef<TableColumnRailResizeState | null>(null)
   const tableQuickRailHideTimerRef = useRef<number | null>(null)
   const hoveredBlockClearTimerRef = useRef<number | null>(null)
   const bubbleHideTimerRef = useRef<number | null>(null)
@@ -1059,6 +1464,7 @@ const BlockEditorShell = ({
   const [isBubbleInlineColorMenuOpen, setIsBubbleInlineColorMenuOpen] = useState(false)
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
+  const [isDesktopTableRailViewport, setIsDesktopTableRailViewport] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
   const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
@@ -1091,12 +1497,16 @@ const BlockEditorShell = ({
     visible: false,
     left: 0,
     top: 0,
+    tableLeft: 0,
+    tableTop: 0,
     width: 0,
     height: 0,
     rowTop: 0,
     rowHeight: 0,
     columnLeft: 0,
     columnWidth: 0,
+    columnIndex: 0,
+    columnSegments: [],
   })
   const [tableMenuState, setTableMenuState] = useState<TableMenuState>(null)
   const tableQuickRailStateRef = useRef(tableQuickRailState)
@@ -1183,6 +1593,25 @@ const BlockEditorShell = ({
       bubbleHideTimerRef.current = null
     }, 220)
   }, [cancelBubbleHide])
+
+  const cancelScheduledTableViewportBudgetNormalize = useCallback(() => {
+    if (tableViewportBudgetNormalizeFrameRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(tableViewportBudgetNormalizeFrameRef.current)
+      tableViewportBudgetNormalizeFrameRef.current = null
+    }
+  }, [])
+
+  const scheduleTableViewportBudgetNormalize = useCallback(
+    (nextEditor: TiptapEditor) => {
+      if (typeof window === "undefined") return
+      cancelScheduledTableViewportBudgetNormalize()
+      tableViewportBudgetNormalizeFrameRef.current = window.requestAnimationFrame(() => {
+        tableViewportBudgetNormalizeFrameRef.current = null
+        normalizeRenderedTableWidthsToReadableBudget(editorRef.current ?? nextEditor)
+      })
+    },
+    [cancelScheduledTableViewportBudgetNormalize]
+  )
 
   const cancelPendingMarkdownCommit = useCallback(() => {
     if (typeof window !== "undefined" && markdownCommitIdleHandleRef.current !== null) {
@@ -1893,6 +2322,95 @@ const BlockEditorShell = ({
     commitTableRowHeight(firstTableRow, nextHeight)
   }, [commitTableRowHeight])
 
+  const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
+    if (!activeEditor || !isTableSelectionActive(activeEditor)) return null
+    try {
+      return selectedRect(activeEditor.state)
+    } catch {
+      return null
+    }
+  }, [])
+
+  const isCurrentTableColumnSelection = useCallback(
+    (columnIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      const { selection } = currentEditor.state
+      if (!(selection instanceof CellSelection)) return false
+      const rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect) return false
+      return (
+        columnIndex >= 0 &&
+        rect.left === columnIndex &&
+        rect.right === columnIndex + 1 &&
+        rect.top === 0 &&
+        rect.bottom === rect.map.height
+      )
+    },
+    [getCurrentSelectedTableRect]
+  )
+
+  const selectTableColumnByIndex = useCallback(
+    (columnIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      const rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) return false
+
+      const anchorCellPos = rect.tableStart + rect.map.positionAt(0, columnIndex, rect.table)
+      const headCellPos =
+        rect.tableStart + rect.map.positionAt(rect.map.height - 1, columnIndex, rect.table)
+      const anchorResolved = resolveDocPosSafe(currentEditor, anchorCellPos)
+      const headResolved = resolveDocPosSafe(currentEditor, headCellPos)
+      if (!anchorResolved || !headResolved) return false
+
+      currentEditor.view.dispatch(
+        currentEditor.state.tr.setSelection(CellSelection.colSelection(anchorResolved, headResolved))
+      )
+      currentEditor.view.focus()
+      return true
+    },
+    [getCurrentSelectedTableRect]
+  )
+
+  const resizeTableColumnByIndex = useCallback(
+    (columnIndex: number, deltaPx: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor || deltaPx === 0) return false
+      const rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) return false
+
+      const columns = collectSimpleTableColumnCells(rect.table, rect.tableStart)
+      if (!columns || columns.length === 0 || columnIndex >= columns.length) return false
+
+      const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
+      const nextWidths = shouldClampTableWidthBudget()
+        ? redistributeTableColumnWidthsForResize(
+            currentWidths,
+            columnIndex,
+            deltaPx,
+            getCurrentEditorReadableWidthPx(currentEditor) - 2
+          )
+        : currentWidths.map((width, index) =>
+            index === columnIndex
+              ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width + deltaPx))
+              : width
+          )
+
+      const applied = applyTableColumnWidthsToTransaction(
+        currentEditor.state.tr,
+        columns,
+        currentWidths,
+        nextWidths
+      )
+      if (!applied.changed) return false
+      currentEditor.view.dispatch(applied.transaction)
+      setSelectionTick((prev) => prev + 1)
+      return true
+    },
+    [getCurrentSelectedTableRect]
+  )
+
   const resizeFirstTableColumnBy = useCallback((deltaPx: number) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return
@@ -1914,23 +2432,70 @@ const BlockEditorShell = ({
       const cellPosition = resolvedPosition.before(depth)
       const cellNode = currentEditor.state.doc.nodeAt(cellPosition)
       if (!cellNode) return
-      const currentWidth = Array.isArray(cellNode.attrs?.colwidth) && cellNode.attrs.colwidth[0]
-        ? Number(cellNode.attrs.colwidth[0])
-        : Math.round(firstCell.getBoundingClientRect().width)
-      const nextWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(currentWidth + deltaPx))
-      const transaction = currentEditor.state.tr.setNodeMarkup(cellPosition, undefined, {
-        ...cellNode.attrs,
-        colwidth: [nextWidth],
-      })
-      currentEditor.view.dispatch(transaction)
+      let tableDepth = depth - 1
+      while (tableDepth > 0 && resolvedPosition.node(tableDepth).type.name !== "table") {
+        tableDepth -= 1
+      }
+
+      const tableNode = tableDepth > 0 ? resolvedPosition.node(tableDepth) : null
+      const tablePosition = tableDepth > 0 ? resolvedPosition.before(tableDepth) : null
+      const columns = tableNode && tablePosition !== null
+        ? collectSimpleTableColumnCells(tableNode, tablePosition)
+        : null
+
+      if (!columns || columns.length === 0) {
+        const currentWidth = Array.isArray(cellNode.attrs?.colwidth) && cellNode.attrs.colwidth[0]
+          ? Number(cellNode.attrs.colwidth[0])
+          : Math.round(firstCell.getBoundingClientRect().width)
+        const nextWidth = Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(currentWidth + deltaPx))
+        const transaction = currentEditor.state.tr.setNodeMarkup(cellPosition, undefined, {
+          ...cellNode.attrs,
+          colwidth: [nextWidth],
+        })
+        currentEditor.view.dispatch(transaction)
+        return
+      }
+
+      const activeColumnIndex = columns.findIndex((column) =>
+        column.some((cell) => cell.pos === cellPosition)
+      )
+      if (activeColumnIndex === -1) return
+      resizeTableColumnByIndex(activeColumnIndex, deltaPx)
       return
+    }
+  }, [resizeTableColumnByIndex])
+
+  const stopTableColumnRailResize = useCallback(() => {
+    tableColumnRailResizeRef.current = null
+    if (typeof document !== "undefined") {
+      document.body.style.removeProperty("cursor")
     }
   }, [])
 
+  const startTableColumnRailResize = useCallback(
+    (pointerId: number, columnIndex: number, clientX: number) => {
+      if (!selectTableColumnByIndex(columnIndex)) return
+      setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
+      tableColumnRailResizeRef.current = {
+        pointerId,
+        columnIndex,
+        lastClientX: clientX,
+      }
+      if (typeof document !== "undefined") {
+        document.body.style.cursor = "col-resize"
+      }
+    },
+    [selectTableColumnByIndex]
+  )
+
   const syncTableQuickRailFromElement = useCallback((element: Element | null) => {
-    const tableElement = element?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+    const tableSurfaceElement = element?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+    const tableElement =
+      tableSurfaceElement instanceof HTMLTableElement
+        ? tableSurfaceElement
+        : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null)
     const tableRect = tableElement?.getBoundingClientRect()
-    if (!tableRect) {
+    if (!tableElement || !tableRect) {
       hideTableQuickRailImmediately()
       return
     }
@@ -1938,21 +2503,66 @@ const BlockEditorShell = ({
     const activeCell =
       (viewportRef.current?.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null) ||
       (element?.closest("th, td") as HTMLElement | null) ||
-      (tableElement?.querySelector("th, td") as HTMLElement | null)
+      (tableElement.querySelector("th, td") as HTMLElement | null)
     const activeCellRect = activeCell?.getBoundingClientRect()
     const activeRowRect = activeCell?.closest("tr")?.getBoundingClientRect()
+    const activeColumnIndex = activeCell?.parentElement
+      ? Array.from(activeCell.parentElement.children).findIndex((child) => child === activeCell)
+      : 0
+    const firstRowCells = Array.from(
+      (tableElement.querySelector("thead tr, tbody tr, tr")?.children ?? []) as HTMLCollectionOf<HTMLElement>
+    )
+      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+      .map((cell) => {
+        const cellRect = cell.getBoundingClientRect()
+        return {
+          left: Math.round(Math.max(0, cellRect.left - tableRect.left)),
+          width: Math.round(cellRect.width),
+        }
+      })
     setTableQuickRailState({
       visible: true,
       left: Math.round(Math.max(12, tableRect.left - 46)),
       top: Math.round(tableRect.top + 10),
+      tableLeft: Math.round(tableRect.left),
+      tableTop: Math.round(tableRect.top),
       width: Math.round(tableRect.width),
       height: Math.round(tableRect.height),
       rowTop: Math.round(activeRowRect?.top ?? tableRect.top + 52),
       rowHeight: Math.round(activeRowRect?.height ?? 44),
       columnLeft: Math.round(activeCellRect?.left ?? tableRect.left + 72),
       columnWidth: Math.round(activeCellRect?.width ?? 120),
+      columnIndex: activeColumnIndex >= 0 ? activeColumnIndex : 0,
+      columnSegments: firstRowCells,
     })
   }, [cancelTableQuickRailHide, hideTableQuickRailImmediately])
+
+  const stabilizeTableSelectionSurface = useCallback((nextEditor?: TiptapEditor | null) => {
+    if (typeof window === "undefined") return
+
+    const run = () => {
+      const activeEditor = nextEditor ?? editorRef.current
+      if (!activeEditor) return
+      normalizeRenderedTableWidthsToReadableBudget(activeEditor)
+      const selectedCell = viewportRef.current?.querySelector(
+        ".aq-block-editor__content .selectedCell"
+      ) as HTMLElement | null
+      const fallbackCell = viewportRef.current?.querySelector(
+        ".aq-block-editor__content table th, .aq-block-editor__content table td"
+      ) as HTMLElement | null
+      if (!isTableSelectionActive(activeEditor) && !fallbackCell) return
+      syncTableQuickRailFromElement(selectedCell ?? fallbackCell)
+      setSelectionTick((prev) => prev + 1)
+    }
+
+    const schedule = (remainingFrames: number) => {
+      run()
+      if (remainingFrames <= 1) return
+      window.requestAnimationFrame(() => schedule(remainingFrames - 1))
+    }
+
+    window.requestAnimationFrame(() => schedule(4))
+  }, [syncTableQuickRailFromElement])
 
   useEffect(() => {
     tableQuickRailStateRef.current = tableQuickRailState
@@ -2075,6 +2685,36 @@ const BlockEditorShell = ({
     return true
   }, [syncSerializedDoc])
 
+  const createInitialTableNode = useCallback(() => {
+    const safeContentWidth = Math.max(
+      TABLE_MIN_COLUMN_WIDTH_PX * DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
+      getCurrentEditorReadableWidthPx(editorRef.current)
+    )
+    const targetInnerWidth = Math.max(
+      TABLE_MIN_COLUMN_WIDTH_PX * DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
+      safeContentWidth - 2
+    )
+    const baseColumnWidth = Math.max(
+      TABLE_MIN_COLUMN_WIDTH_PX,
+      Math.floor(targetInnerWidth / DEFAULT_EMPTY_TABLE_COLUMN_COUNT)
+    )
+    const lastColumnWidth =
+      targetInnerWidth - baseColumnWidth * (DEFAULT_EMPTY_TABLE_COLUMN_COUNT - 1)
+    const initialLayout: MarkdownTableLayout = {
+      columnWidths: Array.from({ length: DEFAULT_EMPTY_TABLE_COLUMN_COUNT }, (_, columnIndex) =>
+        columnIndex === DEFAULT_EMPTY_TABLE_COLUMN_COUNT - 1
+          ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, lastColumnWidth)
+          : baseColumnWidth
+      ),
+    }
+
+    return createEmptyTableNode(
+      DEFAULT_EMPTY_TABLE_ROW_COUNT,
+      DEFAULT_EMPTY_TABLE_COLUMN_COUNT,
+      initialLayout
+    )
+  }, [])
+
   const buildSlashWholeParagraphReplacement = useCallback((itemId: string) => {
     switch (itemId) {
       case "paragraph":
@@ -2102,7 +2742,7 @@ const BlockEditorShell = ({
         }
       case "table":
         return {
-          blocks: [createEmptyTableNode()],
+          blocks: [createInitialTableNode()],
           focusBlockIndex: 0,
         }
       case "callout":
@@ -2167,7 +2807,7 @@ const BlockEditorShell = ({
       default:
         return null
     }
-  }, [enableMermaidBlocks])
+  }, [createInitialTableNode, enableMermaidBlocks])
 
   const transformCurrentParagraphViaSlash = useCallback((itemId: string) => {
     const currentEditor = editorRef.current
@@ -2250,12 +2890,19 @@ const BlockEditorShell = ({
       editorRef.current = createdEditor
       createdEditor.setEditable(!disabled)
     },
+    onTransaction: ({ editor: nextEditor, transaction }) => {
+      if (!transaction.docChanged) return
+      if (transaction.getMeta(TABLE_WIDTH_BUDGET_META_KEY)) return
+      normalizeTableWidthsToReadableBudget(nextEditor)
+      scheduleTableViewportBudgetNormalize(nextEditor)
+    },
     onDestroy: () => {
       const destroyedEditor = editorRef.current
       if (destroyedEditor) {
         pendingCommitEditorRef.current = destroyedEditor
         pendingCommitFocusedRef.current = destroyedEditor.isFocused
       }
+      cancelScheduledTableViewportBudgetNormalize()
       cancelPendingMarkdownCommit()
       flushPendingMarkdownCommit()
       editorRef.current = null
@@ -2557,7 +3204,8 @@ const BlockEditorShell = ({
       const isTopLevelBlockNodeSelection = Boolean(
         selection.$from.depth === 0 && selection.node?.isBlock
       )
-      const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}`
+      const inTableContext = isTableSelectionActive(editor) ? 1 : 0
+      const nextSignature = `${nextBlockIndex ?? "none"}:${isTopLevelBlockNodeSelection ? 1 : 0}:${keyboardBlockSelectionStickyRef.current ? 1 : 0}:${inTableContext}`
       if (nextSignature === selectionUiSignatureRef.current) {
         return
       }
@@ -2746,6 +3394,38 @@ const BlockEditorShell = ({
       stopTableRowResize()
     }
   }, [commitTableRowHeight, stopTableRowResize])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const state = tableColumnRailResizeRef.current
+      if (!state || state.pointerId !== event.pointerId) return
+      const deltaX = event.clientX - state.lastClientX
+      if (deltaX === 0) return
+      const applied = resizeTableColumnByIndex(state.columnIndex, deltaX)
+      if (applied) {
+        state.lastClientX = event.clientX
+      }
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      const state = tableColumnRailResizeRef.current
+      if (!state || state.pointerId !== event.pointerId) return
+      stopTableColumnRailResize()
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    window.addEventListener("pointercancel", handlePointerUp)
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      window.removeEventListener("pointercancel", handlePointerUp)
+      stopTableColumnRailResize()
+    }
+  }, [resizeTableColumnByIndex, stopTableColumnRailResize])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor
@@ -3181,8 +3861,8 @@ const BlockEditorShell = ({
 
   const insertTableBlock = useCallback(() => {
     if (!canInsertTopLevelBlockAtSelection()) return
-    insertBlocksAtCursor([createEmptyTableNode()], true)
-  }, [canInsertTopLevelBlockAtSelection, insertBlocksAtCursor])
+    insertBlocksAtCursor([createInitialTableNode()], true)
+  }, [canInsertTopLevelBlockAtSelection, createInitialTableNode, insertBlocksAtCursor])
 
   const canInsertTable = canInsertTopLevelBlockAtSelection()
 
@@ -3601,7 +4281,7 @@ const BlockEditorShell = ({
   }
 
   const blockInsertCatalog = useMemo<BlockInsertCatalogItem[]>(() => {
-    const createTableTemplate = () => createEmptyTableNode()
+    const createTableTemplate = () => createInitialTableNode()
 
     const createCalloutTemplate = () =>
       createCalloutNode({
@@ -3771,7 +4451,7 @@ const BlockEditorShell = ({
       {
         id: "table",
         label: "테이블",
-        helper: "2열 헤더 포함",
+        helper: "3×3 빈 표",
         section: "structure",
         keywords: ["table", "표", "테이블"],
         slashHint: "표",
@@ -3929,6 +4609,7 @@ const BlockEditorShell = ({
     })
   }, [
     canInsertTable,
+    createInitialTableNode,
     enableMermaidBlocks,
     focusEditor,
     isTableMode,
@@ -4590,8 +5271,9 @@ const BlockEditorShell = ({
 
       action(editor)
       closeTableMenu()
+      stabilizeTableSelectionSurface(editor)
     },
-    [closeTableMenu, editor]
+    [closeTableMenu, editor, stabilizeTableSelectionSurface]
   )
 
   const openTableMenu = useCallback((kind: TableMenuKind, anchorRect: DOMRect) => {
@@ -4640,6 +5322,21 @@ const BlockEditorShell = ({
       openTableMenu(kind, anchorRect)
     },
     [openTableMenu, selectActiveTableBlock, selectCurrentTableAxis]
+  )
+
+  const handleTableColumnRailSegmentClick = useCallback(
+    (columnIndex: number, anchorRect: DOMRect) => {
+      const alreadySelected = isCurrentTableColumnSelection(columnIndex)
+      const selected = selectTableColumnByIndex(columnIndex)
+      if (!selected) return
+      setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
+      if (alreadySelected) {
+        openSelectionAwareTableMenu("column", anchorRect)
+        return
+      }
+      closeTableMenu()
+    },
+    [closeTableMenu, isCurrentTableColumnSelection, openSelectionAwareTableMenu, selectTableColumnByIndex]
   )
 
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
@@ -4753,6 +5450,15 @@ const BlockEditorShell = ({
     if (typeof window === "undefined") return
     const mediaQuery = window.matchMedia(BLOCK_HANDLE_MEDIA_QUERY)
     const sync = () => setIsCoarsePointer(mediaQuery.matches)
+    sync()
+    mediaQuery.addEventListener?.("change", sync)
+    return () => mediaQuery.removeEventListener?.("change", sync)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mediaQuery = window.matchMedia(DESKTOP_TABLE_RAIL_MEDIA_QUERY)
+    const sync = () => setIsDesktopTableRailViewport(!mediaQuery.matches)
     sync()
     mediaQuery.addEventListener?.("change", sync)
     return () => mediaQuery.removeEventListener?.("change", sync)
@@ -4905,6 +5611,106 @@ const BlockEditorShell = ({
   ])
 
   useEffect(() => {
+    if (typeof window === "undefined" || isCoarsePointer || !tableQuickRailState.visible) return
+    if (tableColumnRailResizeRef.current || tableRowResizeRef.current) return
+
+    const anchorElement = viewportRef.current?.querySelector(
+      ".aq-block-editor__content .selectedCell, .aq-block-editor__content table th, .aq-block-editor__content table td"
+    ) as HTMLElement | null
+    const tableElement = anchorElement?.closest("table") as HTMLTableElement | null
+    if (!anchorElement || !tableElement) return
+
+    const tableRect = tableElement.getBoundingClientRect()
+    const nextWidth = Math.round(tableRect.width)
+    const nextSegments = Array.from(
+      (tableElement.querySelector("thead tr, tbody tr, tr")?.children ?? []) as HTMLCollectionOf<HTMLElement>
+    )
+      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+      .map((cell) => {
+        const cellRect = cell.getBoundingClientRect()
+        return {
+          left: Math.round(Math.max(0, cellRect.left - tableRect.left)),
+          width: Math.round(cellRect.width),
+        }
+      })
+
+    const segmentsChanged =
+      nextSegments.length !== tableQuickRailState.columnSegments.length ||
+      nextSegments.some((segment, index) => {
+        const prev = tableQuickRailState.columnSegments[index]
+        return !prev || Math.abs(prev.left - segment.left) > 2 || Math.abs(prev.width - segment.width) > 2
+      })
+
+    if (Math.abs(nextWidth - tableQuickRailState.width) <= 2 && !segmentsChanged) return
+
+    syncTableQuickRailFromElement(anchorElement)
+  }, [
+    isCoarsePointer,
+    selectionTick,
+    syncTableQuickRailFromElement,
+    tableQuickRailState.columnSegments,
+    tableQuickRailState.visible,
+    tableQuickRailState.width,
+  ])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof MutationObserver === "undefined") return
+    if (isCoarsePointer || !tableQuickRailState.visible) return
+
+    const resolveAnchorElement = () =>
+      (viewportRef.current?.querySelector(
+        ".aq-block-editor__content .selectedCell, .aq-block-editor__content table th, .aq-block-editor__content table td"
+      ) as HTMLElement | null)
+
+    const initialAnchorElement = resolveAnchorElement()
+    const tableElement = initialAnchorElement?.closest("table") as HTMLTableElement | null
+    if (!initialAnchorElement || !tableElement) return
+
+    let rafId: number | null = null
+    const requestSync = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        syncTableQuickRailFromElement(resolveAnchorElement())
+      })
+    }
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            requestSync()
+          })
+        : null
+
+    resizeObserver?.observe(tableElement)
+    const firstRow = tableElement.querySelector("thead tr, tbody tr, tr")
+    if (firstRow instanceof HTMLElement) {
+      resizeObserver?.observe(firstRow)
+    }
+
+    const mutationObserver = new MutationObserver(() => {
+      requestSync()
+    })
+
+    mutationObserver.observe(tableElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["colspan", "rowspan", "style", "class"],
+    })
+
+    return () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId)
+      }
+      resizeObserver?.disconnect()
+      mutationObserver.disconnect()
+    }
+  }, [isCoarsePointer, selectionTick, syncTableQuickRailFromElement, tableQuickRailState.visible])
+
+  useEffect(() => {
     const elements = getTopLevelBlockElements()
 
     elements.forEach((element, index) => {
@@ -4936,8 +5742,13 @@ const BlockEditorShell = ({
     (event: React.PointerEvent<HTMLDivElement>) => {
       cancelHoveredBlockClear()
       const rowResizeState = tableRowResizeRef.current
+      const columnResizeState = tableColumnRailResizeRef.current
       if (rowResizeState) {
         setViewportRowResizeHot(true)
+        return
+      }
+      if (columnResizeState) {
+        cancelTableQuickRailHide()
         return
       }
       if (isCoarsePointer) return
@@ -4945,7 +5756,8 @@ const BlockEditorShell = ({
       if (
         target?.closest("[data-table-menu-root='true']") ||
         target?.closest("[data-table-axis-rail='true']") ||
-        target?.closest("[data-table-corner-handle='true']")
+        target?.closest("[data-table-corner-handle='true']") ||
+        target?.closest("[data-table-column-rail-track='true']")
       ) {
         cancelTableQuickRailHide()
         if (isTableMode) {
@@ -5085,7 +5897,7 @@ const BlockEditorShell = ({
         setSelectedBlockNodeIndex(null)
         syncSelectedBlockNodeSurface(null)
       }
-      if (isCoarsePointer || tableRowResizeRef.current) return
+      if (isCoarsePointer || tableRowResizeRef.current || tableColumnRailResizeRef.current) return
       const cell = getTableCellFromTarget(event.target)
       if (!isRowResizeHandleTarget(cell, event.clientX, event.clientY) || !cell) return
       event.preventDefault()
@@ -5227,7 +6039,8 @@ const BlockEditorShell = ({
           target instanceof Element &&
           (target.closest("[data-table-menu-root='true']") ||
             target.closest("[data-table-axis-rail='true']") ||
-            target.closest("[data-table-corner-handle='true']"))
+            target.closest("[data-table-corner-handle='true']") ||
+            target.closest("[data-table-column-rail-track='true']"))
         ) {
           return
         }
@@ -5245,6 +6058,27 @@ const BlockEditorShell = ({
 
   const shouldShowTableHandles =
     !isCoarsePointer && (tableQuickRailState.visible || isTableMode || Boolean(tableMenuState))
+  const desktopTableRailTrackWidth = useMemo(
+    () =>
+      tableQuickRailState.columnSegments.length
+        ? tableQuickRailState.columnSegments.reduce((sum, segment) => sum + Math.max(0, segment.width), 0)
+        : tableQuickRailState.width,
+    [tableQuickRailState.columnSegments, tableQuickRailState.width]
+  )
+  const shouldShowTableColumnRail =
+    shouldShowTableHandles &&
+    isDesktopTableRailViewport &&
+    tableQuickRailState.columnSegments.length > 0 &&
+    desktopTableRailTrackWidth > 0
+  const desktopTableRailLayout = useMemo(() => {
+    if (typeof window === "undefined") return null
+    return resolveDesktopTableRailLayout(
+      tableQuickRailState,
+      desktopTableRailTrackWidth,
+      window.innerWidth,
+      window.innerHeight
+    )
+  }, [desktopTableRailTrackWidth, tableQuickRailState])
 
   return (
     <Shell className={className}>
@@ -5689,6 +6523,65 @@ const BlockEditorShell = ({
         ) : null}
         {shouldShowTableHandles ? (
           <>
+            {shouldShowTableColumnRail ? (
+              <TableColumnRailTrack
+                data-testid="table-column-rail-track"
+                data-table-column-rail-track="true"
+                onPointerEnter={cancelTableQuickRailHide}
+                onPointerLeave={() => {
+                  if (!isTableMode && !tableMenuState) {
+                    scheduleTableQuickRailHide()
+                  }
+                }}
+                style={{
+                  left: `${desktopTableRailLayout?.trackLeft ?? tableQuickRailState.tableLeft}px`,
+                  top: `${desktopTableRailLayout?.trackTop ?? Math.max(12, tableQuickRailState.tableTop - 18)}px`,
+                  width: `${desktopTableRailTrackWidth}px`,
+                }}
+              >
+                {tableQuickRailState.columnSegments.map((segment, index) => {
+                  const isActive =
+                    index === tableQuickRailState.columnIndex || isCurrentTableColumnSelection(index)
+
+                  return (
+                    <TableColumnRailSegment
+                      key={`column-rail-${index}`}
+                      type="button"
+                      aria-label={`열 ${index + 1} 선택`}
+                      data-testid={`table-column-rail-segment-${index}`}
+                      data-active={isActive}
+                      style={{
+                        left: `${segment.left}px`,
+                        width: `${segment.width}px`,
+                      }}
+                      onMouseDown={handleToolbarButtonMouseDown}
+                      onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        handleTableColumnRailSegmentClick(index, event.currentTarget.getBoundingClientRect())
+                      }}
+                    >
+                      {index < tableQuickRailState.columnSegments.length - 1 ? (
+                        <TableColumnRailResizeHandle
+                          role="presentation"
+                          aria-hidden="true"
+                          data-testid={`table-column-rail-resize-${index}`}
+                          onClick={(event: ReactMouseEvent<HTMLSpanElement>) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }}
+                          onPointerDown={(event: React.PointerEvent<HTMLSpanElement>) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            startTableColumnRailResize(event.pointerId, index, event.clientX)
+                          }}
+                        />
+                      ) : null}
+                    </TableColumnRailSegment>
+                  )
+                })}
+              </TableColumnRailTrack>
+            ) : null}
             <TableCornerHandle
               data-table-corner-handle="true"
               data-testid="table-corner-handle"
@@ -5699,8 +6592,8 @@ const BlockEditorShell = ({
                 }
               }}
               style={{
-                left: `${tableQuickRailState.left + 54}px`,
-                top: `${Math.max(12, tableQuickRailState.top - 42)}px`,
+                left: `${desktopTableRailLayout?.cornerLeft ?? tableQuickRailState.left + 54}px`,
+                top: `${desktopTableRailLayout?.cornerTop ?? Math.max(12, tableQuickRailState.top - 42)}px`,
               }}
             >
               <TableHandleButton
@@ -5716,34 +6609,39 @@ const BlockEditorShell = ({
                 <TableHandleIcon kind="table" />
               </TableHandleButton>
             </TableCornerHandle>
-            <TableAxisRail
-              data-testid="table-column-rail"
-              data-table-axis-rail="true"
-              data-axis="column"
-              onPointerEnter={cancelTableQuickRailHide}
-              onPointerLeave={() => {
-                if (!isTableMode && !tableMenuState) {
-                  scheduleTableQuickRailHide()
-                }
-              }}
-              style={{
-                left: `${Math.max(tableQuickRailState.left + 108, tableQuickRailState.columnLeft - 22)}px`,
-                top: `${Math.max(12, tableQuickRailState.top - 42)}px`,
-              }}
-            >
-              <TableQuickRailButton
-                type="button"
-                title="열 선택"
-                aria-label="열 선택"
-                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  openSelectionAwareTableMenu("column", event.currentTarget.getBoundingClientRect())
+            {!shouldShowTableColumnRail ? (
+              <TableAxisRail
+                data-testid="table-column-rail"
+                data-table-axis-rail="true"
+                data-axis="column"
+                onPointerEnter={cancelTableQuickRailHide}
+                onPointerLeave={() => {
+                  if (!isTableMode && !tableMenuState) {
+                    scheduleTableQuickRailHide()
+                  }
+                }}
+                style={{
+                  left: `${
+                    desktopTableRailLayout?.columnRailLeft ??
+                    Math.max(tableQuickRailState.left + 108, tableQuickRailState.columnLeft - 22)
+                  }px`,
+                  top: `${desktopTableRailLayout?.columnRailTop ?? Math.max(12, tableQuickRailState.top - 42)}px`,
                 }}
               >
-                <TableHandleIcon kind="column" />
-              </TableQuickRailButton>
-            </TableAxisRail>
+                <TableQuickRailButton
+                  type="button"
+                  title="열 선택"
+                  aria-label="열 선택"
+                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    openSelectionAwareTableMenu("column", event.currentTarget.getBoundingClientRect())
+                  }}
+                >
+                  <TableHandleIcon kind="column" />
+                </TableQuickRailButton>
+              </TableAxisRail>
+            ) : null}
             <TableAxisRail
               data-testid="table-row-rail"
               data-table-axis-rail="true"
@@ -5755,8 +6653,14 @@ const BlockEditorShell = ({
                 }
               }}
               style={{
-                left: `${tableQuickRailState.left}px`,
-                top: `${Math.max(tableQuickRailState.top + 42, tableQuickRailState.rowTop + Math.round(Math.max(0, tableQuickRailState.rowHeight / 2 - 16)))}px`,
+                left: `${desktopTableRailLayout?.rowRailLeft ?? tableQuickRailState.left}px`,
+                top: `${
+                  desktopTableRailLayout?.rowRailTop ??
+                  Math.max(
+                    tableQuickRailState.top + 42,
+                    tableQuickRailState.rowTop + Math.round(Math.max(0, tableQuickRailState.rowHeight / 2 - 16))
+                  )
+                }px`,
               }}
             >
               <TableQuickRailButton
@@ -7557,6 +8461,86 @@ const TableCornerHandle = styled.div`
   align-items: center;
   justify-content: center;
   pointer-events: auto;
+`
+
+const TableColumnRailTrack = styled.div`
+  position: fixed;
+  z-index: 57;
+  height: 0.72rem;
+  overflow: visible;
+  border-radius: 999px;
+  border: 1px solid
+    ${({ theme }) => (theme.scheme === "dark" ? "rgba(71, 85, 105, 0.48)" : "rgba(148, 163, 184, 0.42)")};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.84)" : "rgba(248, 250, 252, 0.96)"};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 10px 24px rgba(2, 6, 23, 0.2)" : "0 10px 24px rgba(15, 23, 42, 0.08)"};
+  pointer-events: auto;
+`
+
+const TableColumnRailSegment = styled.button`
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 999px;
+  background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.16)")};
+  transition: background-color 120ms ease, transform 120ms ease;
+  cursor: pointer;
+
+  &:hover {
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.24)" : "rgba(148, 163, 184, 0.22)")};
+  }
+
+  &[data-active="true"] {
+    background: rgba(59, 130, 246, 0.34);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: -1px;
+    bottom: 0;
+    width: 1px;
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(100, 116, 139, 0.18)")};
+  }
+
+  &:last-child::after {
+    display: none;
+  }
+`
+
+const TableColumnRailResizeHandle = styled.span`
+  position: absolute;
+  top: -0.35rem;
+  right: -0.44rem;
+  bottom: -0.35rem;
+  width: 0.88rem;
+  cursor: col-resize;
+  opacity: 0.82;
+  transition: opacity 120ms ease;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0.22rem;
+    bottom: 0.22rem;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.9)" : "rgba(37, 99, 235, 0.72)"};
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 0 0 1px rgba(15, 23, 42, 0.28)" : "0 0 0 1px rgba(255, 255, 255, 0.72)"};
+  }
+
+  ${TableColumnRailSegment}:hover &,
+  ${TableColumnRailSegment}[data-active="true"] & {
+    opacity: 1;
+  }
 `
 
 const TableQuickRailButton = styled.button`

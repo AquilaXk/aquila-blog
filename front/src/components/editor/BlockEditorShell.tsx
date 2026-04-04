@@ -7142,7 +7142,6 @@ const EditorViewport = styled.div`
         ? "0 18px 38px rgba(2, 6, 23, 0.28)"
         : "0 18px 38px rgba(15, 23, 42, 0.08)"};
     -webkit-overflow-scrolling: touch;
-    scrollbar-gutter: stable both-edges;
     overscroll-behavior-x: contain;
     overscroll-behavior-y: contain;
     touch-action: pan-x;

@@ -181,7 +181,10 @@ jobs:
         env:
           PLAYWRIGHT_JSON_REPORT_PATH: test-results/perf/playwright-perf.json
           PLAYWRIGHT_PERF_RUNTIME_METRICS_PATH: test-results/perf/runtime-guard-metrics.ndjson
-        run: yarn test:e2e:perf
+        run: |
+          mkdir -p test-results/perf
+          : > test-results/perf/runtime-guard-metrics.ndjson
+          yarn test:e2e:perf
 
       - name: Summarize perf e2e report
         if: always()

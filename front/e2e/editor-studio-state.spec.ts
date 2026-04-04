@@ -174,6 +174,16 @@ test.describe("editor studio state", () => {
     expect(navBarSource).toContain('router.pathname.startsWith("/editor")')
   })
 
+  test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {
+    const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
+
+    expect(editorStudioSource).toContain('"/member/api/v1/adm/members/bootstrap"')
+    expect(editorStudioSource).toContain("const mergedMember: AuthMember = {")
+    expect(editorStudioSource).toContain("profile.profileImageDirectUrl ||")
+    expect(editorStudioSource).toContain("profile.profileImageUrl ||")
+    expect(editorStudioSource).toContain("props: buildAdminPagePropsFromMember(mergedMember)")
+  })
+
   test("/editor/new는 temp draft bootstrap이 끝날 때까지 loading state를 먼저 유지한다", () => {
     const editorStudioSource = readFileSync(path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"), "utf8")
 

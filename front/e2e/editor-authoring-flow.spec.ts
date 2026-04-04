@@ -292,7 +292,7 @@ test.describe("block editor authoring flow", () => {
   test("테이블 생성 경로가 달라도 동일한 empty table shape를 만든다", async ({ page }) => {
     const captureTableMarkdown = async () => {
       const markdownOutput = page.getByTestId("qa-markdown-output")
-      await expect(markdownOutput).toContainText("| --- | --- |")
+      await expect(markdownOutput).toContainText("| --- | --- | --- |")
       const rawMarkdown = (await markdownOutput.textContent()) || ""
       return rawMarkdown
         .split("\n")
@@ -314,8 +314,8 @@ test.describe("block editor authoring flow", () => {
     const slashTableMarkdown = await captureTableMarkdown()
 
     expect(toolbarTableMarkdown).toBe(slashTableMarkdown)
-    expect(toolbarTableMarkdown).toContain("|  |  |")
-    expect(toolbarTableMarkdown).toContain("| --- | --- |")
+    expect(toolbarTableMarkdown).toContain("| --- | --- | --- |")
+    expect(toolbarTableMarkdown.match(/\|  \|  \|  \|/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(toolbarTableMarkdown).not.toContain("| 제목 | 값 |")
   })
 
@@ -440,10 +440,13 @@ test.describe("block editor authoring flow", () => {
     await page.keyboard.type("굵게 코드")
 
     await selectWordInEditable(page, calloutBodyContent, "굵게")
-    await page.getByRole("button", { name: "굵게" }).first().click()
+    const textBubbleToolbar = page.getByTestId("editor-text-bubble-toolbar")
+    await expect(textBubbleToolbar).toBeVisible()
+    await textBubbleToolbar.getByRole("button", { name: "굵게" }).click()
 
     await selectWordInEditable(page, calloutBodyContent, "코드")
-    await page.getByRole("button", { name: "인라인 코드", exact: true }).first().click()
+    await expect(textBubbleToolbar).toBeVisible()
+    await textBubbleToolbar.getByRole("button", { name: "인라인 코드", exact: true }).click()
 
     const markdownOutput = page.getByTestId("qa-markdown-output")
     await expect(markdownOutput).toContainText("> **굵게** `코드`")
@@ -708,7 +711,8 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    await expect(page.getByTestId("table-column-rail")).toBeVisible()
+    await expect(page.getByTestId("table-column-rail-track")).toBeVisible()
+    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
     await expect(page.getByTestId("table-row-rail")).toBeVisible()
     await expect(page.getByTestId("table-corner-handle")).toBeVisible()
     await expect(page.getByTestId("table-bubble-toolbar")).toHaveCount(0)
@@ -720,11 +724,15 @@ test.describe("block editor authoring flow", () => {
         ".aq-block-editor__content .tableWrapper"
       )
       const table = wrapper?.querySelector<HTMLElement>("table")
+      const rail = document.querySelector<HTMLElement>("[data-testid='table-column-rail-track']")
+      const railSegments = Array.from(rail?.querySelectorAll<HTMLElement>("[data-active]") ?? [])
       if (!contentRoot || !wrapper || !table) return null
       return {
         contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
         wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
         tableWidth: Math.round(table.getBoundingClientRect().width),
+        railWidth: Math.round(rail?.getBoundingClientRect().width ?? 0),
+        railSegments: railSegments.map((segment) => Math.round(segment.getBoundingClientRect().width)),
         firstCellWidth: Math.round(
           (table.querySelector("th, td") as HTMLElement | null)?.getBoundingClientRect().width || 0
         ),
@@ -735,14 +743,25 @@ test.describe("block editor authoring flow", () => {
       throw new Error("table wrapper/table width shape is missing")
     }
     expect(Math.abs(tableWidthShape.wrapperWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
-    expect(tableWidthShape.tableWidth).toBeLessThan(tableWidthShape.contentWidth - 120)
-    expect(tableWidthShape.firstCellWidth).toBeGreaterThanOrEqual(40)
-    expect(tableWidthShape.firstCellWidth).toBeLessThan(96)
+    expect(Math.abs(tableWidthShape.contentWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(Math.abs(tableWidthShape.railWidth - tableWidthShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(tableWidthShape.railSegments).toHaveLength(3)
+    expect(tableWidthShape.railSegments.reduce((sum, width) => sum + width, 0)).toBeGreaterThanOrEqual(
+      tableWidthShape.tableWidth - 4
+    )
+    expect(tableWidthShape.firstCellWidth).toBeGreaterThanOrEqual(180)
+    expect(tableWidthShape.firstCellWidth).toBeLessThanOrEqual(320)
 
-    await page.getByTestId("table-row-rail").getByRole("button", { name: "행 선택" }).click()
-    await expect(page.getByTestId("table-row-menu")).toBeVisible()
-    await page.getByTestId("table-row-menu").getByRole("button", { name: "아래에 삽입" }).click()
-    await expect(page.locator("table tr")).toHaveCount(3)
+    const secondColumnSegment = page.getByTestId("table-column-rail-segment-1")
+    await expect(secondColumnSegment).toBeVisible()
+    await secondColumnSegment.click()
+    await expect(secondColumnSegment).toHaveAttribute("data-active", "true")
+    await secondColumnSegment.click()
+
+    const columnMenu = page.getByTestId("table-column-menu")
+    await expect(columnMenu).toBeVisible()
+    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
   })
 
   test("table rail hover 전환 중에도 axis menu 액션이 끊기지 않는다", async ({ page }) => {
@@ -753,17 +772,16 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", {
-      name: "열 선택",
-    })
-    await expect(columnRailButton).toBeVisible()
-    await columnRailButton.hover()
-    await columnRailButton.click()
+    const columnRailSegment = page.getByTestId("table-column-rail-segment-0")
+    await expect(columnRailSegment).toBeVisible()
+    await columnRailSegment.hover()
+    await columnRailSegment.click()
+    await columnRailSegment.click()
 
     const columnMenu = page.getByTestId("table-column-menu")
     await expect(columnMenu).toBeVisible()
     await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
-    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
   })
 
   test("table menu는 좁은 뷰포트에서도 화면 내부에 배치된다", async ({ page }) => {
@@ -791,6 +809,126 @@ test.describe("block editor authoring flow", () => {
     expect(inViewport).toBe(true)
   })
 
+  test("desktop column rail/axis handle은 viewport 내부를 유지하고 열 추가·삭제 뒤 segment가 재동기화된다", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 820, height: 900 })
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstTableCell = page.locator("table th, table td").first()
+    await firstTableCell.click()
+    await firstTableCell.hover()
+
+    const assertHandlesInViewport = async () => {
+      const readMetrics = async () =>
+        page.evaluate(() => {
+          const viewportWidth = window.innerWidth
+          const viewportHeight = window.innerHeight
+          const track = document.querySelector<HTMLElement>("[data-testid='table-column-rail-track']")
+        const corner = document.querySelector<HTMLElement>("[data-testid='table-corner-handle']")
+        const rowRail = document.querySelector<HTMLElement>("[data-testid='table-row-rail']")
+        const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
+        if (!track || !corner || !rowRail || !table) return null
+
+        const toRect = (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect()
+          return {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            right: Math.round(rect.right),
+            bottom: Math.round(rect.bottom),
+            width: Math.round(rect.width),
+          }
+        }
+
+        const withinViewport = (rect: { left: number; top: number; right: number; bottom: number }) =>
+          rect.left >= 8 &&
+          rect.top >= 8 &&
+          rect.right <= viewportWidth - 8 &&
+          rect.bottom <= viewportHeight - 8
+
+        const segments = Array.from(
+          track.querySelectorAll<HTMLElement>("[data-testid^='table-column-rail-segment-']")
+        )
+        const firstSegment = segments[0]
+        const lastSegment = segments[segments.length - 1]
+        if (!firstSegment || !lastSegment) return null
+        return {
+          tableWidth: Math.round(table.getBoundingClientRect().width),
+          track: toRect(track),
+          corner: toRect(corner),
+          rowRail: toRect(rowRail),
+          segmentCount: segments.length,
+          firstSegmentWithinViewport: withinViewport(toRect(firstSegment)),
+          lastSegmentWithinViewport: withinViewport(toRect(lastSegment)),
+          cornerWithinViewport: withinViewport(toRect(corner)),
+          rowWithinViewport: withinViewport(toRect(rowRail)),
+        }
+        })
+
+      await expect
+        .poll(
+          async () => {
+            const metrics = await readMetrics()
+            if (!metrics) return null
+            return {
+              segmentCount: metrics.segmentCount,
+              widthStable: Math.abs(metrics.track.width - metrics.tableWidth) <= 2,
+              firstSegmentWithinViewport: metrics.firstSegmentWithinViewport,
+              lastSegmentWithinViewport: metrics.lastSegmentWithinViewport,
+              cornerWithinViewport: metrics.cornerWithinViewport,
+              rowWithinViewport: metrics.rowWithinViewport,
+            }
+          },
+          { timeout: 5000 }
+        )
+        .toMatchObject({
+          widthStable: true,
+          firstSegmentWithinViewport: true,
+          lastSegmentWithinViewport: true,
+          cornerWithinViewport: true,
+          rowWithinViewport: true,
+        })
+
+      const metrics = await readMetrics()
+      expect(metrics).not.toBeNull()
+      if (!metrics) {
+        throw new Error("desktop table rail viewport metrics are missing")
+      }
+
+      expect(Math.abs(metrics.track.width - metrics.tableWidth)).toBeLessThanOrEqual(2)
+      expect(metrics.firstSegmentWithinViewport).toBe(true)
+      expect(metrics.lastSegmentWithinViewport).toBe(true)
+      expect(metrics.cornerWithinViewport).toBe(true)
+      expect(metrics.rowWithinViewport).toBe(true)
+
+      return metrics
+    }
+
+    const beforeMetrics = await assertHandlesInViewport()
+    expect(beforeMetrics.segmentCount).toBe(3)
+
+    const secondColumnSegment = page.getByTestId("table-column-rail-segment-1")
+    await secondColumnSegment.click()
+    await secondColumnSegment.click()
+    await page.getByTestId("table-column-menu").getByRole("button", { name: "오른쪽에 삽입" }).click()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
+    await expect(page.getByTestId("table-column-rail-segment-3")).toBeVisible()
+
+    const afterInsertMetrics = await assertHandlesInViewport()
+    expect(afterInsertMetrics.segmentCount).toBe(4)
+
+    const lastColumnSegment = page.getByTestId("table-column-rail-segment-3")
+    await lastColumnSegment.click()
+    await lastColumnSegment.click()
+    await page.getByTestId("table-column-menu").getByRole("button", { name: "열 삭제" }).click()
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
+
+    const afterDeleteMetrics = await assertHandlesInViewport()
+    expect(afterDeleteMetrics.segmentCount).toBe(3)
+  })
+
   test("모바일 뷰포트에서는 표만 wrapper 내부 가로 스크롤을 사용하고 페이지 전체 overflow는 생기지 않는다", async ({
     page,
   }) => {
@@ -800,6 +938,8 @@ test.describe("block editor authoring flow", () => {
     await page.getByRole("button", { name: "테이블" }).click()
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
+
+    await expect(page.getByTestId("table-column-rail-track")).toHaveCount(0)
 
     for (let index = 0; index < 8; index += 1) {
       await page.getByRole("button", { name: "QA 열 추가" }).click()
@@ -856,7 +996,7 @@ test.describe("block editor authoring flow", () => {
     await cornerHandleButton.click()
     const tableMenu = page.getByTestId("table-table-menu")
     await expect(tableMenu).toBeVisible()
-    await expect(page.locator("table tr").first().locator("th")).toHaveCount(2)
+    await expect(page.locator("table tr").first().locator("th")).toHaveCount(3)
     await expect(page.getByTestId("block-drag-handle")).toHaveCount(0)
 
     await tableMenu.getByRole("button", { name: "제목 행" }).click()
@@ -962,16 +1102,16 @@ test.describe("block editor authoring flow", () => {
 
     await page.getByRole("button", { name: "QA 행 추가" }).click()
     await page.getByRole("button", { name: "QA 열 추가" }).click()
-    await expect(page.locator("table tr")).toHaveCount(3)
-    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
+    await expect(page.locator("table tr")).toHaveCount(4)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
 
     await page.getByRole("button", { name: "QA 열 선택" }).click()
     await page.getByRole("button", { name: "QA 열 삭제" }).click()
-    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(2)
+    await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
 
     await firstCell.click()
     await page.getByRole("button", { name: "QA 행 삭제" }).click()
-    await expect(page.locator("table tr")).toHaveCount(2)
+    await expect(page.locator("table tr")).toHaveCount(3)
   })
 
   test("table row resize handle은 drag 후 row height를 유지한다", async ({ page }) => {
@@ -1000,19 +1140,98 @@ test.describe("block editor authoring flow", () => {
 
     await page.getByRole("button", { name: "테이블" }).click()
     const firstHeaderCell = page.locator("table th").first()
+    const markdownOutput = page.getByTestId("qa-markdown-output")
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
 
     const beforeWidth = await firstHeaderCell.evaluate((element) =>
       Math.round((element as HTMLElement).getBoundingClientRect().width)
     )
-    await page.getByRole("button", { name: "QA 열 리사이즈" }).click()
+    const beforeMarkdown = (await markdownOutput.textContent()) || ""
+    const resizeHandle = page.getByTestId("table-column-rail-resize-0")
+    const resizeHandleBox = await resizeHandle.boundingBox()
+    if (!resizeHandleBox) {
+      throw new Error("table column rail resize handle bounding box is missing")
+    }
+
+    await page.mouse.move(
+      resizeHandleBox.x + resizeHandleBox.width / 2,
+      resizeHandleBox.y + resizeHandleBox.height / 2
+    )
+    await page.mouse.down()
+    await page.mouse.move(
+      resizeHandleBox.x + resizeHandleBox.width / 2 + 96,
+      resizeHandleBox.y + resizeHandleBox.height / 2
+    )
+    await page.mouse.up()
 
     await expect
       .poll(async () =>
-        firstHeaderCell.evaluate((element) =>
-          Math.round((element as HTMLElement).getBoundingClientRect().width)
-        )
+        (await markdownOutput.textContent()) || ""
       )
-      .toBeGreaterThan(beforeWidth)
-    await expect(page.getByTestId("qa-markdown-output")).toContainText('"columnWidths"')
+      .not.toBe(beforeMarkdown)
+
+    const afterWidth = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().width)
+    )
+    expect(afterWidth).toBeGreaterThanOrEqual(beforeWidth)
+    await expect(markdownOutput).toContainText('"columnWidths"')
+  })
+
+  test("table column resize는 desktop writer readable width budget을 넘지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_ENGINE_ROUTE)
+
+    await page.getByRole("button", { name: "테이블" }).click()
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
+
+    const beforeWidth = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().width)
+    )
+
+    for (let index = 0; index < 6; index += 1) {
+      const resizeHandle = page.getByTestId("table-column-rail-resize-0")
+      const resizeHandleBox = await resizeHandle.boundingBox()
+      if (!resizeHandleBox) {
+        throw new Error("table column rail resize handle bounding box is missing")
+      }
+
+      await page.mouse.move(
+        resizeHandleBox.x + resizeHandleBox.width / 2,
+        resizeHandleBox.y + resizeHandleBox.height / 2
+      )
+      await page.mouse.down()
+      await page.mouse.move(
+        resizeHandleBox.x + resizeHandleBox.width / 2 + 220,
+        resizeHandleBox.y + resizeHandleBox.height / 2
+      )
+      await page.mouse.up()
+    }
+
+    const widthShape = await page.evaluate(() => {
+      const contentRoot = document.querySelector<HTMLElement>(".aq-block-editor__content")
+      const wrapper = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper")
+      const table = wrapper?.querySelector<HTMLElement>("table")
+      const firstCell = table?.querySelector<HTMLElement>("th, td")
+      if (!contentRoot || !wrapper || !table || !firstCell) return null
+      return {
+        contentWidth: Math.round(contentRoot.getBoundingClientRect().width),
+        wrapperWidth: Math.round(wrapper.getBoundingClientRect().width),
+        tableWidth: Math.round(table.getBoundingClientRect().width),
+        firstCellWidth: Math.round(firstCell.getBoundingClientRect().width),
+      }
+    })
+
+    expect(widthShape).not.toBeNull()
+    if (!widthShape) {
+      throw new Error("table width shape is missing")
+    }
+
+    expect(Math.abs(widthShape.wrapperWidth - widthShape.tableWidth)).toBeLessThanOrEqual(2)
+    expect(widthShape.tableWidth).toBeLessThanOrEqual(widthShape.contentWidth + 2)
+    expect(widthShape.firstCellWidth).toBeGreaterThanOrEqual(beforeWidth)
   })
 })

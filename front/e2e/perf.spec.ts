@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, rmSync } from "node:fs"
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { expect, test, type Page, type Route } from "@playwright/test"
 
@@ -83,6 +83,11 @@ const recordRuntimeGuardMetric = (
   )
 }
 
+const resetRuntimeGuardMetricsFile = () => {
+  mkdirSync(path.dirname(runtimeGuardMetricsPath), { recursive: true })
+  writeFileSync(runtimeGuardMetricsPath, "", "utf8")
+}
+
 const recordRuntimeGuardMetricWithAliases = (
   metric: RuntimeGuardMetricName,
   value: number,
@@ -98,6 +103,7 @@ const recordRuntimeGuardMetricWithAliases = (
 
 test.beforeAll(() => {
   rmSync(runtimeGuardMetricsPath, { force: true })
+  resetRuntimeGuardMetricsFile()
 })
 
 const mockTagCounts = [

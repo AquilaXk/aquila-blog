@@ -68,7 +68,10 @@ const toNumber = (raw, fallback = NaN) => {
 
 const readMetricsRows = (targetPath) => {
   if (!fs.existsSync(targetPath)) {
-    throw new Error(`metrics 파일이 없습니다: ${targetPath}`)
+    return {
+      rows: [],
+      missingFile: true,
+    }
   }
 
   const lines = fs
@@ -86,7 +89,10 @@ const readMetricsRows = (targetPath) => {
       throw new Error(`metrics NDJSON 파싱 실패: ${message}`)
     }
   }
-  return rows
+  return {
+    rows,
+    missingFile: false,
+  }
 }
 
 const evaluateMetric = (baselineMetric, actualRow) => {
@@ -178,7 +184,7 @@ const formatValue = (value, unit) => {
 }
 
 const baseline = safeReadJson(baselinePath, "baseline")
-const metricsRows = readMetricsRows(metricsPath)
+const { rows: metricsRows, missingFile: metricsFileMissing } = readMetricsRows(metricsPath)
 const latestByMetric = new Map()
 
 for (const row of metricsRows) {
@@ -235,6 +241,7 @@ summaryLines.push(`- pass: ${passCount}`)
 summaryLines.push(`- warn: ${warnCount}`)
 summaryLines.push(`- fail: ${failCount}`)
 summaryLines.push(`- missing: ${missingCount}`)
+summaryLines.push(`- metricsFilePresent: ${metricsFileMissing ? "no" : "yes"}`)
 summaryLines.push("")
 summaryLines.push("| Metric | Actual Metric | Section | Dashboard Panel | Value | Warn | Fail | Status |")
 summaryLines.push("| --- | --- | --- | --- | ---: | ---: | ---: | --- |")
@@ -246,6 +253,10 @@ for (const row of comparisons) {
 
 summaryLines.push("")
 summaryLines.push("## Notes")
+if (metricsFileMissing) {
+  summaryLines.push(`- metrics 파일이 생성되지 않았습니다: \`${metricsPath}\``)
+  summaryLines.push("- perf Playwright 단계가 조기 실패했거나 metrics 출력 경로가 변경되었는지 먼저 확인해야 합니다.")
+}
 if (comparisons.length === 0) {
   summaryLines.push("- 비교할 baseline metric이 없습니다.")
 } else {
@@ -260,6 +271,7 @@ const summaryJson = {
   baselinePath,
   metricsPath,
   sourceDashboard: baseline.sourceDashboard || null,
+  metricsFilePresent: !metricsFileMissing,
   counts: {
     pass: passCount,
     warn: warnCount,
@@ -277,6 +289,9 @@ console.log(`[runtime-guard] summary written: ${outputPath}`)
 console.log(`[runtime-guard] summary json written: ${jsonOutputPath}`)
 
 if (failCount > 0 || missingCount > 0) {
+  if (metricsFileMissing) {
+    console.error(`[runtime-guard] metrics file missing: ${metricsPath}`)
+  }
   console.error(`[runtime-guard] regression detected (fail=${failCount}, missing=${missingCount})`)
   process.exit(1)
 }

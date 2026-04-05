@@ -8272,11 +8272,11 @@ const EditorViewport = styled.div`
     text-align: left;
     vertical-align: top;
     position: relative;
-    min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, calc(1ch + 1.84rem));
+    min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, 10ch);
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
     background: transparent;
   }
 
@@ -8288,7 +8288,7 @@ const EditorViewport = styled.div`
     min-width: max(${TABLE_WIDE_COLUMN_MIN_WIDTH_PX}px, 12ch);
     white-space: normal;
     overflow-wrap: break-word;
-    word-break: keep-all;
+    word-break: normal;
   }
 
   .aq-block-editor__content tbody tr:last-child > :is(td, th) {
@@ -8341,8 +8341,8 @@ const EditorViewport = styled.div`
       line-height: 1.58;
       padding: 0.66rem 0.72rem;
       white-space: normal;
-      overflow-wrap: anywhere;
-      word-break: break-word;
+      overflow-wrap: break-word;
+      word-break: normal;
     }
 
     .aq-block-editor__content .tableWrapper {

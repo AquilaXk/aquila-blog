@@ -1210,6 +1210,43 @@ const shrinkTableColumnWidthsToFit = (widths: number[], budget: number) => {
   return nextWidths
 }
 
+const expandTableColumnWidthsToBudget = (widths: number[], budget: number) => {
+  const nextWidths = widths.map((width) => Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width)))
+  const currentTotal = nextWidths.reduce((sum, width) => sum + width, 0)
+  const safeBudget = Math.max(TABLE_MIN_COLUMN_WIDTH_PX * nextWidths.length, Math.round(budget))
+
+  if (!nextWidths.length || currentTotal >= safeBudget) {
+    return nextWidths
+  }
+
+  const deficit = safeBudget - currentTotal
+  const weightTotal = nextWidths.reduce((sum, width) => sum + width, 0)
+  let consumed = 0
+
+  nextWidths.forEach((width, index) => {
+    if (index === nextWidths.length - 1) return
+    const ratio = weightTotal > 0 ? width / weightTotal : 1 / nextWidths.length
+    const addBy = Math.max(0, Math.floor(deficit * ratio))
+    nextWidths[index] += addBy
+    consumed += addBy
+  })
+
+  let remainder = deficit - consumed
+  let cursor = 0
+  while (remainder > 0 && nextWidths.length > 0) {
+    nextWidths[cursor % nextWidths.length] += 1
+    remainder -= 1
+    cursor += 1
+  }
+
+  return nextWidths
+}
+
+const isLegacyCollapsedTableWidthState = (widths: number[]) => {
+  if (widths.length <= 1) return false
+  return widths.every((width) => width <= TABLE_MIN_COLUMN_WIDTH_PX + 2)
+}
+
 const redistributeTableColumnWidthsForResize = (
   widths: number[],
   activeColumnIndex: number,
@@ -1302,14 +1339,29 @@ const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
 
     const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
     const requiresExplicitWidths = columns.some((column) => !hasExplicitColumnWidth(column))
+    const shouldRecoverLegacyCollapsedWidths = isLegacyCollapsedTableWidthState(currentWidths)
     const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * currentWidths.length
     const safeBudget = Math.max(minBudget, maxTableWidth)
     const totalWidth = currentWidths.reduce((sum, width) => sum + width, 0)
-    if (totalWidth <= safeBudget && !requiresExplicitWidths) return true
+    if (
+      totalWidth <= safeBudget &&
+      !requiresExplicitWidths &&
+      !shouldRecoverLegacyCollapsedWidths
+    ) {
+      return true
+    }
 
     const nextWidths =
-      totalWidth > safeBudget ? shrinkTableColumnWidthsToFit(currentWidths, safeBudget) : currentWidths
-    if (nextWidths.every((width, index) => width === currentWidths[index]) && !requiresExplicitWidths) {
+      totalWidth > safeBudget
+        ? shrinkTableColumnWidthsToFit(currentWidths, safeBudget)
+        : requiresExplicitWidths || shouldRecoverLegacyCollapsedWidths
+          ? expandTableColumnWidthsToBudget(currentWidths, safeBudget)
+          : currentWidths
+    if (
+      nextWidths.every((width, index) => width === currentWidths[index]) &&
+      !requiresExplicitWidths &&
+      !shouldRecoverLegacyCollapsedWidths
+    ) {
       return true
     }
 
@@ -1396,6 +1448,7 @@ const normalizeRenderedTableWidthsToReadableBudget = (editor: TiptapEditor) => {
     const renderedColumnWidths = readRenderedColumnWidths(renderedTable)
     const measuredWidths =
       renderedColumnWidths.length === columns.length ? renderedColumnWidths : currentWidths
+    const shouldRecoverLegacyCollapsedWidths = isLegacyCollapsedTableWidthState(measuredWidths)
     const measuredTotalWidth = measuredWidths.reduce((sum, width) => sum + width, 0)
     const minBudget = TABLE_MIN_COLUMN_WIDTH_PX * currentWidths.length
     const viewportBudget = getRenderedTableViewportBudgetPx(renderedTable, readableWidthBudget)
@@ -1405,13 +1458,25 @@ const normalizeRenderedTableWidthsToReadableBudget = (editor: TiptapEditor) => {
       : measuredTotalWidth
     const borderOverhead = Math.max(0, renderedTableWidth - measuredTotalWidth)
     const contentBudget = Math.max(minBudget, safeBudget - borderOverhead)
-    if (renderedTableWidth <= safeBudget && !requiresExplicitWidths) return true
+    if (
+      renderedTableWidth <= safeBudget &&
+      !requiresExplicitWidths &&
+      !shouldRecoverLegacyCollapsedWidths
+    ) {
+      return true
+    }
 
     const nextWidths =
       measuredTotalWidth > contentBudget
         ? shrinkTableColumnWidthsToFit(measuredWidths, contentBudget)
-        : measuredWidths
-    if (nextWidths.every((width, index) => width === currentWidths[index]) && !requiresExplicitWidths) {
+        : shouldRecoverLegacyCollapsedWidths || requiresExplicitWidths
+          ? expandTableColumnWidthsToBudget(measuredWidths, contentBudget)
+          : measuredWidths
+    if (
+      nextWidths.every((width, index) => width === currentWidths[index]) &&
+      !requiresExplicitWidths &&
+      !shouldRecoverLegacyCollapsedWidths
+    ) {
       return true
     }
 

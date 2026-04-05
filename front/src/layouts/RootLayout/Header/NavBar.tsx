@@ -37,6 +37,7 @@ const NavBar: React.FC = () => {
   const isAuthenticated = Boolean(me) && (authStatus === "authenticated" || authStatus === "unavailable")
   const isAdmin = Boolean(isAuthenticated && me?.isAdmin)
   const authState = isAuthenticated ? "authenticated" : authStatus
+  const shouldReserveAdminSlot = authStatus === "loading" || authStatus === "unavailable"
 
   const primaryLinks = useMemo(() => [{ id: "about", name: "About", to: "/about" }], [])
   const mobileLinks = useMemo(
@@ -132,15 +133,17 @@ const NavBar: React.FC = () => {
             </Link>
           </li>
         ))}
-        <li className="adminLinkSlot" aria-hidden={!isAdmin}>
-          {isAdmin ? (
-            <Link href="/admin" data-ui="nav-control">
-              Admin
-            </Link>
-          ) : (
-            <span className="navGhost">Admin</span>
-          )}
-        </li>
+        {isAdmin || shouldReserveAdminSlot ? (
+          <li className="adminLinkSlot" aria-hidden={!isAdmin}>
+            {isAdmin ? (
+              <Link href="/admin" data-ui="nav-control">
+                Admin
+              </Link>
+            ) : (
+              <span className="navGhost">Admin</span>
+            )}
+          </li>
+        ) : null}
       </ul>
 
       <div className="authArea" data-auth-state={authState}>
@@ -261,14 +264,14 @@ const StyledWrapper = styled.div`
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.46rem;
+  gap: 0.34rem;
   flex-shrink: 0;
 
   .primaryLinks {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 0.04rem;
+    gap: 0.1rem;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -322,7 +325,7 @@ const StyledWrapper = styled.div`
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.42rem;
+    gap: 0.28rem;
     width: auto;
     min-width: 0;
     max-width: 100%;
@@ -360,6 +363,11 @@ const StyledWrapper = styled.div`
   }
 
   .authArea[data-auth-state="authenticated"] .authSlot--login {
+    display: none;
+  }
+
+  .authArea:not([data-auth-state="authenticated"]) .authSlot--bell,
+  .authArea:not([data-auth-state="authenticated"]) .authSlot--logout {
     display: none;
   }
 

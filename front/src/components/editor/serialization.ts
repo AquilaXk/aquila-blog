@@ -731,6 +731,7 @@ export const createTableNode = (
 
   return {
     type: "table",
+    ...(layout?.overflowMode ? { attrs: { overflowMode: layout.overflowMode } } : {}),
     content: normalizedRows.map((row, rowIndex) => ({
       type: "tableRow",
       ...(buildRowAttrs(rowIndex) ? { attrs: buildRowAttrs(rowIndex) } : {}),
@@ -1574,6 +1575,10 @@ const serializeTable = (node: JSONContent) => {
   const layout: MarkdownTableLayout = {
     headerRow,
     headerColumn,
+    overflowMode:
+      node.attrs?.overflowMode === "wide" || node.attrs?.overflowMode === "normal"
+        ? node.attrs.overflowMode
+        : undefined,
     columnWidths: Array.from({ length: columnCount }, (_, columnIndex) => {
       for (const row of matrix) {
         const entry = row[columnIndex]

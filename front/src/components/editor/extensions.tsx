@@ -1615,6 +1615,25 @@ export const EditorTableHeader = TableHeader.extend({
 })
 
 export const EditorTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      overflowMode: {
+        default: "normal",
+        parseHTML: (element: HTMLElement) => {
+          const value = element.getAttribute("data-overflow-mode") || ""
+          return value === "wide" ? "wide" : "normal"
+        },
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const overflowMode = String(attributes.overflowMode || "normal")
+          if (overflowMode !== "wide") return {}
+          return {
+            "data-overflow-mode": "wide",
+          }
+        },
+      },
+    }
+  },
   addExtensions() {
     return [EditorTableRow, EditorTableHeader, EditorTableCell]
   },
@@ -2846,6 +2865,9 @@ const ToggleEditorWrapper = styled(NodeViewWrapper)`
 `
 
 const ToggleEditorCard = styled.details`
+  --toggle-indent: 2.16rem;
+  margin: 0;
+
   &[data-selected="true"] {
     filter: brightness(1.03);
   }
@@ -2853,23 +2875,38 @@ const ToggleEditorCard = styled.details`
   summary {
     cursor: pointer;
     list-style: none;
-    padding: 0;
+    padding: 0.1rem 0;
+    border-radius: 0.62rem;
+    transition: background-color 140ms ease;
+    user-select: none;
+    -webkit-user-select: none;
 
     &::-webkit-details-marker {
       display: none;
+    }
+
+    &:hover {
+      background: ${({ theme }) =>
+        theme.scheme === "dark" ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.12)"};
     }
   }
 `
 
 const ToggleSummaryInner = styled.div`
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
+  align-items: flex-start;
+  gap: 0.44rem;
+  min-height: 2.2rem;
 `
 
 const ToggleChevron = styled.span`
+  width: 1.08rem;
+  height: 1.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-gray10);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   line-height: 1;
   flex-shrink: 0;
 `
@@ -2880,10 +2917,10 @@ const ToggleTitleInput = styled.input`
   border: 0;
   background: transparent;
   color: var(--color-gray12);
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.5;
-  padding: 0;
+  font-size: 1.01rem;
+  font-weight: 580;
+  line-height: 1.58;
+  padding: 0.04rem 0;
 
   &::placeholder {
     color: var(--color-gray10);
@@ -2891,19 +2928,21 @@ const ToggleTitleInput = styled.input`
 `
 
 const ToggleEditorBody = styled.div`
-  margin-top: 0.5rem;
+  margin-top: 0.18rem;
+  padding-left: var(--toggle-indent);
 `
 
 const ToggleBodyTextarea = styled(CompactBlockTextarea)`
-  min-height: 5.25rem;
+  min-height: 5rem;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--color-gray12);
+  color: var(--color-gray11);
   font-family: inherit;
-  font-size: 0.95rem;
-  line-height: 1.65;
-  padding: 0;
+  font-size: 0.97rem;
+  line-height: 1.7;
+  padding: 0.06rem 0 0.08rem;
+  resize: none;
 
   &::placeholder {
     color: var(--color-gray10);

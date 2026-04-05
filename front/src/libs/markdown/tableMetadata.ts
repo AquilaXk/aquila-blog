@@ -1,7 +1,10 @@
 export const TABLE_MIN_COLUMN_WIDTH_PX = 44
 export const TABLE_MIN_ROW_HEIGHT_PX = 44
+export const TABLE_WIDE_COLUMN_MIN_WIDTH_PX = 180
+export const TABLE_WIDE_PROMOTION_COLUMN_BUDGET_PX = 180
 
 export type MarkdownTableCellAlignment = "left" | "center" | "right"
+export type MarkdownTableOverflowMode = "normal" | "wide"
 
 export type MarkdownTableCellLayout = {
   align?: MarkdownTableCellAlignment | null
@@ -15,6 +18,7 @@ export type MarkdownTableCellLayout = {
 export type MarkdownTableLayout = {
   headerRow?: boolean
   headerColumn?: boolean
+  overflowMode?: MarkdownTableOverflowMode
   columnWidths?: Array<number | null>
   rowHeights?: Array<number | null>
   columnAlignments?: Array<MarkdownTableCellAlignment | null>
@@ -161,18 +165,31 @@ export const normalizeMarkdownTableLayout = (
 
   const headerRow = typeof layout.headerRow === "boolean" ? layout.headerRow : undefined
   const headerColumn = typeof layout.headerColumn === "boolean" ? layout.headerColumn : undefined
+  const overflowMode =
+    layout.overflowMode === "wide" || layout.overflowMode === "normal"
+      ? layout.overflowMode
+      : undefined
   const columnWidths = normalizeTableMetricList(layout.columnWidths, TABLE_MIN_COLUMN_WIDTH_PX)
   const rowHeights = normalizeTableMetricList(layout.rowHeights, TABLE_MIN_ROW_HEIGHT_PX)
   const columnAlignments = normalizeTableAlignmentList(layout.columnAlignments)
   const cells = normalizeTableCellMatrix(layout.cells)
 
-  if (headerRow === undefined && headerColumn === undefined && !columnWidths && !rowHeights && !columnAlignments && !cells) {
+  if (
+    headerRow === undefined &&
+    headerColumn === undefined &&
+    overflowMode === undefined &&
+    !columnWidths &&
+    !rowHeights &&
+    !columnAlignments &&
+    !cells
+  ) {
     return null
   }
 
   return {
     ...(headerRow !== undefined ? { headerRow } : {}),
     ...(headerColumn !== undefined ? { headerColumn } : {}),
+    ...(overflowMode !== undefined ? { overflowMode } : {}),
     ...(columnWidths ? { columnWidths } : {}),
     ...(rowHeights ? { rowHeights } : {}),
     ...(columnAlignments ? { columnAlignments } : {}),

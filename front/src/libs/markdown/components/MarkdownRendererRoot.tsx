@@ -829,6 +829,13 @@ const MarkdownRendererRoot = styled.div`
       table-layout: fixed;
     }
 
+    table[data-overflow-mode="wide"],
+    .aq-table.aq-table-wide {
+      width: max-content;
+      min-width: 100%;
+      max-width: none;
+    }
+
     table thead,
     table tbody,
     .aq-table thead,
@@ -848,7 +855,7 @@ const MarkdownRendererRoot = styled.div`
       font-size: 0.95rem;
       line-height: 1.58;
       padding: 0.66rem 0.72rem;
-      min-width: 0;
+      min-width: max(7.5ch, 84px);
     }
 
     .aq-code-toolbar {
@@ -985,6 +992,13 @@ const MarkdownRendererRoot = styled.div`
     background: transparent;
   }
 
+  table[data-overflow-mode="wide"],
+  .aq-table.aq-table-wide {
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+  }
+
   thead th,
   .aq-table thead th {
     text-align: left !important;
@@ -1002,7 +1016,7 @@ const MarkdownRendererRoot = styled.div`
     border-right: 1px solid ${({ theme }) => theme.colors.gray6};
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
     vertical-align: top;
-    min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
+    min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, 7.5ch);
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
     white-space: normal;
     overflow-wrap: break-word;

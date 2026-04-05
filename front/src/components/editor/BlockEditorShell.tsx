@@ -8254,9 +8254,9 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content table {
-    width: max-content;
-    min-width: 0;
-    max-width: none;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -8265,18 +8265,18 @@ const EditorViewport = styled.div`
   }
 
   .aq-block-editor__content .tableWrapper > table {
-    width: max-content !important;
-    min-width: 0 !important;
-    max-width: none !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
     table-layout: fixed !important;
   }
 
   .aq-block-editor__content .tableWrapper {
-    display: inline-block;
+    display: block;
     position: relative;
     isolation: isolate;
-    inline-size: fit-content;
-    width: fit-content;
+    inline-size: 100%;
+    width: 100%;
     max-width: 100%;
     max-inline-size: 100%;
     min-width: 0;
@@ -8320,6 +8320,13 @@ const EditorViewport = styled.div`
     width: 100%;
     max-width: 100%;
     max-inline-size: 100%;
+  }
+
+  .aq-block-editor__content .tableWrapper > table[data-overflow-mode="wide"] {
+    width: max-content !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    table-layout: fixed !important;
   }
 
   .aq-block-editor__content thead th {
@@ -8394,9 +8401,9 @@ const EditorViewport = styled.div`
 
   @media (max-width: 768px) {
     .aq-block-editor__content table {
-      width: max-content;
-      min-width: 0;
-      max-width: none;
+      width: 100%;
+      min-width: 100%;
+      max-width: 100%;
       table-layout: fixed;
     }
 

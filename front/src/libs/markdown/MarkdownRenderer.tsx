@@ -190,7 +190,16 @@ const MarkdownTableRenderer = ({
     <MarkdownTableRenderContext.Provider value={contextValue}>
       <div className="aq-table-shell">
         <div className="aq-table-scroll">
-          <table className={["aq-table", className].filter(Boolean).join(" ")}>
+          <table
+            className={[
+              "aq-table",
+              layout?.overflowMode === "wide" ? "aq-table-wide" : "aq-table-normal",
+              className,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            data-overflow-mode={layout?.overflowMode === "wide" ? "wide" : undefined}
+          >
             {columnWidths.some((width) => typeof width === "number" && width > 0) ? (
               <colgroup>
                 {columnWidths.map((width, index) => {

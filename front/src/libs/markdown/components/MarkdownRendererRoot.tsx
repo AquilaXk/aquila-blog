@@ -1005,8 +1005,8 @@ const MarkdownRendererRoot = styled.div`
     min-width: ${TABLE_MIN_COLUMN_WIDTH_PX}px;
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   th > *,
@@ -1016,8 +1016,8 @@ const MarkdownRendererRoot = styled.div`
     min-width: 0;
     max-width: 100%;
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   tr td:last-child,

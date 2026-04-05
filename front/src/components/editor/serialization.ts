@@ -16,6 +16,7 @@ import {
   type MarkdownTableLayout,
 } from "src/libs/markdown/tableMetadata"
 import { normalizeInlineColorToken } from "src/libs/markdown/inlineColor"
+import { normalizeLegacyInlineHtmlSpans } from "src/libs/markdown/inlineHtmlNormalization"
 
 export type BlockEditorDoc = JSONContent
 
@@ -748,7 +749,7 @@ export const createTableNode = (
           {
             type: cellType,
             ...(buildCellAttrs(rowIndex, columnIndex) ? { attrs: buildCellAttrs(rowIndex, columnIndex) } : {}),
-            content: [createParagraphNode(cell)],
+            content: [createParagraphNode(normalizeLegacyInlineHtmlSpans(cell))],
           },
         ]
       }),
@@ -1573,8 +1574,9 @@ const serializeTable = (node: JSONContent) => {
   })
 
   const layout: MarkdownTableLayout = {
-    headerRow,
-    headerColumn,
+    // Keep metadata minimal: omit default header configuration (row=true, column=false)
+    ...(headerRow === false ? { headerRow: false } : {}),
+    ...(headerColumn === true ? { headerColumn: true } : {}),
     overflowMode:
       node.attrs?.overflowMode === "wide" || node.attrs?.overflowMode === "normal"
         ? node.attrs.overflowMode

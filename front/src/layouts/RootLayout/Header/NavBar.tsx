@@ -359,6 +359,10 @@ const StyledWrapper = styled.div`
     padding: 0;
   }
 
+  .authArea[data-auth-state="authenticated"] .authSlot--login {
+    display: none;
+  }
+
   .iconGhost {
     display: inline-flex;
     width: 1.9rem;

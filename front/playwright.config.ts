@@ -6,6 +6,7 @@ if (process.env.FORCE_COLOR && Object.prototype.hasOwnProperty.call(process.env,
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
 const useWebServer = process.env.PLAYWRIGHT_USE_WEBSERVER !== "false"
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "true"
 const useLiveMultiBrowser = process.env.PLAYWRIGHT_LIVE_MULTI_BROWSER === "true"
 const useLiveFailFast = process.env.PLAYWRIGHT_LIVE_FAIL_FAST === "true"
 const playwrightJsonReportPath = process.env.PLAYWRIGHT_JSON_REPORT_PATH?.trim() || ""
@@ -74,7 +75,7 @@ export default defineConfig({
           ADMIN_GUARD_QA_BYPASS: resolvedAdminGuardQaBypass,
         },
         timeout: 120_000,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer,
       }
     : undefined,
   projects: useLiveMultiBrowser ? liveMultiBrowserProjects : defaultProjects,

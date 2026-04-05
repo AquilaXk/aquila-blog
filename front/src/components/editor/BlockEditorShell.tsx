@@ -1,4 +1,4 @@
-import type { Editor as TiptapEditor } from "@tiptap/core"
+import type { Editor as TiptapEditor, JSONContent } from "@tiptap/core"
 import { keyframes } from "@emotion/react"
 import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
@@ -80,6 +80,8 @@ import {
   type MarkdownTableLayout,
   TABLE_MIN_COLUMN_WIDTH_PX,
   TABLE_MIN_ROW_HEIGHT_PX,
+  TABLE_WIDE_COLUMN_MIN_WIDTH_PX,
+  TABLE_WIDE_PROMOTION_COLUMN_BUDGET_PX,
 } from "src/libs/markdown/tableMetadata"
 import { markdownContentTypography } from "src/libs/markdown/contentTypography"
 import {
@@ -111,6 +113,102 @@ type RuntimeGuardWindow = Window & {
   __AQ_RUNTIME_GUARD__?: {
     editorCommitSamples?: number[]
   }
+}
+
+const TABLE_OVERFLOW_MODE_WIDE = "wide"
+
+const getTableOverflowMode = (tableNode: { attrs?: Record<string, unknown> } | null | undefined) =>
+  tableNode?.attrs?.overflowMode === TABLE_OVERFLOW_MODE_WIDE ? TABLE_OVERFLOW_MODE_WIDE : "normal"
+
+const readSimpleTableColumnCount = (tableNode: JSONContent): number => {
+  const rows = Array.isArray(tableNode.content) ? tableNode.content : []
+  return rows.reduce((max, row) => {
+    const cells = Array.isArray(row.content)
+      ? row.content.filter((cell) => cell?.type === "tableCell" || cell?.type === "tableHeader")
+      : []
+    return Math.max(max, cells.length)
+  }, 0)
+}
+
+const shouldPromoteWideTableOverflowMode = (columnCount: number, readableWidthBudget: number) =>
+  columnCount > 0 && columnCount * TABLE_WIDE_PROMOTION_COLUMN_BUDGET_PX >= readableWidthBudget
+
+const promoteTableBlockToWideOverflowMode = (
+  tableNode: JSONContent,
+  readableWidthBudget: number
+): JSONContent => {
+  if (tableNode.type !== "table") return tableNode
+  if (getTableOverflowMode(tableNode) === TABLE_OVERFLOW_MODE_WIDE) return tableNode
+
+  const rows = Array.isArray(tableNode.content) ? tableNode.content : []
+  const columnCount = readSimpleTableColumnCount(tableNode)
+  if (!shouldPromoteWideTableOverflowMode(columnCount, readableWidthBudget)) return tableNode
+
+  const nextColumnWidths = Array.from({ length: columnCount }, (_, columnIndex) => {
+    let nextWidth = TABLE_WIDE_COLUMN_MIN_WIDTH_PX
+    rows.forEach((row) => {
+      const cell = Array.isArray(row.content) ? row.content[columnIndex] : null
+      const widthValue = Array.isArray(cell?.attrs?.colwidth) ? cell?.attrs?.colwidth[0] : null
+      if (typeof widthValue === "number" && Number.isFinite(widthValue) && widthValue > 0) {
+        nextWidth = Math.max(nextWidth, Math.round(widthValue))
+      }
+    })
+    return nextWidth
+  })
+
+  let changed = false
+  const nextRows = rows.map((row) => {
+    if (!Array.isArray(row.content)) return row
+
+    let rowChanged = false
+    const nextCells = row.content.map((cell, columnIndex) => {
+      if (cell?.type !== "tableCell" && cell?.type !== "tableHeader") return cell
+
+      const nextWidth = nextColumnWidths[columnIndex]
+      const currentWidth = Array.isArray(cell.attrs?.colwidth) ? cell.attrs?.colwidth[0] : null
+      if (currentWidth === nextWidth) return cell
+
+      rowChanged = true
+      changed = true
+      return {
+        ...cell,
+        attrs: {
+          ...(cell.attrs || {}),
+          colwidth: [nextWidth],
+        },
+      }
+    })
+
+    return rowChanged ? { ...row, content: nextCells } : row
+  })
+
+  return {
+    ...tableNode,
+    attrs: {
+      ...(tableNode.attrs || {}),
+      overflowMode: TABLE_OVERFLOW_MODE_WIDE,
+    },
+    ...(changed ? { content: nextRows } : {}),
+  }
+}
+
+const promotePastedWideTables = (
+  doc: BlockEditorDoc,
+  readableWidthBudget: number
+): BlockEditorDoc => {
+  if (!Array.isArray(doc.content) || doc.content.length === 0) return doc
+
+  let changed = false
+  const nextContent = doc.content.map((block) => {
+    if (!block || block.type !== "table") return block
+    const nextBlock = promoteTableBlockToWideOverflowMode(block, readableWidthBudget)
+    if (nextBlock !== block) {
+      changed = true
+    }
+    return nextBlock
+  })
+
+  return changed ? { ...doc, content: nextContent } : doc
 }
 
 export type BlockEditorChangeMeta = {
@@ -652,6 +750,9 @@ const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
 const TABLE_RAIL_BUTTON_SIZE_PX = 32
+const TABLE_CORNER_GROUP_WIDTH_PX = 92
+const TABLE_COLUMN_AXIS_GROUP_WIDTH_PX = 136
+const TABLE_ROW_AXIS_GROUP_WIDTH_PX = 76
 const TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX = 12
 const TABLE_COLUMN_RAIL_TRACK_OFFSET_PX = 18
 const TABLE_COLUMN_RAIL_BUTTON_GAP_PX = 10
@@ -721,16 +822,19 @@ const resolveDesktopTableRailLayout = (
     TABLE_RAIL_BUTTON_SIZE_PX
   )
   const cornerLeft = clampViewportPosition(
-    trackLeft + 8,
+    trackLeft,
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportWidth,
-    TABLE_RAIL_BUTTON_SIZE_PX
+    TABLE_CORNER_GROUP_WIDTH_PX
   )
   const columnRailLeft = clampViewportPosition(
-    Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_RAIL_BUTTON_SIZE_PX / 2)),
+    Math.max(
+      Math.round(trackLeft + TABLE_CORNER_GROUP_WIDTH_PX + 12),
+      Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_AXIS_GROUP_WIDTH_PX / 2))
+    ),
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportWidth,
-    TABLE_RAIL_BUTTON_SIZE_PX
+    TABLE_COLUMN_AXIS_GROUP_WIDTH_PX
   )
   const rowRailTop = clampViewportPosition(
     Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_RAIL_BUTTON_SIZE_PX / 2)),
@@ -742,7 +846,7 @@ const resolveDesktopTableRailLayout = (
     Math.round(trackLeft - TABLE_SIDE_RAIL_OFFSET_PX),
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportWidth,
-    TABLE_RAIL_BUTTON_SIZE_PX
+    TABLE_ROW_AXIS_GROUP_WIDTH_PX
   )
 
   return {
@@ -1191,6 +1295,7 @@ const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
 
   editor.state.doc.descendants((node: any, pos: number) => {
     if (node.type?.name !== "table") return true
+    if (getTableOverflowMode(node) === TABLE_OVERFLOW_MODE_WIDE) return true
 
     const columns = collectSimpleTableColumnCells(node, pos)
     if (!columns || columns.length === 0) return true
@@ -1221,6 +1326,37 @@ const normalizeTableWidthsToReadableBudget = (editor: TiptapEditor) => {
   return true
 }
 
+const syncRenderedTableOverflowModes = (editor: TiptapEditor) => {
+  const renderedTables = Array.from(
+    editor.view.dom.querySelectorAll<HTMLElement>(".tableWrapper > table")
+  )
+  let renderedTableIndex = 0
+
+  editor.state.doc.descendants((node: any) => {
+    if (node.type?.name !== "table") return true
+
+    const renderedTable = renderedTables[renderedTableIndex] ?? null
+    renderedTableIndex += 1
+    if (!renderedTable) return true
+
+    const overflowMode = getTableOverflowMode(node)
+    if (overflowMode === TABLE_OVERFLOW_MODE_WIDE) {
+      renderedTable.setAttribute("data-overflow-mode", TABLE_OVERFLOW_MODE_WIDE)
+      renderedTable.parentElement?.setAttribute("data-overflow-mode", TABLE_OVERFLOW_MODE_WIDE)
+    } else {
+      renderedTable.removeAttribute("data-overflow-mode")
+      renderedTable.parentElement?.removeAttribute("data-overflow-mode")
+    }
+
+    return true
+  })
+
+  for (let index = renderedTableIndex; index < renderedTables.length; index += 1) {
+    renderedTables[index]?.removeAttribute("data-overflow-mode")
+    renderedTables[index]?.parentElement?.removeAttribute("data-overflow-mode")
+  }
+}
+
 const getRenderedTableViewportBudgetPx = (tableElement: HTMLElement | null, fallbackBudget: number) => {
   if (!tableElement || typeof window === "undefined") return fallbackBudget
 
@@ -1248,6 +1384,7 @@ const normalizeRenderedTableWidthsToReadableBudget = (editor: TiptapEditor) => {
 
   editor.state.doc.descendants((node: any, pos: number) => {
     if (node.type?.name !== "table") return true
+    if (getTableOverflowMode(node) === TABLE_OVERFLOW_MODE_WIDE) return true
 
     const columns = collectSimpleTableColumnCells(node, pos)
     const renderedTable = renderedTables[renderedTableIndex] ?? null
@@ -1607,7 +1744,9 @@ const BlockEditorShell = ({
       cancelScheduledTableViewportBudgetNormalize()
       tableViewportBudgetNormalizeFrameRef.current = window.requestAnimationFrame(() => {
         tableViewportBudgetNormalizeFrameRef.current = null
-        normalizeRenderedTableWidthsToReadableBudget(editorRef.current ?? nextEditor)
+        const targetEditor = editorRef.current ?? nextEditor
+        syncRenderedTableOverflowModes(targetEditor)
+        normalizeRenderedTableWidthsToReadableBudget(targetEditor)
       })
     },
     [cancelScheduledTableViewportBudgetNormalize]
@@ -2384,7 +2523,7 @@ const BlockEditorShell = ({
       if (!columns || columns.length === 0 || columnIndex >= columns.length) return false
 
       const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
-      const nextWidths = shouldClampTableWidthBudget()
+      const nextWidths = shouldClampTableWidthBudget() && getTableOverflowMode(rect.table) !== TABLE_OVERFLOW_MODE_WIDE
         ? redistributeTableColumnWidthsForResize(
             currentWidths,
             columnIndex,
@@ -2701,6 +2840,7 @@ const BlockEditorShell = ({
     const lastColumnWidth =
       targetInnerWidth - baseColumnWidth * (DEFAULT_EMPTY_TABLE_COLUMN_COUNT - 1)
     const initialLayout: MarkdownTableLayout = {
+      overflowMode: "normal",
       columnWidths: Array.from({ length: DEFAULT_EMPTY_TABLE_COLUMN_COUNT }, (_, columnIndex) =>
         columnIndex === DEFAULT_EMPTY_TABLE_COLUMN_COUNT - 1
           ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, lastColumnWidth)
@@ -2889,6 +3029,7 @@ const BlockEditorShell = ({
     onCreate: ({ editor: createdEditor }) => {
       editorRef.current = createdEditor
       createdEditor.setEditable(!disabled)
+      scheduleTableViewportBudgetNormalize(createdEditor)
     },
     onTransaction: ({ editor: nextEditor, transaction }) => {
       if (!transaction.docChanged) return
@@ -3140,7 +3281,11 @@ const BlockEditorShell = ({
             parseMarkdownToEditorDoc(normalizedHtmlMarkdown),
             enableMermaidBlocks
           )
-          return insertDocContent(parsedDoc, isSelectionInEmptyParagraph())
+          const readableWidthBudget = getCurrentEditorReadableWidthPx(currentEditor) - 2
+          return insertDocContent(
+            promotePastedWideTables(parsedDoc, readableWidthBudget),
+            isSelectionInEmptyParagraph()
+          )
         }
 
         if (normalizedPlainText && looksLikeStructuredMarkdownDocument(normalizedPlainText)) {
@@ -3149,7 +3294,11 @@ const BlockEditorShell = ({
             parseMarkdownToEditorDoc(normalizedPlainText),
             enableMermaidBlocks
           )
-          return insertDocContent(parsedDoc, isSelectionInEmptyParagraph())
+          const readableWidthBudget = getCurrentEditorReadableWidthPx(currentEditor) - 2
+          return insertDocContent(
+            promotePastedWideTables(parsedDoc, readableWidthBudget),
+            isSelectionInEmptyParagraph()
+          )
         }
 
         if (html && !plainText.trim()) {
@@ -6066,6 +6215,7 @@ const BlockEditorShell = ({
     [tableQuickRailState.columnSegments, tableQuickRailState.width]
   )
   const shouldShowTableColumnRail =
+    false &&
     shouldShowTableHandles &&
     isDesktopTableRailViewport &&
     tableQuickRailState.columnSegments.length > 0 &&
@@ -6598,8 +6748,9 @@ const BlockEditorShell = ({
             >
               <TableHandleButton
                 type="button"
-                title="표 선택"
-                aria-label="표 선택"
+                data-variant="labeled"
+                title="표 메뉴"
+                aria-label="표 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
@@ -6607,6 +6758,7 @@ const BlockEditorShell = ({
                 }}
               >
                 <TableHandleIcon kind="table" />
+                <TableQuickRailLabel>표 메뉴</TableQuickRailLabel>
               </TableHandleButton>
             </TableCornerHandle>
             {!shouldShowTableColumnRail ? (
@@ -6630,8 +6782,9 @@ const BlockEditorShell = ({
               >
                 <TableQuickRailButton
                   type="button"
-                  title="열 선택"
-                  aria-label="열 선택"
+                  data-variant="labeled"
+                  title="열 추가/삭제"
+                  aria-label="열 추가/삭제"
                   onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -6639,7 +6792,22 @@ const BlockEditorShell = ({
                   }}
                 >
                   <TableHandleIcon kind="column" />
+                  <TableQuickRailLabel>열 메뉴</TableQuickRailLabel>
                 </TableQuickRailButton>
+                <TableQuickAddButton
+                  type="button"
+                  title="열 추가"
+                  aria-label="열 추가"
+                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    runTableMenuEditorAction((activeEditor) => {
+                      activeEditor.chain().focus().addColumnAfter().run()
+                    })
+                  }}
+                >
+                  + 열
+                </TableQuickAddButton>
               </TableAxisRail>
             ) : null}
             <TableAxisRail
@@ -6665,8 +6833,9 @@ const BlockEditorShell = ({
             >
               <TableQuickRailButton
                 type="button"
-                title="행 선택"
-                aria-label="행 선택"
+                data-variant="labeled"
+                title="행 메뉴"
+                aria-label="행 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
@@ -6674,7 +6843,22 @@ const BlockEditorShell = ({
                 }}
               >
                 <TableHandleIcon kind="row" />
+                <TableQuickRailLabel>행 메뉴</TableQuickRailLabel>
               </TableQuickRailButton>
+              <TableQuickAddButton
+                type="button"
+                title="행 추가"
+                aria-label="행 추가"
+                onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  runTableMenuEditorAction((activeEditor) => {
+                    activeEditor.chain().focus().addRowAfter().run()
+                  })
+                }}
+              >
+                + 행
+              </TableQuickAddButton>
             </TableAxisRail>
           </>
         ) : null}
@@ -8065,6 +8249,14 @@ const EditorViewport = styled.div`
       0 0 0 1px rgba(59, 130, 246, 0.12);
   }
 
+  .aq-block-editor__content .tableWrapper[data-overflow-mode="wide"] {
+    display: block;
+    inline-size: 100%;
+    width: 100%;
+    max-width: 100%;
+    max-inline-size: 100%;
+  }
+
   .aq-block-editor__content thead th {
     background: ${({ theme }) => theme.colors.gray3};
     font-weight: 700;
@@ -8090,6 +8282,13 @@ const EditorViewport = styled.div`
 
   .aq-block-editor__content tr > :is(th, td):last-child {
     border-right: 0;
+  }
+
+  .aq-block-editor__content .tableWrapper > table[data-overflow-mode="wide"] :is(th, td) {
+    min-width: max(${TABLE_WIDE_COLUMN_MIN_WIDTH_PX}px, 12ch);
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: keep-all;
   }
 
   .aq-block-editor__content tbody tr:last-child > :is(td, th) {
@@ -8580,12 +8779,49 @@ const TableQuickRailButton = styled.button`
     border-color: rgba(59, 130, 246, 0.28);
     color: var(--color-gray12);
   }
+
+  &[data-variant="labeled"] {
+    width: auto;
+    min-width: 4.6rem;
+    padding-inline: 0.58rem 0.7rem;
+    gap: 0.38rem;
+  }
+`
+
+const TableQuickRailLabel = styled.span`
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 `
 
 const TableHandleButton = styled(TableQuickRailButton)`
   width: 2.12rem;
   height: 2.12rem;
   border-radius: 0.62rem;
+
+  &[data-variant="labeled"] {
+    width: auto;
+    min-width: 4.8rem;
+    height: 2.12rem;
+    padding-inline: 0.62rem 0.78rem;
+    gap: 0.42rem;
+  }
+`
+
+const TableQuickAddButton = styled(TableQuickRailButton)`
+  width: auto;
+  min-width: 3.25rem;
+  padding-inline: 0.56rem 0.7rem;
+  gap: 0.32rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+
+  &[aria-label="행 추가"] {
+    min-width: 3.6rem;
+  }
 `
 
 const FloatingTableMenu = styled.div`

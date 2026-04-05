@@ -559,7 +559,8 @@ const MarkdownRendererRoot = styled.div`
   }
 
   .aq-toggle {
-    margin: 0.9rem 0;
+    --aq-toggle-indent: 2.12rem;
+    margin: 0.98rem 0;
   }
 
   .aq-mermaid {
@@ -897,13 +898,15 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-toggle > summary {
     cursor: pointer;
-    font-weight: 700;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.44rem;
     list-style: none;
-    padding: 0;
-  }
-
-  .aq-toggle[open] > *:not(summary) {
-    margin-top: 0.5rem;
+    padding: 0.1rem 0;
+    color: var(--color-gray12);
+    font-size: 1.01rem;
+    font-weight: 580;
+    line-height: 1.58;
   }
 
   .aq-toggle > summary::-webkit-details-marker {
@@ -912,11 +915,35 @@ const MarkdownRendererRoot = styled.div`
 
   .aq-toggle > summary::before {
     content: "▸";
-    margin-right: 0.45rem;
+    width: 1.08rem;
+    height: 1.66em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-gray10);
+    font-size: 0.88rem;
+    line-height: 1;
+    flex-shrink: 0;
+    transform-origin: center;
+    transition: transform 120ms ease;
   }
 
   .aq-toggle[open] > summary::before {
-    content: "▾";
+    transform: rotate(90deg);
+  }
+
+  .aq-toggle[open] > *:not(summary) {
+    margin-top: 0.22rem;
+    margin-left: var(--aq-toggle-indent);
+  }
+
+  .aq-toggle[open] > :not(summary):first-of-type {
+    margin-top: 0;
+  }
+
+  .aq-toggle[open] > :not(summary) p,
+  .aq-toggle[open] > :not(summary) li {
+    line-height: 1.7;
   }
 
   .aq-table-shell {

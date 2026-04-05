@@ -117,7 +117,9 @@ const NavBar: React.FC = () => {
     setAuthModalOpen(true)
   }
 
-  const showImmediateLoginAction = authStatus === "loading" || authStatus === "anonymous"
+  // authStatus=loading 구간에서는 Login CTA를 노출하지 않아
+  // refresh hydration 중 "Login -> Logout" 플래시와 슬롯 점프를 막는다.
+  const showImmediateLoginAction = authStatus === "anonymous"
   const showUnavailableAuthAction = authStatus === "unavailable" && !me
 
   return (

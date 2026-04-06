@@ -563,18 +563,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     [router]
   )
 
-  const openPostDetailRoute = useCallback(
-    async (postId: number) => {
-      const path = toCanonicalPostPath(postId)
-      if (typeof window !== "undefined") {
-        const opened = window.open(path, "_blank", "noopener,noreferrer")
-        if (opened) return
-      }
-      await pushRoute(router, path)
-    },
-    [router]
-  )
-
   const showToast = useCallback((next: WorkspaceToastState) => {
     setToast(next)
   }, [])
@@ -1169,7 +1157,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                     <td>
                       <TitleCell>
                         <div className="titleRow">
-                          <strong>{getWorkspaceRowTitle(row)}</strong>
+                          <TitleLink href={toCanonicalPostPath(row.id)}>{getWorkspaceRowTitle(row)}</TitleLink>
                           <VisibilityBadge data-tone={toVisibility(row.published, row.listed)}>
                             {visibilityLabel(row.published, row.listed)}
                           </VisibilityBadge>
@@ -1185,9 +1173,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                               수정
                             </RowPrimaryButton>
-                            <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
-                              상세 열기
-                            </RowSecondaryButton>
                             <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
                               링크 복사
                             </RowSecondaryButton>
@@ -1233,7 +1218,7 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                       {visibilityLabel(row.published, row.listed)}
                     </VisibilityBadge>
                   </header>
-                  <strong>{getWorkspaceRowTitle(row)}</strong>
+                  <TitleLink href={toCanonicalPostPath(row.id)}>{getWorkspaceRowTitle(row)}</TitleLink>
                   <p>{row.authorName || "작성자 미상"}</p>
                   <span className="date">{formatDateTime(listScope === "active" ? row.modifiedAt : row.deletedAt)}</span>
                   <div className="actions">
@@ -1242,9 +1227,6 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                           수정
                         </RowPrimaryButton>
-                        <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
-                          상세 열기
-                        </RowSecondaryButton>
                         <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
                           링크 복사
                         </RowSecondaryButton>
@@ -2292,14 +2274,29 @@ const TitleCell = styled.div`
     flex-wrap: wrap;
   }
 
-  strong {
-    font-size: 0.96rem;
-    line-height: 1.45;
-  }
-
   span {
     color: ${({ theme }) => theme.colors.gray10};
     font-size: 0.82rem;
+  }
+`
+
+const TitleLink = styled(Link)`
+  color: ${({ theme }) => theme.colors.gray12};
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.45;
+  text-decoration: none;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.blue10};
+    text-decoration: underline;
+    text-underline-offset: 0.16em;
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.colors.blue8};
+    outline-offset: 3px;
+    border-radius: 0.32rem;
   }
 `
 

@@ -22,6 +22,7 @@ type Props = {
   likePending?: boolean
   hideLikeActionOnDesktop?: boolean
   hideShareActionOnDesktop?: boolean
+  hideActionButtonsOnMobile?: boolean
   shareFeedback?: "copied" | "shared" | "failed" | null
   onToggleLike?: () => void
   onSharePost?: () => void
@@ -43,6 +44,7 @@ const PostHeader: React.FC<Props> = ({
   likePending = false,
   hideLikeActionOnDesktop = false,
   hideShareActionOnDesktop = false,
+  hideActionButtonsOnMobile = false,
   shareFeedback = null,
   onToggleLike,
   onSharePost,
@@ -146,6 +148,7 @@ const PostHeader: React.FC<Props> = ({
                 aria-pressed={actorHasLiked}
                 data-active={actorHasLiked}
                 data-hide-desktop={hideLikeActionOnDesktop}
+                data-hide-mobile={hideActionButtonsOnMobile}
                 disabled={likePending}
                 onClick={onToggleLike}
               >
@@ -158,6 +161,7 @@ const PostHeader: React.FC<Props> = ({
                   type="button"
                   className="shareButton"
                   data-hide-desktop={hideShareActionOnDesktop}
+                  data-hide-mobile={hideActionButtonsOnMobile}
                   aria-label="게시글 공유"
                   onClick={onSharePost}
                 >
@@ -176,6 +180,7 @@ const PostHeader: React.FC<Props> = ({
             <span
               className="shareFeedbackPill"
               data-hide-desktop={hideShareActionOnDesktop}
+              data-hide-mobile={hideActionButtonsOnMobile}
               role="status"
               aria-live="polite"
             >
@@ -526,6 +531,14 @@ const StyledWrapper = styled.header`
       min-height: 38px;
     }
 
+  }
+
+  @media (max-width: 1023px) {
+    .likeButton[data-hide-mobile="true"],
+    .shareButton[data-hide-mobile="true"],
+    .shareFeedbackPill[data-hide-mobile="true"] {
+      display: none;
+    }
   }
 
   @media (min-width: 1201px) {

@@ -4,7 +4,7 @@ import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
-import { Fragment } from "@tiptap/pm/model"
+import { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { NodeSelection, TextSelection, Transaction } from "@tiptap/pm/state"
 import { CellSelection, selectedRect, TableMap } from "@tiptap/pm/tables"
 import StarterKit from "@tiptap/starter-kit"
@@ -2686,6 +2686,18 @@ const BlockEditorShell = ({
     return getActiveTableRectFromDom(activeEditor)
   }, [getActiveTableRectFromDom])
 
+  const resolveTableNodePosition = useCallback((activeEditor: TiptapEditor, tableNode: ProseMirrorNode) => {
+    let tablePos: number | null = null
+    activeEditor.state.doc.descendants((node: ProseMirrorNode, pos: number) => {
+      if (node === tableNode) {
+        tablePos = pos
+        return false
+      }
+      return true
+    })
+    return tablePos
+  }, [])
+
   const isCurrentTableColumnSelection = useCallback(
     (columnIndex: number) => {
       const currentEditor = editorRef.current
@@ -2742,20 +2754,28 @@ const BlockEditorShell = ({
         return { changed: false, appliedDelta: 0 }
       }
 
-      const columns = collectSimpleTableColumnCells(rect.table, rect.tableStart)
+      const tablePos = resolveTableNodePosition(currentEditor, rect.table)
+      if (tablePos === null) {
+        return { changed: false, appliedDelta: 0 }
+      }
+      const columns = collectSimpleTableColumnCells(rect.table, tablePos)
       if (!columns || columns.length === 0 || columnIndex >= columns.length) {
         return { changed: false, appliedDelta: 0 }
       }
 
       const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
+      const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
+      const renderedColumnWidths = readRenderedColumnWidths(renderedTable)
+      const measuredWidths =
+        renderedColumnWidths.length === columns.length ? renderedColumnWidths : currentWidths
       const nextWidths = shouldClampTableWidthBudget() && getTableOverflowMode(rect.table) !== TABLE_OVERFLOW_MODE_WIDE
         ? redistributeTableColumnWidthsForResize(
-            currentWidths,
+            measuredWidths,
             columnIndex,
             deltaPx,
             getCurrentEditorReadableWidthPx(currentEditor) - 2
           )
-        : currentWidths.map((width, index) =>
+        : measuredWidths.map((width, index) =>
             index === columnIndex
               ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width + deltaPx))
               : width
@@ -2774,10 +2794,10 @@ const BlockEditorShell = ({
       setSelectionTick((prev) => prev + 1)
       return {
         changed: true,
-        appliedDelta: nextWidths[columnIndex] - currentWidths[columnIndex],
+        appliedDelta: nextWidths[columnIndex] - measuredWidths[columnIndex],
       }
     },
-    [getCurrentSelectedTableRect]
+    [getCurrentSelectedTableRect, resolveTableNodePosition]
   )
 
   const resizeFirstTableColumnBy = useCallback((deltaPx: number) => {

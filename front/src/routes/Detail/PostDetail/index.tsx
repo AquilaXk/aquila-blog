@@ -1012,6 +1012,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 likePending={likePending}
                 hideLikeActionOnDesktop={showFloatingLike}
                 hideShareActionOnDesktop={showFloatingLike}
+                hideActionButtonsOnMobile
                 shareFeedback={shareFeedback}
                 onToggleLike={handleToggleLike}
                 onSharePost={handleSharePost}

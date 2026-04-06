@@ -1240,7 +1240,7 @@ test.describe("block editor authoring flow", () => {
     await expect(markdownOutput).toContainText('"columnWidths"')
   })
 
-  test("table column resize drag는 mouseup 전에도 guide가 포인터 위치를 따라간다", async ({ page }) => {
+  test("table column resize drag는 mouseup 전에도 guide가 실제 열 경계를 따라간다", async ({ page }) => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
@@ -1261,24 +1261,35 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.down()
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
-    const initialGuideLeft = await page
-      .getByTestId("table-column-drag-guide")
-      .evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().left))
+    const readGuideBoundaryDelta = async () => {
+      const [guideCenter, boundaryRight] = await Promise.all([
+        page.getByTestId("table-column-drag-guide").evaluate((element) => {
+          const rect = (element as HTMLElement).getBoundingClientRect()
+          return Math.round(rect.left + rect.width / 2)
+        }),
+        firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right)),
+      ])
+      return Math.abs(guideCenter - boundaryRight)
+    }
+    const initialBoundaryRight = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().right)
+    )
+
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
 
     await page.mouse.move(startX + 72, startY, { steps: 8 })
 
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
     await expect
       .poll(async () =>
-        page
-          .getByTestId("table-column-drag-guide")
-          .evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().left))
+        firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right))
       )
-      .toBeGreaterThan(initialGuideLeft + 24)
+      .toBeGreaterThan(initialBoundaryRight + 24)
 
     await page.mouse.up()
   })
 
-  test("writer surface의 table column resize drag도 mouseup 전 guide를 먼저 보여준다", async ({
+  test("writer surface의 table column resize drag도 mouseup 전 guide가 실제 열 경계를 따라간다", async ({
     page,
   }) => {
     await page.goto(QA_WRITER_ROUTE)
@@ -1304,33 +1315,38 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.down()
 
     await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
-    const initialGuideLeft = await page
-      .getByTestId("table-column-drag-guide")
-      .evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().left))
+    const readGuideBoundaryDelta = async () => {
+      const [guideCenter, boundaryRight] = await Promise.all([
+        page.getByTestId("table-column-drag-guide").evaluate((element) => {
+          const rect = (element as HTMLElement).getBoundingClientRect()
+          return Math.round(rect.left + rect.width / 2)
+        }),
+        firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right)),
+      ])
+      return Math.abs(guideCenter - boundaryRight)
+    }
+    const initialBoundaryRight = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().right)
+    )
+
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
 
     await page.mouse.move(startX + 72, startY, { steps: 8 })
 
-    await expect
-      .poll(async () =>
-        page
-          .getByTestId("table-column-drag-guide")
-          .evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().left))
-      )
-      .toBeGreaterThan(initialGuideLeft + 24)
-
-    const expandedGuideLeft = await page
-      .getByTestId("table-column-drag-guide")
-      .evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().left))
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
+    const expandedBoundaryRight = await firstHeaderCell.evaluate((element) =>
+      Math.round((element as HTMLElement).getBoundingClientRect().right)
+    )
+    expect(expandedBoundaryRight).toBeGreaterThan(initialBoundaryRight + 24)
 
     await page.mouse.move(startX + 36, startY, { steps: 6 })
 
+    await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
     await expect
       .poll(async () =>
-        page
-          .getByTestId("table-column-drag-guide")
-          .evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().left))
+        firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right))
       )
-      .toBeLessThan(expandedGuideLeft - 12)
+      .toBeLessThan(expandedBoundaryRight - 12)
 
     await page.mouse.up()
   })
@@ -1380,14 +1396,82 @@ test.describe("block editor authoring flow", () => {
       )
       .toBe(initialBoundaryCenter)
     await expect
+      .poll(async () => {
+        const [guideCenter, boundaryRight] = await Promise.all([
+          page.getByTestId("table-column-drag-guide").evaluate((element) => {
+            const rect = (element as HTMLElement).getBoundingClientRect()
+            return Math.round(rect.left + rect.width / 2)
+          }),
+          firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right)),
+        ])
+        return Math.abs(guideCenter - boundaryRight)
+      })
+      .toBeLessThanOrEqual(2)
+    await expect
       .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
       .toBe("")
 
     await page.mouse.move(startX + 64, startY, { steps: 8 })
 
     await expect
+      .poll(async () => {
+        const [guideCenter, boundaryRight] = await Promise.all([
+          page.getByTestId("table-column-drag-guide").evaluate((element) => {
+            const rect = (element as HTMLElement).getBoundingClientRect()
+            return Math.round(rect.left + rect.width / 2)
+          }),
+          firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right)),
+        ])
+        return Math.abs(guideCenter - boundaryRight)
+      })
+      .toBeLessThanOrEqual(2)
+    await expect
       .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
       .toBe("")
+
+    await page.mouse.up()
+  })
+
+  test("writer surface의 table column boundary drag는 좌우로 흔들어도 guide와 실제 경계가 벌어지지 않는다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
+
+    const resizeHandle = page.getByTestId("table-column-resize-boundary-0")
+    const handleBox = await resizeHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("writer table column resize boundary is missing")
+    }
+
+    const startX = Math.round(handleBox.x + handleBox.width / 2)
+    const startY = Math.round(handleBox.y + handleBox.height / 2)
+    const readGuideBoundaryDelta = async () => {
+      const [guideCenter, boundaryRight] = await Promise.all([
+        page.getByTestId("table-column-drag-guide").evaluate((element) => {
+          const rect = (element as HTMLElement).getBoundingClientRect()
+          return Math.round(rect.left + rect.width / 2)
+        }),
+        firstHeaderCell.evaluate((element) => Math.round((element as HTMLElement).getBoundingClientRect().right)),
+      ])
+      return Math.abs(guideCenter - boundaryRight)
+    }
+
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
+
+    for (const offsetX of [72, 24, 96, 18, 88, 28, 64, 36]) {
+      await page.mouse.move(startX + offsetX, startY)
+      await expect.poll(readGuideBoundaryDelta).toBeLessThanOrEqual(2)
+    }
 
     await page.mouse.up()
   })

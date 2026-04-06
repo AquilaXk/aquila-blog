@@ -746,9 +746,10 @@ type TableRowResizeState = {
 type TableColumnRailResizeState = {
   pointerId: number
   columnIndex: number
-  lastClientX: number
-  previewClientX: number
-  guideOffsetX: number
+  startClientX: number
+  baseWidths: number[]
+  budget: number
+  overflowMode: string
 }
 
 type TableColumnDragGuideState = {
@@ -1338,6 +1339,22 @@ const redistributeTableColumnWidthsForResize = (
 
   return nextWidths
 }
+
+const computeNextTableColumnWidthsForResize = (
+  widths: number[],
+  activeColumnIndex: number,
+  deltaPx: number,
+  shouldClampToBudget: boolean,
+  overflowMode: string,
+  budget: number
+) =>
+  shouldClampToBudget && overflowMode !== TABLE_OVERFLOW_MODE_WIDE
+    ? redistributeTableColumnWidthsForResize(widths, activeColumnIndex, deltaPx, budget)
+    : widths.map((width, index) =>
+        index === activeColumnIndex
+          ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width + deltaPx))
+          : width
+      )
 
 const applyTableColumnWidthsToTransaction = (
   transaction: Transaction,
@@ -2765,41 +2782,62 @@ const BlockEditorShell = ({
     [getCurrentSelectedTableRect]
   )
 
-  const resizeTableColumnByIndex = useCallback(
-    (columnIndex: number, deltaPx: number) => {
+  const getCurrentTableColumnResizeContext = useCallback(
+    (columnIndex: number) => {
       const currentEditor = editorRef.current
-      if (!currentEditor || deltaPx === 0) return { changed: false, appliedDelta: 0 }
+      if (!currentEditor) return null
       const rect = getCurrentSelectedTableRect(currentEditor)
       if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) {
-        return { changed: false, appliedDelta: 0 }
+        return null
       }
 
       const tablePos = resolveTableNodePosition(currentEditor, rect.table)
       if (tablePos === null) {
-        return { changed: false, appliedDelta: 0 }
+        return null
       }
+
       const columns = collectSimpleTableColumnCells(rect.table, tablePos)
       if (!columns || columns.length === 0 || columnIndex >= columns.length) {
-        return { changed: false, appliedDelta: 0 }
+        return null
       }
 
       const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
       const renderedTable = findActiveRenderedTable(viewportRef.current, tableQuickRailStateRef.current)
       const renderedColumnWidths = readRenderedColumnWidths(renderedTable)
       const measuredWidths =
-        renderedColumnWidths.length === columns.length ? renderedColumnWidths : currentWidths
-      const nextWidths = shouldClampTableWidthBudget() && getTableOverflowMode(rect.table) !== TABLE_OVERFLOW_MODE_WIDE
-        ? redistributeTableColumnWidthsForResize(
-            measuredWidths,
-            columnIndex,
-            deltaPx,
-            getCurrentEditorReadableWidthPx(currentEditor) - 2
-          )
-        : measuredWidths.map((width, index) =>
-            index === columnIndex
-              ? Math.max(TABLE_MIN_COLUMN_WIDTH_PX, Math.round(width + deltaPx))
-              : width
-          )
+        columns.some((column) => !hasExplicitColumnWidth(column)) &&
+        renderedColumnWidths.length === columns.length
+          ? renderedColumnWidths
+          : currentWidths
+
+      return {
+        currentEditor,
+        rect,
+        columns,
+        currentWidths,
+        measuredWidths,
+      }
+    },
+    [getCurrentSelectedTableRect, resolveTableNodePosition]
+  )
+
+  const resizeTableColumnByIndex = useCallback(
+    (columnIndex: number, deltaPx: number) => {
+      if (deltaPx === 0) return { changed: false, appliedDelta: 0 }
+      const resizeContext = getCurrentTableColumnResizeContext(columnIndex)
+      if (!resizeContext) {
+        return { changed: false, appliedDelta: 0 }
+      }
+
+      const { currentEditor, rect, columns, currentWidths, measuredWidths } = resizeContext
+      const nextWidths = computeNextTableColumnWidthsForResize(
+        measuredWidths,
+        columnIndex,
+        deltaPx,
+        shouldClampTableWidthBudget(),
+        getTableOverflowMode(rect.table),
+        getCurrentEditorReadableWidthPx(currentEditor) - 2
+      )
 
       const applied = applyTableColumnWidthsToTransaction(
         currentEditor.state.tr,
@@ -2817,7 +2855,48 @@ const BlockEditorShell = ({
         appliedDelta: nextWidths[columnIndex] - measuredWidths[columnIndex],
       }
     },
-    [getCurrentSelectedTableRect, resolveTableNodePosition]
+    [getCurrentTableColumnResizeContext]
+  )
+
+  const resizeTableColumnBySessionDelta = useCallback(
+    (
+      columnIndex: number,
+      baseWidths: number[],
+      totalDeltaPx: number,
+      overflowMode: string,
+      budget: number
+    ) => {
+      const resizeContext = getCurrentTableColumnResizeContext(columnIndex)
+      if (!resizeContext) {
+        return { changed: false, appliedDelta: 0 }
+      }
+
+      const { currentEditor, columns, currentWidths } = resizeContext
+      const nextWidths = computeNextTableColumnWidthsForResize(
+        baseWidths,
+        columnIndex,
+        totalDeltaPx,
+        shouldClampTableWidthBudget(),
+        overflowMode,
+        budget
+      )
+      const applied = applyTableColumnWidthsToTransaction(
+        currentEditor.state.tr,
+        columns,
+        currentWidths,
+        nextWidths
+      )
+      if (!applied.changed) {
+        return { changed: false, appliedDelta: 0 }
+      }
+      currentEditor.view.dispatch(applied.transaction)
+      setSelectionTick((prev) => prev + 1)
+      return {
+        changed: true,
+        appliedDelta: nextWidths[columnIndex] - baseWidths[columnIndex],
+      }
+    },
+    [getCurrentTableColumnResizeContext]
   )
 
   const resizeFirstTableColumnBy = useCallback((deltaPx: number) => {
@@ -2878,28 +2957,32 @@ const BlockEditorShell = ({
   }, [isCurrentTableColumnSelection, resizeTableColumnByIndex, selectTableColumnByIndex])
 
   const startTableColumnRailResize = useCallback(
-    (pointerId: number, columnIndex: number, clientX: number, boundaryClientX = clientX) => {
+    (pointerId: number, columnIndex: number, clientX: number) => {
       if (!selectTableColumnByIndex(columnIndex)) return
+      const resizeContext = getCurrentTableColumnResizeContext(columnIndex)
+      if (!resizeContext) return
       setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
       clearWindowTextSelection()
       setColumnResizeUserSelectSuppressed(true)
       tableColumnRailResizeRef.current = {
         pointerId,
         columnIndex,
-        lastClientX: clientX,
-        previewClientX: clientX,
-        guideOffsetX: boundaryClientX - clientX,
+        startClientX: clientX,
+        baseWidths: resizeContext.measuredWidths,
+        budget: getCurrentEditorReadableWidthPx(resizeContext.currentEditor) - 2,
+        overflowMode: getTableOverflowMode(resizeContext.rect.table),
       }
       if (typeof document !== "undefined") {
         document.body.style.cursor = "col-resize"
       }
-      syncTableColumnDragGuideForClientX(boundaryClientX)
+      syncTableColumnDragGuideForColumn(columnIndex)
     },
     [
       clearWindowTextSelection,
+      getCurrentTableColumnResizeContext,
       selectTableColumnByIndex,
       setColumnResizeUserSelectSuppressed,
-      syncTableColumnDragGuideForClientX,
+      syncTableColumnDragGuideForColumn,
     ]
   )
 
@@ -2912,7 +2995,7 @@ const BlockEditorShell = ({
       if (!(cell instanceof HTMLElement) || !(cell.parentElement instanceof HTMLTableRowElement)) return false
       const columnIndex = Array.from(cell.parentElement.children).findIndex((candidate) => candidate === cell)
       if (columnIndex < 0) return false
-      startTableColumnRailResize(pointerId, columnIndex, clientX, cell.getBoundingClientRect().right)
+      startTableColumnRailResize(pointerId, columnIndex, clientX)
       return true
     },
     [startTableColumnRailResize]
@@ -3852,29 +3935,26 @@ const BlockEditorShell = ({
       const state = tableColumnRailResizeRef.current
       if (!state || state.pointerId !== event.pointerId) return
       const nextClientX = event.clientX
-      state.previewClientX = nextClientX
-      syncTableColumnDragGuideForClientX(nextClientX + state.guideOffsetX)
-      const deltaX = nextClientX - state.lastClientX
-      if (deltaX === 0) return
-      const resizeResult = resizeTableColumnByIndex(state.columnIndex, deltaX)
-      if (resizeResult.changed) {
-        state.lastClientX += resizeResult.appliedDelta
-      }
-      if (!resizeResult.changed || Math.abs(state.lastClientX - nextClientX) > 0.5) {
-        syncTableColumnDragGuideForClientX(state.lastClientX + state.guideOffsetX)
-      }
+      resizeTableColumnBySessionDelta(
+        state.columnIndex,
+        state.baseWidths,
+        nextClientX - state.startClientX,
+        state.overflowMode,
+        state.budget
+      )
+      syncTableColumnDragGuideForColumn(state.columnIndex)
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       const state = tableColumnRailResizeRef.current
       if (!state || state.pointerId !== event.pointerId) return
-      const pendingDelta = state.previewClientX - state.lastClientX
-      if (Math.abs(pendingDelta) > 0.5) {
-        const resizeResult = resizeTableColumnByIndex(state.columnIndex, pendingDelta)
-        if (resizeResult.changed) {
-          state.lastClientX += resizeResult.appliedDelta
-        }
-      }
+      resizeTableColumnBySessionDelta(
+        state.columnIndex,
+        state.baseWidths,
+        event.clientX - state.startClientX,
+        state.overflowMode,
+        state.budget
+      )
       stopTableColumnRailResize()
     }
 
@@ -3889,9 +3969,8 @@ const BlockEditorShell = ({
       stopTableColumnRailResize()
     }
   }, [
-    resizeTableColumnByIndex,
+    resizeTableColumnBySessionDelta,
     stopTableColumnRailResize,
-    syncTableColumnDragGuideForClientX,
     syncTableColumnDragGuideForColumn,
   ])
 
@@ -7055,12 +7134,7 @@ const BlockEditorShell = ({
                 onPointerDown={(event: React.PointerEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  startTableColumnRailResize(
-                    event.pointerId,
-                    index,
-                    event.clientX,
-                    tableQuickRailState.tableLeft + segment.left + segment.width
-                  )
+                  startTableColumnRailResize(event.pointerId, index, event.clientX)
                 }}
                 style={{
                   left: `${Math.round(tableQuickRailState.tableLeft + segment.left + segment.width)}px`,
@@ -7124,12 +7198,7 @@ const BlockEditorShell = ({
                           onPointerDown={(event: React.PointerEvent<HTMLSpanElement>) => {
                             event.preventDefault()
                             event.stopPropagation()
-                            startTableColumnRailResize(
-                              event.pointerId,
-                              index,
-                              event.clientX,
-                              tableQuickRailState.tableLeft + segment.left + segment.width
-                            )
+                            startTableColumnRailResize(event.pointerId, index, event.clientX)
                           }}
                         />
                       ) : null}

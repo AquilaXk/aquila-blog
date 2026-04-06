@@ -743,7 +743,7 @@ test.describe("block editor authoring flow", () => {
     expect(tableWidthShape.firstCellWidth).toBeGreaterThanOrEqual(180)
     expect(tableWidthShape.firstCellWidth).toBeLessThanOrEqual(320)
 
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 추가/삭제" })
+    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     const columnQuickAddButton = page
       .getByTestId("table-column-rail")
       .getByRole("button", { name: "열 추가", exact: true })
@@ -754,13 +754,23 @@ test.describe("block editor authoring flow", () => {
     const tableCornerButton = page.getByTestId("table-corner-handle").getByRole("button", { name: "표 메뉴" })
 
     await expect(columnRailButton).toBeVisible()
-    await expect(columnRailButton).toContainText("열 메뉴")
     await expect(columnQuickAddButton).toBeVisible()
     await expect(rowRailButton).toBeVisible()
-    await expect(rowRailButton).toContainText("행 메뉴")
     await expect(rowQuickAddButton).toBeVisible()
     await expect(tableCornerButton).toBeVisible()
-    await expect(tableCornerButton).toContainText("표 메뉴")
+
+    const compactHandleMetrics = await Promise.all(
+      [columnRailButton, columnQuickAddButton, rowRailButton, rowQuickAddButton, tableCornerButton].map((locator) =>
+        locator.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+          return { width: Math.round(rect.width), height: Math.round(rect.height) }
+        })
+      )
+    )
+    compactHandleMetrics.forEach(({ width, height }) => {
+      expect(width).toBeLessThanOrEqual(30)
+      expect(height).toBeLessThanOrEqual(30)
+    })
 
     await columnQuickAddButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
@@ -801,7 +811,7 @@ test.describe("block editor authoring flow", () => {
     await firstTableCell.click()
     await firstTableCell.hover()
 
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 추가/삭제" })
+    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     await expect(columnRailButton).toBeVisible()
     await columnRailButton.hover()
     await columnRailButton.click()
@@ -928,7 +938,7 @@ test.describe("block editor authoring flow", () => {
     const beforeMetrics = await assertHandlesInViewport()
     expect(beforeMetrics.columnCount).toBe(3)
 
-    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 추가/삭제" })
+    const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     await columnRailButton.click()
     await page.getByTestId("table-column-menu").getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)

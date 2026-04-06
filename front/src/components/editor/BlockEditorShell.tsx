@@ -769,14 +769,15 @@ const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
-const TABLE_RAIL_BUTTON_SIZE_PX = 32
-const TABLE_CORNER_GROUP_WIDTH_PX = 92
-const TABLE_COLUMN_AXIS_GROUP_WIDTH_PX = 136
-const TABLE_ROW_AXIS_GROUP_WIDTH_PX = 76
-const TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX = 12
-const TABLE_COLUMN_RAIL_TRACK_OFFSET_PX = 18
-const TABLE_COLUMN_RAIL_BUTTON_GAP_PX = 10
-const TABLE_SIDE_RAIL_OFFSET_PX = 46
+const TABLE_RAIL_BUTTON_SIZE_PX = 28
+const TABLE_CORNER_GROUP_WIDTH_PX = 28
+const TABLE_COLUMN_AXIS_GROUP_WIDTH_PX = 60
+const TABLE_ROW_AXIS_GROUP_WIDTH_PX = 28
+const TABLE_ROW_AXIS_GROUP_HEIGHT_PX = 60
+const TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX = 10
+const TABLE_COLUMN_RAIL_TRACK_OFFSET_PX = 14
+const TABLE_COLUMN_RAIL_BUTTON_GAP_PX = 4
+const TABLE_SIDE_RAIL_OFFSET_PX = 38
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
 const TABLE_MENU_ESTIMATED_WIDTH_PX = 308
@@ -842,25 +843,22 @@ const resolveDesktopTableRailLayout = (
     TABLE_RAIL_BUTTON_SIZE_PX
   )
   const cornerLeft = clampViewportPosition(
-    trackLeft,
+    trackLeft + Math.max(0, Math.round(trackWidth) - TABLE_CORNER_GROUP_WIDTH_PX),
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportWidth,
     TABLE_CORNER_GROUP_WIDTH_PX
   )
   const columnRailLeft = clampViewportPosition(
-    Math.max(
-      Math.round(trackLeft + TABLE_CORNER_GROUP_WIDTH_PX + 12),
-      Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_AXIS_GROUP_WIDTH_PX / 2))
-    ),
+    Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_AXIS_GROUP_WIDTH_PX / 2)),
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportWidth,
     TABLE_COLUMN_AXIS_GROUP_WIDTH_PX
   )
   const rowRailTop = clampViewportPosition(
-    Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_RAIL_BUTTON_SIZE_PX / 2)),
-    Math.max(trackTop + 42, TABLE_RAIL_EDGE_PADDING_PX),
+    Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_AXIS_GROUP_HEIGHT_PX / 2)),
+    Math.max(trackTop + 32, TABLE_RAIL_EDGE_PADDING_PX),
     viewportHeight,
-    TABLE_RAIL_BUTTON_SIZE_PX
+    TABLE_ROW_AXIS_GROUP_HEIGHT_PX
   )
   const rowRailLeft = clampViewportPosition(
     Math.round(trackLeft - TABLE_SIDE_RAIL_OFFSET_PX),
@@ -7217,13 +7215,15 @@ const BlockEditorShell = ({
                 }
               }}
               style={{
-                left: `${desktopTableRailLayout?.cornerLeft ?? tableQuickRailState.left + 54}px`,
+                left: `${
+                  desktopTableRailLayout?.cornerLeft ??
+                  Math.round(tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width - TABLE_RAIL_BUTTON_SIZE_PX))
+                }px`,
                 top: `${desktopTableRailLayout?.cornerTop ?? Math.max(12, tableQuickRailState.top - 42)}px`,
               }}
             >
               <TableHandleButton
                 type="button"
-                data-variant="labeled"
                 title="표 메뉴"
                 aria-label="표 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -7232,8 +7232,7 @@ const BlockEditorShell = ({
                   openSelectionAwareTableMenu("table", event.currentTarget.getBoundingClientRect())
                 }}
               >
-                <TableHandleIcon kind="table" />
-                <TableQuickRailLabel>표 메뉴</TableQuickRailLabel>
+                <TableHandleIcon kind="more" />
               </TableHandleButton>
             </TableCornerHandle>
             {!shouldShowTableColumnRail ? (
@@ -7250,16 +7249,21 @@ const BlockEditorShell = ({
                 style={{
                   left: `${
                     desktopTableRailLayout?.columnRailLeft ??
-                    Math.max(tableQuickRailState.left + 108, tableQuickRailState.columnLeft - 22)
+                    Math.max(
+                      tableQuickRailState.tableLeft,
+                      Math.round(
+                        tableQuickRailState.columnLeft +
+                          Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_AXIS_GROUP_WIDTH_PX / 2)
+                      )
+                    )
                   }px`,
                   top: `${desktopTableRailLayout?.columnRailTop ?? Math.max(12, tableQuickRailState.top - 42)}px`,
                 }}
               >
                 <TableQuickRailButton
                   type="button"
-                  data-variant="labeled"
-                  title="열 추가/삭제"
-                  aria-label="열 추가/삭제"
+                  title="열 메뉴"
+                  aria-label="열 메뉴"
                   onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -7267,7 +7271,6 @@ const BlockEditorShell = ({
                   }}
                 >
                   <TableHandleIcon kind="column" />
-                  <TableQuickRailLabel>열 메뉴</TableQuickRailLabel>
                 </TableQuickRailButton>
                 <TableQuickAddButton
                   type="button"
@@ -7281,7 +7284,7 @@ const BlockEditorShell = ({
                     })
                   }}
                 >
-                  + 열
+                  <TableHandleIcon kind="plus" />
                 </TableQuickAddButton>
               </TableAxisRail>
             ) : null}
@@ -7308,7 +7311,6 @@ const BlockEditorShell = ({
             >
               <TableQuickRailButton
                 type="button"
-                data-variant="labeled"
                 title="행 메뉴"
                 aria-label="행 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -7318,7 +7320,6 @@ const BlockEditorShell = ({
                 }}
               >
                 <TableHandleIcon kind="row" />
-                <TableQuickRailLabel>행 메뉴</TableQuickRailLabel>
               </TableQuickRailButton>
               <TableQuickAddButton
                 type="button"
@@ -7332,7 +7333,7 @@ const BlockEditorShell = ({
                   })
                 }}
               >
-                + 행
+                <TableHandleIcon kind="plus" />
               </TableQuickAddButton>
             </TableAxisRail>
           </>
@@ -9058,9 +9059,28 @@ const FloatingBubbleToolbar = styled.div`
   }
 `
 
-type TableHandleIconKind = "table" | "row" | "column"
+type TableHandleIconKind = "table" | "row" | "column" | "more" | "plus"
 
 const TableHandleIcon = ({ kind }: { kind: TableHandleIconKind }) => {
+  if (kind === "more") {
+    return (
+      <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <circle cx="3.5" cy="8" r="1.15" fill="currentColor" stroke="none" />
+        <circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none" />
+        <circle cx="12.5" cy="8" r="1.15" fill="currentColor" stroke="none" />
+      </TableHandleIconSvg>
+    )
+  }
+
+  if (kind === "plus") {
+    return (
+      <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <line x1="8" y1="3.25" x2="8" y2="12.75" />
+        <line x1="3.25" y1="8" x2="12.75" y2="8" />
+      </TableHandleIconSvg>
+    )
+  }
+
   if (kind === "table") {
     return (
       <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -9106,7 +9126,7 @@ const TableAxisRail = styled.div`
   z-index: 58;
   display: flex;
   align-items: center;
-  gap: 0.28rem;
+  gap: 0.2rem;
   pointer-events: auto;
 
   &[data-axis="column"] {
@@ -9132,17 +9152,17 @@ const TableCornerHandle = styled.div`
 const TableColumnRailTrack = styled.div`
   position: fixed;
   z-index: 57;
-  height: 0.72rem;
+  height: 0.625rem;
   overflow: visible;
   user-select: none;
   -webkit-user-select: none;
   border-radius: 999px;
   border: 1px solid
-    ${({ theme }) => (theme.scheme === "dark" ? "rgba(71, 85, 105, 0.48)" : "rgba(148, 163, 184, 0.42)")};
+    ${({ theme }) => (theme.scheme === "dark" ? "rgba(71, 85, 105, 0.34)" : "rgba(148, 163, 184, 0.28)")};
   background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.84)" : "rgba(248, 250, 252, 0.96)"};
+    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.58)" : "rgba(255, 255, 255, 0.9)"};
   box-shadow: ${({ theme }) =>
-    theme.scheme === "dark" ? "0 10px 24px rgba(2, 6, 23, 0.2)" : "0 10px 24px rgba(15, 23, 42, 0.08)"};
+    theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.18)" : "0 8px 18px rgba(15, 23, 42, 0.06)"};
   pointer-events: auto;
 `
 
@@ -9155,16 +9175,16 @@ const TableColumnRailSegment = styled.button`
   user-select: none;
   -webkit-user-select: none;
   border-radius: 999px;
-  background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.16)")};
+  background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.14)" : "rgba(148, 163, 184, 0.14)")};
   transition: background-color 120ms ease, transform 120ms ease;
   cursor: pointer;
 
   &:hover {
-    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.24)" : "rgba(148, 163, 184, 0.22)")};
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.2)")};
   }
 
   &[data-active="true"] {
-    background: rgba(59, 130, 246, 0.34);
+    background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(191, 219, 254, 0.26)" : "rgba(59, 130, 246, 0.18)")};
   }
 
   &::after {
@@ -9277,82 +9297,49 @@ const TableQuickRailButton = styled.button`
   all: unset;
   position: relative;
   box-sizing: border-box;
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.65rem;
-  border: 1px solid ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(148, 163, 184, 0.2)" : "rgba(71, 85, 105, 0.14)"};
-  background: ${({ theme }) =>
-    theme.scheme === "dark" ? "rgba(15, 23, 42, 0.8)" : "rgba(255, 255, 255, 0.92)"};
-  color: ${({ theme }) => theme.colors.gray11};
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(226, 232, 240, 0.72)" : "rgba(51, 65, 85, 0.78)")};
   cursor: pointer;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
-    color 120ms ease;
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
 
   &::after {
     content: "";
     position: absolute;
-    inset: -0.42rem;
+    inset: -0.3rem;
   }
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(30, 41, 59, 0.94)" : "rgba(239, 246, 255, 0.98)"};
-    border-color: rgba(59, 130, 246, 0.28);
+      theme.scheme === "dark" ? "rgba(30, 41, 59, 0.8)" : "rgba(255, 255, 255, 0.96)"};
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "rgba(148, 163, 184, 0.28)"};
     color: var(--color-gray12);
+    box-shadow: ${({ theme }) =>
+      theme.scheme === "dark" ? "0 6px 16px rgba(2, 6, 23, 0.24)" : "0 6px 16px rgba(15, 23, 42, 0.08)"};
+    transform: translateY(-1px);
   }
-
-  &[data-variant="labeled"] {
-    width: auto;
-    min-width: 4.6rem;
-    padding-inline: 0.58rem 0.7rem;
-    gap: 0.38rem;
-  }
-`
-
-const TableQuickRailLabel = styled.span`
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
 `
 
 const TableHandleButton = styled(TableQuickRailButton)`
-  width: 2.12rem;
-  height: 2.12rem;
-  border-radius: 0.62rem;
-
-  &[data-variant="labeled"] {
-    width: auto;
-    min-width: 4.8rem;
-    height: 2.12rem;
-    padding-inline: 0.62rem 0.78rem;
-    gap: 0.42rem;
-  }
+  backdrop-filter: blur(10px);
 `
 
 const TableQuickAddButton = styled(TableQuickRailButton)`
-  width: auto;
-  min-width: 3.25rem;
-  padding-inline: 0.56rem 0.7rem;
-  gap: 0.32rem;
-  font-size: 0.7rem;
-  font-weight: 800;
-
-  &[aria-label="행 추가"] {
-    min-width: 3.6rem;
-  }
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(191, 219, 254, 0.88)" : "rgba(37, 99, 235, 0.78)")};
 `
 
 const FloatingTableMenu = styled.div`

@@ -45,7 +45,7 @@ export const getServerSideProps: GetServerSideProps<AdminHubPageProps> = async (
   let authDurationMs = 0
   let authDescription: string = "bootstrap"
   let profileDurationMs = 0
-  let profileDescription: string = fallbackProfileSnapshot.source
+  let profileDescription: string
   let profileSnapshot: AdminProfile
 
   if (bootstrapResult?.ok && bootstrapResult.value.ok) {

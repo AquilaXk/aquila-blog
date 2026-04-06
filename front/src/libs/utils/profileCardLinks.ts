@@ -3,6 +3,7 @@ import type { IconName } from "src/components/icons/AppIcon"
 import {
   DEFAULT_CONTACT_ITEM_ICON,
   DEFAULT_SERVICE_ITEM_ICON,
+  getRenderableProfileLinkHref,
   normalizeProfileCardLinkItem,
   ProfileCardLinkItem,
 } from "src/constants/profileCardLinks"
@@ -12,19 +13,25 @@ type ProfileLinkSource = {
   contactLinks?: ProfileCardLinkItem[]
 }
 
-const buildFallbackServiceLinks = (): ProfileCardLinkItem[] =>
-  (CONFIG.projects || [])
-    .map((project) =>
-      normalizeProfileCardLinkItem(
-        {
-          icon: DEFAULT_SERVICE_ITEM_ICON,
-          label: project.name,
-          href: project.href,
-        },
-        DEFAULT_SERVICE_ITEM_ICON
-      )
-    )
+const normalizeLinkList = (
+  items: ProfileCardLinkItem[] | undefined,
+  defaultIcon: IconName,
+  section: "service" | "contact"
+): ProfileCardLinkItem[] =>
+  (items || [])
+    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon, section))
     .filter((item): item is ProfileCardLinkItem => item !== null)
+
+const buildFallbackServiceLinks = (): ProfileCardLinkItem[] =>
+  normalizeLinkList(
+    (CONFIG.projects || []).map((project) => ({
+      icon: DEFAULT_SERVICE_ITEM_ICON,
+      label: project.name,
+      href: project.href,
+    })),
+    DEFAULT_SERVICE_ITEM_ICON,
+    "service"
+  )
 
 const buildFallbackContactLinks = (): ProfileCardLinkItem[] => {
   const links: ProfileCardLinkItem[] = []
@@ -65,16 +72,7 @@ const buildFallbackContactLinks = (): ProfileCardLinkItem[] => {
 }
 
 const FALLBACK_SERVICE_LINKS = buildFallbackServiceLinks()
-const FALLBACK_CONTACT_LINKS = buildFallbackContactLinks()
-
-const normalizeLinkList = (
-  items: ProfileCardLinkItem[] | undefined,
-  defaultIcon: IconName,
-  section: "service" | "contact"
-): ProfileCardLinkItem[] =>
-  (items || [])
-    .map((item) => normalizeProfileCardLinkItem(item, defaultIcon, section))
-    .filter((item): item is ProfileCardLinkItem => item !== null)
+const FALLBACK_CONTACT_LINKS = normalizeLinkList(buildFallbackContactLinks(), DEFAULT_CONTACT_ITEM_ICON, "contact")
 
 export const resolveServiceLinks = (source?: ProfileLinkSource | null): ProfileCardLinkItem[] => {
   if (!source || source.serviceLinks === undefined) return FALLBACK_SERVICE_LINKS
@@ -87,3 +85,8 @@ export const resolveContactLinks = (source?: ProfileLinkSource | null): ProfileC
   const links = normalizeLinkList(source?.contactLinks, DEFAULT_CONTACT_ITEM_ICON, "contact")
   return links
 }
+
+export const resolveRenderableProfileLinkHref = (
+  section: "service" | "contact",
+  href: string
+): string | null => getRenderableProfileLinkHref(section, href)

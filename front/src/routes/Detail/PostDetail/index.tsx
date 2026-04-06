@@ -259,10 +259,6 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     [showDetailedToc, tocItems]
   )
   const showStickyToc = visibleTocItems.length >= 2
-  const activeTocIndex = useMemo(
-    () => visibleTocItems.findIndex((item) => item.id === activeTocId),
-    [activeTocId, visibleTocItems]
-  )
   const commentsCount = typeof data?.commentsCount === "number" ? data.commentsCount : 0
   const commentsProgressLabel = commentsRailActive ? "읽는 중" : `${commentsCount}`
   const shareProgressLabel =

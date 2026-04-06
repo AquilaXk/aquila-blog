@@ -58,6 +58,40 @@ public_http_reachable() {
   [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]
 }
 
+compose_service_runtime_state() {
+  local service="$1"
+  local cid status health restart_count oom_killed
+  cid="$(compose ps -q "${service}" 2>/dev/null | head -n 1 || true)"
+  if [[ -z "${cid}" ]]; then
+    printf 'missing|none|0|unknown'
+    return 0
+  fi
+
+  status="$(docker inspect --format '{{.State.Status}}' "${cid}" 2>/dev/null | tr -d '\r' || true)"
+  health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${cid}" 2>/dev/null | tr -d '\r' || true)"
+  restart_count="$(docker inspect --format '{{.RestartCount}}' "${cid}" 2>/dev/null | tr -d '\r' || true)"
+  oom_killed="$(docker inspect --format '{{.State.OOMKilled}}' "${cid}" 2>/dev/null | tr -d '\r' || true)"
+  printf '%s|%s|%s|%s' "${status:-unknown}" "${health:-unknown}" "${restart_count:-unknown}" "${oom_killed:-unknown}"
+}
+
+probe_internal_caddy_route_code() {
+  local api_domain="$1"
+  local path="$2"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    -s -o /dev/null -w "%{http_code}" \
+    --connect-timeout 3 \
+    --max-time 8 \
+    -H "Host: ${api_domain}" \
+    "http://caddy:80${path}" || true
+}
+
+probe_public_route_code() {
+  local api_domain="$1"
+  local path="$2"
+  curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
+    "https://${api_domain}${path}" || true
+}
+
 query_grafana_datasource_uid_status() {
   local uid="$1"
   local grafana_user grafana_password
@@ -101,6 +135,8 @@ require_file "${STATE_FILE}"
 ACTIVE_BACKEND="$(cat "${STATE_FILE}" 2>/dev/null || true)"
 EXPECTED_BACK_IMAGE="$(trim_quotes "$(env_value "BACK_IMAGE")")"
 API_DOMAIN="$(trim_quotes "$(env_value "API_DOMAIN")")"
+ADMIN_API_UPSTREAM="$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
+READ_API_UPSTREAM="$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
 
 if [[ "${ACTIVE_BACKEND}" != "back_blue" && "${ACTIVE_BACKEND}" != "back_green" ]]; then
   remember_failure "invalid_active_backend=${ACTIVE_BACKEND:-none}"
@@ -139,9 +175,18 @@ INTERNAL_HTTP_CODE="$(
 )"
 
 PUBLIC_HTTP_CODE="$(
-  curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
-    "https://${API_DOMAIN}/actuator/health/readiness" || true
+  probe_public_route_code "${API_DOMAIN}" "/actuator/health/readiness"
 )"
+INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
+  probe_internal_caddy_route_code "${API_DOMAIN}" "/member/api/v1/notifications/snapshot"
+)"
+PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE="$(
+  probe_public_route_code "${API_DOMAIN}" "/member/api/v1/notifications/snapshot"
+)"
+BACK_ADMIN_RUNTIME_STATE="$(compose_service_runtime_state "back_admin")"
+BACK_READ_RUNTIME_STATE="$(compose_service_runtime_state "back_read")"
+IFS='|' read -r BACK_ADMIN_STATUS BACK_ADMIN_HEALTH BACK_ADMIN_RESTART_COUNT BACK_ADMIN_OOM_KILLED <<< "${BACK_ADMIN_RUNTIME_STATE}"
+IFS='|' read -r BACK_READ_STATUS BACK_READ_HEALTH BACK_READ_RESTART_COUNT BACK_READ_OOM_KILLED <<< "${BACK_READ_RUNTIME_STATE}"
 
 CLOUDFLARED_CONTAINER_ID="$(compose ps -q cloudflared 2>/dev/null | head -n 1 || true)"
 CLOUDFLARED_STATUS="$(docker inspect --format '{{.State.Status}}' "${CLOUDFLARED_CONTAINER_ID}" 2>/dev/null || echo "missing")"
@@ -177,8 +222,14 @@ log "expected_image=${EXPECTED_BACK_IMAGE:-none}"
 log "active_image=${ACTIVE_BACKEND_IMAGE:-none}"
 log "mounted_upstream=${MOUNTED_UPSTREAM:-none}"
 log "inactive_backend=${INACTIVE_BACKEND}"
+log "admin_api_upstream=${ADMIN_API_UPSTREAM:-none}"
+log "read_api_upstream=${READ_API_UPSTREAM:-none}"
 log "internal_readiness=${INTERNAL_HTTP_CODE:-none}"
 log "public_readiness=${PUBLIC_HTTP_CODE:-none}"
+log "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
+log "public_notification_snapshot=${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
+log "back_admin_runtime=status:${BACK_ADMIN_STATUS} health:${BACK_ADMIN_HEALTH} restart_count:${BACK_ADMIN_RESTART_COUNT} oom_killed:${BACK_ADMIN_OOM_KILLED}"
+log "back_read_runtime=status:${BACK_READ_STATUS} health:${BACK_READ_HEALTH} restart_count:${BACK_READ_RESTART_COUNT} oom_killed:${BACK_READ_OOM_KILLED}"
 log "cloudflared_status=${CLOUDFLARED_STATUS} restarting=${CLOUDFLARED_RESTARTING} restart_count=${CLOUDFLARED_RESTART_COUNT} registration=${CLOUDFLARED_HAS_REGISTRATION}"
 log "loki_status=${LOKI_STATUS} restarting=${LOKI_RESTARTING}"
 log "promtail_status=${PROMTAIL_STATUS} restarting=${PROMTAIL_RESTARTING}"
@@ -216,6 +267,22 @@ fi
 
 if ! public_http_reachable "${PUBLIC_HTTP_CODE}"; then
   remember_failure "public_readiness=${PUBLIC_HTTP_CODE:-none}"
+fi
+
+if ! public_http_reachable "${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE}"; then
+  remember_failure "internal_notification_snapshot=${INTERNAL_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
+fi
+
+if ! public_http_reachable "${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE}"; then
+  remember_failure "public_notification_snapshot=${PUBLIC_NOTIFICATION_SNAPSHOT_HTTP_CODE:-none}"
+fi
+
+if [[ "${ADMIN_API_UPSTREAM}" == "back_admin" ]] && [[ "${BACK_ADMIN_STATUS}" != "running" || "${BACK_ADMIN_HEALTH}" != "healthy" ]]; then
+  remember_failure "back_admin_unhealthy status=${BACK_ADMIN_STATUS} health=${BACK_ADMIN_HEALTH} restart_count=${BACK_ADMIN_RESTART_COUNT} oom_killed=${BACK_ADMIN_OOM_KILLED}"
+fi
+
+if [[ "${READ_API_UPSTREAM}" == "back_read" ]] && [[ "${BACK_READ_STATUS}" != "running" || "${BACK_READ_HEALTH}" != "healthy" ]]; then
+  remember_failure "back_read_unhealthy status=${BACK_READ_STATUS} health=${BACK_READ_HEALTH} restart_count=${BACK_READ_RESTART_COUNT} oom_killed=${BACK_READ_OOM_KILLED}"
 fi
 
 if [[ -z "${CLOUDFLARED_CONTAINER_ID}" ]]; then

@@ -43,11 +43,15 @@ export const getProfileCardIconOptions = (section: ProfileCardLinkSection): Prof
   section === "service" ? SERVICE_ICON_OPTIONS : CONTACT_ICON_OPTIONS
 
 const KNOWN_ICON_NAMES = new Set<IconName>(PROFILE_CARD_ICON_OPTIONS.map((option) => option.id))
+const SERVICE_LINK_PROTOCOLS = new Set(["http:", "https:"])
+const CONTACT_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"])
 
 const hasBlockedProtocol = (href: string) => /^(javascript|data|vbscript|file|blob):/i.test(href.trim())
 const hasExplicitScheme = (href: string) => /^[a-z][a-z0-9+.-]*:/i.test(href.trim())
 const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 const looksLikePhone = (value: string) => /^\+?[0-9][0-9\s\-()]{6,}$/.test(value)
+const getAllowedProfileLinkProtocols = (section: ProfileCardLinkSection) =>
+  section === "service" ? SERVICE_LINK_PROTOCOLS : CONTACT_LINK_PROTOCOLS
 
 export const normalizeProfileLinkHref = (section: ProfileCardLinkSection, href: string): string => {
   const trimmed = href.trim()
@@ -63,16 +67,23 @@ export const normalizeProfileLinkHref = (section: ProfileCardLinkSection, href: 
   return `https://${trimmed.replace(/^\/+/, "")}`
 }
 
-export const isAllowedProfileLinkHref = (section: ProfileCardLinkSection, href: string): boolean => {
+export const getRenderableProfileLinkHref = (
+  section: ProfileCardLinkSection,
+  href: string
+): string | null => {
   const trimmed = normalizeProfileLinkHref(section, href)
-  if (!trimmed || hasBlockedProtocol(trimmed)) return false
+  if (!trimmed || hasBlockedProtocol(trimmed)) return null
 
-  if (section === "service") {
-    return /^(https?:\/\/)\S+/i.test(trimmed)
+  try {
+    const parsed = new URL(trimmed)
+    return getAllowedProfileLinkProtocols(section).has(parsed.protocol) ? parsed.toString() : null
+  } catch {
+    return null
   }
-
-  return /^(https?:\/\/|mailto:|tel:)\S+/i.test(trimmed)
 }
+
+export const isAllowedProfileLinkHref = (section: ProfileCardLinkSection, href: string): boolean =>
+  getRenderableProfileLinkHref(section, href) !== null
 
 export const normalizeProfileCardLinkItem = (
   item: Partial<ProfileCardLinkItem> | null | undefined,
@@ -83,9 +94,8 @@ export const normalizeProfileCardLinkItem = (
 
   const label = (item.label || "").trim()
   const rawHref = (item.href || "").trim()
-  const href = section ? normalizeProfileLinkHref(section, rawHref) : rawHref
+  const href = section ? getRenderableProfileLinkHref(section, rawHref) || "" : rawHref
   if (!label || !href) return null
-  if (section && !isAllowedProfileLinkHref(section, href)) return null
 
   const icon = item.icon && KNOWN_ICON_NAMES.has(item.icon) ? item.icon : defaultIcon
 

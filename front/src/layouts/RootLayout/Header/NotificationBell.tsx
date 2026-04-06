@@ -790,7 +790,7 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
     const run = async () => {
       if (disposed) return
-      let nextFailureStreak = pollingFailureStreakRef.current
+      let nextFailureStreak: number
 
       if (!isNavigatorOnline()) {
         lastSnapshotErrorRef.current = new Error("NetworkOffline")

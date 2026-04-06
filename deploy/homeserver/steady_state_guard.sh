@@ -421,6 +421,35 @@ check_api_readiness() {
   return 1
 }
 
+probe_notification_snapshot_route_code() {
+  local api_domain="$1"
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    --connect-timeout 3 \
+    --max-time 8 \
+    -s -o /dev/null -w "%{http_code}" \
+    "http://caddy:80/member/api/v1/notifications/snapshot" \
+    -H "Host: ${api_domain}" || true
+}
+
+check_notification_snapshot_route() {
+  local api_domain
+  api_domain="$(trim_quotes "$(env_value "API_DOMAIN")")"
+  if [[ -z "${api_domain}" ]]; then
+    log "FAIL missing API_DOMAIN in ${ENV_FILE}"
+    return 1
+  fi
+
+  local code
+  code="$(probe_notification_snapshot_route_code "${api_domain}")"
+  if [[ "${code}" =~ ^[1-4][0-9][0-9]$ ]]; then
+    log "OK notification snapshot route status=${code}"
+    return 0
+  fi
+
+  log "FAIL notification snapshot route status=${code:-none}"
+  return 1
+}
+
 query_grafana_datasource_by_uid() {
   local grafana_user="$1"
   local grafana_password="$2"
@@ -760,11 +789,12 @@ main() {
   if check_active_backend_image; then ok=$((ok + 1)); fi
   if ensure_caddy_mount_sync; then ok=$((ok + 1)); fi
   if check_api_readiness; then ok=$((ok + 1)); fi
+  if check_notification_snapshot_route; then ok=$((ok + 1)); fi
   if check_grafana_core_datasources; then ok=$((ok + 1)); fi
   if check_grafana_embed_route; then ok=$((ok + 1)); fi
   if check_notification_sse_route; then ok=$((ok + 1)); fi
 
-  if [[ "${ok}" -ne 7 ]]; then
+  if [[ "${ok}" -ne 8 ]]; then
     compose logs --no-color --tail=80 caddy grafana loki promtail >&2 || true
     exit 1
   fi

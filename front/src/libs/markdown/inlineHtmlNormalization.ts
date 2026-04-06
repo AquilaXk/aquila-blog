@@ -14,9 +14,19 @@ const wrapWithMarkdownMark = (content: string, marker: string) => {
   return `${marker}${normalized}${marker}`
 }
 
+const wrapWithMarkdownCodeMark = (content: string) => {
+  const normalized = content.trim()
+  if (!normalized) return ""
+  const backtickRuns = normalized.match(/`+/g)
+  const longestRun = backtickRuns?.reduce((max, run) => Math.max(max, run.length), 0) ?? 0
+  const marker = "`".repeat(longestRun + 1)
+  const paddedContent =
+    normalized.startsWith("`") || normalized.endsWith("`") ? ` ${normalized} ` : normalized
+  return `${marker}${paddedContent}${marker}`
+}
+
 const normalizeCodeTagMatch = (rawInner: string) => {
-  const inner = String(rawInner || "").trim().replace(/`/g, "\\`")
-  return inner ? `\`${inner}\`` : ""
+  return wrapWithMarkdownCodeMark(String(rawInner || ""))
 }
 
 export const normalizeLegacyInlineHtmlSpans = (input: string) => {

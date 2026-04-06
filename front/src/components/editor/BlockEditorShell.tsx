@@ -408,6 +408,7 @@ type BlockSelectionPointerEventLike = {
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
 
 const compactSlashSearchText = (value: string) => normalizeSlashSearchText(value).replace(/\s+/g, "")
+const ENABLE_DESKTOP_TABLE_COLUMN_RAIL = process.env.NEXT_PUBLIC_EDITOR_DESKTOP_TABLE_COLUMN_RAIL === "enabled"
 
 const LIST_ITEM_SELECTOR =
   "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
@@ -417,16 +418,24 @@ const MARKDOWN_COMMIT_DEBOUNCE_MS = 140
 const MARKDOWN_COMMIT_IDLE_TIMEOUT_MS = 220
 const MARKDOWN_COMMIT_MAX_WAIT_MS = 700
 const EDITOR_RUNTIME_GUARD_SAMPLE_LIMIT = 240
-const MARKDOWN_TABLE_ROW_PATTERN = /^\s*\|(?:.*\|)+\s*$/
 const MARKDOWN_TABLE_SEPARATOR_CELL_PATTERN = /^:?-{3,}:?$/
 const MARKDOWN_LIST_PREFIX_PATTERN = /^\s*(?:[-+*]|\d+\.)\s+/
 const MARKDOWN_BLOCKQUOTE_PREFIX_PATTERN = /^\s*>\s?/
+
+const isMarkdownTableRow = (line: string) => {
+  const trimmedLine = line.trim()
+  if (!trimmedLine.includes("|")) return false
+
+  const normalizedLine = trimmedLine.startsWith("|") ? trimmedLine.slice(1) : trimmedLine
+  const rowWithoutEdgePipes = normalizedLine.endsWith("|") ? normalizedLine.slice(0, -1) : normalizedLine
+  return rowWithoutEdgePipes.split("|").length >= 2
+}
 
 const normalizeTableContextPasteLine = (line: string) => {
   const trimmedLine = line.trim()
   if (!trimmedLine) return ""
 
-  if (MARKDOWN_TABLE_ROW_PATTERN.test(trimmedLine)) {
+  if (isMarkdownTableRow(trimmedLine)) {
     const cells = trimmedLine
       .replace(/^\|/, "")
       .replace(/\|$/, "")
@@ -6496,7 +6505,7 @@ const BlockEditorShell = ({
     [tableQuickRailState.columnSegments, tableQuickRailState.width]
   )
   const shouldShowTableColumnRail =
-    false &&
+    ENABLE_DESKTOP_TABLE_COLUMN_RAIL &&
     shouldShowTableHandles &&
     isDesktopTableRailViewport &&
     tableQuickRailState.columnSegments.length > 0 &&

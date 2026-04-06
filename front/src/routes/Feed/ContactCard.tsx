@@ -3,7 +3,7 @@ import React from "react"
 import AppIcon from "src/components/icons/AppIcon"
 import { Emoji } from "src/components/Emoji"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
-import { resolveContactLinks } from "src/libs/utils/profileCardLinks"
+import { resolveContactLinks, resolveRenderableProfileLinkHref } from "src/libs/utils/profileCardLinks"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
@@ -20,18 +20,30 @@ const ContactCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
         <Emoji className="titleEmoji">💬</Emoji> Contact
       </StyledTitle>
       <StyledWrapper>
-        {links.map((item) => (
-          <a
-            key={`${item.href}-${item.label}`}
-            href={item.href}
-            rel="noopener noreferrer"
-            target="_blank"
-            css={{ overflow: "hidden" }}
-          >
-            <AppIcon name={item.icon} className="icon" />
-            <div className="name">{item.label}</div>
-          </a>
-        ))}
+        {links.map((item) => {
+          const safeHref = resolveRenderableProfileLinkHref("contact", item.href)
+          const canRenderHref = Boolean(
+            safeHref &&
+              (safeHref.startsWith("https://") ||
+                safeHref.startsWith("http://") ||
+                safeHref.startsWith("mailto:") ||
+                safeHref.startsWith("tel:"))
+          )
+          if (!canRenderHref || !safeHref) return null
+
+          return (
+            <a
+              key={`${safeHref}-${item.label}`}
+              href={safeHref}
+              rel="noopener noreferrer"
+              target="_blank"
+              css={{ overflow: "hidden" }}
+            >
+              <AppIcon name={item.icon} className="icon" />
+              <div className="name">{item.label}</div>
+            </a>
+          )
+        })}
       </StyledWrapper>
     </>
   )

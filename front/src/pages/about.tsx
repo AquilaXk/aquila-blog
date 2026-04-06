@@ -14,7 +14,7 @@ import {
   resolvePublicAdminProfileSnapshot,
 } from "src/libs/server/adminProfile"
 import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "src/libs/server/serverTiming"
-import { resolveContactLinks, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
+import { resolveContactLinks, resolveRenderableProfileLinkHref, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const ssrStartedAt = performance.now()
@@ -143,14 +143,28 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
             <h3 className="section-title">Contact</h3>
             <ul className="contact-list">
               {contactLinks.map((item) => (
-                <li key={`${item.icon}-${item.label}-${item.href}`}>
-                  <span className="icon">
-                    <AppIcon name={item.icon} aria-hidden="true" />
-                  </span>
-                  <a href={item.href} target="_blank" rel="noopener noreferrer">
-                    {item.label}
-                  </a>
-                </li>
+                (() => {
+                  const safeHref = resolveRenderableProfileLinkHref("contact", item.href)
+                  const canRenderHref = Boolean(
+                    safeHref &&
+                      (safeHref.startsWith("https://") ||
+                        safeHref.startsWith("http://") ||
+                        safeHref.startsWith("mailto:") ||
+                        safeHref.startsWith("tel:"))
+                  )
+                  if (!canRenderHref || !safeHref) return null
+
+                  return (
+                    <li key={`${item.icon}-${item.label}-${safeHref}`}>
+                      <span className="icon">
+                        <AppIcon name={item.icon} aria-hidden="true" />
+                      </span>
+                      <a href={safeHref} target="_blank" rel="noopener noreferrer">
+                        {item.label}
+                      </a>
+                    </li>
+                  )
+                })()
               ))}
             </ul>
           </div>
@@ -160,11 +174,21 @@ const AboutPage: NextPageWithLayout<AboutPageProps> = ({ initialAdminProfile }) 
               <h3 className="section-title">Service</h3>
               <ul className="projects-list">
                 {serviceLinks.map((item) => (
-                  <li key={`${item.icon}-${item.label}-${item.href}`}>
-                    <a href={item.href} target="_blank" rel="noopener noreferrer">
-                      <AppIcon name={item.icon} aria-hidden="true" /> {item.label}
-                    </a>
-                  </li>
+                  (() => {
+                    const safeHref = resolveRenderableProfileLinkHref("service", item.href)
+                    const canRenderHref = Boolean(
+                      safeHref && (safeHref.startsWith("https://") || safeHref.startsWith("http://"))
+                    )
+                    if (!canRenderHref || !safeHref) return null
+
+                    return (
+                      <li key={`${item.icon}-${item.label}-${safeHref}`}>
+                        <a href={safeHref} target="_blank" rel="noopener noreferrer">
+                          <AppIcon name={item.icon} aria-hidden="true" /> {item.label}
+                        </a>
+                      </li>
+                    )
+                  })()
                 ))}
               </ul>
             </div>

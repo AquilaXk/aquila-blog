@@ -3,7 +3,7 @@ import styled from "@emotion/styled"
 import AppIcon from "src/components/icons/AppIcon"
 import { Emoji } from "src/components/Emoji"
 import { AdminProfile, useAdminProfile } from "src/hooks/useAdminProfile"
-import { resolveServiceLinks } from "src/libs/utils/profileCardLinks"
+import { resolveRenderableProfileLinkHref, resolveServiceLinks } from "src/libs/utils/profileCardLinks"
 
 type Props = {
   initialAdminProfile?: AdminProfile | null
@@ -20,17 +20,18 @@ const ServiceCard: React.FC<Props> = ({ initialAdminProfile = null }) => {
         <Emoji className="titleEmoji">🌟</Emoji> Service
       </StyledTitle>
       <StyledWrapper>
-        {links.map((item) => (
-          <a
-            key={`${item.href}-${item.label}`}
-            href={item.href}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <AppIcon name={item.icon} className="icon" />
-            <div className="name">{item.label}</div>
-          </a>
-        ))}
+        {links.map((item) => {
+          const safeHref = resolveRenderableProfileLinkHref("service", item.href)
+          const canRenderHref = Boolean(safeHref && (safeHref.startsWith("https://") || safeHref.startsWith("http://")))
+          if (!canRenderHref || !safeHref) return null
+
+          return (
+            <a key={`${safeHref}-${item.label}`} href={safeHref} rel="noopener noreferrer" target="_blank">
+              <AppIcon name={item.icon} className="icon" />
+              <div className="name">{item.label}</div>
+            </a>
+          )
+        })}
       </StyledWrapper>
     </>
   )

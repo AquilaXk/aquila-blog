@@ -647,7 +647,7 @@ print_section "Compose PS"
 compose ps || true
 
 print_section "Container Health"
-for svc in back_blue back_green caddy cloudflared autoheal loki promtail prometheus grafana; do
+for svc in back_blue back_green back_read back_admin back_worker caddy cloudflared autoheal loki promtail prometheus grafana; do
   cid="$(compose ps -q "${svc}" 2>/dev/null | head -n 1 || true)"
   if [[ -z "${cid}" ]]; then
     echo "${svc}: MISSING"
@@ -660,7 +660,9 @@ for svc in back_blue back_green caddy cloudflared autoheal loki promtail prometh
 done
 
 print_section "Caddy Upstream"
-grep -nE 'reverse_proxy back[-_](blue|green|active):8080' "${CADDY_HOST_FILE}" || true
+grep -nE 'reverse_proxy (\{\$(ADMIN_API_UPSTREAM|READ_API_UPSTREAM):back[-_](blue|green|read|admin)\}:8080|back[-_](blue|green|read|admin|active):8080)' "${CADDY_HOST_FILE}" || true
+echo "ADMIN_API_UPSTREAM=$(trim_quotes "$(env_value "ADMIN_API_UPSTREAM")")"
+echo "READ_API_UPSTREAM=$(trim_quotes "$(env_value "READ_API_UPSTREAM")")"
 
 print_section "Caddy Mount Sync"
 host_upstream="$(awk '$1 == "reverse_proxy" && $2 ~ /^back[-_](blue|green):8080$/ {split($2, a, ":"); gsub("-", "_", a[1]); print a[1]; exit}' "${CADDY_HOST_FILE}" || true)"
@@ -689,11 +691,27 @@ fi
 print_section "Robots.txt (Origin vs Public)"
 print_robots_status
 
+print_section "Notification Snapshot Route (Origin vs Public)"
+internal_snapshot_code="$(
+  docker run --rm --network "${NETWORK_NAME}" curlimages/curl:8.7.1 \
+    -s -o /dev/null -w "%{http_code}" \
+    --connect-timeout 3 \
+    --max-time 8 \
+    -H "Host: ${API_DOMAIN}" \
+    "http://caddy:80/member/api/v1/notifications/snapshot" || true
+)"
+public_snapshot_code="$(
+  curl -sS --connect-timeout 5 -m 15 -o /dev/null -w "%{http_code}" \
+    "https://${API_DOMAIN}/member/api/v1/notifications/snapshot" || true
+)"
+echo "internal_snapshot=${internal_snapshot_code:-none}"
+echo "public_snapshot=${public_snapshot_code:-none}"
+
 print_section "Back Container States"
-docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green)-1|NAMES' || true
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'blog_home-back_(blue|green|read|admin|worker)-1|NAMES' || true
 
 print_section "Back Container Memory"
-docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | grep -E 'blog_home-back_(blue|green)-1|NAME' || true
+docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | grep -E 'blog_home-back_(blue|green|read|admin|worker)-1|NAME' || true
 
 print_section "Caddy Logs (tail 80)"
 compose logs --no-color --tail=80 caddy || true

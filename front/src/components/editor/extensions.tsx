@@ -9,9 +9,11 @@ import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
 import TaskItem from "@tiptap/extension-task-item"
 import TaskList from "@tiptap/extension-task-list"
+import { NodeSelection } from "@tiptap/pm/state"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import AppIcon from "src/components/icons/AppIcon"
 import {
+  ClipboardEvent as ReactClipboardEvent,
   PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -32,6 +34,7 @@ import {
 import FormulaRender from "src/libs/markdown/FormulaRender"
 import { extractNormalizedMermaidSource } from "src/libs/markdown/mermaid"
 import { TABLE_MIN_ROW_HEIGHT_PX } from "src/libs/markdown/tableMetadata"
+import { extractPlainTextFromHtml } from "src/libs/markdown/htmlToMarkdown"
 import {
   formatReadableFileSize,
   inferLinkProvider,
@@ -570,7 +573,7 @@ const MermaidBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   )
 }
 
-const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
+const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) => {
   const menuId = useId()
   const menuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -704,6 +707,53 @@ const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
     setLanguageSearch("")
   }
 
+  const handleCodePaste = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
+    const plainText = event.clipboardData.getData("text/plain") || ""
+    const html = event.clipboardData.getData("text/html") || ""
+    const nextText = plainText || (html ? extractPlainTextFromHtml(html) : "")
+    if (!nextText) return
+
+    const { selection } = editor.state
+    let replaceRange: { from: number; to: number } | null = null
+
+    if (selection instanceof NodeSelection && selection.node.type.name === "codeBlock") {
+      replaceRange = {
+        from: selection.from + 1,
+        to: selection.to - 1,
+      }
+    } else {
+      const { $from } = selection
+      for (let depth = $from.depth; depth >= 0; depth -= 1) {
+        if ($from.node(depth).type.name !== "codeBlock") continue
+        replaceRange = {
+          from: selection.from,
+          to: selection.to,
+        }
+        break
+      }
+    }
+
+    if (!replaceRange && typeof getPos === "function") {
+      const codeBlockPos = getPos()
+      if (typeof codeBlockPos === "number") {
+        replaceRange = {
+          from: codeBlockPos + 1,
+          to: codeBlockPos + node.nodeSize - 1,
+        }
+      }
+    }
+
+    if (!replaceRange) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const normalizedText = nextText.replace(/\r\n?/g, "\n")
+    const tr = editor.state.tr.insertText(normalizedText, replaceRange.from, replaceRange.to)
+    editor.view.dispatch(tr.scrollIntoView())
+    editor.view.focus()
+  }, [editor, getPos, node.nodeSize])
+
   return (
     <CodeBlockEditorWrapper data-selected={selected}>
       <CodeBlockEditorHeader>
@@ -759,7 +809,7 @@ const CodeBlockView = ({ node, updateAttributes, selected }: NodeViewProps) => {
         </CodeLanguagePicker>
       </CodeBlockEditorHeader>
       <CodeBlockEditorSurface>
-        <div ref={shellRef} className="aq-code-shell">
+        <div ref={shellRef} className="aq-code-shell" onPaste={handleCodePaste}>
           <pre
             className="aq-code-highlight-layer"
             aria-hidden="true"

@@ -744,13 +744,9 @@ test.describe("block editor authoring flow", () => {
     expect(tableWidthShape.firstCellWidth).toBeLessThanOrEqual(320)
 
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
-    const columnQuickAddButton = page
-      .getByTestId("table-column-rail")
-      .getByRole("button", { name: "열 추가", exact: true })
     const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
-    const rowQuickAddButton = page
-      .getByTestId("table-row-rail")
-      .getByRole("button", { name: "행 추가", exact: true })
+    const columnQuickAddButton = page.getByTestId("table-column-add-bar")
+    const rowQuickAddButton = page.getByTestId("table-row-add-bar")
     const tableCornerButton = page.getByTestId("table-corner-handle").getByRole("button", { name: "표 메뉴" })
 
     await expect(columnRailButton).toBeVisible()
@@ -759,7 +755,7 @@ test.describe("block editor authoring flow", () => {
     await expect(rowQuickAddButton).toBeVisible()
     await expect(tableCornerButton).toBeVisible()
 
-    const compactHandleMetrics = await Promise.all(
+    const [columnGripRect, columnAddRect, rowGripRect, rowAddRect, cornerRect] = await Promise.all(
       [columnRailButton, columnQuickAddButton, rowRailButton, rowQuickAddButton, tableCornerButton].map((locator) =>
         locator.evaluate((element) => {
           const rect = element.getBoundingClientRect()
@@ -767,10 +763,15 @@ test.describe("block editor authoring flow", () => {
         })
       )
     )
-    compactHandleMetrics.forEach(({ width, height }) => {
-      expect(width).toBeLessThanOrEqual(30)
-      expect(height).toBeLessThanOrEqual(30)
-    })
+    expect(columnGripRect.width).toBeGreaterThan(columnGripRect.height)
+    expect(rowGripRect.height).toBeGreaterThan(rowGripRect.width)
+    expect(columnAddRect.height).toBeGreaterThan(columnAddRect.width * 3)
+    expect(rowAddRect.width).toBeGreaterThan(rowAddRect.height * 3)
+    expect(cornerRect.width).toBeLessThanOrEqual(26)
+    expect(cornerRect.height).toBeLessThanOrEqual(26)
+
+    await rowRailButton.click()
+    await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
 
     await columnQuickAddButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
@@ -779,8 +780,12 @@ test.describe("block editor authoring flow", () => {
     await expect(page.locator("table tr")).toHaveCount(4)
 
     await columnRailButton.click()
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
 
     const columnMenu = page.getByTestId("table-column-menu")
+    if ((await columnMenu.count()) === 0) {
+      await columnRailButton.click()
+    }
     await expect(columnMenu).toBeVisible()
     await columnMenu.getByRole("button", { name: "열 선택" }).click()
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
@@ -815,8 +820,12 @@ test.describe("block editor authoring flow", () => {
     await expect(columnRailButton).toBeVisible()
     await columnRailButton.hover()
     await columnRailButton.click()
+    await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
 
     const columnMenu = page.getByTestId("table-column-menu")
+    if ((await columnMenu.count()) === 0) {
+      await columnRailButton.click()
+    }
     await expect(columnMenu).toBeVisible()
     await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
@@ -864,11 +873,13 @@ test.describe("block editor authoring flow", () => {
           const viewportWidth = window.innerWidth
           const viewportHeight = window.innerHeight
           const columnRail = document.querySelector<HTMLElement>("[data-testid='table-column-rail']")
+          const columnAddBar = document.querySelector<HTMLElement>("[data-testid='table-column-add-bar']")
           const corner = document.querySelector<HTMLElement>("[data-testid='table-corner-handle']")
           const rowRail = document.querySelector<HTMLElement>("[data-testid='table-row-rail']")
+          const rowAddBar = document.querySelector<HTMLElement>("[data-testid='table-row-add-bar']")
           const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
           const content = document.querySelector<HTMLElement>(".aq-block-editor__content")
-          if (!columnRail || !corner || !rowRail || !table || !content) return null
+          if (!columnRail || !columnAddBar || !corner || !rowRail || !rowAddBar || !table || !content) return null
 
           const toRect = (element: HTMLElement) => {
             const rect = element.getBoundingClientRect()
@@ -891,11 +902,15 @@ test.describe("block editor authoring flow", () => {
             tableWidth: Math.round(table.getBoundingClientRect().width),
             contentWidth: Math.round(content.getBoundingClientRect().width),
             columnRail: toRect(columnRail),
+            columnAddBar: toRect(columnAddBar),
             corner: toRect(corner),
             rowRail: toRect(rowRail),
+            rowAddBar: toRect(rowAddBar),
             cornerWithinViewport: withinViewport(toRect(corner)),
             rowWithinViewport: withinViewport(toRect(rowRail)),
             columnWithinViewport: withinViewport(toRect(columnRail)),
+            rowAddWithinViewport: withinViewport(toRect(rowAddBar)),
+            columnAddWithinViewport: withinViewport(toRect(columnAddBar)),
             columnCount: table.querySelectorAll("tr:first-child > th, tr:first-child > td").length,
           }
         })
@@ -910,6 +925,8 @@ test.describe("block editor authoring flow", () => {
               cornerWithinViewport: metrics.cornerWithinViewport,
               rowWithinViewport: metrics.rowWithinViewport,
               columnWithinViewport: metrics.columnWithinViewport,
+              rowAddWithinViewport: metrics.rowAddWithinViewport,
+              columnAddWithinViewport: metrics.columnAddWithinViewport,
             }
           },
           { timeout: 5000 }
@@ -919,6 +936,8 @@ test.describe("block editor authoring flow", () => {
           cornerWithinViewport: true,
           rowWithinViewport: true,
           columnWithinViewport: true,
+          rowAddWithinViewport: true,
+          columnAddWithinViewport: true,
         })
 
       const metrics = await readMetrics()
@@ -931,6 +950,8 @@ test.describe("block editor authoring flow", () => {
       expect(metrics.cornerWithinViewport).toBe(true)
       expect(metrics.rowWithinViewport).toBe(true)
       expect(metrics.columnWithinViewport).toBe(true)
+      expect(metrics.rowAddWithinViewport).toBe(true)
+      expect(metrics.columnAddWithinViewport).toBe(true)
 
       return metrics
     }
@@ -940,14 +961,21 @@ test.describe("block editor authoring flow", () => {
 
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     await columnRailButton.click()
-    await page.getByTestId("table-column-menu").getByRole("button", { name: "오른쪽에 삽입" }).click()
+    const columnMenu = page.getByTestId("table-column-menu")
+    if ((await columnMenu.count()) === 0) {
+      await columnRailButton.click()
+    }
+    await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
 
     const afterInsertMetrics = await assertHandlesInViewport()
     expect(afterInsertMetrics.columnCount).toBe(4)
 
     await columnRailButton.click()
-    await page.getByTestId("table-column-menu").getByRole("button", { name: "열 삭제" }).click()
+    if ((await columnMenu.count()) === 0) {
+      await columnRailButton.click()
+    }
+    await columnMenu.getByRole("button", { name: "열 삭제" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
 
     const afterDeleteMetrics = await assertHandlesInViewport()

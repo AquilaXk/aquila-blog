@@ -409,8 +409,6 @@ type BlockSelectionPointerEventLike = {
 const normalizeSlashSearchText = (value: string) => value.trim().toLowerCase()
 
 const compactSlashSearchText = (value: string) => normalizeSlashSearchText(value).replace(/\s+/g, "")
-const ENABLE_DESKTOP_TABLE_COLUMN_RAIL = process.env.NEXT_PUBLIC_EDITOR_DESKTOP_TABLE_COLUMN_RAIL === "enabled"
-
 const LIST_ITEM_SELECTOR =
   "li[data-type='taskItem'], li[data-task-item='true'], li[data-list-item='true'], li[data-type='listItem']"
 const LIST_CONTAINER_SELECTOR =
@@ -769,15 +767,15 @@ const BLOCK_OUTER_SELECT_VERTICAL_MARGIN_PX = 10
 const TABLE_ROW_RESIZE_EDGE_PX = 6
 const TABLE_COLUMN_RESIZE_GUARD_PX = 12
 const TABLE_RAIL_EDGE_PADDING_PX = 12
-const TABLE_RAIL_BUTTON_SIZE_PX = 28
-const TABLE_CORNER_GROUP_WIDTH_PX = 28
-const TABLE_COLUMN_AXIS_GROUP_WIDTH_PX = 60
-const TABLE_ROW_AXIS_GROUP_WIDTH_PX = 28
-const TABLE_ROW_AXIS_GROUP_HEIGHT_PX = 60
-const TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX = 10
-const TABLE_COLUMN_RAIL_TRACK_OFFSET_PX = 14
-const TABLE_COLUMN_RAIL_BUTTON_GAP_PX = 4
-const TABLE_SIDE_RAIL_OFFSET_PX = 38
+const TABLE_CORNER_BUTTON_SIZE_PX = 22
+const TABLE_CORNER_OFFSET_PX = 34
+const TABLE_COLUMN_GRIP_WIDTH_PX = 40
+const TABLE_COLUMN_GRIP_HEIGHT_PX = 22
+const TABLE_ROW_GRIP_WIDTH_PX = 22
+const TABLE_ROW_GRIP_HEIGHT_PX = 40
+const TABLE_ADD_BAR_THICKNESS_PX = 28
+const TABLE_ADD_BAR_GAP_PX = 10
+const TABLE_ADD_BAR_MIN_LENGTH_PX = 96
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
 const TABLE_MENU_ESTIMATED_WIDTH_PX = 308
@@ -818,64 +816,83 @@ const resolveDesktopTableRailLayout = (
   viewportWidth: number,
   viewportHeight: number
 ) => {
-  const trackLeft = clampViewportPosition(
+  const visibleTableWidth = Math.max(0, Math.round(trackWidth))
+  const visibleTableHeight = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.height))
+  const rowAddBarWidth = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.width))
+  const columnGripTop = clampViewportPosition(
+    Math.round(state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2)),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportHeight,
+    TABLE_COLUMN_GRIP_HEIGHT_PX
+  )
+  const cornerTop = clampViewportPosition(
+    Math.round(state.tableTop - TABLE_CORNER_OFFSET_PX),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportHeight,
+    TABLE_CORNER_BUTTON_SIZE_PX
+  )
+  const cornerLeft = clampViewportPosition(
+    Math.round(state.tableLeft + visibleTableWidth - TABLE_CORNER_BUTTON_SIZE_PX),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_CORNER_BUTTON_SIZE_PX
+  )
+  const columnGripLeft = clampViewportPosition(
+    Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_COLUMN_GRIP_WIDTH_PX
+  )
+  const columnAddBarLeft = clampViewportPosition(
+    Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_ADD_BAR_THICKNESS_PX
+  )
+  const columnAddBarTop = clampViewportPosition(
+    Math.round(state.tableTop),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportHeight,
+    visibleTableHeight
+  )
+  const rowGripTop = clampViewportPosition(
+    Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)),
+    Math.max(columnGripTop + TABLE_COLUMN_GRIP_HEIGHT_PX + 8, TABLE_RAIL_EDGE_PADDING_PX),
+    viewportHeight,
+    TABLE_ROW_GRIP_HEIGHT_PX
+  )
+  const rowGripLeft = clampViewportPosition(
+    Math.round(state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2)),
+    TABLE_RAIL_EDGE_PADDING_PX,
+    viewportWidth,
+    TABLE_ROW_GRIP_WIDTH_PX
+  )
+  const rowAddBarLeft = clampViewportPosition(
     Math.round(state.tableLeft),
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportWidth,
-    Math.max(0, Math.round(trackWidth))
+    rowAddBarWidth
   )
-  const trackTop = clampViewportPosition(
-    Math.round(state.tableTop - TABLE_COLUMN_RAIL_TRACK_OFFSET_PX),
+  const rowAddBarTop = clampViewportPosition(
+    Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX),
     TABLE_RAIL_EDGE_PADDING_PX,
     viewportHeight,
-    TABLE_COLUMN_RAIL_TRACK_HEIGHT_PX
-  )
-  const railButtonTop = clampViewportPosition(
-    trackTop - TABLE_RAIL_BUTTON_SIZE_PX - TABLE_COLUMN_RAIL_BUTTON_GAP_PX,
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportHeight,
-    TABLE_RAIL_BUTTON_SIZE_PX
-  )
-  const cornerTop = clampViewportPosition(
-    railButtonTop,
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportHeight,
-    TABLE_RAIL_BUTTON_SIZE_PX
-  )
-  const cornerLeft = clampViewportPosition(
-    trackLeft + Math.max(0, Math.round(trackWidth) - TABLE_CORNER_GROUP_WIDTH_PX),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_CORNER_GROUP_WIDTH_PX
-  )
-  const columnRailLeft = clampViewportPosition(
-    Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_AXIS_GROUP_WIDTH_PX / 2)),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_COLUMN_AXIS_GROUP_WIDTH_PX
-  )
-  const rowRailTop = clampViewportPosition(
-    Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_AXIS_GROUP_HEIGHT_PX / 2)),
-    Math.max(trackTop + 32, TABLE_RAIL_EDGE_PADDING_PX),
-    viewportHeight,
-    TABLE_ROW_AXIS_GROUP_HEIGHT_PX
-  )
-  const rowRailLeft = clampViewportPosition(
-    Math.round(trackLeft - TABLE_SIDE_RAIL_OFFSET_PX),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_ROW_AXIS_GROUP_WIDTH_PX
+    TABLE_ADD_BAR_THICKNESS_PX
   )
 
   return {
-    trackLeft,
-    trackTop,
     cornerLeft,
     cornerTop,
-    columnRailLeft,
-    columnRailTop: railButtonTop,
-    rowRailLeft,
-    rowRailTop,
+    columnGripLeft,
+    columnGripTop,
+    columnAddBarLeft,
+    columnAddBarTop,
+    columnAddBarHeight: visibleTableHeight,
+    rowGripLeft,
+    rowGripTop,
+    rowAddBarLeft,
+    rowAddBarTop,
+    rowAddBarWidth,
   }
 }
 
@@ -1722,7 +1739,6 @@ const BlockEditorShell = ({
   const [isBubbleInlineColorMenuOpen, setIsBubbleInlineColorMenuOpen] = useState(false)
   const [blockMenuState, setBlockMenuState] = useState<BlockMenuState>(null)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
-  const [isDesktopTableRailViewport, setIsDesktopTableRailViewport] = useState(false)
   const [hoveredBlockIndex, setHoveredBlockIndex] = useState<number | null>(null)
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null)
   const [clickedBlockIndex, setClickedBlockIndex] = useState<number | null>(null)
@@ -2757,6 +2773,26 @@ const BlockEditorShell = ({
     []
   )
 
+  const isCurrentTableRowSelection = useCallback(() => {
+    const currentEditor = editorRef.current
+    if (!currentEditor) return false
+    const { selection } = currentEditor.state
+    if (!(selection instanceof CellSelection)) return false
+    let rect: ReturnType<typeof selectedRect> | null = null
+    try {
+      rect = selectedRect(currentEditor.state)
+    } catch {
+      rect = null
+    }
+    if (!rect) return false
+    return (
+      rect.top >= 0 &&
+      rect.bottom === rect.top + 1 &&
+      rect.left === 0 &&
+      rect.right === rect.map.width
+    )
+  }, [])
+
   const selectTableColumnByIndex = useCallback(
     (columnIndex: number) => {
       const currentEditor = editorRef.current
@@ -2778,6 +2814,49 @@ const BlockEditorShell = ({
       return true
     },
     [getCurrentSelectedTableRect]
+  )
+
+  const selectTableRowByIndex = useCallback(
+    (rowIndex: number) => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      const rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect || rowIndex < 0 || rowIndex >= rect.map.height) return false
+
+      const anchorCellPos = rect.tableStart + rect.map.positionAt(rowIndex, 0, rect.table)
+      const headCellPos =
+        rect.tableStart + rect.map.positionAt(rowIndex, rect.map.width - 1, rect.table)
+      const anchorResolved = resolveDocPosSafe(currentEditor, anchorCellPos)
+      const headResolved = resolveDocPosSafe(currentEditor, headCellPos)
+      if (!anchorResolved || !headResolved) return false
+
+      currentEditor.view.dispatch(
+        currentEditor.state.tr.setSelection(CellSelection.rowSelection(anchorResolved, headResolved))
+      )
+      currentEditor.view.focus()
+      return true
+    },
+    [getCurrentSelectedTableRect]
+  )
+
+  const appendTableAxisAtEnd = useCallback(
+    (axis: "row" | "column") => {
+      const currentEditor = editorRef.current
+      if (!currentEditor) return false
+      const rect = getCurrentSelectedTableRect(currentEditor)
+      if (!rect) return false
+
+      const selected =
+        axis === "column"
+          ? selectTableColumnByIndex(rect.map.width - 1)
+          : selectTableRowByIndex(rect.map.height - 1)
+      if (!selected) return false
+
+      const chain = currentEditor.chain().focus()
+      axis === "column" ? chain.addColumnAfter() : chain.addRowAfter()
+      return chain.run()
+    },
+    [getCurrentSelectedTableRect, selectTableColumnByIndex, selectTableRowByIndex]
   )
 
   const getCurrentTableColumnResizeContext = useCallback(
@@ -5917,6 +5996,19 @@ const BlockEditorShell = ({
     [closeTableMenu, isCurrentTableColumnSelection, openSelectionAwareTableMenu, selectTableColumnByIndex]
   )
 
+  const handleTableRowGripClick = useCallback(
+    (anchorRect: DOMRect) => {
+      const alreadySelected = isCurrentTableRowSelection()
+      selectCurrentTableAxis("row")
+      if (alreadySelected) {
+        openSelectionAwareTableMenu("row", anchorRect)
+        return
+      }
+      closeTableMenu()
+    },
+    [closeTableMenu, isCurrentTableRowSelection, openSelectionAwareTableMenu, selectCurrentTableAxis]
+  )
+
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
     if (isTableMode) return
     setBlockMenuState((prev) =>
@@ -6028,15 +6120,6 @@ const BlockEditorShell = ({
     if (typeof window === "undefined") return
     const mediaQuery = window.matchMedia(BLOCK_HANDLE_MEDIA_QUERY)
     const sync = () => setIsCoarsePointer(mediaQuery.matches)
-    sync()
-    mediaQuery.addEventListener?.("change", sync)
-    return () => mediaQuery.removeEventListener?.("change", sync)
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const mediaQuery = window.matchMedia(DESKTOP_TABLE_RAIL_MEDIA_QUERY)
-    const sync = () => setIsDesktopTableRailViewport(!mediaQuery.matches)
     sync()
     mediaQuery.addEventListener?.("change", sync)
     return () => mediaQuery.removeEventListener?.("change", sync)
@@ -6643,12 +6726,6 @@ const BlockEditorShell = ({
         : tableQuickRailState.width,
     [tableQuickRailState.columnSegments, tableQuickRailState.width]
   )
-  const shouldShowTableColumnRail =
-    ENABLE_DESKTOP_TABLE_COLUMN_RAIL &&
-    shouldShowTableHandles &&
-    isDesktopTableRailViewport &&
-    tableQuickRailState.columnSegments.length > 0 &&
-    desktopTableRailTrackWidth > 0
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
     return resolveDesktopTableRailLayout(
@@ -7145,65 +7222,29 @@ const BlockEditorShell = ({
           : null}
         {shouldShowTableHandles ? (
           <>
-            {shouldShowTableColumnRail ? (
-              <TableColumnRailTrack
-                data-testid="table-column-rail-track"
-                data-table-column-rail-track="true"
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!isTableMode && !tableMenuState) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
+            {isCurrentTableColumnSelection(tableQuickRailState.columnIndex) ? (
+              <TableAxisSelectionOutline
+                data-axis="column"
+                data-testid="table-column-selection-outline"
                 style={{
-                  left: `${desktopTableRailLayout?.trackLeft ?? tableQuickRailState.tableLeft}px`,
-                  top: `${desktopTableRailLayout?.trackTop ?? Math.max(12, tableQuickRailState.tableTop - 18)}px`,
-                  width: `${desktopTableRailTrackWidth}px`,
+                  left: `${Math.round(tableQuickRailState.columnLeft)}px`,
+                  top: `${Math.round(tableQuickRailState.tableTop)}px`,
+                  width: `${Math.round(tableQuickRailState.columnWidth)}px`,
+                  height: `${Math.round(tableQuickRailState.height)}px`,
                 }}
-              >
-                {tableQuickRailState.columnSegments.map((segment, index) => {
-                  const isActive =
-                    index === tableQuickRailState.columnIndex || isCurrentTableColumnSelection(index)
-
-                  return (
-                    <TableColumnRailSegment
-                      key={`column-rail-${index}`}
-                      type="button"
-                      aria-label={`열 ${index + 1} 선택`}
-                      data-testid={`table-column-rail-segment-${index}`}
-                      data-active={isActive}
-                      style={{
-                        left: `${segment.left}px`,
-                        width: `${segment.width}px`,
-                      }}
-                      onMouseDown={handleToolbarButtonMouseDown}
-                      onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        handleTableColumnRailSegmentClick(index, event.currentTarget.getBoundingClientRect())
-                      }}
-                    >
-                      {index < tableQuickRailState.columnSegments.length - 1 &&
-                      !tableColumnDragGuideState.visible ? (
-                        <TableColumnRailResizeHandle
-                          role="presentation"
-                          aria-hidden="true"
-                          data-testid={`table-column-rail-resize-${index}`}
-                          onClick={(event: ReactMouseEvent<HTMLSpanElement>) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                          }}
-                          onPointerDown={(event: React.PointerEvent<HTMLSpanElement>) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            startTableColumnRailResize(event.pointerId, index, event.clientX)
-                          }}
-                        />
-                      ) : null}
-                    </TableColumnRailSegment>
-                  )
-                })}
-              </TableColumnRailTrack>
+              />
+            ) : null}
+            {isCurrentTableRowSelection() ? (
+              <TableAxisSelectionOutline
+                data-axis="row"
+                data-testid="table-row-selection-outline"
+                style={{
+                  left: `${Math.round(tableQuickRailState.tableLeft)}px`,
+                  top: `${Math.round(tableQuickRailState.rowTop)}px`,
+                  width: `${Math.round(tableQuickRailState.width)}px`,
+                  height: `${Math.round(tableQuickRailState.rowHeight)}px`,
+                }}
+              />
             ) : null}
             <TableCornerHandle
               data-table-corner-handle="true"
@@ -7217,15 +7258,16 @@ const BlockEditorShell = ({
               style={{
                 left: `${
                   desktopTableRailLayout?.cornerLeft ??
-                  Math.round(tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width - TABLE_RAIL_BUTTON_SIZE_PX))
+                  Math.round(tableQuickRailState.tableLeft + Math.max(0, tableQuickRailState.width - TABLE_CORNER_BUTTON_SIZE_PX))
                 }px`,
-                top: `${desktopTableRailLayout?.cornerTop ?? Math.max(12, tableQuickRailState.top - 42)}px`,
+                top: `${desktopTableRailLayout?.cornerTop ?? Math.round(tableQuickRailState.tableTop - TABLE_CORNER_OFFSET_PX)}px`,
               }}
             >
               <TableHandleButton
                 type="button"
                 title="표 메뉴"
                 aria-label="표 메뉴"
+                data-testid="table-corner-handle-button"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
@@ -7235,62 +7277,9 @@ const BlockEditorShell = ({
                 <TableHandleIcon kind="more" />
               </TableHandleButton>
             </TableCornerHandle>
-            {!shouldShowTableColumnRail ? (
-              <TableAxisRail
-                data-testid="table-column-rail"
-                data-table-axis-rail="true"
-                data-axis="column"
-                onPointerEnter={cancelTableQuickRailHide}
-                onPointerLeave={() => {
-                  if (!isTableMode && !tableMenuState) {
-                    scheduleTableQuickRailHide()
-                  }
-                }}
-                style={{
-                  left: `${
-                    desktopTableRailLayout?.columnRailLeft ??
-                    Math.max(
-                      tableQuickRailState.tableLeft,
-                      Math.round(
-                        tableQuickRailState.columnLeft +
-                          Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_AXIS_GROUP_WIDTH_PX / 2)
-                      )
-                    )
-                  }px`,
-                  top: `${desktopTableRailLayout?.columnRailTop ?? Math.max(12, tableQuickRailState.top - 42)}px`,
-                }}
-              >
-                <TableQuickRailButton
-                  type="button"
-                  title="열 메뉴"
-                  aria-label="열 메뉴"
-                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    openSelectionAwareTableMenu("column", event.currentTarget.getBoundingClientRect())
-                  }}
-                >
-                  <TableHandleIcon kind="column" />
-                </TableQuickRailButton>
-                <TableQuickAddButton
-                  type="button"
-                  title="열 추가"
-                  aria-label="열 추가"
-                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    runTableMenuEditorAction((activeEditor) => {
-                      activeEditor.chain().focus().addColumnAfter().run()
-                    })
-                  }}
-                >
-                  <TableHandleIcon kind="plus" />
-                </TableQuickAddButton>
-              </TableAxisRail>
-            ) : null}
             <TableAxisRail
-              data-testid="table-row-rail"
               data-table-axis-rail="true"
+              data-testid="table-row-rail"
               data-axis="row"
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
@@ -7299,43 +7288,126 @@ const BlockEditorShell = ({
                 }
               }}
               style={{
-                left: `${desktopTableRailLayout?.rowRailLeft ?? tableQuickRailState.left}px`,
+                left: `${
+                  desktopTableRailLayout?.rowGripLeft ??
+                  Math.round(tableQuickRailState.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
+                }px`,
                 top: `${
-                  desktopTableRailLayout?.rowRailTop ??
-                  Math.max(
-                    tableQuickRailState.top + 42,
-                    tableQuickRailState.rowTop + Math.round(Math.max(0, tableQuickRailState.rowHeight / 2 - 16))
+                  desktopTableRailLayout?.rowGripTop ??
+                  Math.round(
+                    tableQuickRailState.rowTop + Math.max(0, tableQuickRailState.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
                   )
                 }px`,
               }}
             >
               <TableQuickRailButton
                 type="button"
+                data-axis="row"
+                data-active={isCurrentTableRowSelection()}
                 title="행 메뉴"
                 aria-label="행 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  openSelectionAwareTableMenu("row", event.currentTarget.getBoundingClientRect())
+                  handleTableRowGripClick(event.currentTarget.getBoundingClientRect())
                 }}
               >
-                <TableHandleIcon kind="row" />
+                <TableHandleIcon kind="grip" />
               </TableQuickRailButton>
-              <TableQuickAddButton
+            </TableAxisRail>
+            <TableAxisRail
+              data-table-axis-rail="true"
+              data-testid="table-column-rail"
+              data-axis="column"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!isTableMode && !tableMenuState) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              style={{
+                left: `${
+                  desktopTableRailLayout?.columnGripLeft ??
+                  Math.round(
+                    tableQuickRailState.columnLeft + Math.max(0, tableQuickRailState.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
+                  )
+                }px`,
+                top: `${
+                  desktopTableRailLayout?.columnGripTop ??
+                  Math.round(tableQuickRailState.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
+                }px`,
+              }}
+            >
+              <TableQuickRailButton
                 type="button"
-                title="행 추가"
-                aria-label="행 추가"
+                data-axis="column"
+                data-active={isCurrentTableColumnSelection(tableQuickRailState.columnIndex)}
+                title="열 메뉴"
+                aria-label="열 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  runTableMenuEditorAction((activeEditor) => {
-                    activeEditor.chain().focus().addRowAfter().run()
-                  })
+                  handleTableColumnRailSegmentClick(
+                    tableQuickRailState.columnIndex,
+                    event.currentTarget.getBoundingClientRect()
+                  )
                 }}
               >
-                <TableHandleIcon kind="plus" />
-              </TableQuickAddButton>
+                <TableHandleIcon kind="grip" />
+              </TableQuickRailButton>
             </TableAxisRail>
+            <TableTrailingAddBar
+              type="button"
+              data-table-axis-rail="true"
+              data-testid="table-column-add-bar"
+              data-axis="column"
+              title="열 추가"
+              aria-label="열 추가"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!isTableMode && !tableMenuState) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                appendTableAxisAtEnd("column")
+              }}
+              style={{
+                left: `${desktopTableRailLayout?.columnAddBarLeft ?? Math.round(tableQuickRailState.tableLeft + tableQuickRailState.width + TABLE_ADD_BAR_GAP_PX)}px`,
+                top: `${desktopTableRailLayout?.columnAddBarTop ?? Math.round(tableQuickRailState.tableTop)}px`,
+                height: `${desktopTableRailLayout?.columnAddBarHeight ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.height))}px`,
+              }}
+            >
+              <TableHandleIcon kind="plus" />
+            </TableTrailingAddBar>
+            <TableTrailingAddBar
+              type="button"
+              data-table-axis-rail="true"
+              data-testid="table-row-add-bar"
+              data-axis="row"
+              title="행 추가"
+              aria-label="행 추가"
+              onPointerEnter={cancelTableQuickRailHide}
+              onPointerLeave={() => {
+                if (!isTableMode && !tableMenuState) {
+                  scheduleTableQuickRailHide()
+                }
+              }}
+              onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                event.preventDefault()
+                event.stopPropagation()
+                appendTableAxisAtEnd("row")
+              }}
+              style={{
+                left: `${desktopTableRailLayout?.rowAddBarLeft ?? Math.round(tableQuickRailState.tableLeft)}px`,
+                top: `${desktopTableRailLayout?.rowAddBarTop ?? Math.round(tableQuickRailState.tableTop + tableQuickRailState.height + TABLE_ADD_BAR_GAP_PX)}px`,
+                width: `${desktopTableRailLayout?.rowAddBarWidth ?? Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(tableQuickRailState.width))}px`,
+              }}
+            >
+              <TableHandleIcon kind="plus" />
+            </TableTrailingAddBar>
           </>
         ) : null}
         {tableMenuState ? (
@@ -9059,9 +9131,22 @@ const FloatingBubbleToolbar = styled.div`
   }
 `
 
-type TableHandleIconKind = "table" | "row" | "column" | "more" | "plus"
+type TableHandleIconKind = "table" | "row" | "column" | "more" | "plus" | "grip"
 
 const TableHandleIcon = ({ kind }: { kind: TableHandleIconKind }) => {
+  if (kind === "grip") {
+    return (
+      <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <circle cx="5" cy="4" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="4" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="5" cy="8" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="8" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="5" cy="12" r="0.9" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="12" r="0.9" fill="currentColor" stroke="none" />
+      </TableHandleIconSvg>
+    )
+  }
+
   if (kind === "more") {
     return (
       <TableHandleIconSvg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -9123,26 +9208,23 @@ const TableHandleIconSvg = styled.svg`
 
 const TableAxisRail = styled.div`
   position: fixed;
-  z-index: 58;
+  z-index: 60;
   display: flex;
   align-items: center;
-  gap: 0.2rem;
   pointer-events: auto;
 
   &[data-axis="column"] {
-    flex-direction: row;
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   &[data-axis="row"] {
-    flex-direction: column;
-    justify-content: flex-start;
+    justify-content: center;
   }
 `
 
 const TableCornerHandle = styled.div`
   position: fixed;
-  z-index: 58;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9293,20 +9375,31 @@ const TableColumnResizeBoundaryHandle = styled.button`
   }
 `
 
+const TableAxisSelectionOutline = styled.div`
+  position: fixed;
+  z-index: 58;
+  pointer-events: none;
+  border: 2px solid rgba(59, 130, 246, 0.96);
+  border-radius: 0.2rem;
+  box-shadow: 0 0 0 1px rgba(30, 64, 175, 0.14);
+`
+
 const TableQuickRailButton = styled.button`
   all: unset;
   position: relative;
   box-sizing: border-box;
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0.5rem;
-  border: 1px solid transparent;
-  background: transparent;
-  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(226, 232, 240, 0.72)" : "rgba(51, 65, 85, 0.78)")};
+  padding: 0;
+  border-radius: 0.55rem;
+  border: 1px solid ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(59, 130, 246, 0.22)" : "rgba(37, 99, 235, 0.18)"};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(23, 37, 84, 0.72)" : "rgba(255, 255, 255, 0.96)"};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(241, 245, 249, 0.86)" : "rgba(51, 65, 85, 0.82)")};
+  box-shadow: ${({ theme }) =>
+    theme.scheme === "dark" ? "0 8px 18px rgba(2, 6, 23, 0.26)" : "0 8px 18px rgba(15, 23, 42, 0.08)"};
   cursor: pointer;
   transition:
     background-color 120ms ease,
@@ -9315,31 +9408,100 @@ const TableQuickRailButton = styled.button`
     box-shadow 120ms ease,
     transform 120ms ease;
 
+  &[data-axis="column"] {
+    width: ${TABLE_COLUMN_GRIP_WIDTH_PX}px;
+    height: ${TABLE_COLUMN_GRIP_HEIGHT_PX}px;
+  }
+
+  &[data-axis="row"] {
+    width: ${TABLE_ROW_GRIP_WIDTH_PX}px;
+    height: ${TABLE_ROW_GRIP_HEIGHT_PX}px;
+  }
+
   &::after {
     content: "";
     position: absolute;
-    inset: -0.3rem;
+    inset: -0.22rem;
   }
 
   &:hover,
   &:focus-visible {
     background: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(30, 41, 59, 0.8)" : "rgba(255, 255, 255, 0.96)"};
+      theme.scheme === "dark" ? "rgba(29, 78, 216, 0.88)" : "rgba(59, 130, 246, 0.16)"};
     border-color: ${({ theme }) =>
-      theme.scheme === "dark" ? "rgba(148, 163, 184, 0.22)" : "rgba(148, 163, 184, 0.28)"};
-    color: var(--color-gray12);
+      theme.scheme === "dark" ? "rgba(191, 219, 254, 0.52)" : "rgba(59, 130, 246, 0.42)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 64, 175, 0.92)")};
     box-shadow: ${({ theme }) =>
-      theme.scheme === "dark" ? "0 6px 16px rgba(2, 6, 23, 0.24)" : "0 6px 16px rgba(15, 23, 42, 0.08)"};
+      theme.scheme === "dark" ? "0 10px 20px rgba(2, 6, 23, 0.34)" : "0 8px 18px rgba(59, 130, 246, 0.18)"};
     transform: translateY(-1px);
+  }
+
+  &[data-active="true"] {
+    background: rgba(59, 130, 246, 0.96);
+    border-color: rgba(147, 197, 253, 0.86);
+    color: #ffffff;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.32);
   }
 `
 
 const TableHandleButton = styled(TableQuickRailButton)`
-  backdrop-filter: blur(10px);
+  width: ${TABLE_CORNER_BUTTON_SIZE_PX}px;
+  height: ${TABLE_CORNER_BUTTON_SIZE_PX}px;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.78)" : "rgba(100, 116, 139, 0.88)")};
+  box-shadow: none;
+  backdrop-filter: none;
+
+  &:hover,
+  &:focus-visible {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(51, 65, 85, 0.42)" : "rgba(226, 232, 240, 0.82)"};
+    border-color: transparent;
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 41, 59, 0.92)")};
+    box-shadow: none;
+  }
 `
 
-const TableQuickAddButton = styled(TableQuickRailButton)`
-  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(191, 219, 254, 0.88)" : "rgba(37, 99, 235, 0.78)")};
+const TableTrailingAddBar = styled.button`
+  all: unset;
+  position: fixed;
+  z-index: 59;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(15, 23, 42, 0.08)"};
+  background: ${({ theme }) =>
+    theme.scheme === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.06)"};
+  color: ${({ theme }) => (theme.scheme === "dark" ? "rgba(255, 255, 255, 0.72)" : "rgba(51, 65, 85, 0.76)")};
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+
+  &[data-axis="column"] {
+    width: ${TABLE_ADD_BAR_THICKNESS_PX}px;
+  }
+
+  &[data-axis="row"] {
+    height: ${TABLE_ADD_BAR_THICKNESS_PX}px;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.09)"};
+    border-color: ${({ theme }) =>
+      theme.scheme === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.12)"};
+    color: ${({ theme }) => (theme.scheme === "dark" ? "#ffffff" : "rgba(30, 41, 59, 0.92)")};
+    transform: translateY(-1px);
+  }
 `
 
 const FloatingTableMenu = styled.div`

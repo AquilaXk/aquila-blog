@@ -116,8 +116,7 @@ class PostRepositoryImpl(
             .where(
                 post.id
                     .eq(id)
-                    .and(post.published.isTrue)
-                    .and(post.listed.isTrue),
+                    .and(post.published.isTrue),
             ).fetchOne()
 
     override fun findPublicDetailContentById(id: Long): PublicPostDetailContentCacheDto? =
@@ -127,8 +126,7 @@ class PostRepositoryImpl(
             .where(
                 post.id
                     .eq(id)
-                    .and(post.published.isTrue)
-                    .and(post.listed.isTrue),
+                    .and(post.published.isTrue),
             ).fetchOne()
             ?.let { tuple ->
                 val content = tuple.get(post.content) ?: return null

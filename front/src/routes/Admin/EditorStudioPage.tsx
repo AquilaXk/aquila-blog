@@ -48,6 +48,7 @@ import {
   replaceShallowRoutePreservingScroll,
   toLoginPath,
 } from "src/libs/router"
+import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import {
   AdminPageProps,
   buildAdminPagePropsFromMember,
@@ -94,6 +95,11 @@ const ADMIN_POSTS_WORKSPACE_ROUTE = "/admin/posts"
 const EDITOR_NEW_ROUTE_PATH = "/editor/new"
 
 const toEditorPostRoute = (id: string | number) => `/editor/${encodeURIComponent(String(id))}`
+const buildCanonicalPostUrl = (postId: string | number) => {
+  const path = toCanonicalPostPath(postId)
+  if (typeof window === "undefined") return path
+  return new URL(path, window.location.origin).toString()
+}
 
 const extractImageFileFromClipboard = (clipboardData: DataTransfer | null): File | null => {
   if (!clipboardData) return null
@@ -1673,6 +1679,63 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setPublishNotice(next)
     },
     [isPublishModalOpen]
+  )
+
+  const openPostDetailRoute = useCallback(
+    async (targetPostId: string | number) => {
+      const resolvedPostId = String(targetPostId).trim()
+      if (!resolvedPostId) {
+        setPublishStatus({ tone: "error", text: "상세 링크를 열 글 ID가 없습니다." }, "page")
+        return
+      }
+
+      const path = toCanonicalPostPath(resolvedPostId)
+      if (typeof window !== "undefined") {
+        const opened = window.open(path, "_blank", "noopener,noreferrer")
+        if (opened) return
+      }
+
+      try {
+        await pushRoute(router, path)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setPublishStatus({ tone: "error", text: `상세 열기 실패: ${message}` }, "page")
+      }
+    },
+    [router, setPublishStatus]
+  )
+
+  const copyPostDetailLink = useCallback(
+    async (targetPostId: string | number, title?: string) => {
+      const resolvedPostId = String(targetPostId).trim()
+      if (!resolvedPostId) {
+        setPublishStatus({ tone: "error", text: "복사할 상세 링크가 없습니다." }, "page")
+        return
+      }
+
+      const rowLabel = `#${resolvedPostId} ${title?.trim() || "제목 없는 글"}`
+      const url = buildCanonicalPostUrl(resolvedPostId)
+
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url)
+          setPublishStatus({ tone: "success", text: `${rowLabel} 링크를 복사했습니다.` }, "page")
+          return
+        }
+
+        if (typeof window !== "undefined") {
+          window.prompt("링크를 복사하세요.", url)
+          setPublishStatus({ tone: "success", text: `${rowLabel} 링크를 표시했습니다.` }, "page")
+          return
+        }
+
+        throw new Error("링크를 복사할 수 없는 환경입니다.")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setPublishStatus({ tone: "error", text: `링크 복사 실패: ${message}` }, "page")
+      }
+    },
+    [setPublishStatus]
   )
 
   const localDraftCore = useMemo(
@@ -3658,6 +3721,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ]
   )
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
+  const canOpenCurrentPostDetail = editorMode === "edit" && currentFlags.published && postId.trim().length > 0
   const editorModeLabel = editorMode === "edit" ? "원고 편집" : "새 글"
   const hasSelectedManagedPost = editorMode === "edit" && postId.trim().length > 0
   const currentPostLabel =
@@ -4237,7 +4301,19 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                   <span>{previewDateText}</span>
                 </EditorHeaderAuthorText>
               </EditorHeaderAuthor>
-              <EditorHeaderMetaPill $compact={isCompactSplitPreview}>{currentVisibilityText}</EditorHeaderMetaPill>
+              <EditorHeaderMetaActions>
+                <EditorHeaderMetaPill $compact={isCompactSplitPreview}>{currentVisibilityText}</EditorHeaderMetaPill>
+                {canOpenCurrentPostDetail ? (
+                  <>
+                    <EditorHeaderActionButton type="button" onClick={() => void openPostDetailRoute(postId)}>
+                      상세 열기
+                    </EditorHeaderActionButton>
+                    <EditorHeaderActionButton type="button" onClick={() => void copyPostDetailLink(postId, postTitle)}>
+                      링크 복사
+                    </EditorHeaderActionButton>
+                  </>
+                ) : null}
+              </EditorHeaderMetaActions>
             </EditorHeaderMetaRow>
           </EditorStudioMetaSection>
 
@@ -4935,6 +5011,24 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                                           <AppIcon name="chevron-down" />
                                         </summary>
                                         <div className="menu">
+                                          {row.published ? (
+                                            <>
+                                              <button
+                                                type="button"
+                                                disabled={loadingKey.length > 0}
+                                                onClick={() => void openPostDetailRoute(row.id)}
+                                              >
+                                                상세 열기
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={loadingKey.length > 0}
+                                                onClick={() => void copyPostDetailLink(row.id, row.title)}
+                                              >
+                                                링크 복사
+                                              </button>
+                                            </>
+                                          ) : null}
                                           <button
                                             type="button"
                                             disabled={loadingKey.length > 0}
@@ -5033,6 +5127,24 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                                     <AppIcon name="chevron-down" />
                                   </summary>
                                   <div className="menu">
+                                    {row.published ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={loadingKey.length > 0}
+                                          onClick={() => void openPostDetailRoute(row.id)}
+                                        >
+                                          상세 열기
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={loadingKey.length > 0}
+                                          onClick={() => void copyPostDetailLink(row.id, row.title)}
+                                        >
+                                          링크 복사
+                                        </button>
+                                      </>
+                                    ) : null}
                                     <button
                                       type="button"
                                       disabled={loadingKey.length > 0}
@@ -9514,6 +9626,15 @@ const EditorHeaderMetaRow = styled.div`
   min-width: 0;
 `
 
+const EditorHeaderMetaActions = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+`
+
 const EditorHeaderAuthor = styled.div`
   display: inline-flex;
   align-items: center;
@@ -9574,6 +9695,13 @@ const EditorHeaderMetaPill = styled.span<{ $compact?: boolean }>`
   font-size: ${({ $compact }) => ($compact ? "0.74rem" : "0.82rem")};
   font-weight: 650;
   line-height: 1;
+`
+
+const EditorHeaderActionButton = styled(Button)`
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
 `
 
 const EditorStudioCanvas = styled.section`

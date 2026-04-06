@@ -826,7 +826,7 @@ const MarkdownRendererRoot = styled.div`
       width: 100%;
       min-width: 100%;
       max-width: 100%;
-      table-layout: auto;
+      table-layout: fixed;
     }
 
     table[data-overflow-mode="wide"],
@@ -841,12 +841,12 @@ const MarkdownRendererRoot = styled.div`
     .aq-table th,
     .aq-table td {
       white-space: normal;
-      overflow-wrap: anywhere;
-      word-break: break-word;
+      overflow-wrap: break-word;
+      word-break: normal;
       font-size: 0.95rem;
       line-height: 1.58;
       padding: 0.66rem 0.72rem;
-      min-width: max(7.5ch, 84px);
+      min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, 10ch);
     }
 
     .aq-code-toolbar {
@@ -977,7 +977,7 @@ const MarkdownRendererRoot = styled.div`
     max-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    table-layout: auto;
+    table-layout: fixed;
     margin: 0;
     border: 0;
     background: transparent;
@@ -1007,7 +1007,7 @@ const MarkdownRendererRoot = styled.div`
     border-right: 1px solid ${({ theme }) => theme.colors.gray6};
     border-bottom: 1px solid ${({ theme }) => theme.colors.gray6};
     vertical-align: top;
-    min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, 7.5ch);
+    min-width: max(${TABLE_MIN_COLUMN_WIDTH_PX}px, 10ch);
     min-height: ${TABLE_MIN_ROW_HEIGHT_PX}px;
     white-space: normal;
     overflow-wrap: break-word;
@@ -1060,7 +1060,7 @@ const MarkdownRendererRoot = styled.div`
       width: max-content;
       min-width: 100%;
       max-width: none;
-      table-layout: auto;
+      table-layout: fixed;
     }
 
     table.aq-table-responsive > thead,

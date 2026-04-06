@@ -38,10 +38,12 @@ type NavigatorConnectionLike = {
 const STREAM_MAX_RECONNECT_ATTEMPTS = 4
 const POLLING_INTERVAL_MS = 30_000
 const POLLING_MIN_INTERVAL_MS = 8_000
-const POLLING_MAX_BACKOFF_MULTIPLIER = 4
+const POLLING_MAX_BACKOFF_MULTIPLIER = 8
 const POLLING_SAVE_DATA_MULTIPLIER = 1.5
 const POLLING_SLOW_NETWORK_MULTIPLIER = 1.6
 const POLLING_JITTER_RATIO = 0.2
+const POLLING_FAILURE_COOLDOWN_THRESHOLD = 3
+const POLLING_FAILURE_COOLDOWN_MS = 180_000
 const HIDDEN_GRACE_CLOSE_MS = 45_000
 const LAST_EVENT_ID_STORAGE_KEY = "member.notification.lastEventId.v1"
 const SNAPSHOT_STORAGE_KEY = "member.notification.snapshot.v1"
@@ -73,6 +75,11 @@ const getNextPollingDelayMs = (baseMs: number) => {
 const getNavigatorConnection = (): NavigatorConnectionLike | undefined => {
   if (typeof navigator === "undefined") return undefined
   return (navigator as Navigator & { connection?: NavigatorConnectionLike }).connection
+}
+
+const isNavigatorOnline = () => {
+  if (typeof navigator === "undefined") return true
+  return navigator.onLine !== false
 }
 
 const isLoopbackHost = (hostname: string) =>
@@ -284,6 +291,10 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
     if (failureStreak > 0) {
       const multiplier = Math.min(POLLING_MAX_BACKOFF_MULTIPLIER, 2 ** failureStreak)
       baseMs = Math.round(baseMs * multiplier)
+    }
+
+    if (failureStreak >= POLLING_FAILURE_COOLDOWN_THRESHOLD) {
+      baseMs = Math.max(baseMs, POLLING_FAILURE_COOLDOWN_MS)
     }
 
     return Math.max(POLLING_MIN_INTERVAL_MS, baseMs)
@@ -779,27 +790,47 @@ const NotificationBell: React.FC<Props> = ({ enabled }) => {
 
     const run = async () => {
       if (disposed) return
-      const snapshotStatus = await loadSnapshot()
-      if (disposed) return
+      let nextFailureStreak = pollingFailureStreakRef.current
 
-      if (snapshotStatus === "success") {
-        pollingFailureStreakRef.current = 0
-        lastLoggedSnapshotFailureStreakRef.current = 0
-      } else if (snapshotStatus === "blocked") {
-        pollingFailureStreakRef.current = 0
-        lastLoggedSnapshotFailureStreakRef.current = 0
-        setIsRealtimeActive(false)
-        return
-      } else {
-        const nextFailureStreak = Math.min(
+      if (!isNavigatorOnline()) {
+        lastSnapshotErrorRef.current = new Error("NetworkOffline")
+        nextFailureStreak = Math.min(
           pollingFailureStreakRef.current + 1,
-          STREAM_MAX_RECONNECT_ATTEMPTS
+          STREAM_MAX_RECONNECT_ATTEMPTS + POLLING_FAILURE_COOLDOWN_THRESHOLD
         )
         pollingFailureStreakRef.current = nextFailureStreak
         reportSnapshotFailureIfNeeded(nextFailureStreak)
+      } else {
+        const snapshotStatus = await loadSnapshot()
+        if (disposed) return
+
+        if (snapshotStatus === "success") {
+          pollingFailureStreakRef.current = 0
+          lastLoggedSnapshotFailureStreakRef.current = 0
+          nextFailureStreak = 0
+        } else if (snapshotStatus === "blocked") {
+          pollingFailureStreakRef.current = 0
+          lastLoggedSnapshotFailureStreakRef.current = 0
+          setIsRealtimeActive(false)
+          return
+        } else {
+          nextFailureStreak = Math.min(
+            pollingFailureStreakRef.current + 1,
+            STREAM_MAX_RECONNECT_ATTEMPTS + POLLING_FAILURE_COOLDOWN_THRESHOLD
+          )
+          pollingFailureStreakRef.current = nextFailureStreak
+          reportSnapshotFailureIfNeeded(nextFailureStreak)
+        }
       }
 
-      const pollingBaseIntervalMs = resolvePollingBaseIntervalMs(pollingFailureStreakRef.current)
+      if (disposed) return
+
+      if (nextFailureStreak === 0) {
+        pollingFailureStreakRef.current = 0
+        lastLoggedSnapshotFailureStreakRef.current = 0
+      }
+
+      const pollingBaseIntervalMs = resolvePollingBaseIntervalMs(nextFailureStreak)
       timer = window.setTimeout(() => {
         void run()
       }, getNextPollingDelayMs(pollingBaseIntervalMs))

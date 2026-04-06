@@ -44,7 +44,7 @@ const GET_REQUEST_POLICY_REGISTRY: Array<{
     matcher: /^\/member\/api\/v1\/notifications\/snapshot/i,
     policy: {
       cacheMode: "revalidate",
-      retryCount: DEFAULT_GET_TRANSIENT_RETRY_COUNT,
+      retryCount: 0,
       staleIfError: true,
       timeoutMs: 4_000,
     },

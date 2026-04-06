@@ -5,6 +5,15 @@ import { fileURLToPath } from "url"
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const buildIdPath = path.join(projectRoot, ".next", "BUILD_ID")
+const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000"
+const resolvedPort = (() => {
+  try {
+    const url = new URL(baseUrl)
+    return url.port || (url.protocol === "https:" ? "443" : "80")
+  } catch {
+    return "3000"
+  }
+})()
 
 const watchedEntries = [
   "src",
@@ -54,7 +63,7 @@ if (resolveNeedsBuild()) {
   }
 }
 
-const startResult = spawnSync("yarn", ["start", "-p", "3000"], {
+const startResult = spawnSync("yarn", ["start", "-H", "127.0.0.1", "-p", resolvedPort], {
   cwd: projectRoot,
   stdio: "inherit",
   env: process.env,

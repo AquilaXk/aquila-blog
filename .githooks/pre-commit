@@ -10,6 +10,7 @@ if [[ -z "${staged_files}" ]]; then
 fi
 
 bash tools/guards/check-forbidden-tracked-files.sh --staged
+bash tools/guards/check-current-task-state.sh
 bash tools/guards/check-current-task-scope.sh --staged
 
 needs_contract_check="false"

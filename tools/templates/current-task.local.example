@@ -1,10 +1,27 @@
 # 로컬 전용 파일 예시입니다. 이 파일을 `.codex/current-task.local`로 복사해 사용합니다.
 # git 추적 대상이 아니며, 컨텍스트 압축/복구 후 stale 작업 재개를 막기 위한 현재 상태값입니다.
+# 구현 전/압축 복구 직후에는 `bash tools/guards/current-task-preflight.sh` 로 state/scope 를 먼저 검증합니다.
+# scope_mode 기본값은 staged 입니다. 기존 dirty worktree가 많아 시작이 막히면 staged를 유지하고,
+# 정말로 worktree 전체까지 강제하고 싶을 때만 scope_mode=worktree 를 사용하세요.
+# 컨텍스트가 비대해지면(주제 2개 이상 혼재, 원본 로그/이미지 반복, 압축 2회 이상)
+# 새 스레드로 이동하고 `pause_snapshot` 4줄만 다음 스레드에 넘깁니다.
+# 새 스레드 handoff 출력은 `bash tools/guards/current-task-handoff.sh` 를 사용합니다.
 
 status=active
 task=회원가입 메일 큐 정체 해결
+repro=회원가입 메일 task 가 READY 에서 오래 머물고 drain 되지 않는다
+done_when=resume preflight 통과 + ktlintCheck + 대상 테스트 green + 관련 문서 갱신
+forbid=무관한 프런트 UI 수정
+scope_mode=staged
+allow=.codex/current-task.local
+allow=docs/agent/backend-posts.md
 allow=back/src/main/kotlin/com/back/global/task/*
 allow=back/src/test/kotlin/com/back/global/task/*
-allow=deploy/homeserver/docker-compose.prod.yml
-deny=front/*
-done_when=ktlintCheck + 대상 테스트 green + 관련 문서 갱신
+deny=front/src/**
+deny=deploy/**
+confirmed_cause=queue consumer 는 살아 있지만 drain trigger 가 누락됨
+root_hypothesis=원인이 아직 확정되지 않았으면 현재 최강 가설을 기록
+target_edit=TaskProcessingScheduledJob drain trigger
+next_action=patch
+avoid=같은 queue 상태 조회 반복 금지
+pause_snapshot=재현 상태: READY 정체\n원인 가설: drain trigger 누락\n수정 파일: task scheduler/service\n남은 검증: ktlintCheck + 대상 테스트

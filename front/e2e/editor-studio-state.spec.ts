@@ -179,6 +179,10 @@ test.describe("editor studio state", () => {
       path.resolve(__dirname, "../src/components/editor/BlockEditorShell.tsx"),
       "utf8"
     )
+    const editorStudioSource = readFileSync(
+      path.resolve(__dirname, "../src/routes/Admin/EditorStudioPage.tsx"),
+      "utf8"
+    )
     const markdownRendererRootSource = readFileSync(
       path.resolve(__dirname, "../src/libs/markdown/components/MarkdownRendererRoot.tsx"),
       "utf8"
@@ -186,8 +190,9 @@ test.describe("editor studio state", () => {
 
     expect(blockEditorSource).toContain('data-testid="table-column-drag-guide"')
     expect(blockEditorSource).toContain("const syncTableColumnDragGuideForColumn = useCallback(")
-    expect(markdownRendererRootSource.match(/table-layout: auto;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
-    expect(markdownRendererRootSource).not.toContain("table-layout: fixed;")
+    expect(editorStudioSource).toContain("const currentPostContent = postContentLiveRef.current")
+    expect(markdownRendererRootSource.match(/table-layout: fixed;/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+    expect(markdownRendererRootSource).not.toContain("table-layout: auto;")
   })
 
   test("editor studio SSR은 작성자 카드에 공개 프로필 snapshot을 먼저 seed한다", () => {

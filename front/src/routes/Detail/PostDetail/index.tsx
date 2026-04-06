@@ -269,9 +269,9 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
     shareFeedback === "failed"
       ? "재시도"
       : shareFeedback === "shared"
-        ? "복사됨"
+        ? "복사 완료"
         : shareFeedback === "copied"
-          ? "복사됨"
+          ? "복사 완료"
           : null
   const extractedSummaryState = useMemo(() => extractLeadingSummaryBlock(data?.content || "", 180), [data?.content])
   const renderedContent = useMemo(() => {
@@ -996,8 +996,8 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                     {shareFeedback === "failed"
                       ? "공유 실패"
                       : shareFeedback === "shared"
-                        ? "복사됨"
-                        : "링크 복사"}
+                        ? "복사 완료"
+                        : "복사 완료"}
                   </span>
                 ) : null}
               </div>
@@ -1067,7 +1067,7 @@ const PostDetail: React.FC<Props> = ({ initialComments = null }) => {
                 onClick={handleSharePost}
               >
                 <AppIcon name="share" />
-                <span>{shareFeedback === "copied" ? "복사" : shareFeedback === "shared" ? "공유" : shareFeedback === "failed" ? "실패" : "공유"}</span>
+                <span>{shareFeedback === "copied" ? "복사" : shareFeedback === "shared" ? "복사" : shareFeedback === "failed" ? "실패" : "공유"}</span>
                 {shareProgressLabel ? <strong>{shareProgressLabel}</strong> : null}
               </button>
             </MobileSummaryBar>

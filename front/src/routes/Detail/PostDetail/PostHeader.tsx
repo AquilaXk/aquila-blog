@@ -71,8 +71,8 @@ const PostHeader: React.FC<Props> = ({
     shareFeedback === "failed"
       ? "공유에 실패했습니다."
       : shareFeedback === "shared"
-        ? "링크가 복사되었습니다."
-        : "링크가 복사되었습니다."
+        ? "복사 완료"
+        : "복사 완료"
 
   return (
     <StyledWrapper>

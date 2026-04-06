@@ -4,10 +4,11 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
-CURRENT_TASK_FILE="${REPO_ROOT}/.codex/current-task.local"
+CURRENT_TASK_FILE="${CURRENT_TASK_FILE_PATH:-${REPO_ROOT}/.codex/current-task.local}"
 
-if [[ "${1:-}" != "--staged" ]]; then
-  echo "[current-task-scope] usage: $0 --staged" >&2
+mode="${1:-}"
+if [[ "${mode}" != "--staged" && "${mode}" != "--worktree" ]]; then
+  echo "[current-task-scope] usage: $0 --staged|--worktree" >&2
   exit 1
 fi
 
@@ -55,8 +56,25 @@ if [[ ${#allow_patterns[@]} -eq 0 ]]; then
   exit 1
 fi
 
-staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
-if [[ -z "${staged_files}" ]]; then
+collect_targets() {
+  if [[ "${mode}" == "--staged" ]]; then
+    git diff --cached --name-only --diff-filter=ACMR
+    return 0
+  fi
+
+  git status --porcelain=v1 --untracked-files=all \
+    | while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        target="${line:3}"
+        if [[ "${target}" == *" -> "* ]]; then
+          target="${target##* -> }"
+        fi
+        printf '%s\n' "${target}"
+      done
+}
+
+target_files="$(collect_targets)"
+if [[ -z "${target_files}" ]]; then
   exit 0
 fi
 
@@ -86,13 +104,14 @@ while IFS= read -r file; do
   if ! matches_any_pattern "${file}" "${allow_patterns[@]}"; then
     scope_violations+=("${file}")
   fi
-done <<< "${staged_files}"
+done <<< "${target_files}"
 
 if [[ ${#deny_hits[@]} -eq 0 && ${#scope_violations[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "[current-task-scope] current task 범위를 벗어난 staged 파일이 있습니다." >&2
+echo "[current-task-scope] current task 범위를 벗어난 파일이 있습니다." >&2
+echo "[current-task-scope] mode: ${mode#--}" >&2
 if [[ -n "${task}" ]]; then
   echo "[current-task-scope] task: ${task}" >&2
 fi

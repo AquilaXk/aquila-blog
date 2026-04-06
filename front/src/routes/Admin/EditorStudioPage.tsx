@@ -2330,6 +2330,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [postContent, postTags, postTitle])
 
   const handleWritePost = async (): Promise<boolean> => {
+    const currentPostContent = postContentLiveRef.current
     if (editorMode === "edit" || postId.trim()) {
       const msg = "현재는 수정 모드입니다. 새 글을 만들려면 먼저 '새 글 모드 전환'을 눌러주세요."
       setPublishStatus({ tone: "error", text: msg })
@@ -2344,14 +2345,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return false
     }
 
-    if (!postContent.trim()) {
+    if (!currentPostContent.trim()) {
       const msg = "본문을 입력해주세요."
       setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
-    const placeholderIssue = detectPublishPlaceholderIssue(postContent)
+    const placeholderIssue = detectPublishPlaceholderIssue(currentPostContent)
     if (placeholderIssue) {
       setPublishStatus({ tone: "error", text: placeholderIssue })
       setResult(pretty({ error: placeholderIssue }))
@@ -2361,7 +2362,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     try {
       setLoadingKey("writePost")
       setPublishStatus({ tone: "loading", text: "글 작성 중입니다..." })
-      const contentWithMetadata = composeEditorContent(postContent, postTags, {
+      const contentWithMetadata = composeEditorContent(currentPostContent, postTags, {
         category: postCategory,
         summary: postSummary,
         thumbnail: effectiveThumbnailUrl,
@@ -2393,7 +2394,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         setIsTempDraftMode(false)
         serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
           title: postTitle,
-          content: postContent,
+          content: currentPostContent,
           summary: postSummary,
           thumbnailUrl: postThumbnailUrl,
           thumbnailFocusX: postThumbnailFocusX,
@@ -2439,6 +2440,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }
 
   const handleModifyPost = async (): Promise<boolean> => {
+    const currentPostContent = postContentLiveRef.current
     if (editorMode !== "edit" || !postId.trim()) {
       const msg = "수정할 글 ID를 먼저 선택해주세요."
       setPublishStatus({ tone: "error", text: msg })
@@ -2453,14 +2455,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return false
     }
 
-    if (!postContent.trim()) {
+    if (!currentPostContent.trim()) {
       const msg = "본문을 입력해주세요."
       setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
-    const placeholderIssue = detectPublishPlaceholderIssue(postContent)
+    const placeholderIssue = detectPublishPlaceholderIssue(currentPostContent)
     if (placeholderIssue) {
       setPublishStatus({ tone: "error", text: placeholderIssue })
       setResult(pretty({ error: placeholderIssue }))
@@ -2482,7 +2484,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         method: "PUT",
         body: JSON.stringify({
           title: postTitle,
-          content: composeEditorContent(postContent, postTags, {
+          content: composeEditorContent(currentPostContent, postTags, {
             category: postCategory,
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
@@ -2497,7 +2499,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setIsTempDraftMode(isTempDraftTitlePlaceholder(postTitle) && postVisibility === "PRIVATE")
       serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: postTitle,
-        content: postContent,
+        content: currentPostContent,
         summary: postSummary,
         thumbnailUrl: postThumbnailUrl,
         thumbnailFocusX: postThumbnailFocusX,
@@ -2586,6 +2588,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
   }, [applyLoadedPostContext, isCompactMobileLayout, loadExistingTempPostForRecovery, router, setPublishStatus, syncEditorMeta])
 
   const handlePublishTempDraft = async (): Promise<boolean> => {
+    const currentPostContent = postContentLiveRef.current
     if (editorMode !== "edit" || !postId.trim()) {
       const msg = "작성할 새 글을 먼저 불러와주세요."
       setPublishStatus({ tone: "error", text: msg })
@@ -2600,14 +2603,14 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       return false
     }
 
-    if (!postContent.trim()) {
+    if (!currentPostContent.trim()) {
       const msg = "본문을 입력해주세요."
       setPublishStatus({ tone: "error", text: msg })
       setResult(pretty({ error: msg }))
       return false
     }
 
-    const placeholderIssue = detectPublishPlaceholderIssue(postContent)
+    const placeholderIssue = detectPublishPlaceholderIssue(currentPostContent)
     if (placeholderIssue) {
       setPublishStatus({ tone: "error", text: placeholderIssue })
       setResult(pretty({ error: placeholderIssue }))
@@ -2629,7 +2632,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
         method: "PUT",
         body: JSON.stringify({
           title: postTitle,
-          content: composeEditorContent(postContent, postTags, {
+          content: composeEditorContent(currentPostContent, postTags, {
             category: postCategory,
             summary: postSummary,
             thumbnail: effectiveThumbnailUrl,
@@ -2643,7 +2646,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
       setIsTempDraftMode(false)
       serverBaselineEditorFingerprintRef.current = buildEditorStateFingerprint({
         title: postTitle,
-        content: postContent,
+        content: currentPostContent,
         summary: postSummary,
         thumbnailUrl: postThumbnailUrl,
         thumbnailFocusX: postThumbnailFocusX,

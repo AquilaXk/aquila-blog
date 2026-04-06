@@ -1823,6 +1823,34 @@ const BlockEditorShell = ({
     [hideTableColumnDragGuide]
   )
 
+  const syncTableColumnDragGuideForClientX = useCallback(
+    (clientX: number) => {
+      const viewport = viewportRef.current
+      if (!viewport) {
+        hideTableColumnDragGuide()
+        return
+      }
+
+      const selectedCellTable = viewport.querySelector(".aq-block-editor__content .selectedCell")?.closest("table")
+      const fallbackTable = viewport.querySelector(".aq-block-editor__content .tableWrapper table, .aq-block-editor__content table")
+      const tableElement = (selectedCellTable ?? fallbackTable) as HTMLTableElement | null
+      if (!tableElement) {
+        hideTableColumnDragGuide()
+        return
+      }
+
+      const tableRect = tableElement.getBoundingClientRect()
+      const clampedX = Math.max(tableRect.left, Math.min(tableRect.right, clientX))
+      setTableColumnDragGuideState({
+        visible: true,
+        left: Math.round(clampedX),
+        top: Math.round(tableRect.top),
+        height: Math.round(tableRect.height),
+      })
+    },
+    [hideTableColumnDragGuide]
+  )
+
   const scheduleTableQuickRailHide = useCallback((delayMs = TABLE_QUICK_RAIL_HIDE_DELAY_MS) => {
     cancelTableQuickRailHide()
     if (typeof window === "undefined") return
@@ -2634,12 +2662,16 @@ const BlockEditorShell = ({
   const resizeTableColumnByIndex = useCallback(
     (columnIndex: number, deltaPx: number) => {
       const currentEditor = editorRef.current
-      if (!currentEditor || deltaPx === 0) return false
+      if (!currentEditor || deltaPx === 0) return { changed: false, appliedDelta: 0 }
       const rect = getCurrentSelectedTableRect(currentEditor)
-      if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) return false
+      if (!rect || columnIndex < 0 || columnIndex >= rect.map.width) {
+        return { changed: false, appliedDelta: 0 }
+      }
 
       const columns = collectSimpleTableColumnCells(rect.table, rect.tableStart)
-      if (!columns || columns.length === 0 || columnIndex >= columns.length) return false
+      if (!columns || columns.length === 0 || columnIndex >= columns.length) {
+        return { changed: false, appliedDelta: 0 }
+      }
 
       const currentWidths = columns.map((column) => readColumnWidthFromCell(column[0]))
       const nextWidths = shouldClampTableWidthBudget() && getTableOverflowMode(rect.table) !== TABLE_OVERFLOW_MODE_WIDE
@@ -2661,10 +2693,15 @@ const BlockEditorShell = ({
         currentWidths,
         nextWidths
       )
-      if (!applied.changed) return false
+      if (!applied.changed) {
+        return { changed: false, appliedDelta: 0 }
+      }
       currentEditor.view.dispatch(applied.transaction)
       setSelectionTick((prev) => prev + 1)
-      return true
+      return {
+        changed: true,
+        appliedDelta: nextWidths[columnIndex] - currentWidths[columnIndex],
+      }
     },
     [getCurrentSelectedTableRect]
   )
@@ -3676,9 +3713,11 @@ const BlockEditorShell = ({
       if (!state || state.pointerId !== event.pointerId) return
       const deltaX = event.clientX - state.lastClientX
       if (deltaX === 0) return
-      const applied = resizeTableColumnByIndex(state.columnIndex, deltaX)
-      if (applied) {
-        state.lastClientX = event.clientX
+      const resizeResult = resizeTableColumnByIndex(state.columnIndex, deltaX)
+      if (resizeResult.changed) {
+        state.lastClientX += resizeResult.appliedDelta
+        syncTableColumnDragGuideForClientX(state.lastClientX)
+      } else {
         syncTableColumnDragGuideForColumn(state.columnIndex)
       }
     }
@@ -3699,7 +3738,12 @@ const BlockEditorShell = ({
       window.removeEventListener("pointercancel", handlePointerUp)
       stopTableColumnRailResize()
     }
-  }, [resizeTableColumnByIndex, stopTableColumnRailResize, syncTableColumnDragGuideForColumn])
+  }, [
+    resizeTableColumnByIndex,
+    stopTableColumnRailResize,
+    syncTableColumnDragGuideForClientX,
+    syncTableColumnDragGuideForColumn,
+  ])
 
   useEffect(() => {
     const currentEditor = editorRef.current ?? editor

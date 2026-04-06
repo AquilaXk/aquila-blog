@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.context.request.RequestAttributes
 import org.springframework.web.context.request.WebRequest
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.nio.charset.StandardCharsets
@@ -76,6 +77,12 @@ class ApiV1MemberNotificationController(
 
     @GetMapping("/snapshot")
     fun getSnapshot(webRequest: WebRequest): ResponseEntity<SnapshotResBody> {
+        val startNs = System.nanoTime()
+        val requestId =
+            (webRequest.getAttribute("requestId", RequestAttributes.SCOPE_REQUEST) as? String)
+                ?.takeIf { it.isNotBlank() }
+                ?: "-"
+        val ifNoneMatchPresent = !webRequest.getHeader("If-None-Match").isNullOrBlank()
         val payload =
             runCatching {
                 val actor =
@@ -119,12 +126,34 @@ class ApiV1MemberNotificationController(
             }
         val eTag = buildSnapshotETag(payload)
         if (webRequest.checkNotModified(eTag)) {
+            logSnapshotServed(
+                requestId = requestId,
+                actorId = payload.memberId,
+                status = HttpStatus.NOT_MODIFIED.value(),
+                notModified = true,
+                ifNoneMatchPresent = ifNoneMatchPresent,
+                itemCount = payload.body.items.size,
+                unreadCount = payload.body.unreadCount,
+                eTag = eTag,
+                latencyMs = (System.nanoTime() - startNs) / 1_000_000,
+            )
             return ResponseEntity
                 .status(HttpStatus.NOT_MODIFIED)
                 .cacheControl(CacheControl.noCache())
                 .eTag(eTag)
                 .build()
         }
+        logSnapshotServed(
+            requestId = requestId,
+            actorId = payload.memberId,
+            status = HttpStatus.OK.value(),
+            notModified = false,
+            ifNoneMatchPresent = ifNoneMatchPresent,
+            itemCount = payload.body.items.size,
+            unreadCount = payload.body.unreadCount,
+            eTag = eTag,
+            latencyMs = (System.nanoTime() - startNs) / 1_000_000,
+        )
         return ResponseEntity
             .ok()
             .cacheControl(CacheControl.noCache())
@@ -158,6 +187,32 @@ class ApiV1MemberNotificationController(
             }
         val digest = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray(StandardCharsets.UTF_8))
         return digest.joinToString(separator = "") { byte -> "%02x".format(byte) }
+    }
+
+    private fun logSnapshotServed(
+        requestId: String,
+        actorId: Long?,
+        status: Int,
+        notModified: Boolean,
+        ifNoneMatchPresent: Boolean,
+        itemCount: Int,
+        unreadCount: Int,
+        eTag: String,
+        latencyMs: Long,
+    ) {
+        logger.info(
+            "notification_snapshot_served requestId={} actorId={} status={} notModified={} ifNoneMatchPresent={} itemCount={} unreadCount={} eTag={} latencyMs={} clientIp={}",
+            requestId,
+            actorId ?: -1L,
+            status,
+            notModified,
+            ifNoneMatchPresent,
+            itemCount,
+            unreadCount,
+            eTag.take(16),
+            latencyMs,
+            rq.clientIp,
+        )
     }
 
     @GetMapping("/unread-count")

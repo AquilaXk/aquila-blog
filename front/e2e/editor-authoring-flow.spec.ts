@@ -1335,6 +1335,63 @@ test.describe("block editor authoring flow", () => {
     await page.mouse.up()
   })
 
+  test("writer surface의 table column boundary drag는 native text selection 없이 guide만 남긴다", async ({
+    page,
+  }) => {
+    await page.goto(QA_WRITER_ROUTE)
+
+    const editor = page.locator("[data-testid='block-editor-prosemirror']").first()
+    await editor.click()
+    await page.getByRole("button", { name: "테이블", exact: true }).first().click()
+
+    const firstHeaderCell = page.locator("table th").first()
+    await firstHeaderCell.click()
+    await firstHeaderCell.hover()
+
+    const initialBoundaryCenter = await page
+      .getByTestId("table-column-resize-boundary-0")
+      .evaluate((element) => {
+        const rect = (element as HTMLElement).getBoundingClientRect()
+        return Math.round(rect.left + rect.width / 2)
+      })
+
+    const resizeHandle = page.getByTestId("table-column-resize-boundary-0")
+    const handleBox = await resizeHandle.boundingBox()
+    if (!handleBox) {
+      throw new Error("writer table column resize boundary is missing")
+    }
+
+    const startX = Math.round(handleBox.x + handleBox.width / 2)
+    const startY = Math.round(handleBox.y + handleBox.height / 2)
+
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+
+    await expect(page.getByTestId("table-column-drag-guide")).toBeVisible()
+    await expect(page.getByTestId("table-column-resize-boundary-0")).toHaveCount(0)
+    await expect
+      .poll(async () =>
+        page
+          .getByTestId("table-column-drag-guide")
+          .evaluate((element) => {
+            const rect = (element as HTMLElement).getBoundingClientRect()
+            return Math.round(rect.left + rect.width / 2)
+          })
+      )
+      .toBe(initialBoundaryCenter)
+    await expect
+      .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
+      .toBe("")
+
+    await page.mouse.move(startX + 64, startY, { steps: 8 })
+
+    await expect
+      .poll(async () => page.evaluate(() => window.getSelection()?.toString() || ""))
+      .toBe("")
+
+    await page.mouse.up()
+  })
+
   test("plain markdown table도 column width 메타 없이 drag commit 후 실제 폭을 갱신한다", async ({
     page,
   }) => {

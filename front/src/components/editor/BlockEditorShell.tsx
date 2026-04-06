@@ -748,6 +748,7 @@ type TableColumnRailResizeState = {
   columnIndex: number
   lastClientX: number
   previewClientX: number
+  guideOffsetX: number
 }
 
 type TableColumnDragGuideState = {
@@ -1815,6 +1816,24 @@ const BlockEditorShell = ({
     }
   }, [])
 
+  const clearWindowTextSelection = useCallback(() => {
+    if (typeof window === "undefined") return
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) return
+    selection.removeAllRanges()
+  }, [])
+
+  const setColumnResizeUserSelectSuppressed = useCallback((suppressed: boolean) => {
+    if (typeof document === "undefined") return
+    if (suppressed) {
+      document.body.style.setProperty("user-select", "none")
+      document.body.style.setProperty("-webkit-user-select", "none")
+      return
+    }
+    document.body.style.removeProperty("user-select")
+    document.body.style.removeProperty("-webkit-user-select")
+  }, [])
+
   const hideTableColumnDragGuide = useCallback(() => {
     setTableColumnDragGuideState((prev) => (prev.visible ? { ...prev, visible: false } : prev))
   }, [])
@@ -2859,21 +2878,29 @@ const BlockEditorShell = ({
   }, [isCurrentTableColumnSelection, resizeTableColumnByIndex, selectTableColumnByIndex])
 
   const startTableColumnRailResize = useCallback(
-    (pointerId: number, columnIndex: number, clientX: number) => {
+    (pointerId: number, columnIndex: number, clientX: number, boundaryClientX = clientX) => {
       if (!selectTableColumnByIndex(columnIndex)) return
       setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
+      clearWindowTextSelection()
+      setColumnResizeUserSelectSuppressed(true)
       tableColumnRailResizeRef.current = {
         pointerId,
         columnIndex,
         lastClientX: clientX,
         previewClientX: clientX,
+        guideOffsetX: boundaryClientX - clientX,
       }
       if (typeof document !== "undefined") {
         document.body.style.cursor = "col-resize"
       }
-      syncTableColumnDragGuideForClientX(clientX)
+      syncTableColumnDragGuideForClientX(boundaryClientX)
     },
-    [selectTableColumnByIndex, syncTableColumnDragGuideForClientX]
+    [
+      clearWindowTextSelection,
+      selectTableColumnByIndex,
+      setColumnResizeUserSelectSuppressed,
+      syncTableColumnDragGuideForClientX,
+    ]
   )
 
   const startTableColumnResizeFromDomHandle = useCallback(
@@ -2885,7 +2912,7 @@ const BlockEditorShell = ({
       if (!(cell instanceof HTMLElement) || !(cell.parentElement instanceof HTMLTableRowElement)) return false
       const columnIndex = Array.from(cell.parentElement.children).findIndex((candidate) => candidate === cell)
       if (columnIndex < 0) return false
-      startTableColumnRailResize(pointerId, columnIndex, clientX)
+      startTableColumnRailResize(pointerId, columnIndex, clientX, cell.getBoundingClientRect().right)
       return true
     },
     [startTableColumnRailResize]
@@ -2894,10 +2921,12 @@ const BlockEditorShell = ({
   const stopTableColumnRailResize = useCallback(() => {
     tableColumnRailResizeRef.current = null
     hideTableColumnDragGuide()
+    clearWindowTextSelection()
+    setColumnResizeUserSelectSuppressed(false)
     if (typeof document !== "undefined") {
       document.body.style.removeProperty("cursor")
     }
-  }, [hideTableColumnDragGuide])
+  }, [clearWindowTextSelection, hideTableColumnDragGuide, setColumnResizeUserSelectSuppressed])
 
   const syncTableQuickRailFromElement = useCallback((element: Element | null) => {
     const tableSurfaceElement = element?.closest(".aq-table-shell, .tableWrapper, table") ?? null
@@ -3824,15 +3853,15 @@ const BlockEditorShell = ({
       if (!state || state.pointerId !== event.pointerId) return
       const nextClientX = event.clientX
       state.previewClientX = nextClientX
-      syncTableColumnDragGuideForClientX(nextClientX)
+      syncTableColumnDragGuideForClientX(nextClientX + state.guideOffsetX)
       const deltaX = nextClientX - state.lastClientX
       if (deltaX === 0) return
       const resizeResult = resizeTableColumnByIndex(state.columnIndex, deltaX)
       if (resizeResult.changed) {
         state.lastClientX += resizeResult.appliedDelta
-        if (Math.abs(state.lastClientX - nextClientX) > 0.5) {
-          syncTableColumnDragGuideForClientX(state.lastClientX)
-        }
+      }
+      if (!resizeResult.changed || Math.abs(state.lastClientX - nextClientX) > 0.5) {
+        syncTableColumnDragGuideForClientX(state.lastClientX + state.guideOffsetX)
       }
     }
 
@@ -3882,7 +3911,7 @@ const BlockEditorShell = ({
       }
 
       let selection = activeEditor.state.selection
-      if (selection.empty && typeof window !== "undefined") {
+      if (selection.empty && typeof window !== "undefined" && !tableColumnRailResizeRef.current) {
         const domSelection = window.getSelection()
         const range =
           domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null
@@ -4015,6 +4044,10 @@ const BlockEditorShell = ({
     const handleDocumentSelectionChange = () => {
       const activeEditor = editorRef.current ?? currentEditor
       if (!activeEditor) return
+      if (tableColumnRailResizeRef.current) {
+        clearWindowTextSelection()
+        return
+      }
       const selection = window.getSelection()
       const anchorNode = selection?.anchorNode ?? null
       const anchorElement =
@@ -4086,6 +4119,7 @@ const BlockEditorShell = ({
     }
   }, [
     cancelBubbleHide,
+    clearWindowTextSelection,
     editor,
     hideTableQuickRailImmediately,
     scheduleBubbleHide,
@@ -7005,7 +7039,8 @@ const BlockEditorShell = ({
           />
         ) : null}
         {shouldShowTableHandles
-          ? tableQuickRailState.columnSegments.slice(0, -1).map((segment, index) => (
+          ? !tableColumnDragGuideState.visible
+            ? tableQuickRailState.columnSegments.slice(0, -1).map((segment, index) => (
               <TableColumnResizeBoundaryHandle
                 key={`table-column-boundary-${index}`}
                 type="button"
@@ -7023,6 +7058,7 @@ const BlockEditorShell = ({
                   startTableColumnRailResize(
                     event.pointerId,
                     index,
+                    event.clientX,
                     tableQuickRailState.tableLeft + segment.left + segment.width
                   )
                 }}
@@ -7032,7 +7068,8 @@ const BlockEditorShell = ({
                   height: `${Math.round(tableQuickRailState.height)}px`,
                 }}
               />
-            ))
+              ))
+            : null
           : null}
         {shouldShowTableHandles ? (
           <>
@@ -7074,7 +7111,8 @@ const BlockEditorShell = ({
                         handleTableColumnRailSegmentClick(index, event.currentTarget.getBoundingClientRect())
                       }}
                     >
-                      {index < tableQuickRailState.columnSegments.length - 1 ? (
+                      {index < tableQuickRailState.columnSegments.length - 1 &&
+                      !tableColumnDragGuideState.visible ? (
                         <TableColumnRailResizeHandle
                           role="presentation"
                           aria-hidden="true"
@@ -7086,7 +7124,12 @@ const BlockEditorShell = ({
                           onPointerDown={(event: React.PointerEvent<HTMLSpanElement>) => {
                             event.preventDefault()
                             event.stopPropagation()
-                            startTableColumnRailResize(event.pointerId, index, event.clientX)
+                            startTableColumnRailResize(
+                              event.pointerId,
+                              index,
+                              event.clientX,
+                              tableQuickRailState.tableLeft + segment.left + segment.width
+                            )
                           }}
                         />
                       ) : null}
@@ -9022,6 +9065,8 @@ const TableColumnRailTrack = styled.div`
   z-index: 57;
   height: 0.72rem;
   overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
   border-radius: 999px;
   border: 1px solid
     ${({ theme }) => (theme.scheme === "dark" ? "rgba(71, 85, 105, 0.48)" : "rgba(148, 163, 184, 0.42)")};
@@ -9038,6 +9083,8 @@ const TableColumnRailSegment = styled.button`
   position: absolute;
   top: 1px;
   bottom: 1px;
+  user-select: none;
+  -webkit-user-select: none;
   border-radius: 999px;
   background: ${({ theme }) => (theme.scheme === "dark" ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.16)")};
   transition: background-color 120ms ease, transform 120ms ease;
@@ -9072,6 +9119,8 @@ const TableColumnRailResizeHandle = styled.span`
   right: -0.44rem;
   bottom: -0.35rem;
   width: 0.88rem;
+  user-select: none;
+  -webkit-user-select: none;
   cursor: col-resize;
   opacity: 0.82;
   transition: opacity 120ms ease;
@@ -9122,6 +9171,8 @@ const TableColumnResizeBoundaryHandle = styled.button`
   background: transparent;
   cursor: col-resize;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 
   &::before {
     content: "";

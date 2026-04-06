@@ -7,6 +7,8 @@ import { createQueryClient } from "src/libs/react-query"
 import { hydrateServerAuthSession } from "./authSession"
 import { TPostComment } from "src/types"
 import { appendSsrDebugTiming, isSsrDebugEnabled, timed } from "./serverTiming"
+import { ApiPostWithContentDto, mapPostDetail } from "src/apis/backend/posts"
+import { serverApiFetch } from "./backend"
 
 type DetailPageProps = {
   dehydratedState: unknown
@@ -17,6 +19,20 @@ const toSerializableState = (value: unknown): unknown =>
   JSON.parse(
     JSON.stringify(value, (_key, currentValue) => (currentValue === undefined ? null : currentValue))
   )
+
+const getPostDetailByIdForSsr = async (req: IncomingMessage, id: string) => {
+  const postId = Number(id)
+  if (!Number.isInteger(postId) || postId <= 0) return null
+
+  const response = await serverApiFetch(req, `/post/api/v1/posts/${postId}`)
+  if (response.status === 404) return null
+  if (!response.ok) {
+    throw new Error(`post detail SSR fetch failed: ${response.status}`)
+  }
+
+  const post = (await response.json()) as ApiPostWithContentDto
+  return mapPostDetail(post)
+}
 
 export const buildCanonicalPostDetailPage = async (
   req: IncomingMessage,
@@ -30,7 +46,7 @@ export const buildCanonicalPostDetailPage = async (
 
   let postDetail = null as Awaited<ReturnType<typeof getPostDetailById>>
   let shouldClientRecover = false
-  const postDetailResult = await timed(() => getPostDetailById(postId))
+  const postDetailResult = await timed(() => getPostDetailByIdForSsr(req, postId))
   if (postDetailResult.ok) {
     postDetail = postDetailResult.value
   } else {

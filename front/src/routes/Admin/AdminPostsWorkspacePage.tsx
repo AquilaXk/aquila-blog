@@ -1185,16 +1185,12 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                               수정
                             </RowPrimaryButton>
-                            {row.published ? (
-                              <>
-                                <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
-                                  상세 열기
-                                </RowSecondaryButton>
-                                <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                                  링크 복사
-                                </RowSecondaryButton>
-                              </>
-                            ) : null}
+                            <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
+                              상세 열기
+                            </RowSecondaryButton>
+                            <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                              링크 복사
+                            </RowSecondaryButton>
                             <DangerTextButton
                               type="button"
                               disabled={Boolean(mutationPending)}
@@ -1246,16 +1242,12 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                           수정
                         </RowPrimaryButton>
-                        {row.published ? (
-                          <>
-                            <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
-                              상세 열기
-                            </RowSecondaryButton>
-                            <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
-                              링크 복사
-                            </RowSecondaryButton>
-                          </>
-                        ) : null}
+                        <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
+                          상세 열기
+                        </RowSecondaryButton>
+                        <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                          링크 복사
+                        </RowSecondaryButton>
                         <DangerTextButton
                           type="button"
                           disabled={Boolean(mutationPending)}

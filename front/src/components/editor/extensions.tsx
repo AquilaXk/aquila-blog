@@ -9,11 +9,12 @@ import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
 import TaskItem from "@tiptap/extension-task-item"
 import TaskList from "@tiptap/extension-task-list"
-import { NodeSelection } from "@tiptap/pm/state"
+import { NodeSelection, TextSelection } from "@tiptap/pm/state"
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import AppIcon from "src/components/icons/AppIcon"
 import {
   ClipboardEvent as ReactClipboardEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -134,6 +135,25 @@ const CODE_LANGUAGE_ALIASES: Record<string, string> = {
 export const normalizeCodeLanguage = (value?: string | null) => {
   const normalized = value?.trim().toLowerCase() || "text"
   return CODE_LANGUAGE_ALIASES[normalized] || normalized
+}
+
+const isPrimarySelectAllShortcut = (event: ReactKeyboardEvent<HTMLElement>) => {
+  if (event.altKey || event.shiftKey) return false
+  if (!(event.metaKey || event.ctrlKey)) return false
+  return event.key.toLowerCase() === "a"
+}
+
+const selectDomTextContents = (root: HTMLElement | null) => {
+  if (!root) return false
+  const selection = window.getSelection()
+  if (!selection) return false
+
+  const range = document.createRange()
+  range.selectNodeContents(root)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  root.focus()
+  return true
 }
 
 export const getPreferredCodeLanguage = () => {
@@ -590,6 +610,18 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
     }).html
   )
 
+  const selectCodeBlockText = useCallback(() => {
+    if (typeof getPos !== "function") return false
+    const codeBlockPos = getPos()
+    if (typeof codeBlockPos !== "number") return false
+    const from = codeBlockPos + 1
+    const to = codeBlockPos + Math.max(1, node.nodeSize - 1)
+    const nextSelection = TextSelection.create(editor.state.doc, from, to)
+    editor.view.dispatch(editor.state.tr.setSelection(nextSelection).scrollIntoView())
+    editor.view.focus()
+    return true
+  }, [editor, getPos, node.nodeSize])
+
   useEffect(() => {
     setDraftLanguage(normalizeCodeLanguage(String(node.attrs?.language || "")))
   }, [node.attrs?.language])
@@ -600,7 +632,7 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
 
   useEffect(() => {
     const shell = shellRef.current
-    if (!shell) return
+    if (!shell || typeof document === "undefined" || typeof window === "undefined") return
 
     const resolveEditorContent = () => shell.querySelector<HTMLElement>(".aq-code-editor-content")
     const contentRoot = resolveEditorContent()
@@ -615,6 +647,27 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
 
     syncLiveCodeSource()
 
+    const handleDocumentSelectAll = (event: KeyboardEvent) => {
+      if (event.altKey || event.shiftKey) return
+      if (!(event.metaKey || event.ctrlKey)) return
+      if (event.key.toLowerCase() !== "a") return
+      const activeElement = document.activeElement
+      const selection = window.getSelection()
+      const anchorElement =
+        selection?.anchorNode instanceof Element
+          ? selection.anchorNode
+          : selection?.anchorNode?.parentElement ?? null
+      const isInsideCodeBlock =
+        (activeElement instanceof Element && contentRoot.contains(activeElement)) ||
+        (anchorElement instanceof Element && contentRoot.contains(anchorElement))
+      if (!isInsideCodeBlock) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      if (selectCodeBlockText()) return
+      selectDomTextContents(contentRoot)
+    }
+
     const observer = new MutationObserver(() => {
       if (frameId !== null) window.cancelAnimationFrame(frameId)
       frameId = window.requestAnimationFrame(() => {
@@ -623,6 +676,7 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
       })
     })
 
+    document.addEventListener("keydown", handleDocumentSelectAll, true)
     observer.observe(contentRoot, {
       childList: true,
       subtree: true,
@@ -630,12 +684,13 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
     })
 
     return () => {
+      document.removeEventListener("keydown", handleDocumentSelectAll, true)
       observer.disconnect()
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)
       }
     }
-  }, [selected])
+  }, [selectCodeBlockText, selected])
 
   useEffect(() => {
     let disposed = false
@@ -754,6 +809,25 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
     editor.view.focus()
   }, [editor, getPos, node.nodeSize])
 
+  const handleCodeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!isPrimarySelectAllShortcut(event)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (selectCodeBlockText()) return
+
+    const contentRoot = shellRef.current?.querySelector<HTMLElement>(".aq-code-editor-content") ?? null
+    if (selectDomTextContents(contentRoot)) return
+
+    if (typeof getPos !== "function") return
+    const codeBlockPos = getPos()
+    if (typeof codeBlockPos !== "number") return
+    const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, Math.max(0, codeBlockPos)))
+    editor.view.dispatch(tr.scrollIntoView())
+    editor.view.focus()
+  }, [editor, getPos, selectCodeBlockText])
+
   return (
     <CodeBlockEditorWrapper data-selected={selected}>
       <CodeBlockEditorHeader>
@@ -809,7 +883,7 @@ const CodeBlockView = ({ node, updateAttributes, selected, editor, getPos }: Nod
         </CodeLanguagePicker>
       </CodeBlockEditorHeader>
       <CodeBlockEditorSurface>
-        <div ref={shellRef} className="aq-code-shell" onPaste={handleCodePaste}>
+        <div ref={shellRef} className="aq-code-shell" onKeyDownCapture={handleCodeKeyDown} onPaste={handleCodePaste}>
           <pre
             className="aq-code-highlight-layer"
             aria-hidden="true"
@@ -826,6 +900,7 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
   const [draftKind, setDraftKind] = useState<CalloutKind>((node.attrs?.kind as CalloutKind) || "tip")
   const [draftTitle, setDraftTitle] = useState(String(node.attrs?.title || ""))
   const pickerRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const pickerId = useId()
   const [isKindMenuOpen, setIsKindMenuOpen] = useState(false)
   const { schedule: scheduleCommit, flush: flushCommit } = useDebouncedAttributeCommit(updateAttributes)
@@ -864,6 +939,14 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
     }
     scheduleCommit(nextAttrs)
   }
+
+  const handleBodyKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!isPrimarySelectAllShortcut(event)) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    selectDomTextContents(bodyRef.current?.querySelector<HTMLElement>(".aq-callout-body-content__content") || null)
+  }, [])
 
   const activeKindOption =
     CALLOUT_KIND_OPTIONS.find((option) => option.value === draftKind) ?? CALLOUT_KIND_OPTIONS[0]
@@ -925,7 +1008,12 @@ const CalloutBlockView = ({ node, updateAttributes, selected }: NodeViewProps) =
           />
         </CalloutEditorHeader>
         <CalloutEditorBody>
-          <CalloutBodyContent data-callout-body-content="true" onBlur={flushCommit}>
+          <CalloutBodyContent
+            ref={bodyRef}
+            data-callout-body-content="true"
+            onBlur={flushCommit}
+            onKeyDownCapture={handleBodyKeyDown}
+          >
             <NodeViewContent className="aq-callout-body-content__content" />
           </CalloutBodyContent>
         </CalloutEditorBody>

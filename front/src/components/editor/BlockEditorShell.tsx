@@ -294,6 +294,7 @@ type TableQuickRailState = {
   tableTop: number
   width: number
   height: number
+  rowIndex: number
   rowTop: number
   rowHeight: number
   columnLeft: number
@@ -774,7 +775,7 @@ const TABLE_COLUMN_GRIP_HEIGHT_PX = 22
 const TABLE_ROW_GRIP_WIDTH_PX = 22
 const TABLE_ROW_GRIP_HEIGHT_PX = 40
 const TABLE_ADD_BAR_THICKNESS_PX = 28
-const TABLE_ADD_BAR_GAP_PX = 10
+const TABLE_ADD_BAR_GAP_PX = 0
 const TABLE_ADD_BAR_MIN_LENGTH_PX = 96
 const TABLE_QUICK_RAIL_HIDE_DELAY_MS = 120
 const TABLE_MENU_EDGE_PADDING_PX = 16
@@ -812,73 +813,25 @@ const clampViewportPosition = (
 
 const resolveDesktopTableRailLayout = (
   state: TableQuickRailState,
-  trackWidth: number,
-  viewportWidth: number,
-  viewportHeight: number
+  trackWidth: number
 ) => {
   const visibleTableWidth = Math.max(0, Math.round(trackWidth))
   const visibleTableHeight = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.height))
   const rowAddBarWidth = Math.max(TABLE_ADD_BAR_MIN_LENGTH_PX, Math.round(state.width))
-  const columnGripTop = clampViewportPosition(
-    Math.round(state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2)),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportHeight,
-    TABLE_COLUMN_GRIP_HEIGHT_PX
+  const columnGripTop = Math.round(state.tableTop - Math.round(TABLE_COLUMN_GRIP_HEIGHT_PX / 2))
+  const cornerTop = Math.round(state.tableTop - TABLE_CORNER_OFFSET_PX)
+  const cornerLeft = Math.round(state.tableLeft + visibleTableWidth - TABLE_CORNER_BUTTON_SIZE_PX)
+  const columnGripLeft = Math.round(
+    state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)
   )
-  const cornerTop = clampViewportPosition(
-    Math.round(state.tableTop - TABLE_CORNER_OFFSET_PX),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportHeight,
-    TABLE_CORNER_BUTTON_SIZE_PX
+  const columnAddBarLeft = Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX)
+  const columnAddBarTop = Math.round(state.tableTop)
+  const rowGripTop = Math.round(
+    state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)
   )
-  const cornerLeft = clampViewportPosition(
-    Math.round(state.tableLeft + visibleTableWidth - TABLE_CORNER_BUTTON_SIZE_PX),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_CORNER_BUTTON_SIZE_PX
-  )
-  const columnGripLeft = clampViewportPosition(
-    Math.round(state.columnLeft + Math.max(0, state.columnWidth / 2 - TABLE_COLUMN_GRIP_WIDTH_PX / 2)),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_COLUMN_GRIP_WIDTH_PX
-  )
-  const columnAddBarLeft = clampViewportPosition(
-    Math.round(state.tableLeft + visibleTableWidth + TABLE_ADD_BAR_GAP_PX),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_ADD_BAR_THICKNESS_PX
-  )
-  const columnAddBarTop = clampViewportPosition(
-    Math.round(state.tableTop),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportHeight,
-    visibleTableHeight
-  )
-  const rowGripTop = clampViewportPosition(
-    Math.round(state.rowTop + Math.max(0, state.rowHeight / 2 - TABLE_ROW_GRIP_HEIGHT_PX / 2)),
-    Math.max(columnGripTop + TABLE_COLUMN_GRIP_HEIGHT_PX + 8, TABLE_RAIL_EDGE_PADDING_PX),
-    viewportHeight,
-    TABLE_ROW_GRIP_HEIGHT_PX
-  )
-  const rowGripLeft = clampViewportPosition(
-    Math.round(state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2)),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    TABLE_ROW_GRIP_WIDTH_PX
-  )
-  const rowAddBarLeft = clampViewportPosition(
-    Math.round(state.tableLeft),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportWidth,
-    rowAddBarWidth
-  )
-  const rowAddBarTop = clampViewportPosition(
-    Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX),
-    TABLE_RAIL_EDGE_PADDING_PX,
-    viewportHeight,
-    TABLE_ADD_BAR_THICKNESS_PX
-  )
+  const rowGripLeft = Math.round(state.tableLeft - Math.round(TABLE_ROW_GRIP_WIDTH_PX / 2))
+  const rowAddBarLeft = Math.round(state.tableLeft)
+  const rowAddBarTop = Math.round(state.tableTop + state.height + TABLE_ADD_BAR_GAP_PX)
 
   return {
     cornerLeft,
@@ -1775,6 +1728,7 @@ const BlockEditorShell = ({
     tableTop: 0,
     width: 0,
     height: 0,
+    rowIndex: 0,
     rowTop: 0,
     rowHeight: 0,
     columnLeft: 0,
@@ -2587,11 +2541,48 @@ const BlockEditorShell = ({
   )
 
   const getTableCellFromTarget = useCallback((target: EventTarget | null) => {
-    if (!(target instanceof Element)) return null
-    const cell = target.closest("td, th")
+    const normalizedTarget =
+      target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+    if (!(normalizedTarget instanceof Element)) return null
+    const cell = normalizedTarget.closest("td, th")
     if (!(cell instanceof HTMLTableCellElement)) return null
     return cell
   }, [])
+
+  const getTableCellFromClientPoint = useCallback(
+    (clientX: number, clientY: number, target: EventTarget | null) => {
+      const targetCell = getTableCellFromTarget(target)
+      if (targetCell) return targetCell
+      if (typeof document === "undefined") return null
+
+      const pointElement = document.elementFromPoint(clientX, clientY)
+      const pointCell = pointElement?.closest("td, th")
+      if (pointCell instanceof HTMLTableCellElement) return pointCell
+
+      const normalizedTarget =
+        target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+      const tableSurfaceElement =
+        normalizedTarget?.closest(".aq-table-shell, .tableWrapper, table") ??
+        pointElement?.closest(".aq-table-shell, .tableWrapper, table") ??
+        null
+      const tableElement =
+        tableSurfaceElement instanceof HTMLTableElement
+          ? tableSurfaceElement
+          : (tableSurfaceElement?.querySelector("table") as HTMLTableElement | null)
+      if (!tableElement) return null
+
+      const cells = Array.from(tableElement.querySelectorAll("th, td")).filter(
+        (cell): cell is HTMLTableCellElement => cell instanceof HTMLTableCellElement
+      )
+      return (
+        cells.find((cell) => {
+          const rect = cell.getBoundingClientRect()
+          return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+        }) ?? null
+      )
+    },
+    [getTableCellFromTarget]
+  )
 
   const isRowResizeHandleTarget = useCallback(
     (cell: HTMLTableCellElement | null, clientX: number, clientY: number) => {
@@ -2724,6 +2715,30 @@ const BlockEditorShell = ({
     return null
   }, [])
 
+  const resolveTableQuickRailAnchorElement = useCallback(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return null
+
+    const selectedCell = viewport.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null
+    if (selectedCell) return selectedCell
+
+    const renderedTable = findActiveRenderedTable(viewport, tableQuickRailStateRef.current)
+    if (!renderedTable) return null
+
+    const rows = Array.from(renderedTable.querySelectorAll("tr")).filter(
+      (node): node is HTMLTableRowElement => node instanceof HTMLTableRowElement
+    )
+    const row = rows[tableQuickRailStateRef.current.rowIndex] ?? null
+    if (!row) return renderedTable.querySelector("th, td") as HTMLElement | null
+
+    const cells = Array.from(row.children).filter((node): node is HTMLElement => node instanceof HTMLElement)
+    return (
+      cells[tableQuickRailStateRef.current.columnIndex] ??
+      (row.querySelector("th, td") as HTMLElement | null) ??
+      (renderedTable.querySelector("th, td") as HTMLElement | null)
+    )
+  }, [])
+
   const getCurrentSelectedTableRect = useCallback((activeEditor?: TiptapEditor | null) => {
     if (!activeEditor) return null
     if (isTableSelectionActive(activeEditor)) {
@@ -2773,7 +2788,7 @@ const BlockEditorShell = ({
     []
   )
 
-  const isCurrentTableRowSelection = useCallback(() => {
+  const isCurrentTableRowSelection = useCallback((rowIndex: number) => {
     const currentEditor = editorRef.current
     if (!currentEditor) return false
     const { selection } = currentEditor.state
@@ -2786,8 +2801,9 @@ const BlockEditorShell = ({
     }
     if (!rect) return false
     return (
-      rect.top >= 0 &&
-      rect.bottom === rect.top + 1 &&
+      rowIndex >= 0 &&
+      rect.top === rowIndex &&
+      rect.bottom === rowIndex + 1 &&
       rect.left === 0 &&
       rect.right === rect.map.width
     )
@@ -3100,12 +3116,15 @@ const BlockEditorShell = ({
       return
     }
     cancelTableQuickRailHide()
-    const activeCell =
-      (viewportRef.current?.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null) ||
-      (element?.closest("th, td") as HTMLElement | null) ||
-      (tableElement.querySelector("th, td") as HTMLElement | null)
+    const hoveredCell = element?.closest("th, td") as HTMLElement | null
+    const selectedCell = viewportRef.current?.querySelector(".aq-block-editor__content .selectedCell") as HTMLElement | null
+    const activeCell = hoveredCell || selectedCell || (tableElement.querySelector("th, td") as HTMLElement | null)
     const activeCellRect = activeCell?.getBoundingClientRect()
-    const activeRowRect = activeCell?.closest("tr")?.getBoundingClientRect()
+    const activeRow = activeCell?.closest("tr") as HTMLTableRowElement | null
+    const activeRowRect = activeRow?.getBoundingClientRect()
+    const activeRowIndex = activeRow
+      ? Array.from(tableElement.querySelectorAll("tr")).findIndex((row) => row === activeRow)
+      : 0
     const activeColumnIndex = activeCell?.parentElement
       ? Array.from(activeCell.parentElement.children).findIndex((child) => child === activeCell)
       : 0
@@ -3128,6 +3147,7 @@ const BlockEditorShell = ({
       tableTop: Math.round(tableRect.top),
       width: Math.round(tableRect.width),
       height: Math.round(tableRect.height),
+      rowIndex: activeRowIndex >= 0 ? activeRowIndex : 0,
       rowTop: Math.round(activeRowRect?.top ?? tableRect.top + 52),
       rowHeight: Math.round(activeRowRect?.height ?? 44),
       columnLeft: Math.round(activeCellRect?.left ?? tableRect.left + 72),
@@ -4156,10 +4176,14 @@ const BlockEditorShell = ({
         const anchorDom = activeEditor.view.domAtPos(selection.from).node
         const anchorElement =
           anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
-        if (anchorElement?.closest(".aq-table-shell, .tableWrapper, table")) {
+        if (isTableStructuralSelection && anchorElement?.closest(".aq-table-shell, .tableWrapper, table")) {
           syncTableQuickRailFromElement(anchorElement)
           return
         }
+        if (!tableMenuState) {
+          hideTableQuickRailImmediately()
+        }
+        return
       }
 
       cancelBubbleHide()
@@ -4652,6 +4676,13 @@ const BlockEditorShell = ({
   const activeInlineColor = normalizeInlineColorToken(String(editor?.getAttributes("inlineColor").color || ""))
   const isInlineCodeActive = editor?.isActive("code") ?? false
   const isTableMode = isTableSelectionActive(editor)
+  const isTableStructuralSelection = useMemo(() => {
+    if (!editor) return false
+    void selectionTick
+    const { selection } = editor.state
+    return selection instanceof CellSelection || (selection instanceof NodeSelection && selection.node.type.name === "table")
+  }, [editor, selectionTick])
+  const shouldPersistTableHandles = isTableStructuralSelection || Boolean(tableMenuState)
   const activeTableStructureState = useMemo(() => {
     void selectionTick
     return getActiveTableStructureState(editor)
@@ -4664,12 +4695,12 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     const currentEditor = editorRef.current
-    if (!currentEditor || !isTableMode) return
+    if (!currentEditor || !isTableStructuralSelection) return
     const anchorDom = currentEditor.view.domAtPos(currentEditor.state.selection.from).node
     const anchorElement = anchorDom instanceof Element ? anchorDom : anchorDom.parentElement
     if (!anchorElement) return
     syncTableQuickRailFromElement(anchorElement)
-  }, [isTableMode, selectionTick, syncTableQuickRailFromElement])
+  }, [isTableStructuralSelection, selectionTick, syncTableQuickRailFromElement])
 
   const applyInlineColor = useCallback(
     (color?: string | null) => {
@@ -5983,30 +6014,22 @@ const BlockEditorShell = ({
 
   const handleTableColumnRailSegmentClick = useCallback(
     (columnIndex: number, anchorRect: DOMRect) => {
-      const alreadySelected = isCurrentTableColumnSelection(columnIndex)
       const selected = selectTableColumnByIndex(columnIndex)
       if (!selected) return
       setTableQuickRailState((prev) => ({ ...prev, columnIndex }))
-      if (alreadySelected) {
-        openSelectionAwareTableMenu("column", anchorRect)
-        return
-      }
-      closeTableMenu()
+      openTableMenu("column", anchorRect)
     },
-    [closeTableMenu, isCurrentTableColumnSelection, openSelectionAwareTableMenu, selectTableColumnByIndex]
+    [openTableMenu, selectTableColumnByIndex]
   )
 
   const handleTableRowGripClick = useCallback(
-    (anchorRect: DOMRect) => {
-      const alreadySelected = isCurrentTableRowSelection()
-      selectCurrentTableAxis("row")
-      if (alreadySelected) {
-        openSelectionAwareTableMenu("row", anchorRect)
-        return
-      }
-      closeTableMenu()
+    (rowIndex: number, anchorRect: DOMRect) => {
+      const selected = selectTableRowByIndex(rowIndex)
+      if (!selected) return
+      setTableQuickRailState((prev) => ({ ...prev, rowIndex }))
+      openTableMenu("row", anchorRect)
     },
-    [closeTableMenu, isCurrentTableRowSelection, openSelectionAwareTableMenu, selectCurrentTableAxis]
+    [openTableMenu, selectTableRowByIndex]
   )
 
   const openBlockMenu = useCallback((blockIndex: number, anchorRect: DOMRect) => {
@@ -6255,29 +6278,29 @@ const BlockEditorShell = ({
       return
     }
 
-    const selectedCell = viewportRef.current?.querySelector(
-      ".aq-block-editor__content .selectedCell"
-    ) as HTMLElement | null
-    const fallbackCell = viewportRef.current?.querySelector(
-      ".aq-block-editor__content table th, .aq-block-editor__content table td"
-    ) as HTMLElement | null
-    syncTableQuickRailFromElement(selectedCell ?? fallbackCell)
+    if (!shouldPersistTableHandles) {
+      return
+    }
+
+    const anchorCell = resolveTableQuickRailAnchorElement()
+    if (!anchorCell) return
+    syncTableQuickRailFromElement(anchorCell)
   }, [
     editor,
+    resolveTableQuickRailAnchorElement,
     selectionTick,
     scheduleTableQuickRailHide,
+    shouldPersistTableHandles,
     syncTableQuickRailFromElement,
     tableMenuState,
     tableQuickRailState.visible,
   ])
 
   useEffect(() => {
-    if (typeof window === "undefined" || isCoarsePointer || !tableQuickRailState.visible) return
+    if (typeof window === "undefined" || isCoarsePointer || !tableQuickRailState.visible || !shouldPersistTableHandles) return
     if (tableColumnRailResizeRef.current || tableRowResizeRef.current) return
 
-    const anchorElement = viewportRef.current?.querySelector(
-      ".aq-block-editor__content .selectedCell, .aq-block-editor__content table th, .aq-block-editor__content table td"
-    ) as HTMLElement | null
+    const anchorElement = resolveTableQuickRailAnchorElement()
     const tableElement = anchorElement?.closest("table") as HTMLTableElement | null
     if (!anchorElement || !tableElement) return
 
@@ -6307,7 +6330,9 @@ const BlockEditorShell = ({
     syncTableQuickRailFromElement(anchorElement)
   }, [
     isCoarsePointer,
+    resolveTableQuickRailAnchorElement,
     selectionTick,
+    shouldPersistTableHandles,
     syncTableQuickRailFromElement,
     tableQuickRailState.columnSegments,
     tableQuickRailState.visible,
@@ -6316,12 +6341,9 @@ const BlockEditorShell = ({
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof MutationObserver === "undefined") return
-    if (isCoarsePointer || !tableQuickRailState.visible) return
+    if (isCoarsePointer || !tableQuickRailState.visible || !shouldPersistTableHandles) return
 
-    const resolveAnchorElement = () =>
-      (viewportRef.current?.querySelector(
-        ".aq-block-editor__content .selectedCell, .aq-block-editor__content table th, .aq-block-editor__content table td"
-      ) as HTMLElement | null)
+    const resolveAnchorElement = () => resolveTableQuickRailAnchorElement()
 
     const initialAnchorElement = resolveAnchorElement()
     const tableElement = initialAnchorElement?.closest("table") as HTMLTableElement | null
@@ -6369,7 +6391,7 @@ const BlockEditorShell = ({
       resizeObserver?.disconnect()
       mutationObserver.disconnect()
     }
-  }, [isCoarsePointer, selectionTick, syncTableQuickRailFromElement, tableQuickRailState.visible])
+  }, [isCoarsePointer, resolveTableQuickRailAnchorElement, selectionTick, shouldPersistTableHandles, syncTableQuickRailFromElement, tableQuickRailState.visible])
 
   useEffect(() => {
     const elements = getTopLevelBlockElements()
@@ -6399,8 +6421,8 @@ const BlockEditorShell = ({
     }
   }, [draggedBlockState, dropIndicatorState.insertionIndex, getTopLevelBlockElements, hoveredBlockIndex])
 
-  const handleViewportPointerMove = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
+  const syncViewportHoverState = useCallback(
+    (targetEvent: EventTarget | null, clientX: number, clientY: number) => {
       cancelHoveredBlockClear()
       const rowResizeState = tableRowResizeRef.current
       const columnResizeState = tableColumnRailResizeRef.current
@@ -6413,7 +6435,9 @@ const BlockEditorShell = ({
         return
       }
       if (isCoarsePointer) return
-      const target = event.target instanceof Element ? event.target : null
+      const target =
+        targetEvent instanceof Element ? targetEvent : targetEvent instanceof Node ? targetEvent.parentElement : null
+      const cell = getTableCellFromClientPoint(clientX, clientY, targetEvent)
       if (
         target?.closest("[data-table-menu-root='true']") ||
         target?.closest("[data-table-axis-rail='true']") ||
@@ -6426,9 +6450,9 @@ const BlockEditorShell = ({
         }
         return
       }
-      const hoveredTableElement = target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
+      const hoveredTableElement = cell?.closest(".aq-table-shell, .tableWrapper, table") ?? target?.closest(".aq-table-shell, .tableWrapper, table") ?? null
       if (hoveredTableElement) {
-        syncTableQuickRailFromElement(hoveredTableElement)
+        syncTableQuickRailFromElement(cell ?? target ?? hoveredTableElement)
       } else if (!tableMenuState) {
         scheduleTableQuickRailHide()
       }
@@ -6442,11 +6466,10 @@ const BlockEditorShell = ({
         }
         return
       }
-      const cell = getTableCellFromTarget(event.target)
-      setViewportRowResizeHot(isRowResizeHandleTarget(cell, event.clientX, event.clientY))
+      setViewportRowResizeHot(isRowResizeHandleTarget(cell, clientX, clientY))
       setHoveredBlockIndex(
-        findTopLevelBlockIndexByClientPosition(event.clientX, event.clientY) ??
-          findTopLevelBlockIndexFromTarget(event.target)
+        findTopLevelBlockIndexByClientPosition(clientX, clientY) ??
+          findTopLevelBlockIndexFromTarget(targetEvent)
       )
       if (selectedBlockNodeIndex !== null && !keyboardBlockSelectionStickyRef.current) {
         keyboardBlockSelectionStickyRef.current = false
@@ -6461,7 +6484,7 @@ const BlockEditorShell = ({
       cancelTableQuickRailHide,
       findTopLevelBlockIndexByClientPosition,
       findTopLevelBlockIndexFromTarget,
-      getTableCellFromTarget,
+      getTableCellFromClientPoint,
       isCoarsePointer,
       isTableMode,
       isRowResizeHandleTarget,
@@ -6474,20 +6497,33 @@ const BlockEditorShell = ({
     ]
   )
 
+  const handleViewportPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      syncViewportHoverState(event.target, event.clientX, event.clientY)
+    },
+    [syncViewportHoverState]
+  )
+
+  const handleViewportMouseMove = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      syncViewportHoverState(event.target, event.clientX, event.clientY)
+    },
+    [syncViewportHoverState]
+  )
+
   const handleViewportPointerLeave = useCallback(() => {
     scheduleHoveredBlockClear()
-    if (!isTableMode && !tableMenuState) {
+    if (!shouldPersistTableHandles) {
       scheduleTableQuickRailHide()
     }
     if (!tableRowResizeRef.current) {
       setViewportRowResizeHot(false)
     }
   }, [
-    isTableMode,
     scheduleHoveredBlockClear,
     scheduleTableQuickRailHide,
     setViewportRowResizeHot,
-    tableMenuState,
+    shouldPersistTableHandles,
   ])
 
   const handleViewportKeyDownCapture = useCallback(
@@ -6559,7 +6595,7 @@ const BlockEditorShell = ({
         syncSelectedBlockNodeSurface(null)
       }
       if (isCoarsePointer || tableRowResizeRef.current || tableColumnRailResizeRef.current) return
-      const cell = getTableCellFromTarget(event.target)
+      const cell = getTableCellFromClientPoint(event.clientX, event.clientY, event.target)
       if (!isRowResizeHandleTarget(cell, event.clientX, event.clientY) || !cell) return
       event.preventDefault()
       event.stopPropagation()
@@ -6568,7 +6604,7 @@ const BlockEditorShell = ({
     [
       findTopLevelBlockIndexFromTarget,
       findTopLevelBlockIndexByClientPosition,
-      getTableCellFromTarget,
+      getTableCellFromClientPoint,
       isOuterBlockSelectionGesture,
       isCoarsePointer,
       isRowResizeHandleTarget,
@@ -6718,7 +6754,7 @@ const BlockEditorShell = ({
   }, [tableMenuState])
 
   const shouldShowTableHandles =
-    !isCoarsePointer && (tableQuickRailState.visible || isTableMode || Boolean(tableMenuState))
+    !isCoarsePointer && (tableQuickRailState.visible || shouldPersistTableHandles)
   const desktopTableRailTrackWidth = useMemo(
     () =>
       tableQuickRailState.columnSegments.length
@@ -6728,12 +6764,7 @@ const BlockEditorShell = ({
   )
   const desktopTableRailLayout = useMemo(() => {
     if (typeof window === "undefined") return null
-    return resolveDesktopTableRailLayout(
-      tableQuickRailState,
-      desktopTableRailTrackWidth,
-      window.innerWidth,
-      window.innerHeight
-    )
+    return resolveDesktopTableRailLayout(tableQuickRailState, desktopTableRailTrackWidth)
   }, [desktopTableRailTrackWidth, tableQuickRailState])
 
   useEffect(() => {
@@ -7004,6 +7035,7 @@ const BlockEditorShell = ({
           })
         }}
         onKeyDownCapture={handleViewportKeyDownCapture}
+        onMouseMove={handleViewportMouseMove}
         onPointerMove={handleViewportPointerMove}
         onPointerLeave={handleViewportPointerLeave}
         onPointerDown={handleViewportPointerDown}
@@ -7202,7 +7234,7 @@ const BlockEditorShell = ({
                 aria-label={`열 ${index + 1} 경계 조절`}
                 onPointerEnter={cancelTableQuickRailHide}
                 onPointerLeave={() => {
-                  if (!isTableMode && !tableMenuState) {
+                  if (!shouldPersistTableHandles) {
                     scheduleTableQuickRailHide()
                   }
                 }}
@@ -7234,7 +7266,7 @@ const BlockEditorShell = ({
                 }}
               />
             ) : null}
-            {isCurrentTableRowSelection() ? (
+            {isCurrentTableRowSelection(tableQuickRailState.rowIndex) ? (
               <TableAxisSelectionOutline
                 data-axis="row"
                 data-testid="table-row-selection-outline"
@@ -7251,7 +7283,7 @@ const BlockEditorShell = ({
               data-testid="table-corner-handle"
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
-                if (!isTableMode && !tableMenuState) {
+                if (!shouldPersistTableHandles) {
                   scheduleTableQuickRailHide()
                 }
               }}
@@ -7283,7 +7315,7 @@ const BlockEditorShell = ({
               data-axis="row"
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
-                if (!isTableMode && !tableMenuState) {
+                if (!shouldPersistTableHandles) {
                   scheduleTableQuickRailHide()
                 }
               }}
@@ -7303,13 +7335,13 @@ const BlockEditorShell = ({
               <TableQuickRailButton
                 type="button"
                 data-axis="row"
-                data-active={isCurrentTableRowSelection()}
+                data-active={isCurrentTableRowSelection(tableQuickRailState.rowIndex)}
                 title="행 메뉴"
                 aria-label="행 메뉴"
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  handleTableRowGripClick(event.currentTarget.getBoundingClientRect())
+                  handleTableRowGripClick(tableQuickRailState.rowIndex, event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="grip" />
@@ -7321,7 +7353,7 @@ const BlockEditorShell = ({
               data-axis="column"
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
-                if (!isTableMode && !tableMenuState) {
+                if (!shouldPersistTableHandles) {
                   scheduleTableQuickRailHide()
                 }
               }}
@@ -7347,10 +7379,7 @@ const BlockEditorShell = ({
                 onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  handleTableColumnRailSegmentClick(
-                    tableQuickRailState.columnIndex,
-                    event.currentTarget.getBoundingClientRect()
-                  )
+                  handleTableColumnRailSegmentClick(tableQuickRailState.columnIndex, event.currentTarget.getBoundingClientRect())
                 }}
               >
                 <TableHandleIcon kind="grip" />
@@ -7365,7 +7394,7 @@ const BlockEditorShell = ({
               aria-label="열 추가"
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
-                if (!isTableMode && !tableMenuState) {
+                if (!shouldPersistTableHandles) {
                   scheduleTableQuickRailHide()
                 }
               }}
@@ -7391,7 +7420,7 @@ const BlockEditorShell = ({
               aria-label="행 추가"
               onPointerEnter={cancelTableQuickRailHide}
               onPointerLeave={() => {
-                if (!isTableMode && !tableMenuState) {
+                if (!shouldPersistTableHandles) {
                   scheduleTableQuickRailHide()
                 }
               }}

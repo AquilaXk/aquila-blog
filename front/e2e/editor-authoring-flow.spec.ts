@@ -709,6 +709,12 @@ test.describe("block editor authoring flow", () => {
 
     const firstTableCell = page.locator("table th, table td").first()
     await firstTableCell.click()
+
+    await expect(page.getByTestId("table-column-rail")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-rail")).toHaveCount(0)
+    await expect(page.getByTestId("table-column-add-bar")).toHaveCount(0)
+    await expect(page.getByTestId("table-row-add-bar")).toHaveCount(0)
+
     await firstTableCell.hover()
 
     await expect(page.getByTestId("table-column-rail-track")).toHaveCount(0)
@@ -770,8 +776,33 @@ test.describe("block editor authoring flow", () => {
     expect(cornerRect.width).toBeLessThanOrEqual(26)
     expect(cornerRect.height).toBeLessThanOrEqual(26)
 
+    const edgeAlignment = await page.evaluate(() => {
+      const table = document.querySelector<HTMLElement>(".aq-block-editor__content .tableWrapper table")
+      const columnAddBar = document.querySelector<HTMLElement>("[data-testid='table-column-add-bar']")
+      const rowAddBar = document.querySelector<HTMLElement>("[data-testid='table-row-add-bar']")
+      if (!table || !columnAddBar || !rowAddBar) return null
+
+      const tableRect = table.getBoundingClientRect()
+      const columnAddRect = columnAddBar.getBoundingClientRect()
+      const rowAddRect = rowAddBar.getBoundingClientRect()
+      return {
+        columnGap: Math.round(columnAddRect.left - tableRect.right),
+        rowGap: Math.round(rowAddRect.top - tableRect.bottom),
+      }
+    })
+    expect(edgeAlignment).not.toBeNull()
+    if (!edgeAlignment) {
+      throw new Error("table edge alignment metrics are missing")
+    }
+    expect(Math.abs(edgeAlignment.columnGap)).toBeLessThanOrEqual(2)
+    expect(Math.abs(edgeAlignment.rowGap)).toBeLessThanOrEqual(2)
+
     await rowRailButton.click()
     await expect(page.getByTestId("table-row-selection-outline")).toBeVisible()
+    await expect(page.getByTestId("table-row-menu")).toBeVisible()
+    await expect(page.getByTestId("table-row-menu").getByRole("button", { name: "행 삭제" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByTestId("table-row-menu")).toHaveCount(0)
 
     await columnQuickAddButton.click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
@@ -781,12 +812,9 @@ test.describe("block editor authoring flow", () => {
 
     await columnRailButton.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
-
     const columnMenu = page.getByTestId("table-column-menu")
-    if ((await columnMenu.count()) === 0) {
-      await columnRailButton.click()
-    }
     await expect(columnMenu).toBeVisible()
+    await expect(columnMenu.getByRole("button", { name: "열 삭제" })).toBeVisible()
     await columnMenu.getByRole("button", { name: "열 선택" }).click()
     await expect(page.getByTestId("table-column-menu")).toHaveCount(0)
   })
@@ -812,20 +840,51 @@ test.describe("block editor authoring flow", () => {
     await page.goto(QA_ENGINE_ROUTE)
 
     await page.getByRole("button", { name: "테이블" }).click()
-    const firstTableCell = page.locator("table th, table td").first()
-    await firstTableCell.click()
-    await firstTableCell.hover()
+    const targetCell = page.locator("table tr").nth(2).locator("th, td").nth(1)
+    await targetCell.click()
+    await targetCell.hover()
 
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
+    const rowRailButton = page.getByTestId("table-row-rail").getByRole("button", { name: "행 메뉴" })
     await expect(columnRailButton).toBeVisible()
-    await columnRailButton.hover()
+    await expect(rowRailButton).toBeVisible()
+
+    const targetMetrics = await targetCell.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+    })
+    const railMetrics = await Promise.all(
+      [columnRailButton, rowRailButton].map((locator) =>
+        locator.evaluate((element) => {
+          const rect = element.getBoundingClientRect()
+          return {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          }
+        })
+      )
+    )
+    const [columnRailRect, rowRailRect] = railMetrics
+    expect(Math.abs(columnRailRect.left + columnRailRect.width / 2 - (targetMetrics.left + targetMetrics.width / 2))).toBeLessThanOrEqual(8)
+    expect(Math.abs(rowRailRect.top + rowRailRect.height / 2 - (targetMetrics.top + targetMetrics.height / 2))).toBeLessThanOrEqual(8)
+
+    await rowRailButton.click()
+    const rowMenu = page.getByTestId("table-row-menu")
+    await expect(rowMenu).toBeVisible()
+    await expect(rowMenu.getByRole("button", { name: "행 삭제" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(rowMenu).toHaveCount(0)
+
     await columnRailButton.click()
     await expect(page.getByTestId("table-column-selection-outline")).toBeVisible()
-
     const columnMenu = page.getByTestId("table-column-menu")
-    if ((await columnMenu.count()) === 0) {
-      await columnRailButton.click()
-    }
     await expect(columnMenu).toBeVisible()
     await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
@@ -962,9 +1021,6 @@ test.describe("block editor authoring flow", () => {
     const columnRailButton = page.getByTestId("table-column-rail").getByRole("button", { name: "열 메뉴" })
     await columnRailButton.click()
     const columnMenu = page.getByTestId("table-column-menu")
-    if ((await columnMenu.count()) === 0) {
-      await columnRailButton.click()
-    }
     await columnMenu.getByRole("button", { name: "오른쪽에 삽입" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(4)
 
@@ -972,9 +1028,6 @@ test.describe("block editor authoring flow", () => {
     expect(afterInsertMetrics.columnCount).toBe(4)
 
     await columnRailButton.click()
-    if ((await columnMenu.count()) === 0) {
-      await columnRailButton.click()
-    }
     await columnMenu.getByRole("button", { name: "열 삭제" }).click()
     await expect(page.locator("table tr").first().locator("th, td")).toHaveCount(3)
 

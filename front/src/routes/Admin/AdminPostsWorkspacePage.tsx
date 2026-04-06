@@ -10,6 +10,7 @@ import { apiFetch } from "src/apis/backend/client"
 import type { AuthMember } from "src/hooks/useAuthSession"
 import useAuthSession from "src/hooks/useAuthSession"
 import { pushRoute } from "src/libs/router"
+import { toCanonicalPostPath } from "src/libs/utils/postPath"
 import { AdminPageProps, buildAdminPagePropsFromMember, getAdminPageProps, readAdminProtectedBootstrap } from "src/libs/server/adminPage"
 import { hasServerAuthCookie } from "src/libs/server/authSession"
 import { serverApiFetch } from "src/libs/server/backend"
@@ -148,6 +149,12 @@ const toEditorRoute = (query?: Record<string, string>) => {
   return search ? `${EDITOR_NEW_ROUTE_PATH}?${search}` : EDITOR_NEW_ROUTE_PATH
 }
 
+const buildCanonicalPostUrl = (postId: string | number) => {
+  const path = toCanonicalPostPath(postId)
+  if (typeof window === "undefined") return path
+  return new URL(path, window.location.origin).toString()
+}
+
 const sanitizeNumberInput = (value: string, fallback: string) => {
   const digits = value.replace(/[^0-9]/g, "")
   return digits.length > 0 ? digits : fallback
@@ -202,7 +209,7 @@ const toVisibility = (published: boolean, listed: boolean) => {
 const visibilityLabel = (published: boolean, listed: boolean) => {
   const visibility = toVisibility(published, listed)
   if (visibility === "PRIVATE") return "비공개"
-  if (visibility === "PUBLIC_UNLISTED") return "상세 공개"
+  if (visibility === "PUBLIC_UNLISTED") return "링크 공개"
   return "전체 공개"
 }
 
@@ -214,7 +221,7 @@ const getWorkspaceRowTitle = (row: Pick<AdminPostListItem, "title" | "published"
 
 const visibilityLabelFromValue = (visibility: LocalDraftPayload["visibility"]) => {
   if (visibility === "PRIVATE") return "비공개"
-  if (visibility === "PUBLIC_UNLISTED") return "상세 공개"
+  if (visibility === "PUBLIC_UNLISTED") return "링크 공개"
   return "전체 공개"
 }
 
@@ -556,9 +563,44 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
     [router]
   )
 
+  const openPostDetailRoute = useCallback(
+    async (postId: number) => {
+      const path = toCanonicalPostPath(postId)
+      if (typeof window !== "undefined") {
+        const opened = window.open(path, "_blank", "noopener,noreferrer")
+        if (opened) return
+      }
+      await pushRoute(router, path)
+    },
+    [router]
+  )
+
   const showToast = useCallback((next: WorkspaceToastState) => {
     setToast(next)
   }, [])
+
+  const copyPostDetailLink = useCallback(
+    async (row: Pick<AdminPostListItem, "id" | "title" | "published" | "listed" | "tempDraft">) => {
+      const url = buildCanonicalPostUrl(row.id)
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url)
+          showToast({ tone: "success", text: `#${row.id} ${buildRowTitle(row)} 링크를 복사했습니다.` })
+          return
+        }
+        if (typeof window !== "undefined") {
+          window.prompt("링크를 복사하세요.", url)
+          showToast({ tone: "success", text: `#${row.id} ${buildRowTitle(row)} 링크를 표시했습니다.` })
+          return
+        }
+        throw new Error("링크를 복사할 수 없는 환경입니다.")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        showToast({ tone: "error", text: `링크 복사 실패: ${message}` })
+      }
+    },
+    [showToast]
+  )
 
   const pushRecentAction = useCallback(
     (tone: WorkspaceRecentAction["tone"], label: string, detail: string, stateLabel: string) => {
@@ -1143,6 +1185,16 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                             <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                               수정
                             </RowPrimaryButton>
+                            {row.published ? (
+                              <>
+                                <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
+                                  상세 열기
+                                </RowSecondaryButton>
+                                <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                                  링크 복사
+                                </RowSecondaryButton>
+                              </>
+                            ) : null}
                             <DangerTextButton
                               type="button"
                               disabled={Boolean(mutationPending)}
@@ -1194,6 +1246,16 @@ export const AdminPostWorkspacePage: NextPage<AdminPostsWorkspacePageProps> = ({
                         <RowPrimaryButton type="button" onClick={() => void handleContinueRecent(row)}>
                           수정
                         </RowPrimaryButton>
+                        {row.published ? (
+                          <>
+                            <RowSecondaryButton type="button" onClick={() => void openPostDetailRoute(row.id)}>
+                              상세 열기
+                            </RowSecondaryButton>
+                            <RowSecondaryButton type="button" onClick={() => void copyPostDetailLink(row)}>
+                              링크 복사
+                            </RowSecondaryButton>
+                          </>
+                        ) : null}
                         <DangerTextButton
                           type="button"
                           disabled={Boolean(mutationPending)}
@@ -2263,6 +2325,21 @@ const RowPrimaryButton = styled.button`
   padding: 0;
   font-size: 0.86rem;
   font-weight: 800;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.48;
+    cursor: wait;
+  }
+`
+
+const RowSecondaryButton = styled.button`
+  border: 0;
+  background: transparent;
+  color: ${({ theme }) => theme.colors.gray11};
+  padding: 0;
+  font-size: 0.84rem;
+  font-weight: 700;
   cursor: pointer;
 
   &:disabled {

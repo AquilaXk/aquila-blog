@@ -268,6 +268,20 @@ class ApiV1PostControllerTest : SeededSpringBootTestSupport() {
         }
 
         @Test
+        fun `공개지만 목록 미노출 글은 비로그인 상세 조회가 가능하다`() {
+            val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()
+            val post = postFacade.write(actor, "링크 공개 글", "공개 상세 내용", true, false)
+
+            mvc.get("/post/api/v1/posts/${post.id}").andExpect {
+                status { isOk() }
+                jsonPath("$.id") { value(post.id) }
+                jsonPath("$.published") { value(true) }
+                jsonPath("$.listed") { value(false) }
+                jsonPath("$.title") { value("링크 공개 글") }
+            }
+        }
+
+        @Test
         @WithUserDetails("user1@test.com")
         fun `성공 - 미공개 글 작성자 조회`() {
             val actor = actorApplicationService.findByEmail("user1@test.com").getOrThrow()

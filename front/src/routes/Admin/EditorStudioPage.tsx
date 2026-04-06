@@ -3721,7 +3721,7 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
     ]
   )
   const currentVisibilityText = visibilityLabel(currentFlags.published, currentFlags.listed)
-  const canOpenCurrentPostDetail = editorMode === "edit" && currentFlags.published && postId.trim().length > 0
+  const canOpenCurrentPostDetail = editorMode === "edit" && postId.trim().length > 0
   const editorModeLabel = editorMode === "edit" ? "원고 편집" : "새 글"
   const hasSelectedManagedPost = editorMode === "edit" && postId.trim().length > 0
   const currentPostLabel =
@@ -5011,24 +5011,20 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                                           <AppIcon name="chevron-down" />
                                         </summary>
                                         <div className="menu">
-                                          {row.published ? (
-                                            <>
-                                              <button
-                                                type="button"
-                                                disabled={loadingKey.length > 0}
-                                                onClick={() => void openPostDetailRoute(row.id)}
-                                              >
-                                                상세 열기
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={loadingKey.length > 0}
-                                                onClick={() => void copyPostDetailLink(row.id, row.title)}
-                                              >
-                                                링크 복사
-                                              </button>
-                                            </>
-                                          ) : null}
+                                          <button
+                                            type="button"
+                                            disabled={loadingKey.length > 0}
+                                            onClick={() => void openPostDetailRoute(row.id)}
+                                          >
+                                            상세 열기
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={loadingKey.length > 0}
+                                            onClick={() => void copyPostDetailLink(row.id, row.title)}
+                                          >
+                                            링크 복사
+                                          </button>
                                           <button
                                             type="button"
                                             disabled={loadingKey.length > 0}
@@ -5127,24 +5123,20 @@ export const EditorStudioPage: NextPage<AdminPageProps> = ({ initialMember }) =>
                                     <AppIcon name="chevron-down" />
                                   </summary>
                                   <div className="menu">
-                                    {row.published ? (
-                                      <>
-                                        <button
-                                          type="button"
-                                          disabled={loadingKey.length > 0}
-                                          onClick={() => void openPostDetailRoute(row.id)}
-                                        >
-                                          상세 열기
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={loadingKey.length > 0}
-                                          onClick={() => void copyPostDetailLink(row.id, row.title)}
-                                        >
-                                          링크 복사
-                                        </button>
-                                      </>
-                                    ) : null}
+                                    <button
+                                      type="button"
+                                      disabled={loadingKey.length > 0}
+                                      onClick={() => void openPostDetailRoute(row.id)}
+                                    >
+                                      상세 열기
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={loadingKey.length > 0}
+                                      onClick={() => void copyPostDetailLink(row.id, row.title)}
+                                    >
+                                      링크 복사
+                                    </button>
                                     <button
                                       type="button"
                                       disabled={loadingKey.length > 0}

@@ -52,7 +52,7 @@ type ApiPostDto = {
   actorHasLiked?: boolean
 }
 
-type ApiPostWithContentDto = {
+export type ApiPostWithContentDto = {
   id: number
   createdAt: string
   modifiedAt: string
@@ -264,7 +264,7 @@ const mapPostDto = (post: ApiPostDto): TPost => {
   }
 }
 
-const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
+export const mapPostDetail = (post: ApiPostWithContentDto): PostDetail => {
   const parsed = parsePostMeta(post.content)
   const dtoTags = normalizeStringArray(post.tags)
   const dtoCategories = normalizeCategoryArray(post.category)
